@@ -11,7 +11,7 @@ use ropey::Rope;
 use smallvec::SmallVec;
 
 use crate::{
-    ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _,
+    ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _, Size as ComponentSize,
     button::{Button, ButtonVariants as _},
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
 };
@@ -35,6 +35,10 @@ struct FoldIconLayout {
 pub(super) struct TextElement {
     pub(crate) state: Entity<InputState>,
     placeholder: SharedString,
+    /// The size for calculating default padding
+    size: ComponentSize,
+    /// Custom padding from refine_style
+    custom_padding: Option<gpui::EdgesRefinement<gpui::DefiniteLength>>,
 }
 
 impl TextElement {
@@ -42,6 +46,62 @@ impl TextElement {
         Self {
             state,
             placeholder: SharedString::default(),
+            size: ComponentSize::Medium,
+            custom_padding: None,
+        }
+    }
+
+    /// Set the size for calculating default padding.
+    pub(super) fn with_size(mut self, size: ComponentSize) -> Self {
+        self.size = size;
+        self
+    }
+
+    /// Set custom padding from refine_style.
+    pub(super) fn with_custom_padding(
+        mut self,
+        padding: gpui::EdgesRefinement<gpui::DefiniteLength>,
+    ) -> Self {
+        self.custom_padding = Some(padding);
+        self
+    }
+
+    /// Calculate the final padding combining size-based defaults and custom padding.
+    fn calculate_padding(&self, window: &Window) -> gpui::Edges<Pixels> {
+        let base_size = window.text_style().font_size;
+        let rem_size = window.rem_size();
+
+        // Calculate default padding based on size
+        let default_paddings = gpui::Edges {
+            left: self.size.input_px(),
+            right: self.size.input_px(),
+            top: self.size.input_py(),
+            bottom: self.size.input_py(),
+        };
+
+        // If no custom padding, use defaults
+        let Some(custom_padding) = &self.custom_padding else {
+            return default_paddings;
+        };
+
+        // Merge with custom padding (custom padding takes precedence)
+        gpui::Edges {
+            left: custom_padding
+                .left
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(default_paddings.left),
+            right: custom_padding
+                .right
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(default_paddings.right),
+            top: custom_padding
+                .top
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(default_paddings.top),
+            bottom: custom_padding
+                .bottom
+                .map(|v| v.to_pixels(base_size, rem_size))
+                .unwrap_or(default_paddings.bottom),
         }
     }
 
@@ -592,12 +652,11 @@ impl TextElement {
         window: &mut Window,
     ) -> (Pixels, usize) {
         let total_lines = text.lines_len();
-        let line_number_len = match total_lines {
-            0..=9999 => 5,
-            10000..=99999 => 6,
-            100000..=999999 => 7,
-            _ => 8,
-        };
+        // Compute the number of characters needed to display the largest line number,
+        // plus one leading space for visual padding. Use a minimum of 5 so the column
+        // is never too narrow for short files, and grows dynamically for arbitrarily
+        // large files (no fixed upper bound).
+        let line_number_len = (total_lines.max(1).ilog10() as usize + 2).max(5);
 
         let mut line_number_width = if state.mode.line_number() {
             let empty_line_number = window.text_system().shape_line(
@@ -779,6 +838,11 @@ impl TextElement {
     fn layout_fold_icons(
         &self,
         bounds: &Bounds<Pixels>,
+        // The x origin of the line-number column.  Line numbers are painted at
+        // input_bounds.origin.x, so fold icons must use the same reference to stay within
+        // the column.  This value is also not affected by horizontal scroll (unlike
+        // bounds.origin.x, which has the scroll offset applied after layout_cursor runs).
+        fixed_origin_x: Pixels,
         last_layout: &LastLayout,
         window: &mut Window,
         cx: &mut App,
@@ -791,9 +855,10 @@ impl TextElement {
             offset_y: Pixels,
         }
 
+        // The hitbox for the line-number column uses the fixed (non-scrolled) x origin.
         let line_number_hitbox = window.insert_hitbox(
             Bounds::new(
-                bounds.origin + point(px(0.), last_layout.visible_top),
+                point(fixed_origin_x, bounds.origin.y + last_layout.visible_top),
                 size(last_layout.line_number_width, bounds.size.height),
             ),
             HitboxBehavior::Normal,
@@ -838,20 +903,22 @@ impl TextElement {
 
         // Second pass: create and prepaint icons
         let line_height = last_layout.line_height;
-        let line_number_width = last_layout.line_number_width
-            - LINE_NUMBER_RIGHT_MARGIN.half()
-            - FOLD_ICON_HITBOX_WIDTH;
-        let icon_relative_pos = point(
-            (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
-            (line_height - FOLD_ICON_WIDTH).half(),
-        );
+
+        // The visible background column ends at line_number_width.
+        // The fold-icon hitbox occupies the rightmost FOLD_ICON_HITBOX_WIDTH pixels of that
+        // column, so the icon never overflows into the transparent right-margin zone.
+        //
+        //  [  line number text  ][  fold icon (18 px)  ][ right margin (10 px) ][ text ]
+        //  ^- fixed_origin_x                            ^- bg column right
+        let bg_column_right = fixed_origin_x + last_layout.line_number_width;
+        let hitbox_x = bg_column_right - FOLD_ICON_HITBOX_WIDTH;
 
         for (ix, info) in fold_infos.iter().enumerate() {
-            // Position fold icon to the right of line numbers
-            let fold_icon_bounds = Bounds::new(
-                bounds.origin + icon_relative_pos + point(line_number_width, info.offset_y),
-                size(FOLD_ICON_HITBOX_WIDTH, line_height),
-            );
+            // Hitbox: full FOLD_ICON_HITBOX_WIDTH × line_height cell, flush with the
+            // right edge of the visible background column.
+            let hitbox_origin = point(hitbox_x, bounds.origin.y + info.offset_y);
+            let fold_icon_bounds =
+                Bounds::new(hitbox_origin, size(FOLD_ICON_HITBOX_WIDTH, line_height));
 
             // Create and prepaint icon
             let mut icon = Button::new(("fold", ix))
@@ -880,8 +947,13 @@ impl TextElement {
                 .into_any_element();
 
             icon.prepaint_as_root(
-                fold_icon_bounds.origin,
-                fold_icon_bounds.size.into(),
+                // Center the 14 px visual icon inside the 18 px hitbox cell.
+                fold_icon_bounds.origin
+                    + point(
+                        (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
+                        (line_height - FOLD_ICON_WIDTH).half(),
+                    ),
+                size(FOLD_ICON_WIDTH, FOLD_ICON_WIDTH).into(),
                 window,
                 cx,
             );
@@ -1104,6 +1176,8 @@ pub(super) struct PrepaintState {
     hover_definition_hitbox: Option<Hitbox>,
     indent_guides_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
+    /// The original input bounds (including padding).
+    input_bounds: Bounds<Pixels>,
     /// Fold icon layout data
     fold_icon_layout: FoldIconLayout,
     // Inline completion rendering data
@@ -1199,8 +1273,9 @@ impl Element for TextElement {
                 style.min_size.height = line_height.into();
             }
         } else {
-            // For single-line inputs, the minimum height should be the line height
-            style.size.height = line_height.into();
+            // For single-line inputs, fill the available height so that padding
+            // can be applied internally in prepaint to vertically center the text.
+            style.size.height = relative(1.).into();
         };
 
         (window.request_layout(style, [], cx), ())
@@ -1210,7 +1285,7 @@ impl Element for TextElement {
         &mut self,
         _id: Option<&GlobalElementId>,
         _: Option<&gpui::InspectorElementId>,
-        bounds: Bounds<Pixels>,
+        input_bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
@@ -1219,13 +1294,37 @@ impl Element for TextElement {
         let font = style.font();
         let text_size = style.font_size.to_pixels(window.rem_size());
 
+        // Calculate padding and adjust bounds for content area.
+        // For single-line mode, the vertical padding is computed dynamically to
+        // vertically center the text within the available height, rather than
+        // using the fixed input_py value which may not match the actual line height.
+        let padding = self.calculate_padding(window);
+        let line_height = window.line_height();
+        let is_multi_line = self.state.read(cx).mode.is_multi_line();
+        let (padding_top, padding_bottom) = if !is_multi_line {
+            // Center the single line of text vertically within the element.
+            let v = ((input_bounds.size.height - line_height) / 2.).max(px(0.));
+            (v, v)
+        } else {
+            (padding.top, padding.bottom)
+        };
+        let bounds = Bounds {
+            origin: point(
+                input_bounds.origin.x + padding.left,
+                input_bounds.origin.y + padding_top,
+            ),
+            size: size(
+                (input_bounds.size.width - padding.left - padding.right).max(px(0.)),
+                (input_bounds.size.height - padding_top - padding_bottom).max(px(0.)),
+            ),
+        };
+
         self.state.update(cx, |state, cx| {
             state.display_map.set_font(font, text_size, cx);
             state.display_map.ensure_text_prepared(&state.text, cx);
         });
 
         let state = self.state.read(cx);
-        let line_height = window.line_height();
 
         let (visible_range, visible_top) =
             self.calculate_visible_range(&state, line_height, bounds.size.height);
@@ -1437,6 +1536,17 @@ impl Element for TextElement {
             scroll_size.width = longest_line_width + line_number_width;
         }
 
+        // `update_scroll_offset` clamps scroll using `input_bounds.size.width` (full element
+        // width including padding), while `layout_cursor` uses `bounds.size.width` (content
+        // area after padding).  Without the correction the two disagree by
+        // `padding.left + padding.right`, causing the cursor‐tracking scroll to be clamped
+        // short for every alignment — which shifts text past the right edge.
+        //
+        // For right/center the paint pass compensates by subtracting `input_bounds.size.width`
+        // instead of `bounds.size.width` (see the paint() function), keeping the visual offset
+        // correct while letting update_scroll_offset clamp to the right range.
+        scroll_size.width += padding.left + padding.right;
+
         // `position_for_index` for example
         //
         // #### text
@@ -1536,10 +1646,22 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-        let fold_icon_layout = self.layout_fold_icons(&bounds, &last_layout, window, cx);
+        let fold_icon_layout = self.layout_fold_icons(
+            &bounds,
+            // Line numbers are painted at input_bounds.origin.x (not at the padded
+            // content-area origin). Fold icons must use the same reference so they stay
+            // within the line-number column and are not pushed into the text content area.
+            // input_bounds.origin.x is also unaffected by horizontal scroll, which is
+            // what prevents the icons from scrolling off-screen horizontally.
+            input_bounds.origin.x,
+            &last_layout,
+            window,
+            cx,
+        );
 
         PrepaintState {
             bounds,
+            input_bounds,
             last_layout,
             scroll_size,
             line_numbers,
@@ -1634,13 +1756,13 @@ impl Element for TextElement {
             for (ix, lines) in line_numbers.iter().enumerate() {
                 let row = visible_range.start + ix;
                 let is_active = prepaint.current_row == Some(row);
-                let p = point(input_bounds.origin.x, origin.y + offset_y);
+                let p = point(prepaint.input_bounds.origin.x, origin.y + offset_y);
                 let height = line_height * lines.len() as f32;
                 // Paint the current line background
                 if is_active {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
-                            Bounds::new(p, size(bounds.size.width, height)),
+                            Bounds::new(p, size(prepaint.input_bounds.size.width, height)),
                             bg_color,
                         ));
                     }
@@ -1685,11 +1807,15 @@ impl Element for TextElement {
         let ghost_lines = &prepaint.ghost_lines;
         let has_ghost_lines = !ghost_lines.is_empty();
 
-        // Keep scrollbar offset always be positive，Start from the left position
+        // Keep scrollbar offset always be positive，Start from the left position.
+        // For right/center alignment scroll_size.width includes padding.left + padding.right
+        // (added in prepaint to align update_scroll_offset with layout_cursor).  To produce
+        // the correct visual offset we therefore subtract input_bounds.size.width (which equals
+        // bounds.size.width + padding.left + padding.right) rather than bounds.size.width.
         let scroll_offset = if text_align == TextAlign::Right {
-            (prepaint.scroll_size.width - prepaint.bounds.size.width).max(px(0.))
+            (prepaint.scroll_size.width - input_bounds.size.width).max(px(0.))
         } else if text_align == TextAlign::Center {
-            (prepaint.scroll_size.width - prepaint.bounds.size.width)
+            (prepaint.scroll_size.width - input_bounds.size.width)
                 .half()
                 .max(px(0.))
         } else {
@@ -1769,7 +1895,7 @@ impl Element for TextElement {
                 Bounds {
                     origin: input_bounds.origin,
                     size: size(
-                        prepaint.last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN,
+                        prepaint.last_layout.line_number_width,
                         input_bounds.size.height + prepaint.ghost_lines_height,
                     ),
                 },
