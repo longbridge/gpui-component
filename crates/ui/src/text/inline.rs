@@ -380,6 +380,7 @@ fn point_in_text_selection(
     selection_end: Point<Pixels>,
     line_height: Pixels,
 ) -> bool {
+    let point_in_line = |point: Point<Pixels>| point.y >= pos.y && point.y < pos.y + line_height;
     let top = selection_start.y.min(selection_end.y);
     let bottom = selection_start.y.max(selection_end.y);
     let x = pos.x + char_width.half();
@@ -389,26 +390,26 @@ fn point_in_text_selection(
         return false;
     }
 
-    let single_line = selection_start.y == selection_end.y;
-    if single_line {
+    // Treat the selection as single-line when both drag points fall within the
+    // same rendered line, even if their y coordinates differ inside that line.
+    if point_in_line(selection_start) && point_in_line(selection_end) {
         let left = selection_start.x.min(selection_end.x);
         let right = selection_start.x.max(selection_end.x);
-        // If it's a single line selection, just check horizontal bounds
         return x >= left && x <= right;
     }
 
-    let (top_x, bottom_x) = if selection_start.y < selection_end.y {
-        (selection_start.x, selection_end.x)
+    let (top_point, bottom_point) = if selection_start.y < selection_end.y {
+        (selection_start, selection_end)
     } else {
-        (selection_end.x, selection_start.x)
+        (selection_end, selection_start)
     };
-    let is_top_line = pos.y <= top && top < pos.y + line_height;
-    let is_bottom_line = pos.y <= bottom && bottom < pos.y + line_height;
+    let is_top_line = point_in_line(top_point);
+    let is_bottom_line = point_in_line(bottom_point);
 
     if is_top_line {
-        return x >= top_x;
+        return x >= top_point.x;
     } else if is_bottom_line {
-        return x <= bottom_x;
+        return x <= bottom_point.x;
     } else {
         return true;
     }
@@ -603,6 +604,66 @@ mod tests {
         ));
         assert!(!point_in_text_selection(
             point(px(80.), px(140.)),
+            char_width,
+            start,
+            end,
+            line_height
+        ));
+    }
+
+    #[test]
+    fn test_point_in_text_selection_same_visual_line_with_different_y() {
+        let line_height = px(20.);
+        let char_width = px(10.);
+        let start = point(px(100.), px(55.));
+        let end = point(px(60.), px(58.));
+
+        assert!(!point_in_text_selection(
+            point(px(40.), px(50.)),
+            char_width,
+            start,
+            end,
+            line_height
+        ));
+        assert!(point_in_text_selection(
+            point(px(70.), px(50.)),
+            char_width,
+            start,
+            end,
+            line_height
+        ));
+        assert!(!point_in_text_selection(
+            point(px(110.), px(50.)),
+            char_width,
+            start,
+            end,
+            line_height
+        ));
+    }
+
+    #[test]
+    fn test_point_in_text_selection_same_visual_line_with_reversed_y() {
+        let line_height = px(20.);
+        let char_width = px(10.);
+        let start = point(px(60.), px(58.));
+        let end = point(px(100.), px(55.));
+
+        assert!(!point_in_text_selection(
+            point(px(40.), px(50.)),
+            char_width,
+            start,
+            end,
+            line_height
+        ));
+        assert!(point_in_text_selection(
+            point(px(70.), px(50.)),
+            char_width,
+            start,
+            end,
+            line_height
+        ));
+        assert!(!point_in_text_selection(
+            point(px(110.), px(50.)),
             char_width,
             start,
             end,
