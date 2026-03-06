@@ -7,25 +7,27 @@
 //! - 有数据库连接 → SqlWorkflowAgent（自动处理选表/元数据/SQL生成）
 //! - 无数据库连接 → GeneralChatAgent
 
-use crate::chatdb::agents::{DatabaseMetadataProvider, CAP_DB_METADATA};
+use crate::chatdb::agents::{CAP_DB_METADATA, DatabaseMetadataProvider};
 use crate::chatdb::ai_input::{AIInput, AIInputEvent};
-use crate::chatdb::chart_json::{parse_chart_json_block, ChartJsonBlock, ChartType};
+use crate::chatdb::chart_json::{ChartJsonBlock, ChartType, parse_chart_json_block};
 use crate::chatdb::chat_markdown::SqlCodeBlock;
 use crate::chatdb::chat_sql_block::SqlBlockResultState;
 use crate::chatdb::chat_sql_result::ChatSqlResultView;
 use crate::chatdb::components::{
-    ChatMessageUI, ChatRole, MessageVariant, SqlBlockCacheExt, MESSAGE_RENDER_LIMIT,
-    MESSAGE_RENDER_STEP,
+    ChatMessageUI, ChatRole, MESSAGE_RENDER_LIMIT, MESSAGE_RENDER_STEP, MessageVariant,
+    SqlBlockCacheExt,
 };
-use db::{is_query_statement_fallback, GlobalDbState};
+use crate::chatdb::db_connection_selector::DbSelectorContext;
+use db::{GlobalDbState, is_query_statement_fallback};
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, px, AnyElement, App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle,
+    AnyElement, App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle,
     Focusable, InteractiveElement, IntoElement, ParentElement, Render, ScrollHandle, SharedString,
-    StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window,
+    StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, div, px,
 };
 use gpui_component::button::ButtonVariants;
 use gpui_component::{
+    ActiveTheme, Icon, IconName, Sizable, Size, WindowExt as _,
     button::Button,
     chart::{BarChart, LineChart, PieChart},
     clipboard::Clipboard,
@@ -33,21 +35,22 @@ use gpui_component::{
     h_flex,
     input::{Input, InputState},
     list::{List, ListState},
+    popover::Popover,
     scroll::Scrollbar,
     text::TextView,
-    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, WindowExt as _,
+    v_flex,
 };
 use one_core::agent::registry::AgentRegistry;
 use one_core::agent::{AgentContext, AgentDispatcher, AgentEvent, SessionAffinity};
 use one_core::cloud_sync::GlobalCloudUser;
 use one_core::gpui_tokio::Tokio;
 use one_core::llm::{
+    Message, ProviderConfig, Role,
     chat_history::{ChatSession, MessageRepository},
     manager::GlobalProviderState,
     storage::ProviderRepository,
-    Message, ProviderConfig, Role,
 };
-use one_core::storage::{traits::Repository, DatabaseType, GlobalStorageState};
+use one_core::storage::{DatabaseType, GlobalStorageState, traits::Repository};
 use one_core::tab_container::{TabContent, TabContentEvent};
 use rust_i18n::t;
 use std::collections::HashMap;
@@ -60,7 +63,7 @@ use one_core::ai_chat::components::{
     ModelSettings, ProviderItem, SessionData, SessionListConfig, SessionListDelegate,
     SessionListHost,
 };
-use one_core::ai_chat::services::{extract_session_name, SessionService};
+use one_core::ai_chat::services::{SessionService, extract_session_name};
 
 // ============================================================================
 // 事件定义
@@ -77,6 +80,8 @@ pub enum ChatPanelEvent {
 
 pub struct ChatPanel {
     focus_handle: FocusHandle,
+    show_history_sidebar: bool,
+    history_popover_open: bool,
 
     // 输入组件
     ai_input: Entity<AIInput>,
@@ -121,10 +126,29 @@ pub struct ChatPanel {
 
 impl ChatPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_with_options(window, cx, true, DbSelectorContext::default())
+    }
+
+    pub fn new_for_sidebar(
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        selector_context: DbSelectorContext,
+    ) -> Self {
+        Self::new_with_options(window, cx, false, selector_context)
+    }
+
+    fn new_with_options(
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        show_history_sidebar: bool,
+        selector_context: DbSelectorContext,
+    ) -> Self {
         let focus_handle = cx.focus_handle();
 
         // 创建 AIInput 组件
-        let ai_input = cx.new(|cx| AIInput::new(window, cx));
+        let is_sidebar_mode = !show_history_sidebar;
+        let ai_input =
+            cx.new(|cx| AIInput::new_with_context(window, cx, selector_context, is_sidebar_mode));
 
         // 订阅 AIInput 事件
         let input_subscription =
@@ -179,6 +203,8 @@ impl ChatPanel {
 
         let mut instance = Self {
             focus_handle,
+            show_history_sidebar,
+            history_popover_open: false,
             ai_input,
             _input_subscription: input_subscription,
             session_service,
@@ -208,6 +234,10 @@ impl ChatPanel {
         instance.load_providers(window, cx);
         instance.load_history_sessions(cx);
         instance
+    }
+
+    pub fn send_external_message(&mut self, message: String, cx: &mut Context<Self>) {
+        self.send_message(message, cx);
     }
 
     // ========================================================================
@@ -1313,7 +1343,7 @@ impl ChatPanel {
                     panel_for_ok.update(cx, |view, cx| {
                         view.execute_sql_block(&message_id_for_ok, &block_for_ok, window, cx, true);
                     });
-                    false
+                    true
                 })
                 .on_cancel(|_, _, _| true)
         });
@@ -1479,6 +1509,90 @@ impl ChatPanel {
                                 .rounded(cx.theme().radius),
                         )
                     }),
+            )
+    }
+
+    fn render_sidebar_mode_header(
+        &self,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let border = cx.theme().border;
+        let muted = cx.theme().muted;
+        let fg = cx.theme().foreground;
+        let session_list = self.session_list.clone();
+
+        h_flex()
+            .flex_shrink_0()
+            .w_full()
+            .px_4()
+            .py_2()
+            .border_b_1()
+            .border_color(border)
+            .bg(muted)
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(fg)
+                    .child(t!("ChatPanel.title").to_string()),
+            )
+            .child(
+                h_flex()
+                    .gap_2()
+                    .child(
+                        Button::new("chat-sidebar-new-session")
+                            .icon(IconName::Plus)
+                            .ghost()
+                            .small()
+                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                this.start_new_session(cx);
+                            })),
+                    )
+                    .child(
+                        Popover::new("chat-sidebar-history-popover")
+                            .anchor(Corner::TopRight)
+                            .p_0()
+                            .open(self.history_popover_open)
+                            .on_open_change(cx.listener(|this, open, window, cx| {
+                                this.history_popover_open = *open;
+                                if *open {
+                                    this.update_session_list(window, cx);
+                                    this.load_history_sessions(cx);
+                                }
+                                cx.notify();
+                            }))
+                            .when_some(session_list.as_ref(), |popover, list| {
+                                popover.track_focus(&list.focus_handle(cx))
+                            })
+                            .trigger(
+                                Button::new("chat-sidebar-history")
+                                    .icon(IconName::BookOpen)
+                                    .ghost()
+                                    .small(),
+                            )
+                            .when_some(session_list, |popover, list| {
+                                popover.child(
+                                    List::new(&list)
+                                        .w(px(280.0))
+                                        .max_h(px(350.0))
+                                        .border_1()
+                                        .border_color(border)
+                                        .rounded(cx.theme().radius),
+                                )
+                            }),
+                    )
+                    .child(
+                        Button::new("chat-sidebar-close")
+                            .icon(IconName::Close)
+                            .ghost()
+                            .small()
+                            .on_click(cx.listener(|_this, _event, _window, cx| {
+                                cx.emit(ChatPanelEvent::Close);
+                            })),
+                    ),
             )
     }
 
@@ -1967,6 +2081,16 @@ impl SessionListHost for ChatPanel {
     fn is_current_session(&self, session_id: i64) -> bool {
         self.session_id == Some(session_id)
     }
+
+    fn on_session_list_confirm(&mut self, cx: &mut Context<Self>) {
+        self.history_popover_open = false;
+        cx.notify();
+    }
+
+    fn on_session_list_cancel(&mut self, cx: &mut Context<Self>) {
+        self.history_popover_open = false;
+        cx.notify();
+    }
 }
 
 impl Render for ChatPanel {
@@ -1977,19 +2101,29 @@ impl Render for ChatPanel {
             self.load_providers(window, cx);
         }
 
-        div().size_full().bg(cx.theme().background).child(
-            h_flex()
-                .size_full()
-                .child(self.render_history_sidebar(window, cx))
-                .child(
-                    div().flex_1().h_full().min_w_0().child(
-                        v_flex()
-                            .size_full()
-                            .child(self.render_messages(cx))
-                            .child(self.render_input(cx)),
+        if self.show_history_sidebar {
+            div().size_full().bg(cx.theme().background).child(
+                h_flex()
+                    .size_full()
+                    .child(self.render_history_sidebar(window, cx))
+                    .child(
+                        div().flex_1().h_full().min_w_0().child(
+                            v_flex()
+                                .size_full()
+                                .child(self.render_messages(cx))
+                                .child(self.render_input(cx)),
+                        ),
                     ),
-                ),
-        )
+            )
+        } else {
+            div().size_full().bg(cx.theme().background).child(
+                v_flex()
+                    .size_full()
+                    .child(self.render_sidebar_mode_header(window, cx))
+                    .child(self.render_messages(cx))
+                    .child(self.render_input(cx)),
+            )
+        }
     }
 }
 

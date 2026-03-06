@@ -381,7 +381,11 @@ impl SupabaseClient {
             .read()
             .ok()
             .and_then(|r| r.clone())
-            .unwrap_or_else(|| Err(CloudApiError::AuthenticationFailed("令牌刷新状态未知".into())))
+            .unwrap_or_else(|| {
+                Err(CloudApiError::AuthenticationFailed(
+                    "令牌刷新状态未知".into(),
+                ))
+            })
     }
 
     /// 刷新 token（单飞）：同一时刻只执行一次真实刷新，其它请求等待并复用结果
@@ -436,7 +440,10 @@ impl SupabaseClient {
                 Ok(auth_resp)
             }
             Err(e) => {
-                error!("[supabase] token refresh failed (singleflight), clearing auth: {}", e);
+                error!(
+                    "[supabase] token refresh failed (singleflight), clearing auth: {}",
+                    e
+                );
                 self.clear_auth();
                 self.notify_session_expired();
                 Err(e)

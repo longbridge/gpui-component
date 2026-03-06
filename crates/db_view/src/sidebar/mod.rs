@@ -4,6 +4,8 @@
 //! - AI 聊天面板
 //! - 可扩展的其他面板
 
+use crate::chatdb::chat_panel::{ChatPanel, ChatPanelEvent};
+use crate::chatdb::db_connection_selector::DbSelectorContext;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
@@ -11,8 +13,8 @@ use gpui::{
     StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable, Size, v_flex};
+use one_core::ai_chat::CodeBlockAction;
 use one_core::ai_chat::ask_ai::{AskAiEvent, get_ask_ai_notifier};
-use one_core::ai_chat::{AiChatPanel, AiChatPanelEvent, CodeBlockAction};
 use one_core::layout::TOOLBAR_WIDTH;
 
 /// 侧边栏面板类型
@@ -45,7 +47,7 @@ pub struct DatabaseSidebar {
     /// 当前激活的面板
     active_panel: Option<SidebarPanel>,
     /// AI 聊天面板
-    ai_chat_panel: Entity<AiChatPanel>,
+    chat_panel: Entity<ChatPanel>,
     /// 焦点句柄
     focus_handle: FocusHandle,
     /// 是否处于激活状态（用于控制事件响应）
@@ -55,19 +57,22 @@ pub struct DatabaseSidebar {
 }
 
 impl DatabaseSidebar {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let ai_chat_panel = cx.new(|cx| AiChatPanel::new(window, cx));
+    pub fn new(
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        selector_context: DbSelectorContext,
+    ) -> Self {
+        let chat_panel =
+            cx.new(|cx| ChatPanel::new_for_sidebar(window, cx, selector_context.clone()));
 
         let mut subs = Vec::new();
 
-        // 订阅 AI 聊天面板关闭事件
+        // 订阅 ChatPanel 关闭事件
         subs.push(
-            cx.subscribe(&ai_chat_panel, |this, _, event: &AiChatPanelEvent, cx| {
-                if let AiChatPanelEvent::Close = event {
-                    this.active_panel = None;
-                    cx.emit(DatabaseSidebarEvent::PanelChanged);
-                    cx.notify();
-                }
+            cx.subscribe(&chat_panel, |this, _, _event: &ChatPanelEvent, cx| {
+                this.active_panel = None;
+                cx.emit(DatabaseSidebarEvent::PanelChanged);
+                cx.notify();
             }),
         );
 
@@ -86,7 +91,7 @@ impl DatabaseSidebar {
 
         Self {
             active_panel: None,
-            ai_chat_panel,
+            chat_panel,
             focus_handle: cx.focus_handle(),
             is_active: false,
             _subs: subs,
@@ -131,7 +136,7 @@ impl DatabaseSidebar {
         }
 
         // 发送消息到 AI 聊天面板
-        self.ai_chat_panel.update(cx, |panel, cx| {
+        self.chat_panel.update(cx, |panel, cx| {
             panel.send_external_message(message, cx);
         });
 
@@ -140,11 +145,7 @@ impl DatabaseSidebar {
     }
 
     /// 注册代码块操作
-    pub fn register_code_block_action(&self, action: CodeBlockAction, cx: &mut Context<Self>) {
-        self.ai_chat_panel.update(cx, |panel, cx| {
-            panel.register_code_block_action(action, cx);
-        });
-    }
+    pub fn register_code_block_action(&self, _action: CodeBlockAction, _cx: &mut Context<Self>) {}
 
     /// 渲染工具栏按钮
     fn render_toolbar_button(
@@ -207,7 +208,7 @@ impl DatabaseSidebar {
         _cx: &mut Context<Self>,
     ) -> AnyElement {
         match panel {
-            SidebarPanel::AiChat => self.ai_chat_panel.clone().into_any_element(),
+            SidebarPanel::AiChat => self.chat_panel.clone().into_any_element(),
         }
     }
 }

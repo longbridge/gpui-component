@@ -273,3 +273,48 @@
 - 通过：`cd /Users/hufei/RustroverProjects/onetcli && cargo check -p redis_view`
 - 结果：`Finished dev profile`（无新增编译错误）
 - 备注：本次未执行 GUI 自动化，建议后续补充交互回归用例。
+## 审查报告
+时间：2026-03-06 10:27:45 +0800
+任务：sidebar-chat-panel-migration
+
+### 技术维度评分
+- 代码质量：91/100（用配置扩展替代复制实现，改动集中在 5 个模块）
+- 测试覆盖：80/100（完成 `cargo check -p db_view`，缺少 UI 自动化回归）
+- 规范遵循：93/100（命名/事件流/组件组织与现有模式保持一致）
+
+### 战略维度评分
+- 需求匹配：94/100（侧栏已替换为 ChatPanel 消息区+输入区，支持单连接/工作区默认选择策略）
+- 架构一致：90/100（`DatabaseTab -> Sidebar -> ChatPanel -> AIInput -> Selector` 透传清晰）
+- 风险评估：86/100（register_code_block_action 目前为兼容空实现，后续如需自定义动作需补回）
+
+### 综合评分
+- 90/100
+- 建议：通过
+
+### 本地验证结果
+- 通过：`cargo fmt --all`
+- 通过：`cargo check -p db_view`
+- 备注：存在既有 future-incompat 警告（`num-bigint-dig v0.8.4`），与本次改动无关
+
+## 返修验证补充
+时间：2026-03-06 11:10:24 +0800
+任务：sidebar-chat-panel-migration（用户反馈修复）
+
+### 本地验证结果
+- 通过：`cargo fmt --all`
+- 通过：`cargo check -p db_view`
+- 说明：本次修复聚焦 UI 布局与元数据时序，建议补充手工回归：
+  1) 侧栏 AI 输入底部控件在窄宽度下是否完整显示
+  2) 非查询 SQL 点击“运行”后弹窗是否关闭
+  3) 快速切换数据库后 `@` 表补全是否稳定出现
+
+## 返修验证补充
+时间：2026-03-06 11:21:00 +0800
+任务：sidebar-chat-panel-topbar
+
+### 本地验证结果
+- 通过：`cargo fmt --all`
+- 通过：`cargo check -p db_view`
+- 建议手测：
+  1) 侧栏顶部按钮（新建对话/历史记录/关闭）是否可用
+  2) 历史抽屉中会话切换、重命名、删除是否正常

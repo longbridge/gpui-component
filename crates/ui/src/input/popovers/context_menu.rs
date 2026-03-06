@@ -1,14 +1,14 @@
 use gpui::{
-    anchored, deferred, div, px, App, AppContext as _, Context, Corner, DismissEvent, Entity,
-    IntoElement, MouseDownEvent, ParentElement as _, Pixels, Point, Render, Styled, Subscription,
-    Window,
+    App, AppContext as _, Context, Corner, DismissEvent, Entity, IntoElement, MouseDownEvent,
+    ParentElement as _, Pixels, Point, Render, Styled, Subscription, Window, anchored, deferred,
+    div, px,
 };
 use rust_i18n::t;
 
 use crate::{
-    input::{self, popovers::ContextMenu, InputContextMenuItem, InputState},
-    menu::{PopupMenu, PopupMenuItem},
     ActiveTheme as _,
+    input::{self, InputContextMenuItem, InputState, popovers::ContextMenu},
+    menu::{PopupMenu, PopupMenuItem},
 };
 
 /// Context menu for mouse right clicks.

@@ -61,10 +61,7 @@ fn create_demo_db_file(path: &std::path::Path) -> Result<()> {
 }
 
 /// 构建 StoredConnection 并写入应用数据库。
-fn register_demo_connection(
-    repo: &ConnectionRepository,
-    db_path: &std::path::Path,
-) -> Result<i64> {
+fn register_demo_connection(repo: &ConnectionRepository, db_path: &std::path::Path) -> Result<i64> {
     let path_str = db_path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("演示数据库路径包含非法字符"))?

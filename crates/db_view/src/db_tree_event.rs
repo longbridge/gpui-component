@@ -9,14 +9,14 @@ use crate::{
 };
 use db::{DbNode, DbNodeType, GlobalDbState, SqlResult};
 use gpui::{
-    div, px, App, AppContext, AsyncApp, Context, Entity, ParentElement, PathPromptOptions, Styled,
-    Subscription, Window,
+    App, AppContext, AsyncApp, Context, Entity, ParentElement, PathPromptOptions, Styled,
+    Subscription, Window, div, px,
 };
 use gpui_component::dialog::DialogButtonProps;
-use gpui_component::{h_flex, notification::Notification, v_flex, WindowExt};
+use gpui_component::{WindowExt, h_flex, notification::Notification, v_flex};
 use one_core::gpui_tokio::Tokio;
 use one_core::{
-    popup_window::{open_popup_window, PopupWindowOptions},
+    popup_window::{PopupWindowOptions, open_popup_window},
     tab_container::{TabContainer, TabItem},
 };
 use rust_i18n::t;
@@ -2646,8 +2646,8 @@ impl DatabaseEventHandler {
         cx: &mut App,
     ) {
         use gpui_component::{
-            input::{Input, InputState},
             WindowExt,
+            input::{Input, InputState},
         };
 
         let connection_id = node.connection_id.clone();
@@ -2998,8 +2998,8 @@ impl DatabaseEventHandler {
         cx: &mut App,
     ) {
         use gpui_component::{
-            input::{Input, InputState},
             WindowExt,
+            input::{Input, InputState},
         };
 
         let Some(path_str) = node.metadata.get("file_path") else {

@@ -4,8 +4,8 @@ use db::GlobalDbState;
 use db::plugin::SqlCompletionInfo;
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle, Focusable,
-    IntoElement, ParentElement, Render, Styled, Subscription, Window, div, px,
+    AnyElement, App, AppContext, AsyncApp, Context, Corner, Entity, EventEmitter, FocusHandle,
+    Focusable, IntoElement, ParentElement, Render, Styled, Subscription, Window, div, px,
 };
 use gpui_component::button::ButtonVariants;
 use gpui_component::{
@@ -22,7 +22,7 @@ use one_core::ai_chat::components::{
 };
 
 use crate::chatdb::db_connection_selector::{
-    ConnectionItem, DbConnectionSelector, DbConnectionSelectorEvent,
+    ConnectionItem, DbConnectionSelector, DbConnectionSelectorEvent, DbSelectorContext,
 };
 use crate::sql_editor::{
     DefaultSqlCompletionProvider, SqlEditor, SqlSchema, TableMentionCompletionProvider,
@@ -95,6 +95,7 @@ pub enum AIInputEvent {
 /// AI 输入框组件
 pub struct AIInput {
     focus_handle: FocusHandle,
+    is_sidebar_mode: bool,
 
     // 模式状态
     mode: InputMode,
@@ -125,10 +126,20 @@ pub struct AIInput {
     is_loading: bool,
     sql_schema: SqlSchema,
     db_completion_info: Option<SqlCompletionInfo>,
+    schema_sync_seq: u64,
 }
 
 impl AIInput {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_with_context(window, cx, DbSelectorContext::default(), false)
+    }
+
+    pub fn new_with_context(
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        selector_context: DbSelectorContext,
+        is_sidebar_mode: bool,
+    ) -> Self {
         let focus_handle = cx.focus_handle();
 
         // SQL/Agent 共用编辑器
@@ -158,7 +169,8 @@ impl AIInput {
             });
 
         // 数据源选择器
-        let db_selector = cx.new(|cx| DbConnectionSelector::new(window, cx));
+        let db_selector =
+            cx.new(|cx| DbConnectionSelector::new_with_context(window, cx, selector_context));
 
         // 模型设置（使用国际化标签）
         let model_settings = ModelSettings::default();
@@ -185,7 +197,7 @@ impl AIInput {
         subscriptions.push(cx.subscribe_in(
             &db_selector,
             window,
-            |this, _selector, event, _window, cx| {
+            |this, _selector, event, window, cx| {
                 let DbConnectionSelectorEvent::SelectionChanged {
                     connection,
                     database,
@@ -198,7 +210,7 @@ impl AIInput {
                 this.selected_schema = schema.clone();
                 this.supports_schema = *supports_schema;
                 this.uses_schema_as_database = *uses_schema_as_database;
-                this.update_sql_editor_schema(cx);
+                this.update_sql_editor_schema(window, cx);
             },
         ));
 
@@ -230,6 +242,7 @@ impl AIInput {
 
         let mut instance = Self {
             focus_handle,
+            is_sidebar_mode,
             mode: InputMode::Agent,
             sql_editor,
             provider_select_state,
@@ -248,6 +261,7 @@ impl AIInput {
             is_loading: false,
             sql_schema: SqlSchema::default(),
             db_completion_info: None,
+            schema_sync_seq: 0,
         };
 
         instance.apply_editor_mode(window, cx);
@@ -362,33 +376,59 @@ impl AIInput {
     // 架构同步
     // ========================================================================
 
-    fn update_sql_editor_schema(&mut self, cx: &mut Context<Self>) {
-        let Some(conn) = &self.selected_connection else {
+    fn update_sql_editor_schema(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(connection_id) = self
+            .selected_connection
+            .as_ref()
+            .map(|conn| conn.id.clone())
+        else {
+            self.sql_schema = SqlSchema::default();
+            self.db_completion_info = None;
+            self.apply_completion_provider(window, cx);
             return;
         };
 
-        let (database, schema) = if self.uses_schema_as_database {
-            let Some(schema) = self.selected_schema.clone() else {
-                return;
-            };
-            (String::new(), Some(schema))
-        } else {
-            let Some(database) = self.selected_database.clone() else {
-                return;
-            };
-            let schema = if self.supports_schema {
-                self.selected_schema.clone()
+        let (query_database, query_schema, expected_database, expected_schema) =
+            if self.uses_schema_as_database {
+                let Some(schema) = self.selected_schema.clone() else {
+                    self.sql_schema = SqlSchema::default();
+                    self.db_completion_info = None;
+                    self.apply_completion_provider(window, cx);
+                    return;
+                };
+                (String::new(), Some(schema.clone()), None, Some(schema))
             } else {
-                None
+                let Some(database) = self.selected_database.clone() else {
+                    self.sql_schema = SqlSchema::default();
+                    self.db_completion_info = None;
+                    self.apply_completion_provider(window, cx);
+                    return;
+                };
+                let schema = if self.supports_schema {
+                    self.selected_schema.clone()
+                } else {
+                    None
+                };
+                (database.clone(), schema.clone(), Some(database), schema)
             };
-            (database, schema)
-        };
+
+        self.schema_sync_seq = self.schema_sync_seq.saturating_add(1);
+        let schema_sync_seq = self.schema_sync_seq;
+
+        // 切换连接/数据库后先清空旧元数据，避免补全展示过期表名
+        self.sql_schema = SqlSchema::default();
+        self.db_completion_info = None;
+        self.apply_completion_provider(window, cx);
 
         let global_state = cx.global::<GlobalDbState>().clone();
-        let connection_id = conn.id.clone();
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let tables = match global_state
-                .list_tables(cx, connection_id.clone(), database.clone(), schema.clone())
+                .list_tables(
+                    cx,
+                    connection_id.clone(),
+                    query_database.clone(),
+                    query_schema.clone(),
+                )
                 .await
             {
                 Ok(tables) => tables,
@@ -399,20 +439,47 @@ impl AIInput {
                 .get_completion_info(cx, connection_id.clone())
                 .ok();
 
-            let mut sql_schema = SqlSchema::default();
             let table_items: Vec<(String, String)> = tables
                 .iter()
                 .map(|t| (t.name.clone(), t.comment.clone().unwrap_or_default()))
                 .collect();
-            sql_schema = sql_schema.with_tables(table_items);
+            let table_schema = SqlSchema::default().with_tables(table_items);
 
+            if let Some(entity) = this.upgrade() {
+                let _ = cx.update(|cx| {
+                    if let Some(window_id) = cx.active_window() {
+                        let schema_snapshot = table_schema.clone();
+                        let completion_snapshot = db_completion_info.clone();
+                        let expected_database_snapshot = expected_database.clone();
+                        let expected_schema_snapshot = expected_schema.clone();
+                        let connection_id_snapshot = connection_id.clone();
+                        let _ = cx.update_window(window_id, |_, window, cx| {
+                            entity.update(cx, |input, cx| {
+                                if !input.matches_schema_request(
+                                    schema_sync_seq,
+                                    &connection_id_snapshot,
+                                    &expected_database_snapshot,
+                                    &expected_schema_snapshot,
+                                ) {
+                                    return;
+                                }
+                                input.sql_schema = schema_snapshot.clone();
+                                input.db_completion_info = completion_snapshot.clone();
+                                input.apply_completion_provider(window, cx);
+                            });
+                        });
+                    }
+                });
+            }
+
+            let mut full_schema = table_schema;
             for table in &tables {
                 if let Ok(columns) = global_state
                     .list_columns(
                         cx,
                         connection_id.clone(),
-                        database.clone(),
-                        schema.clone(),
+                        query_database.clone(),
+                        query_schema.clone(),
                         table.name.clone(),
                     )
                     .await
@@ -427,17 +494,28 @@ impl AIInput {
                             )
                         })
                         .collect();
-                    sql_schema = sql_schema.with_table_columns_typed(&table.name, column_items);
+                    full_schema = full_schema.with_table_columns_typed(&table.name, column_items);
                 }
             }
 
             if let Some(entity) = this.upgrade() {
                 let _ = cx.update(|cx| {
                     if let Some(window_id) = cx.active_window() {
-                        let schema_snapshot = sql_schema.clone();
+                        let schema_snapshot = full_schema.clone();
                         let completion_snapshot = db_completion_info.clone();
+                        let expected_database_snapshot = expected_database.clone();
+                        let expected_schema_snapshot = expected_schema.clone();
+                        let connection_id_snapshot = connection_id.clone();
                         let _ = cx.update_window(window_id, |_, window, cx| {
                             entity.update(cx, |input, cx| {
+                                if !input.matches_schema_request(
+                                    schema_sync_seq,
+                                    &connection_id_snapshot,
+                                    &expected_database_snapshot,
+                                    &expected_schema_snapshot,
+                                ) {
+                                    return;
+                                }
                                 input.sql_schema = schema_snapshot.clone();
                                 input.db_completion_info = completion_snapshot.clone();
                                 input.apply_completion_provider(window, cx);
@@ -448,6 +526,25 @@ impl AIInput {
             }
         })
         .detach();
+    }
+
+    fn matches_schema_request(
+        &self,
+        seq: u64,
+        connection_id: &str,
+        expected_database: &Option<String>,
+        expected_schema: &Option<String>,
+    ) -> bool {
+        if self.schema_sync_seq != seq {
+            return false;
+        }
+        if self.selected_connection.as_ref().map(|c| c.id.as_str()) != Some(connection_id) {
+            return false;
+        }
+        if self.uses_schema_as_database {
+            return &self.selected_schema == expected_schema;
+        }
+        self.selected_database == *expected_database && self.selected_schema == *expected_schema
     }
 
     // ========================================================================
@@ -523,36 +620,29 @@ impl AIInput {
         )
     }
 
-    fn render_footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let settings_panel = self.settings_panel.clone();
         let send_button_state = self.send_button_state.clone();
         let entity = cx.entity().downgrade();
         let submit_entity = entity.clone();
         let cancel_entity = entity.clone();
 
-        h_flex()
-            .w_full()
-            .items_center()
-            .px_3()
-            .pb_3()
-            .gap_2()
-            // 左侧：模式切换
-            .child(
-                Button::new("mode-switch")
-                    .icon(self.mode.icon().color())
-                    .ghost()
-                    .with_size(Size::Small)
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.toggle_mode(window, cx);
-                    })),
-            )
-            // Provider 选择器（仅 Agent 模式）
-            .when(self.mode == InputMode::Agent, |this| {
-                this.child(self.provider_select_state.render())
-            })
-            // 模型设置按钮（仅 Agent 模式）
-            .when(self.mode == InputMode::Agent, |this| {
-                this.child(
+        if self.is_sidebar_mode {
+            return h_flex()
+                .w_full()
+                .px_3()
+                .pb_3()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .when(self.mode == InputMode::Agent, |this| {
+                            this.child(self.provider_select_state.render())
+                        }),
+                )
+                .child(
                     Popover::new("model-settings-popover")
                         .anchor(Corner::BottomLeft)
                         .trigger(
@@ -563,11 +653,83 @@ impl AIInput {
                         )
                         .content(move |_state, _window, _cx| settings_panel.clone()),
                 )
-            })
-            // 弹性空间
-            .child(div().flex_1())
-            // 发送按钮（或终止按钮）
-            .child(SendButton::render(
+                .child({
+                    let submit_entity = submit_entity.clone();
+                    let cancel_entity = cancel_entity.clone();
+                    if send_button_state.is_loading {
+                        Button::new("send-cancel-icon")
+                            .with_size(Size::Small)
+                            .danger()
+                            .icon(IconName::CircleX)
+                            .on_click(move |_, window, app| {
+                                if let Some(entity) = cancel_entity.upgrade() {
+                                    let _ = entity.update(app, |this, cx| {
+                                        cx.emit(AIInputEvent::Cancel);
+                                        this.set_loading(false, window, cx);
+                                    });
+                                }
+                            })
+                    } else {
+                        Button::new("send-submit-icon")
+                            .with_size(Size::Small)
+                            .primary()
+                            .icon(IconName::ArrowRight)
+                            .on_click(move |_, window, app| {
+                                if let Some(entity) = submit_entity.upgrade() {
+                                    let _ = entity.update(app, |this, cx| {
+                                        this.submit(window, cx);
+                                    });
+                                }
+                            })
+                    }
+                })
+                .into_any_element();
+        }
+
+        v_flex()
+            .w_full()
+            .px_3()
+            .pb_3()
+            .gap_2()
+            .child(
+                h_flex()
+                    .w_full()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        Button::new("mode-switch")
+                            .icon(self.mode.icon().color())
+                            .ghost()
+                            .with_size(Size::Small)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.toggle_mode(window, cx);
+                            })),
+                    )
+                    // Provider 选择器（仅 Agent 模式）
+                    .when(self.mode == InputMode::Agent, |this| {
+                        this.child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(self.provider_select_state.render()),
+                        )
+                    })
+                    // 模型设置按钮（仅 Agent 模式）
+                    .when(self.mode == InputMode::Agent, |this| {
+                        this.child(
+                            Popover::new("model-settings-popover")
+                                .anchor(Corner::BottomLeft)
+                                .trigger(
+                                    Button::new("model-settings-btn")
+                                        .icon(IconName::Settings)
+                                        .ghost()
+                                        .with_size(Size::Small),
+                                )
+                                .content(move |_state, _window, _cx| settings_panel.clone()),
+                        )
+                    }),
+            )
+            .child(h_flex().w_full().justify_end().child(SendButton::render(
                 &send_button_state,
                 move |window, app| {
                     if let Some(entity) = submit_entity.upgrade() {
@@ -584,7 +746,8 @@ impl AIInput {
                         });
                     }
                 },
-            ))
+            )))
+            .into_any_element()
     }
 }
 

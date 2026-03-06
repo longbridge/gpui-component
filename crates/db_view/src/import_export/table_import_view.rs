@@ -2,17 +2,18 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use gpui::{
-    div, prelude::FluentBuilder, px, App, AppContext, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, PathPromptOptions, Render, SharedString,
-    StatefulInteractiveElement, Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, PathPromptOptions, Render, SharedString, StatefulInteractiveElement, Styled,
+    Window, div, prelude::FluentBuilder, px,
 };
 use gpui_component::{
+    ActiveTheme, Disableable, IconName, IndexPath, VirtualListScrollHandle,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectItem, SelectState},
     switch::Switch,
-    v_flex, v_virtual_list, ActiveTheme, Disableable, IconName, IndexPath, VirtualListScrollHandle,
+    v_flex, v_virtual_list,
 };
 use tokio::sync::mpsc;
 

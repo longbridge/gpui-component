@@ -24,8 +24,8 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use crate::database_view_plugin::{ColumnEditorCapabilities, DatabaseViewPluginRegistry};
-use db::plugin::DatabasePlugin;
 use db::GlobalDbState;
+use db::plugin::DatabasePlugin;
 use db::types::{
     CharsetInfo, CollationInfo, ColumnDefinition, ColumnInfo, IndexDefinition, IndexInfo,
     TableDesign, TableOptions,
@@ -410,8 +410,13 @@ impl TableDesigner {
         design: &TableDesign,
         column_renames: &[(String, String)],
     ) -> Vec<(String, String)> {
-        let original_names: HashSet<&str> = original.columns.iter().map(|col| col.name.as_str()).collect();
-        let current_names: HashSet<&str> = design.columns.iter().map(|col| col.name.as_str()).collect();
+        let original_names: HashSet<&str> = original
+            .columns
+            .iter()
+            .map(|col| col.name.as_str())
+            .collect();
+        let current_names: HashSet<&str> =
+            design.columns.iter().map(|col| col.name.as_str()).collect();
         let mut seen_old = HashSet::new();
         let mut seen_new = HashSet::new();
 
@@ -3019,7 +3024,8 @@ mod tests {
         }
     }
 
-    fn build_delete_and_rename_conflict_case() -> (TableDesign, TableDesign, Vec<(String, String)>) {
+    fn build_delete_and_rename_conflict_case() -> (TableDesign, TableDesign, Vec<(String, String)>)
+    {
         let original = build_design(
             vec![build_col("a"), build_col("b"), build_col("c")],
             vec!["b"],
@@ -3032,9 +3038,15 @@ mod tests {
     fn assert_contains_rename_sql(sql: &str, database_type: DatabaseType) {
         match database_type {
             DatabaseType::MySQL => {
-                assert!(sql.contains("CHANGE COLUMN"), "MySQL 应使用 CHANGE COLUMN: {sql}");
+                assert!(
+                    sql.contains("CHANGE COLUMN"),
+                    "MySQL 应使用 CHANGE COLUMN: {sql}"
+                );
                 assert!(sql.contains("`b`"), "MySQL 重命名 SQL 应包含源列 b: {sql}");
-                assert!(sql.contains("`a`"), "MySQL 重命名 SQL 应包含目标列 a: {sql}");
+                assert!(
+                    sql.contains("`a`"),
+                    "MySQL 重命名 SQL 应包含目标列 a: {sql}"
+                );
             }
             DatabaseType::PostgreSQL => {
                 assert!(
@@ -3102,10 +3114,8 @@ mod tests {
     #[test]
     fn test_map_design_for_diff_rewrites_column_and_index_names() {
         let current = build_design(vec![build_col("a"), build_col("c")], vec!["a"]);
-        let mapped = TableDesigner::map_design_for_diff(
-            &current,
-            &[("b".to_string(), "a".to_string())],
-        );
+        let mapped =
+            TableDesigner::map_design_for_diff(&current, &[("b".to_string(), "a".to_string())]);
 
         let column_names: Vec<&str> = mapped.columns.iter().map(|col| col.name.as_str()).collect();
         assert_eq!(column_names, vec!["b", "c"]);
@@ -3177,7 +3187,10 @@ mod tests {
             &[("b".to_string(), "a".to_string())],
         );
         assert_eq!(statements.len(), 1);
-        assert_eq!(statements[0], "EXEC sp_rename '[users].[b]', 'a', 'COLUMN';");
+        assert_eq!(
+            statements[0],
+            "EXEC sp_rename '[users].[b]', 'a', 'COLUMN';"
+        );
     }
 
     #[test]
@@ -3289,7 +3302,10 @@ mod tests {
     fn test_simple_rename_generates_rename_not_drop_add() {
         let original = build_design(vec![build_col("a"), build_col("b"), build_col("c")], vec![]);
         // 用户将 b 重命名为 b2，其他不变
-        let current = build_design(vec![build_col("a"), build_col("b2"), build_col("c")], vec![]);
+        let current = build_design(
+            vec![build_col("a"), build_col("b2"), build_col("c")],
+            vec![],
+        );
         let renames = vec![("b".to_string(), "b2".to_string())];
 
         for database_type in DatabaseType::all().iter().copied() {
@@ -3314,7 +3330,8 @@ mod tests {
             let add_keyword = "ADD COLUMN";
             if database_type != DatabaseType::SQLite {
                 assert!(
-                    !sql.contains(&add_b2) && (!sql.contains(add_keyword) || sql.contains("RENAME")),
+                    !sql.contains(&add_b2)
+                        && (!sql.contains(add_keyword) || sql.contains("RENAME")),
                     "[{:?}] 简单重命名不应生成 ADD COLUMN: {sql}",
                     database_type
                 );
@@ -3323,11 +3340,7 @@ mod tests {
             let has_rename = sql.contains("RENAME COLUMN")
                 || sql.contains("CHANGE COLUMN")
                 || sql.contains("sp_rename");
-            assert!(
-                has_rename,
-                "[{:?}] 应包含重命名SQL: {sql}",
-                database_type
-            );
+            assert!(has_rename, "[{:?}] 应包含重命名SQL: {sql}", database_type);
             println!("[{:?}] SQL: {}", database_type, sql);
         }
     }
@@ -3404,5 +3417,4 @@ mod tests {
             "应包含正确的 RENAME SQL: {sql}"
         );
     }
-
 }

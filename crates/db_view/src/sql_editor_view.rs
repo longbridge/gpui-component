@@ -1,29 +1,29 @@
 use crate::sql_editor::SqlEditor;
 use crate::sql_result_tab::SqlResultTabContainer;
-use db::{compress_sql, format_sql, GlobalDbState};
+use db::{GlobalDbState, compress_sql, format_sql};
 use gpui::prelude::*;
 use gpui::{
-    div, px, App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity,
-    EventEmitter, FocusHandle, Focusable, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement,
-    Pixels, Point, Render, SharedString, Styled, Task, WeakEntity, Window,
+    App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity, EventEmitter,
+    FocusHandle, Focusable, IntoElement, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
+    Point, Render, SharedString, Styled, Task, WeakEntity, Window, div, px,
 };
 use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::input::{InputContextMenuItem, InputEvent};
 use gpui_component::select::{SearchableVec, Select, SelectEvent, SelectState};
 use gpui_component::{
-    h_flex, v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Sizable, Size, WindowExt,
+    ActiveTheme, Disableable, Icon, IconName, IndexPath, Sizable, Size, WindowExt, h_flex, v_flex,
 };
-use one_core::storage::manager::get_queries_dir;
 use one_core::storage::DatabaseType;
+use one_core::storage::manager::get_queries_dir;
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
 use one_core::utils::auto_save_config::AutoSaveConfig;
-use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
+use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
 use rust_i18n::t;
 use smol::Timer;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 use tracing::log::error;
 
@@ -381,11 +381,9 @@ impl SqlEditorTab {
                 let _ = cx.update_window(window_id, |_entity, window, cx| {
                     schema_select.update(cx, |state, cx| {
                         if schemas.is_empty() {
-                            let items = SearchableVec::new(vec![t!(
-                                "Common.no_available",
-                                item = &t!("Schema.schema")
-                            )
-                            .to_string()]);
+                            let items = SearchableVec::new(vec![
+                                t!("Common.no_available", item = &t!("Schema.schema")).to_string(),
+                            ]);
                             state.set_items(items, window, cx);
                             state.set_selected_index(None, window, cx);
                         } else {
@@ -481,11 +479,10 @@ impl SqlEditorTab {
                     cx.update_window(window_id, |_entity, window, cx| {
                         database_select.update(cx, |state, cx| {
                             if databases.is_empty() {
-                                let items = SearchableVec::new(vec![t!(
-                                    "Common.no_available",
-                                    item = &t!("Database.database")
-                                )
-                                .to_string()]);
+                                let items = SearchableVec::new(vec![
+                                    t!("Common.no_available", item = &t!("Database.database"))
+                                        .to_string(),
+                                ]);
                                 state.set_items(items, window, cx);
                                 state.set_selected_index(None, window, cx);
                             } else {

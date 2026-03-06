@@ -338,3 +338,58 @@
 □ 将遵循命名约定：Rust `snake_case` / 类型 `PascalCase`
 □ 将遵循代码风格：GPUI 链式构建 + 状态更新后 `cx.notify()`
 □ 确认不重复造轮子，证明：已检查 `sql_dump_view.rs`、`table_export_view.rs`、`sql_run_view.rs`，存在可直接复用模式
+
+## 编码前检查 - sidebar-chat-panel-migration
+时间：2026-03-06 10:20:55 CST
+
+□ 已查阅上下文摘要文件：.claude/context-summary-sidebar-chat-panel-migration.md
+□ 将使用以下可复用组件：
+- ChatPanel: crates/db_view/src/chatdb/chat_panel.rs - 复用消息与AI执行链路
+- AIInput: crates/db_view/src/chatdb/ai_input.rs - 复用输入与模型设置
+- DbConnectionSelector: crates/db_view/src/chatdb/db_connection_selector.rs - 复用连接/数据库选择
+□ 将遵循命名约定：Rust 结构体 PascalCase / 方法 snake_case
+□ 将遵循代码风格：现有事件驱动与 `cx.notify()` 刷新模式
+□ 确认不重复造轮子，证明：已检查 sidebar/chatdb/database_tab，采用配置扩展而非新造聊天链路
+
+## 编码后声明 - sidebar-chat-panel-migration
+时间：2026-03-06 10:27:45 CST
+
+### 1. 复用了以下既有组件
+- ChatPanel: 用于复用 AI 消息渲染与 SQL 执行链路，位于 crates/db_view/src/chatdb/chat_panel.rs
+- AIInput: 用于复用 Provider/模型设置与输入交互，位于 crates/db_view/src/chatdb/ai_input.rs
+- DbConnectionSelector: 用于连接/数据库/Schema 选择，位于 crates/db_view/src/chatdb/db_connection_selector.rs
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增类型采用 `DbSelectorContext` / `SelectorSourceMode`，方法采用 snake_case
+- 代码风格：保持事件驱动与 `cx.notify()` 刷新，未引入额外状态管理框架
+- 文件组织：上下文配置放在 chatdb 选择器模块，侧栏与 tab 仅做透传
+
+### 3. 对比了以下相似实现
+- crates/db_view/src/sidebar/mod.rs: 保留原有侧栏工具栏与 AskAi 事件流，仅替换面板实体
+- crates/db_view/src/chatdb/chat_panel.rs: 复用既有消息区和输入区，新增侧栏模式避免复制逻辑
+
+### 4. 未重复造轮子的证明
+- 检查了 sidebar/chatdb/database_tab 相关模块，未新增独立聊天业务链路
+- 通过 ChatPanel 模式配置和 DbSelectorContext 扩展完成需求，避免新建重复组件
+
+## 返修记录 - sidebar-chat-panel-migration（用户反馈三项）
+时间：2026-03-06 11:10:24 CST
+
+- 问题1（侧栏宽度不足导致底部控件挤压）：
+  - 调整 `AIInput::render_footer` 为双行布局（上行模式/模型设置，下行发送按钮）
+  - 提升数据库侧栏默认宽度与最小宽度（默认 420，最小 360）
+- 问题2（执行编辑 SQL 弹窗确认后未关闭）：
+  - `chat_panel.rs` 中非查询 SQL 的 `.on_ok` 返回值改为 `true`
+- 问题3（切库后 @表偶发不出现）：
+  - `AIInput` 元数据同步改为分阶段：先注入表名，再补列信息
+  - 新增 `schema_sync_seq`，拦截旧请求回写，避免切换数据库时数据串写
+
+本地验证：`cargo fmt --all && cargo check -p db_view` 通过。
+
+## 返修记录 - sidebar-chat-panel-topbar
+时间：2026-03-06 11:21:00 CST
+
+- 在 ChatPanel 侧栏模式新增顶部工具栏：新建对话、历史记录开关、关闭侧栏
+- 在侧栏模式新增历史会话抽屉（可展开/收起）
+- 恢复 DatabaseSidebar 对 ChatPanelEvent::Close 的订阅联动关闭
+- 本地验证：`cargo fmt --all && cargo check -p db_view` 通过

@@ -4,16 +4,17 @@ use std::time::Instant;
 
 // 2. 外部 crate 导入（按字母顺序）
 use gpui::{
-    div, prelude::FluentBuilder, px, App, AppContext, AsyncApp, ClickEvent, Context, Entity,
-    FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement, PathPromptOptions,
-    Render, Styled, Window,
+    App, AppContext, AsyncApp, ClickEvent, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, PathPromptOptions, Render, Styled, Window, div,
+    prelude::FluentBuilder, px,
 };
 use gpui_component::{
+    ActiveTheme, Disableable, Sizable, VirtualListScrollHandle,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputState},
     switch::Switch,
-    v_flex, v_virtual_list, ActiveTheme, Disableable, Sizable, VirtualListScrollHandle
+    v_flex, v_virtual_list,
 };
 use rust_i18n::t;
 use std::rc::Rc;

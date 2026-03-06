@@ -16,8 +16,11 @@ use gpui_component::{
     v_flex,
 };
 use one_core::storage::traits::Repository;
-use one_core::storage::{ConnectionRepository, ConnectionType, DatabaseType, GlobalStorageState};
+use one_core::storage::{
+    ConnectionRepository, ConnectionType, DatabaseType, GlobalStorageState, StoredConnection,
+};
 use rust_i18n::t;
+use std::collections::HashMap;
 
 // ========================================================================
 // 数据类型
@@ -42,6 +45,21 @@ impl ConnectionItem {
             database_type,
         }
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum SelectorSourceMode {
+    #[default]
+    Auto,
+    SingleConnection,
+    Workspace,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct DbSelectorContext {
+    pub source_mode: SelectorSourceMode,
+    pub connections: Vec<StoredConnection>,
+    pub active_connection_id: Option<i64>,
 }
 
 // ========================================================================
@@ -75,6 +93,8 @@ pub struct DbConnectionSelector {
     selected_connection: Option<ConnectionItem>,
     selected_database: Option<String>,
     selected_schema: Option<String>,
+    preferred_databases: HashMap<String, String>,
+    source_mode: SelectorSourceMode,
 
     supports_schema: bool,
     uses_schema_as_database: bool,
@@ -94,6 +114,7 @@ struct DbConnectionSelectorSnapshot {
     selected_connection: Option<ConnectionItem>,
     selected_database: Option<String>,
     selected_schema: Option<String>,
+    source_mode: SelectorSourceMode,
     supports_schema: bool,
     uses_schema_as_database: bool,
     loading_connections: bool,
@@ -102,11 +123,19 @@ struct DbConnectionSelectorSnapshot {
 }
 
 impl DbConnectionSelector {
-    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_with_context(window, cx, DbSelectorContext::default())
+    }
+
+    pub fn new_with_context(
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+        context: DbSelectorContext,
+    ) -> Self {
         let focus_handle = cx.focus_handle();
         let storage_manager = cx.global::<GlobalStorageState>().storage.clone();
 
-        Self {
+        let mut instance = Self {
             focus_handle,
             storage_manager,
             connections: Vec::new(),
@@ -115,6 +144,8 @@ impl DbConnectionSelector {
             selected_connection: None,
             selected_database: None,
             selected_schema: None,
+            preferred_databases: HashMap::new(),
+            source_mode: context.source_mode.clone(),
             supports_schema: false,
             uses_schema_as_database: false,
             popover_open: false,
@@ -122,7 +153,9 @@ impl DbConnectionSelector {
             loading_connections: false,
             loading_databases: false,
             loading_schemas: false,
-        }
+        };
+        instance.apply_selector_context(context, cx);
+        instance
     }
 
     pub fn get_connection_info(&self) -> Option<(String, Option<String>, Option<String>)> {
@@ -153,6 +186,7 @@ impl DbConnectionSelector {
             selected_connection: self.selected_connection.clone(),
             selected_database: self.selected_database.clone(),
             selected_schema: self.selected_schema.clone(),
+            source_mode: self.source_mode.clone(),
             supports_schema: self.supports_schema,
             uses_schema_as_database: self.uses_schema_as_database,
             loading_connections: self.loading_connections,
@@ -217,6 +251,77 @@ impl DbConnectionSelector {
         self.connections_loaded = true;
         self.loading_connections = false;
         cx.notify();
+    }
+
+    fn apply_selector_context(&mut self, context: DbSelectorContext, cx: &mut Context<Self>) {
+        if context.connections.is_empty() {
+            return;
+        }
+
+        let (connections, preferred_databases) =
+            Self::build_context_connections(&context.connections);
+        if connections.is_empty() {
+            return;
+        }
+
+        self.connections = connections;
+        self.preferred_databases = preferred_databases;
+        self.connections_loaded = true;
+        self.loading_connections = false;
+
+        let default_connection = context
+            .active_connection_id
+            .and_then(|id| {
+                let id = id.to_string();
+                self.connections.iter().find(|conn| conn.id == id).cloned()
+            })
+            .or_else(|| self.connections.first().cloned());
+
+        if let Some(connection) = default_connection {
+            self.handle_connection_selected(connection, cx);
+        }
+    }
+
+    fn build_context_connections(
+        stored_connections: &[StoredConnection],
+    ) -> (Vec<ConnectionItem>, HashMap<String, String>) {
+        let mut connections = Vec::new();
+        let mut preferred_databases = HashMap::new();
+
+        for stored in stored_connections {
+            if stored.connection_type != ConnectionType::Database {
+                continue;
+            }
+            let Some(id) = stored.id else {
+                continue;
+            };
+            let Ok(config) = stored.to_db_connection() else {
+                continue;
+            };
+
+            let id_str = id.to_string();
+            if let Some(selected) = stored
+                .get_selected_databases()
+                .and_then(|databases| databases.into_iter().next())
+            {
+                preferred_databases.insert(id_str.clone(), selected);
+            }
+
+            connections.push(ConnectionItem::new(
+                id_str,
+                stored.name.clone(),
+                config.database_type,
+            ));
+        }
+
+        (connections, preferred_databases)
+    }
+
+    fn should_auto_select_database(&self) -> bool {
+        matches!(
+            self.source_mode,
+            SelectorSourceMode::SingleConnection | SelectorSourceMode::Workspace
+        )
     }
 
     fn handle_connection_selected(&mut self, connection: ConnectionItem, cx: &mut Context<Self>) {
@@ -301,6 +406,27 @@ impl DbConnectionSelector {
                             }
                             Err(_) => {
                                 selector.databases.clear();
+                            }
+                        }
+                        let has_database_selected = if selector.uses_schema_as_database {
+                            selector.selected_schema.is_some()
+                        } else {
+                            selector.selected_database.is_some()
+                        };
+                        if !has_database_selected
+                            && selector.should_auto_select_database()
+                            && !selector.databases.is_empty()
+                        {
+                            let preferred =
+                                selector.selected_connection.as_ref().and_then(|conn| {
+                                    selector.preferred_databases.get(&conn.id).cloned()
+                                });
+                            let default_database = preferred
+                                .filter(|name| selector.databases.iter().any(|db| db == name))
+                                .or_else(|| selector.databases.first().cloned());
+                            if let Some(database) = default_database {
+                                selector.handle_database_selected(database, cx);
+                                return;
                             }
                         }
                         cx.notify();
@@ -531,6 +657,7 @@ impl DbConnectionSelector {
             selected_connection,
             selected_database,
             selected_schema,
+            source_mode,
             supports_schema,
             uses_schema_as_database,
             loading_connections,
@@ -618,16 +745,20 @@ impl DbConnectionSelector {
             t!("ChatDbSelector.database_title").to_string()
         };
 
+        let show_connection_column = !matches!(source_mode, SelectorSourceMode::SingleConnection);
+
         h_flex()
             .gap_0()
-            .child(Self::render_column(
-                "connections",
-                t!("ChatDbSelector.connection_title").to_string(),
-                connection_items,
-                loading_connections,
-                200.0,
-                colors,
-            ))
+            .when(show_connection_column, |this| {
+                this.child(Self::render_column(
+                    "connections",
+                    t!("ChatDbSelector.connection_title").to_string(),
+                    connection_items,
+                    loading_connections,
+                    200.0,
+                    colors,
+                ))
+            })
             .child(Self::render_column(
                 "databases",
                 database_title,

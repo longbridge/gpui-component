@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+use crate::chatdb::db_connection_selector::{DbSelectorContext, SelectorSourceMode};
 use crate::database_objects_tab::DatabaseObjectsPanel;
 use crate::db_tree_event::DatabaseEventHandler;
 use crate::db_tree_view::DbTreeView;
@@ -28,6 +29,8 @@ use uuid::Uuid;
 
 const PANEL_MIN_SIZE: Pixels = px(100.0);
 const TREE_PANEL_DEFAULT_SIZE: Pixels = px(250.0);
+const CHAT_SIDEBAR_MIN_WIDTH: Pixels = px(360.0);
+const CHAT_SIDEBAR_DEFAULT_WIDTH: Pixels = px(420.0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ResizingPanel {
@@ -85,7 +88,16 @@ impl DatabaseTabView {
             )
         });
 
-        let sidebar = cx.new(|cx| DatabaseSidebar::new(window, cx));
+        let selector_context = DbSelectorContext {
+            source_mode: if workspace.is_some() {
+                SelectorSourceMode::Workspace
+            } else {
+                SelectorSourceMode::SingleConnection
+            },
+            connections: connections.clone(),
+            active_connection_id: active_conn_id,
+        };
+        let sidebar = cx.new(|cx| DatabaseSidebar::new(window, cx, selector_context.clone()));
 
         // 注册 SQL 代码块操作
         Self::register_sql_code_block_actions(&sidebar, tab_container.clone(), &connections, cx);
@@ -135,7 +147,7 @@ impl DatabaseTabView {
             sidebar,
             _subscriptions: subscriptions,
             tree_panel_size: TREE_PANEL_DEFAULT_SIZE,
-            sidebar_panel_size: SIDEBAR_DEFAULT_WIDTH,
+            sidebar_panel_size: SIDEBAR_DEFAULT_WIDTH.max(CHAT_SIDEBAR_DEFAULT_WIDTH),
             resizing: None,
             bounds: Bounds::default(),
         }
@@ -317,8 +329,9 @@ impl DatabaseTabView {
                 let new_size = self.bounds.right() - mouse_position.x;
                 let max_size = (available_width - self.tree_panel_size - PANEL_MIN_SIZE)
                     .max(SIDEBAR_MIN_WIDTH);
-                self.sidebar_panel_size =
-                    new_size.clamp(SIDEBAR_MIN_WIDTH, max_size.min(SIDEBAR_MAX_WIDTH));
+                let upper = max_size.min(SIDEBAR_MAX_WIDTH);
+                let lower = SIDEBAR_MIN_WIDTH.max(CHAT_SIDEBAR_MIN_WIDTH).min(upper);
+                self.sidebar_panel_size = new_size.clamp(lower, upper);
             }
         }
 

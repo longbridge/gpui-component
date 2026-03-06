@@ -1718,7 +1718,10 @@ impl CollectionView {
                     )
                     .await;
                 match &documents {
-                    Ok(docs) => info!("[run_query] find_documents 成功，返回 {} 条文档", docs.len()),
+                    Ok(docs) => info!(
+                        "[run_query] find_documents 成功，返回 {} 条文档",
+                        docs.len()
+                    ),
                     Err(e) => error!("[run_query] find_documents 失败: {e}"),
                 }
                 let documents = documents.map_err(|e| anyhow::anyhow!("{}", e))?;
@@ -1741,7 +1744,11 @@ impl CollectionView {
             _ = this.update(cx, |view, cx| {
                 match result {
                     Ok((documents, total)) => {
-                        info!("[run_query] 异步结果成功，文档数={}, total={:?}", documents.len(), total);
+                        info!(
+                            "[run_query] 异步结果成功，文档数={}, total={:?}",
+                            documents.len(),
+                            total
+                        );
                         let items_result: Result<Vec<DocumentItem>, MongoError> = documents
                             .into_iter()
                             .enumerate()
