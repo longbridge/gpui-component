@@ -1593,17 +1593,16 @@ impl Element for TextElement {
             scroll_size.width = longest_line_width + line_number_width;
         }
 
-        // For single-line mode, `update_scroll_offset` in state.rs clamps the scroll using
-        // `input_bounds.size.width` (the full element width including padding), while
-        // `layout_cursor` here uses `bounds.size.width` (the content area, after padding).
-        // Without correction these two disagree by `padding.left + padding.right`, which causes:
-        //   1. Over-scrolling that pushes the last characters beyond the visible right edge.
-        //   2. Oscillation (shaking) between the two mismatched scroll limits on every click.
-        // Adding the horizontal padding to scroll_size.width makes update_scroll_offset compute
-        // the same effective max-scroll as layout_cursor, eliminating both issues.
-        if !multi_line {
-            scroll_size.width += padding.left + padding.right;
-        }
+        // `update_scroll_offset` clamps scroll using `input_bounds.size.width` (full element
+        // width including padding), while `layout_cursor` uses `bounds.size.width` (content
+        // area after padding).  Without the correction the two disagree by
+        // `padding.left + padding.right`, causing the cursor‐tracking scroll to be clamped
+        // short for every alignment — which shifts text past the right edge.
+        //
+        // For right/center the paint pass compensates by subtracting `input_bounds.size.width`
+        // instead of `bounds.size.width` (see the paint() function), keeping the visual offset
+        // correct while letting update_scroll_offset clamp to the right range.
+        scroll_size.width += padding.left + padding.right;
 
         // `position_for_index` for example
         //
@@ -1851,11 +1850,15 @@ impl Element for TextElement {
         let ghost_lines = &prepaint.ghost_lines;
         let has_ghost_lines = !ghost_lines.is_empty();
 
-        // Keep scrollbar offset always be positive，Start from the left position
+        // Keep scrollbar offset always be positive，Start from the left position.
+        // For right/center alignment scroll_size.width includes padding.left + padding.right
+        // (added in prepaint to align update_scroll_offset with layout_cursor).  To produce
+        // the correct visual offset we therefore subtract input_bounds.size.width (which equals
+        // bounds.size.width + padding.left + padding.right) rather than bounds.size.width.
         let scroll_offset = if text_align == TextAlign::Right {
-            (prepaint.scroll_size.width - prepaint.bounds.size.width).max(px(0.))
+            (prepaint.scroll_size.width - input_bounds.size.width).max(px(0.))
         } else if text_align == TextAlign::Center {
-            (prepaint.scroll_size.width - prepaint.bounds.size.width)
+            (prepaint.scroll_size.width - input_bounds.size.width)
                 .half()
                 .max(px(0.))
         } else {
