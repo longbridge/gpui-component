@@ -53,7 +53,12 @@ const TERMINAL_CONTEXT: &str = "TerminalView";
 const DEFAULT_CELL_WIDTH: Pixels = px(8.0);
 const DEFAULT_COLS: usize = 80;
 const DEFAULT_ROWS: usize = 24;
-const ALT_SCREEN_SCROLL_SENSITIVITY: f32 = 0.3;
+
+fn take_whole_scroll_lines(scroll_lines_accumulated: &mut f32) -> i32 {
+    let lines = scroll_lines_accumulated.trunc() as i32;
+    *scroll_lines_accumulated -= lines as f32;
+    lines
+}
 
 /// 正在调整大小的面板
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1254,58 +1259,34 @@ impl TerminalView {
     ) {
         let delta_pixels = event.delta.pixel_delta(self.line_height);
         let delta_lines = delta_pixels.y / self.line_height;
+        self.scroll_lines_accumulated += delta_lines;
 
         let mode = self.terminal.read(cx).mode();
-        let mouse_mode = mode.contains(TermMode::MOUSE_REPORT_CLICK)
-            || mode.contains(TermMode::MOUSE_DRAG)
-            || mode.contains(TermMode::MOUSE_MOTION);
+        let lines = take_whole_scroll_lines(&mut self.scroll_lines_accumulated);
 
         if mode.contains(TermMode::ALT_SCREEN) {
-            if mouse_mode {
-                let point = self.pixel_to_point(event.position, self.terminal_bounds, cx);
-                let col = point.column.0 + 1;
-                let row = point.line.0 + 1;
-
-                let count = delta_lines.abs().ceil() as i32;
-                // 64 = 向上滚动, 65 = 向下滚动
-                // delta_lines < 0 表示用户向下滑动（自然滚动），应发送向上滚动事件
-                let button = if delta_lines < 0.0 { 64 } else { 65 };
-
-                for _ in 0..count {
-                    let seq = if mode.contains(TermMode::SGR_MOUSE) {
-                        format!("\x1b[<{};{};{}M", button, col, row)
-                    } else {
-                        let cb = (button + 32) as u8 as char;
-                        let cx_char = (col as u8 + 32) as char;
-                        let cy = (row as u8 + 32) as char;
-                        format!("\x1b[M{}{}{}", cb, cx_char, cy)
-                    };
-                    self.write_to_pty(seq.into_bytes(), cx);
-                }
-            } else {
-                self.scroll_lines_accumulated += delta_lines * ALT_SCREEN_SCROLL_SENSITIVITY;
-                let lines = self.scroll_lines_accumulated as i32;
-                if lines != 0 {
-                    // delta_lines < 0 → 向下滑动 → 发送 Up 箭头查看历史
-                    let arrow = if lines < 0 { "\x1b[A" } else { "\x1b[B" };
-                    for _ in 0..lines.abs() {
-                        self.write_to_pty(arrow.as_bytes().to_vec(), cx);
-                    }
-                    self.scroll_lines_accumulated -= lines as f32;
+            // ALT_SCREEN（vim、less 等）：累计到整行后再转为上下箭头，避免放大小幅滚轮输入
+            if lines != 0 {
+                // APP_CURSOR 模式下箭头键使用 SS3（\x1bO）前缀而非 CSI（\x1b[）
+                let arrow = match (lines < 0, mode.contains(TermMode::APP_CURSOR)) {
+                    (true, true) => "\x1bOA",   // Up, application mode
+                    (true, false) => "\x1b[A",  // Up, normal mode
+                    (false, true) => "\x1bOB",  // Down, application mode
+                    (false, false) => "\x1b[B", // Down, normal mode
+                };
+                for _ in 0..lines.abs() {
+                    self.write_to_pty(arrow.as_bytes().to_vec(), cx);
                 }
             }
             return;
         }
 
-        self.scroll_lines_accumulated += delta_lines;
-
-        let lines = self.scroll_lines_accumulated as i32;
         if lines != 0 {
             let term = self.terminal.read(cx).term().clone();
 
             if mode.contains(TermMode::VI) {
                 let mut term = term.lock();
-                // delta_lines < 0 → 向下滑动 → lines < 0 → 传入正值使光标向上移动
+                // 沿用 Alacritty `ViModeCursor::scroll` 的符号语义，直接传入离散后的行数
                 let vi_cursor = term.vi_mode_cursor.scroll(&term, lines);
                 term.vi_goto_point(vi_cursor.point);
 
@@ -1321,11 +1302,10 @@ impl TerminalView {
                     term.scroll_display(alacritty_terminal::grid::Scroll::Delta(delta));
                 }
             } else {
-                // delta_lines < 0 → 向下滑动 → lines < 0 → 传入正值向上滚动（查看历史）
+                // 沿用终端 display scroll 的符号语义，直接传入离散后的行数
                 term.lock()
                     .scroll_display(alacritty_terminal::grid::Scroll::Delta(lines));
             }
-            self.scroll_lines_accumulated -= lines as f32;
             cx.notify();
         }
     }
@@ -2032,5 +2012,32 @@ impl Element for ResizeEventHandler {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::take_whole_scroll_lines;
+
+    #[test]
+    fn take_whole_scroll_lines_preserves_fractional_remainder() {
+        let mut accumulated = 0.4;
+        assert_eq!(take_whole_scroll_lines(&mut accumulated), 0);
+        assert!((accumulated - 0.4).abs() < f32::EPSILON);
+
+        accumulated += 0.8;
+        assert_eq!(take_whole_scroll_lines(&mut accumulated), 1);
+        assert!((accumulated - 0.2).abs() < 0.0001);
+    }
+
+    #[test]
+    fn take_whole_scroll_lines_handles_negative_accumulation() {
+        let mut accumulated = -0.45;
+        assert_eq!(take_whole_scroll_lines(&mut accumulated), 0);
+        assert!((accumulated + 0.45).abs() < f32::EPSILON);
+
+        accumulated -= 0.8;
+        assert_eq!(take_whole_scroll_lines(&mut accumulated), -1);
+        assert!((accumulated + 0.25).abs() < 0.0001);
     }
 }

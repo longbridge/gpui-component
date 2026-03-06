@@ -33,6 +33,12 @@ impl SshBackend {
         let mut client = RusshClient::connect(config).await?;
         let mut channel = client.open_channel().await?;
 
+        // // 通过 SSH env 请求注入 UTF-8 locale（在 PTY/shell 启动前，完全不可见）
+        // // want_reply=false：避免服务端不回复时阻塞连接
+        // for (name, value) in [("LANG", "en_US.UTF-8"), ("LC_ALL", "en_US.UTF-8")] {
+        //     let _ = channel.set_env(name, value).await;
+        // }
+
         channel.request_pty(&pty_config).await?;
         channel.request_shell().await?;
 

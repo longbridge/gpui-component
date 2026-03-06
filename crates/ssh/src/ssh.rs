@@ -103,6 +103,7 @@ pub trait SshChannel: Send {
     async fn request_pty(&mut self, config: &PtyConfig) -> Result<()>;
     async fn exec(&mut self, command: &str) -> Result<()>;
     async fn request_shell(&mut self) -> Result<()>;
+    async fn set_env(&mut self, name: &str, value: &str) -> Result<()>;
     async fn send_data(&mut self, data: &[u8]) -> Result<()>;
     async fn resize_pty(&mut self, width: u32, height: u32) -> Result<()>;
     async fn recv(&mut self) -> Option<ChannelEvent>;
@@ -582,6 +583,11 @@ impl SshChannel for RusshChannel {
 
     async fn request_shell(&mut self) -> Result<()> {
         self.channel.request_shell(true).await?;
+        Ok(())
+    }
+
+    async fn set_env(&mut self, name: &str, value: &str) -> Result<()> {
+        self.channel.set_env(false, name, value).await?;
         Ok(())
     }
 

@@ -393,3 +393,38 @@
 - 在侧栏模式新增历史会话抽屉（可展开/收起）
 - 恢复 DatabaseSidebar 对 ChatPanelEvent::Close 的订阅联动关闭
 - 本地验证：`cargo fmt --all && cargo check -p db_view` 通过
+
+## 编码前检查 - terminal-handle-scroll
+时间：2026-03-06 16:11:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-terminal-handle-scroll.md`
+□ 将使用以下可复用组件：
+- `scroll_lines_accumulated`: `crates/terminal_view/src/view.rs` - 复用现有滚轮累计状态
+- `write_to_pty`: `crates/terminal_view/src/view.rs` - 复用终端输入写入封装
+- `Terminal::scroll`: `crates/terminal/src/terminal.rs` - 复用普通 display scroll 封装
+□ 将遵循命名约定：Rust 类型 `PascalCase` / 方法与字段 `snake_case`
+□ 将遵循代码风格：小范围局部修复、状态更新后按需 `cx.notify()`
+□ 确认不重复造轮子，证明：已检查 `terminal_view`、`redis_cli_view`、`edit_table` 的滚轮实现，采用复用累计逻辑而非新增滚动抽象
+
+## 编码后声明 - terminal-handle-scroll
+时间：2026-03-06 16:16:00 +0800
+
+### 1. 复用了以下既有组件
+- `scroll_lines_accumulated`：用于复用已有滚轮累计状态，位于 `crates/terminal_view/src/view.rs`
+- `write_to_pty`：用于复用 ALT_SCREEN 下终端输入写入，位于 `crates/terminal_view/src/view.rs`
+- `Terminal::scroll` / `scroll_display` 语义：用于保持普通滚动路径不变，位于 `crates/terminal/src/terminal.rs`
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增函数 `take_whole_scroll_lines` 采用 `snake_case`
+- 代码风格：仅做局部修复和小型纯函数抽取，未改动模块边界
+- 文件组织：只修改 `crates/terminal_view/src/view.rs`，验证仍复用现有 `keys.rs` 测试
+
+### 3. 对比了以下相似实现
+- `crates/redis_view/src/redis_cli_view.rs`：保留 delta 原始语义，不放大滚轮输入
+- `crates/one_ui/src/edit_table/state.rs`：按滚轮正负值与边界决定处理方式
+- `crates/terminal_view/src/keys.rs`：APP_CURSOR 序列映射保持不变
+
+### 4. 未重复造轮子的证明
+- 未新增新的滚轮状态对象，仅复用既有 `scroll_lines_accumulated`
+- 未新增新的终端输入抽象，继续复用 `write_to_pty`
+- 未改造底层终端滚动模型，仅修正 ALT_SCREEN 分支的离散化策略

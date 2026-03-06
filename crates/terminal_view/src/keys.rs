@@ -62,8 +62,7 @@ const PLAIN_FKEYS: [(&str, &str); 20] = [
     ("f20", "\x1b[34~"),
 ];
 
-const MOD_FKEY_PREFIX: [(&str, char); 4] =
-    [("f1", 'P'), ("f2", 'Q'), ("f3", 'R'), ("f4", 'S')];
+const MOD_FKEY_PREFIX: [(&str, char); 4] = [("f1", 'P'), ("f2", 'Q'), ("f3", 'R'), ("f4", 'S')];
 
 const MOD_FKEY_TILDE: [(&str, u16); 16] = [
     ("f5", 15),
@@ -299,7 +298,10 @@ mod tests {
     #[test]
     fn app_cursor_arrow_mapping() {
         let up = Keystroke::parse("up").unwrap();
-        assert_eq!(to_esc_str(&up, &TermMode::NONE, false).unwrap().as_ref(), "\x1b[A");
+        assert_eq!(
+            to_esc_str(&up, &TermMode::NONE, false).unwrap().as_ref(),
+            "\x1b[A"
+        );
         assert_eq!(
             to_esc_str(&up, &TermMode::APP_CURSOR, false)
                 .unwrap()
