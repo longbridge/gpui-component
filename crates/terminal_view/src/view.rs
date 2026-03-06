@@ -8,7 +8,7 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
 use gpui_component::scroll::{Scrollbar, ScrollbarHandle, ScrollbarShow};
-use gpui_component::{BlinkCursor, Icon, IconName, Sizable, Size, WindowExt};
+use gpui_component::{kbd::Kbd, BlinkCursor, Icon, IconName, Sizable, Size, WindowExt};
 use std::borrow::Cow;
 use std::cell::{Cell as StdCell, RefCell};
 use std::path::PathBuf;
@@ -50,6 +50,27 @@ actions!(
 
 const TERMINAL_CONTEXT: &str = "TerminalView";
 
+#[cfg(target_os = "macos")]
+const TERMINAL_COPY_SHORTCUT: &str = "cmd-c";
+#[cfg(not(target_os = "macos"))]
+const TERMINAL_COPY_SHORTCUT: &str = "ctrl-shift-c";
+#[cfg(target_os = "macos")]
+const TERMINAL_PASTE_SHORTCUT: &str = "cmd-v";
+#[cfg(not(target_os = "macos"))]
+const TERMINAL_PASTE_SHORTCUT: &str = "ctrl-shift-v";
+#[cfg(target_os = "macos")]
+const TERMINAL_SELECT_ALL_SHORTCUT: &str = "cmd-a";
+#[cfg(not(target_os = "macos"))]
+const TERMINAL_SELECT_ALL_SHORTCUT: &str = "ctrl-shift-a";
+#[cfg(target_os = "macos")]
+const TERMINAL_SEARCH_FORWARD_SHORTCUT: &str = "cmd-f";
+#[cfg(not(target_os = "macos"))]
+const TERMINAL_SEARCH_FORWARD_SHORTCUT: &str = "ctrl-shift-f";
+#[cfg(target_os = "macos")]
+const TERMINAL_SEARCH_BACKWARD_SHORTCUT: &str = "cmd-g";
+#[cfg(not(target_os = "macos"))]
+const TERMINAL_SEARCH_BACKWARD_SHORTCUT: &str = "ctrl-shift-g";
+
 const DEFAULT_CELL_WIDTH: Pixels = px(8.0);
 const DEFAULT_COLS: usize = 80;
 const DEFAULT_ROWS: usize = 24;
@@ -58,6 +79,10 @@ fn take_whole_scroll_lines(scroll_lines_accumulated: &mut f32) -> i32 {
     let lines = scroll_lines_accumulated.trunc() as i32;
     *scroll_lines_accumulated -= lines as f32;
     lines
+}
+
+fn terminal_shortcut_label(shortcut: &str) -> SharedString {
+    Kbd::format(&Keystroke::parse(shortcut).expect("终端快捷键定义非法")).into()
 }
 
 /// 正在调整大小的面板
@@ -70,12 +95,24 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("tab", SendTab, Some(TERMINAL_CONTEXT)),
         KeyBinding::new("shift-tab", SendShiftTab, Some(TERMINAL_CONTEXT)),
-        KeyBinding::new("cmd-c", Copy, Some(TERMINAL_CONTEXT)),
-        KeyBinding::new("cmd-v", Paste, Some(TERMINAL_CONTEXT)),
-        KeyBinding::new("cmd-a", SelectAll, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new(TERMINAL_COPY_SHORTCUT, Copy, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new(TERMINAL_PASTE_SHORTCUT, Paste, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new(
+            TERMINAL_SELECT_ALL_SHORTCUT,
+            SelectAll,
+            Some(TERMINAL_CONTEXT),
+        ),
         KeyBinding::new("escape", ClearSelection, Some(TERMINAL_CONTEXT)),
-        KeyBinding::new("cmd-f", SearchForward, Some(TERMINAL_CONTEXT)),
-        KeyBinding::new("cmd-g", SearchBackward, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new(
+            TERMINAL_SEARCH_FORWARD_SHORTCUT,
+            SearchForward,
+            Some(TERMINAL_CONTEXT),
+        ),
+        KeyBinding::new(
+            TERMINAL_SEARCH_BACKWARD_SHORTCUT,
+            SearchBackward,
+            Some(TERMINAL_CONTEXT),
+        ),
         KeyBinding::new("ctrl-shift-space", ToggleViMode, Some(TERMINAL_CONTEXT)),
     ]);
 }
@@ -593,12 +630,32 @@ impl TerminalView {
             self.blink_manager.update(cx, BlinkCursor::pause);
         }
 
+        #[cfg(target_os = "macos")]
         if event.keystroke.modifiers.platform && event.keystroke.key == "v" {
             self.paste(&Paste, _window, cx);
             return;
         }
 
+        #[cfg(not(target_os = "macos"))]
+        if event.keystroke.modifiers.control
+            && event.keystroke.modifiers.shift
+            && event.keystroke.key == "v"
+        {
+            self.paste(&Paste, _window, cx);
+            return;
+        }
+
+        #[cfg(target_os = "macos")]
         if event.keystroke.modifiers.platform && event.keystroke.key == "c" {
+            self.copy(&Copy, _window, cx);
+            return;
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        if event.keystroke.modifiers.control
+            && event.keystroke.modifiers.shift
+            && event.keystroke.key == "c"
+        {
             self.copy(&Copy, _window, cx);
             return;
         }
@@ -1066,40 +1123,52 @@ impl TerminalView {
         let view_paste = view.clone();
         let view_select_all = view.clone();
         let view_clear = view.clone();
+        let copy_shortcut = terminal_shortcut_label(TERMINAL_COPY_SHORTCUT);
+        let paste_shortcut = terminal_shortcut_label(TERMINAL_PASTE_SHORTCUT);
+        let select_all_shortcut = terminal_shortcut_label(TERMINAL_SELECT_ALL_SHORTCUT);
 
         let mut menu = menu
             // 复制
             .item(
-                PopupMenuItem::new(t!("ContextMenu.copy"))
-                    .icon(IconName::Copy)
-                    .action(Box::new(Copy))
-                    .disabled(!has_selection)
-                    .on_click(move |_, window, cx| {
-                        let _ = view_copy.update(cx, |this, cx| {
-                            this.copy(&Copy, window, cx);
-                        });
-                    }),
+                PopupMenuItem::new(t!(
+                    "ContextMenu.copy_with_shortcut",
+                    shortcut = copy_shortcut
+                ))
+                .icon(IconName::Copy)
+                .action(Box::new(Copy))
+                .disabled(!has_selection)
+                .on_click(move |_, window, cx| {
+                    let _ = view_copy.update(cx, |this, cx| {
+                        this.copy(&Copy, window, cx);
+                    });
+                }),
             )
             // 粘贴
             .item(
-                PopupMenuItem::new(t!("ContextMenu.paste"))
-                    .action(Box::new(Paste))
-                    .on_click(move |_, window, cx| {
-                        let _ = view_paste.update(cx, |this, cx| {
-                            this.paste(&Paste, window, cx);
-                        });
-                    }),
+                PopupMenuItem::new(t!(
+                    "ContextMenu.paste_with_shortcut",
+                    shortcut = paste_shortcut
+                ))
+                .action(Box::new(Paste))
+                .on_click(move |_, window, cx| {
+                    let _ = view_paste.update(cx, |this, cx| {
+                        this.paste(&Paste, window, cx);
+                    });
+                }),
             )
             .separator()
             // 全选
             .item(
-                PopupMenuItem::new(t!("ContextMenu.select_all"))
-                    .action(Box::new(SelectAll))
-                    .on_click(move |_, window, cx| {
-                        let _ = view_select_all.update(cx, |this, cx| {
-                            this.select_all(&SelectAll, window, cx);
-                        });
-                    }),
+                PopupMenuItem::new(t!(
+                    "ContextMenu.select_all_with_shortcut",
+                    shortcut = select_all_shortcut
+                ))
+                .action(Box::new(SelectAll))
+                .on_click(move |_, window, cx| {
+                    let _ = view_select_all.update(cx, |this, cx| {
+                        this.select_all(&SelectAll, window, cx);
+                    });
+                }),
             )
             // 清除选择
             .item(

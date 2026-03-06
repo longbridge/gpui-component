@@ -428,3 +428,69 @@
 - 未新增新的滚轮状态对象，仅复用既有 `scroll_lines_accumulated`
 - 未新增新的终端输入抽象，继续复用 `write_to_pty`
 - 未改造底层终端滚动模型，仅修正 ALT_SCREEN 分支的离散化策略
+
+## 分析记录 - shortcuts-cross-platform
+时间：2026-03-06 16:55:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-shortcuts-cross-platform.md`
+- 已分析相似实现：
+  - `crates/ui/src/input/state.rs`（完整跨平台绑定样板）
+  - `crates/one_ui/src/edit_table/mod.rs`（简单编辑动作跨平台分支）
+  - `examples/system_monitor/src/main.rs`（系统级退出快捷键跨平台分支）
+- 已识别真实问题点：
+  - `crates/terminal_view/src/view.rs` 中 5 个 `cmd-*` 绑定未做非 macOS 适配
+  - `crates/redis_view/src/redis_cli_view.rs` 中 7 个 `cmd-*` 绑定未做非 macOS 适配
+- 已核对参考：
+  - `crates/ui/src/kbd.rs` 显示层确认 `secondary/platform` 具备平台语义
+  - GitHub 搜索 `zed-industries/zed` 的 GPUI 使用样例，确认跨平台键位通常需要显式按平台定义
+- 当前阶段为审查分析，尚未修改代码
+
+## 编码前检查 - shortcuts-cross-platform-fix
+时间：2026-03-06 17:01:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-shortcuts-cross-platform.md`
+□ 将使用以下可复用组件：
+- `crates/ui/src/input/state.rs`：跨平台快捷键条件编译模板
+- `crates/one_ui/src/edit_table/mod.rs`：简单通用编辑动作的双平台绑定模板
+- `examples/system_monitor/src/main.rs`：系统级动作平台差异样板
+□ 将遵循命名约定：保持现有动作名、上下文名和 `KeyBinding::new` 风格不变
+□ 将遵循代码风格：使用 `#[cfg(target_os = "macos")]` / `#[cfg(not(target_os = "macos"))]` 成对注册，不新增抽象层
+□ 确认不重复造轮子，证明：本次复用仓库既有跨平台绑定模式，不引入新的快捷键 helper
+
+## 编码后声明 - shortcuts-cross-platform-fix
+时间：2026-03-06 17:09:00 +0800
+
+### 1. 复用了以下既有组件
+- `crates/ui/src/input/state.rs`：用于复用跨平台快捷键条件编译模式
+- `crates/one_ui/src/edit_table/mod.rs`：用于复用通用编辑动作的 `cmd-*` / `ctrl-*` 分支样式
+- `examples/system_monitor/src/main.rs`：用于参考系统级快捷键的平台差异处理方式
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增动作名与上下文名，保持现有 `KeyBinding::new` 调用风格
+- 代码风格：使用 `#[cfg(target_os = "macos")]` / `#[cfg(not(target_os = "macos"))]` 成对绑定
+- 文件组织：仅修改 `crates/terminal_view/src/view.rs` 与 `crates/redis_view/src/redis_cli_view.rs`
+
+### 3. 对比了以下相似实现
+- `crates/ui/src/input/state.rs`：完整跨平台快捷键模板，本次直接沿用其分支思路
+- `crates/one_ui/src/edit_table/mod.rs`：复制/粘贴/全选的最小跨平台样板
+- `examples/system_monitor/src/main.rs`：说明仓库允许同一动作按平台使用不同快捷键
+
+### 4. 未重复造轮子的证明
+- 未新增快捷键 helper 或平台抽象层，避免扩大改动面
+- 直接复用仓库既有条件编译模式修复两个业务模块
+- Redis CLI 对非 macOS 额外补充 `home/end/shift-home/shift-end`，用于避免 `ctrl-a` 与全选冲突
+
+## 返修记录 - terminal-shortcuts-platform-aware
+时间：2026-03-06 17:28:00 +0800
+
+- 根据用户补充约束，终端场景下非 macOS 不能使用 `Ctrl+C` / `Ctrl+V` / `Ctrl+F` 等会影响终端控制序列的组合。
+- `crates/terminal_view/src/view.rs` 已调整为：
+  - macOS：`Cmd+C` / `Cmd+V` / `Cmd+A` / `Cmd+F` / `Cmd+G`
+  - 非 macOS：`Ctrl+Shift+C` / `Ctrl+Shift+V` / `Ctrl+Shift+A` / `Ctrl+Shift+F` / `Ctrl+Shift+G`
+- `handle_key_event` 中同步补充了非 macOS 的 `Ctrl+Shift+C/V` 粘贴拦截逻辑。
+- `crates/terminal_view/locales/terminal_view.yml` 新增菜单文案占位符：
+  - `ContextMenu.copy_with_shortcut`
+  - `ContextMenu.paste_with_shortcut`
+  - `ContextMenu.select_all_with_shortcut`
+- 右键菜单现在通过 `Kbd::format` 按平台显示快捷键文本。
+- 本地验证：`cargo fmt --all && cargo check -p terminal_view` 通过。

@@ -306,14 +306,26 @@ ContextMenu:
     en: Copy
     zh-CN: 复制
     zh-HK: 複製
+  copy_with_shortcut:
+    en: "Copy (%{shortcut})"
+    zh-CN: "复制（%{shortcut}）"
+    zh-HK: "複製（%{shortcut}）"
   paste:
     en: Paste
     zh-CN: 粘贴
     zh-HK: 貼上
+  paste_with_shortcut:
+    en: "Paste (%{shortcut})"
+    zh-CN: "粘贴（%{shortcut}）"
+    zh-HK: "貼上（%{shortcut}）"
   select_all:
     en: Select All
     zh-CN: 全选
     zh-HK: 全選
+  select_all_with_shortcut:
+    en: "Select All (%{shortcut})"
+    zh-CN: "全选（%{shortcut}）"
+    zh-HK: "全選（%{shortcut}）"
   clear_selection:
     en: Clear Selection
     zh-CN: 清除选择

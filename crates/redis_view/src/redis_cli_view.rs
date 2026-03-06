@@ -281,21 +281,39 @@ impl ScrollbarHandle for RedisCliScrollbarHandle {
 pub fn init(cx: &mut App) {
     cx.bind_keys([
         gpui::KeyBinding::new("ctrl-l", ClearOutput, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(target_os = "macos")]
         gpui::KeyBinding::new("cmd-c", Copy, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        gpui::KeyBinding::new("ctrl-c", Copy, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(target_os = "macos")]
         gpui::KeyBinding::new("cmd-v", Paste, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        gpui::KeyBinding::new("ctrl-v", Paste, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(target_os = "macos")]
         gpui::KeyBinding::new("cmd-a", SelectAll, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        gpui::KeyBinding::new("ctrl-a", SelectAll, Some(REDIS_CLI_CONTEXT)),
         gpui::KeyBinding::new("escape", ClearSelection, Some(REDIS_CLI_CONTEXT)),
         // 光标移动
         gpui::KeyBinding::new("left", MoveLeft, Some(REDIS_CLI_CONTEXT)),
         gpui::KeyBinding::new("right", MoveRight, Some(REDIS_CLI_CONTEXT)),
+        gpui::KeyBinding::new("home", MoveToStart, Some(REDIS_CLI_CONTEXT)),
+        gpui::KeyBinding::new("end", MoveToEnd, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(target_os = "macos")]
         gpui::KeyBinding::new("ctrl-a", MoveToStart, Some(REDIS_CLI_CONTEXT)),
         gpui::KeyBinding::new("ctrl-e", MoveToEnd, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(target_os = "macos")]
         gpui::KeyBinding::new("cmd-left", MoveToStart, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(target_os = "macos")]
         gpui::KeyBinding::new("cmd-right", MoveToEnd, Some(REDIS_CLI_CONTEXT)),
         // Shift+方向键选择
         gpui::KeyBinding::new("shift-left", SelectLeft, Some(REDIS_CLI_CONTEXT)),
         gpui::KeyBinding::new("shift-right", SelectRight, Some(REDIS_CLI_CONTEXT)),
+        gpui::KeyBinding::new("shift-home", SelectToStart, Some(REDIS_CLI_CONTEXT)),
+        gpui::KeyBinding::new("shift-end", SelectToEnd, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(target_os = "macos")]
         gpui::KeyBinding::new("shift-cmd-left", SelectToStart, Some(REDIS_CLI_CONTEXT)),
+        #[cfg(target_os = "macos")]
         gpui::KeyBinding::new("shift-cmd-right", SelectToEnd, Some(REDIS_CLI_CONTEXT)),
         gpui::KeyBinding::new("shift-ctrl-a", SelectToStart, Some(REDIS_CLI_CONTEXT)),
         gpui::KeyBinding::new("shift-ctrl-e", SelectToEnd, Some(REDIS_CLI_CONTEXT)),
