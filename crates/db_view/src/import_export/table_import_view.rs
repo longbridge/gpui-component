@@ -8,13 +8,11 @@ use gpui::{
 };
 use gpui_component::{
     button::{Button, ButtonVariants as _},
-    dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectItem, SelectState},
     switch::Switch,
     v_flex, v_virtual_list, ActiveTheme, Disableable, IconName, IndexPath, VirtualListScrollHandle,
-    WindowExt as _,
 };
 use tokio::sync::mpsc;
 
@@ -328,40 +326,20 @@ impl TableImportView {
             return;
         }
 
-        let table = self.table.clone();
-        let panel = cx.entity().clone();
-        window.open_dialog(cx, move |dialog, _window, _cx| {
-            let panel_for_ok = panel.clone();
-            let table_name = table.clone();
-            dialog
-                .overlay(false)
-                .title(t!("Common.confirm_clear").to_string())
-                .confirm()
-                .button_props(
-                    DialogButtonProps::default()
-                        .ok_text(t!("Common.confirm").to_string())
-                        .cancel_text(t!("Common.cancel").to_string()),
+        let table_name = self.table.clone();
+        self.logs.update(cx, |l, cx| {
+            l.push(LogEntry {
+                table: table_name.clone(),
+                message: t!(
+                    "ImportExport.confirm_truncate_before_import_message",
+                    table = table_name
                 )
-                .child(
-                    v_flex()
-                        .gap_2()
-                        .child(
-                            t!(
-                                "ImportExport.confirm_truncate_before_import_message",
-                                table = table_name
-                            )
-                            .to_string(),
-                        )
-                        .child(t!("ImportExport.confirm_truncate_before_import_desc").to_string()),
-                )
-                .on_ok(move |_, window, cx| {
-                    panel_for_ok.update(cx, |view, cx| {
-                        view.start_import(window, cx);
-                    });
-                    false
-                })
-                .on_cancel(|_, _, _| true)
+                .to_string(),
+            });
+            cx.notify();
         });
+        self.scroll_handle.scroll_to_bottom();
+        self.start_import(window, cx);
     }
 
     fn start_import(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
@@ -1376,8 +1354,8 @@ impl Render for TableImportView {
                     })
                     .when(is_finished, |this| {
                         this.child(Button::new("close").primary().child(t!("Common.finish").to_string()).on_click(
-                            |_, window, cx| {
-                                gpui_component::WindowExt::close_dialog(window, cx);
+                            |_, window, _cx| {
+                                window.remove_window();
                             },
                         ))
                     }),

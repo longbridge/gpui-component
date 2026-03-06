@@ -8,6 +8,7 @@ use crate::redis_cli_element::{
     cell_column_for_char_index, cell_len, char_index_for_cell_column,
 };
 use crate::{GlobalRedisState, RedisValue};
+use gpui::prelude::FluentBuilder;
 use gpui::{
     App, AppContext as _, AsyncApp, Bounds, ClipboardItem, Context, ElementInputHandler, Entity,
     EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontFallbacks, InteractiveElement,
@@ -18,11 +19,14 @@ use gpui::{
 use gpui_component::{
     BlinkCursor, Icon, IconName, Sizable, Size,
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
+    scroll::{Scrollbar, ScrollbarHandle, ScrollbarShow},
 };
 use one_core::gpui_tokio::Tokio;
 use one_core::tab_container::{TabContent, TabContentEvent};
 use rust_i18n::t;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -55,6 +59,9 @@ actions!(
 const REDIS_CLI_CONTEXT: &str = "RedisCli";
 /// 双击判定时间（毫秒）
 const DOUBLE_CLICK_THRESHOLD_MS: u128 = 500;
+const REDIS_CLI_CONTENT_PADDING: Pixels = px(12.0);
+const REDIS_CLI_SCROLLBAR_WIDTH: Pixels = px(12.0);
+const REDIS_CLI_SCROLLBAR_RIGHT: Pixels = px(4.0);
 
 struct CommandHint {
     name: &'static str,
@@ -189,6 +196,87 @@ struct MouseState {
     last_click_time: Option<Instant>,
 }
 
+#[derive(Debug, Clone)]
+struct RedisCliScrollbarMetrics {
+    viewport_size: gpui::Size<Pixels>,
+    line_height: Pixels,
+    total_lines: usize,
+    scroll_offset: f32,
+}
+
+impl Default for RedisCliScrollbarMetrics {
+    fn default() -> Self {
+        Self {
+            viewport_size: size(px(0.0), px(0.0)),
+            line_height: px(1.0),
+            total_lines: 0,
+            scroll_offset: 0.0,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct RedisCliScrollbarHandle {
+    metrics: Rc<RefCell<RedisCliScrollbarMetrics>>,
+    pending_scroll_offset: Rc<Cell<Option<f32>>>,
+}
+
+impl RedisCliScrollbarHandle {
+    fn new(metrics: Rc<RefCell<RedisCliScrollbarMetrics>>) -> Self {
+        Self {
+            metrics,
+            pending_scroll_offset: Rc::new(Cell::new(None)),
+        }
+    }
+
+    fn take_pending_scroll_offset(&self) -> Option<f32> {
+        self.pending_scroll_offset.take()
+    }
+}
+
+impl ScrollbarHandle for RedisCliScrollbarHandle {
+    fn offset(&self) -> Point<Pixels> {
+        let metrics = self.metrics.borrow();
+        let line_height = metrics.line_height.max(px(1.0));
+        Point::new(px(0.0), -(metrics.scroll_offset * line_height))
+    }
+
+    fn set_offset(&self, offset: Point<Pixels>) {
+        let (line_height, viewport_height, total_lines) = {
+            let metrics = self.metrics.borrow();
+            (
+                metrics.line_height.max(px(1.0)),
+                metrics.viewport_size.height,
+                metrics.total_lines,
+            )
+        };
+
+        if total_lines == 0 {
+            self.pending_scroll_offset.set(Some(0.0));
+            return;
+        }
+
+        let visible_lines = if viewport_height > px(0.0) {
+            (viewport_height / line_height) as f32
+        } else {
+            20.0
+        };
+        let max_scroll = (total_lines as f32 - visible_lines).max(0.0);
+        let target = (-offset.y / line_height).clamp(0.0, max_scroll);
+        self.pending_scroll_offset.set(Some(target));
+    }
+
+    fn content_size(&self) -> gpui::Size<Pixels> {
+        let metrics = self.metrics.borrow();
+        let line_height = metrics.line_height.max(px(1.0));
+        let total_lines = metrics.total_lines.max(1);
+        size(
+            metrics.viewport_size.width.max(px(1.0)),
+            line_height * total_lines as f32,
+        )
+    }
+}
+
 /// 注册键绑定
 pub fn init(cx: &mut App) {
     cx.bind_keys([
@@ -272,6 +360,10 @@ pub struct RedisCliView {
     blink_manager: Entity<BlinkCursor>,
     /// 终端边界
     terminal_bounds: Bounds<Pixels>,
+    /// 滚动条度量信息
+    scrollbar_metrics: Rc<RefCell<RedisCliScrollbarMetrics>>,
+    /// CLI 滚动条句柄
+    scrollbar_handle: RedisCliScrollbarHandle,
     /// 主题
     theme: CliTheme,
     /// 是否拥有独立连接（关闭时需要清理）
@@ -297,6 +389,8 @@ impl RedisCliView {
         cx: &mut Context<Self>,
     ) -> Self {
         let focus_handle = cx.focus_handle();
+        let scrollbar_metrics = Rc::new(RefCell::new(RedisCliScrollbarMetrics::default()));
+        let scrollbar_handle = RedisCliScrollbarHandle::new(scrollbar_metrics.clone());
 
         let blink_manager = cx.new(|_| BlinkCursor::new());
         let blink_subscription = cx.observe(&blink_manager, |_, _, cx| {
@@ -320,6 +414,8 @@ impl RedisCliView {
             max_output_entries: 500,
             blink_manager,
             terminal_bounds: Bounds::default(),
+            scrollbar_metrics,
+            scrollbar_handle,
             theme: CliTheme::default(),
             selection: None,
             mouse_state: MouseState::default(),
@@ -371,6 +467,42 @@ impl RedisCliView {
     /// 获取提示符
     fn get_prompt(&self) -> String {
         format!("{}:db{}>", "redis", self.db_index)
+    }
+
+    fn line_height(&self) -> Pixels {
+        self.theme.font_size * self.theme.line_height_scale
+    }
+
+    fn visible_lines(&self, line_height: Pixels) -> f32 {
+        if self.terminal_bounds.size.height > px(0.0) {
+            (self.terminal_bounds.size.height / line_height) as f32
+        } else {
+            20.0
+        }
+    }
+
+    fn max_scroll_for(&self, total_lines: usize, line_height: Pixels) -> f32 {
+        (total_lines as f32 - self.visible_lines(line_height)).max(0.0)
+    }
+
+    fn clamp_scroll_offset_for(&mut self, total_lines: usize, line_height: Pixels) {
+        let max_scroll = self.max_scroll_for(total_lines, line_height);
+        self.scroll_offset = self.scroll_offset.clamp(0.0, max_scroll);
+    }
+
+    fn sync_scrollbar_metrics(&mut self, total_lines: usize, line_height: Pixels) {
+        let mut metrics = self.scrollbar_metrics.borrow_mut();
+        metrics.viewport_size = self.terminal_bounds.size;
+        metrics.line_height = line_height;
+        metrics.total_lines = total_lines;
+        metrics.scroll_offset = self.scroll_offset;
+    }
+
+    fn consume_pending_scroll_offset(&mut self, total_lines: usize, line_height: Pixels) {
+        if let Some(offset) = self.scrollbar_handle.take_pending_scroll_offset() {
+            self.scroll_offset = offset;
+            self.clamp_scroll_offset_for(total_lines, line_height);
+        }
     }
 
     /// 处理键盘按下事件
@@ -656,7 +788,7 @@ impl RedisCliView {
         let bounds = self.terminal_bounds;
         let line_height = self.theme.font_size * self.theme.line_height_scale;
         let char_width = self.cell_width;
-        let padding_x = px(12.0);
+        let padding_x = REDIS_CLI_CONTENT_PADDING;
 
         // 计算相对于文本内容区域的位置
         let relative_x = position.x - bounds.origin.x - padding_x;
@@ -1037,6 +1169,11 @@ impl RedisCliView {
             self.output_entries.pop_front();
         }
 
+        let line_height = self.line_height();
+        let total_lines = self.build_render_lines().len();
+        self.clamp_scroll_offset_for(total_lines, line_height);
+        self.sync_scrollbar_metrics(total_lines, line_height);
+
         cx.notify();
     }
 
@@ -1104,6 +1241,9 @@ impl RedisCliView {
     fn clear_output(&mut self, cx: &mut Context<Self>) {
         self.output_entries.clear();
         self.scroll_offset = 0.0;
+        let line_height = self.line_height();
+        let total_lines = self.build_render_lines().len();
+        self.sync_scrollbar_metrics(total_lines, line_height);
         cx.notify();
     }
 
@@ -1114,24 +1254,15 @@ impl RedisCliView {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // 计算总行数
-        let total_lines = self.build_render_lines().len() as f32;
-        let line_height = self.theme.font_size * self.theme.line_height_scale;
-
-        // 计算可见行数（使用终端边界高度）
-        let visible_lines = if self.terminal_bounds.size.height > px(0.0) {
-            (self.terminal_bounds.size.height / line_height) as f32
-        } else {
-            20.0 // 默认值
-        };
-
-        // 计算最大滚动偏移
-        let max_scroll = (total_lines - visible_lines).max(0.0);
+        let total_lines = self.build_render_lines().len();
+        let line_height = self.line_height();
+        let max_scroll = self.max_scroll_for(total_lines, line_height);
 
         // 根据滚轮方向调整偏移
         let delta_pixels = event.delta.pixel_delta(line_height);
         let delta = (delta_pixels.y / line_height) as f32;
         self.scroll_offset = (self.scroll_offset - delta).clamp(0.0, max_scroll);
+        self.sync_scrollbar_metrics(total_lines, line_height);
 
         cx.notify();
     }
@@ -1654,6 +1785,8 @@ impl Render for RedisCliView {
         let view = cx.entity().clone();
         let focus_handle = self.focus_handle.clone();
         let entity = cx.entity().downgrade();
+        let line_height = self.line_height();
+        let total_lines = self.build_render_lines().len();
 
         // 焦点变化时更新闪烁状态
         if focus_handle.is_focused(window) {
@@ -1664,6 +1797,10 @@ impl Render for RedisCliView {
 
         // 精确计算字符宽度（复用 terminal_view 的方法）
         self.update_cell_width(window);
+        self.consume_pending_scroll_offset(total_lines, line_height);
+        self.clamp_scroll_offset_for(total_lines, line_height);
+        self.sync_scrollbar_metrics(total_lines, line_height);
+        let show_scrollbar = self.max_scroll_for(total_lines, line_height) > 0.0;
 
         div()
             .id("redis-cli-view")
@@ -1699,6 +1836,10 @@ impl Render for RedisCliView {
                         if let Some(entity) = entity.upgrade() {
                             entity.update(cx, |this, _cx| {
                                 this.terminal_bounds = bounds;
+                                let line_height = this.line_height();
+                                let total_lines = this.build_render_lines().len();
+                                this.clamp_scroll_offset_for(total_lines, line_height);
+                                this.sync_scrollbar_metrics(total_lines, line_height);
                             });
                         }
                     },
@@ -1714,23 +1855,37 @@ impl Render for RedisCliView {
                     },
                 )
                 .absolute()
-                .left(px(12.))
-                .right(px(12.))
-                .top(px(12.))
-                .bottom(px(12.)),
+                .left(REDIS_CLI_CONTENT_PADDING)
+                .right(REDIS_CLI_CONTENT_PADDING)
+                .top(REDIS_CLI_CONTENT_PADDING)
+                .bottom(REDIS_CLI_CONTENT_PADDING),
             )
             .child({
                 let view = view.clone();
                 div()
                     .absolute()
-                    .left(px(12.))
-                    .right(px(12.))
-                    .top(px(12.))
-                    .bottom(px(12.))
+                    .left(REDIS_CLI_CONTENT_PADDING)
+                    .right(REDIS_CLI_CONTENT_PADDING)
+                    .top(REDIS_CLI_CONTENT_PADDING)
+                    .bottom(REDIS_CLI_CONTENT_PADDING)
                     .child(self.render_terminal(cx))
                     .context_menu(move |menu, window, cx| {
                         Self::build_context_menu(menu, &view, window, cx)
                     })
+            })
+            .when(show_scrollbar, |this| {
+                this.child(
+                    div()
+                        .absolute()
+                        .top(REDIS_CLI_CONTENT_PADDING)
+                        .right(REDIS_CLI_SCROLLBAR_RIGHT)
+                        .bottom(REDIS_CLI_CONTENT_PADDING)
+                        .w(REDIS_CLI_SCROLLBAR_WIDTH)
+                        .child(
+                            Scrollbar::vertical(&self.scrollbar_handle)
+                                .scrollbar_show(ScrollbarShow::Always),
+                        ),
+                )
             })
     }
 }
@@ -1851,7 +2006,7 @@ impl EntityInputHandler for RedisCliView {
         let prompt_len = self.get_prompt().chars().count() + 1;
         let cursor_col = cell_column_for_char_index(&self.input_text, self.cursor_pos);
         let x = self.terminal_bounds.origin.x
-            + px(12.0)
+            + REDIS_CLI_CONTENT_PADDING
             + char_width * (prompt_len + cursor_col) as f32;
 
         let lines = self.build_text_lines();

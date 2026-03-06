@@ -10,12 +10,10 @@ use gpui::{
 };
 use gpui_component::{
     button::{Button, ButtonVariants as _},
-    dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputState},
     switch::Switch,
-    v_flex, v_virtual_list, ActiveTheme, Disableable, Sizable, VirtualListScrollHandle,
-    WindowExt as _,
+    v_flex, v_virtual_list, ActiveTheme, Disableable, Sizable, VirtualListScrollHandle
 };
 use rust_i18n::t;
 use std::rc::Rc;
@@ -147,47 +145,6 @@ impl SqlRunView {
             }
         })
         .detach();
-    }
-
-    fn confirm_start_run(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let selected_files = self.file_path.read(cx).text().to_string();
-        let file_count = selected_files
-            .split(';')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .count();
-
-        if file_count == 0 {
-            self.start_run(window, cx);
-            return;
-        }
-
-        let panel = cx.entity().clone();
-        window.open_dialog(cx, move |dialog, _window, _cx| {
-            let panel_for_ok = panel.clone();
-            dialog
-                .overlay(false)
-                .title(t!("Common.confirm").to_string())
-                .confirm()
-                .button_props(
-                    DialogButtonProps::default()
-                        .ok_text(t!("SqlRun.execute").to_string())
-                        .cancel_text(t!("Common.cancel").to_string()),
-                )
-                .child(
-                    v_flex()
-                        .gap_2()
-                        .child(t!("SqlRun.confirm_execute_message", count = file_count).to_string())
-                        .child(t!("SqlRun.confirm_execute_desc").to_string()),
-                )
-                .on_ok(move |_, window, cx| {
-                    panel_for_ok.update(cx, |view, cx| {
-                        view.start_run(window, cx);
-                    });
-                    false
-                })
-                .on_cancel(|_, _, _| true)
-        });
     }
 
     fn start_run(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
@@ -708,7 +665,7 @@ impl Render for SqlRunView {
                                 .on_click(window.listener_for(
                                     &cx.entity(),
                                     |view, _: &ClickEvent, window, cx| {
-                                        view.confirm_start_run(window, cx);
+                                        view.start_run(window, cx);
                                     },
                                 )),
                         )

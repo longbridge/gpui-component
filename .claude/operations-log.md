@@ -287,3 +287,54 @@
 ### 4. 未重复造轮子的证明
 - 未新增新的拖拽状态结构，仅复用 `TabBarDragState`。
 - 未引入新窗口拖动 API，仅复用 `window.start_window_move()`。
+## 编码前检查 - redis-cli-scrollbar
+时间：2026-03-05 21:16:11 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-redis-cli-scrollbar.md`
+- 将使用以下可复用组件：
+  - `crates/terminal_view/src/view.rs` 的 `ScrollbarHandle` 模式
+  - `crates/redis_view/src/redis_cli_view.rs` 现有 `scroll_offset`/`handle_scroll`
+  - `gpui_component::scroll::{Scrollbar, ScrollbarShow}`
+- 将遵循命名约定：Rust `snake_case` / 类型 `PascalCase`
+- 将遵循代码风格：GPUI 链式渲染 + 局部状态同步
+- 确认不重复造轮子，证明：已检查 `redis_cli_view.rs`、`terminal_view/src/view.rs`、`redis_tree_view.rs`、`one_ui/edit_table/state.rs`，采用现有滚动条模式最小集成。
+## 编码中调整 - redis-cli-scrollbar
+时间：2026-03-05 21:36:33 +0800
+
+- 复用 `terminal_view` 的 `ScrollbarHandle` 语义，在 `redis_cli_view.rs` 新增 `RedisCliScrollbarMetrics/RedisCliScrollbarHandle`。
+- 将滚动条 `set_offset` 与视图状态解耦：通过 `pending_scroll_offset` 在 `render` 周期回写 `scroll_offset`。
+- 在 `render` 末尾叠加右侧 `Scrollbar::vertical`，并设置 `ScrollbarShow::Always`。
+- 在 `handle_scroll`、`canvas` 布局回调、`add_output_entry` 中统一执行 `clamp + metrics 同步`，避免越界。
+
+## 编码后声明 - redis-cli-scrollbar
+时间：2026-03-05 21:36:33 +0800
+
+### 1. 复用了以下既有组件
+- `crates/terminal_view/src/view.rs`：`ScrollbarHandle` 的 `offset/set_offset/content_size` 设计。
+- `gpui_component::scroll::{Scrollbar, ScrollbarShow}`：滚动条组件与显示策略。
+- `redis_cli_view` 既有 `scroll_offset` 与 `handle_scroll`，未重写滚动主逻辑。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增类型 `RedisCliScrollbarMetrics/Handle`，函数与字段 `snake_case`。
+- 代码风格：保持 GPUI 链式渲染，局部状态同步，不改动模块边界。
+- 文件组织：仅修改 `crates/redis_view/src/redis_cli_view.rs`。
+
+### 3. 对比了以下相似实现
+- `crates/terminal_view/src/view.rs`：自绘内容 + 右侧绝对定位滚动条。
+- `crates/redis_view/src/redis_tree_view.rs`：可见垂直滚动条交互预期。
+- `crates/one_ui/src/edit_table/state.rs`：滚动条叠加层写法。
+
+### 4. 未重复造轮子的证明
+- 未新增自定义滚动条控件，仅接入已有 `gpui_component::scrollbar` 体系。
+- 未替换 `RedisCliElement` 的文本绘制方案，仅增加滚动状态桥接层。
+## 编码前检查 - import-export-no-dialog
+时间：2026-03-06 15:01:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-import-export-no-dialog.md`
+□ 将使用以下可复用组件：
+- `TableImportView::add_log`：用于替代弹窗确认提示
+- `VirtualListScrollHandle::scroll_to_bottom`：确保提示可见
+- `window.remove_window()`：复用完成态关闭模式
+□ 将遵循命名约定：Rust `snake_case` / 类型 `PascalCase`
+□ 将遵循代码风格：GPUI 链式构建 + 状态更新后 `cx.notify()`
+□ 确认不重复造轮子，证明：已检查 `sql_dump_view.rs`、`table_export_view.rs`、`sql_run_view.rs`，存在可直接复用模式
