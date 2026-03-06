@@ -295,13 +295,25 @@ impl RenderOnce for Input {
             None
         };
 
+        // If we have a prefix, we need to adjust the left padding to avoid double padding:
+        // - The prefix container gets left padding (.pl(self.size.input_px()))
+        // - But TextElement should NOT have left padding to avoid double spacing
+        let text_element_padding = if self.prefix.is_some() {
+            let mut adjusted_padding = custom_padding.clone().unwrap_or_default();
+            // Set left padding to 0 since the prefix container handles it
+            adjusted_padding.left = Some(px(0.).into());
+            Some(adjusted_padding)
+        } else {
+            custom_padding.clone()
+        };
+
         // Store custom padding in state for element.rs to use
         self.state.update(cx, |state, _| {
             state.context_menu_builder = self.context_menu_builder.clone();
             state.disabled = self.disabled;
             state.size = self.size;
-
-            state.custom_padding = custom_padding.clone();
+            // Use the adjusted padding for TextElement (removes left padding when prefix exists)
+            state.custom_padding = text_element_padding.clone();
             // Only for single line mode
             if state.mode.is_single_line() {
                 state.text_align = text_align;
@@ -419,8 +431,6 @@ impl RenderOnce for Input {
             .on_scroll_wheel(window.listener_for(&self.state, InputState::on_scroll_wheel))
             .size_full()
             .line_height(LINE_HEIGHT)
-            // .input_px(self.size)
-            // .input_py(self.size)
             .input_h(self.size)
             .input_text_size(self.size)
             .when(!self.disabled, |this| this.cursor_text())
@@ -450,20 +460,30 @@ impl RenderOnce for Input {
                 outer_style.padding = EdgesRefinement::default();
                 this.refine_style(&outer_style)
             })
-            .children(prefix)
-            .when(state.mode.is_multi_line(), |this| {
-                this.child(Self::render_editor(
-                    self.size,
-                    custom_padding,
-                    &self.state,
-                    &state,
-                    window,
-                    cx,
-                ))
+            .when_some(prefix, |this, prefix_element| {
+                this.pl(self.size.input_px()).child(
+                    h_flex()
+                        .id("prefix")
+                        .gap(gap_x)
+                        .when(self.appearance, |this| this.bg(bg))
+                        .items_center()
+                        .child(prefix_element),
+                )
             })
-            .when(!state.mode.is_multi_line(), |this| {
-                this.child(self.state.clone())
-            })
+            .when_else(
+                state.mode.is_multi_line(),
+                |this| {
+                    this.child(Self::render_editor(
+                        self.size,
+                        text_element_padding.clone(),
+                        &self.state,
+                        &state,
+                        window,
+                        cx,
+                    ))
+                },
+                |this| this.child(self.state.clone()),
+            )
             .when(has_suffix, |this| {
                 this.pr(self.size.input_px()).child(
                     h_flex()
