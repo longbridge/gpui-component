@@ -631,3 +631,59 @@
 - 已执行：`cargo check -p db_view`
 - 结果：通过
 - 备注：编译输出包含已有依赖 `num-bigint-dig v0.8.4` 的 future incompatibility 警告，本次改动未引入新告警
+
+## 编码前检查 - mssql-dump-sql-menu
+时间：2026-03-07 22:14:05 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-mssql-dump-sql-menu.md`
+- 已分析相似实现：
+  - `crates/db_view/src/mssql/mssql_view_plugin.rs`
+  - `crates/db_view/src/mysql/mysql_view_plugin.rs`
+  - `crates/db_view/src/postgresql/postgresql_view_plugin.rs`
+- 已识别复用链路：
+  - `DbTreeViewEvent::DumpSqlFile`
+  - `SqlDumpMode`
+  - `db_tree_event.rs -> sql_dump_view.rs` 导出处理链
+- 当前方案：仅在 MSSQL 插件菜单层补子菜单，不改下游导出逻辑
+
+## 编码前检查 - mssql-dump-sql-menu
+时间：2026-03-07 22:14:05 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-mssql-dump-sql-menu.md`
+□ 将使用以下可复用组件：
+- `DbTreeViewEvent::DumpSqlFile`: `crates/db_view/src/db_tree_view.rs` - 复用既有导出脚本事件
+- `SqlDumpMode`: `crates/db_view/src/db_tree_view.rs` - 复用结构/数据导出模式
+- `ContextMenuItem::submenu`: `crates/db_view/src/database_view_plugin.rs` - 复用菜单组织方式
+□ 将遵循命名约定：沿用现有插件文件导入与 `build_context_menu` 风格
+□ 将遵循代码风格：最小侵入，只补缺失菜单项
+□ 确认不重复造轮子，证明：已有完整 DumpSqlFile 链路，仅 MSSQL 菜单未暴露
+
+## 编码后声明 - mssql-dump-sql-menu
+时间：2026-03-07 22:15:10 +0800
+
+### 1. 复用了以下既有组件
+- `DbTreeViewEvent::DumpSqlFile`：复用既有导出脚本事件，位于 `crates/db_view/src/db_tree_view.rs`
+- `SqlDumpMode`：复用导出结构/数据模式，位于 `crates/db_view/src/db_tree_view.rs`
+- `ContextMenuItem::submenu`：复用插件菜单组织方式，位于 `crates/db_view/src/database_view_plugin.rs`
+
+### 2. 遵循了以下项目约定
+- 命名约定：仅新增 `SqlDumpMode` 导入与现有事件枚举引用，未引入新命名体系
+- 代码风格：保持 `build_context_menu` 内手工拼装菜单的既有写法
+- 文件组织：仅修改 `crates/db_view/src/mssql/mssql_view_plugin.rs`
+
+### 3. 对比了以下相似实现
+- `crates/db_view/src/mysql/mysql_view_plugin.rs`：复用 Database/Table 节点 dump_sql 子菜单模式
+- `crates/db_view/src/postgresql/postgresql_view_plugin.rs`：复用菜单顺序与三种导出模式
+- `crates/db_view/src/sqlite/sqlite_view_plugin.rs`：确认此能力属于通用导出菜单而非特定数据库专属逻辑
+
+### 4. 未重复造轮子的证明
+- 未新增新的导出事件、导出窗口或导出后端实现
+- 仅将 MSSQL 插件接入现有 `DumpSqlFile` 链路
+
+## 本地验证记录 - mssql-dump-sql-menu
+时间：2026-03-07 22:15:10 +0800
+
+- 已执行：`cargo fmt --all`
+- 已执行：`cargo check -p db_view`
+- 结果：通过
+- 备注：编译输出包含已有依赖 `num-bigint-dig v0.8.4` 的 future incompatibility 警告，本次改动未引入新告警

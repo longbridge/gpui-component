@@ -4,7 +4,7 @@ use crate::database_objects_tab::DatabaseObjectsEvent;
 use crate::database_view_plugin::{
     ContextMenuItem, DatabaseViewPlugin, TableDesignerCapabilities, ToolbarButton,
 };
-use crate::db_tree_view::DbTreeViewEvent;
+use crate::db_tree_view::{DbTreeViewEvent, SqlDumpMode};
 use crate::mssql::database_form::MsSqlDatabaseForm;
 use crate::mssql::schema_form::MsSqlSchemaForm;
 use db::DbNodeType;
@@ -134,6 +134,32 @@ impl DatabaseViewPlugin for MsSqlDatabaseViewPlugin {
                             node_id: node_id.to_string(),
                         },
                     ),
+                    ContextMenuItem::submenu(
+                        t!("ImportExport.dump_sql_file").to_string(),
+                        vec![
+                            ContextMenuItem::item(
+                                t!("ImportExport.export_structure").to_string(),
+                                DbTreeViewEvent::DumpSqlFile {
+                                    node_id: node_id.to_string(),
+                                    mode: SqlDumpMode::StructureOnly,
+                                },
+                            ),
+                            ContextMenuItem::item(
+                                t!("ImportExport.export_data").to_string(),
+                                DbTreeViewEvent::DumpSqlFile {
+                                    node_id: node_id.to_string(),
+                                    mode: SqlDumpMode::DataOnly,
+                                },
+                            ),
+                            ContextMenuItem::item(
+                                t!("ImportExport.export_structure_and_data").to_string(),
+                                DbTreeViewEvent::DumpSqlFile {
+                                    node_id: node_id.to_string(),
+                                    mode: SqlDumpMode::StructureAndData,
+                                },
+                            ),
+                        ],
+                    ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
                         t!("Database.edit_database").to_string(),
@@ -217,6 +243,33 @@ impl DatabaseViewPlugin for MsSqlDatabaseViewPlugin {
                         DbTreeViewEvent::DeleteTable {
                             node_id: node_id.to_string(),
                         },
+                    ),
+                    ContextMenuItem::separator(),
+                    ContextMenuItem::submenu(
+                        t!("ImportExport.dump_sql_file").to_string(),
+                        vec![
+                            ContextMenuItem::item(
+                                t!("ImportExport.export_structure").to_string(),
+                                DbTreeViewEvent::DumpSqlFile {
+                                    node_id: node_id.to_string(),
+                                    mode: SqlDumpMode::StructureOnly,
+                                },
+                            ),
+                            ContextMenuItem::item(
+                                t!("ImportExport.export_data").to_string(),
+                                DbTreeViewEvent::DumpSqlFile {
+                                    node_id: node_id.to_string(),
+                                    mode: SqlDumpMode::DataOnly,
+                                },
+                            ),
+                            ContextMenuItem::item(
+                                t!("ImportExport.export_structure_and_data").to_string(),
+                                DbTreeViewEvent::DumpSqlFile {
+                                    node_id: node_id.to_string(),
+                                    mode: SqlDumpMode::StructureAndData,
+                                },
+                            ),
+                        ],
                     ),
                     ContextMenuItem::separator(),
                     ContextMenuItem::item(
