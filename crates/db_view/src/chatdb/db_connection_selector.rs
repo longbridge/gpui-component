@@ -3,14 +3,15 @@
 use db::GlobalDbState;
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    App, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
-    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window,
-    div, px,
+    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Sizable, Size,
-    button::{Button, ButtonVariants},
+    ActiveTheme, Icon, IconName, Sizable, Size,
+    button::Button,
     h_flex,
+    input::{Input, InputEvent, InputState},
     popover::Popover,
     spinner::Spinner,
     v_flex,
@@ -99,6 +100,10 @@ pub struct DbConnectionSelector {
     supports_schema: bool,
     uses_schema_as_database: bool,
     popover_open: bool,
+    connection_search_input: Entity<InputState>,
+    database_search_input: Entity<InputState>,
+    schema_search_input: Entity<InputState>,
+    _search_subscriptions: Vec<Subscription>,
 
     connections_loaded: bool,
     loading_connections: bool,
@@ -128,12 +133,56 @@ impl DbConnectionSelector {
     }
 
     pub fn new_with_context(
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
         context: DbSelectorContext,
     ) -> Self {
         let focus_handle = cx.focus_handle();
         let storage_manager = cx.global::<GlobalStorageState>().storage.clone();
+        let connection_search_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Common.search").to_string())
+                .clean_on_escape()
+        });
+        let database_search_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Common.search").to_string())
+                .clean_on_escape()
+        });
+        let schema_search_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Common.search").to_string())
+                .clean_on_escape()
+        });
+
+        let mut search_subscriptions = Vec::new();
+        search_subscriptions.push(cx.subscribe_in(
+            &connection_search_input,
+            window,
+            |_this, _input: &Entity<InputState>, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            },
+        ));
+        search_subscriptions.push(cx.subscribe_in(
+            &database_search_input,
+            window,
+            |_this, _input: &Entity<InputState>, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            },
+        ));
+        search_subscriptions.push(cx.subscribe_in(
+            &schema_search_input,
+            window,
+            |_this, _input: &Entity<InputState>, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            },
+        ));
 
         let mut instance = Self {
             focus_handle,
@@ -149,6 +198,10 @@ impl DbConnectionSelector {
             supports_schema: false,
             uses_schema_as_database: false,
             popover_open: false,
+            connection_search_input,
+            database_search_input,
+            schema_search_input,
+            _search_subscriptions: search_subscriptions,
             connections_loaded: false,
             loading_connections: false,
             loading_databases: false,
@@ -573,6 +626,13 @@ impl DbConnectionSelector {
                     .text_ellipsis()
                     .child(label),
             )
+            .when(selected, |this| {
+                this.child(
+                    Icon::new(IconName::Check)
+                        .with_size(Size::XSmall)
+                        .text_color(colors.foreground),
+                )
+            })
             .map(|this| {
                 if selected {
                     this.bg(colors.list_active).child(
@@ -595,8 +655,10 @@ impl DbConnectionSelector {
     fn render_column(
         column_id: &str,
         title: String,
+        search_input: Entity<InputState>,
         items: Vec<AnyColumnItem>,
         is_loading: bool,
+        show_right_border: bool,
         width: f32,
         colors: SelectorColors,
     ) -> impl IntoElement {
@@ -604,11 +666,14 @@ impl DbConnectionSelector {
             .w(px(width))
             .min_w(px(width))
             .h(px(260.0))
+            .min_h_0()
             .overflow_hidden()
-            .border_r_1()
-            .border_color(colors.border)
+            .when(show_right_border, |this| {
+                this.border_r_1().border_color(colors.border)
+            })
             .child(
                 div()
+                    .flex_shrink_0()
                     .px_3()
                     .py_2()
                     .text_sm()
@@ -616,9 +681,19 @@ impl DbConnectionSelector {
                     .child(title),
             )
             .child(
+                div().flex_shrink_0().px_2().pb_2().child(
+                    Input::new(&search_input)
+                        .prefix(Icon::new(IconName::Search).text_color(colors.muted_foreground))
+                        .cleanable(true)
+                        .small()
+                        .w_full(),
+                ),
+            )
+            .child(
                 div()
                     .id(SharedString::from(format!("db-selector-{}", column_id)))
                     .flex_1()
+                    .min_h_0()
                     .overflow_x_hidden()
                     .overflow_y_scroll()
                     .when(is_loading, |this| {
@@ -647,6 +722,12 @@ impl DbConnectionSelector {
 
     fn render_popover_content(
         snapshot: DbConnectionSelectorSnapshot,
+        connection_search_input: Entity<InputState>,
+        database_search_input: Entity<InputState>,
+        schema_search_input: Entity<InputState>,
+        connection_query: String,
+        database_query: String,
+        schema_query: String,
         view: Entity<Self>,
         colors: SelectorColors,
     ) -> impl IntoElement {
@@ -667,6 +748,11 @@ impl DbConnectionSelector {
 
         let connection_items = connections
             .into_iter()
+            .filter(|conn| {
+                connection_query.is_empty()
+                    || conn.name.to_lowercase().contains(&connection_query)
+                    || conn.id.to_lowercase().contains(&connection_query)
+            })
             .map(|conn| {
                 let selected = selected_connection
                     .as_ref()
@@ -691,6 +777,7 @@ impl DbConnectionSelector {
 
         let database_items = databases
             .into_iter()
+            .filter(|db| database_query.is_empty() || db.to_lowercase().contains(&database_query))
             .map(|db| {
                 let selected = if uses_schema_as_database {
                     selected_schema.as_ref().map(|s| s == &db).unwrap_or(false)
@@ -716,8 +803,14 @@ impl DbConnectionSelector {
             })
             .collect::<Vec<_>>();
 
+        let show_schema_column =
+            supports_schema && !uses_schema_as_database && (loading_schemas || !schemas.is_empty());
+
         let schema_items = schemas
             .into_iter()
+            .filter(|schema| {
+                schema_query.is_empty() || schema.to_lowercase().contains(&schema_query)
+            })
             .map(|schema| {
                 let selected = selected_schema
                     .as_ref()
@@ -746,37 +839,56 @@ impl DbConnectionSelector {
         };
 
         let show_connection_column = !matches!(source_mode, SelectorSourceMode::SingleConnection);
+        let visible_column_count =
+            usize::from(show_connection_column) + 1 + usize::from(show_schema_column);
+        let popover_width = 16.0 + (visible_column_count as f32 * 200.0);
 
-        h_flex()
+        v_flex()
+            .w(px(popover_width))
+            .p_2()
             .gap_0()
-            .when(show_connection_column, |this| {
-                this.child(Self::render_column(
-                    "connections",
-                    t!("ChatDbSelector.connection_title").to_string(),
-                    connection_items,
-                    loading_connections,
-                    200.0,
-                    colors,
-                ))
-            })
-            .child(Self::render_column(
-                "databases",
-                database_title,
-                database_items,
-                loading_databases,
-                200.0,
-                colors,
-            ))
-            .when(supports_schema && !uses_schema_as_database, |this| {
-                this.child(Self::render_column(
-                    "schemas",
-                    t!("ChatDbSelector.schema_title").to_string(),
-                    schema_items,
-                    loading_schemas,
-                    200.0,
-                    colors,
-                ))
-            })
+            .bg(colors.background)
+            .child(
+                h_flex()
+                    .gap_0()
+                    .border_1()
+                    .border_color(colors.border)
+                    .rounded(px(8.0))
+                    .when(show_connection_column, |this| {
+                        this.child(Self::render_column(
+                            "connections",
+                            t!("ChatDbSelector.connection_title").to_string(),
+                            connection_search_input,
+                            connection_items,
+                            loading_connections,
+                            true,
+                            200.0,
+                            colors,
+                        ))
+                    })
+                    .child(Self::render_column(
+                        "databases",
+                        database_title,
+                        database_search_input,
+                        database_items,
+                        loading_databases,
+                        show_schema_column,
+                        200.0,
+                        colors,
+                    ))
+                    .when(show_schema_column, |this| {
+                        this.child(Self::render_column(
+                            "schemas",
+                            t!("ChatDbSelector.schema_title").to_string(),
+                            schema_search_input,
+                            schema_items,
+                            loading_schemas,
+                            false,
+                            200.0,
+                            colors,
+                        ))
+                    }),
+            )
     }
 
     fn render_trigger(&self, view: Entity<Self>, _cx: &mut Context<Self>) -> impl IntoElement {
@@ -796,24 +908,83 @@ impl DbConnectionSelector {
             })
             .trigger(
                 Button::new("db-connection-selector-trigger")
-                    .ghost()
+                    .outline()
                     .with_size(Size::Small)
-                    .icon(IconName::Database.color())
-                    .label(label),
+                    .min_w(px(240.0))
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                h_flex()
+                                    .min_w_0()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(
+                                        Icon::new(IconName::Database.color())
+                                            .with_size(Size::Small),
+                                    )
+                                    .child(
+                                        div()
+                                            .min_w_0()
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .child(label),
+                                    ),
+                            )
+                            .child(div().flex_1())
+                            .child(Icon::new(IconName::ChevronDown).with_size(Size::XSmall)),
+                    ),
             )
             .content({
                 let view_for_content = view.clone();
                 move |_state, _window, cx| {
                     let snapshot = view_for_content.read(cx).snapshot();
+                    let connection_search_input =
+                        view_for_content.read(cx).connection_search_input.clone();
+                    let database_search_input =
+                        view_for_content.read(cx).database_search_input.clone();
+                    let schema_search_input = view_for_content.read(cx).schema_search_input.clone();
+                    let connection_query = connection_search_input
+                        .read(cx)
+                        .text()
+                        .to_string()
+                        .trim()
+                        .to_lowercase();
+                    let database_query = database_search_input
+                        .read(cx)
+                        .text()
+                        .to_string()
+                        .trim()
+                        .to_lowercase();
+                    let schema_query = schema_search_input
+                        .read(cx)
+                        .text()
+                        .to_string()
+                        .trim()
+                        .to_lowercase();
                     let colors = SelectorColors {
                         border: cx.theme().border,
                         foreground: cx.theme().foreground,
                         muted_foreground: cx.theme().muted_foreground,
+                        background: cx.theme().background,
                         list_active: cx.theme().list_active,
                         list_active_border: cx.theme().list_active_border,
                         list_hover: cx.theme().list_hover,
                     };
-                    Self::render_popover_content(snapshot, view_for_content.clone(), colors)
+                    Self::render_popover_content(
+                        snapshot,
+                        connection_search_input,
+                        database_search_input,
+                        schema_search_input,
+                        connection_query,
+                        database_query,
+                        schema_query,
+                        view_for_content.clone(),
+                        colors,
+                    )
                 }
             })
             .max_w(px(640.0))
@@ -853,6 +1024,7 @@ struct SelectorColors {
     border: Hsla,
     foreground: Hsla,
     muted_foreground: Hsla,
+    background: Hsla,
     list_active: Hsla,
     list_active_border: Hsla,
     list_hover: Hsla,

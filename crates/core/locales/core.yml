@@ -9,6 +9,10 @@ Common:
     en: "Cancel"
     zh-CN: "取消"
     zh-HK: "取消"
+  search:
+    en: "Search..."
+    zh-CN: "搜索..."
+    zh-HK: "搜尋..."
 
 AiChat:
   title:

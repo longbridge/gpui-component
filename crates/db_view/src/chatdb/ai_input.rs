@@ -627,121 +627,72 @@ impl AIInput {
         let submit_entity = entity.clone();
         let cancel_entity = entity.clone();
 
-        if self.is_sidebar_mode {
-            return h_flex()
-                .w_full()
-                .px_3()
-                .pb_3()
-                .items_center()
-                .gap_2()
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .when(self.mode == InputMode::Agent, |this| {
-                            this.child(self.provider_select_state.render())
-                        }),
-                )
-                .child(
-                    Popover::new("model-settings-popover")
-                        .anchor(Corner::BottomLeft)
-                        .trigger(
-                            Button::new("model-settings-btn")
-                                .icon(IconName::Settings)
-                                .ghost()
-                                .with_size(Size::Small),
-                        )
-                        .content(move |_state, _window, _cx| settings_panel.clone()),
-                )
-                .child({
-                    let submit_entity = submit_entity.clone();
-                    let cancel_entity = cancel_entity.clone();
-                    if send_button_state.is_loading {
-                        Button::new("send-cancel-icon")
-                            .with_size(Size::Small)
-                            .danger()
-                            .icon(IconName::CircleX)
-                            .on_click(move |_, window, app| {
-                                if let Some(entity) = cancel_entity.upgrade() {
-                                    let _ = entity.update(app, |this, cx| {
-                                        cx.emit(AIInputEvent::Cancel);
-                                        this.set_loading(false, window, cx);
-                                    });
-                                }
-                            })
-                    } else {
-                        Button::new("send-submit-icon")
-                            .with_size(Size::Small)
-                            .primary()
-                            .icon(IconName::ArrowRight)
-                            .on_click(move |_, window, app| {
-                                if let Some(entity) = submit_entity.upgrade() {
-                                    let _ = entity.update(app, |this, cx| {
-                                        this.submit(window, cx);
-                                    });
-                                }
-                            })
-                    }
-                })
-                .into_any_element();
-        }
-
         h_flex()
             .w_full()
             .px_3()
             .pb_3()
             .items_center()
             .gap_2()
+            // 非侧栏模式保留 SQL/Agent 切换
+            .when(!self.is_sidebar_mode, |this| {
+                this.child(
+                    Button::new("mode-switch")
+                        .icon(self.mode.icon().color())
+                        .ghost()
+                        .with_size(Size::Small)
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.toggle_mode(window, cx);
+                        })),
+                )
+            })
             .child(
-                Button::new("mode-switch")
-                    .icon(self.mode.icon().color())
-                    .ghost()
-                    .with_size(Size::Small)
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.toggle_mode(window, cx);
-                    })),
-            )
-            // Provider 选择器（仅 Agent 模式）
-            .when(self.mode == InputMode::Agent, |this| {
-                this.child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(self.provider_select_state.render()),
-                )
-            })
-            // 模型设置按钮（仅 Agent 模式）
-            .when(self.mode == InputMode::Agent, |this| {
-                this.child(
-                    Popover::new("model-settings-popover")
-                        .anchor(Corner::BottomLeft)
-                        .trigger(
-                            Button::new("model-settings-btn")
-                                .icon(IconName::Settings)
-                                .ghost()
-                                .with_size(Size::Small),
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .items_center()
+                    .justify_end()
+                    .gap_2()
+                    .when(self.mode == InputMode::Agent, |this| {
+                        this.child(
+                            div()
+                                .min_w_0()
+                                .max_w(px(460.0))
+                                .child(self.provider_select_state.render(cx)),
                         )
-                        .content(move |_state, _window, _cx| settings_panel.clone()),
-                )
-            })
-            .child(SendButton::render(
-                &send_button_state,
-                move |window, app| {
-                    if let Some(entity) = submit_entity.upgrade() {
-                        let _ = entity.update(app, |this, cx| {
-                            this.submit(window, cx);
-                        });
-                    }
-                },
-                move |window, app| {
-                    if let Some(entity) = cancel_entity.upgrade() {
-                        let _ = entity.update(app, |this, cx| {
-                            cx.emit(AIInputEvent::Cancel);
-                            this.set_loading(false, window, cx);
-                        });
-                    }
-                },
-            ))
+                    })
+                    // 模型设置按钮（仅 Agent 模式）
+                    .when(self.mode == InputMode::Agent, |this| {
+                        this.child(
+                            Popover::new("model-settings-popover")
+                                .anchor(Corner::BottomLeft)
+                                .trigger(
+                                    Button::new("model-settings-btn")
+                                        .icon(IconName::Settings)
+                                        .ghost()
+                                        .with_size(Size::Small),
+                                )
+                                .content(move |_state, _window, _cx| settings_panel.clone()),
+                        )
+                    })
+                    .child(SendButton::render(
+                        &send_button_state,
+                        move |window, app| {
+                            if let Some(entity) = submit_entity.upgrade() {
+                                let _ = entity.update(app, |this, cx| {
+                                    this.submit(window, cx);
+                                });
+                            }
+                        },
+                        move |window, app| {
+                            if let Some(entity) = cancel_entity.upgrade() {
+                                let _ = entity.update(app, |this, cx| {
+                                    cx.emit(AIInputEvent::Cancel);
+                                    this.set_loading(false, window, cx);
+                                });
+                            }
+                        },
+                    )),
+            )
             .into_any_element()
     }
 }

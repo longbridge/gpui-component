@@ -2,13 +2,20 @@
 //!
 //! 提供可复用的 Provider 和 Model 选择功能。
 
+use gpui::prelude::FluentBuilder;
 use gpui::{
-    App, AppContext, Context, Entity, IntoElement, ParentElement, SharedString, Styled,
-    Subscription, Window, px,
+    AnyElement, App, AppContext, Context, Corner, Entity, Hsla, InteractiveElement, IntoElement,
+    ParentElement, SharedString, StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
 use gpui_component::{
-    IndexPath, Sizable, Size, h_flex,
+    ActiveTheme, Icon, IconName, IndexPath, Sizable, Size,
+    button::Button,
+    h_flex,
+    input::{Input, InputEvent, InputState},
+    popover::Popover,
+    scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectItem, SelectState},
+    v_flex,
 };
 use rust_i18n::t;
 
@@ -171,6 +178,10 @@ pub struct ProviderSelectState {
     provider_select: Entity<SelectState<Vec<ProviderItem>>>,
     /// Model 选择器状态
     model_select: Entity<SelectState<Vec<ModelItem>>>,
+    /// Provider 搜索输入框
+    provider_search_input: Entity<InputState>,
+    /// Model 搜索输入框
+    model_search_input: Entity<InputState>,
     /// 订阅
     _subscriptions: Vec<Subscription>,
 }
@@ -192,6 +203,16 @@ impl ProviderSelectState {
 
         // 创建 Model 选择器
         let model_select = cx.new(|cx| SelectState::new(Vec::<ModelItem>::new(), None, window, cx));
+        let provider_search_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Common.search").to_string())
+                .clean_on_escape()
+        });
+        let model_search_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("Common.search").to_string())
+                .clean_on_escape()
+        });
 
         let mut subscriptions = Vec::new();
 
@@ -236,6 +257,25 @@ impl ProviderSelectState {
             },
         ));
 
+        subscriptions.push(cx.subscribe_in(
+            &provider_search_input,
+            window,
+            |_this, _input, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            },
+        ));
+        subscriptions.push(cx.subscribe_in(
+            &model_search_input,
+            window,
+            |_this, _input, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            },
+        ));
+
         Self {
             providers: Vec::new(),
             models: Vec::new(),
@@ -243,6 +283,8 @@ impl ProviderSelectState {
             selected_model: None,
             provider_select,
             model_select,
+            provider_search_input,
+            model_search_input,
             _subscriptions: subscriptions,
         }
     }
@@ -419,6 +461,7 @@ impl ProviderSelectState {
         cx: &mut App,
     ) -> Option<String> {
         let provider = self.providers.iter().find(|p| p.id == provider_id)?.clone();
+        self.selected_provider = Some(provider_id.to_string());
         let models = Self::build_model_list(&provider);
         let default_model = Self::resolve_default_model(&provider, &models);
         self.set_models(models, default_model.clone(), window, cx);
@@ -481,19 +524,321 @@ impl ProviderSelectState {
             .placeholder(t!("AiChat.select_provider_placeholder").to_string())
     }
 
-    /// 渲染 Model 选择器
-    pub fn render_model_select(&self) -> impl IntoElement {
-        Select::new(&self.model_select)
-            .with_size(Size::Small)
-            .min_w(px(140.0))
-            .placeholder(t!("AiChat.select_model_placeholder").to_string())
+    fn render_selector_item(
+        id: impl Into<gpui::ElementId>,
+        label: String,
+        selected: bool,
+        colors: SelectorColors,
+        on_click: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> AnyElement {
+        let corner = px(6.0);
+        let item = h_flex()
+            .id(id)
+            .w_full()
+            .relative()
+            .items_center()
+            .justify_start()
+            .px_3()
+            .py_2()
+            .text_sm()
+            .text_color(colors.foreground)
+            .cursor_pointer()
+            .rounded(corner)
+            .when(!selected, |this| {
+                this.hover(move |style| style.bg(colors.list_hover))
+            })
+            .on_click(on_click)
+            .child(
+                div()
+                    .flex_1()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .child(label),
+            )
+            .when(selected, |this| {
+                this.child(
+                    Icon::new(IconName::Check)
+                        .with_size(Size::XSmall)
+                        .text_color(colors.foreground),
+                )
+            });
+
+        if selected {
+            item.bg(colors.list_active)
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .right_0()
+                        .bottom_0()
+                        .left_0()
+                        .rounded(corner)
+                        .border_1()
+                        .border_color(colors.list_active_border),
+                )
+                .into_any_element()
+        } else {
+            item.into_any_element()
+        }
+    }
+
+    fn render_selector_column(
+        column_id: &str,
+        title: String,
+        search_input: Entity<InputState>,
+        items: Vec<AnyElement>,
+        empty_text: String,
+        width: f32,
+        with_right_border: bool,
+        colors: SelectorColors,
+    ) -> impl IntoElement {
+        v_flex()
+            .id(SharedString::from(format!(
+                "provider-selector-column-{column_id}"
+            )))
+            .w(px(width))
+            .min_w(px(width))
+            .h(px(320.0))
+            .min_h_0()
+            .overflow_hidden()
+            .when(with_right_border, |this| {
+                this.border_r_1().border_color(colors.border)
+            })
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .px_3()
+                    .py_2()
+                    .text_sm()
+                    .text_color(colors.muted_foreground)
+                    .child(title),
+            )
+            .child(
+                div().flex_shrink_0().px_2().pb_2().child(
+                    Input::new(&search_input)
+                        .prefix(Icon::new(IconName::Search).text_color(colors.muted_foreground))
+                        .cleanable(true)
+                        .small()
+                        .w_full(),
+                ),
+            )
+            .child({
+                let list = div().flex_1().min_h_0().overflow_y_scrollbar().p_1();
+                if items.is_empty() {
+                    list.child(
+                        div()
+                            .w_full()
+                            .px_3()
+                            .py_2()
+                            .text_sm()
+                            .text_color(colors.muted_foreground)
+                            .child(empty_text),
+                    )
+                } else {
+                    list.children(items)
+                }
+            })
     }
 
     /// 渲染 Provider 和 Model 选择器组合
-    pub fn render(&self) -> impl IntoElement {
-        h_flex()
-            .gap_2()
-            .child(self.render_provider_select())
-            .child(self.render_model_select())
+    pub fn render(&self, cx: &App) -> impl IntoElement {
+        let selected_provider_id = self
+            .provider_select
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .or_else(|| self.selected_provider.clone());
+        let selected_provider = selected_provider_id
+            .as_ref()
+            .and_then(|id| self.providers.iter().find(|p| &p.id == id))
+            .cloned();
+        let selected_model = self
+            .model_select
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .or_else(|| self.selected_model.clone());
+        let trigger_label = match (&selected_provider, &selected_model) {
+            (Some(provider), Some(model)) => format!("{}/{}", provider.name, model),
+            (Some(provider), None) => provider.name.clone(),
+            _ => t!("AiChat.select_provider_placeholder").to_string(),
+        };
+
+        let providers = self.providers.clone();
+        let models = self.models.clone();
+        let provider_select = self.provider_select.clone();
+        let model_select = self.model_select.clone();
+        let provider_search_input = self.provider_search_input.clone();
+        let model_search_input = self.model_search_input.clone();
+
+        Popover::new("provider-model-selector")
+            .anchor(Corner::TopRight)
+            .p_0()
+            .trigger(
+                Button::new("provider-model-selector-trigger")
+                    .outline()
+                    .with_size(Size::Small)
+                    .min_w(px(220.0))
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                h_flex()
+                                    .min_w_0()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(Icon::new(IconName::AI.color()).with_size(Size::Small))
+                                    .child(
+                                        div()
+                                            .min_w_0()
+                                            .overflow_hidden()
+                                            .whitespace_nowrap()
+                                            .text_ellipsis()
+                                            .child(trigger_label),
+                                    ),
+                            )
+                            .child(div().flex_1())
+                            .child(Icon::new(IconName::ChevronDown).with_size(Size::XSmall)),
+                    ),
+            )
+            .content(move |_state, _window, cx| {
+                let provider_query = provider_search_input
+                    .read(cx)
+                    .text()
+                    .to_string()
+                    .trim()
+                    .to_lowercase();
+                let model_query = model_search_input
+                    .read(cx)
+                    .text()
+                    .to_string()
+                    .trim()
+                    .to_lowercase();
+                let colors = SelectorColors {
+                    border: cx.theme().border,
+                    foreground: cx.theme().foreground,
+                    muted_foreground: cx.theme().muted_foreground,
+                    list_active: cx.theme().list_active,
+                    list_active_border: cx.theme().list_active_border,
+                    list_hover: cx.theme().list_hover,
+                };
+
+                let provider_items = providers
+                    .clone()
+                    .into_iter()
+                    .filter(|provider| {
+                        provider_query.is_empty()
+                            || provider.name.to_lowercase().contains(&provider_query)
+                            || provider
+                                .provider_type
+                                .to_lowercase()
+                                .contains(&provider_query)
+                            || provider.id.to_lowercase().contains(&provider_query)
+                    })
+                    .enumerate()
+                    .map(|(idx, provider)| {
+                        let current_provider_id =
+                            provider_select.read(cx).selected_value().cloned();
+                        let is_selected = selected_provider_id
+                            .as_ref()
+                            .or(current_provider_id.as_ref())
+                            .map(|id| id == &provider.id)
+                            .unwrap_or(false);
+                        let provider_id = provider.id.clone();
+                        let provider_select = provider_select.clone();
+
+                        Self::render_selector_item(
+                            SharedString::from(format!("provider-item-{idx}")),
+                            provider.display_name(),
+                            is_selected,
+                            colors,
+                            move |_, window, cx| {
+                                provider_select.update(cx, |state, cx| {
+                                    state.set_selected_value(&provider_id, window, cx);
+                                    cx.emit(SelectEvent::Confirm(Some(provider_id.clone())));
+                                });
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>();
+
+                let model_items = models
+                    .clone()
+                    .into_iter()
+                    .filter(|model| {
+                        model_query.is_empty() || model.id.to_lowercase().contains(&model_query)
+                    })
+                    .enumerate()
+                    .map(|(idx, model)| {
+                        let current_model = model_select.read(cx).selected_value().cloned();
+                        let is_selected = selected_model
+                            .as_ref()
+                            .or(current_model.as_ref())
+                            .map(|current| current == &model.id)
+                            .unwrap_or(false);
+                        let model_id = model.id.clone();
+                        let model_select = model_select.clone();
+
+                        Self::render_selector_item(
+                            SharedString::from(format!("model-item-{idx}")),
+                            model.id.clone(),
+                            is_selected,
+                            colors,
+                            move |_, window, cx| {
+                                model_select.update(cx, |state, cx| {
+                                    state.set_selected_value(&model_id, window, cx);
+                                    cx.emit(SelectEvent::Confirm(Some(model_id.clone())));
+                                });
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>();
+
+                v_flex()
+                    .w(px(520.0))
+                    .p_2()
+                    .gap_0()
+                    .bg(cx.theme().background)
+                    .child(
+                        h_flex()
+                            .border_1()
+                            .border_color(colors.border)
+                            .rounded(cx.theme().radius)
+                            .child(Self::render_selector_column(
+                                "providers",
+                                t!("AiChat.select_provider_placeholder").to_string(),
+                                provider_search_input.clone(),
+                                provider_items,
+                                t!("AiChat.select_provider_placeholder").to_string(),
+                                260.0,
+                                true,
+                                colors,
+                            ))
+                            .child(Self::render_selector_column(
+                                "models",
+                                t!("AiChat.select_model_placeholder").to_string(),
+                                model_search_input.clone(),
+                                model_items,
+                                t!("AiChat.select_model_placeholder").to_string(),
+                                240.0,
+                                false,
+                                colors,
+                            )),
+                    )
+            })
+            .max_w(px(720.0))
     }
+}
+
+#[derive(Clone, Copy)]
+struct SelectorColors {
+    border: Hsla,
+    foreground: Hsla,
+    muted_foreground: Hsla,
+    list_active: Hsla,
+    list_active_border: Hsla,
+    list_hover: Hsla,
 }

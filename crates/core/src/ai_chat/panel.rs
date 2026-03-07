@@ -1187,13 +1187,7 @@ impl AiChatPanel {
                                 div()
                                     .flex_1()
                                     .min_w_0()
-                                    .child(self.provider_select_state.render_provider_select()),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .child(self.provider_select_state.render_model_select()),
+                                    .child(self.provider_select_state.render(cx)),
                             )
                             // 模型设置按钮
                             .child({
