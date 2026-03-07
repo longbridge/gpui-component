@@ -20,8 +20,7 @@ impl InputState {
         };
 
         let point = self.text.offset_to_point(self.cursor());
-        let row = point.row.saturating_sub(last_layout.visible_range.start);
-        let Some(line) = last_layout.lines.get(row) else {
+        let Some(line) = last_layout.line(point.row) else {
             self.preferred_column = None;
             return;
         };
@@ -99,8 +98,7 @@ impl InputState {
 
         if let Some((preferred_x, column)) = was_preferred_column {
             // Get display point again to update local_row.
-            let mut next_display_point =
-                self.display_map.offset_to_wrap_display_point(new_offset);
+            let mut next_display_point = self.display_map.offset_to_wrap_display_point(new_offset);
             next_display_point.column = 0;
             let next_point = self
                 .display_map
