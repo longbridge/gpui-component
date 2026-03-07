@@ -686,50 +686,45 @@ impl AIInput {
                 .into_any_element();
         }
 
-        v_flex()
+        h_flex()
             .w_full()
             .px_3()
             .pb_3()
+            .items_center()
             .gap_2()
             .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        Button::new("mode-switch")
-                            .icon(self.mode.icon().color())
-                            .ghost()
-                            .with_size(Size::Small)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.toggle_mode(window, cx);
-                            })),
-                    )
-                    // Provider 选择器（仅 Agent 模式）
-                    .when(self.mode == InputMode::Agent, |this| {
-                        this.child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .child(self.provider_select_state.render()),
-                        )
-                    })
-                    // 模型设置按钮（仅 Agent 模式）
-                    .when(self.mode == InputMode::Agent, |this| {
-                        this.child(
-                            Popover::new("model-settings-popover")
-                                .anchor(Corner::BottomLeft)
-                                .trigger(
-                                    Button::new("model-settings-btn")
-                                        .icon(IconName::Settings)
-                                        .ghost()
-                                        .with_size(Size::Small),
-                                )
-                                .content(move |_state, _window, _cx| settings_panel.clone()),
-                        )
-                    }),
+                Button::new("mode-switch")
+                    .icon(self.mode.icon().color())
+                    .ghost()
+                    .with_size(Size::Small)
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        this.toggle_mode(window, cx);
+                    })),
             )
-            .child(h_flex().w_full().justify_end().child(SendButton::render(
+            // Provider 选择器（仅 Agent 模式）
+            .when(self.mode == InputMode::Agent, |this| {
+                this.child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(self.provider_select_state.render()),
+                )
+            })
+            // 模型设置按钮（仅 Agent 模式）
+            .when(self.mode == InputMode::Agent, |this| {
+                this.child(
+                    Popover::new("model-settings-popover")
+                        .anchor(Corner::BottomLeft)
+                        .trigger(
+                            Button::new("model-settings-btn")
+                                .icon(IconName::Settings)
+                                .ghost()
+                                .with_size(Size::Small),
+                        )
+                        .content(move |_state, _window, _cx| settings_panel.clone()),
+                )
+            })
+            .child(SendButton::render(
                 &send_button_state,
                 move |window, app| {
                     if let Some(entity) = submit_entity.upgrade() {
@@ -746,7 +741,7 @@ impl AIInput {
                         });
                     }
                 },
-            )))
+            ))
             .into_any_element()
     }
 }
