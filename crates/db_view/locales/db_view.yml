@@ -2318,9 +2318,9 @@ AIInput:
     zh-CN: 执行
     zh-HK: 執行
   placeholder_agent:
-    en: Ask AI... (Enter to send, Shift+Enter for newline)
-    zh-CN: 向 AI 提问...（回车发送，Shift+Enter 换行）
-    zh-HK: 向 AI 提問...（按 Enter 送出，Shift+Enter 換行）
+    en: Ask AI... (Enter to send, Shift+Enter for newline, @ to select table)
+    zh-CN: 向 AI 提问...（回车发送，Shift+Enter 换行，@ 选择表格）
+    zh-HK: 向 AI 提問...（按 Enter 送出，Shift+Enter 換行，@ 選擇表格）
   placeholder_sql:
     en: Enter SQL... (Enter to run, Shift+Enter for newline)
     zh-CN: 请输入 SQL...（回车执行，Shift+Enter 换行）

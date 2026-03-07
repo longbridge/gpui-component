@@ -517,3 +517,63 @@
   - `crates/terminal_view/src/view.rs` 中 `paste_text` 现在在 `ALT_SCREEN` 下直接粘贴，不再弹高危/多行确认。
   - `crates/terminal_view/src/view.rs` 中确认弹框补上 `.confirm()`，恢复标准确认/取消按钮。
 - 本地验证：`cargo fmt --all && cargo check -p terminal_view` 通过。
+
+
+## 分析记录 - terminal-sidebar-ai-system-prompt
+时间：2026-03-07 11:35:26 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-terminal-sidebar-ai-system-prompt.md`
+- 已分析相似实现：
+  - `crates/terminal_view/src/sidebar/mod.rs`（终端侧边栏接入 `AiChatPanel`）
+  - `crates/core/src/ai_chat/panel.rs`（统一消息构造与发送入口）
+  - `crates/core/src/ai_chat/engine.rs`（会话历史与代码块动作管理）
+- 已识别真实注入点：
+  - `AiChatPanel::new` 当前无场景专属提示词配置
+  - `send_message` 在发送前统一构造 `Vec<Message>`，适合前置插入 `Role::System`
+- 已核对参考：
+  - GitHub `search_code` 搜索 `Role::System` 的 Rust 项目实现，确认常见做法是发送前拼装 system message，而不是散落在 UI 层硬编码消息数组
+- 当前方案：为 `AiChatPanel` 增加可选系统提示 setter，仅由 `terminal_view` 侧边栏设置 Linux 单命令代码块约束
+
+## 编码前检查 - terminal-sidebar-ai-system-prompt
+时间：2026-03-07 11:35:26 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-terminal-sidebar-ai-system-prompt.md`
+□ 将使用以下可复用组件：
+- `AiChatPanel::new`: `crates/core/src/ai_chat/panel.rs` - 复用通用 AI 面板构造
+- `AiChatPanel::send_message`: `crates/core/src/ai_chat/panel.rs` - 复用统一消息构造入口
+- `TerminalSidebar::new`: `crates/terminal_view/src/sidebar/mod.rs` - 复用终端侧边栏接入点
+□ 将遵循命名约定：新增字段/方法使用 `snake_case`，常量使用全大写下划线风格
+□ 将遵循代码风格：最小化新增 setter 和可选字段，不扩散到其他场景
+□ 确认不重复造轮子，证明：已检查 `AiChatPanel` 现有接口，没有现成的 system prompt 注入能力，因此补一个最小可选配置接口
+
+
+## 编码后声明 - terminal-sidebar-ai-system-prompt
+时间：2026-03-07 11:38:56 +0800
+
+### 1. 复用了以下既有组件
+- `AiChatPanel::send_message`：用于复用现有统一消息构造与流式发送链路，位于 `crates/core/src/ai_chat/panel.rs`
+- `AiChatPanel::new`：用于复用通用 AI 面板构造，位于 `crates/core/src/ai_chat/panel.rs`
+- `TerminalSidebar::new`：用于复用终端侧边栏场景接入点，位于 `crates/terminal_view/src/sidebar/mod.rs`
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增字段 `system_instruction`、方法 `set_system_instruction`、常量 `TERMINAL_AI_SYSTEM_INSTRUCTION` 均符合现有 Rust 命名风格
+- 代码风格：仅新增一个可选字段、一个 setter 和一次场景设置，不改动现有消息引擎结构
+- 文件组织：通用能力放 `crates/core/src/ai_chat/panel.rs`，场景配置放 `crates/terminal_view/src/sidebar/mod.rs`
+
+### 3. 对比了以下相似实现
+- `crates/terminal_view/src/sidebar/mod.rs`：保持侧边栏只做场景接入与动作注册，不承载消息构造细节
+- `crates/core/src/ai_chat/panel.rs`：继续在统一发送入口中组装 `Vec<Message>`
+- `crates/core/src/ai_chat/engine.rs`：维持会话历史与 UI 状态管理不变
+
+### 4. 未重复造轮子的证明
+- 未新增终端专属聊天面板，继续复用通用 `AiChatPanel`
+- 未在多个场景散落拼装消息数组，只在统一 `send_message` 入口前置 system message
+- 未引入新的提示词管理抽象，当前需求使用最小 setter 即可满足
+
+## 本地验证记录 - terminal-sidebar-ai-system-prompt
+时间：2026-03-07 11:38:56 +0800
+
+- 已执行：`cargo fmt --all`
+- 已执行：`cargo check -p terminal_view`
+- 结果：通过
+- 备注：`cargo check` 输出包含已有依赖 `num-bigint-dig v0.8.4` 的 future incompatibility 警告，本次改动未引入新警告

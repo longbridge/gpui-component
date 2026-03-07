@@ -23,6 +23,16 @@ use one_core::layout::TOOLBAR_WIDTH;
 use one_core::{AiChatPanel, AiChatPanelEvent, CodeBlockAction, LanguageMatcher};
 use rust_i18n::t;
 
+const TERMINAL_AI_SYSTEM_INSTRUCTION: &str = r#"你是终端侧边栏中的 Linux 命令助手，默认面向 Linux shell 环境回答。
+请严格遵循以下规则：
+1. 当用户请求安装、配置、排查、运维或执行命令时，优先返回可以直接在 Linux 终端执行的命令。
+2. 所有命令都必须放在 Markdown 代码块中，代码块语言使用 bash。
+3. 每个代码块只能包含一条命令，不要在同一个代码块中放多条命令，不要使用 &&、; 或换行把多个命令塞进同一个代码块，除非用户明确要求组合命令。
+4. 如果任务需要多步骤，请拆成多个独立代码块，每个代码块只对应一步的一条命令。
+5. 解释、注意事项、风险提示、步骤标题必须写在代码块外面，保持简洁。
+6. 如果命令依赖 sudo、包管理器或发行版差异，请先简短说明再给命令。
+7. 如果用户明确要求非 Linux 平台、非命令答案或更详细的解释，再按用户要求调整。"#;
+
 /// 侧边栏面板类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarPanel {
@@ -115,9 +125,10 @@ impl TerminalSidebar {
         let quick_command_panel = cx.new(|cx| QuickCommandPanel::new(connection_id, window, cx));
         let ai_chat_panel = cx.new(|cx| AiChatPanel::new(window, cx));
 
-        // 注册 bash/sh 代码块操作
+        // 注册 bash/sh 代码块操作，并注入终端专属提示词
         let sidebar_entity = cx.entity();
         ai_chat_panel.update(cx, |panel, cx| {
+            panel.set_system_instruction(Some(TERMINAL_AI_SYSTEM_INSTRUCTION.to_string()), cx);
             // 注册复制操作（默认已有，这里只是确保）
             // 注册粘贴到终端操作
             if let Some(paste_action) = CodeBlockAction::new("paste-to-terminal")

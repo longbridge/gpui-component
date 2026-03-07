@@ -16,9 +16,9 @@ AiChat:
     zh-CN: "AI 助手"
     zh-HK: "AI 助手"
   input_placeholder:
-    en: "Ask AI... (Enter to send)"
-    zh-CN: "向 AI 提问... (Enter 发送)"
-    zh-HK: "向 AI 提問... (Enter 發送)"
+    en: "Ask AI... (Enter to send, Shift+Enter for newline)"
+    zh-CN: "向 AI 提问...（回车发送，Shift+Enter 换行）"
+    zh-HK: "向 AI 提問...（按 Enter 送出，Shift+Enter 換行）"
   send:
     en: "Send"
     zh-CN: "发送"

@@ -314,6 +314,8 @@ pub struct AiChatPanel {
     /// 模型设置面板
     settings_panel: Entity<ModelSettingsPanel>,
     is_logged_in: bool,
+    /// 场景专属系统提示词，仅在发送消息时前置注入
+    system_instruction: Option<String>,
 }
 
 impl AiChatPanel {
@@ -393,6 +395,7 @@ impl AiChatPanel {
             custom_colors: None,
             settings_panel,
             is_logged_in: GlobalCloudUser::is_logged_in(cx),
+            system_instruction: None,
         };
 
         // 加载 providers
@@ -458,6 +461,15 @@ impl AiChatPanel {
     ) {
         self.connection_name = connection_name;
         self.database = database;
+    }
+
+    /// 设置场景专属系统提示词
+    pub fn set_system_instruction(&mut self, instruction: Option<String>, cx: &mut Context<Self>) {
+        self.system_instruction = instruction.and_then(|instruction| {
+            let trimmed = instruction.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        });
+        cx.notify();
     }
 
     /// 设置自定义颜色（用于终端等需要自定义主题的场景）
@@ -824,6 +836,7 @@ impl AiChatPanel {
         let history_count = self.engine.model_settings.history_count;
         let max_tokens = self.engine.model_settings.max_tokens;
         let temperature = self.engine.model_settings.temperature;
+        let system_instruction = self.system_instruction.clone();
 
         // 获取用户选择的模型
         let selected_model = self.engine.selected_model.clone().unwrap_or_else(|| {
@@ -862,7 +875,7 @@ impl AiChatPanel {
 
             // 构建聊天历史消息
             let messages: Vec<Message> = {
-                if let Some(sid) = session_id {
+                let mut messages = if let Some(sid) = session_id {
                     if let Some(message_repo) = storage_manager.get::<MessageRepository>() {
                         match message_repo.list_by_session(sid) {
                             Ok(messages) => {
@@ -891,7 +904,13 @@ impl AiChatPanel {
                     }
                 } else {
                     vec![Message::text(Role::User, &content)]
+                };
+
+                if let Some(instruction) = system_instruction.as_deref() {
+                    messages.insert(0, Message::text(Role::System, instruction));
                 }
+
+                messages
             };
 
             // 直接使用 ChatStreamProcessor 进行流式对话

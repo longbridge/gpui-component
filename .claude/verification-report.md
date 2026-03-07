@@ -1,39 +1,44 @@
 # 验证报告
 
-- 任务：修复终端粘贴确认在 Vim 场景误触发，以及确认弹框无按钮问题
-- 时间：2026-03-07 00:32:00 +0800
+- 任务：为 `terminal_view` 侧边栏 AI 增加终端专属系统提示词，约束输出 Linux 单命令代码块
+- 时间：2026-03-07 11:38:56 +0800
 - 结论：通过
-- 综合评分：97/100
+- 综合评分：96/100
 
 ## 技术维度评分
 - 代码质量：97/100
-  - `ALT_SCREEN` 场景下直接跳过 shell 粘贴确认，符合全屏编辑器语义。
-  - 对话框补上 `.confirm()`，恢复标准 OK/Cancel 按钮。
-  - 改动小且集中，没有影响底层终端粘贴实现。
-- 测试覆盖：90/100
-  - 通过 `cargo check -p terminal_view` 做定向编译验证。
-  - 仍缺少实际 UI 交互测试，保留少量扣分。
+  - 在 `AiChatPanel` 中新增可选 `system_instruction`，只扩展统一发送入口，不破坏既有结构。
+  - 历史消息裁剪后再插入 `Role::System`，保证提示词稳定生效且不改变现有 `history_count` 语义。
+  - 终端场景通过 setter 注入，不影响其他 `AiChatPanel` 使用方。
+- 测试覆盖：88/100
+  - 已通过 `cargo fmt --all` 与 `cargo check -p terminal_view`。
+  - 当前仍缺少提示词生效的自动化 UI/集成测试，保留部分扣分。
 - 规范遵循：100/100
-  - 保持项目既有对话框与模式判断风格。
+  - 命名、文件组织、最小改动策略均符合仓库既有模式。
 
 ## 战略维度评分
-- 需求匹配：99/100
-  - 直接解决“Vim 编辑文件不应弹多行提示”和“提示框没有操作按钮”两个问题。
+- 需求匹配：98/100
+  - 明确要求 AI 返回 Linux `bash` 代码块、每个代码块一个命令、多步骤拆成多个代码块。
+  - 改动范围仅限终端侧边栏场景，符合用户要求。
 - 架构一致：96/100
-  - 只调整粘贴确认的场景判断和对话框构建方式。
-- 风险评估：96/100
-  - Shell 场景下的高危/多行确认仍保留。
-  - Vim/less 等全屏程序不再被误伤。
+  - 继续复用通用 `AiChatPanel`，通过可选配置实现终端场景差异化。
+- 风险评估：94/100
+  - 工程实现风险较低。
+  - 剩余风险主要来自模型遵循提示词的稳定性，需后续实际交互观察。
 
 ## 本地验证
 - `cargo fmt --all`
 - `cargo check -p terminal_view`
 
 ## 变更摘要
-- `crates/terminal_view/src/view.rs`
-  - `paste_text`：`ALT_SCREEN` 下直接粘贴，跳过高危/多行确认
-  - `show_paste_confirm_dialog`：补 `.confirm()`，恢复按钮
+- `crates/core/src/ai_chat/panel.rs`
+  - 新增 `system_instruction` 字段与 `set_system_instruction`
+  - `send_message` 在发送前前置插入 `Role::System` 消息
+- `crates/terminal_view/src/sidebar/mod.rs`
+  - 新增终端专属系统提示词常量
+  - 创建 `AiChatPanel` 后注入 Linux 单命令代码块约束
 
 ## 建议
-- 当前修改可以直接使用。
-- 若后续还要更严谨，可再补一个针对 `ALT_SCREEN` / shell 模式差异的单元测试。
+- 当前实现可以直接使用。
+- 若后续数据库 AI、Redis AI 也需要场景化提示词，可继续复用 `set_system_instruction`。
+- 若要进一步提升稳定性，可后续补一个针对 `send_message` 的消息构造单元测试。
