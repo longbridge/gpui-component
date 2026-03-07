@@ -2262,6 +2262,10 @@ ChatDbSelector:
     en: Schema
     zh-CN: 架构
     zh-HK: 架構
+  clear_selection:
+    en: Clear selection
+    zh-CN: 清除选择
+    zh-HK: 清除選擇
 ChatMessageList:
   load_more:
     en: "Load earlier messages (%{hidden_count} remaining)"

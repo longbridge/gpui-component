@@ -7,6 +7,7 @@ use gpui::{
     InteractiveElement, IntoElement, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, Window, div, px,
 };
+use gpui_component::button::ButtonVariants;
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, Size,
     button::Button,
@@ -22,7 +23,6 @@ use one_core::storage::{
 };
 use rust_i18n::t;
 use std::collections::HashMap;
-
 // ========================================================================
 // 数据类型
 // ========================================================================
@@ -263,6 +263,39 @@ impl DbConnectionSelector {
             self.popover_open = false;
             cx.notify();
         }
+    }
+
+    fn has_selection(&self) -> bool {
+        self.selected_connection.is_some()
+            || self.selected_database.is_some()
+            || self.selected_schema.is_some()
+    }
+
+    fn clear_selection(&mut self, cx: &mut Context<Self>) {
+        if !self.has_selection() {
+            return;
+        }
+
+        let preserve_connection = matches!(self.source_mode, SelectorSourceMode::SingleConnection);
+
+        self.selected_database = None;
+        self.selected_schema = None;
+        self.schemas.clear();
+        self.loading_schemas = false;
+
+        if preserve_connection {
+            self.loading_databases = false;
+        } else {
+            self.selected_connection = None;
+            self.databases.clear();
+            self.supports_schema = false;
+            self.uses_schema_as_database = false;
+            self.loading_databases = false;
+        }
+
+        self.emit_selection(cx);
+        self.close_popover(cx);
+        cx.notify();
     }
 
     fn ensure_connections_loaded(&mut self, cx: &mut Context<Self>) {
@@ -842,12 +875,32 @@ impl DbConnectionSelector {
         let visible_column_count =
             usize::from(show_connection_column) + 1 + usize::from(show_schema_column);
         let popover_width = 16.0 + (visible_column_count as f32 * 200.0);
+        let has_selection = selected_connection.is_some()
+            || selected_database.is_some()
+            || selected_schema.is_some();
 
         v_flex()
             .w(px(popover_width))
             .p_2()
-            .gap_0()
+            .gap_2()
             .bg(colors.background)
+            .when(has_selection, |this| {
+                let view = view.clone();
+                this.child(
+                    h_flex().w_full().justify_end().child(
+                        Button::new("db-connection-selector-clear")
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Close)
+                            .label(t!("ChatDbSelector.clear_selection").to_string())
+                            .on_click(move |_, _window, cx| {
+                                view.update(cx, |selector, cx| {
+                                    selector.clear_selection(cx);
+                                });
+                            }),
+                    ),
+                )
+            })
             .child(
                 h_flex()
                     .gap_0()

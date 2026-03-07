@@ -577,3 +577,27 @@
 - 已执行：`cargo check -p terminal_view`
 - 结果：通过
 - 备注：`cargo check` 输出包含已有依赖 `num-bigint-dig v0.8.4` 的 future incompatibility 警告，本次改动未引入新警告
+
+## 编码前检查 - db-connection-selector-clear
+时间：2026-03-07 21:24:10 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-connection-selector-clear.md`
+- 已分析相似实现：
+  - `crates/db_view/src/chatdb/db_connection_selector.rs`（三级选择与事件发射）
+  - `crates/db_view/src/chatdb/chat_panel.rs`（`get_connection_info()` 空值兼容）
+  - `crates/story/src/stories/table_story.rs`（显式清除选择按钮）
+- 已核对文档参考：
+  - `gpui-component` Button 文档确认可用 `.icon(...)`、`.ghost()`、`.xsmall()` 构建图标按钮
+- 当前方案：在选择器内部增加统一清除方法，并在触发器中显示条件性清除按钮
+
+## 编码前检查 - db-connection-selector-clear
+时间：2026-03-07 21:24:10 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-db-connection-selector-clear.md`
+□ 将使用以下可复用组件：
+- `DbConnectionSelector::emit_selection`: `crates/db_view/src/chatdb/db_connection_selector.rs` - 复用统一事件发射
+- `DbConnectionSelector::selection_label`: `crates/db_view/src/chatdb/db_connection_selector.rs` - 复用触发器文案生成
+- `gpui_component::button::Button`: `crates/ui` - 复用图标按钮样式能力
+□ 将遵循命名约定：新增方法使用 `snake_case`，渲染方法保持 `render_*` 风格
+□ 将遵循代码风格：最小侵入、早返回、使用现有 `cx.emit/cx.notify` 更新路径
+□ 确认不重复造轮子，证明：已检查 `db_connection_selector` 与 `chat_panel` 现有能力，没有现成“清空整个数据库选择上下文”的入口，因此只补统一清理方法和 UI 入口
