@@ -1923,37 +1923,94 @@ impl HomePage {
             return true;
         }
 
-        // 匹配连接参数（主机/IP、端口、用户名、数据库名）
-        if let Ok(params) = conn.to_db_connection() {
-            // 主机名或 IP 地址
-            if params.host.to_lowercase().contains(query) {
-                return true;
+        // 根据连接类型解析对应参数进行匹配
+        match conn.connection_type {
+            ConnectionType::Database => {
+                if let Ok(params) = conn.to_db_connection() {
+                    if params.host.to_lowercase().contains(query) {
+                        return true;
+                    }
+                    if params.port.to_string().contains(query) {
+                        return true;
+                    }
+                    if params.username.to_lowercase().contains(query) {
+                        return true;
+                    }
+                    if params
+                        .database
+                        .as_ref()
+                        .map_or(false, |db| db.to_lowercase().contains(query))
+                    {
+                        return true;
+                    }
+                    let conn_str = format!("{}@{}:{}", params.username, params.host, params.port);
+                    if conn_str.to_lowercase().contains(query) {
+                        return true;
+                    }
+                }
             }
-
-            // 端口号（转为字符串匹配）
-            if params.port.to_string().contains(query) {
-                return true;
+            ConnectionType::SshSftp => {
+                if let Ok(params) = conn.to_ssh_params() {
+                    if params.host.to_lowercase().contains(query) {
+                        return true;
+                    }
+                    if params.port.to_string().contains(query) {
+                        return true;
+                    }
+                    if params.username.to_lowercase().contains(query) {
+                        return true;
+                    }
+                    let conn_str = format!("{}@{}:{}", params.username, params.host, params.port);
+                    if conn_str.to_lowercase().contains(query) {
+                        return true;
+                    }
+                }
             }
-
-            // 用户名
-            if params.username.to_lowercase().contains(query) {
-                return true;
+            ConnectionType::Redis => {
+                if let Ok(params) = conn.to_redis_params() {
+                    if params.host.to_lowercase().contains(query) {
+                        return true;
+                    }
+                    if params.port.to_string().contains(query) {
+                        return true;
+                    }
+                    if params
+                        .username
+                        .as_ref()
+                        .map_or(false, |u| u.to_lowercase().contains(query))
+                    {
+                        return true;
+                    }
+                }
             }
-
-            // 数据库名
-            if params
-                .database
-                .as_ref()
-                .map_or(false, |db| db.to_lowercase().contains(query))
-            {
-                return true;
+            ConnectionType::MongoDB => {
+                if let Ok(params) = conn.to_mongodb_params() {
+                    if params.host.to_lowercase().contains(query) {
+                        return true;
+                    }
+                    if params.port.map_or(false, |p| p.to_string().contains(query)) {
+                        return true;
+                    }
+                    if params
+                        .username
+                        .as_ref()
+                        .map_or(false, |u| u.to_lowercase().contains(query))
+                    {
+                        return true;
+                    }
+                    if params
+                        .database
+                        .as_ref()
+                        .map_or(false, |db| db.to_lowercase().contains(query))
+                    {
+                        return true;
+                    }
+                    if params.connection_string.to_lowercase().contains(query) {
+                        return true;
+                    }
+                }
             }
-
-            // 完整连接字符串匹配（如 "root@localhost:3306"）
-            let conn_str = format!("{}@{}:{}", params.username, params.host, params.port);
-            if conn_str.to_lowercase().contains(query) {
-                return true;
-            }
+            _ => {}
         }
 
         false
