@@ -823,6 +823,15 @@ impl TerminalView {
     /// 2. 保持文本的完整性，让用户可以检查后再执行
     /// 3. 避免意外执行危险命令
     fn paste_text(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let mode = self.terminal.read(cx).mode();
+
+        // ALT_SCREEN（如 Vim、less）属于全屏交互程序，粘贴内容不会像 shell 那样直接执行。
+        // 这里跳过高危/多行确认，避免编辑器场景误弹确认框。
+        if mode.contains(TermMode::ALT_SCREEN) {
+            self.paste_text_unchecked(text, cx);
+            return;
+        }
+
         if self.confirm_high_risk_command && Self::contains_high_risk_command(text) {
             self.show_paste_confirm_dialog(
                 text.to_string(),
@@ -834,7 +843,6 @@ impl TerminalView {
             return;
         }
 
-        let mode = self.terminal.read(cx).mode();
         let is_multiline = text.lines().filter(|line| !line.trim().is_empty()).count() > 1;
         if self.confirm_multiline_paste && is_multiline && !mode.contains(TermMode::BRACKETED_PASTE)
         {
@@ -893,6 +901,7 @@ impl TerminalView {
 
             dialog
                 .title(title.clone())
+                .confirm()
                 .child(
                     div()
                         .flex()

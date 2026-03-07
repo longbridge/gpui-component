@@ -506,3 +506,14 @@
   - `TerminalView.vi_mode_enabled`
   - `TerminalView.vi_mode_disabled`
 - 本地验证：`cargo fmt --all && cargo check -p terminal_view` 通过。
+
+## 返修记录 - terminal-paste-confirm-vim
+时间：2026-03-07 00:31:00 +0800
+
+- 已确认两个根因：
+  - `show_paste_confirm_dialog` 未调用 `.confirm()`，因此没有底部 OK/Cancel 按钮。
+  - `paste_text` 仅以 `!BRACKETED_PASTE` 判定多行确认，导致 `vim` 等 `ALT_SCREEN` 全屏编辑器也被误判为 shell 场景。
+- 已修复：
+  - `crates/terminal_view/src/view.rs` 中 `paste_text` 现在在 `ALT_SCREEN` 下直接粘贴，不再弹高危/多行确认。
+  - `crates/terminal_view/src/view.rs` 中确认弹框补上 `.confirm()`，恢复标准确认/取消按钮。
+- 本地验证：`cargo fmt --all && cargo check -p terminal_view` 通过。
