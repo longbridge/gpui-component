@@ -375,6 +375,14 @@ TerminalView:
 ```
 %{content}
 ```"
+  vi_mode_enabled:
+    en: "Vi mode enabled. Press %{shortcut} again or Esc to exit."
+    zh-CN: "已进入 Vi 模式。再次按 %{shortcut} 或按 Esc 退出。"
+    zh-HK: "已進入 Vi 模式。再次按 %{shortcut} 或按 Esc 退出。"
+  vi_mode_disabled:
+    en: "Vi mode disabled."
+    zh-CN: "已退出 Vi 模式。"
+    zh-HK: "已退出 Vi 模式。"
   multiline_paste_title:
     en: Confirm Multiline Paste
     zh-CN: 确认多行粘贴

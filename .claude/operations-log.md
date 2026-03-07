@@ -494,3 +494,15 @@
   - `ContextMenu.select_all_with_shortcut`
 - 右键菜单现在通过 `Kbd::format` 按平台显示快捷键文本。
 - 本地验证：`cargo fmt --all && cargo check -p terminal_view` 通过。
+
+## 返修记录 - terminal-vi-mode-shortcut
+时间：2026-03-07 00:17:00 +0800
+
+- 将 `ToggleViMode` 的快捷键从 `Ctrl+Shift+Space` 改为 `F7`，降低与输入法/系统快捷键冲突的概率。
+- 在 `toggle_vi_mode` 中增加通知提示：
+  - 进入 Vi 模式时提示“再次按 F7 或按 Esc 退出”
+  - 退出 Vi 模式时提示“已退出 Vi 模式”
+- 在 `crates/terminal_view/locales/terminal_view.yml` 中新增国际化文案：
+  - `TerminalView.vi_mode_enabled`
+  - `TerminalView.vi_mode_disabled`
+- 本地验证：`cargo fmt --all && cargo check -p terminal_view` 通过。

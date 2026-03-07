@@ -70,6 +70,7 @@ const TERMINAL_SEARCH_FORWARD_SHORTCUT: &str = "ctrl-shift-f";
 const TERMINAL_SEARCH_BACKWARD_SHORTCUT: &str = "cmd-g";
 #[cfg(not(target_os = "macos"))]
 const TERMINAL_SEARCH_BACKWARD_SHORTCUT: &str = "ctrl-shift-g";
+const TERMINAL_TOGGLE_VI_MODE_SHORTCUT: &str = "f7";
 
 const DEFAULT_CELL_WIDTH: Pixels = px(8.0);
 const DEFAULT_COLS: usize = 80;
@@ -113,7 +114,11 @@ pub fn init(cx: &mut App) {
             SearchBackward,
             Some(TERMINAL_CONTEXT),
         ),
-        KeyBinding::new("ctrl-shift-space", ToggleViMode, Some(TERMINAL_CONTEXT)),
+        KeyBinding::new(
+            TERMINAL_TOGGLE_VI_MODE_SHORTCUT,
+            ToggleViMode,
+            Some(TERMINAL_CONTEXT),
+        ),
     ]);
 }
 
@@ -782,10 +787,18 @@ impl TerminalView {
         cx.notify();
     }
 
-    fn toggle_vi_mode(&mut self, _: &ToggleViMode, _window: &mut Window, cx: &mut Context<Self>) {
-        self.terminal.update(cx, |terminal, _| {
+    fn toggle_vi_mode(&mut self, _: &ToggleViMode, window: &mut Window, cx: &mut Context<Self>) {
+        let in_vi_mode = self.terminal.update(cx, |terminal, _| {
             terminal.toggle_vi_mode();
+            terminal.mode().contains(TermMode::VI)
         });
+        let shortcut = terminal_shortcut_label(TERMINAL_TOGGLE_VI_MODE_SHORTCUT);
+        let message = if in_vi_mode {
+            t!("TerminalView.vi_mode_enabled", shortcut = shortcut).to_string()
+        } else {
+            t!("TerminalView.vi_mode_disabled", shortcut = shortcut).to_string()
+        };
+        window.push_notification(message, cx);
         cx.notify();
     }
 
