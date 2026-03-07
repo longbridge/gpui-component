@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use gpui::{
-    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, FontWeight,
     InteractiveElement, IntoElement, ParentElement, PathPromptOptions, Render, SharedString,
     Styled, Window, div,
 };
@@ -506,6 +506,10 @@ impl SettingsPanel {
             SettingPage::new(t!("Settings.Account.title")).group(SettingGroup::new().item(
                 SettingItem::render(move |_options, window, cx| render_account_section(window, cx)),
             )),
+            // 关于页面
+            SettingPage::new(t!("Settings.About.title")).group(SettingGroup::new().item(
+                SettingItem::render(move |_options, _window, cx| render_about_section(cx)),
+            )),
         ]
     }
 }
@@ -528,7 +532,7 @@ impl TabContent for SettingsPanel {
     }
 
     fn icon(&self, _cx: &App) -> Option<Icon> {
-        Some(IconName::Settings.mono())
+        Some(IconName::SettingColor.color())
     }
 
     fn closeable(&self, _cx: &App) -> bool {
@@ -700,4 +704,111 @@ fn render_account_section(_window: &mut Window, cx: &App) -> gpui::AnyElement {
             )
             .into_any_element()
     }
+}
+
+/// 渲染关于页面
+fn render_about_section(cx: &App) -> gpui::AnyElement {
+    let version = env!("CARGO_PKG_VERSION");
+
+    v_flex()
+        .gap_4()
+        .p_4()
+        // 版本信息
+        .child(
+            h_flex()
+                .gap_2()
+                .items_center()
+                .child(div().text_sm().child(format!(
+                    "{}: {}",
+                    t!("Settings.About.version"),
+                    version
+                ))),
+        )
+        // 免责声明
+        .child(
+            v_flex()
+                .gap_2()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(t!("Settings.About.disclaimer_title").to_string()),
+                )
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(t!("Settings.About.disclaimer_status").to_string()),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .pl_2()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("1. {}", t!("Settings.About.disclaimer_item_1"))),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("2. {}", t!("Settings.About.disclaimer_item_2"))),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("3. {}", t!("Settings.About.disclaimer_item_3"))),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("4. {}", t!("Settings.About.disclaimer_item_4"))),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("5. {}", t!("Settings.About.disclaimer_item_5"))),
+                        ),
+                ),
+        )
+        // 数据与安全提示
+        .child(
+            v_flex()
+                .gap_2()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(t!("Settings.About.data_safety_title").to_string()),
+                )
+                .child(
+                    v_flex()
+                        .gap_1()
+                        .pl_2()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("• {}", t!("Settings.About.data_safety_item_1"))),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("• {}", t!("Settings.About.data_safety_item_2"))),
+                        )
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("• {}", t!("Settings.About.data_safety_item_3"))),
+                        ),
+                ),
+        )
+        .into_any_element()
 }

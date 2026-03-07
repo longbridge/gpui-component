@@ -192,6 +192,8 @@ pub enum IconName {
     Server,
     Export,
     AI,
+    Home,
+    SettingColor,
 }
 
 impl IconName {
@@ -373,6 +375,8 @@ impl IconNamed for IconName {
             Self::Server => "icons/server.svg",
             Self::Export => "icons/export.svg",
             Self::AI => "icons/ai.svg",
+            Self::Home => "icons/home.svg",
+            Self::SettingColor => "icons/setting_color.svg",
         }
         .into()
     }

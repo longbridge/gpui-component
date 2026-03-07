@@ -639,6 +639,61 @@ Settings:
         zh-CN: 设置自动保存的时间间隔（1-60秒）
         zh-HK: 設置自動保存的時間間隔（1-60秒）
 
+  # 关于页面
+  About:
+    title:
+      en: About
+      zh-CN: 关于
+      zh-HK: 關於
+    version:
+      en: "Version"
+      zh-CN: "版本"
+      zh-HK: "版本"
+    disclaimer_title:
+      en: "Disclaimer (Beta)"
+      zh-CN: "免责声明（测试版）"
+      zh-HK: "免責聲明（測試版）"
+    disclaimer_status:
+      en: "This software is currently an open-source beta version, not a stable commercial release. It may contain unknown bugs, compatibility issues, connection anomalies, or potential security risks."
+      zh-CN: "本软件目前为开源测试版本，非稳定商业版，可能存在未知 Bug、兼容性问题、连接异常或潜在安全风险。"
+      zh-HK: "本軟件目前為開源測試版本，非穩定商業版，可能存在未知 Bug、兼容性問題、連線異常或潛在安全風險。"
+    disclaimer_item_1:
+      en: "This software is provided \"as is\" without any express or implied warranties, including but not limited to stability, security, or fitness for a particular purpose."
+      zh-CN: "本软件按\"现状\"提供，无任何明示或默示担保，包括但不限于稳定性、安全性、适用性。"
+      zh-HK: "本軟件按\"現狀\"提供，無任何明示或默示擔保，包括但不限於穩定性、安全性、適用性。"
+    disclaimer_item_2:
+      en: "You assume all risks arising from the use of this software, including but not limited to: data loss, service interruption, connection anomalies, information leakage, or business losses."
+      zh-CN: "你自行承担使用本软件导致的一切风险，包括但不限于：数据丢失、服务中断、连接异常、信息泄露、业务损失。"
+      zh-HK: "你自行承擔使用本軟件導致的一切風險，包括但不限於：數據丟失、服務中斷、連線異常、信息洩露、業務損失。"
+    disclaimer_item_3:
+      en: "This software may only be used for servers/databases that you have legal management rights to. Unauthorized access is strictly prohibited."
+      zh-CN: "本软件仅用于你有权管理的合法服务器/数据库，禁止用于未授权访问。"
+      zh-HK: "本軟件僅用於你有權管理的合法伺服器/資料庫，禁止用於未授權訪問。"
+    disclaimer_item_4:
+      en: "The author and contributors shall not be liable for any direct or indirect losses."
+      zh-CN: "作者与贡献者不对任何直接或间接损失承担法律责任。"
+      zh-HK: "作者與貢獻者不對任何直接或間接損失承擔法律責任。"
+    disclaimer_item_5:
+      en: "By using this software, you acknowledge that you have read, understood, and fully agree to this disclaimer."
+      zh-CN: "使用即表示你已阅读、理解并完全同意本声明。"
+      zh-HK: "使用即表示你已閱讀、理解並完全同意本聲明。"
+    data_safety_title:
+      en: "Data & Security Notice"
+      zh-CN: "数据与安全提示"
+      zh-HK: "數據與安全提示"
+    data_safety_item_1:
+      en: "Please back up important data and connection credentials on your own."
+      zh-CN: "请自行备份重要数据与连接凭证。"
+      zh-HK: "請自行備份重要數據與連線憑證。"
+    data_safety_item_2:
+      en: "Use with caution in production environments; test in a staging environment first."
+      zh-CN: "生产环境谨慎使用，建议先在测试环境验证。"
+      zh-HK: "生產環境謹慎使用，建議先在測試環境驗證。"
+    data_safety_item_3:
+      en: "Please evaluate storage risks for sensitive information (passwords, keys) on your own."
+      zh-CN: "敏感信息（密码、密钥）请自行评估存储风险。"
+      zh-HK: "敏感信息（密碼、密鑰）請自行評估存儲風險。"
+
   # 账户设置
   Account:
     title:
