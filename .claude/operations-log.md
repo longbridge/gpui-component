@@ -687,3 +687,61 @@
 - 已执行：`cargo check -p db_view`
 - 结果：通过
 - 备注：编译输出包含已有依赖 `num-bigint-dig v0.8.4` 的 future incompatibility 警告，本次改动未引入新告警
+
+## 编码前检查 - settings-search-clipped
+时间：2026-03-08 00:00:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-settings-search-clipped.md`
+- 已分析相似实现：
+  - `main/src/setting_tab.rs`（设置页装配入口）
+  - `crates/ui/src/setting/settings.rs`（设置侧栏搜索框真实渲染）
+  - `crates/story/src/stories/theme_story/color_theme_story.rs`（侧栏搜索框稳定示例）
+  - `crates/ui/src/sidebar/mod.rs`（头部容器约束）
+  - `crates/ui/src/input/input.rs`（输入框宽度行为）
+- 已查询文档参考：
+  - Context7 `gpui-component` Sidebar/Input 文档，确认搜索框通常直接作为 `Sidebar::header(...)` 子元素使用
+- 当前方案：优先将设置页侧栏搜索框对齐到现有 story 的直接 header 用法，以最小改动消除裁切
+
+## 编码前检查 - settings-search-clipped
+时间：2026-03-08 00:00:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-settings-search-clipped.md`
+□ 将使用以下可复用组件：
+- `Settings::render_sidebar`: `crates/ui/src/setting/settings.rs` - 复用现有设置侧栏渲染入口
+- `Sidebar::header`: `crates/ui/src/sidebar/mod.rs` - 复用统一侧栏头部容器
+- `Input::new(...).prefix(...)`: `crates/ui/src/input/input.rs` - 复用现有搜索输入框
+- `color_theme_story` 侧栏搜索示例：`crates/story/src/stories/theme_story/color_theme_story.rs` - 复用稳定接入模式
+□ 将遵循命名约定：不新增命名体系，仅调整现有链式 UI 组合
+□ 将遵循代码风格：最小侵入、优先删掉多余包裹层，不扩散到无关组件
+□ 确认不重复造轮子，证明：已检查 `Settings`、`Sidebar`、`Input` 与 story 示例，现有组件足以完成修复，无需新增自定义搜索控件
+
+## 编码后声明 - settings-search-clipped
+时间：2026-03-08 00:00:00 +0800
+
+### 1. 复用了以下既有组件
+- `Settings::render_sidebar`：继续复用设置侧栏渲染入口，位于 `crates/ui/src/setting/settings.rs`
+- `Sidebar::header`：继续复用统一侧栏头部容器，位于 `crates/ui/src/sidebar/mod.rs`
+- `Input::new(...).prefix(...)`：继续复用现有搜索输入框，位于 `crates/ui/src/input/input.rs`
+- `color_theme_story` 侧栏搜索示例：复用已验证的直接 header 接入模式，位于 `crates/story/src/stories/theme_story/color_theme_story.rs`
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增业务命名，仅调整现有链式 UI 组合
+- 代码风格：保持最小侵入，只删除多余包裹层并保留原有状态与过滤逻辑
+- 文件组织：实际代码改动仅落在 `crates/ui/src/setting/settings.rs`
+
+### 3. 对比了以下相似实现
+- `crates/story/src/stories/theme_story/color_theme_story.rs`：对齐到直接将 `Input` 作为 `Sidebar::header(...)` 的写法
+- `crates/ui/src/sidebar/mod.rs`：确认头部容器会裁切溢出内容，因此应减少不必要包裹层
+- `crates/ui/src/input/input.rs`：确认 `Input` 自身已具备 `size_full()`，额外容器并非必要
+
+### 4. 未重复造轮子的证明
+- 未新增新的搜索框组件、状态类型或布局抽象
+- 未修改 `Settings` 过滤逻辑与 `Sidebar`/`Input` 接口，仅复用既有模式修复布局问题
+
+## 本地验证记录 - settings-search-clipped
+时间：2026-03-08 00:00:00 +0800
+
+- 已执行：`cargo fmt --all --check`
+- 已执行：`cargo test -p gpui-component`
+- 结果：通过
+- 备注：`cargo test -p gpui-component` 共 130 个测试通过；本任务属于视觉布局修复，仓库缺少现成截图回归，因此以公共组件测试通过 + 用户截图复现场景对照作为补偿验证方式
