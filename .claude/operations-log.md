@@ -601,3 +601,33 @@
 □ 将遵循命名约定：新增方法使用 `snake_case`，渲染方法保持 `render_*` 风格
 □ 将遵循代码风格：最小侵入、早返回、使用现有 `cx.emit/cx.notify` 更新路径
 □ 确认不重复造轮子，证明：已检查 `db_connection_selector` 与 `chat_panel` 现有能力，没有现成“清空整个数据库选择上下文”的入口，因此只补统一清理方法和 UI 入口
+
+## 编码后声明 - db-connection-selector-clear
+时间：2026-03-07 21:31:30 +0800
+
+### 1. 复用了以下既有组件
+- `DbConnectionSelector::emit_selection`：复用统一选择变更事件发射，位于 `crates/db_view/src/chatdb/db_connection_selector.rs`
+- `DbConnectionSelector::selection_label`：复用触发器文案生成，位于 `crates/db_view/src/chatdb/db_connection_selector.rs`
+- `gpui_component::button::Button` 与 `ButtonVariants`：复用图标/幽灵按钮写法，位于 `crates/ui`
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `has_selection`、`clear_selection`，保持 `snake_case`
+- 代码风格：保持早返回、最小侵入修改、`cx.notify/cx.emit` 驱动更新
+- 文件组织：实现集中在 `db_connection_selector.rs`，文案集中在 `crates/db_view/locales/db_view.yml`
+
+### 3. 对比了以下相似实现
+- `crates/db_view/src/chatdb/chat_panel.rs`：继续复用 `get_connection_info()` 的空值兼容消费方式
+- `crates/story/src/stories/table_story.rs`：沿用显式按钮触发清除选择的交互模式
+- `gpui-component` Button 文档：沿用 `.icon(...).ghost().xsmall()` 的按钮组合能力
+
+### 4. 未重复造轮子的证明
+- 未新增新的选择器组件或状态容器，只在现有选择器中补统一清理入口
+- 未改造调用方协议，继续复用 `SelectionChanged` 与 `get_connection_info()`
+
+## 本地验证记录 - db-connection-selector-clear
+时间：2026-03-07 21:31:30 +0800
+
+- 已执行：`cargo fmt --all`
+- 已执行：`cargo check -p db_view`
+- 结果：通过
+- 备注：编译输出包含已有依赖 `num-bigint-dig v0.8.4` 的 future incompatibility 警告，本次改动未引入新告警
