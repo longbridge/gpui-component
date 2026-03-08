@@ -303,13 +303,12 @@ impl TextElement {
         let mut line_corners = vec![];
 
         // Iterate only over visible (non-hidden) buffer lines
-        for (vi, (_buffer_line, line)) in last_layout
-            .visible_buffer_lines
+        for (prev_lines_offset, line) in last_layout
+            .visible_line_byte_offsets
             .iter()
             .zip(lines.iter())
-            .enumerate()
         {
-            let prev_lines_offset = last_layout.visible_line_byte_offsets[vi];
+            let prev_lines_offset = *prev_lines_offset;
             let line_size = line.size(line_height);
             let line_wrap_width = line_size.width;
 
