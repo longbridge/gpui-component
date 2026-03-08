@@ -11,14 +11,14 @@ use gpui::{
 use gpui_component::button::{ButtonCustomVariant, ButtonVariant};
 use gpui_component::menu::DropdownMenu;
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, InteractiveElementExt, Sizable, Size, ThemeMode,
+    ActiveTheme, Disableable, Icon, IconName, InteractiveElementExt, Sizable, Size,
     WindowExt,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
     input::{Input, InputEvent, InputState},
     list::{List, ListState},
-    menu::{ContextMenuExt, PopupMenuItem},
+    menu::{ PopupMenuItem},
     popover::Popover,
     tooltip::Tooltip,
     v_flex,
@@ -39,7 +39,6 @@ use one_core::storage::{
     PendingCloudDeletionRepository, RedisMode, StoredConnection, Workspace, WorkspaceRepository,
 };
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
-use one_core::themes::SwitchThemeMode;
 use redis_view::{RedisFormWindow, RedisFormWindowConfig};
 use rust_i18n::t;
 use terminal_view::{SshFormWindow, SshFormWindowConfig};
@@ -1850,22 +1849,6 @@ impl HomePage {
                     .border_t_1()
                     .border_color(cx.theme().border)
                     .child(
-                        Button::new("theme_toggle")
-                            .icon(IconName::Palette)
-                            .label(t!("Home.switch_theme"))
-                            .w_full()
-                            .justify_start()
-                            .on_click(cx.listener(|_this: &mut HomePage, _, window, cx| {
-                                // 切换主题模式
-                                let current_mode = cx.theme().mode;
-                                let new_mode = match current_mode {
-                                    ThemeMode::Light => ThemeMode::Dark,
-                                    ThemeMode::Dark => ThemeMode::Light,
-                                };
-                                window.dispatch_action(Box::new(SwitchThemeMode(new_mode)), cx);
-                            })),
-                    )
-                    .child(
                         Button::new("open_encourage_dialog")
                             .icon(IconName::Heart)
                             .label(t!("Encourage.button_label"))
@@ -1879,16 +1862,6 @@ impl HomePage {
                         Button::new("open_settings")
                             .icon(IconName::Settings)
                             .label(t!("Common.settings"))
-                            .w_full()
-                            .justify_start()
-                            .on_click(cx.listener(|this: &mut HomePage, _, window, cx| {
-                                this.add_settings_tab(window, cx);
-                            })),
-                    )
-                    .child(
-                        Button::new("open_about")
-                            .icon(IconName::Info)
-                            .label(t!("Settings.About.title"))
                             .w_full()
                             .justify_start()
                             .on_click(cx.listener(|this: &mut HomePage, _, window, cx| {
@@ -2261,11 +2234,9 @@ impl HomePage {
         selected_id: Option<i64>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let view = cx.entity();
         let conn_id = conn.id;
         let clone_conn = conn.clone();
-        let ssh_conn = conn.clone();
-        let sftp_conn = conn.clone();
+        let sftp_hover_conn = conn.clone();
         let edit_conn = conn.clone();
         let edit_conn_type = conn.connection_type;
         let edit_conn_name = conn.name.clone();
@@ -2340,6 +2311,24 @@ impl HomePage {
                     .gap_1()
                     .group_hover("", |style| style.opacity(1.0))
                     .opacity(0.0)
+                    .when(conn.connection_type == ConnectionType::SshSftp, |this| {
+                        this.child(
+                            Button::new(SharedString::from(format!(
+                                "sftp-conn-{}",
+                                conn.id.unwrap_or(0)
+                            )))
+                            .icon(IconName::Folder1.color())
+                            .with_size(Size::Small)
+                            .primary()
+                            .tooltip(t!("Home.open_sftp"))
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    this.open_sftp_view(sftp_hover_conn.clone(), window, cx);
+                                },
+                            )),
+                        )
+                    })
                     .child(
                         Button::new(SharedString::from(format!(
                             "edit-conn-{}",
@@ -2348,6 +2337,7 @@ impl HomePage {
                         .icon(IconName::Edit)
                         .with_size(Size::Small)
                         .primary()
+                        .tooltip(t!("Home.edit_connection"))
                         .on_click(cx.listener(
                             move |this, _, window, cx| {
                                 cx.stop_propagation();
@@ -2389,6 +2379,7 @@ impl HomePage {
                         .icon(IconName::Remove)
                         .with_size(Size::Small)
                         .danger()
+                        .tooltip(t!("Home.delete_connection"))
                         .on_click(cx.listener(
                             move |this, _, window, cx| {
                                 cx.stop_propagation();
@@ -2619,41 +2610,7 @@ impl HomePage {
                     ),
             );
 
-        if conn.connection_type == ConnectionType::SshSftp {
-            card.context_menu(move |menu, window, _cx| {
-                let ssh_conn_clone = ssh_conn.clone();
-                let sftp_conn_clone = sftp_conn.clone();
-                let view_clone = view.clone();
-                let view_clone2 = view.clone();
-
-                menu.item(
-                    PopupMenuItem::new("with SSH")
-                        .icon(
-                            IconName::Terminal
-                                .mono()
-                                .with_size(Size::Medium)
-                                .text_color(gpui::rgb(0x8b5cf6)),
-                        )
-                        .on_click(
-                            window.listener_for(&view_clone, move |this, _, window, cx| {
-                                this.open_ssh_terminal(ssh_conn_clone.clone(), window, cx);
-                            }),
-                        ),
-                )
-                .item(
-                    PopupMenuItem::new("with SFTP")
-                        .icon(IconName::Folder1.color().with_size(Size::Medium))
-                        .on_click(
-                            window.listener_for(&view_clone2, move |this, _, window, cx| {
-                                this.open_sftp_view(sftp_conn_clone.clone(), window, cx);
-                            }),
-                        ),
-                )
-            })
-            .into_any_element()
-        } else {
             card.into_any_element()
-        }
     }
 }
 

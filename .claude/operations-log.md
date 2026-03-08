@@ -816,3 +816,55 @@
 ### 本地验证补充
 - 已再次执行：`cargo fmt --all --check && cargo check -p main`
 - 结果：通过
+
+## 编码前检查 - home-sftp-button
+时间：2026-03-08 12:36:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-home-sftp-button.md`
+- 已分析相似实现：
+  - `main/src/home_tab.rs:2335` 的连接卡片 hover 操作区
+  - `main/src/home/home_tabs.rs:55` 的 `open_sftp_view`
+  - `main/src/home_tab.rs:2629` 的 SSH/SFTP 卡片右键菜单动作
+  - `main/src/home_tab.rs:1117` 的 `ConnectionType::SshSftp` 条件分支
+- 已查询文档参考：
+  - Context7 `GPUI` 文档，确认 `group_hover` 仅负责 hover 样式联动，现有绝对定位 hover 容器可直接追加按钮
+- 当前方案：仅在 `ConnectionType::SshSftp` 卡片 hover 区追加一个 SFTP 按钮，点击调用 `open_sftp_view`，不改动其他类型卡片和现有右键菜单
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-home-sftp-button.md`
+□ 将使用以下可复用组件：
+- `open_sftp_view`: `main/src/home/home_tabs.rs` - 打开 SFTP 标签页
+- 连接卡片 hover 容器: `main/src/home_tab.rs` - 复用现有绝对定位操作区
+- SSH/SFTP 右键菜单动作: `main/src/home_tab.rs` - 复用 SFTP 图标和点击目标
+□ 将遵循命名约定：新增按钮 id 继续使用 `xxx-conn-{id}` 风格
+□ 将遵循代码风格：最小侵入，仅在卡片 hover 操作区增加条件按钮
+□ 确认不重复造轮子，证明：仓库已存在 `open_sftp_view` 和 SSH/SFTP 菜单动作，无需新增窗口或导航逻辑
+
+## 编码后声明 - home-sftp-button
+时间：2026-03-08 12:45:00 +0800
+
+### 1. 复用了以下既有组件
+- `open_sftp_view`：用于打开 SFTP 标签页，位于 `main/src/home/home_tabs.rs`
+- 连接卡片 hover 容器：复用 `main/src/home_tab.rs` 现有绝对定位 hover 操作区
+- SSH/SFTP 右键菜单动作：复用现有 SFTP 图标和点击目标，位于 `main/src/home_tab.rs`
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增按钮 id 使用 `sftp-conn-{id}`，延续现有 `edit-conn-*`、`delete-conn-*` 风格
+- 代码风格：仅在 `render_connection_card` 的 hover 容器中增加条件按钮，保持链式 UI 写法
+- 文件组织：实际代码改动仅落在 `main/src/home_tab.rs`
+
+### 3. 对比了以下相似实现
+- `main/src/home_tab.rs:2335`：对齐连接卡片 hover 操作区的既有按钮组织方式
+- `main/src/home_tab.rs:2661`：复用 SSH/SFTP 右键菜单中的 SFTP 打开动作
+- `main/src/home/home_tabs.rs:55`：复用现有 SFTP 标签页打开逻辑，不新增并行实现
+
+### 4. 未重复造轮子的证明
+- 未新增新的 SFTP 窗口、Tab 构建器或导航入口
+- 仅把既有 `open_sftp_view` 接入 SSH/SFTP 卡片 hover 快捷按钮
+
+## 本地验证记录 - home-sftp-button
+时间：2026-03-08 12:46:00 +0800
+
+- 已执行：`cargo fmt --all`
+- 已执行：`cargo check -p main`
+- 结果：通过
+- 备注：编译输出仅包含仓库既有 `num-bigint-dig v0.8.4` future incompatibility 警告，本次改动未引入新的编译问题

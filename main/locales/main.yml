@@ -137,6 +137,18 @@ Home:
     en: AI Assistant
     zh-CN: AI 助手
     zh-HK: AI 助手
+  open_sftp:
+    en: Open SFTP
+    zh-CN: 打开 SFTP
+    zh-HK: 打開 SFTP
+  edit_connection:
+    en: Edit Connection
+    zh-CN: 编辑连接
+    zh-HK: 編輯連線
+  delete_connection:
+    en: Delete Connection
+    zh-CN: 删除连接
+    zh-HK: 刪除連線
 
 # 鼓励作者
 Encourage:
