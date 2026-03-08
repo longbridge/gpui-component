@@ -1383,6 +1383,215 @@ impl DatabasePlugin for MsSqlPlugin {
         })
     }
 
+    fn get_data_types(&self) -> &[(&'static str, &'static str)] {
+        MSSQL_DATA_TYPES
+    }
+
+    fn get_charsets(&self) -> Vec<CharsetInfo> {
+        vec![
+            CharsetInfo {
+                name: "Chinese_PRC".into(),
+                description: "简体中文 (GBK)".into(),
+                default_collation: "Chinese_PRC_CI_AS".into(),
+            },
+            CharsetInfo {
+                name: "Chinese_Taiwan".into(),
+                description: "繁体中文 (Big5)".into(),
+                default_collation: "Chinese_Taiwan_Stroke_CI_AS".into(),
+            },
+            CharsetInfo {
+                name: "Latin1_General".into(),
+                description: "Latin1 General (CP1252)".into(),
+                default_collation: "Latin1_General_CI_AS".into(),
+            },
+            CharsetInfo {
+                name: "Latin1_General_100".into(),
+                description: "Latin1 General 100 (Unicode)".into(),
+                default_collation: "Latin1_General_100_CI_AS_SC".into(),
+            },
+            CharsetInfo {
+                name: "SQL_Latin1_General".into(),
+                description: "SQL Latin1 General (CP1252)".into(),
+                default_collation: "SQL_Latin1_General_CP1_CI_AS".into(),
+            },
+            CharsetInfo {
+                name: "Japanese".into(),
+                description: "日本語 (CP932)".into(),
+                default_collation: "Japanese_CI_AS".into(),
+            },
+            CharsetInfo {
+                name: "Korean_Wansung".into(),
+                description: "한국어 (EUC-KR)".into(),
+                default_collation: "Korean_Wansung_CI_AS".into(),
+            },
+        ]
+    }
+
+    fn get_collations(&self, charset: &str) -> Vec<CollationInfo> {
+        match charset {
+            "Chinese_PRC" => vec![
+                CollationInfo {
+                    name: "Chinese_PRC_CI_AS".into(),
+                    charset: "Chinese_PRC".into(),
+                    is_default: true,
+                },
+                CollationInfo {
+                    name: "Chinese_PRC_CS_AS".into(),
+                    charset: "Chinese_PRC".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Chinese_PRC_CI_AI".into(),
+                    charset: "Chinese_PRC".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Chinese_PRC_BIN".into(),
+                    charset: "Chinese_PRC".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Chinese_PRC_BIN2".into(),
+                    charset: "Chinese_PRC".into(),
+                    is_default: false,
+                },
+            ],
+            "Chinese_Taiwan" => vec![
+                CollationInfo {
+                    name: "Chinese_Taiwan_Stroke_CI_AS".into(),
+                    charset: "Chinese_Taiwan".into(),
+                    is_default: true,
+                },
+                CollationInfo {
+                    name: "Chinese_Taiwan_Stroke_CS_AS".into(),
+                    charset: "Chinese_Taiwan".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Chinese_Taiwan_Bopomofo_CI_AS".into(),
+                    charset: "Chinese_Taiwan".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Chinese_Taiwan_Stroke_BIN".into(),
+                    charset: "Chinese_Taiwan".into(),
+                    is_default: false,
+                },
+            ],
+            "Latin1_General" => vec![
+                CollationInfo {
+                    name: "Latin1_General_CI_AS".into(),
+                    charset: "Latin1_General".into(),
+                    is_default: true,
+                },
+                CollationInfo {
+                    name: "Latin1_General_CS_AS".into(),
+                    charset: "Latin1_General".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Latin1_General_CI_AI".into(),
+                    charset: "Latin1_General".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Latin1_General_BIN".into(),
+                    charset: "Latin1_General".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Latin1_General_BIN2".into(),
+                    charset: "Latin1_General".into(),
+                    is_default: false,
+                },
+            ],
+            "Latin1_General_100" => vec![
+                CollationInfo {
+                    name: "Latin1_General_100_CI_AS_SC".into(),
+                    charset: "Latin1_General_100".into(),
+                    is_default: true,
+                },
+                CollationInfo {
+                    name: "Latin1_General_100_CS_AS_SC".into(),
+                    charset: "Latin1_General_100".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Latin1_General_100_CI_AS_SC_UTF8".into(),
+                    charset: "Latin1_General_100".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Latin1_General_100_BIN2".into(),
+                    charset: "Latin1_General_100".into(),
+                    is_default: false,
+                },
+            ],
+            "SQL_Latin1_General" => vec![
+                CollationInfo {
+                    name: "SQL_Latin1_General_CP1_CI_AS".into(),
+                    charset: "SQL_Latin1_General".into(),
+                    is_default: true,
+                },
+                CollationInfo {
+                    name: "SQL_Latin1_General_CP1_CS_AS".into(),
+                    charset: "SQL_Latin1_General".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "SQL_Latin1_General_CP1_CI_AI".into(),
+                    charset: "SQL_Latin1_General".into(),
+                    is_default: false,
+                },
+            ],
+            "Japanese" => vec![
+                CollationInfo {
+                    name: "Japanese_CI_AS".into(),
+                    charset: "Japanese".into(),
+                    is_default: true,
+                },
+                CollationInfo {
+                    name: "Japanese_CS_AS".into(),
+                    charset: "Japanese".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Japanese_BIN".into(),
+                    charset: "Japanese".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Japanese_BIN2".into(),
+                    charset: "Japanese".into(),
+                    is_default: false,
+                },
+            ],
+            "Korean_Wansung" => vec![
+                CollationInfo {
+                    name: "Korean_Wansung_CI_AS".into(),
+                    charset: "Korean_Wansung".into(),
+                    is_default: true,
+                },
+                CollationInfo {
+                    name: "Korean_Wansung_CS_AS".into(),
+                    charset: "Korean_Wansung".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Korean_Wansung_BIN".into(),
+                    charset: "Korean_Wansung".into(),
+                    is_default: false,
+                },
+                CollationInfo {
+                    name: "Korean_Wansung_BIN2".into(),
+                    charset: "Korean_Wansung".into(),
+                    is_default: false,
+                },
+            ],
+            _ => vec![],
+        }
+    }
+
     fn build_column_definition(&self, column: &ColumnInfo, include_name: bool) -> String {
         let mut def = String::new();
 

@@ -62,14 +62,6 @@ impl MsSqlDatabaseForm {
 
         let collation_items = vec![
             CollationSelectItem::new(
-                "SQL_Latin1_General_CP1_CI_AS",
-                t!("MsSqlCollation.latin1_general_ci_default").to_string(),
-            ),
-            CollationSelectItem::new(
-                "SQL_Latin1_General_CP1_CS_AS",
-                t!("MsSqlCollation.latin1_general_cs").to_string(),
-            ),
-            CollationSelectItem::new(
                 "Chinese_PRC_CI_AS",
                 t!("MsSqlCollation.chinese_prc_ci").to_string(),
             ),
@@ -82,12 +74,12 @@ impl MsSqlDatabaseForm {
                 t!("MsSqlCollation.chinese_taiwan_ci").to_string(),
             ),
             CollationSelectItem::new(
-                "Japanese_CI_AS",
-                t!("MsSqlCollation.japanese_ci").to_string(),
+                "SQL_Latin1_General_CP1_CI_AS",
+                t!("MsSqlCollation.latin1_general_ci_default").to_string(),
             ),
             CollationSelectItem::new(
-                "Korean_Wansung_CI_AS",
-                t!("MsSqlCollation.korean_ci").to_string(),
+                "SQL_Latin1_General_CP1_CS_AS",
+                t!("MsSqlCollation.latin1_general_cs").to_string(),
             ),
             CollationSelectItem::new(
                 "Latin1_General_CI_AS",
@@ -100,6 +92,14 @@ impl MsSqlDatabaseForm {
             CollationSelectItem::new(
                 "Latin1_General_100_CI_AS_SC",
                 t!("MsSqlCollation.latin1_general_100_unicode").to_string(),
+            ),
+            CollationSelectItem::new(
+                "Japanese_CI_AS",
+                t!("MsSqlCollation.japanese_ci").to_string(),
+            ),
+            CollationSelectItem::new(
+                "Korean_Wansung_CI_AS",
+                t!("MsSqlCollation.korean_ci").to_string(),
             ),
         ];
 
@@ -146,7 +146,7 @@ impl MsSqlDatabaseForm {
             .read(cx)
             .selected_value()
             .cloned()
-            .unwrap_or_else(|| "SQL_Latin1_General_CP1_CI_AS".to_string());
+            .unwrap_or_else(|| "Chinese_PRC_CI_AS".to_string());
 
         field_values.insert("name".to_string(), db_name.clone());
         field_values.insert("collation".to_string(), collation);
