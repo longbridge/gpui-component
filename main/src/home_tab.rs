@@ -282,6 +282,11 @@ impl HomePage {
         .detach();
     }
 
+    fn refresh_local_home_data(&mut self, cx: &mut Context<Self>) {
+        self.load_workspaces(cx);
+        self.load_connections(cx);
+    }
+
     /// 触发云端同步
     ///
     /// 使用 SyncEngine 执行同步，包括：
@@ -360,8 +365,8 @@ impl HomePage {
                             this.cloud_error = Some(stats.errors.join("; "));
                         }
 
-                        // 刷新本地连接列表
-                        this.load_connections(cx);
+                        // 刷新首页本地数据，确保部分失败时界面仍与已落库数据一致
+                        this.refresh_local_home_data(cx);
                     }
                     Err(e) => {
                         tracing::error!("同步失败: {}", e);
@@ -545,7 +550,7 @@ impl HomePage {
                             stats.downloaded
                         );
                         this.pending_conflicts.clear();
-                        this.load_connections(cx);
+                        this.refresh_local_home_data(cx);
                     }
                     Err(e) => {
                         tracing::error!("冲突解决失败: {}", e);

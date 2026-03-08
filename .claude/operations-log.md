@@ -745,3 +745,30 @@
 - 已执行：`cargo test -p gpui-component`
 - 结果：通过
 - 备注：`cargo test -p gpui-component` 共 130 个测试通过；本任务属于视觉布局修复，仓库缺少现成截图回归，因此以公共组件测试通过 + 用户截图复现场景对照作为补偿验证方式
+
+## 编码前检查 - home-sync-refresh
+时间：2026-03-08 11:56:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-home-sync-refresh.md`
+- 已分析相似实现：
+  - `main/src/home_tab.rs:232` 的 `load_workspaces`
+  - `main/src/home_tab.rs:252` 的 `load_connections`
+  - `main/src/home_tab.rs:1611` 的手动刷新按钮双重载
+  - `main/src/home_tab.rs:176` 的连接事件异步重载模式
+  - `crates/core/src/cloud_sync/engine.rs:52` 的同步 handler 顺序与错误聚合
+- 已查询文档参考：
+  - Context7 `GPUI` 文档，确认异步任务里应通过 `this.update(..., cx.notify())` 触发界面重绘
+  - GitHub `zed-industries/zed` 代码搜索，确认 `cx.notify()` 是 GPUI 生态常见刷新模式
+- 当前方案：抽取首页统一本地重载入口，复用 `load_workspaces` 与 `load_connections`，在同步成功但存在部分错误时仍刷新 UI 到本地最新状态
+
+## 编码前检查 - home-sync-refresh
+时间：2026-03-08 11:56:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-home-sync-refresh.md`
+□ 将使用以下可复用组件：
+- `HomePage::load_workspaces`: `main/src/home_tab.rs` - 首页工作区重载入口
+- `HomePage::load_connections`: `main/src/home_tab.rs` - 首页连接重载入口
+- `SyncEngine::sync`: `crates/core/src/cloud_sync/engine.rs` - 识别部分失败仍返回 `Ok(SyncResult)` 的语义
+□ 将遵循命名约定：新增方法沿用 `load_*` / `refresh_*` 语义化命名，不引入新术语
+□ 将遵循代码风格：保持 `HomePage` 内部小型私有方法 + 成功分支最小替换，不改变现有错误提示逻辑
+□ 确认不重复造轮子，证明：已检查 `HomePage` 现有加载入口和手动刷新逻辑，现有方法足以完成修复，无需新增自定义同步状态管理
