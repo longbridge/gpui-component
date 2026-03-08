@@ -34,6 +34,7 @@
   - 新增 `refresh_local_home_data`，统一调用 `load_workspaces(cx)` 与 `load_connections(cx)`。
   - 在 `trigger_sync` 成功分支中，用统一刷新替换原先仅 `load_connections(cx)` 的行为。
   - 在 `resolve_all_conflicts` 成功分支中，同步改为统一刷新，避免路径分叉。
+  - 将手动刷新按钮也切换为统一刷新入口，继续收敛完整首页刷新的调用点。
 
 ## 风险与补偿计划
 - 风险：仓库暂无针对 `HomePage` 同步后展示状态的自动化 UI/集成测试。

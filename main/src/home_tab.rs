@@ -1614,8 +1614,7 @@ impl HomePage {
                             .ghost()
                             .tooltip(t!("Home.refresh"))
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.load_workspaces(cx);
-                                this.load_connections(cx);
+                                this.refresh_local_home_data(cx);
                             })),
                     )
                     // 工作区筛选

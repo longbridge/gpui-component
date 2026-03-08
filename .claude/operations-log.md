@@ -802,3 +802,17 @@
 - 已执行：`cargo check -p main`
 - 结果：通过
 - 备注：`cargo check -p main` 仅输出仓库既有 `num-bigint-dig v0.8.4` future incompatibility 警告，本次改动未引入新的编译问题
+
+## 追加收敛 - home-sync-refresh
+时间：2026-03-08 12:20:00 +0800
+
+### 继续修改内容
+- 将手动刷新按钮从直接分别调用 `load_workspaces(cx)` 与 `load_connections(cx)`，收敛为统一调用 `refresh_local_home_data(cx)`。
+
+### 取舍说明
+- 保留连接事件只刷新连接、工作区事件只刷新工作区的局部刷新策略，因为它们是按事件粒度设计的，不属于“完整首页刷新”入口。
+- 保留密钥解锁完成后的 `load_connections(cx)` 单独刷新，因为该路径的直接目标是修复连接解密后的展示，不等同于完整首页刷新。
+
+### 本地验证补充
+- 已再次执行：`cargo fmt --all --check && cargo check -p main`
+- 结果：通过
