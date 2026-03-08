@@ -143,9 +143,8 @@ fn main() {
             cx.open_window(WindowOptions::default(), |window, cx| {
                 let view = Example::new(window, cx);
                 cx.new(|cx| Root::new(view, window, cx))
-            })?;
-
-            Ok::<_, anyhow::Error>(())
+            })
+            .expect("Failed to open window");
         })
         .detach();
     });

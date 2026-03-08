@@ -33,9 +33,8 @@ fn main() {
                     // You can refine the root view style by yourself.
                     Root::new(view, window, cx).bg(cx.theme().background)
                 })
-            })?;
-
-            Ok::<_, anyhow::Error>(())
+            })
+            .expect("Failed to open window");
         })
         .detach();
     });

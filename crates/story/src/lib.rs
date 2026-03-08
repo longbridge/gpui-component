@@ -139,12 +139,10 @@ pub fn create_new_window_with_size<F, E>(
             })
             .expect("failed to open window");
 
-        window
-            .update(cx, |_, window, _| {
-                window.activate_window();
-                window.set_window_title(&title);
-            })
-            .expect("failed to update window");
+        window.update(cx, |_, window, _| {
+            window.activate_window();
+            window.set_window_title(&title);
+        })?;
 
         Ok::<_, anyhow::Error>(())
     })

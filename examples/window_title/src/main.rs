@@ -55,9 +55,8 @@ fn main() {
             cx.open_window(window_options, |window, cx| {
                 let view = cx.new(|_| Example);
                 cx.new(|cx| Root::new(view, window, cx))
-            })?;
-
-            Ok::<_, anyhow::Error>(())
+            })
+            .expect("Failed to open window");
         })
         .detach();
     });

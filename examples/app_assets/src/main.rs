@@ -55,9 +55,8 @@ fn main() {
                 let view = cx.new(|_| Example);
                 // The first level on the window must be Root.
                 cx.new(|cx| Root::new(view, window, cx))
-            })?;
-
-            Ok::<_, anyhow::Error>(())
+            })
+            .expect("Failed to open window");
         })
         .detach();
     });

@@ -8,6 +8,7 @@ description: Async operations and background tasks in GPUI. Use when working wit
 GPUI provides integrated async runtime for foreground UI updates and background computation.
 
 **Key Concepts:**
+
 - **Foreground tasks**: UI thread, can update entities (`cx.spawn`)
 - **Background tasks**: Worker threads, CPU-intensive work (`cx.background_spawn`)
 - All entity updates happen on foreground thread
@@ -160,6 +161,7 @@ cx.background_spawn(async move { data })
 ## Reference Documentation
 
 ### Complete Guides
+
 - **API Reference**: See [api-reference.md](references/api-reference.md)
   - Task types, spawning methods, contexts
   - Executors, cancellation, error handling
