@@ -47,19 +47,17 @@
 
 ## 应用截图
 
-<!-- 将下方占位图替换为实际截图 -->
-
-| 数据库浏览器 | SQL 编辑器 |
+| 数据库 | SSH |
 |:-:|:-:|
-| ![数据库浏览器](docs/public/screenshots/database-explorer.png) | ![SQL 编辑器](docs/public/screenshots/sql-editor.png) |
+| ![数据库](database.png) | ![SSH](ssh.png) |
 
-| 终端 | SSH 与 SFTP |
+| SFTP | Redis |
 |:-:|:-:|
-| ![终端](docs/public/screenshots/terminal.png) | ![SSH 与 SFTP](docs/public/screenshots/ssh-sftp.png) |
+| ![SFTP](sftp.png) | ![Redis](redis.png) |
 
-| Redis 视图 | AI 对话 |
+| MongoDB | AI 对话 |
 |:-:|:-:|
-| ![Redis](docs/public/screenshots/redis.png) | ![AI 对话](docs/public/screenshots/ai-chat.png) |
+| ![MongoDB](mongodb.png) | ![AI 对话](chatdb.png) |
 
 ## 平台支持
 

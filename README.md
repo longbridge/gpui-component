@@ -47,19 +47,17 @@
 
 ## Screenshots
 
-<!-- Replace placeholders below with actual screenshots -->
-
-| Database Explorer | SQL Editor |
+| Database | SSH |
 |:-:|:-:|
-| ![Database Explorer](docs/public/screenshots/database-explorer.png) | ![SQL Editor](docs/public/screenshots/sql-editor.png) |
+| ![Database](database.png) | ![SSH](ssh.png) |
 
-| Terminal | SSH & SFTP |
+| SFTP | Redis |
 |:-:|:-:|
-| ![Terminal](docs/public/screenshots/terminal.png) | ![SSH & SFTP](docs/public/screenshots/ssh-sftp.png) |
+| ![SFTP](sftp.png) | ![Redis](redis.png) |
 
-| Redis Viewer | AI Chat |
+| MongoDB | AI Chat |
 |:-:|:-:|
-| ![Redis](docs/public/screenshots/redis.png) | ![AI Chat](docs/public/screenshots/ai-chat.png) |
+| ![MongoDB](mongodb.png) | ![AI Chat](chatdb.png) |
 
 ## Platform Support
 
