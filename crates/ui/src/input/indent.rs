@@ -124,23 +124,15 @@ impl TextElement {
 
         let tab_size = state.mode.tab_size();
         let line_height = last_layout.line_height;
-        let visible_range = last_layout.visible_range.clone();
         let mut builder = PathBuilder::stroke(px(1.));
         let mut offset_y = last_layout.visible_top;
         let mut last_indents = vec![];
 
-        for buffer_line in visible_range {
-            // visible_range contains buffer lines (not display rows)
-            let line_index = buffer_line - last_layout.visible_range.start;
-            let Some(line_layout) = last_layout.lines.get(line_index) else {
-                continue;
-            };
-
-            // Skip hidden (folded) lines
-            if state.display_map.is_buffer_line_hidden(buffer_line) {
-                continue;
-            }
-
+        for (&buffer_line, line_layout) in last_layout
+            .visible_buffer_lines
+            .iter()
+            .zip(last_layout.lines.iter())
+        {
             let line = state.text.slice_line(buffer_line);
             let mut current_indents = vec![];
             if line.len() > 0 {
