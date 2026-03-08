@@ -772,3 +772,33 @@
 □ 将遵循命名约定：新增方法沿用 `load_*` / `refresh_*` 语义化命名，不引入新术语
 □ 将遵循代码风格：保持 `HomePage` 内部小型私有方法 + 成功分支最小替换，不改变现有错误提示逻辑
 □ 确认不重复造轮子，证明：已检查 `HomePage` 现有加载入口和手动刷新逻辑，现有方法足以完成修复，无需新增自定义同步状态管理
+
+## 编码后声明 - home-sync-refresh
+时间：2026-03-08 12:00:00 +0800
+
+### 1. 复用了以下既有组件
+- `HomePage::load_workspaces`：用于同步后重载首页工作区，位于 `main/src/home_tab.rs`
+- `HomePage::load_connections`：用于同步后重载首页连接列表，位于 `main/src/home_tab.rs`
+- `SyncEngine::sync`：继续负责落库与错误聚合，位于 `crates/core/src/cloud_sync/engine.rs`
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `refresh_local_home_data`，延续 `load_*`/`refresh_*` 风格
+- 代码风格：仅在 `HomePage` 内新增一个私有小方法，并替换两个成功分支调用点
+- 文件组织：业务修复只改 `main/src/home_tab.rs`，文档记录落在 `.claude/`
+
+### 3. 对比了以下相似实现
+- `main/src/home_tab.rs:1611`：与手动刷新按钮保持一致，首页完整刷新应同时重载工作区和连接
+- `main/src/home_tab.rs:176`：沿用“更新后异步全量重载”的一致性策略
+- `crates/core/src/cloud_sync/engine.rs:124`：针对部分失败仍返回 `Ok(SyncResult)` 的语义做 UI 侧兜底刷新
+
+### 4. 未重复造轮子的证明
+- 未新增新的同步状态管理、事件总线或仓储接口
+- 仅把已有 `load_workspaces` 与 `load_connections` 组合为统一刷新入口并复用
+
+## 本地验证记录 - home-sync-refresh
+时间：2026-03-08 12:01:00 +0800
+
+- 已执行：`cargo fmt --all --check`
+- 已执行：`cargo check -p main`
+- 结果：通过
+- 备注：`cargo check -p main` 仅输出仓库既有 `num-bigint-dig v0.8.4` future incompatibility 警告，本次改动未引入新的编译问题
