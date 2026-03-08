@@ -8,7 +8,7 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
 use gpui_component::scroll::{Scrollbar, ScrollbarHandle, ScrollbarShow};
-use gpui_component::{kbd::Kbd, BlinkCursor, Icon, IconName, Sizable, Size, WindowExt};
+use gpui_component::{kbd::Kbd, BlinkCursor, Icon, IconName, Sizable, WindowExt};
 use std::borrow::Cow;
 use std::cell::{Cell as StdCell, RefCell};
 use std::path::PathBuf;
@@ -1670,7 +1670,7 @@ impl TabContent for TerminalView {
     }
 
     fn icon(&self, _cx: &App) -> Option<Icon> {
-        Some(IconName::Terminal.color().with_size(Size::Medium))
+        Some(IconName::TerminalColor.color())
     }
 
     fn closeable(&self, _cx: &App) -> bool {
