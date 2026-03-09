@@ -86,6 +86,23 @@ jobs:
             echo "ONETCLI_VERSION=0.0.0-dev.$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
           fi
 
+      - name: Verify secrets are set
+        shell: bash
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::error::SUPABASE_URL secret is empty or not set"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::SUPABASE_ANON_KEY secret is empty or not set"
+            exit 1
+          fi
+          echo "SUPABASE_URL length: ${#SUPABASE_URL}"
+          echo "SUPABASE_ANON_KEY length: ${#SUPABASE_ANON_KEY}"
+
       - name: Build release binary
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
