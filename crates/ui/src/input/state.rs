@@ -26,6 +26,8 @@ use super::{
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::highlighter::DiagnosticSet;
+#[cfg(not(target_family = "wasm"))]
+use crate::highlighter::LanguageRegistry;
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
@@ -2051,6 +2053,79 @@ impl InputState {
             &self.text,
         );
     }
+
+    /// Spawn a background parse after the synchronous parse timed out.
+    ///
+    /// Dropping the returned `Task` (stored in `parse_task`) cancels the
+    /// parse, which naturally debounces rapid edits.
+    #[cfg(not(target_family = "wasm"))]
+    fn dispatch_background_parse(
+        pending: super::mode::PendingBackgroundParse,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let highlighter_rc = pending.highlighter;
+        let parse_task_rc = pending.parse_task;
+        let language = pending.language;
+        let text = pending.text;
+
+        let old_tree = highlighter_rc
+            .borrow()
+            .as_ref()
+            .and_then(|h| h.tree().cloned());
+
+        let text_for_apply = text.clone();
+        let task = cx.spawn_in(window, async move |entity, cx| {
+            let new_tree = cx
+                .background_executor()
+                .spawn(async move {
+                    let Some(config) = LanguageRegistry::singleton().language(&language) else {
+                        return None;
+                    };
+
+                    let mut parser = tree_sitter::Parser::new();
+                    if parser.set_language(&config.language).is_err() {
+                        return None;
+                    }
+
+                    parser.parse_with_options(
+                        &mut |offset, _| {
+                            if offset >= text.len() {
+                                ""
+                            } else {
+                                let (chunk, chunk_byte_ix) = text.chunk(offset);
+                                &chunk[offset - chunk_byte_ix..]
+                            }
+                        },
+                        old_tree.as_ref(),
+                        None,
+                    )
+                })
+                .await;
+
+            if let Some(new_tree) = new_tree {
+                if let Some(h) = highlighter_rc.borrow_mut().as_mut() {
+                    h.apply_background_tree(new_tree, &text_for_apply);
+                }
+
+                // Trigger re-render so the new highlights are displayed.
+                _ = entity.update(cx, |_, cx| {
+                    cx.notify();
+                });
+            }
+        });
+
+        parse_task_rc.borrow_mut().replace(task);
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn dispatch_background_parse(
+        _pending: super::mode::PendingBackgroundParse,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        // No-op
+    }
 }
 
 impl EntityInputHandler for InputState {
@@ -2149,8 +2224,14 @@ impl EntityInputHandler for InputState {
             .adjust_folds_for_edit(&old_text, &range, new_text);
         self.display_map
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
-        self.mode
+
+        let bg = self
+            .mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
+        if let Some(bg) = bg {
+            Self::dispatch_background_parse(bg, window, cx);
+        }
+
         self.update_fold_candidates_incremental(&range, new_text);
         self.lsp.update(&self.text, window, cx);
         self.selected_range = (new_offset..new_offset).into();
@@ -2208,8 +2289,14 @@ impl EntityInputHandler for InputState {
             .adjust_folds_for_edit(&old_text, &range, new_text);
         self.display_map
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
-        self.mode
+
+        let bg = self
+            .mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
+        if let Some(bg) = bg {
+            Self::dispatch_background_parse(bg, window, cx);
+        }
+
         self.update_fold_candidates_incremental(&range, new_text);
         self.lsp.update(&self.text, window, cx);
         if new_text.is_empty() {
@@ -2316,8 +2403,13 @@ impl Focusable for InputState {
 impl Render for InputState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self._pending_update {
-            self.mode
+            let bg = self
+                .mode
                 .update_highlighter(&(0..0), &self.text, "", false, cx);
+            if let Some(bg) = bg {
+                Self::dispatch_background_parse(bg, window, cx);
+            }
+
             self.update_fold_candidates();
             self.lsp.update(&self.text, window, cx);
             self._pending_update = false;

@@ -1030,19 +1030,34 @@ impl TextElement {
 
         let mut styles = Vec::with_capacity(visible_buffer_lines.len());
 
-        for &buffer_line in visible_buffer_lines {
-            let line_start = text.line_start_offset(buffer_line);
-            let line = text.slice_line(buffer_line);
-            let line_len = if is_multi_line {
-                // +1 for `\n`
-                line.len() + 1
-            } else {
-                line.len()
-            };
+        // Group contiguous visible lines into ranges and call styles() once per range
+        let mut visible_iter = visible_buffer_lines.iter().peekable();
+        let mut range_start: Option<usize> = None;
 
-            let range = line_start..line_start + line_len;
-            let line_styles = highlighter.styles(&range, &cx.theme().highlight_theme);
-            styles = gpui::combine_highlights(styles, line_styles).collect();
+        while let Some(&line) = visible_iter.next() {
+            range_start.get_or_insert(line);
+
+            // Check if next line is contiguous, if so keep accumulating
+            if visible_iter
+                .peek()
+                .map(|&&next| next == line + 1)
+                .unwrap_or(false)
+            {
+                continue;
+            }
+
+            // Flush the contiguous range
+            let start_line = range_start.take().unwrap();
+            let byte_start = text.line_start_offset(start_line);
+            let byte_end = if is_multi_line {
+                // +1 for `\n`
+                text.line_start_offset(line + 1)
+            } else {
+                text.line_end_offset(line)
+            };
+            let range_styles =
+                highlighter.styles(&(byte_start..byte_end), &cx.theme().highlight_theme);
+            styles = gpui::combine_highlights(styles, range_styles).collect();
         }
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
