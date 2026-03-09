@@ -82,6 +82,19 @@ fn take_whole_scroll_lines(scroll_lines_accumulated: &mut f32) -> i32 {
     lines
 }
 
+fn alt_screen_scroll_arrow(lines: i32, app_cursor: bool) -> Option<&'static str> {
+    if lines == 0 {
+        return None;
+    }
+
+    Some(match (lines > 0, app_cursor) {
+        (true, true) => "\x1bOA",   // Up, application mode
+        (true, false) => "\x1b[A",  // Up, normal mode
+        (false, true) => "\x1bOB",  // Down, application mode
+        (false, false) => "\x1b[B", // Down, normal mode
+    })
+}
+
 fn terminal_shortcut_label(shortcut: &str) -> SharedString {
     Kbd::format(&Keystroke::parse(shortcut).expect("终端快捷键定义非法")).into()
 }
@@ -1357,14 +1370,8 @@ impl TerminalView {
 
         if mode.contains(TermMode::ALT_SCREEN) {
             // ALT_SCREEN（vim、less 等）：累计到整行后再转为上下箭头，避免放大小幅滚轮输入
-            if lines != 0 {
-                // APP_CURSOR 模式下箭头键使用 SS3（\x1bO）前缀而非 CSI（\x1b[）
-                let arrow = match (lines < 0, mode.contains(TermMode::APP_CURSOR)) {
-                    (true, true) => "\x1bOA",   // Up, application mode
-                    (true, false) => "\x1b[A",  // Up, normal mode
-                    (false, true) => "\x1bOB",  // Down, application mode
-                    (false, false) => "\x1b[B", // Down, normal mode
-                };
+            if let Some(arrow) = alt_screen_scroll_arrow(lines, mode.contains(TermMode::APP_CURSOR))
+            {
                 for _ in 0..lines.abs() {
                     self.write_to_pty(arrow.as_bytes().to_vec(), cx);
                 }
@@ -2108,7 +2115,7 @@ impl Element for ResizeEventHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::take_whole_scroll_lines;
+    use super::{alt_screen_scroll_arrow, take_whole_scroll_lines};
 
     #[test]
     fn take_whole_scroll_lines_preserves_fractional_remainder() {
@@ -2130,5 +2137,18 @@ mod tests {
         accumulated -= 0.8;
         assert_eq!(take_whole_scroll_lines(&mut accumulated), -1);
         assert!((accumulated + 0.25).abs() < 0.0001);
+    }
+
+    #[test]
+    fn alt_screen_scroll_arrow_maps_positive_lines_to_up() {
+        assert_eq!(alt_screen_scroll_arrow(1, false), Some("\x1b[A"));
+        assert_eq!(alt_screen_scroll_arrow(1, true), Some("\x1bOA"));
+    }
+
+    #[test]
+    fn alt_screen_scroll_arrow_maps_negative_lines_to_down() {
+        assert_eq!(alt_screen_scroll_arrow(-1, false), Some("\x1b[B"));
+        assert_eq!(alt_screen_scroll_arrow(-1, true), Some("\x1bOB"));
+        assert_eq!(alt_screen_scroll_arrow(0, false), None);
     }
 }
