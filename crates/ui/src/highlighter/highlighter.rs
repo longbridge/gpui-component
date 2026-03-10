@@ -408,12 +408,15 @@ impl SyntaxHighlighter {
         let mut timed_out = false;
         let start = Instant::now();
         let mut progress = |_: &tree_sitter::ParseState| -> bool {
-            if let Some(budget) = timeout {
-                if start.elapsed() > budget {
-                    timed_out = true;
-                    return true; // Cancel execution
-                }
+            let Some(budget) = timeout else {
+                return false;
+            };
+
+            if start.elapsed() > budget {
+                timed_out = true;
+                return true; // Cancel execution
             }
+
             false
         };
 
@@ -446,7 +449,7 @@ impl SyntaxHighlighter {
     }
 
     /// Apply a tree that was parsed on a background thread.
-    pub fn apply_background_tree(&mut self, tree: Tree, text: &Rope) {
+    pub(crate) fn apply_background_tree(&mut self, tree: Tree, text: &Rope) {
         // Only apply if the text still matches what was parsed.
         if !self.text.eq(text) {
             return;

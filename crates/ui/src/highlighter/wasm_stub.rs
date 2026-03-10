@@ -51,7 +51,7 @@ impl SyntaxHighlighter {
         None
     }
 
-    pub fn apply_background_tree(&mut self, _tree: crate::input::Tree, _text: &ropey::Rope) {
+    pub(crate) fn apply_background_tree(&mut self, _tree: crate::input::Tree, _text: &ropey::Rope) {
         // No-op in WASM
     }
 }
