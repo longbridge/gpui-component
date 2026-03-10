@@ -99,6 +99,17 @@ fn terminal_shortcut_label(shortcut: &str) -> SharedString {
     Kbd::format(&Keystroke::parse(shortcut).expect("终端快捷键定义非法")).into()
 }
 
+/// 对路径进行简单 shell 转义（用单引号包裹，处理内部单引号）
+fn shell_escape(s: &str) -> String {
+    if s.chars()
+        .all(|c| c.is_alphanumeric() || c == '/' || c == '.' || c == '-' || c == '_')
+    {
+        s.to_string()
+    } else {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+}
+
 /// 正在调整大小的面板
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ResizingPanel {
@@ -295,7 +306,15 @@ impl TerminalView {
         let local_working_dir = config.working_dir.clone().map(PathBuf::from);
         let terminal =
             cx.new(|cx| Terminal::new_local(config, cx).expect("Failed to create local terminal"));
-        Self::new_with_terminal(terminal, None, local_working_dir, tab_index, window, cx)
+        Self::new_with_terminal(
+            terminal,
+            None,
+            None,
+            local_working_dir,
+            tab_index,
+            window,
+            cx,
+        )
     }
 
     pub fn new_ssh(conn: StoredConnection, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -311,14 +330,24 @@ impl TerminalView {
     ) -> Self {
         // 创建 SSH Terminal Entity
         let connection_id = conn.id;
+        let stored_conn = conn.clone();
         let terminal = cx.new(|cx| Terminal::new_ssh(conn, cx, working_dir));
-        Self::new_with_terminal(terminal, connection_id, None, tab_index, window, cx)
-            .expect("SSH terminal creation should not fail")
+        Self::new_with_terminal(
+            terminal,
+            connection_id,
+            Some(stored_conn),
+            None,
+            tab_index,
+            window,
+            cx,
+        )
+        .expect("SSH terminal creation should not fail")
     }
 
     fn new_with_terminal(
         terminal: Entity<Terminal>,
         connection_id: Option<i64>,
+        stored_connection: Option<StoredConnection>,
         local_working_dir: Option<PathBuf>,
         tab_index: Option<usize>,
         window: &mut Window,
@@ -334,8 +363,10 @@ impl TerminalView {
         // 创建默认主题（需要在创建侧边栏之前）
         let default_theme = TerminalTheme::ocean();
 
-        // 创建侧边栏
-        let sidebar = cx.new(|cx| TerminalSidebar::new(connection_id, &default_theme, window, cx));
+        // 创建侧边栏（传递 StoredConnection 用于文件管理器）
+        let sidebar = cx.new(|cx| {
+            TerminalSidebar::new(connection_id, stored_connection, &default_theme, window, cx)
+        });
 
         // 订阅侧边栏事件（需要 window 以便弹确认对话框）
         let sidebar_subscription = cx.subscribe_in(&sidebar, window, Self::handle_sidebar_event);
@@ -469,6 +500,11 @@ impl TerminalView {
             }
             TerminalSidebarEvent::ConfirmHighRiskCommandChanged(enabled) => {
                 self.confirm_high_risk_command = *enabled;
+            }
+            TerminalSidebarEvent::CdToTerminal(path) => {
+                // 向终端发送 cd 命令并回车
+                let cmd = format!("cd {}\n", shell_escape(path));
+                self.write_to_pty(cmd.into_bytes(), cx);
             }
         }
     }

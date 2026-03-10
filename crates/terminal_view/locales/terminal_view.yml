@@ -486,3 +486,66 @@ SshSession:
     en: Reconnect
     zh-CN: 重新连接
     zh-HK: 重新連接
+
+# 文件管理器
+FileManager:
+  title:
+    en: File Manager
+    zh-CN: 文件管理
+    zh-HK: 文件管理
+  connecting:
+    en: Connecting...
+    zh-CN: 连接中...
+    zh-HK: 連接中...
+  connect:
+    en: Connect
+    zh-CN: 连接
+    zh-HK: 連接
+  connect_failed:
+    en: Connection failed
+    zh-CN: 连接失败
+    zh-HK: 連接失敗
+  retry:
+    en: Retry
+    zh-CN: 重试
+    zh-HK: 重試
+  cd_to_terminal:
+    en: CD in Terminal
+    zh-CN: 在终端中 CD
+    zh-HK: 在終端中 CD
+  copy_path:
+    en: Copy Path
+    zh-CN: 复制路径
+    zh-HK: 複製路徑
+  copy_name:
+    en: Copy Name
+    zh-CN: 复制名称
+    zh-HK: 複製名稱
+  refresh:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 刷新
+  toggle_hidden:
+    en: Toggle Hidden Files
+    zh-CN: 显示/隐藏文件
+    zh-HK: 顯示/隱藏文件
+  search_placeholder:
+    en: Search...
+    zh-CN: 搜索...
+    zh-HK: 搜索...
+  name:
+    en: Name
+    zh-CN: 名称
+    zh-HK: 名稱
+  size:
+    en: Size
+    zh-CN: 大小
+    zh-HK: 大小
+  time:
+    en: Time
+    zh-CN: 时间
+    zh-HK: 時間
+  current_path:
+    en: Current Path
+    zh-CN: 当前路径
+    zh-HK: 當前路徑
