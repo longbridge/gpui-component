@@ -157,3 +157,154 @@
 ### 结论
 - 当前修复与 GitHub Actions 截图中的失败根因一致，已经对准 `cargo-machete` 报告的 `one-core` 未使用依赖。
 - 由于本地工作树存在无关的 workspace 解析错误，无法在当前状态下完成最终 `cargo` 级验证；补偿计划是在清理该无关问题后重新执行 `cargo machete` 与 `cargo check -p one-core`。
+
+## 编码前检查 - terminal-file-manager-sync
+时间：2026-03-10 19:11:24 +0800
+
+- □ 已查阅上下文摘要文件：`.claude/context-summary-terminal-file-manager-sync.md`
+- □ 将使用以下可复用组件：
+  - `TerminalSidebar::sync_file_manager_path`（crates/terminal_view/src/sidebar/mod.rs:361）— 负责承接 OSC 7 事件入口。
+  - `FileManagerPanel::connect` / `sync_navigate_to`（crates/terminal_view/src/sidebar/file_manager_panel.rs:430/513）— 负责 SFTP 连接与导航。
+  - `TerminalModelEvent::WorkingDirChanged`（crates/terminal/src/terminal.rs:48,606）— 终端路径事件源。
+- □ 将遵循命名约定：Rust 类型使用 PascalCase，字段与方法使用 snake_case。
+- □ 将遵循代码风格：事件驱动 + `cx.subscribe`/`cx.emit`/`cx.notify()` 流程。
+- □ 确认不重复造轮子，证明：已检查 Terminal、TerminalSidebar、FileManagerPanel、ssh_backend 现有实现，仓库内暂无延迟同步或 pending 路径缓存逻辑。
+
+## 编码后声明 - terminal-file-manager-sync
+时间：2026-03-10 19:13:13 +0800
+
+### 1. 复用了以下既有组件
+- `TerminalModelEvent::WorkingDirChanged`（crates/terminal/src/terminal.rs:48,606）：继续作为终端路径的唯一事件来源。
+- `TerminalSidebar::sync_file_manager_path`（crates/terminal_view/src/sidebar/mod.rs:361）：保持原有 OSC 7 事件入口，只调整下游处理。
+- `FileManagerPanel::navigate_to`/`refresh_dir`（crates/terminal_view/src/sidebar/file_manager_panel.rs:579,692）：沿用现有导航和刷新实现，只在连接时机上增加缓存判断。
+
+### 2. 遵循了以下项目约定
+- 命名与风格：新增字段 `pending_sync_path`、方法逻辑均使用 snake_case，状态变更仍通过 `cx.notify()` 通知。
+- 事件模型：继续使用 `cx.subscribe`/`cx.emit` 链路，不新增自定义全局状态。
+- 流程留痕：上下文摘要、操作日志记录和最终说明全部输出在 `.claude/` 目录。
+
+### 3. 对比了以下相似实现
+- `TerminalView::handle_terminal_event`（crates/terminal_view/src/view.rs:534）：确认仍由该入口统一下发同步命令。
+- `TerminalSidebar::toggle_panel`（crates/terminal_view/src/sidebar/mod.rs:248）：只在原有“首次打开自动连接”的逻辑上附加缓存处理。
+- `FileManagerPanel::connect`（crates/terminal_view/src/sidebar/file_manager_panel.rs:430`起`）：在成功分支中插入 pending 处理，保持失败分支行为不变。
+
+### 4. 未重复造轮子的证明
+- 检查了 `TerminalSidebar`、`FileManagerPanel`、`ssh_backend`、`terminal_view/src/view.rs`，仓库内没有现成的延迟同步机制或“请求当前路径”API，因此本次仅在既有模块上追加状态缓存与复用调用。
+
+## 实施与验证记录 - terminal-file-manager-sync
+时间：2026-03-10 19:13:13 +0800
+
+### 已完成修改
+- 在 `FileManagerPanel` 结构体中新增 `pending_sync_path` 字段，并在构造函数初始化。
+- `FileManagerPanel::connect` 成功后优先消费 `pending_sync_path`，若存在则直接 `navigate_to`，否则维持旧的 `refresh_dir`。
+- `FileManagerPanel::sync_navigate_to` 在未连接时改为缓存路径而非直接返回，确保首次打开文件管理器能够同步最新终端目录。
+
+### 本地验证
+- `cargo fmt -- crates/terminal_view/src/sidebar/file_manager_panel.rs`
+- `cargo check -p terminal_view`
+  - 结果：构建成功。构建日志提示 `num-bigint-dig v0.8.4` 将在未来 rust 版本中被拒绝，此为既有依赖的 `future-incompat` 提示，与本次改动无关。
+
+## 编码后声明 - terminal-file-manager-sync (manual-sync)
+时间：2026-03-10 19:49:04 +0800
+
+### 1. 复用了以下既有组件
+- `TerminalModelEvent::WorkingDirChanged`（crates/terminal/src/terminal.rs）继续作为路径源，未新增额外命令。
+- `FileManagerPanel::connect_if_idle` + `sync_navigate_to`（crates/terminal_view/src/sidebar/file_manager_panel.rs）负责保持连接与导航，只在外层增加 pending/缓存。
+- `TerminalSidebar::toggle_panel` 既有自动连接逻辑，手动同步仍复用该路径。
+
+### 2. 遵循项目约定
+- 新增字段、事件与文案均使用 snake_case + zh-CN 描述；UI 仍通过 gpui 组件拼装。
+- 事件链保持 `TerminalView -> TerminalSidebar -> FileManagerPanel`，未引入全局状态。
+- 所有操作记录、审查说明输出在 `.claude/` 目录。
+
+### 3. 对比相似实现
+- 参考 `SettingsPanelEvent::SyncPathChanged`（crates/terminal_view/src/sidebar/settings_panel.rs:584）保持开关语义不变，只增加 enter-triggered 分支。
+- 文件管理器 Toolbar 原有按钮（返回/刷新/隐藏）风格保持一致，仅追加一个 `Redo` 图标按钮。
+- 键盘监听参考 `redis_cli_view` 中对 enter 的处理方式（crates/redis_view/src/redis_cli_view.rs:539）。
+
+### 4. 未重复造轮子证明
+- 检查 `TerminalSidebar`、`FileManagerPanel`、`SettingsPanel`、`ssh_backend` 已有实现，仓库内不存在“手动同步”或“Enter 触发”逻辑，本次均在原模块内增量实现。
+
+### 本地验证
+- `cargo fmt -- crates/terminal_view/src/sidebar/file_manager_panel.rs crates/terminal_view/src/sidebar/mod.rs crates/terminal_view/src/view.rs`
+- `cargo check -p terminal_view`
+  - 结果：构建成功；编译输出含现存 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关。
+
+## 实施与验证记录 - terminal-file-manager-sync (manual refresh)
+时间：2026-03-10 22:57:32 +0800
+
+### 主要变更
+- `TerminalSidebarEvent` 新增 `RequestWorkingDirRefresh`，终端视图收到后会写入隐藏指令 `printf '\033]7;file://%s%s\007' "$HOSTNAME" "$PWD"`，强制 shell 发送最新 OSC 7 信号。
+- 文件管理器的“同步终端路径”按钮现在不仅复用缓存路径，还会设置 `sync_on_enter_pending = true` 并发出上述事件，从而在关闭自动同步时也能获取新路径。
+- TerminalView 的侧边栏事件处理函数增加分支，调用新的 `request_working_dir_refresh` 帮助方法统一发送指令。
+
+### 本地验证
+- `cargo fmt -- crates/terminal_view/src/sidebar/mod.rs crates/terminal_view/src/view.rs`
+- `cargo check -p terminal_view`
+  - 结果：构建成功；警告同样来自既有依赖 `num-bigint-dig v0.8.4` 的 future-incompat 提示。
+
+## 编码前检查 - db-tree-auto-expand
+时间：2026-03-10 23:35:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-db-tree.md`
+□ 将使用以下可复用组件：
+- `DbTreeView::add_database_to_selection`（crates/db_view/src/db_tree_view.rs:868）- 负责更新并持久化数据库筛选
+- `DbTreeView::add_database_node`（同文件:1732）- 负责向树结构插入数据库节点
+- `DatabaseEventHandler`（crates/db_view/src/db_tree_event.rs:0-420）- 统一处理 `DatabaseObjectsEvent`
+□ 将遵循命名约定：Rust 函数/字段使用 snake_case，事件枚举使用 PascalCase
+□ 将遵循代码风格：gpui fluent builder + `cx.listener` + `cx.spawn`，注释使用简体中文
+□ 确认不重复造轮子，证明：已检查 db_tree_view 现有添加/筛选逻辑及 DatabaseEventHandler 事件路由，仓库内不存在数据库节点自动添加逻辑
+
+## 设计记录 - db-tree-auto-expand
+时间：2026-03-10 23:45:00 +0800
+
+### 目标
+- 双击数据库行时向 `DbTreeView` 自动添加并展开该数据库节点，同时更新持久化筛选。
+- 若数据库节点已存在，仅展开并选中。
+
+### 实施思路
+1. **事件扩展**：为 `DatabaseObjectsEvent` 新增 `AddDatabaseToTree { node: DbNode }`，`handle_row_double_click` 在检测到数据库型 `DbNode` 时发出该事件。
+2. **树视图接口**：在 `DbTreeView` 内新增 `ensure_database_node_expanded` 方法，调用 `add_database_to_selection`、`add_database_node`（仅在缺失时）、维护 `expanded_nodes` 并懒加载父/子节点。
+3. **事件处理**：`DatabaseEventHandler` 订阅新事件，调用树视图接口并在成功后 `cx.emit(DbTreeViewEvent::NodeSelected)`，以保持 objects panel 与树视图同步。
+4. **持久化**：复用 `save_database_filter` + `ConnectionRepository` 写入逻辑，确保添加路径与既有新建数据库流程一致。
+
+### 依赖
+- `DbTreeView` 现有增删节点 API 与 `GlobalDbState` 懒加载能力。
+- `DatabaseEventHandler` 既有的 objects->tree 路由模式。
+- `ConnectionRepository`（通过 `GlobalStorageState`）负责保存 `selected_databases`。
+
+### 风险
+- `DbTreeView` 状态较大，新方法需谨慎避免重复重建造成性能下降。
+- 多线程场景中 `cx.spawn` 异步写入无回调，若失败需通过日志提示。
+- 树节点尚未懒加载时直接展开可能无效，需要在方法内显式触发 `lazy_load_children`。
+
+### 测试计划
+- 针对 `DbTreeView` 新方法编写单元测试，验证缺失节点时会插入并返回 node_id，已有节点时不重复插入。
+- 运行 `cargo test -p db_view database_objects_tab::tests`（或等价命令）覆盖新增单元测试。
+- 若 gpui 测试环境无法构造窗口，则记录限制并提供补测计划。
+
+## 编码后声明 - db-tree-auto-expand
+时间：2026-03-11 00:25:00 +0800
+
+### 1. 复用了以下既有组件
+- `DbTreeView::add_database_to_selection` + `add_database_node`：双击数据库时沿用相同的持久化与节点构造逻辑，确保与新建数据库流程一致
+- `DbTreeView::lazy_load_children`/`expanded_nodes`：通过新的 `ensure_database_node_expanded` 接口复用原有展开与懒加载机制
+- `DatabaseEventHandler` 事件路由：在 objects panel 的事件流中新增 `AddDatabaseToTree` 分支，继续复用集中处理模式
+
+### 2. 遵循了以下项目约定
+- 事件枚举/结构体使用 PascalCase，函数和字段使用 snake_case；新增注释全部保持简体中文
+- UI 层仍然通过 `cx.emit`、`cx.spawn` 与 `gpui` 交互，保持与原文件相同的 builder / listener 风格
+- 改动仅限于 `db_view` 相关模块与 `.claude/` 文档，未触及用户已有的终端/SSH 代码
+
+### 3. 对比相似实现
+- `database_objects_tab.rs` 中表/视图双击同样依赖 `build_node_for_row` 构造 `DbNode` 并发事件，本次直接复用该模式，只是新增 `DatabaseObjectsEvent::AddDatabaseToTree`
+- `db_tree_event.rs` 既有的创建/删除数据库 handler 也是通过 `tree_view.update` 执行 UI 逻辑并显示通知，本次新增 handler 没有改变这一结构
+
+### 4. 未重复造轮子的证明
+- 在引入 auto-expand 逻辑前，已经检查 `DbTreeView` 是否存在现成的“添加数据库并展开”接口；确认只有新建/DDL 刷新路径，因此新增接口封装并在 handler 中调用
+- 为避免强耦合，新增 public 方法只是聚合已有私有流程（筛选持久化 + 节点插入 + 展开），没有额外复制状态
+
+### 5. 本地验证
+- `cargo fmt -- crates/db_view/src/database_objects_tab.rs crates/db_view/src/db_tree_view.rs crates/db_view/src/db_tree_event.rs`
+- `cargo test -p db_view`
+  - 结果：`sql_editor_completion_tests::tests::test_table_mention_format` 仍然失败（与现有工作区相同），其余 136 个测试通过。该失败与当前改动无关，后续需在专门任务中修复表提及格式断言。

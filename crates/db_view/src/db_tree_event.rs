@@ -321,6 +321,14 @@ impl DatabaseEventHandler {
                             cx,
                         );
                     }
+                    DatabaseObjectsEvent::AddDatabaseToTree { node } => {
+                        Self::handle_add_database_to_tree(
+                            node.clone(),
+                            tree_view.clone(),
+                            window,
+                            cx,
+                        );
+                    }
                     DatabaseObjectsEvent::CreateDatabase { node } => {
                         Self::handle_create_database(
                             node.clone(),
@@ -488,6 +496,40 @@ impl DatabaseEventHandler {
             });
         } else {
             error!("handle_node_selected error: config is None")
+        }
+    }
+
+    /// 处理将数据库添加至树视图的事件
+    fn handle_add_database_to_tree(
+        node: DbNode,
+        tree_view: Entity<DbTreeView>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let connection_id = node.connection_id.clone();
+        let database_name = node
+            .get_database_name()
+            .unwrap_or_else(|| node.name.clone());
+
+        if database_name.is_empty() {
+            Self::show_error(window, t!("Common.error_info").to_string(), cx);
+            return;
+        }
+
+        let node_id = tree_view.update(cx, |tree, cx| {
+            let Some(node_id) =
+                tree.ensure_database_node_expanded(&connection_id, &database_name, cx)
+            else {
+                return None;
+            };
+            cx.emit(DbTreeViewEvent::NodeSelected {
+                node_id: node_id.clone(),
+            });
+            Some(node_id)
+        });
+
+        if node_id.is_none() {
+            Self::show_error(window, t!("Common.error_info").to_string(), cx);
         }
     }
 

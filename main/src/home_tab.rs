@@ -11,14 +11,13 @@ use gpui::{
 use gpui_component::button::{ButtonCustomVariant, ButtonVariant};
 use gpui_component::menu::DropdownMenu;
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, InteractiveElementExt, Sizable, Size,
-    WindowExt,
+    ActiveTheme, Disableable, Icon, IconName, InteractiveElementExt, Sizable, Size, WindowExt,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
     input::{Input, InputEvent, InputState},
     list::{List, ListState},
-    menu::{ PopupMenuItem},
+    menu::PopupMenuItem,
     popover::Popover,
     tooltip::Tooltip,
     v_flex,
@@ -2610,7 +2609,7 @@ impl HomePage {
                     ),
             );
 
-            card.into_any_element()
+        card.into_any_element()
     }
 }
 
