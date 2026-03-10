@@ -1343,8 +1343,14 @@ pub trait DatabasePlugin: Send + Sync {
     ) -> Result<TableDataResponse> {
         let start_time = std::time::Instant::now();
 
-        let where_clause = request.where_clause.unwrap_or_default();
-        let order_clause = request.order_by_clause.unwrap_or_default();
+        let where_clause = match request.where_clause {
+            Some(ref c) if !c.trim().is_empty() => format!(" WHERE {}", c.trim()),
+            _ => String::new(),
+        };
+        let order_clause = match request.order_by_clause {
+            Some(ref c) if !c.trim().is_empty() => format!(" ORDER BY {}", c.trim()),
+            _ => String::new(),
+        };
 
         // Calculate offset
         let offset = (request.page.saturating_sub(1)) * request.page_size;
