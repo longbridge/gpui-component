@@ -102,3 +102,58 @@
 - `cargo fmt --all`
 - `cargo test -p db_view sql_editor_view::tests -- --nocapture`
 - 结果：9 个相关测试全部通过。
+
+## 编码前检查 - ci-machete
+时间：2026-03-09 23:01:51 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-ci-machete.md`
+- 已分析相似实现：
+  - `.github/workflows/ci.yml:1`
+  - `Cargo.toml:217`
+  - `crates/macros/Cargo.toml:20`
+  - `main/src/update.rs:806`
+- 将使用以下可复用组件：
+  - `Cargo.toml:217` 的工作区级 `cargo-machete` 配置模式，用于判断是否需要工作区 ignore
+  - `crates/macros/Cargo.toml:20` 的包级 `cargo-machete` 配置模式，用于判断是否需要 crate 级 ignore
+- 将遵循命名约定：仅调整 `Cargo.toml` 依赖项名称，不新增偏离现有 crate 命名的配置
+- 将遵循代码风格：最小改动、优先删除真实无效声明，不扩大工作流或全局例外
+- 确认不重复造轮子，证明：已检查 `.github/workflows/ci.yml`、根 `Cargo.toml`、`crates/macros/Cargo.toml`、`crates/core/Cargo.toml`，仓库内已存在完整的依赖治理模式，无需新增自定义脚本或工作流
+
+## 编码后声明 - ci-machete
+时间：2026-03-09 23:01:51 +0800
+
+### 1. 复用了以下既有组件
+- `Cargo.toml:217`：沿用工作区级 `cargo-machete` 配置作为“是否需要全局 ignore”的判断基线
+- `crates/macros/Cargo.toml:20`：沿用包级 `cargo-machete` 配置模式作为“若存在误报则局部 ignore”的参考
+- `.github/workflows/ci.yml:32`：保留现有 `Machete` 步骤，不改 CI 结构
+
+### 2. 遵循了以下项目约定
+- 文件组织：只修改受影响 crate 的 `Cargo.toml`，不扩散到工作流和源码模块
+- 代码风格：采用最小改动策略，仅删除无引用的依赖声明
+- 留痕方式：上下文摘要、操作日志、审查报告均写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `Cargo.toml:217`：根级 ignore 适用于工作区共性误报，本次未扩展它，因为证据更支持真实未使用依赖
+- `crates/macros/Cargo.toml:20`：包级 ignore 适用于局部误报，本次也未采用，因为 `crates/core/src` 未发现显式引用
+- `.github/workflows/ci.yml:32`：失败入口已明确，因此优先修正被扫描对象而不是改 workflow
+
+### 4. 未重复造轮子的证明
+- 检查了 `.github/workflows/ci.yml`、`Cargo.toml`、`crates/macros/Cargo.toml`、`crates/core/Cargo.toml`
+- 结论：仓库已有 `cargo-machete` 使用与例外配置模式，本次只需在现有治理体系内清理依赖声明
+
+## 实施与验证记录 - ci-machete
+时间：2026-03-09 23:01:51 +0800
+
+### 已完成修改
+- 在 `crates/core/Cargo.toml` 删除 `bytes`、`http-body-util`、`reqwest`、`rustls`、`regex`、`rustls-platform-verifier`、`urlencoding` 7 个未使用依赖声明。
+- 新增 `.claude/context-summary-ci-machete.md`，记录工作流、依赖治理模式、测试模式和风险。
+
+### 本地验证
+- `cargo machete`
+  - 结果：失败，原因是本地未安装 `cargo-machete`，错误为 `error: no such command: machete`
+- `cargo check -p one-core`
+  - 结果：失败，原因是当前工作区存在无关的 manifest 问题：`crates/ui/Cargo.toml:113` 出现 `duplicate key tree-sitter-bash`，导致 workspace 解析在进入 `one-core` 前就中止
+
+### 结论
+- 当前修复与 GitHub Actions 截图中的失败根因一致，已经对准 `cargo-machete` 报告的 `one-core` 未使用依赖。
+- 由于本地工作树存在无关的 workspace 解析错误，无法在当前状态下完成最终 `cargo` 级验证；补偿计划是在清理该无关问题后重新执行 `cargo machete` 与 `cargo check -p one-core`。
