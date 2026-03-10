@@ -549,3 +549,51 @@ FileManager:
     en: Current Path
     zh-CN: 当前路径
     zh-HK: 當前路徑
+  download:
+    en: Download
+    zh-CN: 下载
+    zh-HK: 下載
+  upload_file:
+    en: Upload File
+    zh-CN: 上传文件
+    zh-HK: 上傳文件
+  upload_folder:
+    en: Upload Folder
+    zh-CN: 上传文件夹
+    zh-HK: 上傳文件夾
+  select_upload_files:
+    en: Select files to upload
+    zh-CN: 选择要上传的文件
+    zh-HK: 選擇要上傳的文件
+  select_upload_folder:
+    en: Select folder to upload
+    zh-CN: 选择要上传的文件夹
+    zh-HK: 選擇要上傳的文件夾
+  select_download_dir:
+    en: Select download destination
+    zh-CN: 选择下载目标目录
+    zh-HK: 選擇下載目標目錄
+  drop_files_here:
+    en: Drop files here to upload
+    zh-CN: 拖放文件到此处上传
+    zh-HK: 拖放文件到此處上傳
+  transfer_pending:
+    en: Pending
+    zh-CN: 等待中
+    zh-HK: 等待中
+  transfer_done:
+    en: Done
+    zh-CN: 完成
+    zh-HK: 完成
+  transfer_failed:
+    en: Failed
+    zh-CN: 失败
+    zh-HK: 失敗
+  transfer_cancelled:
+    en: Cancelled
+    zh-CN: 已取消
+    zh-HK: 已取消
+  transfer_connect_failed:
+    en: Transfer connection failed
+    zh-CN: 传输连接建立失败
+    zh-HK: 傳輸連接建立失敗

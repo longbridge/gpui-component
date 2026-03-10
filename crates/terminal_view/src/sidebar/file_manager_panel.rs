@@ -2,17 +2,20 @@
 //!
 //! 仅针对 SSH 终端，通过独立的 SFTP 连接浏览远程文件系统。
 //! UI 参考 `sftp_view` 的 `FileListPanel`，但为侧边栏场景做了精简和适配。
+//! 支持文件传输（上传/下载/拖拽），使用独立的传输连接避免阻塞浏览。
 
 use chrono::{DateTime, Local};
 use gpui::{
     div, prelude::*, px, uniform_list, App, ClipboardItem, Context, Entity, EventEmitter,
-    FocusHandle, Focusable, IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Render, SharedString, Styled, UniformListScrollHandle, Window,
+    ExternalPaths, FocusHandle, Focusable, IntoElement, ListSizingBehavior, MouseButton,
+    MouseDownEvent, ParentElement, PathPromptOptions, Render, SharedString, Styled,
+    UniformListScrollHandle, Window,
 };
 use gpui_component::{
     h_flex,
     input::{Input, InputEvent, InputState},
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
+    progress::Progress,
     spinner::Spinner,
     tooltip::Tooltip,
     v_flex, ActiveTheme, Icon, IconName, InteractiveElementExt, Sizable, Size,
@@ -20,13 +23,151 @@ use gpui_component::{
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{ProxyType as StorageProxyType, SshAuthMethod, StoredConnection};
 use rust_i18n::t;
-use sftp::{RusshSftpClient, SftpClient};
+use sftp::{RusshSftpClient, SftpClient, TransferCancelled, TransferProgress};
 use ssh::{JumpServerConnectConfig, ProxyConnectConfig, ProxyType, SshAuth, SshConnectConfig};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::ops::Range;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::Mutex;
+
+// ── 传输相关类型 ──────────────────────────────────────────────
+
+/// 传输操作类型
+#[derive(Clone)]
+enum TransferOperation {
+    Upload {
+        local_path: PathBuf,
+        remote_path: String,
+        is_dir: bool,
+    },
+    Download {
+        remote_path: String,
+        local_path: PathBuf,
+        is_dir: bool,
+    },
+}
+
+/// 传输任务状态
+#[derive(Clone, PartialEq)]
+enum TransferTaskState {
+    Pending,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+/// 跨线程共享的进度数据（原子操作，无需加锁）
+struct SharedProgress {
+    transferred: AtomicU64,
+    total: AtomicU64,
+    /// 存储 f64::to_bits() 的速度值
+    speed: AtomicU64,
+    cancelled: Arc<AtomicBool>,
+    current_file: std::sync::RwLock<Option<String>>,
+}
+
+impl SharedProgress {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            transferred: AtomicU64::new(0),
+            total: AtomicU64::new(0),
+            speed: AtomicU64::new(0),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            current_file: std::sync::RwLock::new(None),
+        })
+    }
+}
+
+/// 传输任务
+#[derive(Clone)]
+struct TransferTask {
+    id: usize,
+    operation: TransferOperation,
+    state: TransferTaskState,
+    shared_progress: Arc<SharedProgress>,
+    error: Option<String>,
+}
+
+/// 传输队列（单任务串行执行）
+struct TransferQueue {
+    tasks: Vec<TransferTask>,
+    pending: VecDeque<usize>,
+}
+
+impl TransferQueue {
+    fn new() -> Self {
+        Self {
+            tasks: Vec::new(),
+            pending: VecDeque::new(),
+        }
+    }
+
+    fn has_active(&self) -> bool {
+        self.tasks.iter().any(|task| {
+            task.state == TransferTaskState::Running || task.state == TransferTaskState::Pending
+        })
+    }
+
+    fn running_count(&self) -> usize {
+        self.tasks
+            .iter()
+            .filter(|task| task.state == TransferTaskState::Running)
+            .count()
+    }
+
+    fn enqueue(&mut self, task: TransferTask) {
+        self.pending.push_back(task.id);
+        self.tasks.push(task);
+    }
+
+    /// 取出下一个可执行的任务（串行：仅当没有 Running 时才启动）
+    fn next_startable(&mut self) -> Option<TransferTask> {
+        if self.running_count() > 0 {
+            return None;
+        }
+
+        while let Some(task_id) = self.pending.pop_front() {
+            let Some(task) = self.tasks.iter_mut().find(|t| t.id == task_id) else {
+                continue;
+            };
+
+            if task.state != TransferTaskState::Pending {
+                continue;
+            }
+
+            task.state = TransferTaskState::Running;
+            return Some(task.clone());
+        }
+
+        None
+    }
+
+    /// 获取当前活跃任务（用于进度显示）
+    fn active_task(&self) -> Option<&TransferTask> {
+        self.tasks
+            .iter()
+            .find(|task| task.state == TransferTaskState::Running)
+            .or_else(|| {
+                self.tasks
+                    .iter()
+                    .find(|task| task.state == TransferTaskState::Pending)
+            })
+    }
+
+    /// 排队中的任务数（不含正在执行的）
+    fn pending_count(&self) -> usize {
+        self.tasks
+            .iter()
+            .filter(|t| t.state == TransferTaskState::Pending)
+            .count()
+    }
+}
+
+// ── 基础类型 ──────────────────────────────────────────────────
 
 /// SFTP 连接状态
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +215,8 @@ pub enum FileManagerPanelEvent {
     CdToTerminal(String),
 }
 
+// ── 工具函数 ──────────────────────────────────────────────────
+
 /// 格式化文件大小（紧凑格式，适合侧边栏窄列）
 fn format_file_size(size: u64) -> String {
     if size == 0 {
@@ -104,6 +247,31 @@ fn format_modified_time(time: SystemTime) -> String {
     } else {
         datetime.format("%Y/%-m/%-d").to_string()
     }
+}
+
+/// 格式化传输速度
+fn format_speed(bytes_per_sec: f64) -> String {
+    if bytes_per_sec >= 1024.0 * 1024.0 {
+        format!("{:.1} MB/s", bytes_per_sec / (1024.0 * 1024.0))
+    } else if bytes_per_sec >= 1024.0 {
+        format!("{:.1} KB/s", bytes_per_sec / 1024.0)
+    } else {
+        format!("{:.0} B/s", bytes_per_sec)
+    }
+}
+
+/// 拼接远程路径
+fn join_remote_path(base: &str, name: &str) -> String {
+    if base == "/" {
+        format!("/{}", name)
+    } else {
+        format!("{}/{}", base, name)
+    }
+}
+
+/// 判断传输错误是否为取消
+fn is_transfer_cancelled(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<TransferCancelled>().is_some()
 }
 
 /// 从 StoredConnection 构建 SshConnectConfig
@@ -165,11 +333,13 @@ fn build_ssh_config(conn: &StoredConnection) -> anyhow::Result<SshConnectConfig>
     })
 }
 
+// ── FileManagerPanel ──────────────────────────────────────────
+
 /// 终端侧边栏文件管理器面板
 pub struct FileManagerPanel {
     /// 存储的连接信息
     stored_connection: StoredConnection,
-    /// SFTP 客户端
+    /// SFTP 客户端（浏览用）
     sftp_client: Option<Arc<Mutex<RusshSftpClient>>>,
     /// 连接状态
     connection_state: ConnectionState,
@@ -203,6 +373,18 @@ pub struct FileManagerPanel {
     loading: bool,
     /// 订阅
     _subscriptions: Vec<gpui::Subscription>,
+
+    // ── 传输相关字段 ──
+    /// 独立的传输 SFTP 连接（懒创建）
+    transfer_client: Option<Arc<Mutex<RusshSftpClient>>>,
+    /// 传输队列
+    transfer_queue: TransferQueue,
+    /// 下一个任务 ID
+    next_task_id: usize,
+    /// 进度刷新定时器
+    progress_refresh_task: Option<gpui::Task<()>>,
+    /// 是否有外部文件拖入
+    is_dragging_over: bool,
 }
 
 impl FileManagerPanel {
@@ -245,8 +427,15 @@ impl FileManagerPanel {
             focus_handle,
             loading: false,
             _subscriptions: vec![sub],
+            transfer_client: None,
+            transfer_queue: TransferQueue::new(),
+            next_task_id: 0,
+            progress_refresh_task: None,
+            is_dragging_over: false,
         }
     }
+
+    // ── 连接管理 ──────────────────────────────────────────────
 
     /// 建立 SFTP 连接
     pub fn connect(&mut self, cx: &mut Context<Self>) {
@@ -317,6 +506,8 @@ impl FileManagerPanel {
             self.connect(cx);
         }
     }
+
+    // ── 目录浏览 ──────────────────────────────────────────────
 
     /// 刷新当前目录
     fn refresh_dir(&mut self, cx: &mut Context<Self>) {
@@ -426,6 +617,8 @@ impl FileManagerPanel {
         self.current_path == "/" || self.current_path.is_empty()
     }
 
+    // ── 排序和过滤 ───────────────────────────────────────────
+
     /// 排序文件列表
     fn sort_items(&mut self) {
         let sort_column = self.sort_column;
@@ -507,6 +700,525 @@ impl FileManagerPanel {
             self.selected_indices.insert(row_ix);
         }
     }
+
+    // ── 传输调度 ──────────────────────────────────────────────
+
+    /// 分配下一个任务 ID
+    fn alloc_task_id(&mut self) -> usize {
+        let id = self.next_task_id;
+        self.next_task_id += 1;
+        id
+    }
+
+    /// 创建传输专用连接（首次传输时懒创建），然后执行排队任务
+    fn ensure_transfer_client_and_schedule(&mut self, cx: &mut Context<Self>) {
+        if self.transfer_client.is_some() {
+            self.schedule_transfers(cx);
+            return;
+        }
+
+        let config = match build_ssh_config(&self.stored_connection) {
+            Ok(config) => config,
+            Err(e) => {
+                tracing::error!("{}: {}", t!("FileManager.transfer_connect_failed"), e);
+                // 将所有排队任务标记为失败
+                let error_msg = format!("{}: {}", t!("FileManager.transfer_connect_failed"), e);
+                for task in &mut self.transfer_queue.tasks {
+                    if task.state == TransferTaskState::Pending {
+                        task.state = TransferTaskState::Failed;
+                        task.error = Some(error_msg.clone());
+                    }
+                }
+                self.transfer_queue.pending.clear();
+                cx.notify();
+                return;
+            }
+        };
+
+        let connect_task = Tokio::spawn(cx, async move {
+            let client = RusshSftpClient::connect(config).await?;
+            Ok::<_, anyhow::Error>(client)
+        });
+
+        cx.spawn(async move |this, cx| {
+            let result = match connect_task.await {
+                Ok(Ok(client)) => Ok(client),
+                Ok(Err(e)) => Err(e),
+                Err(e) => Err(anyhow::Error::new(e)),
+            };
+
+            match result {
+                Ok(client) => {
+                    let _ = this.update(cx, |this, cx| {
+                        this.transfer_client = Some(Arc::new(Mutex::new(client)));
+                        this.schedule_transfers(cx);
+                    });
+                }
+                Err(e) => {
+                    let _ = this.update(cx, |this, cx| {
+                        let error_msg =
+                            format!("{}: {}", t!("FileManager.transfer_connect_failed"), e);
+                        tracing::error!("{}", error_msg);
+                        for task in &mut this.transfer_queue.tasks {
+                            if task.state == TransferTaskState::Pending {
+                                task.state = TransferTaskState::Failed;
+                                task.error = Some(error_msg.clone());
+                            }
+                        }
+                        this.transfer_queue.pending.clear();
+                        cx.notify();
+                    });
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// 调度下一个待执行的传输任务
+    fn schedule_transfers(&mut self, cx: &mut Context<Self>) {
+        let Some(task) = self.transfer_queue.next_startable() else {
+            return;
+        };
+
+        match task.operation.clone() {
+            TransferOperation::Upload {
+                local_path,
+                remote_path,
+                is_dir,
+            } => {
+                self.start_upload_task(
+                    task.id,
+                    local_path,
+                    remote_path,
+                    is_dir,
+                    task.shared_progress,
+                    cx,
+                );
+            }
+            TransferOperation::Download {
+                remote_path,
+                local_path,
+                is_dir,
+            } => {
+                self.start_download_task(
+                    task.id,
+                    remote_path,
+                    local_path,
+                    is_dir,
+                    task.shared_progress,
+                    cx,
+                );
+            }
+        }
+
+        self.start_progress_refresh(cx);
+        cx.notify();
+    }
+
+    /// 执行上传任务
+    fn start_upload_task(
+        &mut self,
+        task_id: usize,
+        local_path: PathBuf,
+        remote_path: String,
+        is_dir: bool,
+        shared_progress: Arc<SharedProgress>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(client) = self.transfer_client.clone() else {
+            return;
+        };
+
+        let cancelled = shared_progress.cancelled.clone();
+        let progress_for_callback = shared_progress.clone();
+        let current_remote_path = self.current_path.clone();
+        let local_path_for_refresh = local_path.clone();
+        let remote_path_for_refresh = remote_path.clone();
+
+        let upload_task = Tokio::spawn(cx, async move {
+            let mut client_guard = client.lock().await;
+            if is_dir {
+                client_guard
+                    .upload_dir_with_progress(
+                        local_path.to_string_lossy().as_ref(),
+                        &remote_path,
+                        cancelled,
+                        Box::new(move |progress: TransferProgress| {
+                            progress_for_callback
+                                .transferred
+                                .store(progress.transferred, Ordering::Relaxed);
+                            progress_for_callback
+                                .total
+                                .store(progress.total, Ordering::Relaxed);
+                            progress_for_callback
+                                .speed
+                                .store(progress.speed.to_bits(), Ordering::Relaxed);
+                            if let Some(file) = progress.current_file {
+                                if let Ok(mut guard) = progress_for_callback.current_file.write() {
+                                    *guard = Some(file);
+                                }
+                            }
+                        }),
+                    )
+                    .await
+            } else {
+                client_guard
+                    .upload_with_progress(
+                        local_path.to_string_lossy().as_ref(),
+                        &remote_path,
+                        cancelled,
+                        Box::new(move |progress: TransferProgress| {
+                            progress_for_callback
+                                .transferred
+                                .store(progress.transferred, Ordering::Relaxed);
+                            progress_for_callback
+                                .total
+                                .store(progress.total, Ordering::Relaxed);
+                            progress_for_callback
+                                .speed
+                                .store(progress.speed.to_bits(), Ordering::Relaxed);
+                        }),
+                    )
+                    .await
+            }
+        });
+
+        cx.spawn(async move |this, cx| {
+            let result = match upload_task.await {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(e)) => Err(e),
+                Err(e) => Err(anyhow::Error::new(e)),
+            };
+
+            let should_refresh = result.is_ok();
+
+            let _ = this.update(cx, |this, cx| {
+                this.update_task_state(task_id, result);
+                this.schedule_transfers(cx);
+
+                if should_refresh {
+                    // 上传完成后，如果当前目录与上传目标同级，刷新目录
+                    let remote_parent = remote_path_parent(&current_remote_path);
+                    let upload_parent = remote_path_parent(&remote_path_parent_of_upload(
+                        &local_path_for_refresh,
+                        &remote_path_for_refresh,
+                    ));
+                    if current_remote_path == remote_parent
+                        || current_remote_path == upload_parent
+                        || remote_path_for_refresh.starts_with(&current_remote_path)
+                    {
+                        this.refresh_dir(cx);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// 执行下载任务
+    fn start_download_task(
+        &mut self,
+        task_id: usize,
+        remote_path: String,
+        local_path: PathBuf,
+        is_dir: bool,
+        shared_progress: Arc<SharedProgress>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(client) = self.transfer_client.clone() else {
+            return;
+        };
+
+        let cancelled = shared_progress.cancelled.clone();
+        let progress_for_callback = shared_progress.clone();
+
+        let download_task = Tokio::spawn(cx, async move {
+            let mut client_guard = client.lock().await;
+            if is_dir {
+                client_guard
+                    .download_dir_with_progress(
+                        &remote_path,
+                        local_path.to_string_lossy().as_ref(),
+                        cancelled,
+                        Box::new(move |progress: TransferProgress| {
+                            progress_for_callback
+                                .transferred
+                                .store(progress.transferred, Ordering::Relaxed);
+                            progress_for_callback
+                                .total
+                                .store(progress.total, Ordering::Relaxed);
+                            progress_for_callback
+                                .speed
+                                .store(progress.speed.to_bits(), Ordering::Relaxed);
+                            if let Some(file) = progress.current_file {
+                                if let Ok(mut guard) = progress_for_callback.current_file.write() {
+                                    *guard = Some(file);
+                                }
+                            }
+                        }),
+                    )
+                    .await
+            } else {
+                client_guard
+                    .download_with_progress(
+                        &remote_path,
+                        local_path.to_string_lossy().as_ref(),
+                        cancelled,
+                        Box::new(move |progress: TransferProgress| {
+                            progress_for_callback
+                                .transferred
+                                .store(progress.transferred, Ordering::Relaxed);
+                            progress_for_callback
+                                .total
+                                .store(progress.total, Ordering::Relaxed);
+                            progress_for_callback
+                                .speed
+                                .store(progress.speed.to_bits(), Ordering::Relaxed);
+                        }),
+                    )
+                    .await
+            }
+        });
+
+        cx.spawn(async move |this, cx| {
+            let result = match download_task.await {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(e)) => Err(e),
+                Err(e) => Err(anyhow::Error::new(e)),
+            };
+
+            let _ = this.update(cx, |this, cx| {
+                this.update_task_state(task_id, result);
+                this.schedule_transfers(cx);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// 更新任务状态
+    fn update_task_state(&mut self, task_id: usize, result: Result<(), anyhow::Error>) {
+        if let Some(task) = self
+            .transfer_queue
+            .tasks
+            .iter_mut()
+            .find(|t| t.id == task_id)
+        {
+            match result {
+                Ok(()) => {
+                    task.state = TransferTaskState::Completed;
+                    task.error = None;
+                }
+                Err(error) => {
+                    if is_transfer_cancelled(&error) {
+                        task.state = TransferTaskState::Cancelled;
+                        task.error = None;
+                    } else {
+                        task.state = TransferTaskState::Failed;
+                        task.error = Some(error.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    /// 取消传输
+    fn cancel_transfer(&mut self, task_id: usize, cx: &mut Context<Self>) {
+        if let Some(task) = self
+            .transfer_queue
+            .tasks
+            .iter_mut()
+            .find(|t| t.id == task_id)
+        {
+            match task.state {
+                TransferTaskState::Pending => {
+                    task.state = TransferTaskState::Cancelled;
+                    task.error = None;
+                }
+                TransferTaskState::Running => {
+                    task.shared_progress
+                        .cancelled
+                        .store(true, Ordering::Relaxed);
+                }
+                TransferTaskState::Completed
+                | TransferTaskState::Failed
+                | TransferTaskState::Cancelled => {}
+            }
+        }
+        self.schedule_transfers(cx);
+        cx.notify();
+    }
+
+    /// 100ms 定时刷新进度
+    fn start_progress_refresh(&mut self, cx: &mut Context<Self>) {
+        if self.progress_refresh_task.is_some() {
+            cx.notify();
+            return;
+        }
+
+        self.progress_refresh_task = Some(cx.spawn(async move |this, cx| loop {
+            let should_continue = this
+                .update(cx, |this, cx| {
+                    let has_active = this.transfer_queue.has_active();
+                    if has_active {
+                        cx.notify();
+                        true
+                    } else {
+                        this.progress_refresh_task = None;
+                        false
+                    }
+                })
+                .unwrap_or(false);
+
+            if !should_continue {
+                break;
+            }
+
+            cx.background_executor()
+                .timer(Duration::from_millis(100))
+                .await;
+        }));
+    }
+
+    // ── 传输入口 ──────────────────────────────────────────────
+
+    /// 入队上传任务
+    fn enqueue_uploads(&mut self, paths: Vec<PathBuf>, remote_dir: &str, cx: &mut Context<Self>) {
+        for path in paths {
+            let file_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let remote_path = join_remote_path(remote_dir, &file_name);
+            let is_dir = path.is_dir();
+
+            let task = TransferTask {
+                id: self.alloc_task_id(),
+                operation: TransferOperation::Upload {
+                    local_path: path,
+                    remote_path,
+                    is_dir,
+                },
+                state: TransferTaskState::Pending,
+                shared_progress: SharedProgress::new(),
+                error: None,
+            };
+            self.transfer_queue.enqueue(task);
+        }
+
+        self.ensure_transfer_client_and_schedule(cx);
+    }
+
+    /// 入队下载任务
+    fn enqueue_download(
+        &mut self,
+        remote_path: String,
+        local_path: PathBuf,
+        is_dir: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let task = TransferTask {
+            id: self.alloc_task_id(),
+            operation: TransferOperation::Download {
+                remote_path,
+                local_path,
+                is_dir,
+            },
+            state: TransferTaskState::Pending,
+            shared_progress: SharedProgress::new(),
+            error: None,
+        };
+        self.transfer_queue.enqueue(task);
+        self.ensure_transfer_client_and_schedule(cx);
+    }
+
+    /// 通过文件选择器上传文件
+    fn select_and_upload_files(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let remote_dir = self.current_path.clone();
+        let view = cx.entity().clone();
+
+        let future = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            multiple: true,
+            directories: false,
+            prompt: Some(t!("FileManager.select_upload_files").to_string().into()),
+        });
+
+        cx.spawn(async move |_this, cx| {
+            if let Ok(Ok(Some(paths))) = future.await {
+                if paths.is_empty() {
+                    return;
+                }
+                view.update(cx, |this, cx| {
+                    this.enqueue_uploads(paths, &remote_dir, cx);
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// 通过文件夹选择器上传文件夹
+    fn select_and_upload_folder(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let remote_dir = self.current_path.clone();
+        let view = cx.entity().clone();
+
+        let future = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            multiple: true,
+            directories: true,
+            prompt: Some(t!("FileManager.select_upload_folder").to_string().into()),
+        });
+
+        cx.spawn(async move |_this, cx| {
+            if let Ok(Ok(Some(paths))) = future.await {
+                if paths.is_empty() {
+                    return;
+                }
+                view.update(cx, |this, cx| {
+                    this.enqueue_uploads(paths, &remote_dir, cx);
+                });
+            }
+        })
+        .detach();
+    }
+
+    /// 通过保存目录选择器下载远程文件/文件夹
+    fn download_item(
+        &mut self,
+        remote_path: String,
+        is_dir: bool,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let view = cx.entity().clone();
+        let remote_name = remote_path
+            .rsplit('/')
+            .next()
+            .unwrap_or(&remote_path)
+            .to_string();
+
+        let future = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            multiple: false,
+            directories: true,
+            prompt: Some(t!("FileManager.select_download_dir").to_string().into()),
+        });
+
+        cx.spawn(async move |_this, cx| {
+            if let Ok(Ok(Some(paths))) = future.await {
+                if let Some(dir) = paths.first() {
+                    let local_path = dir.join(&remote_name);
+                    view.update(cx, |this, cx| {
+                        this.enqueue_download(remote_path, local_path, is_dir, cx);
+                    });
+                }
+            }
+        })
+        .detach();
+    }
+
+    // ── 渲染方法 ──────────────────────────────────────────────
 
     /// 渲染工具栏
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -873,8 +1585,27 @@ impl FileManagerPanel {
         let path_for_cd = full_path.to_string();
         let path_for_copy = full_path.to_string();
         let name_for_copy = name.to_string();
+        let path_for_download = full_path.to_string();
+        let is_dir_for_download = is_dir;
 
         let mut menu = menu;
+
+        // 下载
+        let view_download = view.clone();
+        menu = menu.item(
+            PopupMenuItem::new(t!("FileManager.download"))
+                .icon(IconName::ArrowDown)
+                .on_click(
+                    window.listener_for(&view_download, move |this, _, window, cx| {
+                        this.download_item(
+                            path_for_download.clone(),
+                            is_dir_for_download,
+                            window,
+                            cx,
+                        );
+                    }),
+                ),
+        );
 
         // 文件夹：在终端中 CD
         if is_dir {
@@ -912,17 +1643,201 @@ impl FileManagerPanel {
                 ),
         );
 
-        // 分隔线 + 刷新
+        // 分隔线 + 上传文件 + 上传文件夹 + 刷新
+        let view_upload_files = view.clone();
+        let view_upload_folder = view.clone();
         let view_refresh = view.clone();
-        menu = menu.separator().item(
-            PopupMenuItem::new(t!("FileManager.refresh"))
-                .icon(IconName::Refresh)
-                .on_click(window.listener_for(&view_refresh, move |this, _, _, cx| {
-                    this.refresh_dir(cx);
-                })),
-        );
+        menu = menu
+            .separator()
+            .item(
+                PopupMenuItem::new(t!("FileManager.upload_file"))
+                    .icon(IconName::ArrowUp)
+                    .on_click(window.listener_for(
+                        &view_upload_files,
+                        move |this, _, window, cx| {
+                            this.select_and_upload_files(window, cx);
+                        },
+                    )),
+            )
+            .item(
+                PopupMenuItem::new(t!("FileManager.upload_folder"))
+                    .icon(IconName::ArrowUp)
+                    .on_click(window.listener_for(
+                        &view_upload_folder,
+                        move |this, _, window, cx| {
+                            this.select_and_upload_folder(window, cx);
+                        },
+                    )),
+            )
+            .separator()
+            .item(
+                PopupMenuItem::new(t!("FileManager.refresh"))
+                    .icon(IconName::Refresh)
+                    .on_click(window.listener_for(&view_refresh, move |this, _, _, cx| {
+                        this.refresh_dir(cx);
+                    })),
+            );
 
         menu
+    }
+
+    /// 渲染底部传输进度条（紧凑型，适合侧边栏窄宽度）
+    fn render_transfer_progress(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let Some(task) = self.transfer_queue.active_task() else {
+            return div().into_any_element();
+        };
+
+        let (icon, label) = match &task.operation {
+            TransferOperation::Upload { local_path, .. } => (
+                IconName::ArrowUp,
+                local_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+            ),
+            TransferOperation::Download { remote_path, .. } => {
+                let name = remote_path.rsplit('/').next().unwrap_or(remote_path);
+                (IconName::ArrowDown, name.to_string())
+            }
+        };
+
+        let transferred = task.shared_progress.transferred.load(Ordering::Relaxed);
+        let total = task.shared_progress.total.load(Ordering::Relaxed);
+        let speed_bits = task.shared_progress.speed.load(Ordering::Relaxed);
+        let speed = f64::from_bits(speed_bits);
+
+        let progress_pct = if total > 0 {
+            (transferred as f64 / total as f64 * 100.0) as u32
+        } else {
+            0
+        };
+
+        let task_id = task.id;
+        let is_running = task.state == TransferTaskState::Running;
+        let pending_count = self.transfer_queue.pending_count();
+
+        let status_text = match task.state {
+            TransferTaskState::Pending => t!("FileManager.transfer_pending").to_string(),
+            TransferTaskState::Running => {
+                if is_running && speed > 0.0 {
+                    format!("{}% {}", progress_pct, format_speed(speed))
+                } else {
+                    format!("{}%", progress_pct)
+                }
+            }
+            TransferTaskState::Completed => t!("FileManager.transfer_done").to_string(),
+            TransferTaskState::Failed => t!("FileManager.transfer_failed").to_string(),
+            TransferTaskState::Cancelled => t!("FileManager.transfer_cancelled").to_string(),
+        };
+
+        let tooltip_label = label.clone();
+
+        v_flex()
+            .border_t_1()
+            .border_color(cx.theme().border)
+            .bg(cx.theme().title_bar)
+            .px_2()
+            .py_1()
+            .gap_1()
+            // 第一行：图标 + 文件名 + 状态文本 + 取消按钮
+            .child(
+                h_flex()
+                    .gap_1()
+                    .items_center()
+                    .child(
+                        Icon::new(icon)
+                            .xsmall()
+                            .text_color(cx.theme().muted_foreground),
+                    )
+                    .child(
+                        div()
+                            .id("fm-transfer-name")
+                            .flex_1()
+                            .text_xs()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(label)
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(tooltip_label.clone()).build(window, cx)
+                            }),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(status_text),
+                    )
+                    .when(
+                        is_running || task.state == TransferTaskState::Pending,
+                        |el| {
+                            el.child(
+                                div()
+                                    .id("fm-cancel-transfer")
+                                    .cursor_pointer()
+                                    .rounded_md()
+                                    .p(px(2.))
+                                    .hover(|s| s.bg(cx.theme().list_active))
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(move |this, _, _window, cx| {
+                                            this.cancel_transfer(task_id, cx);
+                                        }),
+                                    )
+                                    .child(
+                                        Icon::new(IconName::Close)
+                                            .xsmall()
+                                            .text_color(cx.theme().muted_foreground),
+                                    ),
+                            )
+                        },
+                    ),
+            )
+            // 第二行：进度条 + 排队数
+            .child(
+                h_flex()
+                    .gap_1()
+                    .items_center()
+                    .child(
+                        div().flex_1().child(
+                            Progress::new("fm-transfer-progress").value(progress_pct as f32),
+                        ),
+                    )
+                    .when(pending_count > 0, |el| {
+                        el.child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("+{}", pending_count)),
+                        )
+                    }),
+            )
+            .into_any_element()
+    }
+
+    /// 渲染拖拽覆盖层
+    fn render_drop_overlay(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .bg(gpui::rgba(0x3b82f630))
+            .border_2()
+            .border_color(gpui::rgba(0x3b82f6ff))
+            .rounded_md()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                v_flex().items_center().gap_2().child(
+                    div()
+                        .text_sm()
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(cx.theme().foreground)
+                        .child(t!("FileManager.drop_files_here")),
+                ),
+            )
     }
 
     /// 渲染连接中状态
@@ -1036,6 +1951,8 @@ impl FileManagerPanel {
         };
         let scroll_handle = self.scroll_handle.clone();
         let is_loading = self.loading;
+        let has_active_transfer = self.transfer_queue.has_active();
+        let is_dragging = self.is_dragging_over;
 
         v_flex()
             .size_full()
@@ -1054,103 +1971,160 @@ impl FileManagerPanel {
             })
             .when(!is_loading, |el| {
                 el.child(
-                    uniform_list("fm-file-list", total_count, {
-                        cx.processor(move |state: &mut Self, range: Range<usize>, _window, cx| {
-                            let current_path = state.current_path.clone();
-                            let has_parent = !state.is_at_root();
-                            let view = cx.entity();
+                    div()
+                        .id("fm-file-list-drop-zone")
+                        .flex_1()
+                        .relative()
+                        // 拖拽上传支持
+                        .drag_over::<ExternalPaths>(|el, _, _, _cx| el.bg(gpui::rgba(0x3b82f620)))
+                        .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
+                            this.is_dragging_over = false;
+                            let file_paths = paths.paths().to_vec();
+                            if !file_paths.is_empty() {
+                                let remote_dir = this.current_path.clone();
+                                this.enqueue_uploads(file_paths, &remote_dir, cx);
+                            }
+                        }))
+                        .child(
+                            uniform_list("fm-file-list", total_count, {
+                                cx.processor(
+                                    move |state: &mut Self, range: Range<usize>, _window, cx| {
+                                        let current_path = state.current_path.clone();
+                                        let has_parent = !state.is_at_root();
+                                        let view = cx.entity();
 
-                            range
-                                .map(|list_ix| {
-                                    // 上级目录行
-                                    if has_parent && list_ix == 0 {
-                                        return div()
-                                            .id(list_ix)
-                                            .cursor_pointer()
-                                            .hover(|s| s.bg(cx.theme().list_hover))
-                                            .on_double_click(cx.listener(
-                                                move |this, _, _window, cx| {
-                                                    this.go_parent(cx);
-                                                },
-                                            ))
-                                            .child(state.render_parent_row(cx))
-                                            .into_any_element();
-                                    }
-
-                                    let filtered_ix =
-                                        if has_parent { list_ix - 1 } else { list_ix };
-                                    let real_ix = state.filtered_indices[filtered_ix];
-                                    let item = &state.items[real_ix];
-                                    let is_selected = state.selected_indices.contains(&filtered_ix);
-                                    let item_name = item.name.clone();
-                                    let is_dir = item.is_dir;
-                                    let full_path = if current_path.ends_with('/') {
-                                        format!("{}{}", current_path, item_name)
-                                    } else {
-                                        format!("{}/{}", current_path, item_name)
-                                    };
-
-                                    // 右键菜单变量
-                                    let ctx_name = item_name.clone();
-                                    let ctx_full_path = full_path.clone();
-                                    let ctx_is_dir = is_dir;
-                                    let ctx_view = view.clone();
-
-                                    div()
-                                        .id(list_ix)
-                                        .cursor_pointer()
-                                        .hover(|s| s.bg(cx.theme().list_hover))
-                                        .on_mouse_down(
-                                            MouseButton::Left,
-                                            cx.listener(
-                                                move |this, event: &MouseDownEvent, _window, cx| {
-                                                    let multi_select = event.modifiers.secondary();
-                                                    this.toggle_selection(
-                                                        filtered_ix,
-                                                        multi_select,
-                                                    );
-                                                    cx.notify();
-                                                },
-                                            ),
-                                        )
-                                        .on_double_click(cx.listener({
-                                            let name = item_name.clone();
-                                            let fp = full_path.clone();
-                                            move |this, _, _window, cx| {
-                                                if is_dir {
-                                                    this.navigate_to(fp.clone(), cx);
-                                                } else {
-                                                    // 文件双击：复制路径到剪贴板
-                                                    cx.write_to_clipboard(
-                                                        ClipboardItem::new_string(name.clone()),
-                                                    );
+                                        range
+                                            .map(|list_ix| {
+                                                // 上级目录行
+                                                if has_parent && list_ix == 0 {
+                                                    return div()
+                                                        .id(list_ix)
+                                                        .cursor_pointer()
+                                                        .hover(|s| s.bg(cx.theme().list_hover))
+                                                        .on_double_click(cx.listener(
+                                                            move |this, _, _window, cx| {
+                                                                this.go_parent(cx);
+                                                            },
+                                                        ))
+                                                        .child(state.render_parent_row(cx))
+                                                        .into_any_element();
                                                 }
-                                            }
-                                        }))
-                                        .context_menu(move |menu, window, cx| {
-                                            Self::build_context_menu(
-                                                menu,
-                                                &ctx_name,
-                                                &ctx_full_path,
-                                                ctx_is_dir,
-                                                &ctx_view,
-                                                window,
-                                                cx,
-                                            )
-                                        })
-                                        .child(state.render_file_row(item, is_selected, cx))
-                                        .into_any_element()
-                                })
-                                .collect()
-                        })
-                    })
-                    .flex_1()
-                    .size_full()
-                    .track_scroll(&scroll_handle)
-                    .with_sizing_behavior(ListSizingBehavior::Auto),
+
+                                                let filtered_ix =
+                                                    if has_parent { list_ix - 1 } else { list_ix };
+                                                let real_ix = state.filtered_indices[filtered_ix];
+                                                let item = &state.items[real_ix];
+                                                let is_selected =
+                                                    state.selected_indices.contains(&filtered_ix);
+                                                let item_name = item.name.clone();
+                                                let is_dir = item.is_dir;
+                                                let full_path = if current_path.ends_with('/') {
+                                                    format!("{}{}", current_path, item_name)
+                                                } else {
+                                                    format!("{}/{}", current_path, item_name)
+                                                };
+
+                                                // 右键菜单变量
+                                                let ctx_name = item_name.clone();
+                                                let ctx_full_path = full_path.clone();
+                                                let ctx_is_dir = is_dir;
+                                                let ctx_view = view.clone();
+
+                                                div()
+                                                    .id(list_ix)
+                                                    .cursor_pointer()
+                                                    .hover(|s| s.bg(cx.theme().list_hover))
+                                                    .on_mouse_down(
+                                                        MouseButton::Left,
+                                                        cx.listener(
+                                                            move |this,
+                                                                  event: &MouseDownEvent,
+                                                                  _window,
+                                                                  cx| {
+                                                                let multi_select =
+                                                                    event.modifiers.secondary();
+                                                                this.toggle_selection(
+                                                                    filtered_ix,
+                                                                    multi_select,
+                                                                );
+                                                                cx.notify();
+                                                            },
+                                                        ),
+                                                    )
+                                                    .on_double_click(cx.listener({
+                                                        let name = item_name.clone();
+                                                        let fp = full_path.clone();
+                                                        move |this, _, _window, cx| {
+                                                            if is_dir {
+                                                                this.navigate_to(
+                                                                    fp.clone(),
+                                                                    cx,
+                                                                );
+                                                            } else {
+                                                                cx.write_to_clipboard(
+                                                                    ClipboardItem::new_string(
+                                                                        name.clone(),
+                                                                    ),
+                                                                );
+                                                            }
+                                                        }
+                                                    }))
+                                                    .context_menu(
+                                                        move |menu, window, cx| {
+                                                            Self::build_context_menu(
+                                                                menu,
+                                                                &ctx_name,
+                                                                &ctx_full_path,
+                                                                ctx_is_dir,
+                                                                &ctx_view,
+                                                                window,
+                                                                cx,
+                                                            )
+                                                        },
+                                                    )
+                                                    .child(state.render_file_row(
+                                                        item,
+                                                        is_selected,
+                                                        cx,
+                                                    ))
+                                                    .into_any_element()
+                                            })
+                                            .collect()
+                                    },
+                                )
+                            })
+                            .flex_1()
+                            .size_full()
+                            .track_scroll(&scroll_handle)
+                            .with_sizing_behavior(ListSizingBehavior::Auto),
+                        )
+                        .when(is_dragging, |el| el.child(self.render_drop_overlay(cx))),
                 )
             })
+            // 底部传输进度条
+            .when(has_active_transfer, |el| {
+                el.child(self.render_transfer_progress(cx))
+            })
     }
+}
+
+/// 获取远程路径的父目录
+fn remote_path_parent(path: &str) -> String {
+    if path == "/" || path.is_empty() {
+        "/".to_string()
+    } else {
+        let trimmed = path.trim_end_matches('/');
+        match trimmed.rfind('/') {
+            Some(0) => "/".to_string(),
+            Some(pos) => trimmed[..pos].to_string(),
+            None => "/".to_string(),
+        }
+    }
+}
+
+/// 从上传操作中推断远程目标的父目录
+fn remote_path_parent_of_upload(_local_path: &PathBuf, remote_path: &str) -> String {
+    remote_path.to_string()
 }
 
 impl EventEmitter<FileManagerPanelEvent> for FileManagerPanel {}
