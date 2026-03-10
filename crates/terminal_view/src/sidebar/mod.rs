@@ -117,6 +117,8 @@ pub struct TerminalSidebar {
     ai_chat_panel: Entity<AiChatPanel>,
     /// 文件管理器面板（仅 SSH 终端时创建）
     file_manager_panel: Option<Entity<FileManagerPanel>>,
+    /// 路径与终端同步开关（默认开启）
+    sync_path_enabled: bool,
     /// 焦点句柄
     focus_handle: FocusHandle,
     /// 终端主题配色（用于侧边栏工具栏）
@@ -134,7 +136,9 @@ impl TerminalSidebar {
         cx: &mut Context<Self>,
     ) -> Self {
         let colors = initial_theme.colors();
-        let settings_panel = cx.new(|cx| SettingsPanel::new(initial_theme, window, cx));
+        let has_file_manager = stored_connection.is_some();
+        let settings_panel =
+            cx.new(|cx| SettingsPanel::new(initial_theme, has_file_manager, window, cx));
         let quick_command_panel = cx.new(|cx| QuickCommandPanel::new(connection_id, window, cx));
         let ai_chat_panel = cx.new(|cx| AiChatPanel::new(window, cx));
 
@@ -203,6 +207,9 @@ impl TerminalSidebar {
                         *enabled,
                     ));
                 }
+                settings_panel::SettingsPanelEvent::SyncPathChanged(enabled) => {
+                    this.sync_path_enabled = *enabled;
+                }
             },
         );
 
@@ -253,6 +260,7 @@ impl TerminalSidebar {
             quick_command_panel,
             ai_chat_panel,
             file_manager_panel,
+            sync_path_enabled: true,
             focus_handle: cx.focus_handle(),
             colors,
             _subs: subs,
@@ -346,6 +354,20 @@ impl TerminalSidebar {
         self.quick_command_panel.update(cx, |panel, cx| {
             panel.add_command_external(command, cx);
         });
+    }
+
+    /// 从终端 OSC 7 同步路径到文件管理器
+    ///
+    /// 检查 `sync_path_enabled` 且存在文件管理器面板时，导航到指定路径。
+    pub fn sync_file_manager_path(&mut self, path: String, cx: &mut Context<Self>) {
+        if !self.sync_path_enabled {
+            return;
+        }
+        if let Some(ref fm_panel) = self.file_manager_panel {
+            fm_panel.update(cx, |panel, cx| {
+                panel.sync_navigate_to(path, cx);
+            });
+        }
     }
 
     /// 渲染工具栏按钮

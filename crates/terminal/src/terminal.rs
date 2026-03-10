@@ -44,6 +44,8 @@ pub enum TerminalModelEvent {
     ChildExit(i32),
     /// 终端程序请求存储到剪贴板
     ClipboardStore(String),
+    /// 远程工作目录变更（OSC 7）
+    WorkingDirChanged(String),
 }
 
 /// 终端连接状态
@@ -274,12 +276,13 @@ impl Terminal {
                     }
                 }
             }
-            // 执行初始化脚本
-            if commands.is_empty() {
-                None
-            } else {
-                Some(commands.join("\n"))
-            }
+            // 注入 PROMPT_COMMAND，让 bash 每次命令后发送 OSC 7 序列
+            // 保留用户已有的 PROMPT_COMMAND
+            commands.push(
+                r#"export PROMPT_COMMAND='printf "\033]7;file://%s%s\007" "$HOSTNAME" "$PWD"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}"#
+                    .to_string(),
+            );
+            Some(commands.join("\n"))
         };
 
         let ssh_config = SshConnectConfig {
@@ -499,6 +502,7 @@ impl Terminal {
                 config.pty_config,
                 term,
                 event_proxy,
+                event_tx,
                 notify_tx,
                 disconnect_tx,
             )
@@ -600,6 +604,9 @@ impl Terminal {
             }
             TerminalEvent::ClipboardLoad(_ty) => {
                 // 剪贴板加载由 TerminalView 处理
+            }
+            TerminalEvent::WorkingDirChanged(path) => {
+                cx.emit(TerminalModelEvent::WorkingDirChanged(path));
             }
         }
     }

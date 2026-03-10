@@ -507,6 +507,19 @@ impl FileManagerPanel {
         }
     }
 
+    /// 从终端 OSC 7 同步导航到指定路径
+    ///
+    /// 仅在已连接且路径不同时才导航，避免不必要的刷新。
+    pub fn sync_navigate_to(&mut self, path: String, cx: &mut Context<Self>) {
+        if self.connection_state != ConnectionState::Connected {
+            return;
+        }
+        if path == self.current_path {
+            return;
+        }
+        self.navigate_to(path, cx);
+    }
+
     // ── 目录浏览 ──────────────────────────────────────────────
 
     /// 刷新当前目录

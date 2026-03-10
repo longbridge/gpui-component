@@ -551,6 +551,12 @@ impl TerminalView {
             TerminalModelEvent::ClipboardStore(data) => {
                 cx.write_to_clipboard(ClipboardItem::new_string(data.clone()));
             }
+            TerminalModelEvent::WorkingDirChanged(path) => {
+                let path = path.clone();
+                self.sidebar.update(cx, |sidebar, cx| {
+                    sidebar.sync_file_manager_path(path, cx);
+                });
+            }
         }
     }
 

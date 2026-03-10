@@ -299,6 +299,14 @@ Settings:
     en: Confirm high-risk command paste
     zh-CN: 高危命令粘贴需确认
     zh-HK: 高危命令貼上需確認
+  file_manager_section:
+    en: FILE MANAGER
+    zh-CN: 文件管理器
+    zh-HK: 文件管理器
+  sync_path_with_terminal:
+    en: Sync path with terminal
+    zh-CN: 路径与终端同步
+    zh-HK: 路徑與終端同步
 
 # 右键菜单
 ContextMenu:
