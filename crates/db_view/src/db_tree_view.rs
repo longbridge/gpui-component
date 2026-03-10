@@ -26,7 +26,7 @@ use gpui_component::{
     v_flex,
 };
 use rust_i18n::t;
-use tracing::log::{error, info, trace};
+use tracing::log::{error, info, trace, warn};
 
 // 3. 当前 crate 导入（按模块分组）
 use crate::database_view_plugin::DatabaseViewPluginRegistry;
@@ -891,6 +891,46 @@ impl DbTreeView {
         }
     }
 
+    /// 确保数据库节点存在于树中并展开
+    pub fn ensure_database_node_expanded(
+        &mut self,
+        connection_id: &str,
+        database_name: &str,
+        cx: &mut Context<Self>,
+    ) -> Option<String> {
+        if database_name.is_empty() {
+            return None;
+        }
+
+        // 确认连接存在
+        if !self.db_nodes.contains_key(connection_id) {
+            return None;
+        }
+
+        let mut node_id = self.find_database_node(connection_id, database_name);
+        if node_id.is_none() {
+            self.add_database_to_selection(connection_id, database_name, cx);
+            self.add_database_node(connection_id, database_name, cx);
+            node_id = self.find_database_node(connection_id, database_name);
+        } else {
+            // 确保筛选状态包含该数据库
+            self.add_database_to_selection(connection_id, database_name, cx);
+        }
+
+        let Some(node_id) = node_id else {
+            return None;
+        };
+
+        self.expanded_nodes.insert(connection_id.to_string());
+        self.expanded_nodes.insert(node_id.clone());
+
+        self.lazy_load_children(connection_id.to_string(), cx);
+        self.lazy_load_children(node_id.clone(), cx);
+        self.rebuild_tree(cx);
+
+        Some(node_id)
+    }
+
     /// 保存数据库筛选状态到存储
     fn save_database_filter(&self, connection_id: &str, cx: &mut Context<Self>) {
         let selected_dbs: Option<Vec<String>> = match self.selected_databases.get(connection_id) {
@@ -902,8 +942,15 @@ impl DbTreeView {
             }
         };
 
+        let Some(storage_state) = cx.try_global::<GlobalStorageState>() else {
+            warn!(
+                "GlobalStorageState 不存在，无法持久化连接 {} 的数据库筛选状态",
+                connection_id
+            );
+            return;
+        };
         let connection_id_str = connection_id.to_string();
-        let storage = cx.global::<GlobalStorageState>().storage.clone();
+        let storage = storage_state.storage.clone();
 
         cx.spawn(async move |_view, cx| {
             use one_core::gpui_tokio::Tokio;
@@ -1126,7 +1173,14 @@ impl DbTreeView {
         self.loading_nodes.insert(node_id.clone());
         cx.notify();
 
-        let global_state = cx.global::<GlobalDbState>().clone();
+        let Some(global_state) = cx.try_global::<GlobalDbState>() else {
+            warn!(
+                "GlobalDbState 不存在，无法加载连接 {} 的子节点",
+                &node.connection_id
+            );
+            return;
+        };
+        let global_state = global_state.clone();
         let clone_node_id = node_id.clone();
         let connection_id = node.connection_id.clone();
         let node_type = node.node_type.clone();

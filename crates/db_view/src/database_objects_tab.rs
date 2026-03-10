@@ -45,6 +45,9 @@ pub enum DatabaseObjectsEvent {
     /// 刷新当前视图
     Refresh { node: DbNode },
 
+    /// 将数据库添加到树视图并展开
+    AddDatabaseToTree { node: DbNode },
+
     /// 新建数据库
     CreateDatabase { node: DbNode },
 
@@ -216,78 +219,16 @@ impl DatabaseObjects {
     }
 
     fn handle_row_double_click(&self, row: usize, cx: &mut Context<Self>) {
-        let Some(current_node) = &self.current_node else {
+        let Some(node) = self.build_node_for_row(row) else {
             return;
         };
-
-        let Some(original_row) = self.filtered_rows.get(row).copied() else {
-            return;
-        };
-
-        let row_data = self.rows.get(original_row).cloned();
-        let Some(row_values) = row_data else {
-            return;
-        };
-
-        // 获取双击的第一列值（名称）
-        let cell_value = row_values.first().cloned().unwrap_or_default();
-        if cell_value.is_empty() {
-            return;
-        }
-
-        let db_node_type = self.db_node_type.clone();
-        let connection_id = current_node.connection_id.clone();
-
-        let mut current_metadata: HashMap<String, String> = current_node.metadata.clone();
-
-        current_metadata
-            .entry("database".to_string())
-            .or_insert_with(|| current_node.get_database_name().unwrap_or_default());
-        current_metadata
-            .entry("schema".to_string())
-            .or_insert_with(|| current_node.get_schema_name().unwrap_or_default());
-        current_metadata
-            .entry("table".to_string())
-            .or_insert_with(|| current_node.get_table_name().unwrap_or_default());
-
-        let node_id = match db_node_type {
-            DbNodeType::Table => {
-                format!("{}:table_folder:{}", current_node.id, cell_value)
-            }
-            DbNodeType::TablesFolder => {
-                format!("{}:{}", current_node.id, cell_value)
-            }
-            DbNodeType::View => {
-                format!("{}:view_folder:{}", current_node.id, cell_value)
-            }
-            DbNodeType::ViewsFolder => {
-                format!("{}:{}", current_node.id, cell_value)
-            }
-            DbNodeType::QueriesFolder | DbNodeType::NamedQuery => {
-                let query_id = row_values.get(1).cloned().unwrap_or_default();
-                current_metadata.insert("query_id".to_string(), query_id.clone());
-                format!("{}:queries:{}", connection_id, query_id)
-            }
-            _ => return,
-        };
-        let node = DbNode::new(
-            node_id,
-            cell_value,
-            db_node_type,
-            connection_id,
-            current_node.database_type,
-        )
-        .with_metadata(current_metadata);
 
         let event = match node.node_type {
             DbNodeType::Table => DatabaseObjectsEvent::OpenTableData { node },
             DbNodeType::View => DatabaseObjectsEvent::OpenViewData { node },
-            DbNodeType::QueriesFolder | DbNodeType::NamedQuery => {
-                DatabaseObjectsEvent::OpenNamedQuery { node }
-            }
-            _ => {
-                return;
-            }
+            DbNodeType::NamedQuery => DatabaseObjectsEvent::OpenNamedQuery { node },
+            DbNodeType::Database => DatabaseObjectsEvent::AddDatabaseToTree { node },
+            _ => return,
         };
 
         cx.emit(event);
@@ -521,7 +462,7 @@ impl DatabaseObjects {
         })
     }
 
-    fn build_node_for_row(&self, row_ix: usize, _cx: &Context<Self>) -> Option<DbNode> {
+    fn build_node_for_row(&self, row_ix: usize) -> Option<DbNode> {
         let db_node_type = self.db_node_type.clone();
 
         let original_row = self.filtered_rows.get(row_ix).copied()?;
@@ -657,12 +598,12 @@ impl DatabaseObjects {
         )
     }
 
-    fn build_nodes_for_selected_rows(&self, cx: &Context<Self>) -> Vec<DbNode> {
+    fn build_nodes_for_selected_rows(&self) -> Vec<DbNode> {
         let mut selected_rows: Vec<usize> = self.selected_indices.iter().copied().collect();
         selected_rows.sort_unstable();
         selected_rows
             .into_iter()
-            .filter_map(|row_ix| self.build_node_for_row(row_ix, cx))
+            .filter_map(|row_ix| self.build_node_for_row(row_ix))
             .collect()
     }
 
@@ -890,7 +831,7 @@ impl DatabaseObjects {
                             .on_click(window.listener_for(
                                 &cx.entity(),
                                 move |this, _, window, cx| {
-                                    let nodes = this.build_nodes_for_selected_rows(cx);
+                                    let nodes = this.build_nodes_for_selected_rows();
                                     if nodes.is_empty() {
                                         window.push_notification(
                                             Notification::warning(t!("Common.select_row")),
