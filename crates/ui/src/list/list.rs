@@ -640,7 +640,7 @@ where
                             Size::Small => this.px_1p5(),
                             _ => this.px_2(),
                         })
-                        .bg(cx.theme().input_background)
+                        .bg(cx.theme().input_background())
                         .border_b_1()
                         .border_color(cx.theme().border)
                         .child(

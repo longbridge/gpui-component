@@ -795,9 +795,9 @@ where
         let outline_visible = self.open || is_focused && !self.options.disabled;
         let popup_radius = cx.theme().radius.min(px(8.));
 
-        let mut bg = cx.theme().input_background;
+        let mut bg = cx.theme().input_background();
         if self.options.disabled {
-            bg.a = (bg.a * 3.0).min(1.0);
+            bg.a = (bg.a / 0.3).min(1.0);
         }
         let fg = if self.options.disabled {
             cx.theme().muted_foreground

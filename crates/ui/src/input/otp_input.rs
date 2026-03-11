@@ -243,9 +243,9 @@ impl RenderOnce for OtpInput {
             groups.push(vec![]);
         }
 
-        let mut bg = cx.theme().input_background;
+        let mut bg = cx.theme().input_background();
         if self.disabled {
-            bg.a = (bg.a * 3.0).min(1.0);
+            bg.a = (bg.a / 0.3).min(1.0);
         }
         let fg = if self.disabled {
             cx.theme().muted_foreground

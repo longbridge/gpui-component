@@ -155,9 +155,6 @@ pub struct ThemeConfigColors {
     /// Info hover background color.
     #[serde(rename = "info.hover.background")]
     pub info_hover: Option<SharedString>,
-    /// Background color for inputs such as Input, Select, etc.
-    #[serde(rename = "input.background")]
-    pub input_background: Option<SharedString>,
     /// Border color for inputs such as Input, Select, etc.
     #[serde(rename = "input.border")]
     pub input: Option<SharedString>,
@@ -535,7 +532,6 @@ impl ThemeColor {
         apply_color!(description_list_label_foreground, fallback = self.muted_foreground);
         apply_color!(drag_border, fallback = self.primary.opacity(0.65));
         apply_color!(drop_target, fallback = self.primary.opacity(0.2));
-        apply_color!(input_background, fallback = self.background);
         apply_color!(input, fallback = self.border);
         apply_color!(link, fallback = self.primary);
         apply_color!(link_active, fallback = self.link);

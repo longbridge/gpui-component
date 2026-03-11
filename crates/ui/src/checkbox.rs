@@ -255,7 +255,7 @@ impl RenderOnce for Checkbox {
                         .rounded(radius)
                         .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
                         .map(|this| match checked {
-                            false => this.bg(cx.theme().input_background),
+                            false => this.bg(cx.theme().input_background()),
                             _ => this.bg(color),
                         })
                         .child(checkbox_check_icon(

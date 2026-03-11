@@ -179,13 +179,18 @@ impl Theme {
         }
     }
 
-    /// Get the editor background color, if not set, use the theme background color.
+    /// Get the editor background color, if not set, use the input background color.
     #[inline]
     pub(crate) fn editor_background(&self) -> Hsla {
         self.highlight_theme
             .style
             .editor_background
-            .unwrap_or(self.input_background)
+            .unwrap_or(self.input_background())
+    }
+
+    #[inline]
+    pub fn input_background(&self) -> Hsla {
+        self.primary.mix_oklab(self.transparent, 0.045)
     }
 }
 

@@ -261,10 +261,10 @@ impl RenderOnce for Input {
         let mut bg = if state.mode.is_code_editor() {
             cx.theme().editor_background()
         } else {
-            cx.theme().input_background
+            cx.theme().input_background()
         };
         if state.disabled {
-            bg.a = (bg.a * 3.0).min(1.0);
+            bg.a = (bg.a / 0.3).min(1.0);
         }
         let fg = if state.disabled {
             cx.theme().muted_foreground
