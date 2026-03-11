@@ -815,7 +815,7 @@ where
                     .when(self.options.appearance, |this| {
                         this.bg(bg)
                             .text_color(fg)
-                            .when(self.options.disabled, |this| this.opacity(0.3))
+                            .when(self.options.disabled, |this| this.opacity(0.5))
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
                             .when(cx.theme().shadow, |this| this.shadow_xs())

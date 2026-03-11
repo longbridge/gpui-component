@@ -137,7 +137,7 @@ impl RenderOnce for Radio {
         let (border_color, bg) = if checked {
             (cx.theme().primary, cx.theme().primary)
         } else {
-            (cx.theme().input, cx.theme().input.opacity(0.3))
+            (cx.theme().input, cx.theme().input.opacity(0.5))
         };
         let (border_color, bg) = if disabled {
             (border_color.opacity(0.5), bg.opacity(0.5))
