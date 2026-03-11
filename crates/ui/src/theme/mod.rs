@@ -185,7 +185,7 @@ impl Theme {
         self.highlight_theme
             .style
             .editor_background
-            .unwrap_or(self.background)
+            .unwrap_or(self.input_background)
     }
 }
 

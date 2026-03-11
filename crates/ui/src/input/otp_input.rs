@@ -243,6 +243,16 @@ impl RenderOnce for OtpInput {
             groups.push(vec![]);
         }
 
+        let mut bg = cx.theme().input_background;
+        if self.disabled {
+            bg.a = (bg.a * 3.0).min(1.0);
+        }
+        let fg = if self.disabled {
+            cx.theme().muted_foreground
+        } else {
+            cx.theme().foreground
+        };
+
         for ix in 0..state.length {
             let c = state.value.chars().nth(ix);
             if ix % group_items_count == 0 && ix != 0 {
@@ -256,11 +266,9 @@ impl RenderOnce for OtpInput {
                     .id(ix)
                     .border_1()
                     .border_color(cx.theme().input)
-                    .bg(cx.theme().background)
-                    .when(self.disabled, |this| {
-                        this.bg(cx.theme().muted)
-                            .text_color(cx.theme().muted_foreground)
-                    })
+                    .bg(bg)
+                    .text_color(fg)
+                    .when(self.disabled, |this| this.opacity(0.3))
                     .when(is_input_focused, |this| this.border_color(cx.theme().ring))
                     .when(cx.theme().shadow, |this| this.shadow_xs())
                     .items_center()

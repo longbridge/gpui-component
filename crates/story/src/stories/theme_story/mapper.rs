@@ -121,6 +121,7 @@ pub fn parse_theme_key(key: &str) -> ParsedKey {
         "tab_foreground" => ("Tab", "Foreground", "tab.foreground"),
 
         // Input
+        "input_background" => ("Input", "Background", "input.background"),
         "input" => ("Input", "Border", "input.border"),
         "caret" => ("Input", "Caret", "caret"),
         "selection" => ("Input", "Selection", "selection.background"),

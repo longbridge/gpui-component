@@ -1,8 +1,6 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
-    IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
-    Styled, TextAlign, Window, div, px, relative,
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled, TextAlign, Window, div, px, relative
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -260,14 +258,18 @@ impl RenderOnce for Input {
             _ => px(6.),
         };
 
-        let bg = if state.disabled {
-            cx.theme().muted
+        let mut bg = if state.mode.is_code_editor() {
+            cx.theme().editor_background()
         } else {
-            if state.mode.is_code_editor() {
-                cx.theme().editor_background()
-            } else {
-                cx.theme().background
-            }
+            cx.theme().input_background
+        };
+        if state.disabled {
+            bg.a = (bg.a * 3.0).min(1.0);
+        }
+        let fg = if state.disabled {
+            cx.theme().muted_foreground
+        } else {
+            cx.theme().foreground
         };
 
         let prefix = self.prefix;
@@ -370,7 +372,7 @@ impl RenderOnce for Input {
             .input_py(self.size)
             .input_h(self.size)
             .input_text_size(self.size)
-            .cursor_text()
+            .when(!self.disabled, |this| this.cursor_text())
             .items_center()
             .when(state.mode.is_multi_line(), |this| {
                 this.h_auto()
@@ -378,6 +380,8 @@ impl RenderOnce for Input {
             })
             .when(self.appearance, |this| {
                 this.bg(bg)
+                    .text_color(fg)
+                    .when(self.disabled, |this| this.opacity(0.3))
                     .rounded(cx.theme().radius)
                     .when(self.bordered, |this| {
                         this.border_color(cx.theme().input)

@@ -368,6 +368,16 @@ impl RenderOnce for DatePicker {
             .format(&state.date_format)
             .unwrap_or(placeholder.clone());
 
+        let mut bg = cx.theme().input_background;
+        if self.disabled {
+            bg.a = (bg.a * 3.0).min(1.0);
+        }
+        let fg = if self.disabled {
+            cx.theme().muted_foreground
+        } else {
+            cx.theme().foreground
+        };
+
         div()
             .id(self.id.clone())
             .key_context(CONTEXT)
@@ -390,16 +400,14 @@ impl RenderOnce for DatePicker {
                     .items_center()
                     .justify_between()
                     .when(self.appearance, |this| {
-                        this.bg(cx.theme().background)
+                        this.bg(bg)
+                            .text_color(fg)
+                            .when(self.disabled, |this| this.opacity(0.3))
                             .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
                             .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(is_focused, |this| this.focused_border(cx))
-                            .when(self.disabled, |this| {
-                                this.bg(cx.theme().muted)
-                                    .text_color(cx.theme().muted_foreground)
-                            })
                     })
                     .overflow_hidden()
                     .input_text_size(self.size)
