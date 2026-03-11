@@ -50,10 +50,6 @@ impl SyntaxHighlighter {
     pub fn tree(&self) -> Option<&crate::input::Tree> {
         None
     }
-
-    pub(crate) fn apply_background_tree(&mut self, _tree: crate::input::Tree, _text: &ropey::Rope) {
-        // No-op in WASM
-    }
 }
 
 // Language enum stub

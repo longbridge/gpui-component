@@ -581,10 +581,12 @@ impl InputState {
             InputMode::CodeEditor {
                 language,
                 highlighter,
+                parse_task,
                 ..
             } => {
                 *language = new_language.into();
                 *highlighter.borrow_mut() = None;
+                parse_task.borrow_mut().take();
             }
             _ => {}
         }
@@ -593,8 +595,13 @@ impl InputState {
 
     fn reset_highlighter(&mut self, cx: &mut Context<Self>) {
         match &mut self.mode {
-            InputMode::CodeEditor { highlighter, .. } => {
+            InputMode::CodeEditor {
+                highlighter,
+                parse_task,
+                ..
+            } => {
                 *highlighter.borrow_mut() = None;
+                parse_task.borrow_mut().take();
             }
             _ => {}
         }
@@ -2074,9 +2081,16 @@ impl InputState {
             .as_ref()
             .and_then(|h| h.tree().cloned());
 
+        // Extract injection parse data on the main thread before spawning, so that
+        // compute_injection_layers can also run on the background thread.
+        let injection_data = highlighter_rc
+            .borrow()
+            .as_ref()
+            .and_then(|h| h.injection_parse_data());
+
         let text_for_apply = text.clone();
         let task = cx.spawn_in(window, async move |entity, cx| {
-            let new_tree = cx
+            let result = cx
                 .background_executor()
                 .spawn(async move {
                     let Some(config) = LanguageRegistry::singleton().language(&language) else {
@@ -2088,7 +2102,7 @@ impl InputState {
                         return None;
                     }
 
-                    parser.parse_with_options(
+                    let new_tree = parser.parse_with_options(
                         &mut |offset, _| {
                             if offset >= text.len() {
                                 ""
@@ -2099,13 +2113,25 @@ impl InputState {
                         },
                         old_tree.as_ref(),
                         None,
-                    )
+                    )?;
+
+                    // Compute injection layers in the background to avoid blocking the
+                    // main thread with combined-injection parsing (e.g. PHP, HTML+JS/CSS).
+                    let injection_layers = if let Some(data) = injection_data {
+                        crate::highlighter::SyntaxHighlighter::compute_injection_layers(
+                            data, &new_tree, &text,
+                        )
+                    } else {
+                        Default::default()
+                    };
+
+                    Some((new_tree, injection_layers))
                 })
                 .await;
 
-            if let Some(new_tree) = new_tree {
+            if let Some((new_tree, injection_layers)) = result {
                 if let Some(h) = highlighter_rc.borrow_mut().as_mut() {
-                    h.apply_background_tree(new_tree, &text_for_apply);
+                    h.apply_background_tree(new_tree, &text_for_apply, injection_layers);
                 }
 
                 // Trigger re-render so the new highlights are displayed.

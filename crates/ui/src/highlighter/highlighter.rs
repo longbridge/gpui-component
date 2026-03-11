@@ -4,6 +4,7 @@ use anyhow::{Context, Result, anyhow};
 use gpui::{HighlightStyle, SharedString};
 
 use ropey::{ChunkCursor, Rope};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{
     collections::{BTreeSet, HashMap},
@@ -25,7 +26,7 @@ pub struct SyntaxHighlighter {
     language: SharedString,
     query: Option<Query>,
     /// A separate query for injection patterns that have `#set! injection.combined`.
-    combined_injections_query: Option<Query>,
+    combined_injections_query: Option<Arc<Query>>,
     injection_queries: HashMap<SharedString, Query>,
 
     locals_pattern_index: usize,
@@ -53,8 +54,16 @@ pub struct SyntaxHighlighter {
 
 /// A parsed injection layer.
 /// Stores the parsed tree and the ranges it covers.
-struct InjectionLayer {
-    tree: Tree,
+pub(crate) struct InjectionLayer {
+    pub(crate) tree: Tree,
+}
+
+/// Data needed to compute injection layers on a background thread.
+pub(crate) struct InjectionParseData {
+    pub(crate) query: Arc<Query>,
+    pub(crate) content_capture_index: Option<u32>,
+    /// Old injection trees for incremental re-parsing.
+    pub(crate) old_layers: HashMap<SharedString, Tree>,
 }
 
 struct TextProvider<'a>(&'a Rope);
@@ -263,7 +272,7 @@ impl SyntaxHighlighter {
                         ciq.disable_pattern(pattern_index);
                     }
                 }
-                if has_combined_query { Some(ciq) } else { None }
+                if has_combined_query { Some(Arc::new(ciq)) } else { None }
             } else {
                 None
             }
@@ -448,36 +457,38 @@ impl SyntaxHighlighter {
         true
     }
 
-    /// Apply a tree that was parsed on a background thread.
-    pub(crate) fn apply_background_tree(&mut self, tree: Tree, text: &Rope) {
-        // Only apply if the text still matches what was parsed.
-        if !self.text.eq(text) {
-            return;
-        }
-
-        self.tree = Some(tree.clone());
-        self.parse_combined_injections(&tree);
+    /// Returns the data needed to compute injection layers on a background thread.
+    /// Returns `None` if this language has no combined injections.
+    pub(crate) fn injection_parse_data(&self) -> Option<InjectionParseData> {
+        let query = self.combined_injections_query.clone()?;
+        Some(InjectionParseData {
+            query,
+            content_capture_index: self.combined_injection_content_capture_index,
+            old_layers: self
+                .injection_layers
+                .iter()
+                .map(|(k, v)| (k.clone(), v.tree.clone()))
+                .collect(),
+        })
     }
 
-    /// Parse all combined injections after main tree is updated.
-    /// pattern: parse once in update, query many times in render.
-    fn parse_combined_injections(&mut self, tree: &Tree) {
-        let Some(combined_query) = &self.combined_injections_query else {
-            return;
-        };
-
-        // Note: Tree edit history is handled in update() via parser.parse_with_options(old_tree)
-
+    /// Compute injection layers from a freshly-parsed main tree.
+    /// This is pure computation with no side effects and is safe to run on a
+    /// background thread.
+    pub(crate) fn compute_injection_layers(
+        data: InjectionParseData,
+        tree: &Tree,
+        text: &Rope,
+    ) -> HashMap<SharedString, InjectionLayer> {
         let root_node = tree.root_node();
         let mut cursor = QueryCursor::new();
-        let mut matches = cursor.matches(combined_query, root_node, TextProvider(&self.text));
+        let mut matches = cursor.matches(&data.query, root_node, TextProvider(text));
 
-        // Group ranges by injection language
         let mut combined_ranges: HashMap<SharedString, Vec<tree_sitter::Range>> = HashMap::new();
         while let Some(query_match) = matches.next() {
             let mut language_name: Option<SharedString> = None;
-
-            if let Some(prop) = combined_query
+            if let Some(prop) = data
+                .query
                 .property_settings(query_match.pattern_index)
                 .iter()
                 .find(|prop| prop.key.as_ref() == "injection.language")
@@ -487,15 +498,13 @@ impl SyntaxHighlighter {
                     .as_ref()
                     .map(|v| SharedString::from(v.to_string()));
             }
-
             let Some(language_name) = language_name else {
                 continue;
             };
-
             for capture in query_match
                 .captures
                 .iter()
-                .filter(|cap| Some(cap.index) == self.combined_injection_content_capture_index)
+                .filter(|cap| Some(cap.index) == data.content_capture_index)
             {
                 combined_ranges
                     .entry(language_name.clone())
@@ -504,16 +513,14 @@ impl SyntaxHighlighter {
             }
         }
 
-        // Parse each combined language group with incremental parsing
+        let mut new_layers = HashMap::new();
         for (language_name, ranges) in combined_ranges {
             if ranges.is_empty() {
                 continue;
             }
-
             let Some(config) = LanguageRegistry::singleton().language(&language_name) else {
                 continue;
             };
-
             let mut parser = Parser::new();
             if parser.set_language(&config.language).is_err() {
                 continue;
@@ -521,19 +528,13 @@ impl SyntaxHighlighter {
             if parser.set_included_ranges(&ranges).is_err() {
                 continue;
             }
-
-            // Try to reuse old tree for incremental parsing
-            let old_tree = self
-                .injection_layers
-                .get(&language_name)
-                .map(|layer| &layer.tree);
-
+            let old_tree = data.old_layers.get(&language_name);
             let Some(new_tree) = parser.parse_with_options(
                 &mut |offset, _| {
-                    if offset >= self.text.len() {
+                    if offset >= text.len() {
                         ""
                     } else {
-                        let (chunk, chunk_byte_ix) = self.text.chunk(offset);
+                        let (chunk, chunk_byte_ix) = text.chunk(offset);
                         &chunk[offset - chunk_byte_ix..]
                     }
                 },
@@ -542,11 +543,39 @@ impl SyntaxHighlighter {
             ) else {
                 continue;
             };
-
-            // Store the parsed layer
-            self.injection_layers
-                .insert(language_name, InjectionLayer { tree: new_tree });
+            new_layers.insert(language_name, InjectionLayer { tree: new_tree });
         }
+        new_layers
+    }
+
+    /// Apply a tree that was parsed on a background thread.
+    ///
+    /// `injection_layers` must also be pre-computed in the background via
+    /// [`compute_injection_layers`] to avoid blocking the main thread.
+    pub(crate) fn apply_background_tree(
+        &mut self,
+        tree: Tree,
+        text: &Rope,
+        injection_layers: HashMap<SharedString, InjectionLayer>,
+    ) {
+        // Only apply if the text still matches what was parsed.
+        if !self.text.eq(text) {
+            return;
+        }
+
+        self.tree = Some(tree);
+        self.injection_layers = injection_layers;
+    }
+
+    /// Parse all combined injections after main tree is updated.
+    /// pattern: parse once in update, query many times in render.
+    /// Parse all combined injections after main tree is updated.
+    /// pattern: parse once in update, query many times in render.
+    fn parse_combined_injections(&mut self, tree: &Tree) {
+        let Some(data) = self.injection_parse_data() else {
+            return;
+        };
+        self.injection_layers = Self::compute_injection_layers(data, tree, &self.text.clone());
     }
 
     /// Match the visible ranges of nodes in the Tree for highlighting.
