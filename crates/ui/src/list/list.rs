@@ -1,12 +1,12 @@
-use std::ops::Range;
 use instant::Duration;
+use std::ops::Range;
 
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::input::InputState;
 use crate::list::cache::{MeasuredEntrySize, RowEntry, RowsCache};
 use crate::{
     ActiveTheme, IconName, Size,
-    input::{Input, InputEvent, input_bg},
+    input::{Input, InputEvent},
     scroll::Scrollbar,
     v_flex,
 };
@@ -287,7 +287,10 @@ where
                     });
 
                     // Always wait 100ms to avoid flicker
-                    window.background_executor().timer(Duration::from_millis(100)).await;
+                    window
+                        .background_executor()
+                        .timer(Duration::from_millis(100))
+                        .await;
                     _ = this.update_in(window, |this, window, cx| {
                         this.set_searching(false, window, cx);
                     });
@@ -640,7 +643,7 @@ where
                             Size::Small => this.px_1p5(),
                             _ => this.px_2(),
                         })
-                        .bg(input_bg(cx))
+                        .bg(cx.theme().input_background())
                         .border_b_1()
                         .border_color(cx.theme().border)
                         .child(

@@ -10,7 +10,7 @@ use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
 use crate::spinner::Spinner;
-use crate::{ActiveTheme, Colorize, v_flex};
+use crate::{ActiveTheme, v_flex};
 use crate::{IconName, Size};
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
