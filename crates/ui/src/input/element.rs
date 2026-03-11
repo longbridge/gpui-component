@@ -1062,7 +1062,7 @@ impl TextElement {
                     flush_range(start, line - 1, false, &mut styles);
                 }
 
-                flush_range(line, line + 1, true, &mut styles);
+                flush_range(line, line, true, &mut styles);
                 continue;
             }
 
