@@ -14,7 +14,7 @@ use gpui_component::{
 
 pub struct ScrollbarStory {
     focus_handle: FocusHandle,
-    items: Vec<String>,
+    items: Rc<Vec<String>>,
     item_sizes: Rc<Vec<Size<Pixels>>>,
     test_width: Pixels,
     size_mode: usize,
@@ -25,7 +25,7 @@ const ITEM_HEIGHT: Pixels = px(50.);
 
 impl ScrollbarStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
+        let items: Rc<Vec<String>> = Rc::new((0..5000).map(|i| format!("Item {}", i)).collect());
         let test_width = px(3000.);
         let item_sizes = items
             .iter()
@@ -49,18 +49,16 @@ impl ScrollbarStory {
     pub fn change_test_cases(&mut self, n: usize, cx: &mut Context<Self>) {
         self.size_mode = n;
         if n == 0 {
-            self.items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
+            self.items = Rc::new((0..5000).map(|i| format!("Item {}", i)).collect());
             self.test_width = px(3000.);
         } else if n == 1 {
-            self.items = (0..100).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
+            self.items = Rc::new((0..100).map(|i| format!("Item {}", i)).collect());
             self.test_width = px(10000.);
         } else if n == 2 {
-            self.items = (0..500000)
-                .map(|i| format!("Item {}", i))
-                .collect::<Vec<_>>();
+            self.items = Rc::new((0..500000).map(|i| format!("Item {}", i)).collect());
             self.test_width = px(10000.);
         } else {
-            self.items = (0..5).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
+            self.items = Rc::new((0..5).map(|i| format!("Item {}", i)).collect());
             self.test_width = px(10000.);
         }
 
