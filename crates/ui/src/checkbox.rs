@@ -1,8 +1,8 @@
 use std::{rc::Rc, time::Duration};
 
 use crate::{
-    icon::IconNamed, text::Text, v_flex, ActiveTheme, Disableable, FocusableExt, IconName,
-    Selectable, Sizable, Size, StyledExt as _,
+    icon::IconNamed, input::input_bg, text::Text, v_flex, ActiveTheme, Disableable, FocusableExt,
+    IconName, Selectable, Sizable, Size, StyledExt as _,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, rems, svg, Animation, AnimationExt, AnyElement,
@@ -255,7 +255,7 @@ impl RenderOnce for Checkbox {
                         .rounded(radius)
                         .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
                         .map(|this| match checked {
-                            false => this.bg(cx.theme().input_background()),
+                            false => this.bg(input_bg(cx)),
                             _ => this.bg(color),
                         })
                         .child(checkbox_check_icon(

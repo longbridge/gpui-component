@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use crate::{
-    checkbox::checkbox_check_icon, h_flex, text::Text, v_flex, ActiveTheme, AxisExt,
-    FocusableExt as _, Sizable, Size, StyledExt,
+    checkbox::checkbox_check_icon, h_flex, input::input_bg, text::Text, v_flex, ActiveTheme,
+    AxisExt, FocusableExt as _, Sizable, Size, StyledExt,
 };
 use gpui::{
     div, prelude::FluentBuilder, px, relative, rems, AnyElement, App, Axis, Div, ElementId,
@@ -187,7 +187,7 @@ impl RenderOnce for Radio {
                         .border_color(border_color)
                         .when(cx.theme().shadow && !disabled, |this| this.shadow_xs())
                         .map(|this| match self.checked {
-                            false => this.bg(cx.theme().input_background()),
+                            false => this.bg(input_bg(cx)),
                             _ => this.bg(bg),
                         })
                         .child(checkbox_check_icon(

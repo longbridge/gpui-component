@@ -5,7 +5,7 @@ use gpui::{
     prelude::FluentBuilder, px,
 };
 
-use super::{InputEvent, blink_cursor::BlinkCursor};
+use super::{InputEvent, blink_cursor::BlinkCursor, input::input_style};
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 
 pub struct OtpState {
@@ -243,15 +243,7 @@ impl RenderOnce for OtpInput {
             groups.push(vec![]);
         }
 
-        let mut bg = cx.theme().input_background();
-        if self.disabled {
-            bg.a = (bg.a / 0.3).min(1.0);
-        }
-        let fg = if self.disabled {
-            cx.theme().muted_foreground
-        } else {
-            cx.theme().foreground
-        };
+        let (bg, fg) = input_style(self.disabled, cx);
 
         for ix in 0..state.length {
             let c = state.value.chars().nth(ix);

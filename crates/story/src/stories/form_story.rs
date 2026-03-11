@@ -195,7 +195,6 @@ impl Render for FormStory {
                                 .border_1()
                                 .border_color(cx.theme().border)
                                 .rounded(cx.theme().radius)
-                                .bg(cx.theme().input_background())
                                 .child(
                                     div().w(px(90.)).child(
                                         Select::new(&self.name_prefix_state)

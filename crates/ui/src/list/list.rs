@@ -6,7 +6,7 @@ use crate::input::InputState;
 use crate::list::cache::{MeasuredEntrySize, RowEntry, RowsCache};
 use crate::{
     ActiveTheme, IconName, Size,
-    input::{Input, InputEvent},
+    input::{Input, InputEvent, input_bg},
     scroll::Scrollbar,
     v_flex,
 };
@@ -640,7 +640,7 @@ where
                             Size::Small => this.px_1p5(),
                             _ => this.px_2(),
                         })
-                        .bg(cx.theme().input_background())
+                        .bg(input_bg(cx))
                         .border_b_1()
                         .border_color(cx.theme().border)
                         .child(

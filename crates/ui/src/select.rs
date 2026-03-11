@@ -13,7 +13,7 @@ use crate::{
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     global_state::GlobalState,
     h_flex,
-    input::clear_button,
+    input::{clear_button, input_style},
     list::{List, ListDelegate, ListState},
     v_flex,
 };
@@ -795,15 +795,7 @@ where
         let outline_visible = self.open || is_focused && !self.options.disabled;
         let popup_radius = cx.theme().radius.min(px(8.));
 
-        let mut bg = cx.theme().input_background();
-        if self.options.disabled {
-            bg.a = (bg.a / 0.3).min(1.0);
-        }
-        let fg = if self.options.disabled {
-            cx.theme().muted_foreground
-        } else {
-            cx.theme().foreground
-        };
+        let (bg, fg) = input_style(self.options.disabled, cx);
 
         self.list
             .update(cx, |list, cx| list.set_searchable(searchable, cx));

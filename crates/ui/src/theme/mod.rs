@@ -185,16 +185,13 @@ impl Theme {
         self.highlight_theme
             .style
             .editor_background
-            .unwrap_or(self.input_background())
-    }
-
-    #[inline]
-    pub fn input_background(&self) -> Hsla {
-        if self.is_dark() {
-            self.primary.mix_oklab(self.transparent, 0.045)
-        } else {
-            self.primary.mix_oklab(self.background, 0.045).opacity(0.3)
-        }
+            .unwrap_or_else(|| {
+                if self.is_dark() {
+                    self.primary.mix_oklab(self.transparent, 0.045)
+                } else {
+                    self.primary.mix_oklab(self.background, 0.045).opacity(0.3)
+                }
+            })
     }
 }
 

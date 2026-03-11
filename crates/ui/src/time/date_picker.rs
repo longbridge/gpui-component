@@ -14,7 +14,7 @@ use crate::{
     actions::{Cancel, Confirm},
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{Delete, clear_button},
+    input::{Delete, clear_button, input_style},
     v_flex,
 };
 
@@ -368,15 +368,7 @@ impl RenderOnce for DatePicker {
             .format(&state.date_format)
             .unwrap_or(placeholder.clone());
 
-        let mut bg = cx.theme().input_background();
-        if self.disabled {
-            bg.a = (bg.a / 0.3).min(1.0);
-        }
-        let fg = if self.disabled {
-            cx.theme().muted_foreground
-        } else {
-            cx.theme().foreground
-        };
+        let (bg, fg) = input_style(self.disabled, cx);
 
         div()
             .id(self.id.clone())

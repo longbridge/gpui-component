@@ -1,6 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled, TextAlign, Window, div, px, relative
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
+    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Rems,
+    RenderOnce, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -8,12 +10,36 @@ use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
 use crate::spinner::Spinner;
-use crate::{ActiveTheme, v_flex};
+use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
 use super::InputState;
+
+/// Returns the input background color.
+/// In dark mode, matches shadcn: `color-mix(in oklab, var(--input) 30%, transparent)`
+pub(crate) fn input_bg(cx: &App) -> Hsla {
+    if cx.theme().is_dark() {
+        cx.theme().input.mix_oklab(cx.theme().transparent, 0.30)
+    } else {
+        cx.theme().background
+    }
+}
+
+/// Returns `(background, foreground)` colors for input-like components.
+pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
+    let mut bg = input_bg(cx);
+    if disabled {
+        bg.a = (bg.a / 0.3).min(1.0);
+    }
+    let fg = if disabled {
+        cx.theme().muted_foreground
+    } else {
+        cx.theme().foreground
+    };
+    (bg, fg)
+}
 
 /// A text input element bind to an [`InputState`].
 #[derive(IntoElement)]
@@ -258,18 +284,11 @@ impl RenderOnce for Input {
             _ => px(6.),
         };
 
-        let mut bg = if state.mode.is_code_editor() {
+        let (bg, fg) = input_style(state.disabled, cx);
+        let bg = if state.mode.is_code_editor() {
             cx.theme().editor_background()
         } else {
-            cx.theme().input_background()
-        };
-        if state.disabled {
-            bg.a = (bg.a / 0.3).min(1.0);
-        }
-        let fg = if state.disabled {
-            cx.theme().muted_foreground
-        } else {
-            cx.theme().foreground
+            bg
         };
 
         let prefix = self.prefix;
