@@ -394,7 +394,7 @@ impl RenderOnce for DatePicker {
                     .when(self.appearance, |this| {
                         this.bg(bg)
                             .text_color(fg)
-                            .when(self.disabled, |this| this.opacity(0.3))
+                            .when(self.disabled, |this| this.opacity(0.5))
                             .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
