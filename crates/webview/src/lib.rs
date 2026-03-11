@@ -70,7 +70,7 @@ impl WebView {
 
     /// Load a URL in the webview.
     pub fn load_url(&mut self, url: &str) {
-        self.webview.load_url(url).unwrap();
+        let _ = self.webview.load_url(url);
     }
 
     /// Get the raw wry webview.
@@ -188,18 +188,16 @@ impl Element for WebViewElement {
             return None;
         }
 
-        self.view
-            .set_bounds(Rect {
-                size: dpi::Size::Logical(LogicalSize {
-                    width: bounds.size.width.into(),
-                    height: bounds.size.height.into(),
-                }),
-                position: dpi::Position::Logical(dpi::LogicalPosition::new(
-                    bounds.origin.x.into(),
-                    bounds.origin.y.into(),
-                )),
-            })
-            .unwrap();
+        let _ = self.view.set_bounds(Rect {
+            size: dpi::Size::Logical(LogicalSize {
+                width: bounds.size.width.into(),
+                height: bounds.size.height.into(),
+            }),
+            position: dpi::Position::Logical(dpi::LogicalPosition::new(
+                bounds.origin.x.into(),
+                bounds.origin.y.into(),
+            )),
+        });
 
         // Create a hitbox to handle mouse event
         Some(window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal))
