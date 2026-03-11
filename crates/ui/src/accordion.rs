@@ -1,12 +1,12 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
-    div, prelude::FluentBuilder as _, rems, AnyElement, App, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled,
-    Window,
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
+    SharedString, StatefulInteractiveElement as _, Styled, Window, div,
+    prelude::FluentBuilder as _, rems,
 };
 
-use crate::{h_flex, v_flex, ActiveTheme as _, Icon, IconName, Sizable, Size};
+use crate::{ActiveTheme as _, Icon, IconName, Sizable, Size, h_flex, v_flex};
 
 /// Accordion element.
 #[derive(IntoElement)]
@@ -89,7 +89,7 @@ impl RenderOnce for Accordion {
         v_flex()
             .id(self.id)
             .size_full()
-            .when(self.bordered, |this| this.gap_1())
+            .when(self.bordered, |this| this.gap_y_2())
             .children(
                 self.children
                     .into_iter()
