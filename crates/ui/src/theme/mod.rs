@@ -190,7 +190,11 @@ impl Theme {
 
     #[inline]
     pub fn input_background(&self) -> Hsla {
-        self.primary.mix_oklab(self.transparent, 0.045)
+        if self.is_dark() {
+            self.primary.mix_oklab(self.transparent, 0.045)
+        } else {
+            self.primary.mix_oklab(self.background, 0.045).opacity(0.3)
+        }
     }
 }
 
