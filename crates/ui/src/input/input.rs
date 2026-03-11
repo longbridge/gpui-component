@@ -1,8 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
-    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Rems,
-    RenderOnce, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla, InteractiveElement as _,
+    IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
+    Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -17,19 +17,9 @@ use crate::{Sizable, StyleSized};
 
 use super::InputState;
 
-/// Returns the input background color.
-/// In dark mode, matches shadcn: `color-mix(in oklab, var(--input) 30%, transparent)`
-pub(crate) fn input_bg(cx: &App) -> Hsla {
-    if cx.theme().is_dark() {
-        cx.theme().input.mix_oklab(cx.theme().transparent, 0.30)
-    } else {
-        cx.theme().background
-    }
-}
-
 /// Returns `(background, foreground)` colors for input-like components.
 pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
-    let mut bg = input_bg(cx);
+    let mut bg = cx.theme().input_background();
     if disabled {
         bg.a = (bg.a / 0.3).min(1.0);
     }
