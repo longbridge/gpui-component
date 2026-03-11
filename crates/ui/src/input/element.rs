@@ -23,6 +23,7 @@ pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 const FOLD_ICON_WIDTH: Pixels = px(14.);
 const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
+const MAX_HIGHLIGHT_LINE_LENGTH: usize = 10_000;
 
 /// Layout information for fold icons.
 struct FoldIconLayout {
@@ -1030,19 +1031,55 @@ impl TextElement {
 
         let mut styles = Vec::with_capacity(visible_buffer_lines.len());
 
-        for &buffer_line in visible_buffer_lines {
-            let line_start = text.line_start_offset(buffer_line);
-            let line = text.slice_line(buffer_line);
-            let line_len = if is_multi_line {
+        // Helper to flush a contiguous range of lines
+        let flush_range = |start_line: usize, end_line: usize, skip: bool, styles: &mut Vec<_>| {
+            let byte_start = text.line_start_offset(start_line);
+            let byte_end = if is_multi_line {
                 // +1 for `\n`
-                line.len() + 1
+                text.line_start_offset(end_line + 1)
             } else {
-                line.len()
+                text.line_end_offset(end_line)
+            };
+            let range_styles = if skip {
+                vec![(byte_start..byte_end, HighlightStyle::default())]
+            } else {
+                highlighter.styles(&(byte_start..byte_end), &cx.theme().highlight_theme)
             };
 
-            let range = line_start..line_start + line_len;
-            let line_styles = highlighter.styles(&range, &cx.theme().highlight_theme);
-            styles = gpui::combine_highlights(styles, line_styles).collect();
+            *styles = gpui::combine_highlights(styles.clone(), range_styles).collect();
+        };
+
+        // Group contiguous visible lines into ranges and call styles() once per range
+        let mut visible_iter = visible_buffer_lines.iter().peekable();
+        let mut range_start: Option<usize> = None;
+
+        while let Some(&line) = visible_iter.next() {
+            // Check if this line is too long for highlighting
+            let line_len = text.slice_line(line).len();
+            if line_len > MAX_HIGHLIGHT_LINE_LENGTH {
+                // Flush any accumulated range first
+                if let Some(start) = range_start.take() {
+                    flush_range(start, line - 1, false, &mut styles);
+                }
+
+                flush_range(line, line, true, &mut styles);
+                continue;
+            }
+
+            range_start.get_or_insert(line);
+
+            // Check if next line is contiguous, if so keep accumulating
+            if visible_iter
+                .peek()
+                .map(|&&next| next == line + 1)
+                .unwrap_or(false)
+            {
+                continue;
+            }
+
+            // Flush the contiguous range
+            let start_line = range_start.take().unwrap();
+            flush_range(start_line, line, false, &mut styles);
         }
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);

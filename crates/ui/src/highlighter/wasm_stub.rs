@@ -5,6 +5,7 @@
 
 use gpui::{HighlightStyle, SharedString};
 use std::ops::Range;
+use std::time::Duration;
 
 // Syntax highlighter stub
 pub struct SyntaxHighlighter;
@@ -26,8 +27,24 @@ impl SyntaxHighlighter {
         Vec::new()
     }
 
-    pub fn update(&mut self, _edit: Option<crate::input::InputEdit>, _text: &ropey::Rope) {
+    pub fn update(
+        &mut self,
+        _edit: Option<crate::input::InputEdit>,
+        _text: &ropey::Rope,
+        _timeout: Option<Duration>,
+    ) -> bool {
         // No-op in WASM
+        true
+    }
+
+    pub fn language(&self) -> &SharedString {
+        static EMPTY: SharedString = SharedString::new_static("");
+        &EMPTY
+    }
+
+    pub fn text(&self) -> &ropey::Rope {
+        static EMPTY_ROPE: LazyLock<ropey::Rope> = LazyLock::new(ropey::Rope::new);
+        &EMPTY_ROPE
     }
 
     pub fn tree(&self) -> Option<&crate::input::Tree> {

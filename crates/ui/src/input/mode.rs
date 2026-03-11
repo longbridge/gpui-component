@@ -1,13 +1,22 @@
 use std::rc::Rc;
+use std::time::Duration;
 use std::{cell::RefCell, ops::Range};
 
-use gpui::{App, SharedString};
+use gpui::{App, SharedString, Task};
 use ropey::Rope;
 
 use super::display_map::DisplayMap;
 use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
 use crate::input::{InputEdit, RopeExt as _, TabSize};
+
+#[allow(dead_code)]
+pub(super) struct PendingBackgroundParse {
+    pub highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
+    pub parse_task: Rc<RefCell<Option<Task<()>>>>,
+    pub language: SharedString,
+    pub text: Rope,
+}
 
 #[derive(Clone)]
 pub(crate) enum InputMode {
@@ -35,6 +44,7 @@ pub(crate) enum InputMode {
         folding: bool,
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
         diagnostics: DiagnosticSet,
+        parse_task: Rc<RefCell<Option<Task<()>>>>,
     },
 }
 
@@ -67,6 +77,7 @@ impl InputMode {
             indent_guides: true,
             folding: true,
             diagnostics: DiagnosticSet::new(&Rope::new()),
+            parse_task: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -205,6 +216,11 @@ impl InputMode {
         }
     }
 
+    /// Update the syntax highlighter with new text.
+    ///
+    /// Returns `Some(PendingBackgroundParse)` when the synchronous parse
+    /// timed out and the caller should dispatch a background parse.
+    /// Returns `None` when parsing completed (or no highlighter is active).
     pub(super) fn update_highlighter(
         &mut self,
         selected_range: &Range<usize>,
@@ -212,25 +228,26 @@ impl InputMode {
         new_text: &str,
         force: bool,
         cx: &mut App,
-    ) {
+    ) -> Option<PendingBackgroundParse> {
         match &self {
             InputMode::CodeEditor {
                 language,
                 highlighter,
+                parse_task,
                 ..
             } => {
                 if !force && highlighter.borrow().is_some() {
-                    return;
+                    return None;
                 }
 
-                let mut highlighter = highlighter.borrow_mut();
-                if highlighter.is_none() {
+                let mut highlighter_ref = highlighter.borrow_mut();
+                if highlighter_ref.is_none() {
                     let new_highlighter = SyntaxHighlighter::new(language);
-                    highlighter.replace(new_highlighter);
+                    highlighter_ref.replace(new_highlighter);
                 }
 
-                let Some(highlighter) = highlighter.as_mut() else {
-                    return;
+                let Some(h) = highlighter_ref.as_mut() else {
+                    return None;
                 };
 
                 // When full text changed, the selected_range may be out of bound (The before version).
@@ -257,9 +274,25 @@ impl InputMode {
                     new_end_position: new_end_pos,
                 };
 
-                highlighter.update(Some(edit), text);
+                const SYNC_PARSE_TIMEOUT: Duration = Duration::from_millis(2);
+                let completed = h.update(Some(edit), text, Some(SYNC_PARSE_TIMEOUT));
+                if completed {
+                    // Sync parse succeeded, cancel any pending background parse.
+                    parse_task.borrow_mut().take();
+                    None
+                } else {
+                    // Timed out. Return the data needed for background parsing.
+                    let pending = PendingBackgroundParse {
+                        language: h.language().clone(),
+                        text: text.clone(),
+                        highlighter: highlighter.clone(),
+                        parse_task: parse_task.clone(),
+                    };
+                    drop(highlighter_ref);
+                    Some(pending)
+                }
             }
-            _ => {}
+            _ => None,
         }
     }
 
@@ -318,6 +351,7 @@ mod tests {
             language: "rust".into(),
             highlighter: Default::default(),
             diagnostics: DiagnosticSet::new(&Rope::new()),
+            parse_task: Default::default(),
         };
         assert_eq!(mode.is_code_editor(), true);
         assert_eq!(mode.is_multi_line(), false);
