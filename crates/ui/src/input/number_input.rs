@@ -151,7 +151,7 @@ impl RenderOnce for NumberInput {
             .flex_1()
             .rounded(cx.theme().radius)
             .refine_style(&self.style)
-            .when(self.disabled, |this| this.bg(cx.theme().muted))
+            .when(self.disabled, |this| this.opacity(0.5))
             .child(
                 Button::new("minus")
                     .outline()

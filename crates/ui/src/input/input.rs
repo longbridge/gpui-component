@@ -1,6 +1,6 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla, InteractiveElement as _,
     IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
     Styled, TextAlign, Window, div, px, relative,
 };
@@ -16,6 +16,20 @@ use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
 use super::InputState;
+
+/// Returns `(background, foreground)` colors for input-like components.
+pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
+    let mut bg = cx.theme().input_background();
+    if disabled {
+        bg.a = (bg.a / 0.3).min(1.0);
+    }
+    let fg = if disabled {
+        cx.theme().muted_foreground
+    } else {
+        cx.theme().foreground
+    };
+    (bg, fg)
+}
 
 /// A text input element bind to an [`InputState`].
 #[derive(IntoElement)]
@@ -260,14 +274,11 @@ impl RenderOnce for Input {
             _ => px(6.),
         };
 
-        let bg = if state.disabled {
-            cx.theme().muted
+        let (bg, fg) = input_style(state.disabled, cx);
+        let bg = if state.mode.is_code_editor() {
+            cx.theme().editor_background()
         } else {
-            if state.mode.is_code_editor() {
-                cx.theme().editor_background()
-            } else {
-                cx.theme().background
-            }
+            bg
         };
 
         let prefix = self.prefix;
@@ -370,7 +381,7 @@ impl RenderOnce for Input {
             .input_py(self.size)
             .input_h(self.size)
             .input_text_size(self.size)
-            .cursor_text()
+            .when(!self.disabled, |this| this.cursor_text())
             .items_center()
             .when(state.mode.is_multi_line(), |this| {
                 this.h_auto()
@@ -378,6 +389,8 @@ impl RenderOnce for Input {
             })
             .when(self.appearance, |this| {
                 this.bg(bg)
+                    .text_color(fg)
+                    .when(self.disabled, |this| this.opacity(0.5))
                     .rounded(cx.theme().radius)
                     .when(self.bordered, |this| {
                         this.border_color(cx.theme().input)

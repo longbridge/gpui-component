@@ -179,13 +179,26 @@ impl Theme {
         }
     }
 
-    /// Get the editor background color, if not set, use the theme background color.
+    /// Get the input background color.
+    ///
+    /// For dark, use a transparent color mixed with the input border: `cx.theme().input`,
+    /// otherwise use the `cx.theme().background` color.
+    #[inline]
+    pub fn input_background(&self) -> Hsla {
+        if self.is_dark() {
+            self.input.mix_oklab(self.transparent, 0.1)
+        } else {
+            self.background
+        }
+    }
+
+    /// Get the editor background color, if not set, use the input background color.
     #[inline]
     pub(crate) fn editor_background(&self) -> Hsla {
         self.highlight_theme
             .style
             .editor_background
-            .unwrap_or(self.background)
+            .unwrap_or_else(|| self.input_background())
     }
 }
 
@@ -224,7 +237,18 @@ impl From<&ThemeColor> for Theme {
 }
 
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize, JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    PartialOrd,
+    Eq,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeMode {
