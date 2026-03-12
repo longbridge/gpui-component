@@ -2335,7 +2335,7 @@ impl DbTreeView {
                                         )))
                                         .ghost()
                                         .small()
-                                        .label(format!("{} / {}", selected, total)),
+                                        .label(format!("{} of {}", selected, total)),
                                     )
                                     .when_some(db_filter_list, |popover, list| {
                                         let view_content = view_for_filter.clone();

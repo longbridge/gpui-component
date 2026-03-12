@@ -4,10 +4,13 @@
 //! - 设置面板（搜索、字体、主题）
 //! - 快捷命令面板
 //! - AI 聊天面板
+//! - 文件管理器面板（仅 SSH 终端）
 
+pub mod file_manager_panel;
 mod quick_command_panel;
 mod settings_panel;
 
+pub use file_manager_panel::{FileManagerPanel, FileManagerPanelEvent};
 pub use quick_command_panel::QuickCommandPanel;
 pub use settings_panel::SettingsPanel;
 
@@ -20,6 +23,7 @@ use gpui::{
 };
 use gpui_component::{v_flex, ActiveTheme, Icon, IconName, Sizable, Size};
 use one_core::layout::TOOLBAR_WIDTH;
+use one_core::storage::models::StoredConnection;
 use one_core::{AiChatPanel, AiChatPanelEvent, CodeBlockAction, LanguageMatcher};
 use rust_i18n::t;
 
@@ -42,6 +46,8 @@ pub enum SidebarPanel {
     QuickCommand,
     /// AI 聊天面板
     AiChat,
+    /// 文件管理器面板（仅 SSH 终端）
+    FileManager,
 }
 
 impl SidebarPanel {
@@ -51,6 +57,7 @@ impl SidebarPanel {
             SidebarPanel::Settings => IconName::Settings.mono(),
             SidebarPanel::QuickCommand => IconName::SquareTerminal.mono(),
             SidebarPanel::AiChat => IconName::AI.color(),
+            SidebarPanel::FileManager => IconName::FolderOpen.mono(),
         }
     }
 
@@ -60,6 +67,7 @@ impl SidebarPanel {
             SidebarPanel::Settings => "Settings",
             SidebarPanel::QuickCommand => "Quick Commands",
             SidebarPanel::AiChat => "AI Chat",
+            SidebarPanel::FileManager => "File Manager",
         }
     }
 }
@@ -93,6 +101,10 @@ pub enum TerminalSidebarEvent {
     ConfirmMultilinePasteChanged(bool),
     /// 高危命令确认开关
     ConfirmHighRiskCommandChanged(bool),
+    /// 在终端中 cd 到指定路径
+    CdToTerminal(String),
+    /// 请求将终端当前工作目录同步到文件管理器
+    SyncWorkingDir,
 }
 
 /// 终端侧边栏组件
@@ -105,6 +117,10 @@ pub struct TerminalSidebar {
     quick_command_panel: Entity<QuickCommandPanel>,
     /// AI 聊天面板
     ai_chat_panel: Entity<AiChatPanel>,
+    /// 文件管理器面板（仅 SSH 终端时创建）
+    file_manager_panel: Option<Entity<FileManagerPanel>>,
+    /// 路径与终端同步开关（默认开启）
+    sync_path_enabled: bool,
     /// 焦点句柄
     focus_handle: FocusHandle,
     /// 终端主题配色（用于侧边栏工具栏）
@@ -116,14 +132,21 @@ pub struct TerminalSidebar {
 impl TerminalSidebar {
     pub fn new(
         connection_id: Option<i64>,
+        stored_connection: Option<StoredConnection>,
         initial_theme: &TerminalTheme,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let colors = initial_theme.colors();
-        let settings_panel = cx.new(|cx| SettingsPanel::new(initial_theme, window, cx));
+        let has_file_manager = stored_connection.is_some();
+        let settings_panel =
+            cx.new(|cx| SettingsPanel::new(initial_theme, has_file_manager, window, cx));
         let quick_command_panel = cx.new(|cx| QuickCommandPanel::new(connection_id, window, cx));
         let ai_chat_panel = cx.new(|cx| AiChatPanel::new(window, cx));
+
+        // 仅 SSH 终端（有 StoredConnection）时创建文件管理器面板
+        let file_manager_panel =
+            stored_connection.map(|conn| cx.new(|cx| FileManagerPanel::new(conn, window, cx)));
 
         // 注册 bash/sh 代码块操作，并注入终端专属提示词
         let sidebar_entity = cx.entity();
@@ -186,6 +209,9 @@ impl TerminalSidebar {
                         *enabled,
                     ));
                 }
+                settings_panel::SettingsPanelEvent::SyncPathChanged(enabled) => {
+                    this.sync_path_enabled = *enabled;
+                }
             },
         );
 
@@ -211,14 +237,38 @@ impl TerminalSidebar {
             }
         });
 
+        let mut subs = vec![set_sub, quick_sub, ai_chat_sub];
+
+        // 订阅文件管理器面板事件
+        if let Some(ref fm_panel) = file_manager_panel {
+            let fm_sub =
+                cx.subscribe(
+                    fm_panel,
+                    |this, _, event: &FileManagerPanelEvent, cx| match event {
+                        FileManagerPanelEvent::Close => {
+                            this.set_active_panel(None, cx);
+                        }
+                        FileManagerPanelEvent::CdToTerminal(path) => {
+                            cx.emit(TerminalSidebarEvent::CdToTerminal(path.clone()));
+                        }
+                        FileManagerPanelEvent::SyncWorkingDir => {
+                            cx.emit(TerminalSidebarEvent::SyncWorkingDir);
+                        }
+                    },
+                );
+            subs.push(fm_sub);
+        }
+
         Self {
             active_panel: None,
             settings_panel,
             quick_command_panel,
             ai_chat_panel,
+            file_manager_panel,
+            sync_path_enabled: true,
             focus_handle: cx.focus_handle(),
             colors,
-            _subs: vec![set_sub, quick_sub, ai_chat_sub],
+            _subs: subs,
         }
     }
 
@@ -241,6 +291,15 @@ impl TerminalSidebar {
         if self.active_panel == Some(panel) {
             self.set_active_panel(None, cx);
         } else {
+            // 文件管理器首次激活时自动建立连接
+            if panel == SidebarPanel::FileManager {
+                if let Some(ref fm_panel) = self.file_manager_panel {
+                    fm_panel.update(cx, |panel, cx| {
+                        // 仅在 Idle 状态时自动连接
+                        panel.connect_if_idle(cx);
+                    });
+                }
+            }
             self.set_active_panel(Some(panel), cx);
         }
     }
@@ -302,6 +361,20 @@ impl TerminalSidebar {
         });
     }
 
+    /// 从终端 OSC 7 同步路径到文件管理器
+    ///
+    /// 检查 `sync_path_enabled` 且存在文件管理器面板时，导航到指定路径。
+    pub fn sync_file_manager_path(&mut self, path: String, cx: &mut Context<Self>) {
+        if !self.sync_path_enabled {
+            return;
+        }
+        if let Some(ref fm_panel) = self.file_manager_panel {
+            fm_panel.update(cx, |panel, cx| {
+                panel.sync_navigate_to(path, cx);
+            });
+        }
+    }
+
     /// 渲染工具栏按钮
     fn render_toolbar_button(
         &self,
@@ -340,6 +413,7 @@ impl TerminalSidebar {
     pub fn render_toolbar(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let border_color = self.colors.border;
         let muted_bg = self.colors.background;
+        let has_file_manager = self.file_manager_panel.is_some();
 
         v_flex()
             .flex_shrink_0()
@@ -354,6 +428,9 @@ impl TerminalSidebar {
             .child(self.render_toolbar_button(SidebarPanel::Settings, window, cx))
             .child(self.render_toolbar_button(SidebarPanel::QuickCommand, window, cx))
             .child(self.render_toolbar_button(SidebarPanel::AiChat, window, cx))
+            .when(has_file_manager, |this| {
+                this.child(self.render_toolbar_button(SidebarPanel::FileManager, window, cx))
+            })
             .into_any_element()
     }
 
@@ -368,6 +445,13 @@ impl TerminalSidebar {
             SidebarPanel::Settings => self.settings_panel.clone().into_any_element(),
             SidebarPanel::QuickCommand => self.quick_command_panel.clone().into_any_element(),
             SidebarPanel::AiChat => self.ai_chat_panel.clone().into_any_element(),
+            SidebarPanel::FileManager => {
+                if let Some(ref fm_panel) = self.file_manager_panel {
+                    fm_panel.clone().into_any_element()
+                } else {
+                    div().into_any_element()
+                }
+            }
         }
     }
 }

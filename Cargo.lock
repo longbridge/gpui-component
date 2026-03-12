@@ -10083,6 +10083,7 @@ version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
+ "chrono",
  "gpui",
  "gpui-component",
  "once_cell",
@@ -10091,8 +10092,10 @@ dependencies = [
  "regex",
  "rust-i18n",
  "serde_json",
+ "sftp",
  "ssh",
  "terminal",
+ "tokio",
  "tracing",
  "url",
 ]

@@ -45,6 +45,8 @@ pub enum SettingsPanelEvent {
     ConfirmMultilinePasteChanged(bool),
     /// 高危命令确认开关
     ConfirmHighRiskCommandChanged(bool),
+    /// 路径同步开关变更
+    SyncPathChanged(bool),
 }
 
 /// 设置面板组件
@@ -63,6 +65,10 @@ pub struct SettingsPanel {
     confirm_multiline_paste: bool,
     /// 高危命令确认
     confirm_high_risk_command: bool,
+    /// 路径与终端同步开关
+    sync_path: bool,
+    /// 是否有文件管理器面板（仅 SSH 终端有）
+    has_file_manager: bool,
     /// 焦点句柄
     focus_handle: FocusHandle,
     /// 订阅
@@ -70,7 +76,12 @@ pub struct SettingsPanel {
 }
 
 impl SettingsPanel {
-    pub fn new(initial_theme: &TerminalTheme, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        initial_theme: &TerminalTheme,
+        has_file_manager: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let search_input_state = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
 
         // 字体大小输入框
@@ -178,6 +189,8 @@ impl SettingsPanel {
             cursor_blink: false,
             confirm_multiline_paste: true,
             confirm_high_risk_command: true,
+            sync_path: true,
+            has_file_manager,
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
         }
@@ -532,6 +545,49 @@ impl SettingsPanel {
             )
     }
 
+    /// 渲染文件管理器设置区域（仅 SSH 终端有文件管理器时显示）
+    fn render_file_manager_section(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let border = cx.theme().border;
+        let muted_fg = cx.theme().muted_foreground;
+        let sync_path = self.sync_path;
+
+        v_flex()
+            .gap_3()
+            .p_3()
+            .border_t_1()
+            .border_color(border)
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(muted_fg)
+                            .child(t!("Settings.file_manager_section").to_uppercase()),
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .child(t!("Settings.sync_path_with_terminal")),
+                            )
+                            .child(
+                                Switch::new("sync-path-switch")
+                                    .checked(sync_path)
+                                    .small()
+                                    .on_click(cx.listener(|this, checked: &bool, _window, cx| {
+                                        this.sync_path = *checked;
+                                        cx.emit(SettingsPanelEvent::SyncPathChanged(*checked));
+                                    })),
+                            ),
+                    ),
+            )
+    }
+
     /// 渲染主题选择区域
     fn render_theme_section(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
@@ -579,6 +635,8 @@ impl Focusable for SettingsPanel {
 
 impl Render for SettingsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let has_file_manager = self.has_file_manager;
+
         v_flex()
             .size_full()
             .bg(cx.theme().background)
@@ -594,6 +652,9 @@ impl Render for SettingsPanel {
                     .child(self.render_font_section(cx))
                     .child(self.render_cursor_section(cx))
                     .child(self.render_safety_section(cx))
+                    .when(has_file_manager, |el| {
+                        el.child(self.render_file_manager_section(cx))
+                    })
                     .child(self.render_theme_section(cx)),
             )
     }

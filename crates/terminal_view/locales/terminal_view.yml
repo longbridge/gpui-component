@@ -299,6 +299,14 @@ Settings:
     en: Confirm high-risk command paste
     zh-CN: 高危命令粘贴需确认
     zh-HK: 高危命令貼上需確認
+  file_manager_section:
+    en: FILE MANAGER
+    zh-CN: 文件管理器
+    zh-HK: 文件管理器
+  sync_path_with_terminal:
+    en: Sync path with terminal
+    zh-CN: 路径与终端同步
+    zh-HK: 路徑與終端同步
 
 # 右键菜单
 ContextMenu:
@@ -486,3 +494,118 @@ SshSession:
     en: Reconnect
     zh-CN: 重新连接
     zh-HK: 重新連接
+
+# 文件管理器
+FileManager:
+  title:
+    en: File Manager
+    zh-CN: 文件管理
+    zh-HK: 文件管理
+  connecting:
+    en: Connecting...
+    zh-CN: 连接中...
+    zh-HK: 連接中...
+  connect:
+    en: Connect
+    zh-CN: 连接
+    zh-HK: 連接
+  connect_failed:
+    en: Connection failed
+    zh-CN: 连接失败
+    zh-HK: 連接失敗
+  retry:
+    en: Retry
+    zh-CN: 重试
+    zh-HK: 重試
+  cd_to_terminal:
+    en: CD in Terminal
+    zh-CN: 在终端中 CD
+    zh-HK: 在終端中 CD
+  copy_path:
+    en: Copy Path
+    zh-CN: 复制路径
+    zh-HK: 複製路徑
+  copy_name:
+    en: Copy Name
+    zh-CN: 复制名称
+    zh-HK: 複製名稱
+  refresh:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 刷新
+  toggle_hidden:
+    en: Toggle Hidden Files
+    zh-CN: 显示/隐藏文件
+    zh-HK: 顯示/隱藏文件
+  search_placeholder:
+    en: Search...
+    zh-CN: 搜索...
+    zh-HK: 搜索...
+  name:
+    en: Name
+    zh-CN: 名称
+    zh-HK: 名稱
+  size:
+    en: Size
+    zh-CN: 大小
+    zh-HK: 大小
+  time:
+    en: Time
+    zh-CN: 时间
+    zh-HK: 時間
+  current_path:
+    en: Current Path
+    zh-CN: 当前路径
+    zh-HK: 當前路徑
+  sync_terminal_dir:
+    en: Sync Terminal Directory
+    zh-CN: 同步终端目录
+    zh-HK: 同步終端目錄
+  download:
+    en: Download
+    zh-CN: 下载
+    zh-HK: 下載
+  upload_file:
+    en: Upload File
+    zh-CN: 上传文件
+    zh-HK: 上傳文件
+  upload_folder:
+    en: Upload Folder
+    zh-CN: 上传文件夹
+    zh-HK: 上傳文件夾
+  select_upload_files:
+    en: Select files to upload
+    zh-CN: 选择要上传的文件
+    zh-HK: 選擇要上傳的文件
+  select_upload_folder:
+    en: Select folder to upload
+    zh-CN: 选择要上传的文件夹
+    zh-HK: 選擇要上傳的文件夾
+  select_download_dir:
+    en: Select download destination
+    zh-CN: 选择下载目标目录
+    zh-HK: 選擇下載目標目錄
+  drop_files_here:
+    en: Drop files here to upload
+    zh-CN: 拖放文件到此处上传
+    zh-HK: 拖放文件到此處上傳
+  transfer_pending:
+    en: Pending
+    zh-CN: 等待中
+    zh-HK: 等待中
+  transfer_done:
+    en: Done
+    zh-CN: 完成
+    zh-HK: 完成
+  transfer_failed:
+    en: Failed
+    zh-CN: 失败
+    zh-HK: 失敗
+  transfer_cancelled:
+    en: Cancelled
+    zh-CN: 已取消
+    zh-HK: 已取消
+  transfer_connect_failed:
+    en: Transfer connection failed
+    zh-CN: 传输连接建立失败
+    zh-HK: 傳輸連接建立失敗

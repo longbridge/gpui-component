@@ -7,6 +7,7 @@ edition = "2021"
 # Terminal core
 terminal = { workspace = true }
 ssh = { workspace = true }
+sftp = { workspace = true }
 
 # GPUI
 gpui = { workspace = true }
@@ -25,3 +26,5 @@ once_cell .workspace = true
 tracing = { workspace = true }
 rust-i18n = { workspace = true }
 url.workspace = true
+chrono = { workspace = true }
+tokio = { workspace = true }

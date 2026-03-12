@@ -26,6 +26,8 @@ pub enum TerminalEvent {
     ClipboardStore(ClipboardType, String),
     /// 终端程序请求从剪贴板加载
     ClipboardLoad(ClipboardType),
+    /// 远程工作目录变更（OSC 7）
+    WorkingDirChanged(String),
 }
 
 /// Commands from UI layer to PTY backend

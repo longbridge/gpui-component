@@ -44,6 +44,8 @@ pub enum TerminalModelEvent {
     ChildExit(i32),
     /// 终端程序请求存储到剪贴板
     ClipboardStore(String),
+    /// 远程工作目录变更（OSC 7）
+    WorkingDirChanged(String),
 }
 
 /// 终端连接状态
@@ -109,6 +111,8 @@ pub struct Terminal {
 
     /// 终端标题
     title: String,
+    /// 当前工作目录（由 OSC 7 更新，仅 SSH 终端）
+    current_working_dir: Option<String>,
     /// 子进程退出码
     child_exited: Option<i32>,
     /// 连接状态
@@ -220,6 +224,7 @@ impl Terminal {
             term,
             backend: Some(Box::new(local_backend)),
             title: String::new(),
+            current_working_dir: None,
             child_exited: None,
             connection_state: ConnectionState::Connected,
             cols: DEFAULT_COLS,
@@ -274,12 +279,13 @@ impl Terminal {
                     }
                 }
             }
-            // 执行初始化脚本
-            if commands.is_empty() {
-                None
-            } else {
-                Some(commands.join("\n"))
-            }
+            // 注入 PROMPT_COMMAND，让 bash 每次命令后发送 OSC 7 序列
+            // 保留用户已有的 PROMPT_COMMAND
+            commands.push(
+                r#"export PROMPT_COMMAND='printf "\033]7;file://%s%s\007" "$HOSTNAME" "$PWD"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}"#
+                    .to_string(),
+            );
+            Some(commands.join("\n"))
         };
 
         let ssh_config = SshConnectConfig {
@@ -352,6 +358,7 @@ impl Terminal {
             term,
             backend: None,
             title: String::new(),
+            current_working_dir: None,
             child_exited: None,
             connection_state: ConnectionState::Connecting,
             cols,
@@ -499,6 +506,7 @@ impl Terminal {
                 config.pty_config,
                 term,
                 event_proxy,
+                event_tx,
                 notify_tx,
                 disconnect_tx,
             )
@@ -601,6 +609,10 @@ impl Terminal {
             TerminalEvent::ClipboardLoad(_ty) => {
                 // 剪贴板加载由 TerminalView 处理
             }
+            TerminalEvent::WorkingDirChanged(path) => {
+                self.current_working_dir = Some(path.clone());
+                cx.emit(TerminalModelEvent::WorkingDirChanged(path));
+            }
         }
     }
 
@@ -629,6 +641,11 @@ impl Terminal {
     /// 获取连接名称
     pub fn connection_name(&self) -> Option<&str> {
         self.connection_name.as_deref()
+    }
+
+    /// 获取当前工作目录（由 OSC 7 更新，仅 SSH 终端）
+    pub fn current_working_dir(&self) -> Option<&str> {
+        self.current_working_dir.as_deref()
     }
 
     /// 获取连接类型
