@@ -227,7 +227,7 @@
         "foreground": "neutral-50",
         "info.background": "cyan-400",
         "info.foreground": "cyan-600",
-        "input.border": "neutral-800",
+        "input.border": "#2f2f2f",
         "link.foreground": "#fafafa",
         "link.active.foreground": "#d4d4d4",
         "link.hover.foreground": "#ffffff",

@@ -10,7 +10,7 @@ use crate::input::clear_button;
 use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::scroll::Scrollbar;
 use crate::spinner::Spinner;
-use crate::{ActiveTheme, v_flex};
+use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
@@ -19,16 +19,14 @@ use super::InputState;
 
 /// Returns `(background, foreground)` colors for input-like components.
 pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
-    let mut bg = cx.theme().input_background();
     if disabled {
-        bg.a = (bg.a / 0.3).min(1.0);
-    }
-    let fg = if disabled {
-        cx.theme().muted_foreground
+        (
+            cx.theme().input.mix_oklab(cx.theme().transparent, 0.8),
+            cx.theme().muted_foreground,
+        )
     } else {
-        cx.theme().foreground
-    };
-    (bg, fg)
+        (cx.theme().input_background(), cx.theme().foreground)
+    }
 }
 
 /// A text input element bind to an [`InputState`].
@@ -423,7 +421,6 @@ impl RenderOnce for Input {
                     h_flex()
                         .id("suffix")
                         .gap(gap_x)
-                        .when(self.appearance, |this| this.bg(bg))
                         .items_center()
                         .when(state.loading, |this| {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
