@@ -421,7 +421,6 @@ impl RenderOnce for Input {
                     h_flex()
                         .id("suffix")
                         .gap(gap_x)
-                        .when(self.appearance, |this| this.bg(bg))
                         .items_center()
                         .when(state.loading, |this| {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
