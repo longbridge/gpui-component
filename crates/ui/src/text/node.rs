@@ -698,7 +698,13 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent);
+                        // Fallback matches TextViewStyle::inline_code_background doc
+                        highlight.background_color = Some(
+                            node_cx
+                                .style
+                                .inline_code_background
+                                .unwrap_or(cx.theme().accent),
+                        );
                     }
 
                     if let Some(mut link_mark) = style.link.clone() {
