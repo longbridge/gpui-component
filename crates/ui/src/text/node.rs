@@ -698,7 +698,11 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent);
+                        // Use a subtle semi-transparent overlay instead of the
+                        // bright accent color — inline code should blend with
+                        // surrounding text, not compete for attention.
+                        highlight.background_color =
+                            Some(gpui::Hsla { h: 0.0, s: 0.0, l: 1.0, a: 0.08 });
                     }
 
                     if let Some(mut link_mark) = style.link.clone() {
