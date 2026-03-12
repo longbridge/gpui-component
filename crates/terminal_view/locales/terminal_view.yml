@@ -557,6 +557,10 @@ FileManager:
     en: Current Path
     zh-CN: 当前路径
     zh-HK: 當前路徑
+  sync_terminal_dir:
+    en: Sync Terminal Directory
+    zh-CN: 同步终端目录
+    zh-HK: 同步終端目錄
   download:
     en: Download
     zh-CN: 下载

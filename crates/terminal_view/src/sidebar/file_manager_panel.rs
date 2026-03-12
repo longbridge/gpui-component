@@ -213,6 +213,8 @@ pub enum FileManagerPanelEvent {
     Close,
     /// 在终端中 cd 到指定路径
     CdToTerminal(String),
+    /// 请求将终端当前工作目录同步到文件管理器
+    SyncWorkingDir,
 }
 
 // ── 工具函数 ──────────────────────────────────────────────────
@@ -1323,6 +1325,30 @@ impl FileManagerPanel {
                     .tooltip(move |window, cx| {
                         Tooltip::new(t!("FileManager.current_path").to_string()).build(window, cx)
                     }),
+            )
+            // 同步终端工作目录按钮
+            .child(
+                div()
+                    .id("fm-sync-terminal")
+                    .cursor_pointer()
+                    .rounded_md()
+                    .p(px(4.))
+                    .hover(|s| s.bg(cx.theme().list_active))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |_this, _, _window, cx| {
+                            cx.emit(FileManagerPanelEvent::SyncWorkingDir);
+                        }),
+                    )
+                    .tooltip(move |window, cx| {
+                        Tooltip::new(t!("FileManager.sync_terminal_dir").to_string())
+                            .build(window, cx)
+                    })
+                    .child(
+                        Icon::new(IconName::Terminal)
+                            .xsmall()
+                            .text_color(cx.theme().muted_foreground),
+                    ),
             )
             // 刷新按钮
             .child(

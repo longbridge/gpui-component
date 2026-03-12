@@ -103,6 +103,8 @@ pub enum TerminalSidebarEvent {
     ConfirmHighRiskCommandChanged(bool),
     /// 在终端中 cd 到指定路径
     CdToTerminal(String),
+    /// 请求将终端当前工作目录同步到文件管理器
+    SyncWorkingDir,
 }
 
 /// 终端侧边栏组件
@@ -248,6 +250,9 @@ impl TerminalSidebar {
                         }
                         FileManagerPanelEvent::CdToTerminal(path) => {
                             cx.emit(TerminalSidebarEvent::CdToTerminal(path.clone()));
+                        }
+                        FileManagerPanelEvent::SyncWorkingDir => {
+                            cx.emit(TerminalSidebarEvent::SyncWorkingDir);
                         }
                     },
                 );

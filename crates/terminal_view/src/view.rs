@@ -506,6 +506,13 @@ impl TerminalView {
                 let cmd = format!("cd {}\n", shell_escape(path));
                 self.write_to_pty(cmd.into_bytes(), cx);
             }
+            TerminalSidebarEvent::SyncWorkingDir => {
+                if let Some(path) = self.terminal.read(cx).current_working_dir().map(str::to_string) {
+                    self.sidebar.update(cx, |sidebar, cx| {
+                        sidebar.sync_file_manager_path(path, cx);
+                    });
+                }
+            }
         }
     }
 
