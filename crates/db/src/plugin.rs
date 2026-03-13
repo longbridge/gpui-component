@@ -2141,6 +2141,44 @@ pub trait DatabasePlugin: Send + Sync {
     /// Returns a series of ALTER TABLE statements for the differences
     fn build_alter_table_sql(&self, original: &TableDesign, new: &TableDesign) -> String;
 
+    /// 生成单列重命名 SQL，默认使用标准 RENAME COLUMN 语法。
+    /// MySQL 需使用 CHANGE COLUMN，MSSQL 需使用 sp_rename，应覆盖此方法。
+    fn build_column_rename_sql(
+        &self,
+        table_name: &str,
+        old_name: &str,
+        new_name: &str,
+        _new_column: Option<&ColumnDefinition>,
+    ) -> String {
+        let quoted_table = self.quote_identifier(table_name);
+        let quoted_old = self.quote_identifier(old_name);
+        let quoted_new = self.quote_identifier(new_name);
+        format!(
+            "ALTER TABLE {} RENAME COLUMN {} TO {};",
+            quoted_table, quoted_old, quoted_new
+        )
+    }
+
+    /// 带列重命名支持的 ALTER TABLE SQL 生成。
+    /// 默认实现：map_design_for_diff → build_alter_table_sql → 追加 rename。
+    fn build_alter_table_sql_with_renames(
+        &self,
+        original: &TableDesign,
+        new: &TableDesign,
+        column_renames: &[(String, String)],
+    ) -> String {
+        let design_for_diff = map_design_for_diff(new, column_renames);
+        let base_sql = self.build_alter_table_sql(original, &design_for_diff);
+        let rename_statements: Vec<String> = column_renames
+            .iter()
+            .map(|(old_name, new_name)| {
+                let new_column = new.columns.iter().find(|col| col.name == *new_name);
+                self.build_column_rename_sql(&new.table_name, old_name, new_name, new_column)
+            })
+            .collect();
+        merge_alter_sql(base_sql, rename_statements)
+    }
+
     /// Check if a column definition has changed
     fn column_changed(&self, original: &ColumnDefinition, new: &ColumnDefinition) -> bool {
         original.data_type.to_uppercase() != new.data_type.to_uppercase()
@@ -2240,6 +2278,47 @@ pub trait DatabasePlugin: Send + Sync {
         config: &ExportConfig,
         progress_tx: Option<ExportProgressSender>,
     ) -> Result<ExportResult>;
+}
+
+/// 将 design 中被重命名的列名回退为旧名，以便与 original 做 diff 时不会产生误删/误增。
+pub fn map_design_for_diff(
+    design: &TableDesign,
+    normalized_renames: &[(String, String)],
+) -> TableDesign {
+    let mut design_for_diff = design.clone();
+    for (old_name, new_name) in normalized_renames {
+        if let Some(column) = design_for_diff
+            .columns
+            .iter_mut()
+            .find(|column| column.name == *new_name)
+        {
+            column.name = old_name.clone();
+        }
+        for index in &mut design_for_diff.indexes {
+            for idx_col in &mut index.columns {
+                if idx_col == new_name {
+                    *idx_col = old_name.clone();
+                }
+            }
+        }
+    }
+    design_for_diff
+}
+
+/// 合并 base ALTER SQL 和 rename 语句，跳过 "-- No changes" 前缀。
+pub fn merge_alter_sql(base_sql: String, rename_statements: Vec<String>) -> String {
+    let mut statements = Vec::new();
+    let trimmed = base_sql.trim();
+    if !trimmed.is_empty() && !trimmed.starts_with("-- No changes") {
+        statements.push(trimmed.to_string());
+    }
+    statements.extend(rename_statements);
+
+    if statements.is_empty() {
+        "-- No changes detected".to_string()
+    } else {
+        statements.join("\n")
+    }
 }
 
 /// Default import data implementation - can be called by database plugins

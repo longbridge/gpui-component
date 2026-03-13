@@ -1550,6 +1550,31 @@ impl DatabasePlugin for MySqlPlugin {
         sql
     }
 
+    /// MySQL 使用 CHANGE COLUMN 语法进行列重命名，需要完整列定义。
+    fn build_column_rename_sql(
+        &self,
+        table_name: &str,
+        old_name: &str,
+        new_name: &str,
+        new_column: Option<&ColumnDefinition>,
+    ) -> String {
+        let quoted_table = self.quote_identifier(table_name);
+        let quoted_old = self.quote_identifier(old_name);
+        if let Some(col) = new_column {
+            let col_def = self.build_column_def(col);
+            format!(
+                "ALTER TABLE {} CHANGE COLUMN {} {};",
+                quoted_table, quoted_old, col_def
+            )
+        } else {
+            let quoted_new = self.quote_identifier(new_name);
+            format!(
+                "ALTER TABLE {} RENAME COLUMN {} TO {};",
+                quoted_table, quoted_old, quoted_new
+            )
+        }
+    }
+
     fn build_alter_table_sql(&self, original: &TableDesign, new: &TableDesign) -> String {
         let mut statements: Vec<String> = Vec::new();
         let table_name = self.quote_identifier(&new.table_name);

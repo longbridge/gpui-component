@@ -1809,6 +1809,24 @@ impl DatabasePlugin for MsSqlPlugin {
         sql
     }
 
+    /// MSSQL 使用 EXEC sp_rename 进行列重命名。
+    fn build_column_rename_sql(
+        &self,
+        table_name: &str,
+        old_name: &str,
+        new_name: &str,
+        _new_column: Option<&ColumnDefinition>,
+    ) -> String {
+        let quoted_table = self.quote_identifier(table_name);
+        let quoted_old = self.quote_identifier(old_name);
+        let table_column_ref = format!("{}.{}", quoted_table, quoted_old);
+        format!(
+            "EXEC sp_rename '{}', '{}', 'COLUMN';",
+            table_column_ref.replace('\'', "''"),
+            new_name.replace('\'', "''")
+        )
+    }
+
     fn build_alter_table_sql(&self, original: &TableDesign, new: &TableDesign) -> String {
         let mut statements: Vec<String> = Vec::new();
         let table_name = format!("[{}]", new.table_name.replace("]", "]]"));
