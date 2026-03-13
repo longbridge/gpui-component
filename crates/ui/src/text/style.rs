@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{Pixels, Rems, StyleRefinement, px, rems};
+use gpui::{Hsla, Pixels, Rems, StyleRefinement, px, rems};
 
 use crate::highlighter::HighlightTheme;
 
@@ -20,9 +20,15 @@ pub struct TextViewStyle {
     pub highlight_theme: Arc<HighlightTheme>,
     /// The style refinement for code blocks.
     pub code_block: StyleRefinement,
+    /// Background color for inline code spans (backtick text).
+    /// Defaults to `cx.theme().accent` when `None`.
+    pub inline_code_background: Option<Hsla>,
     pub is_dark: bool,
 }
 
+// NOTE: Only paragraph_gap, heading_base_font_size, and highlight_theme
+// are compared. Rendering-only fields (inline_code_background, code_block,
+// is_dark, heading_font_size) are intentionally excluded.
 impl PartialEq for TextViewStyle {
     fn eq(&self, other: &Self) -> bool {
         self.paragraph_gap == other.paragraph_gap
@@ -39,6 +45,7 @@ impl Default for TextViewStyle {
             heading_font_size: None,
             highlight_theme: HighlightTheme::default_light().clone(),
             code_block: StyleRefinement::default(),
+            inline_code_background: None,
             is_dark: false,
         }
     }
@@ -62,6 +69,14 @@ impl TextViewStyle {
     /// Set style for code blocks.
     pub fn code_block(mut self, style: StyleRefinement) -> Self {
         self.code_block = style;
+        self
+    }
+
+    /// Set background color for inline code spans.
+    ///
+    /// When not set, falls back to `cx.theme().accent`.
+    pub fn inline_code_background(mut self, color: Hsla) -> Self {
+        self.inline_code_background = Some(color);
         self
     }
 }
