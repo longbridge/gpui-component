@@ -5,7 +5,7 @@ use gpui_component_story::{Gallery, StoryRoot};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
+pub fn run() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
     // Initialize logging to browser console
@@ -14,6 +14,8 @@ pub fn init_story(_canvas_id: String) -> Result<(), JsValue> {
     // Also initialize tracing for WASM
     tracing_wasm::set_as_global_default();
 
+    #[cfg(target_family = "wasm")]
+    gpui_platform::web_init();
     #[cfg(not(target_family = "wasm"))]
     let app = gpui_platform::application();
     #[cfg(target_family = "wasm")]

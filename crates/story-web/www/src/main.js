@@ -8,7 +8,7 @@ async function init() {
     await wasm.default();
 
     // Initialize the story gallery
-    await wasm.init_story('canvas');
+    await wasm.run();
 
     // Hide loading indicator
     if (loadingEl) {
