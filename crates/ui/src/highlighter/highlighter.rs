@@ -758,52 +758,57 @@ pub(crate) fn unique_styles(
         return styles;
     }
 
-    let mut intervals = BTreeSet::new();
-    let mut significant_intervals = BTreeSet::new();
-
-    // For example
-    //
-    // from: [(6..11), (6..11), (11..17), (17..25), (16..19), (25..59))]
-    // to:   [6, 11, 16, 17, 19, 25, 59]
-    intervals.insert(total_range.start);
-    intervals.insert(total_range.end);
-    for (range, _) in &styles {
-        intervals.insert(range.start);
-        intervals.insert(range.end);
-        significant_intervals.insert(range.end); // End points are significant for merging decisions
+    // Create intervals: (position, is_start, style_index)
+    let mut intervals: Vec<(usize, bool, usize)> = Vec::with_capacity(styles.len() * 2 + 2);
+    for (i, (range, _)) in styles.iter().enumerate() {
+        intervals.push((range.start, true, i));
+        intervals.push((range.end, false, i));
     }
 
-    let intervals: Vec<usize> = intervals.into_iter().collect();
-    let mut result = Vec::with_capacity(intervals.len().saturating_sub(1));
+    intervals.push((total_range.start, true, usize::MAX));
+    intervals.push((total_range.end, false, usize::MAX));
 
-    // For each interval between boundaries, find the top-most style
-    //
-    // Result e.g.:
-    //
-    // [(6..11, red), (11..16, green), (16..17, blue), (17..19, red), (19..25, clean), (25..59, blue)]
-    for i in 0..intervals.len().saturating_sub(1) {
-        let interval = intervals[i]..intervals[i + 1];
-        if interval.start >= interval.end {
-            continue;
+    // Sort by position, with ends before starts at same position
+    // This ensures we close ranges before opening new ones at the same position
+    intervals.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+
+    // Track significant intervals (where style ranges end) for merging decisions
+    let mut significant_intervals: BTreeSet<usize> = BTreeSet::new();
+    for (range, _) in &styles {
+        significant_intervals.insert(range.end);
+    }
+
+    let mut result: Vec<(Range<usize>, HighlightStyle)> = Vec::new();
+    let mut active_styles: Vec<usize> = Vec::new();
+    let mut last_pos = total_range.start;
+
+    for (pos, is_start, style_idx) in intervals {
+        // Skip total_range boundaries in active set management
+        let is_boundary = style_idx == usize::MAX;
+
+        if pos > last_pos {
+            let interval = last_pos..pos;
+            let combined_style = if active_styles.is_empty() {
+                HighlightStyle::default()
+            } else {
+                let mut combined = HighlightStyle::default();
+                for &idx in &active_styles {
+                    merge_highlight_style(&mut combined, &styles[idx].1);
+                }
+                combined
+            };
+            result.push((interval, combined_style));
         }
 
-        // Find the last (top-most) style that covers this interval
-        let mut top_style: Option<HighlightStyle> = None;
-        for (range, style) in &styles {
-            if range.start <= interval.start && interval.end <= range.end {
-                if let Some(top_style) = &mut top_style {
-                    merge_highlight_style(top_style, style);
-                } else {
-                    top_style = Some(*style);
-                }
+        if !is_boundary {
+            if is_start {
+                active_styles.push(style_idx);
+            } else {
+                active_styles.retain(|&i| i != style_idx);
             }
         }
 
-        if let Some(style) = top_style {
-            result.push((interval, style));
-        } else {
-            result.push((interval, HighlightStyle::default()));
-        }
+        last_pos = pos;
     }
 
     // Merge adjacent ranges with the same style, but not across significant boundaries
