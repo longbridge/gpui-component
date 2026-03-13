@@ -39,7 +39,9 @@ impl AlertDialogStory {
     }
 
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self { focus_handle: cx.focus_handle() }
+        Self {
+            focus_handle: cx.focus_handle(),
+        }
     }
 }
 
@@ -292,7 +294,7 @@ impl Render for AlertDialogStory {
                                 alert
                                     .confirm()
                                     .title("Are you sure?")
-                                    .description("This is a AlertDialog with `confirm` mode.\
+                                    .child("This is a AlertDialog with `confirm` mode.\
                                         Will have OK, CANCEL buttons.")
                             });
                         },
