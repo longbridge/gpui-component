@@ -24,7 +24,7 @@ Button::new("ok")
 
 Add the following to your `Cargo.toml`:
 
-GPUI and GPUI Component are under active development, recenlty GPUI have some new features not published on crates.io, so we recommend using the git version for now.
+GPUI and GPUI Component are under active development, recently GPUI have some new features not published on crates.io, so we recommend using the git version for now.
 
 The documentation on this site are based on the **Git main branch**, if you use the crates.io version, there may be some differences.
 
