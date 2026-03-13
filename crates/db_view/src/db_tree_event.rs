@@ -723,6 +723,11 @@ impl DatabaseEventHandler {
                 let schema = node.get_schema_name();
                 (database, schema, Some(node.name.clone()))
             }
+            DbNodeType::Database => {
+                let database = node.get_database_name().unwrap_or_default();
+                let schema = node.get_schema_name();
+                (database, schema, None)
+            }
             _ => return,
         };
 

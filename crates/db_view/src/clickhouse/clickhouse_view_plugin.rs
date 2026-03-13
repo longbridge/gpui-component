@@ -123,6 +123,12 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
             DbNodeType::Database => {
                 vec![
                     ContextMenuItem::item(
+                        t!("Table.new_table").to_string(),
+                        DbTreeViewEvent::DesignTable {
+                            node_id: node_id.to_string(),
+                        },
+                    ),
+                    ContextMenuItem::item(
                         t!("Query.new_query").to_string(),
                         DbTreeViewEvent::CreateNewQuery {
                             node_id: node_id.to_string(),
