@@ -902,22 +902,22 @@ impl ButtonVariant {
     }
 
     fn disabled(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
+        let bg = match self {
+            Self::Default | Self::Link | Self::Ghost | Self::Text => cx.theme().transparent,
+            Self::Primary => cx.theme().primary.opacity(0.15),
+            Self::Danger => cx.theme().danger.opacity(0.15),
+            Self::Warning => cx.theme().warning.opacity(0.15),
+            Self::Success => cx.theme().success.opacity(0.15),
+            Self::Info => cx.theme().info.opacity(0.15),
+            Self::Secondary => cx.theme().secondary.opacity(1.5),
+            Self::Custom(style) => style.color.opacity(0.15),
+        };
         let fg = cx.theme().muted_foreground.opacity(0.5);
         let (bg, border) = if outline {
             (cx.theme().transparent, cx.theme().border.opacity(0.5))
         } else if let Self::Default = self {
             (cx.theme().transparent, cx.theme().input.opacity(0.5))
         } else {
-            let bg = match self {
-                Self::Default | Self::Link | Self::Ghost | Self::Text => cx.theme().transparent,
-                Self::Primary => cx.theme().primary.opacity(0.15),
-                Self::Danger => cx.theme().danger.opacity(0.15),
-                Self::Warning => cx.theme().warning.opacity(0.15),
-                Self::Success => cx.theme().success.opacity(0.15),
-                Self::Info => cx.theme().info.opacity(0.15),
-                Self::Secondary => cx.theme().secondary.opacity(1.5),
-                Self::Custom(style) => style.color.opacity(0.15),
-            };
             (bg, bg)
         };
 
