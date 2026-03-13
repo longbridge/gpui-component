@@ -914,9 +914,15 @@ impl ButtonVariant {
         };
         let fg = cx.theme().muted_foreground.opacity(0.5);
         let (bg, border) = if outline {
-            (cx.theme().transparent, cx.theme().border.opacity(0.5))
+            (
+                cx.theme().input_background().opacity(0.5),
+                cx.theme().border.opacity(0.5),
+            )
         } else if let Self::Default = self {
-            (cx.theme().transparent, cx.theme().input.opacity(0.5))
+            (
+                cx.theme().input_background().opacity(0.5),
+                cx.theme().input.opacity(0.5),
+            )
         } else {
             (bg, bg)
         };
