@@ -20,42 +20,11 @@ use db_view::database_view_plugin::DatabaseViewPluginRegistry;
 use gpui::*;
 use gpui_component::Root;
 use gpui_component_assets::Assets;
-use std::path::PathBuf;
-
-fn try_load_env_file(path: &PathBuf) {
-    if path.exists() {
-        let _ = dotenvy::from_path(path);
-    }
-}
-
-fn load_env_files() {
-    // 开发环境：优先当前工作目录
-    let _ = dotenvy::from_filename(".env.local");
-    let _ = dotenvy::dotenv();
-
-    // 打包应用：从可执行文件目录和 .app 资源目录加载
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let exe_dir = exe_dir.to_path_buf();
-            let resources_dir = exe_dir
-                .parent()
-                .map(|parent| parent.join("Resources"))
-                .unwrap_or_else(|| exe_dir.clone());
-
-            for file_name in [".env.local", ".env"] {
-                try_load_env_file(&exe_dir.join(file_name));
-                try_load_env_file(&resources_dir.join(file_name));
-            }
-        }
-    }
-}
 
 fn main() {
     if update::handle_update_command() {
         return;
     }
-
-    load_env_files();
 
     let app = Application::new().with_assets(Assets);
 

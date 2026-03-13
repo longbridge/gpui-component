@@ -40,15 +40,6 @@ else
     echo "Warning: Icon file not found at ${ICNS_PATH}"
 fi
 
-# Copy env files for packaged runtime config (optional)
-for ENV_FILE in ".env.local" ".env"; do
-    SRC_ENV_PATH="${PROJECT_DIR}/${ENV_FILE}"
-    if [ -f "$SRC_ENV_PATH" ]; then
-        cp "$SRC_ENV_PATH" "$APP_DIR/Contents/Resources/${ENV_FILE}"
-        echo "Included env file: ${ENV_FILE}"
-    fi
-done
-
 # Write PkgInfo
 echo -n "APPL????" > "$APP_DIR/Contents/PkgInfo"
 

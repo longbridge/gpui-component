@@ -100,13 +100,16 @@ jobs:
             echo "::error::SUPABASE_ANON_KEY secret is empty or not set"
             exit 1
           fi
-          echo "SUPABASE_URL length: ${#SUPABASE_URL}"
-          echo "SUPABASE_ANON_KEY length: ${#SUPABASE_ANON_KEY}"
 
       - name: Build release binary
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ONETCLI_UPDATE_URL: ${{ secrets.ONETCLI_UPDATE_URL }}
+          ONETCLI_UPDATE_DOWNLOAD_URL: ${{ secrets.ONETCLI_UPDATE_DOWNLOAD_URL }}
+          ONETCLI_WECHAT_QR_URL: ${{ secrets.ONETCLI_WECHAT_QR_URL }}
+          ONETCLI_ALIPAY_QR_URL: ${{ secrets.ONETCLI_ALIPAY_QR_URL }}
+          ONETCLI_PAYPAL_QR_URL: ${{ secrets.ONETCLI_PAYPAL_QR_URL }}
         run: cargo build --release -p main --target ${{ matrix.target }}
 
       - name: Create macOS app bundle

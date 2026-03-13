@@ -22,7 +22,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rust-i18n = { workspace = true }
 base64 = { workspace = true }
 dirs = {workspace = true}
-dotenvy = "0.15"
 futures = { workspace = true }
 smol = { workspace = true }
 db_view = { workspace = true }
