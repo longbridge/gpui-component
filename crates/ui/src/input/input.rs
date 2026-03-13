@@ -1,13 +1,13 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, InteractiveElement as _,
+    AnyElement, App, DefiniteLength, EdgesRefinement, Entity, InteractiveElement as _,
     IntoElement, IsZero, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement,
     Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
 use crate::input::clear_button;
-use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
+use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN, compute_input_padding};
 use crate::scroll::Scrollbar;
 use crate::spinner::Spinner;
 use crate::{ActiveTheme, v_flex};
@@ -172,38 +172,7 @@ impl Input {
         window: &Window,
         _cx: &App,
     ) -> impl IntoElement {
-        let base_size = window.text_style().font_size;
-        let rem_size = window.rem_size();
-
-        // Compute effective padding: default size-based padding overridden by any custom padding
-        let default_padding = Edges {
-            left: size.input_px(),
-            right: size.input_px(),
-            top: size.input_py(),
-            bottom: size.input_py(),
-        };
-        let paddings = if let Some(custom) = custom_padding {
-            Edges {
-                left: custom
-                    .left
-                    .map(|v| v.to_pixels(base_size, rem_size))
-                    .unwrap_or(default_padding.left),
-                right: custom
-                    .right
-                    .map(|v| v.to_pixels(base_size, rem_size))
-                    .unwrap_or(default_padding.right),
-                top: custom
-                    .top
-                    .map(|v| v.to_pixels(base_size, rem_size))
-                    .unwrap_or(default_padding.top),
-                bottom: custom
-                    .bottom
-                    .map(|v| v.to_pixels(base_size, rem_size))
-                    .unwrap_or(default_padding.bottom),
-            }
-        } else {
-            default_padding
-        };
+        let paddings = compute_input_padding(size, custom_padding.as_ref(), window);
 
         v_flex()
             .size_full()
@@ -283,15 +252,29 @@ impl RenderOnce for Input {
         self.state.update(cx, |state, _| {
             state.disabled = self.disabled;
             state.size = self.size;
-            // Use the adjusted padding for TextElement (removes left padding when prefix exists)
-            state.custom_padding = text_element_padding.clone();
-            // Only for single line mode
             if state.mode.is_single_line() {
+                // For single-line: horizontal padding is applied to the outer wrapper div so that
+                // overflow_hidden clips text at the padded boundary.  Zero it out here so
+                // TextElement doesn't double-apply it.
+                let mut sl_padding = text_element_padding.clone().unwrap_or_default();
+                sl_padding.left = Some(px(0.).into());
+                sl_padding.right = Some(px(0.).into());
+                state.custom_padding = Some(sl_padding);
                 state.text_align = text_align;
+            } else {
+                state.custom_padding = text_element_padding.clone();
             }
         });
 
         let state = self.state.read(cx);
+        // Horizontal padding for the single-line wrapper div, using the same logic as
+        // TextElement so both values are always consistent.
+        let single_line_h_padding = if state.mode.is_single_line() {
+            let p = compute_input_padding(self.size, text_element_padding.as_ref(), window);
+            (p.left, p.right)
+        } else {
+            (px(0.), px(0.))
+        };
         let focused = state.focus_handle.is_focused(window) && !state.disabled;
         let gap_x = match self.size {
             Size::Small => px(4.),
@@ -455,7 +438,14 @@ impl RenderOnce for Input {
                         cx,
                     ))
                 },
-                |this| this.child(self.state.clone()),
+                |this| {
+                    let (pad_l, pad_r) = single_line_h_padding;
+                    // overflow_hidden clips text at the padded boundary so text never
+                    // appears flush with the input border during horizontal scroll.
+                    this.child(div().h_full().flex_1().pl(pad_l).pr(pad_r).child(
+                        div().size_full().overflow_hidden().child(self.state.clone()),
+                    ))
+                },
             )
             .when(has_suffix, |this| {
                 this.pr(self.size.input_px()).child(

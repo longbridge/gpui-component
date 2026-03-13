@@ -21,6 +21,45 @@ use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
+
+/// Calculate input padding by merging size-based defaults with any custom padding.
+///
+/// Shared between [`TextElement`] and `input.rs` so both use the same values.
+pub(super) fn compute_input_padding(
+    size: ComponentSize,
+    custom_padding: Option<&gpui::EdgesRefinement<gpui::DefiniteLength>>,
+    window: &Window,
+) -> gpui::Edges<Pixels> {
+    let base_size = window.text_style().font_size;
+    let rem_size = window.rem_size();
+    let defaults = gpui::Edges {
+        left: size.input_px(),
+        right: size.input_px(),
+        top: size.input_py(),
+        bottom: size.input_py(),
+    };
+    let Some(custom) = custom_padding else {
+        return defaults;
+    };
+    gpui::Edges {
+        left: custom
+            .left
+            .map(|v| v.to_pixels(base_size, rem_size))
+            .unwrap_or(defaults.left),
+        right: custom
+            .right
+            .map(|v| v.to_pixels(base_size, rem_size))
+            .unwrap_or(defaults.right),
+        top: custom
+            .top
+            .map(|v| v.to_pixels(base_size, rem_size))
+            .unwrap_or(defaults.top),
+        bottom: custom
+            .bottom
+            .map(|v| v.to_pixels(base_size, rem_size))
+            .unwrap_or(defaults.bottom),
+    }
+}
 const FOLD_ICON_WIDTH: Pixels = px(14.);
 const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
 
@@ -68,41 +107,7 @@ impl TextElement {
 
     /// Calculate the final padding combining size-based defaults and custom padding.
     fn calculate_padding(&self, window: &Window) -> gpui::Edges<Pixels> {
-        let base_size = window.text_style().font_size;
-        let rem_size = window.rem_size();
-
-        // Calculate default padding based on size
-        let default_paddings = gpui::Edges {
-            left: self.size.input_px(),
-            right: self.size.input_px(),
-            top: self.size.input_py(),
-            bottom: self.size.input_py(),
-        };
-
-        // If no custom padding, use defaults
-        let Some(custom_padding) = &self.custom_padding else {
-            return default_paddings;
-        };
-
-        // Merge with custom padding (custom padding takes precedence)
-        gpui::Edges {
-            left: custom_padding
-                .left
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(default_paddings.left),
-            right: custom_padding
-                .right
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(default_paddings.right),
-            top: custom_padding
-                .top
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(default_paddings.top),
-            bottom: custom_padding
-                .bottom
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(default_paddings.bottom),
-        }
+        compute_input_padding(self.size, self.custom_padding.as_ref(), window)
     }
 
     /// Set the placeholder text of the input field.
