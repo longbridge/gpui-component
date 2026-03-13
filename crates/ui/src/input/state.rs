@@ -1993,6 +1993,13 @@ impl InputState {
         ))
     }
 
+    /// Return the rendered bounds for a UTF-8 byte range in the current input contents.
+    ///
+    /// Returns `None` when the requested range is not currently laid out or visible.
+    pub fn offset_range_bounds(&self, range: &Range<usize>) -> Option<Bounds<Pixels>> {
+        self.range_to_bounds(range)
+    }
+
     /// Replace text in range in silent.
     ///
     /// This will not trigger any UI interaction, such as auto-completion.
