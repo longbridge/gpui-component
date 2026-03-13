@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, InspectorElementId,
-    InteractiveElement, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
+    AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
+    InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
 };
 
 use crate::StyledExt;
@@ -159,7 +159,7 @@ pub struct TextViewLayoutState {
 
 impl Element for TextView {
     type RequestLayoutState = TextViewLayoutState;
-    type PrepaintState = ();
+    type PrepaintState = Hitbox;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -230,21 +230,22 @@ impl Element for TextView {
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
+        bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
         request_layout.element.prepaint(window, cx);
+        window.insert_hitbox(bounds, HitboxBehavior::Normal)
     }
 
     fn paint(
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
+        _bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
+        hitbox: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -262,9 +263,9 @@ impl Element for TextView {
 
             window.on_mouse_event({
                 let state = state.clone();
-
-                move |event: &MouseDownEvent, phase, _, cx| {
-                    if !bounds.contains(&event.position) || !phase.bubble() {
+                let hitbox = hitbox.clone();
+                move |event: &MouseDownEvent, phase, window, cx| {
+                    if !phase.bubble() || !hitbox.is_hovered(window) {
                         return;
                     }
 
@@ -311,8 +312,9 @@ impl Element for TextView {
                 // down outside to clear selection
                 window.on_mouse_event({
                     let state = state.clone();
-                    move |event: &MouseDownEvent, _, _, cx| {
-                        if bounds.contains(&event.position) {
+                    let hitbox = hitbox.clone();
+                    move |_: &MouseDownEvent, _, window, cx| {
+                        if hitbox.is_hovered(window) {
                             return;
                         }
 
@@ -324,5 +326,84 @@ impl Element for TextView {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TextView;
+    use crate::text::TextViewState;
+    use gpui::{
+        AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, ParentElement as _,
+        Render, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
+    };
+
+    struct TextViewTestRoot {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl TextViewTestRoot {
+        fn new(text: &str, cx: &mut Context<Self>) -> Self {
+            let text = text.to_string();
+            let text_view = cx.new(|cx| TextViewState::markdown(&text, cx));
+            Self { text_view }
+        }
+    }
+
+    impl Render for TextViewTestRoot {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(160.))
+                .child(
+                    div()
+                        .h(px(24.))
+                        .overflow_hidden()
+                        .child(TextView::new(&self.text_view).selectable(true)),
+                )
+                .child(div().h(px(40.)).child("footer"))
+        }
+    }
+
+    #[gpui::test]
+    fn clipped_markdown_link_does_not_open(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, cx| {
+            TextViewTestRoot::new("visible\n\n[hidden](https://example.com)", cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.simulate_click(point(px(10.), px(34.)), Modifiers::default());
+
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
+    fn clipped_markdown_cannot_start_selection(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx
+            .add_window_view(|_, cx| TextViewTestRoot::new("visible\n\nhidden selection text", cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.simulate_mouse_down(
+            point(px(10.), px(34.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(90.), px(34.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(90.), px(34.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+
+        let selected_text = view.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+        assert!(
+            selected_text.is_empty(),
+            "unexpected selection: {selected_text:?}"
+        );
     }
 }
