@@ -37,6 +37,10 @@ pub struct ThemeColor {
     pub chart_4: Hsla,
     /// Chart 5 color.
     pub chart_5: Hsla,
+    /// Bullish color for candlestick charts (upward price movement).
+    pub chart_bullish: Hsla,
+    /// Bearish color for candlestick charts (downward price movement).
+    pub chart_bearish: Hsla,
     /// Danger background color.
     pub danger: Hsla,
     /// Danger active background color.
@@ -147,10 +151,6 @@ pub struct ThemeColor {
     pub success_hover: Hsla,
     /// Success active background color.
     pub success_active: Hsla,
-    /// Bullish color for candlestick charts (upward price movement).
-    pub bullish: Hsla,
-    /// Bearish color for candlestick charts (downward price movement).
-    pub bearish: Hsla,
     /// Switch background color.
     pub switch: Hsla,
     /// Switch thumb background color.

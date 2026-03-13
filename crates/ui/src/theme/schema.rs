@@ -116,6 +116,12 @@ pub struct ThemeConfigColors {
     /// Chart 5 color.
     #[serde(rename = "chart.5")]
     pub chart_5: Option<SharedString>,
+    /// Bullish color for candlestick charts (upward price movement).
+    #[serde(rename = "chart_bullish")]
+    pub chart_bullish: Option<SharedString>,
+    /// Bearish color for candlestick charts (downward price movement).
+    #[serde(rename = "chart_bearish")]
+    pub chart_bearish: Option<SharedString>,
     /// Danger background color.
     #[serde(rename = "danger.background")]
     pub danger: Option<SharedString>,
@@ -281,12 +287,6 @@ pub struct ThemeConfigColors {
     /// Success active background color.
     #[serde(rename = "success.active.background")]
     pub success_active: Option<SharedString>,
-    /// Bullish color for candlestick charts (upward price movement).
-    #[serde(rename = "chart_bullish")]
-    pub bullish: Option<SharedString>,
-    /// Bearish color for candlestick charts (downward price movement).
-    #[serde(rename = "chart_bearish")]
-    pub bearish: Option<SharedString>,
     /// Switch background color.
     #[serde(rename = "switch.background")]
     pub switch: Option<SharedString>,
@@ -514,8 +514,6 @@ impl ThemeColor {
             success_active,
             fallback = self.success.darken(active_darken)
         );
-        apply_color!(bullish, fallback = self.green);
-        apply_color!(bearish, fallback = self.red);
         apply_color!(info, fallback = self.cyan);
         apply_color!(info_foreground, fallback = self.primary_foreground);
         apply_color!(
@@ -555,6 +553,8 @@ impl ThemeColor {
         apply_color!(chart_3, fallback = self.blue);
         apply_color!(chart_4, fallback = self.blue.darken(0.2));
         apply_color!(chart_5, fallback = self.blue.darken(0.4));
+        apply_color!(chart_bullish, fallback = self.green);
+        apply_color!(chart_bearish, fallback = self.red);
         apply_color!(danger, fallback = self.red);
         apply_color!(danger_active, fallback = self.danger.darken(active_darken));
         apply_color!(danger_foreground, fallback = self.primary_foreground);
