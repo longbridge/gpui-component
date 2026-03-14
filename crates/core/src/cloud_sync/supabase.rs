@@ -440,12 +440,21 @@ impl SupabaseClient {
                 Ok(auth_resp)
             }
             Err(e) => {
-                error!(
-                    "[supabase] token refresh failed (singleflight), clearing auth: {}",
-                    e
-                );
-                self.clear_auth();
-                self.notify_session_expired();
+                // 仅当认证真正失败时才清除状态并通知会话过期，
+                // 网络错误等临时性问题不应视为会话过期
+                if e.is_auth_error() {
+                    error!(
+                        "[supabase] token refresh auth failed (singleflight), clearing auth: {}",
+                        e
+                    );
+                    self.clear_auth();
+                    self.notify_session_expired();
+                } else {
+                    warn!(
+                        "[supabase] token refresh failed (singleflight) due to non-auth error, keeping auth state: {}",
+                        e
+                    );
+                }
                 Err(e)
             }
         }

@@ -48,6 +48,16 @@ impl fmt::Display for CloudApiError {
     }
 }
 
+impl CloudApiError {
+    /// 判断是否为认证相关错误（应触发清除认证状态）
+    pub fn is_auth_error(&self) -> bool {
+        matches!(
+            self,
+            CloudApiError::NotAuthenticated | CloudApiError::AuthenticationFailed(_)
+        )
+    }
+}
+
 impl std::error::Error for CloudApiError {}
 
 /// 云端 API 客户端 trait
