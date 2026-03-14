@@ -6,8 +6,8 @@ use gpui::prelude::FluentBuilder;
 use gpui::FontWeight;
 use gpui::{
     div, px, AnyElement, App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, MouseButton, ParentElement, Render, SharedString, Styled,
-    Subscription, Window,
+    InteractiveElement, IntoElement, MouseButton, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants},
@@ -63,6 +63,8 @@ pub struct SettingsPanel {
     font_select_state: Entity<SelectState<Vec<SharedString>>>,
     /// 当前主题
     current_theme: TerminalTheme,
+    /// 字体大小输入变更抑制
+    suppress_font_size_change: bool,
     /// 光标闪烁开关
     cursor_blink: bool,
     /// 非 bracketed 模式下，多行粘贴确认
@@ -147,6 +149,9 @@ impl SettingsPanel {
             window,
             move |this, _state, event: &InputEvent, _window, cx| match event {
                 InputEvent::Change => {
+                    if this.suppress_font_size_change {
+                        return;
+                    }
                     let value = font_size_entity.read(cx).value().to_string();
                     if let Ok(size) = value.parse::<f32>() {
                         let clamped: f32 = size.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
@@ -196,6 +201,7 @@ impl SettingsPanel {
             font_size_input_state,
             font_select_state,
             current_theme: initial_theme.clone(),
+            suppress_font_size_change: false,
             cursor_blink: false,
             confirm_multiline_paste: true,
             confirm_high_risk_command: true,
@@ -217,9 +223,11 @@ impl SettingsPanel {
     ) {
         // 更新字体大小输入框
         let font_size = f32::from(theme.font_size);
+        self.suppress_font_size_change = true;
         self.font_size_input_state.update(cx, |state, cx| {
             state.set_value(&format!("{:.0}", font_size), window, cx);
         });
+        self.suppress_font_size_change = false;
 
         // 更新字体选择
         let font_family = theme.font_family.clone();
@@ -238,6 +246,21 @@ impl SettingsPanel {
 
     pub fn set_middle_click_paste(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.middle_click_paste = enabled;
+        cx.notify();
+    }
+
+    pub fn set_cursor_blink(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.cursor_blink = enabled;
+        cx.notify();
+    }
+
+    pub fn set_confirm_multiline_paste(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.confirm_multiline_paste = enabled;
+        cx.notify();
+    }
+
+    pub fn set_confirm_high_risk_command(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.confirm_high_risk_command = enabled;
         cx.notify();
     }
 
@@ -701,15 +724,19 @@ impl Render for SettingsPanel {
                     .id("settings-panel-scroll")
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scrollbar()
-                    .child(self.render_search_section(cx))
-                    .child(self.render_font_section(cx))
-                    .child(self.render_cursor_section(cx))
-                    .child(self.render_safety_section(cx))
-                    .when(has_file_manager, |el| {
-                        el.child(self.render_file_manager_section(cx))
-                    })
-                    .child(self.render_theme_section(cx)),
+                    .overflow_y_scroll()
+                    .child(
+                        v_flex()
+                            .flex_shrink_0()
+                            .child(self.render_search_section(cx))
+                            .child(self.render_font_section(cx))
+                            .child(self.render_cursor_section(cx))
+                            .child(self.render_safety_section(cx))
+                            .when(has_file_manager, |el| {
+                                el.child(self.render_file_manager_section(cx))
+                            })
+                            .child(self.render_theme_section(cx)),
+                    ),
             )
     }
 }

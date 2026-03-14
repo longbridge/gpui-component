@@ -13,82 +13,148 @@ use terminal::LocalConfig;
 use terminal_view::{TerminalView, TerminalViewEvent};
 
 impl HomePage {
-    fn apply_terminal_font_size(
-        &self,
-        terminal_view: &Entity<TerminalView>,
-        cx: &mut Context<Self>,
-    ) {
-        if cx.has_global::<AppSettings>() {
-            let font_size = AppSettings::global(cx).terminal_font_size as f32;
-            terminal_view.update(cx, |view, cx| {
-                view.set_font_size(font_size, cx);
-            });
-        }
+    fn register_terminal_view(&mut self, terminal_view: &Entity<TerminalView>) {
+        self.terminal_views.retain(|view| view.upgrade().is_some());
+        self.terminal_views.push(terminal_view.downgrade());
     }
 
-    fn bind_terminal_font_persistence(
+    /// 注册终端视图：应用当前全局设置 + 绑定事件同步
+    ///
+    /// 所有创建 TerminalView 的地方都应调用此方法，
+    /// 替代之前散落的 register + apply + bind × 2。
+    fn setup_terminal_view(
         &mut self,
         terminal_view: &Entity<TerminalView>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let subscription = cx.subscribe(
-            terminal_view,
-            |_this, _view, event: &TerminalViewEvent, cx| {
-                if let TerminalViewEvent::FontSizeChanged { size } = event {
-                    cx.update_global::<AppSettings, _>(|settings, _| {
-                        settings.terminal_font_size = *size as f64;
-                        settings.save();
-                    });
-                    cx.notify();
-                }
-            },
-        );
-        self._subscriptions.push(subscription);
-    }
+        self.register_terminal_view(terminal_view);
 
-    fn apply_terminal_clipboard_settings(
-        &self,
-        terminal_view: &Entity<TerminalView>,
-        cx: &mut Context<Self>,
-    ) {
+        // 应用当前全局持久化设置
         if cx.has_global::<AppSettings>() {
-            let auto_copy = AppSettings::global(cx).terminal_auto_copy;
-            let middle_click_paste = AppSettings::global(cx).terminal_middle_click_paste;
+            let settings = AppSettings::global(cx);
+            let font_size = settings.terminal_font_size as f32;
+            let auto_copy = settings.terminal_auto_copy;
+            let middle_click_paste = settings.terminal_middle_click_paste;
             terminal_view.update(cx, |view, cx| {
-                view.set_auto_copy(auto_copy, cx);
-                view.set_middle_click_paste(middle_click_paste, cx);
+                view.apply_terminal_settings(
+                    font_size,
+                    auto_copy,
+                    middle_click_paste,
+                    window,
+                    cx,
+                );
             });
         }
-    }
 
-    fn bind_terminal_clipboard_persistence(
-        &mut self,
-        terminal_view: &Entity<TerminalView>,
-        cx: &mut Context<Self>,
-    ) {
-        let subscription = cx.subscribe(
+        // 单一订阅处理所有 TerminalViewEvent
+        let subscription = cx.subscribe_in(
             terminal_view,
-            |_this, _view, event: &TerminalViewEvent, cx| {
+            window,
+            |this, _view, event: &TerminalViewEvent, window, cx| {
                 match event {
-                    TerminalViewEvent::AutoCopyChanged { enabled } => {
-                        cx.update_global::<AppSettings, _>(|settings, _| {
-                            settings.terminal_auto_copy = *enabled;
-                            settings.save();
+                    // ---- 持久化到 AppSettings 并同步 ----
+                    TerminalViewEvent::FontSizeChanged { size } => {
+                        cx.update_global::<AppSettings, _>(|s, _| {
+                            s.terminal_font_size = *size as f64;
+                            s.save();
                         });
-                        cx.notify();
+                        let settings = AppSettings::global(cx).clone();
+                        this.apply_terminal_settings_to_all(&settings, window, cx);
+                    }
+                    TerminalViewEvent::AutoCopyChanged { enabled } => {
+                        cx.update_global::<AppSettings, _>(|s, _| {
+                            s.terminal_auto_copy = *enabled;
+                            s.save();
+                        });
+                        let settings = AppSettings::global(cx).clone();
+                        this.apply_terminal_settings_to_all(&settings, window, cx);
                     }
                     TerminalViewEvent::MiddleClickPasteChanged { enabled } => {
-                        cx.update_global::<AppSettings, _>(|settings, _| {
-                            settings.terminal_middle_click_paste = *enabled;
-                            settings.save();
+                        cx.update_global::<AppSettings, _>(|s, _| {
+                            s.terminal_middle_click_paste = *enabled;
+                            s.save();
                         });
-                        cx.notify();
+                        let settings = AppSettings::global(cx).clone();
+                        this.apply_terminal_settings_to_all(&settings, window, cx);
                     }
-                    _ => {}
+
+                    // ---- 仅内存同步（不持久化） ----
+                    TerminalViewEvent::ThemeChanged { theme } => {
+                        let theme = theme.clone();
+                        this.for_each_terminal_view(window, cx, |view, window, cx| {
+                            view.apply_theme(&theme, window, cx);
+                        });
+                    }
+                    TerminalViewEvent::CursorBlinkChanged { enabled } => {
+                        let enabled = *enabled;
+                        this.for_each_terminal_view(window, cx, |view, window, cx| {
+                            view.apply_cursor_blink(enabled, window, cx);
+                        });
+                    }
+                    TerminalViewEvent::ConfirmMultilinePasteChanged { enabled } => {
+                        let enabled = *enabled;
+                        this.for_each_terminal_view(window, cx, |view, _window, cx| {
+                            view.apply_confirm_multiline_paste(enabled, cx);
+                        });
+                    }
+                    TerminalViewEvent::ConfirmHighRiskCommandChanged { enabled } => {
+                        let enabled = *enabled;
+                        this.for_each_terminal_view(window, cx, |view, _window, cx| {
+                            view.apply_confirm_high_risk_command(enabled, cx);
+                        });
+                    }
                 }
+                cx.notify();
             },
         );
         self._subscriptions.push(subscription);
+    }
+
+    pub(crate) fn apply_terminal_settings_to_all(
+        &mut self,
+        settings: &AppSettings,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let font_size = settings.terminal_font_size as f32;
+        let auto_copy = settings.terminal_auto_copy;
+        let middle_click_paste = settings.terminal_middle_click_paste;
+        self.terminal_views.retain(|weak| {
+            if let Some(view) = weak.upgrade() {
+                view.update(cx, |view, cx| {
+                    view.apply_terminal_settings(
+                        font_size,
+                        auto_copy,
+                        middle_click_paste,
+                        window,
+                        cx,
+                    );
+                });
+                true
+            } else {
+                false
+            }
+        });
+    }
+
+    /// 遍历所有存活的终端视图并执行回调，同时清理已释放的弱引用
+    fn for_each_terminal_view(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        mut f: impl FnMut(&mut TerminalView, &mut Window, &mut Context<TerminalView>),
+    ) {
+        self.terminal_views.retain(|weak| {
+            if let Some(entity) = weak.upgrade() {
+                entity.update(cx, |view, cx| {
+                    f(view, window, cx);
+                });
+                true
+            } else {
+                false
+            }
+        });
     }
 
     pub(crate) fn open_ssh_terminal(
@@ -122,10 +188,7 @@ impl HomePage {
 
         let terminal_view =
             cx.new(|cx| TerminalView::new_ssh_with_index(conn, tab_index, window, cx, None));
-        self.apply_terminal_font_size(&terminal_view, cx);
-        self.apply_terminal_clipboard_settings(&terminal_view, cx);
-        self.bind_terminal_font_persistence(&terminal_view, cx);
-        self.bind_terminal_clipboard_persistence(&terminal_view, cx);
+        self.setup_terminal_view(&terminal_view, window, cx);
         self.tab_container.update(cx, |tc, cx| {
             let tab = TabItem::new(tab_id, "ssh", terminal_view);
             tc.add_and_activate_tab_with_focus(tab, window, cx);
@@ -200,10 +263,7 @@ impl HomePage {
                             TerminalView::new_with_index(config, idx, window, cx)
                                 .expect("创建本地终端失败")
                         });
-                        this.apply_terminal_font_size(&terminal_view, cx);
-                        this.apply_terminal_clipboard_settings(&terminal_view, cx);
-                        this.bind_terminal_font_persistence(&terminal_view, cx);
-                        this.bind_terminal_clipboard_persistence(&terminal_view, cx);
+                        this.setup_terminal_view(&terminal_view, window, cx);
                         tab_container.update(cx, |tc, cx| {
                             let tab = TabItem::new(tab_id, "terminal", terminal_view);
                             tc.add_and_activate_tab_with_focus(tab, window, cx);
@@ -243,10 +303,7 @@ impl HomePage {
                                 Some(working_dir),
                             )
                         });
-                        this.apply_terminal_font_size(&terminal_view, cx);
-                        this.apply_terminal_clipboard_settings(&terminal_view, cx);
-                        this.bind_terminal_font_persistence(&terminal_view, cx);
-                        this.bind_terminal_clipboard_persistence(&terminal_view, cx);
+                        this.setup_terminal_view(&terminal_view, window, cx);
                         tab_container.update(cx, |tc, cx| {
                             let tab = TabItem::new(tab_id, "ssh", terminal_view);
                             tc.add_and_activate_tab_with_focus(tab, window, cx);
@@ -431,10 +488,7 @@ impl HomePage {
                     .expect("Failed to create TerminalView")
             });
             home.update(cx, |this, cx| {
-                this.apply_terminal_font_size(&terminal_view, cx);
-                this.apply_terminal_clipboard_settings(&terminal_view, cx);
-                this.bind_terminal_font_persistence(&terminal_view, cx);
-                this.bind_terminal_clipboard_persistence(&terminal_view, cx);
+                this.setup_terminal_view(&terminal_view, window, cx);
             });
             tab_container.update(cx, |tc, cx| {
                 let tab = TabItem::new(tab_id, "home", terminal_view);

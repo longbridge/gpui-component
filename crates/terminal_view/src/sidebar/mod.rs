@@ -349,6 +349,24 @@ impl TerminalSidebar {
         });
     }
 
+    pub fn set_cursor_blink(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings_panel.update(cx, |panel, cx| {
+            panel.set_cursor_blink(enabled, cx);
+        });
+    }
+
+    pub fn set_confirm_multiline_paste(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings_panel.update(cx, |panel, cx| {
+            panel.set_confirm_multiline_paste(enabled, cx);
+        });
+    }
+
+    pub fn set_confirm_high_risk_command(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings_panel.update(cx, |panel, cx| {
+            panel.set_confirm_high_risk_command(enabled, cx);
+        });
+    }
+
     /// 更新搜索输入框的值
     pub fn set_search_value(&self, value: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.settings_panel.update(cx, |panel, cx| {

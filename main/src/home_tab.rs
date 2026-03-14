@@ -38,6 +38,7 @@ use one_core::storage::{
     PendingCloudDeletionRepository, RedisMode, StoredConnection, Workspace, WorkspaceRepository,
 };
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
+use terminal_view::TerminalView;
 use redis_view::{RedisFormWindow, RedisFormWindowConfig};
 use rust_i18n::t;
 use terminal_view::{SshFormWindow, SshFormWindowConfig};
@@ -83,6 +84,7 @@ pub struct HomePage {
     pub(crate) workspace_filter_open: bool,
     workspace_filter_list: Option<Entity<ListState<WorkspaceFilterDelegate>>>,
     pub(crate) _subscriptions: Vec<gpui::Subscription>,
+    pub(crate) terminal_views: Vec<gpui::WeakEntity<TerminalView>>,
     /// 云端连接列表（用于同步对比）
     cloud_connections: Vec<CloudConnection>,
     /// 云同步服务
@@ -150,6 +152,7 @@ impl HomePage {
             workspace_filter_open: false,
             workspace_filter_list: None,
             _subscriptions: Vec::new(),
+            terminal_views: Vec::new(),
             cloud_connections: Vec::new(),
             cloud_sync_service: Arc::new(std::sync::RwLock::new(CloudSyncService::new())),
             cloud_error: None,

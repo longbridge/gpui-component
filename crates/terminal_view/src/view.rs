@@ -56,6 +56,10 @@ pub enum TerminalViewEvent {
     FontSizeChanged { size: f32 },
     AutoCopyChanged { enabled: bool },
     MiddleClickPasteChanged { enabled: bool },
+    ThemeChanged { theme: TerminalTheme },
+    CursorBlinkChanged { enabled: bool },
+    ConfirmMultilinePasteChanged { enabled: bool },
+    ConfirmHighRiskCommandChanged { enabled: bool },
 }
 
 const TERMINAL_CONTEXT: &str = "TerminalView";
@@ -508,6 +512,9 @@ impl TerminalView {
             }
             TerminalSidebarEvent::ThemeChanged(theme) => {
                 self.set_theme(theme.clone(), cx);
+                cx.emit(TerminalViewEvent::ThemeChanged {
+                    theme: theme.clone(),
+                });
             }
             TerminalSidebarEvent::ExecuteCommand(command) => {
                 // 仅粘贴命令，不自动回车执行，降低误操作风险
@@ -528,12 +535,21 @@ impl TerminalView {
                 } else {
                     self.blink_manager.update(cx, BlinkCursor::stop);
                 }
+                cx.emit(TerminalViewEvent::CursorBlinkChanged {
+                    enabled: *enabled,
+                });
             }
             TerminalSidebarEvent::ConfirmMultilinePasteChanged(enabled) => {
                 self.confirm_multiline_paste = *enabled;
+                cx.emit(TerminalViewEvent::ConfirmMultilinePasteChanged {
+                    enabled: *enabled,
+                });
             }
             TerminalSidebarEvent::ConfirmHighRiskCommandChanged(enabled) => {
                 self.confirm_high_risk_command = *enabled;
+                cx.emit(TerminalViewEvent::ConfirmHighRiskCommandChanged {
+                    enabled: *enabled,
+                });
             }
             TerminalSidebarEvent::AutoCopyChanged(enabled) => {
                 self.set_auto_copy(*enabled, cx);
@@ -645,7 +661,83 @@ impl TerminalView {
         cx.notify();
     }
 
-    fn sync_sidebar_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn apply_terminal_settings(
+        &mut self,
+        font_size: f32,
+        auto_copy: bool,
+        middle_click_paste: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // 字体大小
+        let clamped = font_size.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
+        let current = f32::from(self.current_theme.font_size);
+        if (current - clamped).abs() >= f32::EPSILON {
+            self.current_theme.font_size = px(clamped);
+            self.font_size = self.current_theme.font_size;
+            self.line_height = self.current_theme.line_height();
+        }
+
+        self.auto_copy_on_select = auto_copy;
+        self.middle_click_paste = middle_click_paste;
+
+        let theme = self.current_theme.clone();
+        self.sidebar.update(cx, |sidebar, cx| {
+            sidebar.update_current_theme(&theme, window, cx);
+            sidebar.set_auto_copy(auto_copy, cx);
+            sidebar.set_middle_click_paste(middle_click_paste, cx);
+        });
+
+        cx.notify();
+    }
+
+    /// 应用主题（不 emit 事件，用于跨 tab 同步）
+    pub fn apply_theme(&mut self, theme: &TerminalTheme, window: &mut Window, cx: &mut Context<Self>) {
+        if self.current_theme.name == theme.name {
+            return;
+        }
+        self.current_theme = theme.clone();
+        self.font_size = self.current_theme.font_size;
+        self.line_height = self.current_theme.line_height();
+        self.sync_sidebar_theme(window, cx);
+        cx.notify();
+    }
+
+    /// 应用光标闪烁（不 emit 事件，用于跨 tab 同步）
+    pub fn apply_cursor_blink(&mut self, enabled: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.cursor_blink_enabled = enabled;
+        if enabled {
+            if self.focus_handle.is_focused(window) {
+                self.blink_manager.update(cx, BlinkCursor::start);
+            }
+        } else {
+            self.blink_manager.update(cx, BlinkCursor::stop);
+        }
+        self.sidebar.update(cx, |sidebar, cx| {
+            sidebar.set_cursor_blink(enabled, cx);
+        });
+        cx.notify();
+    }
+
+    /// 应用多行粘贴确认（不 emit 事件，用于跨 tab 同步）
+    pub fn apply_confirm_multiline_paste(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.confirm_multiline_paste = enabled;
+        self.sidebar.update(cx, |sidebar, cx| {
+            sidebar.set_confirm_multiline_paste(enabled, cx);
+        });
+        cx.notify();
+    }
+
+    /// 应用高危命令确认（不 emit 事件，用于跨 tab 同步）
+    pub fn apply_confirm_high_risk_command(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.confirm_high_risk_command = enabled;
+        self.sidebar.update(cx, |sidebar, cx| {
+            sidebar.set_confirm_high_risk_command(enabled, cx);
+        });
+        cx.notify();
+    }
+
+    pub fn sync_sidebar_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let theme = self.current_theme.clone();
         self.sidebar.update(cx, |sidebar, cx| {
             sidebar.update_current_theme(&theme, window, cx);
@@ -728,6 +820,22 @@ impl TerminalView {
     }
 
     fn write_to_pty(&mut self, data: Vec<u8>, cx: &mut Context<Self>) {
+        // 用户输入时自动滚动到底部
+        let display_offset = self
+            .terminal
+            .read(cx)
+            .term()
+            .lock()
+            .grid()
+            .display_offset();
+        if display_offset > 0 {
+            self.terminal.update(cx, |terminal, _| {
+                terminal
+                    .term()
+                    .lock()
+                    .scroll_display(alacritty_terminal::grid::Scroll::Bottom);
+            });
+        }
         self.terminal.read(cx).write(&data);
     }
 

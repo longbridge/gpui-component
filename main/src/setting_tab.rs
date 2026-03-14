@@ -25,6 +25,7 @@ use tracing::{error, info};
 
 use crate::auth::get_auth_service;
 use crate::license::{get_license_service, offline_license_public_key};
+use crate::onetcli_app::GlobalHomePage;
 use crate::settings::llm_providers_view::LlmProvidersView;
 
 // ============================================================================
@@ -273,6 +274,21 @@ pub fn init_settings(cx: &mut App) {
     cx.set_global(settings);
 }
 
+fn sync_terminal_settings_to_all(settings: AppSettings, cx: &mut App) {
+    let Some(home) = cx.try_global::<GlobalHomePage>() else {
+        return;
+    };
+    let Some(window_id) = cx.active_window() else {
+        return;
+    };
+    let home_page = home.home_page.clone();
+    let _ = cx.update_window(window_id, move |_, window, cx| {
+        home_page.update(cx, |hp, cx| {
+            hp.apply_terminal_settings_to_all(&settings, window, cx);
+        });
+    });
+}
+
 pub struct SettingsPanel {
     focus_handle: FocusHandle,
     llm_providers_view: Entity<LlmProvidersView>,
@@ -443,6 +459,8 @@ impl SettingsPanel {
                                         let settings = AppSettings::global_mut(cx);
                                         settings.terminal_font_size = val;
                                         settings.save();
+                                        let settings_snapshot = settings.clone();
+                                        sync_terminal_settings_to_all(settings_snapshot, cx);
                                     },
                                 )
                                 .default_value(default_settings.terminal_font_size),
@@ -458,6 +476,8 @@ impl SettingsPanel {
                                         let settings = AppSettings::global_mut(cx);
                                         settings.terminal_auto_copy = val;
                                         settings.save();
+                                        let settings_snapshot = settings.clone();
+                                        sync_terminal_settings_to_all(settings_snapshot, cx);
                                     },
                                 )
                                 .default_value(default_settings.terminal_auto_copy),
@@ -475,6 +495,8 @@ impl SettingsPanel {
                                         let settings = AppSettings::global_mut(cx);
                                         settings.terminal_middle_click_paste = val;
                                         settings.save();
+                                        let settings_snapshot = settings.clone();
+                                        sync_terminal_settings_to_all(settings_snapshot, cx);
                                     },
                                 )
                                 .default_value(default_settings.terminal_middle_click_paste),
