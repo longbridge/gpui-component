@@ -1716,15 +1716,15 @@ mod tests {
     fn test_table_mention_format() {
         assert_eq!(
             TableMentionCompletionProvider::format_table_mention("users"),
-            "@users"
+            "@users "
         );
         assert_eq!(
             TableMentionCompletionProvider::format_table_mention("用户表"),
-            "@用户表"
+            "@用户表 "
         );
         assert_eq!(
             TableMentionCompletionProvider::format_table_mention("user info"),
-            "@`user info`"
+            "@`user info` "
         );
     }
 }

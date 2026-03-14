@@ -1350,6 +1350,50 @@ impl ColumnsEditor {
         }
     }
 
+    fn update_collation_for_charset(
+        database_type: DatabaseType,
+        charset_select: &Entity<SelectState<Vec<CharsetSelectItem>>>,
+        collation_select: &Entity<SelectState<Vec<CollationSelectItem>>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let selected = charset_select
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .unwrap_or_default();
+        // 空字符串表示 "(default)"，此时排序规则也重置为默认
+        if selected.is_empty() {
+            collation_select.update(cx, |state, cx| {
+                let items = vec![CollationSelectItem {
+                    info: CollationInfo {
+                        name: "".into(),
+                        charset: "".into(),
+                        is_default: true,
+                    },
+                }];
+                state.set_items(items, window, cx);
+                state.set_selected_index(Some(IndexPath::new(0)), window, cx);
+            });
+            return;
+        }
+        let global_state = cx.global::<GlobalDbState>();
+        let collations = if let Ok(plugin) = global_state.db_manager.get_plugin(&database_type) {
+            plugin.get_collations(&selected)
+        } else {
+            vec![]
+        };
+        let items: Vec<CollationSelectItem> = collations
+            .into_iter()
+            .map(|info| CollationSelectItem { info })
+            .collect();
+        let default_idx = items.iter().position(|c| c.info.is_default).unwrap_or(0);
+        collation_select.update(cx, |state, cx| {
+            state.set_items(items, window, cx);
+            state.set_selected_index(Some(IndexPath::new(default_idx)), window, cx);
+        });
+    }
+
     fn update_filtered_indices(&mut self, cx: &mut Context<Self>) {
         let query = self.search_input.read(cx).text().to_string().to_lowercase();
         self.search_query = query.clone();
@@ -1492,15 +1536,26 @@ impl ColumnsEditor {
                 }
             },
         );
-        let type_sub = cx.observe(&type_select, |_this, _, cx| {
+        let type_sub = cx.observe_in(&type_select, window, |_this, _, _window, cx| {
             cx.emit(ColumnsEditorEvent::Changed);
         });
-        let charset_sub = cx.observe(&charset_select, |_this, _, cx| {
-            cx.emit(ColumnsEditorEvent::Changed);
-        });
-        let collation_sub = cx.observe(&collation_select, |_this, _, cx| {
-            cx.emit(ColumnsEditorEvent::Changed);
-        });
+        let charset_select_clone = charset_select.clone();
+        let collation_select_clone = collation_select.clone();
+        let charset_sub =
+            cx.observe_in(&charset_select, window, move |this, _, window, cx| {
+                Self::update_collation_for_charset(
+                    this.database_type,
+                    &charset_select_clone,
+                    &collation_select_clone,
+                    window,
+                    cx,
+                );
+                cx.emit(ColumnsEditorEvent::Changed);
+            });
+        let collation_sub =
+            cx.observe_in(&collation_select, window, |_this, _, _window, cx| {
+                cx.emit(ColumnsEditorEvent::Changed);
+            });
         let enum_values_sub = cx.subscribe_in(
             &enum_values_input,
             window,
@@ -1852,15 +1907,26 @@ impl ColumnsEditor {
                     }
                 },
             );
-            let type_sub = cx.observe(&type_select, |_this, _, cx| {
+            let type_sub = cx.observe_in(&type_select, window, |_this, _, _window, cx| {
                 cx.emit(ColumnsEditorEvent::Changed);
             });
-            let charset_sub = cx.observe(&charset_select, |_this, _, cx| {
-                cx.emit(ColumnsEditorEvent::Changed);
-            });
-            let collation_sub = cx.observe(&collation_select, |_this, _, cx| {
-                cx.emit(ColumnsEditorEvent::Changed);
-            });
+            let charset_select_clone = charset_select.clone();
+            let collation_select_clone = collation_select.clone();
+            let charset_sub =
+                cx.observe_in(&charset_select, window, move |this, _, window, cx| {
+                    Self::update_collation_for_charset(
+                        this.database_type,
+                        &charset_select_clone,
+                        &collation_select_clone,
+                        window,
+                        cx,
+                    );
+                    cx.emit(ColumnsEditorEvent::Changed);
+                });
+            let collation_sub =
+                cx.observe_in(&collation_select, window, |_this, _, _window, cx| {
+                    cx.emit(ColumnsEditorEvent::Changed);
+                });
             let enum_values_sub = cx.subscribe_in(
                 &enum_values_input,
                 window,
@@ -2740,15 +2806,25 @@ impl TableOptionsEditor {
             InputState::new(window, cx).placeholder(t!("Table.table_comment").to_string())
         });
 
-        let engine_sub = cx.observe(&engine_select, |_this, _, cx| {
+        let engine_sub = cx.observe_in(&engine_select, window, |_this, _, _window, cx| {
             cx.emit(TableOptionsEvent::Changed);
         });
-        let charset_sub = cx.observe(&charset_select, |_this, _, cx| {
-            cx.emit(TableOptionsEvent::Changed);
-        });
-        let collation_sub = cx.observe(&collation_select, |_this, _, cx| {
-            cx.emit(TableOptionsEvent::Changed);
-        });
+        let charset_select_clone = charset_select.clone();
+        let collation_select_clone = collation_select.clone();
+        let charset_sub =
+            cx.observe_in(&charset_select, window, move |this, _, window, cx| {
+                this.update_collations_for_charset(
+                    &charset_select_clone,
+                    &collation_select_clone,
+                    window,
+                    cx,
+                );
+                cx.emit(TableOptionsEvent::Changed);
+            });
+        let collation_sub =
+            cx.observe_in(&collation_select, window, |_this, _, _window, cx| {
+                cx.emit(TableOptionsEvent::Changed);
+            });
         let comment_sub = cx.subscribe_in(
             &comment_input,
             window,
@@ -2794,6 +2870,35 @@ impl TableOptionsEditor {
                 is_default: true,
             }]
         }
+    }
+
+    fn update_collations_for_charset(
+        &self,
+        charset_select: &Entity<SelectState<Vec<CharsetSelectItem>>>,
+        collation_select: &Entity<SelectState<Vec<CollationSelectItem>>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let selected_charset = charset_select
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .unwrap_or_else(|| "utf8mb4".to_string());
+
+        let collations = Self::get_collations(&self._database_type, &selected_charset, cx);
+        let collation_items: Vec<CollationSelectItem> = collations
+            .into_iter()
+            .map(|info| CollationSelectItem { info })
+            .collect();
+        let default_idx = collation_items
+            .iter()
+            .position(|c| c.info.is_default)
+            .unwrap_or(0);
+
+        collation_select.update(cx, |state, cx| {
+            state.set_items(collation_items, window, cx);
+            state.set_selected_index(Some(IndexPath::new(default_idx)), window, cx);
+        });
     }
 
     pub fn get_options(&self, cx: &App) -> TableOptions {
@@ -3225,5 +3330,681 @@ mod tests {
             sql.contains("RENAME COLUMN \"name\" TO \"username\""),
             "应包含正确的 RENAME SQL: {sql}"
         );
+    }
+
+    // ===== 以下为补充测试，覆盖各种表修改场景 =====
+
+    /// 完全无变更时应返回 "-- No changes detected"
+    #[test]
+    fn test_no_changes_returns_no_changes_for_all_databases() {
+        let design = build_design(vec![build_col("a"), build_col("b")], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&design, &design);
+            assert_eq!(
+                sql, "-- No changes detected",
+                "[{:?}] 无变更时应返回 no changes",
+                database_type
+            );
+        }
+    }
+
+    /// 仅新增列（无重命名）
+    #[test]
+    fn test_add_column_only_for_all_databases() {
+        let original = build_design(vec![build_col("a")], vec![]);
+        let current = build_design(vec![build_col("a"), build_col("b")], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            let quoted_b = plugin.quote_identifier("b");
+            assert!(
+                sql.contains(&quoted_b),
+                "[{:?}] 新增列应包含列名 b: {sql}",
+                database_type
+            );
+            assert!(
+                !sql.contains("DROP COLUMN"),
+                "[{:?}] 仅新增列不应包含 DROP COLUMN: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 仅删除列（无重命名）
+    #[test]
+    fn test_drop_column_only_for_all_databases() {
+        let original = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let current = build_design(vec![build_col("a")], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            // SQLite 使用 table recreation 方式，不包含 DROP COLUMN 关键词
+            if database_type != DatabaseType::SQLite {
+                assert!(
+                    sql.contains("DROP COLUMN"),
+                    "[{:?}] 删除列应包含 DROP COLUMN: {sql}",
+                    database_type
+                );
+            }
+            assert!(
+                !sql.starts_with("-- No changes"),
+                "[{:?}] 删除列不应返回 no changes: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 仅修改列类型（无重命名）
+    #[test]
+    fn test_modify_column_type_for_all_databases() {
+        let original = build_design(vec![build_col("a")], vec![]);
+        let mut modified_col = build_col("a");
+        modified_col.data_type = "BIGINT".to_string();
+        let current = build_design(vec![modified_col], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            assert!(
+                sql.contains("BIGINT"),
+                "[{:?}] 修改类型后应包含新类型 BIGINT: {sql}",
+                database_type
+            );
+            assert!(
+                !sql.starts_with("-- No changes"),
+                "[{:?}] 修改类型不应返回 no changes: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 修改列 nullable 属性
+    #[test]
+    fn test_modify_column_nullable_for_all_databases() {
+        let original = build_design(vec![build_col("a")], vec![]);
+        let mut nullable_col = build_col("a");
+        nullable_col.is_nullable = true;
+        let current = build_design(vec![nullable_col], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            assert!(
+                !sql.starts_with("-- No changes"),
+                "[{:?}] 修改 nullable 不应返回 no changes: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 重命名 + 同时新增另一列
+    #[test]
+    fn test_rename_and_add_column_simultaneously() {
+        let original = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let current = build_design(
+            vec![build_col("a_new"), build_col("b"), build_col("c")],
+            vec![],
+        );
+        let renames = vec![("a".to_string(), "a_new".to_string())];
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql_with_renames(&original, &current, &renames);
+            // 应包含重命名
+            let has_rename = sql.contains("RENAME COLUMN")
+                || sql.contains("CHANGE COLUMN")
+                || sql.contains("sp_rename");
+            assert!(has_rename, "[{:?}] 应包含重命名 SQL: {sql}", database_type);
+            // 应包含新增列 c
+            let quoted_c = plugin.quote_identifier("c");
+            assert!(
+                sql.contains(&quoted_c),
+                "[{:?}] 应包含新增列 c: {sql}",
+                database_type
+            );
+            // 不应 DROP 被重命名的源列
+            let drop_a = format!("DROP COLUMN {}", plugin.quote_identifier("a"));
+            assert!(
+                !sql.contains(&drop_a),
+                "[{:?}] 不应 DROP 重命名源列 a: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 重命名 + 同时删除另一列
+    #[test]
+    fn test_rename_and_delete_another_column() {
+        let original = build_design(vec![build_col("a"), build_col("b"), build_col("c")], vec![]);
+        // 重命名 a→a2，删除 c
+        let current = build_design(vec![build_col("a2"), build_col("b")], vec![]);
+        let renames = vec![("a".to_string(), "a2".to_string())];
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql_with_renames(&original, &current, &renames);
+            // 应包含重命名
+            let has_rename = sql.contains("RENAME COLUMN")
+                || sql.contains("CHANGE COLUMN")
+                || sql.contains("sp_rename");
+            assert!(has_rename, "[{:?}] 应包含重命名 SQL: {sql}", database_type);
+            // 不应 DROP 重命名源列 a
+            let drop_a = format!("DROP COLUMN {}", plugin.quote_identifier("a"));
+            assert!(
+                !sql.contains(&drop_a),
+                "[{:?}] 不应 DROP 重命名源列 a: {sql}",
+                database_type
+            );
+            // SQLite 使用 table recreation，不直接包含 DROP COLUMN
+            if database_type != DatabaseType::SQLite {
+                // 应 DROP 被删除的列 c
+                let drop_c = format!("DROP COLUMN {}", plugin.quote_identifier("c"));
+                assert!(
+                    sql.contains(&drop_c),
+                    "[{:?}] 应 DROP 被删除的列 c: {sql}",
+                    database_type
+                );
+            }
+        }
+    }
+
+    /// 重命名 + 同时修改另一列的类型
+    #[test]
+    fn test_rename_and_modify_another_column() {
+        let original = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let mut modified_b = build_col("b");
+        modified_b.data_type = "BIGINT".to_string();
+        let current = build_design(vec![build_col("a_new"), modified_b], vec![]);
+        let renames = vec![("a".to_string(), "a_new".to_string())];
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql_with_renames(&original, &current, &renames);
+            // 应包含重命名
+            let has_rename = sql.contains("RENAME COLUMN")
+                || sql.contains("CHANGE COLUMN")
+                || sql.contains("sp_rename");
+            assert!(has_rename, "[{:?}] 应包含重命名 SQL: {sql}", database_type);
+            // 应包含修改列 b 的类型
+            assert!(
+                sql.contains("BIGINT"),
+                "[{:?}] 应包含修改后的类型 BIGINT: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 同时重命名多列
+    #[test]
+    fn test_multiple_renames_simultaneously() {
+        let original = build_design(vec![build_col("a"), build_col("b"), build_col("c")], vec![]);
+        let current = build_design(vec![build_col("x"), build_col("y"), build_col("c")], vec![]);
+        let renames = vec![
+            ("a".to_string(), "x".to_string()),
+            ("b".to_string(), "y".to_string()),
+        ];
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql_with_renames(&original, &current, &renames);
+            // 不应 DROP 源列
+            let drop_a = format!("DROP COLUMN {}", plugin.quote_identifier("a"));
+            let drop_b = format!("DROP COLUMN {}", plugin.quote_identifier("b"));
+            assert!(
+                !sql.contains(&drop_a),
+                "[{:?}] 不应 DROP 重命名源列 a: {sql}",
+                database_type
+            );
+            assert!(
+                !sql.contains(&drop_b),
+                "[{:?}] 不应 DROP 重命名源列 b: {sql}",
+                database_type
+            );
+            // 不应 ADD 目标列
+            assert!(
+                !sql.contains("ADD COLUMN") || sql.contains("RENAME") || sql.contains("CHANGE"),
+                "[{:?}] 不应 ADD COLUMN: {sql}",
+                database_type
+            );
+            // 应包含两条重命名语句
+            let rename_count = sql.match_indices("RENAME COLUMN").count()
+                + sql.match_indices("CHANGE COLUMN").count()
+                + sql.match_indices("sp_rename").count();
+            assert_eq!(
+                rename_count, 2,
+                "[{:?}] 应包含 2 条重命名语句，实际 {} 条: {sql}",
+                database_type, rename_count
+            );
+        }
+    }
+
+    /// 重命名的列同时也是索引列
+    #[test]
+    fn test_rename_column_in_index() {
+        let original = build_design(
+            vec![build_col("a"), build_col("b"), build_col("c")],
+            vec!["b"],
+        );
+        // 重命名索引列 b→b2，索引也应指向 b2
+        let mut current = build_design(
+            vec![build_col("a"), build_col("b2"), build_col("c")],
+            vec!["b2"],
+        );
+        current.indexes[0].name = "idx_test".to_string();
+        let renames = vec![("b".to_string(), "b2".to_string())];
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql_with_renames(&original, &current, &renames);
+            // 应包含重命名语句
+            let has_rename = sql.contains("RENAME COLUMN")
+                || sql.contains("CHANGE COLUMN")
+                || sql.contains("sp_rename");
+            assert!(has_rename, "[{:?}] 应包含重命名 SQL: {sql}", database_type);
+            // 不应误删再重建索引（因为 map_design_for_diff 会将 b2 映射回 b）
+            assert!(
+                !sql.contains("DROP INDEX"),
+                "[{:?}] 重命名索引列不应删除索引: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 新增索引（无列重命名）
+    #[test]
+    fn test_add_index_for_all_databases() {
+        let original = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let current = build_design(vec![build_col("a"), build_col("b")], vec!["a"]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            // 应包含 INDEX 相关关键字
+            assert!(
+                sql.to_uppercase().contains("INDEX"),
+                "[{:?}] 新增索引应包含 INDEX 关键字: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 删除索引（无列重命名）
+    #[test]
+    fn test_drop_index_for_all_databases() {
+        let original = build_design(vec![build_col("a"), build_col("b")], vec!["a"]);
+        let current = build_design(vec![build_col("a"), build_col("b")], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            assert!(
+                sql.to_uppercase().contains("DROP") && sql.to_uppercase().contains("INDEX"),
+                "[{:?}] 删除索引应包含 DROP INDEX: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// map_design_for_diff 支持多列重命名
+    #[test]
+    fn test_map_design_for_diff_multiple_renames() {
+        let current = build_design(
+            vec![build_col("x"), build_col("y"), build_col("z")],
+            vec!["x", "y"],
+        );
+        let renames = vec![
+            ("a".to_string(), "x".to_string()),
+            ("b".to_string(), "y".to_string()),
+        ];
+        let mapped = db::plugin::map_design_for_diff(&current, &renames);
+        let names: Vec<&str> = mapped.columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["a", "b", "z"]);
+        // 索引列也应被回退
+        assert_eq!(
+            mapped.indexes[0].columns,
+            vec!["a".to_string(), "b".to_string()]
+        );
+    }
+
+    /// map_design_for_diff 当列名不匹配时不做任何修改
+    #[test]
+    fn test_map_design_for_diff_no_matching_column() {
+        let current = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let renames = vec![("x".to_string(), "y".to_string())];
+        let mapped = db::plugin::map_design_for_diff(&current, &renames);
+        let names: Vec<&str> = mapped.columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["a", "b"]);
+    }
+
+    /// map_design_for_diff 传空重命名列表时返回原样
+    #[test]
+    fn test_map_design_for_diff_empty_renames() {
+        let current = build_design(vec![build_col("a"), build_col("b")], vec!["a"]);
+        let mapped = db::plugin::map_design_for_diff(&current, &[]);
+        let names: Vec<&str> = mapped.columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, vec!["a", "b"]);
+        assert_eq!(mapped.indexes[0].columns, vec!["a".to_string()]);
+    }
+
+    /// merge_alter_sql 同时有 base SQL 和 rename 语句时两者都保留
+    #[test]
+    fn test_merge_alter_sql_combines_base_and_renames() {
+        let base = "ALTER TABLE \"users\" ADD COLUMN \"c\" INT NOT NULL;".to_string();
+        let renames = vec![
+            "ALTER TABLE \"users\" RENAME COLUMN \"a\" TO \"x\";".to_string(),
+            "ALTER TABLE \"users\" RENAME COLUMN \"b\" TO \"y\";".to_string(),
+        ];
+        let result = db::plugin::merge_alter_sql(base.clone(), renames);
+        assert!(result.contains(&base), "应包含 base SQL");
+        assert!(
+            result.contains("RENAME COLUMN \"a\" TO \"x\""),
+            "应包含第一条 rename"
+        );
+        assert!(
+            result.contains("RENAME COLUMN \"b\" TO \"y\""),
+            "应包含第二条 rename"
+        );
+        // 各语句用换行分隔
+        assert_eq!(result.lines().count(), 3, "应有 3 行 SQL 语句");
+    }
+
+    /// merge_alter_sql base 为空字符串时只保留 rename 语句
+    #[test]
+    fn test_merge_alter_sql_empty_base_with_renames() {
+        let renames = vec!["ALTER TABLE t RENAME COLUMN a TO b;".to_string()];
+        let result = db::plugin::merge_alter_sql(String::new(), renames);
+        assert_eq!(result, "ALTER TABLE t RENAME COLUMN a TO b;");
+    }
+
+    /// merge_alter_sql base 为纯空白时跳过 base
+    #[test]
+    fn test_merge_alter_sql_whitespace_base() {
+        let renames = vec!["RENAME SQL;".to_string()];
+        let result = db::plugin::merge_alter_sql("   \n  ".to_string(), renames);
+        assert_eq!(result, "RENAME SQL;");
+    }
+
+    /// normalize_column_renames 过滤自身重命名（old == new）
+    #[test]
+    fn test_normalize_column_renames_filters_self_renames() {
+        let original = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let current = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let normalized = TableDesigner::normalize_column_renames(
+            &original,
+            &current,
+            &[("a".to_string(), "a".to_string())],
+        );
+        assert!(normalized.is_empty(), "old == new 的重命名应被过滤");
+    }
+
+    /// normalize_column_renames 去重：同一旧列名只保留第一次出现
+    #[test]
+    fn test_normalize_column_renames_dedup_old_name() {
+        let original = build_design(vec![build_col("a"), build_col("b"), build_col("c")], vec![]);
+        let current = build_design(vec![build_col("x"), build_col("y"), build_col("c")], vec![]);
+        let normalized = TableDesigner::normalize_column_renames(
+            &original,
+            &current,
+            &[
+                ("a".to_string(), "x".to_string()),
+                ("a".to_string(), "y".to_string()), // 重复旧列名
+            ],
+        );
+        assert_eq!(
+            normalized,
+            vec![("a".to_string(), "x".to_string())],
+            "同一旧列名只保留第一次"
+        );
+    }
+
+    /// normalize_column_renames 去重：同一新列名只保留第一次出现
+    #[test]
+    fn test_normalize_column_renames_dedup_new_name() {
+        let original = build_design(vec![build_col("a"), build_col("b"), build_col("c")], vec![]);
+        let current = build_design(vec![build_col("x"), build_col("b"), build_col("c")], vec![]);
+        let normalized = TableDesigner::normalize_column_renames(
+            &original,
+            &current,
+            &[
+                ("a".to_string(), "x".to_string()),
+                ("b".to_string(), "x".to_string()), // 重复新列名
+            ],
+        );
+        assert_eq!(
+            normalized,
+            vec![("a".to_string(), "x".to_string())],
+            "同一新列名只保留第一次"
+        );
+    }
+
+    /// MySQL build_column_rename_sql 无列定义时回退为 RENAME COLUMN
+    #[test]
+    fn test_mysql_rename_sql_fallback_without_column_def() {
+        let plugin = MySqlPlugin::new();
+        let sql = plugin.build_column_rename_sql("users", "old_col", "new_col", None);
+        assert!(
+            sql.contains("RENAME COLUMN"),
+            "MySQL 无列定义时应回退为 RENAME COLUMN: {sql}"
+        );
+        assert!(
+            !sql.contains("CHANGE COLUMN"),
+            "MySQL 无列定义时不应使用 CHANGE COLUMN: {sql}"
+        );
+    }
+
+    /// MySQL CHANGE COLUMN 保留 default 值和 comment
+    #[test]
+    fn test_mysql_change_column_preserves_default_and_comment() {
+        let plugin = MySqlPlugin::new();
+        let col = ColumnDefinition {
+            name: "new_name".to_string(),
+            data_type: "VARCHAR".to_string(),
+            length: Some(100),
+            is_nullable: true,
+            default_value: Some("'hello'".to_string()),
+            comment: "用户名字段".to_string(),
+            ..Default::default()
+        };
+        let sql = plugin.build_column_rename_sql("users", "old_name", "new_name", Some(&col));
+        assert!(sql.contains("CHANGE COLUMN"), "应使用 CHANGE COLUMN: {sql}");
+        assert!(sql.contains("DEFAULT 'hello'"), "应保留 DEFAULT 值: {sql}");
+        assert!(
+            sql.contains("COMMENT '用户名字段'"),
+            "应保留 COMMENT: {sql}"
+        );
+    }
+
+    /// MySQL CHANGE COLUMN 保留 auto_increment
+    #[test]
+    fn test_mysql_change_column_preserves_auto_increment() {
+        let plugin = MySqlPlugin::new();
+        let col = ColumnDefinition {
+            name: "id".to_string(),
+            data_type: "INT".to_string(),
+            is_nullable: false,
+            is_auto_increment: true,
+            ..Default::default()
+        };
+        let sql = plugin.build_column_rename_sql("users", "old_id", "id", Some(&col));
+        assert!(
+            sql.contains("AUTO_INCREMENT"),
+            "应保留 AUTO_INCREMENT: {sql}"
+        );
+    }
+
+    /// MSSQL sp_rename 正确处理包含单引号的列名
+    #[test]
+    fn test_mssql_rename_escapes_single_quotes() {
+        let plugin = MsSqlPlugin::new();
+        let sql = plugin.build_column_rename_sql("users", "col'a", "col'b", None);
+        // 单引号应被转义
+        assert!(sql.contains("col''a"), "旧列名中的单引号应被转义: {sql}");
+        assert!(sql.contains("col''b"), "新列名中的单引号应被转义: {sql}");
+    }
+
+    /// build_alter_table_sql_with_renames 传入空设计（无列、无索引）
+    #[test]
+    fn test_alter_table_with_renames_empty_designs() {
+        let empty = build_design(vec![], vec![]);
+        let plugin = PostgresPlugin::new();
+        let sql = plugin.build_alter_table_sql_with_renames(&empty, &empty, &[]);
+        assert_eq!(sql, "-- No changes detected");
+    }
+
+    /// 重命名 + 修改同一列的类型（重命名列同时改了 data_type）
+    #[test]
+    fn test_rename_and_modify_same_column() {
+        let original = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let mut renamed_and_modified = build_col("a_new");
+        renamed_and_modified.data_type = "BIGINT".to_string();
+        let current = build_design(vec![renamed_and_modified, build_col("b")], vec![]);
+        let renames = vec![("a".to_string(), "a_new".to_string())];
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql_with_renames(&original, &current, &renames);
+            // 应包含重命名
+            let has_rename = sql.contains("RENAME COLUMN")
+                || sql.contains("CHANGE COLUMN")
+                || sql.contains("sp_rename");
+            assert!(has_rename, "[{:?}] 应包含重命名 SQL: {sql}", database_type);
+            // 对于 MySQL 的 CHANGE COLUMN，类型变更和重命名合为一条
+            // 对于其他数据库，类型变更和重命名分别生成
+            if database_type == DatabaseType::MySQL {
+                // MySQL CHANGE COLUMN 自带完整列定义，包含新类型
+                assert!(
+                    sql.contains("BIGINT"),
+                    "[MySQL] CHANGE COLUMN 应包含新类型 BIGINT: {sql}"
+                );
+            } else {
+                // 其他数据库应同时包含 RENAME 和 ALTER COLUMN（类型变更）
+                assert!(
+                    sql.contains("BIGINT"),
+                    "[{:?}] 应包含类型变更 BIGINT: {sql}",
+                    database_type
+                );
+            }
+        }
+    }
+
+    /// 所有列都被删除后应生成合法 SQL
+    #[test]
+    fn test_delete_all_columns() {
+        let original = build_design(vec![build_col("a"), build_col("b")], vec![]);
+        let current = build_design(vec![], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            // 应生成非空 SQL（而非 no changes）
+            assert!(
+                !sql.starts_with("-- No changes"),
+                "[{:?}] 删除所有列不应返回 no changes: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 从零列新增多列
+    #[test]
+    fn test_add_multiple_columns_from_empty() {
+        let original = build_design(vec![], vec![]);
+        let current = build_design(vec![build_col("a"), build_col("b"), build_col("c")], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            let quoted_a = plugin.quote_identifier("a");
+            let quoted_b = plugin.quote_identifier("b");
+            let quoted_c = plugin.quote_identifier("c");
+            assert!(
+                sql.contains(&quoted_a) && sql.contains(&quoted_b) && sql.contains(&quoted_c),
+                "[{:?}] 应包含所有新增列 a, b, c: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 同时新增和删除索引
+    #[test]
+    fn test_add_and_drop_index_simultaneously() {
+        let mut original = build_design(
+            vec![build_col("a"), build_col("b"), build_col("c")],
+            vec!["a"],
+        );
+        original.indexes[0].name = "idx_old".to_string();
+
+        let mut current = build_design(
+            vec![build_col("a"), build_col("b"), build_col("c")],
+            vec!["b"],
+        );
+        current.indexes[0].name = "idx_new".to_string();
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            let upper = sql.to_uppercase();
+            assert!(
+                upper.contains("DROP") && upper.contains("INDEX"),
+                "[{:?}] 应包含 DROP INDEX: {sql}",
+                database_type
+            );
+            // 应包含创建新索引（INDEX 关键字出现在创建和删除两处）
+            let idx_count = upper.match_indices("INDEX").count();
+            assert!(
+                idx_count >= 2,
+                "[{:?}] INDEX 关键字应至少出现 2 次（增+删）: {sql}",
+                database_type
+            );
+        }
+    }
+
+    /// 添加带完整属性的列（default、comment、nullable）
+    #[test]
+    fn test_add_column_with_full_attributes() {
+        let original = build_design(vec![build_col("id")], vec![]);
+        let new_col = ColumnDefinition {
+            name: "email".to_string(),
+            data_type: "VARCHAR".to_string(),
+            length: Some(255),
+            is_nullable: true,
+            default_value: Some("''".to_string()),
+            comment: "邮箱地址".to_string(),
+            ..Default::default()
+        };
+        let current = build_design(vec![build_col("id"), new_col], vec![]);
+
+        // MySQL 支持 COMMENT 和 DEFAULT
+        let plugin = MySqlPlugin::new();
+        let sql = plugin.build_alter_table_sql(&original, &current);
+        assert!(sql.contains("VARCHAR(255)"), "应包含类型和长度: {sql}");
+        assert!(sql.contains("DEFAULT ''"), "应包含 DEFAULT: {sql}");
+        assert!(sql.contains("COMMENT '邮箱地址'"), "应包含 COMMENT: {sql}");
+    }
+
+    /// 修改列 default 值
+    #[test]
+    fn test_modify_column_default_value() {
+        let mut col_orig = build_col("a");
+        col_orig.default_value = Some("0".to_string());
+        let original = build_design(vec![col_orig], vec![]);
+
+        let mut col_new = build_col("a");
+        col_new.default_value = Some("1".to_string());
+        let current = build_design(vec![col_new], vec![]);
+
+        for database_type in DatabaseType::all().iter().copied() {
+            let plugin = build_plugin(database_type);
+            let sql = plugin.build_alter_table_sql(&original, &current);
+            assert!(
+                !sql.starts_with("-- No changes"),
+                "[{:?}] 修改 DEFAULT 值不应返回 no changes: {sql}",
+                database_type
+            );
+        }
     }
 }
