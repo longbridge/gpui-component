@@ -47,6 +47,23 @@ impl HomePage {
             });
         }
 
+        // 应用内存同步设置（主题、光标闪烁、多行粘贴确认、高危命令确认）
+        let session = &self.terminal_session_settings;
+        if let Some(theme) = &session.theme {
+            let theme = theme.clone();
+            terminal_view.update(cx, |view, cx| {
+                view.apply_theme(&theme, window, cx);
+            });
+        }
+        let cursor_blink = session.cursor_blink;
+        let confirm_multiline = session.confirm_multiline_paste;
+        let confirm_high_risk = session.confirm_high_risk_command;
+        terminal_view.update(cx, |view, cx| {
+            view.apply_cursor_blink(cursor_blink, window, cx);
+            view.apply_confirm_multiline_paste(confirm_multiline, cx);
+            view.apply_confirm_high_risk_command(confirm_high_risk, cx);
+        });
+
         // 单一订阅处理所有 TerminalViewEvent
         let subscription = cx.subscribe_in(
             terminal_view,
@@ -81,24 +98,28 @@ impl HomePage {
 
                     // ---- 仅内存同步（不持久化） ----
                     TerminalViewEvent::ThemeChanged { theme } => {
+                        this.terminal_session_settings.theme = Some(theme.clone());
                         let theme = theme.clone();
                         this.for_each_terminal_view(window, cx, |view, window, cx| {
                             view.apply_theme(&theme, window, cx);
                         });
                     }
                     TerminalViewEvent::CursorBlinkChanged { enabled } => {
+                        this.terminal_session_settings.cursor_blink = *enabled;
                         let enabled = *enabled;
                         this.for_each_terminal_view(window, cx, |view, window, cx| {
                             view.apply_cursor_blink(enabled, window, cx);
                         });
                     }
                     TerminalViewEvent::ConfirmMultilinePasteChanged { enabled } => {
+                        this.terminal_session_settings.confirm_multiline_paste = *enabled;
                         let enabled = *enabled;
                         this.for_each_terminal_view(window, cx, |view, _window, cx| {
                             view.apply_confirm_multiline_paste(enabled, cx);
                         });
                     }
                     TerminalViewEvent::ConfirmHighRiskCommandChanged { enabled } => {
+                        this.terminal_session_settings.confirm_high_risk_command = *enabled;
                         let enabled = *enabled;
                         this.for_each_terminal_view(window, cx, |view, _window, cx| {
                             view.apply_confirm_high_risk_command(enabled, cx);
