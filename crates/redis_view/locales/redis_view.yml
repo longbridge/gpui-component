@@ -26,6 +26,10 @@ Common:
     en: "Paste"
     zh-CN: "粘贴"
     zh-HK: "貼上"
+  delete:
+    en: "Delete"
+    zh-CN: "删除"
+    zh-HK: "刪除"
   none:
     en: "None"
     zh-CN: "无"

@@ -1643,10 +1643,8 @@ impl RedisTreeView {
         let node_connection_id = node.connection_id.clone();
         let node_db_index = node.db_index;
         let view = cx.entity().clone();
-        let view_for_delete = cx.entity().clone();
         let view_for_context = cx.entity().clone();
         let view_for_dbl = cx.entity().clone();
-        let node_id_for_delete = node_id.clone();
         let node_id_for_context = node_id.clone();
         let node_id_for_dbl = node_id.clone();
 
@@ -1854,36 +1852,6 @@ impl RedisTreeView {
                         .child(format!("({})", count)),
                 )
             })
-            // 删除按钮（仅对 Key 节点，悬停显示）
-            .when(is_key, |this| {
-                this.child(
-                    div()
-                        .id(SharedString::from(format!("delete-btn-{}", ix)))
-                        .w(px(20.0))
-                        .h(px(20.0))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(4.0))
-                        .invisible()
-                        .group_hover("tree-item", |style| style.visible())
-                        .hover(|style| style.bg(cx.theme().danger.opacity(0.1)))
-                        .cursor_pointer()
-                        .on_click(move |_, _, cx| {
-                            cx.stop_propagation();
-                            view_for_delete.update(cx, |_view, cx| {
-                                cx.emit(RedisTreeViewEvent::DeleteKey {
-                                    node_id: node_id_for_delete.clone(),
-                                });
-                            });
-                        })
-                        .child(
-                            Icon::new(IconName::Remove)
-                                .with_size(Size::XSmall)
-                                .text_color(cx.theme().danger),
-                        ),
-                )
-            })
             // 右键菜单
             .context_menu({
                 let view_for_context = view_for_context.clone();
@@ -1907,9 +1875,11 @@ impl RedisTreeView {
                     if let Some(node) = node {
                         match &node.node_type {
                             RedisNodeType::Key(_) => {
-                                // 键节点：显示"在新标签页中打开"菜单项
+                                // 键节点：显示"在新标签页中打开"和"删除"菜单项
                                 let view_for_open = view_for_context.clone();
+                                let view_for_delete = view_for_context.clone();
                                 let node_id_for_open = node_id_for_context.clone();
+                                let node_id_for_delete = node_id_for_context.clone();
                                 menu.item(
                                     PopupMenuItem::new(
                                         t!("RedisTree.menu_open_in_new_tab").to_string(),
@@ -1920,6 +1890,22 @@ impl RedisTreeView {
                                             move |_view, _, _, cx| {
                                                 cx.emit(RedisTreeViewEvent::OpenKeyInNewTab {
                                                     node_id: node_id_for_open.clone(),
+                                                });
+                                            },
+                                        ),
+                                    ),
+                                )
+                                .separator()
+                                .item(
+                                    PopupMenuItem::new(
+                                        t!("Common.delete").to_string(),
+                                    )
+                                    .on_click(
+                                        window.listener_for(
+                                            &view_for_delete,
+                                            move |_view, _, _, cx| {
+                                                cx.emit(RedisTreeViewEvent::DeleteKey {
+                                                    node_id: node_id_for_delete.clone(),
                                                 });
                                             },
                                         ),
