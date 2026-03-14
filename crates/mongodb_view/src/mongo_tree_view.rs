@@ -15,6 +15,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
     notification::Notification,
+    scroll::Scrollbar,
     spinner::Spinner,
     v_flex,
 };
@@ -1550,7 +1551,8 @@ impl Render for MongoTreeView {
                             .size_full()
                             .track_scroll(&self.scroll_handle),
                         )
-                    }),
+                    })
+                    .child(Scrollbar::vertical(&self.scroll_handle)),
             )
     }
 }

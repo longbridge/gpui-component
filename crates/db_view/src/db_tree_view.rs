@@ -21,6 +21,7 @@ use gpui_component::{
     list::{List, ListDelegate, ListState},
     menu::{ContextMenuExt, PopupMenuItem},
     popover::Popover,
+    scroll::Scrollbar,
     spinner::Spinner,
     tooltip::Tooltip,
     v_flex,
@@ -2000,37 +2001,44 @@ impl Render for DbTreeView {
             })
             .child(
                 // 树形视图
-                v_flex().flex_1().w_full().bg(cx.theme().sidebar).child(
-                    div()
-                        .id("tree-scroll")
-                        .flex_1()
-                        .overflow_scroll()
-                        .p_2()
-                        .map(|this| {
-                            if entries_len == 0 && !self.search_query.is_empty() {
-                                // 搜索无结果时显示空状态
-                                this.child(
-                                    v_flex()
-                                        .size_full()
-                                        .items_center()
-                                        .justify_center()
-                                        .gap_3()
-                                        .child(
-                                            Icon::new(IconName::Search)
-                                                .with_size(ComponentSize::Large)
-                                                .text_color(cx.theme().muted_foreground),
-                                        )
-                                        .child(
-                                            div()
-                                                .text_color(cx.theme().muted_foreground)
-                                                .child(t!("Common.not_found").to_string()),
-                                        ),
-                                )
-                            } else {
-                                this.child(self.render_tree_list(window, cx))
-                            }
-                        }),
-                ),
+                v_flex()
+                    .flex_1()
+                    .w_full()
+                    .bg(cx.theme().sidebar)
+                    .child(
+                        div()
+                            .id("tree-scroll")
+                            .flex_1()
+                            .overflow_scroll()
+                            .p_2()
+                            .map(|this| {
+                                if entries_len == 0 && !self.search_query.is_empty() {
+                                    // 搜索无结果时显示空状态
+                                    this.child(
+                                        v_flex()
+                                            .size_full()
+                                            .items_center()
+                                            .justify_center()
+                                            .gap_3()
+                                            .child(
+                                                Icon::new(IconName::Search)
+                                                    .with_size(ComponentSize::Large)
+                                                    .text_color(cx.theme().muted_foreground),
+                                            )
+                                            .child(
+                                                div()
+                                                    .text_color(cx.theme().muted_foreground)
+                                                    .child(
+                                                        t!("Common.not_found").to_string(),
+                                                    ),
+                                            ),
+                                    )
+                                } else {
+                                    this.child(self.render_tree_list(window, cx))
+                                }
+                            }),
+                    )
+                    .child(Scrollbar::vertical(&self.scroll_handle)),
             )
     }
 }
