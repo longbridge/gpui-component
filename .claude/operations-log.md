@@ -308,3 +308,141 @@
 - `cargo fmt -- crates/db_view/src/database_objects_tab.rs crates/db_view/src/db_tree_view.rs crates/db_view/src/db_tree_event.rs`
 - `cargo test -p db_view`
   - 结果：`sql_editor_completion_tests::tests::test_table_mention_format` 仍然失败（与现有工作区相同），其余 136 个测试通过。该失败与当前改动无关，后续需在专门任务中修复表提及格式断言。
+
+## 编码前检查 - 快捷键支持
+时间：2026-03-14 13:23:40 +0800
+
+□ 已查阅上下文摘要文件：.claude/context-summary-shortcut-key-support.md
+□ 将使用以下可复用组件：
+- crates/core/src/tab_container.rs: TabContainer 切换标签与 pinned tab 激活
+- crates/terminal_view/src/view.rs: 终端动作与快捷键绑定模式
+- crates/one_ui/src/edit_table/mod.rs: 跨平台快捷键分支模板
+  □ 将遵循命名约定：Rust 类型 PascalCase，函数与字段 snake_case
+  □ 将遵循代码风格：cfg 平台分支成对出现，init(cx) 注册
+  □ 确认不重复造轮子，证明：已检查 TabContainer 与 TerminalView 现有接口
+
+## 编码后声明 - shortcut-key-support
+时间：2026-03-14 14:30:00 +0800
+
+### 1. 复用了以下既有组件
+- `crates/core/src/tab_container.rs`：复用标签切换与 pinned tab 激活能力。
+- `crates/terminal_view/src/view.rs`：沿用终端动作与快捷键绑定模式。
+- `crates/one_ui/src/edit_table/mod.rs`：参考跨平台快捷键分支结构。
+
+### 2. 遵循了以下项目约定
+- 命名约定：类型 PascalCase、函数与字段 snake_case。
+- 代码风格：`cfg(target_os = "macos")` 与非 macOS 分支成对出现，统一在 `init(cx)` 绑定快捷键。
+- 文件组织：修改集中在 Home/Terminal/TabContainer 相关模块与 `.claude/` 文档。
+
+### 3. 对比了以下相似实现
+- `main/src/home/home_workspace_filter.rs`：ListDelegate 渲染与 confirm/close 模式对齐。
+- `crates/db_view/src/db_tree_view.rs`：ListDelegate 搜索/选择流程对齐。
+- `crates/ui/src/input/state.rs`：键位绑定风格与平台分支一致。
+
+### 4. 未重复造轮子的证明
+- 检查了 TabContainer、TerminalView、home_tab 现有接口，未找到现成的跨平台快捷键覆盖，故在既有 `actions!` 与 `bind_keys` 流程中扩展。
+
+## 实施与验证记录 - shortcut-key-support
+时间：2026-03-14 14:31:00 +0800
+
+### 本地验证
+- `cargo test -p ui`
+  - 结果：失败，原因是包名不存在（提示相似包为 `cc`）。
+- `cargo test -p gpui-component`
+  - 结果：通过，运行 130 个单元测试全部成功。
+
+## 实施与验证记录 - build-fix
+时间：2026-03-14 15:05:00 +0800
+
+### 已完成修改
+- 在 `main/src/onetcli_app.rs` 与 `main/src/home_tab.rs` 补充 `actions` 宏导入，修复快捷键动作类型未生成问题。
+- 在 `main/src/home/home_tabs.rs` 补充 `Entity` 与 `BorrowAppContext` 导入，修正字体持久化回调中的 `update_global` 可用性；同时去除无效 `if let` 与未使用变量。
+- 将 `main/src/home_tab.rs` 的 `open_connection_from_quick` 调整为 `pub(crate)`，供 quick open delegate 调用。
+- 在 `main/src/home/home_connection_quick_open.rs` 引入 `WindowExt` 并清理未使用导入，确保 `close_dialog` 可用。
+
+### 本地验证
+- `cargo build`
+  - 结果：构建成功；仅出现既有依赖 `num-bigint-dig v0.8.4` 的 future-incompat 警告。
+
+## 实施与验证记录 - shortcut-key-activation
+时间：2026-03-14 15:22:00 +0800
+
+### 已完成修改
+- 在 `main/src/main.rs` 打开窗口时调用 `window.activate_window()`，确保窗口成为激活窗口以接收快捷键事件。
+- 在 `main/src/onetcli_app.rs` 设置 pinned Home tab 后立即调用 `activate_pinned_tab`，确保 HomePage 获取焦点并启用 `HomePage` key_context。
+
+### 本地验证
+- `cargo build`
+  - 结果：构建成功；存在既有依赖 `num-bigint-dig v0.8.4` 的 future-incompat 警告。
+
+## 编码前检查 - 终端功能增强
+时间：2026-03-14 20:40:42 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-终端功能增强.md`
+□ 将使用以下可复用组件：
+- `main/src/home/home_tabs.rs` 中终端字体应用与持久化订阅模式
+- `crates/terminal_view/src/sidebar/settings_panel.rs` 中 Switch 事件模式
+- `crates/terminal_view/src/view.rs` 中剪贴板读写与鼠标事件绑定模式
+□ 将遵循命名约定：Rust 使用 snake_case，事件枚举使用 PascalCase
+□ 将遵循代码风格：最小改动、事件集中处理、t!("...") 多语言键
+□ 确认不重复造轮子，证明：已搜索 `auto_copy` / `middle_click` 未发现既有实现
+
+## 编码后声明 - 终端功能增强
+时间：2026-03-14 21:02:16 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/setting_tab.rs` SettingGroup/SettingItem 设置组模式
+- `main/src/home/home_tabs.rs` 终端设置应用与订阅持久化模式
+- `crates/terminal_view/src/sidebar/settings_panel.rs` Switch 事件处理模式
+- `crates/terminal_view/src/view.rs` 剪贴板读写与鼠标事件绑定模式
+
+### 2. 遵循了以下项目约定
+- 命名约定：snake_case 与 PascalCase
+- 代码风格：事件集中处理、最小改动
+- 文件组织：设置页/终端视图/侧边栏/本地化分层
+
+### 3. 对比了以下相似实现
+- `main/src/setting_tab.rs:160` 字体设置组写法
+- `main/src/home/home_tabs.rs:18` 终端字体持久化订阅
+- `crates/terminal_view/src/view.rs:470` 侧边栏事件处理
+
+### 4. 未重复造轮子的证明
+- 搜索 `auto_copy` / `middle_click` 未发现现有实现
+- 复用 `Terminal::selection_text` 与 `TerminalView::paste_text` 完成剪贴板逻辑
+
+## 实施与验证记录 - 终端功能增强
+时间：2026-03-14 21:02:16 +0800
+
+### 已完成修改
+- 增加终端字体持久化字段与设置页终端分组
+- 终端侧边栏新增“选中自动复制/中键粘贴”开关与事件链路
+- 终端视图支持自动复制与中键粘贴，新增 cmd/ctrl-= 快捷键
+- 更新终端与主设置页面本地化文案
+
+### 本地验证
+- `cargo build -p main`
+- 结果：成功（包含 future-incompat 警告：num-bigint-dig v0.8.4）
+- `cargo run -p main` 未执行：需要图形界面/交互，当前环境不适合自动运行
+
+## 修复记录 - 终端字体与侧边栏同步
+时间：2026-03-14 21:16:58 +0800
+
+### 修复内容
+- 字体快捷键变更后同步侧边栏输入值（增加 `sync_sidebar_theme` 并在 Increase/Decrease/Reset 以及侧边栏字体事件中调用）。
+
+### 本地验证
+- `cargo build -p main`
+- 结果：成功（包含 future-incompat 警告：num-bigint-dig v0.8.4）
+
+## 修复记录 - 终端字体快捷键卡顿
+时间：2026-03-14 21:22:50 +0800
+
+### 原因定位
+- 侧边栏字体输入框的程序化更新触发 InputEvent::Change，回流为 FontSizeChanged，导致重复同步链路。
+
+### 修复内容
+- 移除 `TerminalSidebarEvent::FontSizeChanged` 分支内的 `sync_sidebar_theme`，避免循环触发。
+
+### 本地验证
+- `cargo build -p main`
+- 结果：成功（包含 future-incompat 警告：num-bigint-dig v0.8.4）

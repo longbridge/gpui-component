@@ -299,6 +299,14 @@ Settings:
     en: Confirm high-risk command paste
     zh-CN: 高危命令粘贴需确认
     zh-HK: 高危命令貼上需確認
+  auto_copy:
+    en: Auto copy on select
+    zh-CN: 选中自动复制
+    zh-HK: 選中自動複製
+  middle_click_paste:
+    en: Middle click paste
+    zh-CN: 中键粘贴
+    zh-HK: 中鍵貼上
   file_manager_section:
     en: FILE MANAGER
     zh-CN: 文件管理器

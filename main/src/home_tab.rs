@@ -5,8 +5,8 @@ use db_view::connection_form_window::{ConnectionFormWindow, ConnectionFormWindow
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, App, AppContext, AsyncApp, Context, ElementId, Entity, EventEmitter, FocusHandle,
-    Focusable, FontWeight, InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
+    Focusable, FontWeight, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
+    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div, px,
 };
 use gpui_component::button::{ButtonCustomVariant, ButtonVariant};
 use gpui_component::menu::DropdownMenu;
@@ -44,11 +44,27 @@ use terminal_view::{SshFormWindow, SshFormWindowConfig};
 
 use crate::auth::{AuthService, show_auth_dialog};
 use crate::encourage::EncourageDialog;
+use crate::home::home_connection_quick_open::ConnectionQuickOpenDelegate;
 use crate::home::home_strategy::build_connection_open_strategy;
 use crate::home::home_workspace_filter::WorkspaceFilterDelegate;
 use crate::license::{get_license_service, is_feature_enabled, show_upgrade_dialog};
 use crate::setting_tab::GlobalCurrentUser;
 use crate::user_avatar::render_user_avatar;
+
+actions!(home_tab, [OpenConnectionQuickOpen, NewConnectionShortcut]);
+
+pub fn init(cx: &mut App) {
+    cx.bind_keys([
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-o", OpenConnectionQuickOpen, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("alt-o", OpenConnectionQuickOpen, None),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-n", NewConnectionShortcut, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("alt-n", NewConnectionShortcut, None),
+    ]);
+}
 
 // HomePage Entity - 管理 home 页面的所有状态
 
@@ -887,6 +903,135 @@ impl HomePage {
                     true
                 })
         });
+    }
+
+    pub(crate) fn show_connection_quick_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let parent = cx.entity();
+        let connections = self.connections.clone();
+        let list = cx.new(|cx| {
+            let mut delegate = ConnectionQuickOpenDelegate::new(parent);
+            delegate.update_items(&connections);
+            ListState::new(delegate, window, cx).searchable(true)
+        });
+
+        window.open_dialog(cx, move |dialog, _window, cx| {
+            dialog
+                .title("打开连接".to_string())
+                .w(px(520.0))
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(
+                            List::new(&list)
+                                .w_full()
+                                .max_h(px(360.0))
+                                .p(px(8.0))
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded(cx.theme().radius),
+                        ),
+                )
+                .alert()
+                .button_props(
+                    gpui_component::dialog::DialogButtonProps::default()
+                        .ok_text(t!("Common.close")),
+                )
+        });
+    }
+
+    pub(crate) fn show_new_connection_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let view = cx.entity();
+        window.open_dialog(cx, move |dialog, window, _cx| {
+            let mut items: Vec<AnyElement> = Vec::new();
+
+            items.push(
+                Button::new("new-conn-workspace")
+                    .label(t!("Workspace.label"))
+                    .on_click(window.listener_for(&view, |this, _, window, cx| {
+                        this.show_workspace_form(None, window, cx);
+                        window.close_dialog(cx);
+                    }))
+                    .into_any_element(),
+            );
+            items.push(
+                Button::new("new-conn-ssh")
+                    .label("SSH")
+                    .on_click(window.listener_for(&view, |this, _, window, cx| {
+                        this.editing_connection_id = None;
+                        this.show_ssh_form(window, cx);
+                        window.close_dialog(cx);
+                    }))
+                    .into_any_element(),
+            );
+            items.push(
+                Button::new("new-conn-terminal")
+                    .label("Terminal")
+                    .on_click(window.listener_for(&view, |this, _, window, cx| {
+                        this.add_terminal_tab(window, cx);
+                        window.close_dialog(cx);
+                    }))
+                    .into_any_element(),
+            );
+            items.push(
+                Button::new("new-conn-redis")
+                    .label("Redis")
+                    .on_click(window.listener_for(&view, |this, _, window, cx| {
+                        this.editing_connection_id = None;
+                        this.show_redis_form(window, cx);
+                        window.close_dialog(cx);
+                    }))
+                    .into_any_element(),
+            );
+            items.push(
+                Button::new("new-conn-mongodb")
+                    .label("MongoDB")
+                    .on_click(window.listener_for(&view, |this, _, window, cx| {
+                        this.editing_connection_id = None;
+                        this.show_mongodb_form(window, cx);
+                        window.close_dialog(cx);
+                    }))
+                    .into_any_element(),
+            );
+
+            for db_type in DatabaseType::all() {
+                let db_type = *db_type;
+                let label = db_type.as_str().to_string();
+                items.push(
+                    Button::new(SharedString::from(format!("new-conn-db-{}", db_type.as_str())))
+                        .label(label)
+                        .on_click(window.listener_for(&view, move |this, _, window, cx| {
+                            this.editing_connection_id = None;
+                            this.show_connection_form(db_type, window, cx);
+                            window.close_dialog(cx);
+                        }))
+                        .into_any_element(),
+                );
+            }
+
+            dialog
+                .title(t!("Home.new_connection").to_string())
+                .w(px(360.0))
+                .child(v_flex().gap_2().children(items))
+                .alert()
+                .button_props(
+                    gpui_component::dialog::DialogButtonProps::default()
+                        .ok_text(t!("Common.close")),
+                )
+        });
+    }
+
+    pub(crate) fn open_connection_from_quick(
+        &mut self,
+        connection: &StoredConnection,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let workspace = connection
+            .workspace_id
+            .and_then(|id| self.workspaces.iter().find(|w| w.id == Some(id)).cloned());
+        let strategy = build_connection_open_strategy(connection.clone(), workspace);
+        strategy.open(self, window, cx);
+        cx.notify();
     }
 
     fn handle_save_workspace(&mut self, name: String, cx: &mut Context<Self>) {
@@ -2681,26 +2826,29 @@ impl Render for HomePage {
             });
         }
 
-        div().size_full().child(
-            h_flex()
-                .size_full()
-                .child(self.render_sidebar(window, cx))
-                .child(
-                    v_flex()
-                        .flex_1()
-                        .h_full()
-                        .bg(cx.theme().background)
-                        .child(self.render_toolbar(window, cx))
-                        .child(
-                            div()
-                                .flex_1()
-                                .w_full()
-                                .overflow_hidden()
-                                .bg(cx.theme().muted)
-                                .child(self.render_content_area(cx)),
-                        ),
-                ),
-        )
+        div()
+            .size_full()
+            .track_focus(&self.focus_handle)
+            .child(
+                h_flex()
+                    .size_full()
+                    .child(self.render_sidebar(window, cx))
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .h_full()
+                            .bg(cx.theme().background)
+                            .child(self.render_toolbar(window, cx))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .w_full()
+                                    .overflow_hidden()
+                                    .bg(cx.theme().muted)
+                                    .child(self.render_content_area(cx)),
+                            ),
+                    ),
+            )
     }
 }
 

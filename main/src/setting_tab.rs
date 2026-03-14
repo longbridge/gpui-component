@@ -107,6 +107,12 @@ pub struct AppSettings {
     pub font_family: String,
     #[serde(default = "default_font_size")]
     pub font_size: f64,
+    #[serde(default = "default_terminal_font_size")]
+    pub terminal_font_size: f64,
+    #[serde(default = "default_true")]
+    pub terminal_auto_copy: bool,
+    #[serde(default = "default_true")]
+    pub terminal_middle_click_paste: bool,
     #[serde(default = "default_true")]
     pub auto_update: bool,
     #[serde(default)]
@@ -127,6 +133,10 @@ fn default_font_size() -> f64 {
     14.0
 }
 
+fn default_terminal_font_size() -> f64 {
+    15.0
+}
+
 fn default_true() -> bool {
     true
 }
@@ -143,6 +153,9 @@ impl Default for AppSettings {
             auto_switch_theme: false,
             font_family: default_font_family(),
             font_size: default_font_size(),
+            terminal_font_size: default_terminal_font_size(),
+            terminal_auto_copy: default_true(),
+            terminal_middle_click_paste: default_true(),
             auto_update: true,
             database_open_mode: DatabaseOpenMode::default(),
             enable_sql_auto_save: true,
@@ -414,6 +427,62 @@ impl SettingsPanel {
                             )
                             .description(t!("Settings.General.Font.font_size_desc").to_string()),
                         ),
+                    SettingGroup::new()
+                        .title(t!("Settings.General.Terminal.group_title"))
+                        .items(vec![
+                            SettingItem::new(
+                                t!("Settings.General.Terminal.font_size"),
+                                SettingField::number_input(
+                                    NumberFieldOptions {
+                                        min: 8.0,
+                                        max: 72.0,
+                                        ..Default::default()
+                                    },
+                                    |cx: &App| AppSettings::global(cx).terminal_font_size,
+                                    |val: f64, cx: &mut App| {
+                                        let settings = AppSettings::global_mut(cx);
+                                        settings.terminal_font_size = val;
+                                        settings.save();
+                                    },
+                                )
+                                .default_value(default_settings.terminal_font_size),
+                            )
+                            .description(
+                                t!("Settings.General.Terminal.font_size_desc").to_string(),
+                            ),
+                            SettingItem::new(
+                                t!("Settings.General.Terminal.auto_copy"),
+                                SettingField::switch(
+                                    |cx: &App| AppSettings::global(cx).terminal_auto_copy,
+                                    |val: bool, cx: &mut App| {
+                                        let settings = AppSettings::global_mut(cx);
+                                        settings.terminal_auto_copy = val;
+                                        settings.save();
+                                    },
+                                )
+                                .default_value(default_settings.terminal_auto_copy),
+                            )
+                            .description(
+                                t!("Settings.General.Terminal.auto_copy_desc").to_string(),
+                            ),
+                            SettingItem::new(
+                                t!("Settings.General.Terminal.middle_click_paste"),
+                                SettingField::switch(
+                                    |cx: &App| {
+                                        AppSettings::global(cx).terminal_middle_click_paste
+                                    },
+                                    |val: bool, cx: &mut App| {
+                                        let settings = AppSettings::global_mut(cx);
+                                        settings.terminal_middle_click_paste = val;
+                                        settings.save();
+                                    },
+                                )
+                                .default_value(default_settings.terminal_middle_click_paste),
+                            )
+                            .description(
+                                t!("Settings.General.Terminal.middle_click_paste_desc").to_string(),
+                            ),
+                        ]),
                     SettingGroup::new()
                         .title(t!("Settings.General.Database.group_title"))
                         .items(vec![

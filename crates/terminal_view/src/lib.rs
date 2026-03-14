@@ -19,4 +19,4 @@ pub use theme::{
     default_font_fallbacks, TerminalTheme, DEFAULT_FONT_SIZE, DEFAULT_LINE_HEIGHT_SCALE,
     MAX_FONT_SIZE, MIN_FONT_SIZE,
 };
-pub use view::{init, TerminalView};
+pub use view::{init, TerminalView, TerminalViewEvent};

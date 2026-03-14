@@ -45,8 +45,18 @@ actions!(
         SearchBackward,
         ToggleViMode,
         ViModeStartSelection,
+        IncreaseFont,
+        DecreaseFont,
+        ResetFont,
     ]
 );
+
+#[derive(Clone, Debug)]
+pub enum TerminalViewEvent {
+    FontSizeChanged { size: f32 },
+    AutoCopyChanged { enabled: bool },
+    MiddleClickPasteChanged { enabled: bool },
+}
 
 const TERMINAL_CONTEXT: &str = "TerminalView";
 
@@ -122,6 +132,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("shift-tab", SendShiftTab, Some(TERMINAL_CONTEXT)),
         KeyBinding::new(TERMINAL_COPY_SHORTCUT, Copy, Some(TERMINAL_CONTEXT)),
         KeyBinding::new(TERMINAL_PASTE_SHORTCUT, Paste, Some(TERMINAL_CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("shift-insert", Paste, Some(TERMINAL_CONTEXT)),
         KeyBinding::new(
             TERMINAL_SELECT_ALL_SHORTCUT,
             SelectAll,
@@ -143,6 +155,22 @@ pub fn init(cx: &mut App) {
             ToggleViMode,
             Some(TERMINAL_CONTEXT),
         ),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-+", IncreaseFont, Some(TERMINAL_CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-=", IncreaseFont, Some(TERMINAL_CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd--", DecreaseFont, Some(TERMINAL_CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-0", ResetFont, Some(TERMINAL_CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-+", IncreaseFont, Some(TERMINAL_CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-=", IncreaseFont, Some(TERMINAL_CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl--", DecreaseFont, Some(TERMINAL_CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-0", ResetFont, Some(TERMINAL_CONTEXT)),
     ]);
 }
 
@@ -194,6 +222,10 @@ pub struct TerminalView {
     confirm_multiline_paste: bool,
     /// 高危命令是否弹确认
     confirm_high_risk_command: bool,
+    /// 选中自动复制
+    auto_copy_on_select: bool,
+    /// 中键粘贴
+    middle_click_paste: bool,
 
     /// 侧边栏面板大小
     sidebar_panel_size: Pixels,
@@ -436,6 +468,8 @@ impl TerminalView {
             cursor_blink_enabled: false,
             confirm_multiline_paste: true,
             confirm_high_risk_command: true,
+            auto_copy_on_select: true,
+            middle_click_paste: true,
             sidebar_panel_size: SIDEBAR_DEFAULT_WIDTH,
             resizing: None,
             view_bounds: Bounds::default(),
@@ -500,6 +534,12 @@ impl TerminalView {
             }
             TerminalSidebarEvent::ConfirmHighRiskCommandChanged(enabled) => {
                 self.confirm_high_risk_command = *enabled;
+            }
+            TerminalSidebarEvent::AutoCopyChanged(enabled) => {
+                self.set_auto_copy(*enabled, cx);
+            }
+            TerminalSidebarEvent::MiddleClickPasteChanged(enabled) => {
+                self.set_middle_click_paste(*enabled, cx);
             }
             TerminalSidebarEvent::CdToTerminal(path) => {
                 // 向终端发送 cd 命令并回车
@@ -594,9 +634,45 @@ impl TerminalView {
     /// 设置字体大小
     pub fn set_font_size(&mut self, size: f32, cx: &mut Context<Self>) {
         let clamped = size.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE);
+        let current = f32::from(self.current_theme.font_size);
+        if (current - clamped).abs() < f32::EPSILON {
+            return;
+        }
         self.current_theme.font_size = px(clamped);
         self.font_size = self.current_theme.font_size;
         self.line_height = self.current_theme.line_height();
+        cx.emit(TerminalViewEvent::FontSizeChanged { size: clamped });
+        cx.notify();
+    }
+
+    fn sync_sidebar_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let theme = self.current_theme.clone();
+        self.sidebar.update(cx, |sidebar, cx| {
+            sidebar.update_current_theme(&theme, window, cx);
+        });
+    }
+
+    pub fn set_auto_copy(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.auto_copy_on_select == enabled {
+            return;
+        }
+        self.auto_copy_on_select = enabled;
+        self.sidebar.update(cx, |sidebar, cx| {
+            sidebar.set_auto_copy(enabled, cx);
+        });
+        cx.emit(TerminalViewEvent::AutoCopyChanged { enabled });
+        cx.notify();
+    }
+
+    pub fn set_middle_click_paste(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.middle_click_paste == enabled {
+            return;
+        }
+        self.middle_click_paste = enabled;
+        self.sidebar.update(cx, |sidebar, cx| {
+            sidebar.set_middle_click_paste(enabled, cx);
+        });
+        cx.emit(TerminalViewEvent::MiddleClickPasteChanged { enabled });
         cx.notify();
     }
 
@@ -876,6 +952,21 @@ impl TerminalView {
                 self.paste_text(&text, _window, cx);
             }
         }
+    }
+
+    fn increase_font(&mut self, _: &IncreaseFont, window: &mut Window, cx: &mut Context<Self>) {
+        self.increase_font_size(cx);
+        self.sync_sidebar_theme(window, cx);
+    }
+
+    fn decrease_font(&mut self, _: &DecreaseFont, window: &mut Window, cx: &mut Context<Self>) {
+        self.decrease_font_size(cx);
+        self.sync_sidebar_theme(window, cx);
+    }
+
+    fn reset_font(&mut self, _: &ResetFont, window: &mut Window, cx: &mut Context<Self>) {
+        self.reset_font_size(cx);
+        self.sync_sidebar_theme(window, cx);
     }
 
     /// 粘贴文本到终端
@@ -1561,6 +1652,22 @@ impl TerminalView {
         cx.notify();
     }
 
+    fn handle_middle_mouse_down(
+        &mut self,
+        _event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.middle_click_paste {
+            return;
+        }
+        if let Some(clipboard) = cx.read_from_clipboard() {
+            if let Some(text) = clipboard.text() {
+                self.paste_text(&text, window, cx);
+            }
+        }
+    }
+
     fn handle_mouse_move(
         &mut self,
         event: &MouseMoveEvent,
@@ -1635,6 +1742,13 @@ impl TerminalView {
             let _ = self.addon_manager.dispatch_mouse_up(&mut context);
         }
         self.mouse_state.selecting = false;
+        if self.auto_copy_on_select {
+            if let Some(text) = self.terminal.read(cx).selection_text() {
+                if !text.is_empty() {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                }
+            }
+        }
         cx.notify();
     }
 
@@ -1701,6 +1815,7 @@ impl Focusable for TerminalView {
 }
 
 impl EventEmitter<TabContentEvent> for TerminalView {}
+impl EventEmitter<TerminalViewEvent> for TerminalView {}
 
 impl TabContent for TerminalView {
     fn content_key(&self) -> &'static str {
@@ -1830,12 +1945,16 @@ impl Render for TerminalView {
                     .on_action(cx.listener(Self::search_forward))
                     .on_action(cx.listener(Self::search_backward))
                     .on_action(cx.listener(Self::toggle_vi_mode))
+                    .on_action(cx.listener(Self::increase_font))
+                    .on_action(cx.listener(Self::decrease_font))
+                    .on_action(cx.listener(Self::reset_font))
                     .on_key_down(cx.listener(Self::handle_key_event))
                     .flex_1()
                     .relative()
                     .overflow_hidden()
                     .on_scroll_wheel(cx.listener(Self::handle_scroll))
                     .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
+                    .on_mouse_down(MouseButton::Middle, cx.listener(Self::handle_middle_mouse_down))
                     .on_mouse_move(cx.listener(Self::handle_mouse_move))
                     .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
                     .child(

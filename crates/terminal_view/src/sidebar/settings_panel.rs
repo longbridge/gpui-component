@@ -45,6 +45,10 @@ pub enum SettingsPanelEvent {
     ConfirmMultilinePasteChanged(bool),
     /// 高危命令确认开关
     ConfirmHighRiskCommandChanged(bool),
+    /// 选中自动复制开关
+    AutoCopyChanged(bool),
+    /// 中键粘贴开关
+    MiddleClickPasteChanged(bool),
     /// 路径同步开关变更
     SyncPathChanged(bool),
 }
@@ -65,6 +69,10 @@ pub struct SettingsPanel {
     confirm_multiline_paste: bool,
     /// 高危命令确认
     confirm_high_risk_command: bool,
+    /// 选中自动复制
+    auto_copy: bool,
+    /// 中键粘贴
+    middle_click_paste: bool,
     /// 路径与终端同步开关
     sync_path: bool,
     /// 是否有文件管理器面板（仅 SSH 终端有）
@@ -79,6 +87,8 @@ impl SettingsPanel {
     pub fn new(
         initial_theme: &TerminalTheme,
         has_file_manager: bool,
+        auto_copy: bool,
+        middle_click_paste: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -189,6 +199,8 @@ impl SettingsPanel {
             cursor_blink: false,
             confirm_multiline_paste: true,
             confirm_high_risk_command: true,
+            auto_copy,
+            middle_click_paste,
             sync_path: true,
             has_file_manager,
             focus_handle: cx.focus_handle(),
@@ -216,6 +228,16 @@ impl SettingsPanel {
         });
 
         self.current_theme = theme;
+        cx.notify();
+    }
+
+    pub fn set_auto_copy(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.auto_copy = enabled;
+        cx.notify();
+    }
+
+    pub fn set_middle_click_paste(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.middle_click_paste = enabled;
         cx.notify();
     }
 
@@ -484,6 +506,8 @@ impl SettingsPanel {
 
         let confirm_multiline = self.confirm_multiline_paste;
         let confirm_high_risk = self.confirm_high_risk_command;
+        let auto_copy = self.auto_copy;
+        let middle_click_paste = self.middle_click_paste;
 
         v_flex()
             .gap_3()
@@ -539,6 +563,36 @@ impl SettingsPanel {
                                         cx.emit(SettingsPanelEvent::ConfirmHighRiskCommandChanged(
                                             *checked,
                                         ));
+                                    })),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(div().text_sm().child(t!("Settings.auto_copy")))
+                            .child(
+                                Switch::new("auto-copy-switch")
+                                    .checked(auto_copy)
+                                    .small()
+                                    .on_click(cx.listener(|this, checked: &bool, _window, cx| {
+                                        this.auto_copy = *checked;
+                                        cx.emit(SettingsPanelEvent::AutoCopyChanged(*checked));
+                                    })),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .child(div().text_sm().child(t!("Settings.middle_click_paste")))
+                            .child(
+                                Switch::new("middle-click-paste-switch")
+                                    .checked(middle_click_paste)
+                                    .small()
+                                    .on_click(cx.listener(|this, checked: &bool, _window, cx| {
+                                        this.middle_click_paste = *checked;
+                                        cx.emit(SettingsPanelEvent::MiddleClickPasteChanged(*checked));
                                     })),
                             ),
                     ),

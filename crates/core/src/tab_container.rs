@@ -786,6 +786,11 @@ impl TabContainer {
         self.pinned_tab_active
     }
 
+    /// Returns whether a pinned tab exists.
+    pub fn has_pinned_tab(&self) -> bool {
+        self.pinned_tab.is_some()
+    }
+
     /// Activate the pinned tab (deactivate regular tabs visually).
     pub fn activate_pinned_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.pinned_tab.is_some() {

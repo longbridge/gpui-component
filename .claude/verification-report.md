@@ -93,3 +93,95 @@
 - `TerminalSidebar` 的手动同步会缓存最近路径、强制下一次 OSC 7 更新，并向 TerminalView 发出 `RequestWorkingDirRefresh` 事件。
 - TerminalView 新增 `request_working_dir_refresh`，写入 `printf '\033]7;file://%s%s\007' "$HOSTNAME" "$PWD"\n` 指令，确保即使 shell 未配置 PROMPT_COMMAND 也能返回当前路径。
 - `cargo fmt -- crates/terminal_view/src/sidebar/mod.rs crates/terminal_view/src/view.rs`、`cargo check -p terminal_view` 均已执行；唯一警告依旧是既有依赖 `num-bigint-dig v0.8.4` 的 future-incompat 提示。
+
+---
+
+## 审查报告（shortcut-key-support）
+生成时间：2026-03-14 14:32:00 +0800
+
+### 技术维度评分
+- 代码质量：90/100
+- 测试覆盖：78/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：92/100
+- 架构一致：93/100
+- 风险评估：84/100
+
+### 综合评分
+- 88/100
+- 建议：需讨论（原因：快捷键行为存在平台差异与降级策略，需要在产品侧确认预期）。
+
+### 结论
+- 已实现跨平台快捷键分支：macOS 使用 `cmd-o/cmd-n` 打开/新建连接、`cmd-1..9` 切换标签、`ctrl-cmd-f` 全屏；非 macOS 使用 `alt-o/alt-n`、`alt-1..9`、`alt-enter` 全屏、`ctrl-space` 最小化。
+- 终端字体快捷键保持一致：macOS `cmd +/-/0`，非 macOS `ctrl +/-/0`；字体大小变更已持久化到 `AppSettings`。
+- 本地验证执行 `cargo test -p gpui-component` 通过（130 tests），未运行全量 UI 交互测试；需在实际 UI 交互环境中验证快速连接弹窗与键位冲突情况。
+- 风险点：`ctrl-space` 在非 macOS 仅实现为最小化而非隐藏/恢复的完整切换，需确认是否满足需求或是否需要后续补强。
+
+---
+
+## 审查报告（build-fix）
+生成时间：2026-03-14 15:06:00 +0800
+
+### 技术维度评分
+- 代码质量：90/100
+- 测试覆盖：75/100
+- 规范遵循：94/100
+
+### 战略维度评分
+- 需求匹配：93/100
+- 架构一致：93/100
+- 风险评估：85/100
+
+### 综合评分
+- 88/100
+- 建议：需讨论（原因：仅完成编译验证，未覆盖运行时 UI 行为测试）。
+
+### 结论
+- 通过补齐 `actions` 宏与 `WindowExt/BorrowAppContext` 导入，修复快捷键动作类型缺失与对话框关闭方法不可用的问题。
+- `open_connection_from_quick` 由私有改为 `pub(crate)`，与 quick open delegate 的调用链保持一致。
+- 本地执行 `cargo build` 成功，唯有 `num-bigint-dig v0.8.4` 的 future-incompat 警告，属于既有依赖风险。
+
+---
+
+## 审查报告（终端功能增强）
+生成时间：2026-03-14 21:02:16 +0800
+
+### 技术维度评分
+- 代码质量：92/100
+- 测试覆盖：70/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：94/100
+- 架构一致：94/100
+- 风险评估：84/100
+
+### 综合评分
+- 88/100
+- 建议：需讨论（原因：仅完成编译验证，未运行实际 UI 手动场景）
+
+### 结论
+- 已新增终端字体持久化、选中自动复制、中键粘贴与 cmd/ctrl-= 快捷键，事件链路保持 TerminalView ← TerminalSidebar ← SettingsPanel 模式。
+- 设置页新增“终端”分组与本地化文案，主设置与侧边栏设置均可持久化。
+- 本地验证仅执行 `cargo build -p main`；`cargo run -p main` 未执行（需要图形界面/交互）。
+- 风险：自动复制依赖选择文本，若 selection 为空不会写剪贴板；中键粘贴依赖剪贴板文本存在。
+
+---
+
+## 审查补充（终端字体与侧边栏同步）
+生成时间：2026-03-14 21:16:58 +0800
+
+### 结论
+- 快捷键调整字体后已同步侧边栏数值，避免显示滞后。
+- 本地验证执行 `cargo build -p main`，通过（future-incompat 警告同前）。
+
+---
+
+## 审查补充（终端字体快捷键卡顿）
+生成时间：2026-03-14 21:22:50 +0800
+
+### 结论
+- 已移除侧边栏字体事件中的同步回流，避免输入框更新触发重复事件导致卡顿。
+- 本地验证执行 `cargo build -p main`，通过（future-incompat 警告同前）。

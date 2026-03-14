@@ -612,6 +612,37 @@ Settings:
         zh-CN: 调整字体大小以获得更好的可读性（8-72）
         zh-HK: 調整字型大小以獲得更好的可讀性（8-72）
 
+    # 终端设置
+    Terminal:
+      group_title:
+        en: Terminal
+        zh-CN: 终端
+        zh-HK: 終端
+      font_size:
+        en: Terminal Font Size
+        zh-CN: 终端字体大小
+        zh-HK: 終端字型大小
+      font_size_desc:
+        en: Adjust terminal font size (8-72)
+        zh-CN: 调整终端字体大小（8-72）
+        zh-HK: 調整終端字型大小（8-72）
+      auto_copy:
+        en: Auto copy on select
+        zh-CN: 选中自动复制
+        zh-HK: 選中自動複製
+      auto_copy_desc:
+        en: Automatically copy selected terminal text
+        zh-CN: 选中文本后自动复制到剪贴板
+        zh-HK: 選中文本後自動複製到剪貼簿
+      middle_click_paste:
+        en: Middle click paste
+        zh-CN: 中键粘贴
+        zh-HK: 中鍵貼上
+      middle_click_paste_desc:
+        en: Paste clipboard content with middle mouse button
+        zh-CN: 使用鼠标中键粘贴剪贴板内容
+        zh-HK: 使用滑鼠中鍵貼上剪貼簿內容
+
     # 数据库设置
     Database:
       group_title:

@@ -101,6 +101,10 @@ pub enum TerminalSidebarEvent {
     ConfirmMultilinePasteChanged(bool),
     /// 高危命令确认开关
     ConfirmHighRiskCommandChanged(bool),
+    /// 选中自动复制开关
+    AutoCopyChanged(bool),
+    /// 中键粘贴开关
+    MiddleClickPasteChanged(bool),
     /// 在终端中 cd 到指定路径
     CdToTerminal(String),
     /// 请求将终端当前工作目录同步到文件管理器
@@ -139,8 +143,9 @@ impl TerminalSidebar {
     ) -> Self {
         let colors = initial_theme.colors();
         let has_file_manager = stored_connection.is_some();
-        let settings_panel =
-            cx.new(|cx| SettingsPanel::new(initial_theme, has_file_manager, window, cx));
+        let settings_panel = cx.new(|cx| {
+            SettingsPanel::new(initial_theme, has_file_manager, true, true, window, cx)
+        });
         let quick_command_panel = cx.new(|cx| QuickCommandPanel::new(connection_id, window, cx));
         let ai_chat_panel = cx.new(|cx| AiChatPanel::new(window, cx));
 
@@ -208,6 +213,12 @@ impl TerminalSidebar {
                     cx.emit(TerminalSidebarEvent::ConfirmHighRiskCommandChanged(
                         *enabled,
                     ));
+                }
+                settings_panel::SettingsPanelEvent::AutoCopyChanged(enabled) => {
+                    cx.emit(TerminalSidebarEvent::AutoCopyChanged(*enabled));
+                }
+                settings_panel::SettingsPanelEvent::MiddleClickPasteChanged(enabled) => {
+                    cx.emit(TerminalSidebarEvent::MiddleClickPasteChanged(*enabled));
                 }
                 settings_panel::SettingsPanelEvent::SyncPathChanged(enabled) => {
                     this.sync_path_enabled = *enabled;
@@ -324,6 +335,18 @@ impl TerminalSidebar {
         });
 
         cx.notify();
+    }
+
+    pub fn set_auto_copy(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings_panel.update(cx, |panel, cx| {
+            panel.set_auto_copy(enabled, cx);
+        });
+    }
+
+    pub fn set_middle_click_paste(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings_panel.update(cx, |panel, cx| {
+            panel.set_middle_click_paste(enabled, cx);
+        });
     }
 
     /// 更新搜索输入框的值

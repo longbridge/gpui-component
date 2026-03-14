@@ -3,16 +3,94 @@ use crate::setting_tab::{AppSettings, DatabaseOpenMode, SettingsPanel};
 use db_view::chatdb::chat_panel::ChatPanel;
 use db_view::database_tab::DatabaseTabView;
 use gpui::AppContext;
-use gpui::{Context, Window};
+use gpui::{BorrowAppContext, Context, Entity, Window};
 use mongodb_view::MongoTabView;
 use one_core::storage::{ConnectionType, StoredConnection, Workspace};
 use one_core::tab_container::TabItem;
 use redis_view::RedisTabView;
 use sftp_view::{SftpView, SftpViewEvent};
 use terminal::LocalConfig;
-use terminal_view::TerminalView;
+use terminal_view::{TerminalView, TerminalViewEvent};
 
 impl HomePage {
+    fn apply_terminal_font_size(
+        &self,
+        terminal_view: &Entity<TerminalView>,
+        cx: &mut Context<Self>,
+    ) {
+        if cx.has_global::<AppSettings>() {
+            let font_size = AppSettings::global(cx).terminal_font_size as f32;
+            terminal_view.update(cx, |view, cx| {
+                view.set_font_size(font_size, cx);
+            });
+        }
+    }
+
+    fn bind_terminal_font_persistence(
+        &mut self,
+        terminal_view: &Entity<TerminalView>,
+        cx: &mut Context<Self>,
+    ) {
+        let subscription = cx.subscribe(
+            terminal_view,
+            |_this, _view, event: &TerminalViewEvent, cx| {
+                if let TerminalViewEvent::FontSizeChanged { size } = event {
+                    cx.update_global::<AppSettings, _>(|settings, _| {
+                        settings.terminal_font_size = *size as f64;
+                        settings.save();
+                    });
+                    cx.notify();
+                }
+            },
+        );
+        self._subscriptions.push(subscription);
+    }
+
+    fn apply_terminal_clipboard_settings(
+        &self,
+        terminal_view: &Entity<TerminalView>,
+        cx: &mut Context<Self>,
+    ) {
+        if cx.has_global::<AppSettings>() {
+            let auto_copy = AppSettings::global(cx).terminal_auto_copy;
+            let middle_click_paste = AppSettings::global(cx).terminal_middle_click_paste;
+            terminal_view.update(cx, |view, cx| {
+                view.set_auto_copy(auto_copy, cx);
+                view.set_middle_click_paste(middle_click_paste, cx);
+            });
+        }
+    }
+
+    fn bind_terminal_clipboard_persistence(
+        &mut self,
+        terminal_view: &Entity<TerminalView>,
+        cx: &mut Context<Self>,
+    ) {
+        let subscription = cx.subscribe(
+            terminal_view,
+            |_this, _view, event: &TerminalViewEvent, cx| {
+                match event {
+                    TerminalViewEvent::AutoCopyChanged { enabled } => {
+                        cx.update_global::<AppSettings, _>(|settings, _| {
+                            settings.terminal_auto_copy = *enabled;
+                            settings.save();
+                        });
+                        cx.notify();
+                    }
+                    TerminalViewEvent::MiddleClickPasteChanged { enabled } => {
+                        cx.update_global::<AppSettings, _>(|settings, _| {
+                            settings.terminal_middle_click_paste = *enabled;
+                            settings.save();
+                        });
+                        cx.notify();
+                    }
+                    _ => {}
+                }
+            },
+        );
+        self._subscriptions.push(subscription);
+    }
+
     pub(crate) fn open_ssh_terminal(
         &mut self,
         conn: StoredConnection,
@@ -42,12 +120,14 @@ impl HomePage {
             None
         };
 
+        let terminal_view =
+            cx.new(|cx| TerminalView::new_ssh_with_index(conn, tab_index, window, cx, None));
+        self.apply_terminal_font_size(&terminal_view, cx);
+        self.apply_terminal_clipboard_settings(&terminal_view, cx);
+        self.bind_terminal_font_persistence(&terminal_view, cx);
+        self.bind_terminal_clipboard_persistence(&terminal_view, cx);
         self.tab_container.update(cx, |tc, cx| {
-            let tab = TabItem::new(
-                tab_id,
-                "ssh",
-                cx.new(|cx| TerminalView::new_ssh_with_index(conn, tab_index, window, cx, None)),
-            );
+            let tab = TabItem::new(tab_id, "ssh", terminal_view);
             tc.add_and_activate_tab_with_focus(tab, window, cx);
         });
     }
@@ -88,7 +168,7 @@ impl HomePage {
         let subscription = cx.subscribe_in(
             &sftp_view,
             window,
-            move |_this, _sftp, event: &SftpViewEvent, window, cx| {
+            move |this, _sftp, event: &SftpViewEvent, window, cx| {
                 match event {
                     SftpViewEvent::OpenLocalTerminal { working_dir } => {
                         // 使用时间戳生成唯一 tab_id，支持打开多个本地终端
@@ -116,15 +196,16 @@ impl HomePage {
                         } else {
                             None
                         };
+                        let terminal_view = cx.new(|cx| {
+                            TerminalView::new_with_index(config, idx, window, cx)
+                                .expect("创建本地终端失败")
+                        });
+                        this.apply_terminal_font_size(&terminal_view, cx);
+                        this.apply_terminal_clipboard_settings(&terminal_view, cx);
+                        this.bind_terminal_font_persistence(&terminal_view, cx);
+                        this.bind_terminal_clipboard_persistence(&terminal_view, cx);
                         tab_container.update(cx, |tc, cx| {
-                            let tab = TabItem::new(
-                                tab_id,
-                                "terminal",
-                                cx.new(|cx| {
-                                    TerminalView::new_with_index(config, idx, window, cx)
-                                        .expect("创建本地终端失败")
-                                }),
-                            );
+                            let tab = TabItem::new(tab_id, "terminal", terminal_view);
                             tc.add_and_activate_tab_with_focus(tab, window, cx);
                         });
                     }
@@ -153,20 +234,21 @@ impl HomePage {
                         } else {
                             None
                         };
+                        let terminal_view = cx.new(|cx| {
+                            TerminalView::new_ssh_with_index(
+                                conn,
+                                idx,
+                                window,
+                                cx,
+                                Some(working_dir),
+                            )
+                        });
+                        this.apply_terminal_font_size(&terminal_view, cx);
+                        this.apply_terminal_clipboard_settings(&terminal_view, cx);
+                        this.bind_terminal_font_persistence(&terminal_view, cx);
+                        this.bind_terminal_clipboard_persistence(&terminal_view, cx);
                         tab_container.update(cx, |tc, cx| {
-                            let tab = TabItem::new(
-                                tab_id,
-                                "ssh",
-                                cx.new(|cx| {
-                                    TerminalView::new_ssh_with_index(
-                                        conn,
-                                        idx,
-                                        window,
-                                        cx,
-                                        Some(working_dir),
-                                    )
-                                }),
-                            );
+                            let tab = TabItem::new(tab_id, "ssh", terminal_view);
                             tc.add_and_activate_tab_with_focus(tab, window, cx);
                         });
                     }
@@ -342,16 +424,20 @@ impl HomePage {
         };
 
         let tab_container = self.tab_container.clone();
+        let home = cx.entity();
         window.defer(cx, move |window, cx| {
+            let terminal_view = cx.new(|cx| {
+                TerminalView::new_with_index(LocalConfig::default(), tab_index, window, cx)
+                    .expect("Failed to create TerminalView")
+            });
+            home.update(cx, |this, cx| {
+                this.apply_terminal_font_size(&terminal_view, cx);
+                this.apply_terminal_clipboard_settings(&terminal_view, cx);
+                this.bind_terminal_font_persistence(&terminal_view, cx);
+                this.bind_terminal_clipboard_persistence(&terminal_view, cx);
+            });
             tab_container.update(cx, |tc, cx| {
-                let tab = TabItem::new(
-                    tab_id,
-                    "home",
-                    cx.new(|cx| {
-                        TerminalView::new_with_index(LocalConfig::default(), tab_index, window, cx)
-                            .expect("Failed to create TerminalView")
-                    }),
-                );
+                let tab = TabItem::new(tab_id, "home", terminal_view);
                 tc.add_and_activate_tab_with_focus(tab, window, cx);
             });
         });
