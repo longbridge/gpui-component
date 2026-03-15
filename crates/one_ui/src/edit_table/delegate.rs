@@ -236,6 +236,13 @@ pub trait EditTableDelegate: Sized + 'static {
         false
     }
 
+    /// 是否启用单击编辑模式（类似 Navicat）。
+    /// 启用后，第一次单击选中单元格，再次单击已选中的单元格进入编辑模式。
+    /// 默认为 false，即保持双击编辑行为。
+    fn single_click_to_edit(&self, cx: &App) -> bool {
+        false
+    }
+
     fn row_number_enabled(&self, cx: &App) -> bool {
         false
     }

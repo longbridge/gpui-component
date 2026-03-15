@@ -696,6 +696,9 @@ impl EditTableDelegate for EditorTableDelegate {
     fn cell_edit_enabled(&self, _cx: &App) -> bool {
         true
     }
+    fn single_click_to_edit(&self, _cx: &App) -> bool {
+        true
+    }
     fn row_number_enabled(&self, _cx: &App) -> bool {
         true
     }

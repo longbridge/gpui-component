@@ -895,6 +895,17 @@ where
             // Ctrl/Cmd+Click: 添加到选区
             self.add_to_selection(row_ix, col_ix, cx);
         } else {
+            // 单击编辑模式（类似 Navicat）：
+            // 如果单元格已被选中，再次单击则进入编辑模式
+            if edit_enabled
+                && self.delegate.single_click_to_edit(cx)
+                && self.selected_cell == Some((row_ix, col_ix))
+                && self.editing_cell.is_none()
+            {
+                self.start_editing(row_ix, col_ix, window, cx);
+                return;
+            }
+
             // 普通点击: 选择单个单元格
             self.select_cell(row_ix, col_ix, cx);
         }
@@ -1257,13 +1268,26 @@ where
 
         // 构建变更列表
         let mut changes: Vec<(usize, usize, String)> = Vec::new();
-        for (row_offset, row_data) in data.iter().enumerate() {
-            for (col_offset, value) in row_data.iter().enumerate() {
-                let target_row = start.0 + row_offset;
-                let target_col = start.1 + col_offset;
-                // 转换为 delegate 的列索引
-                let delegate_col = target_col.saturating_sub(row_number_offset);
-                changes.push((target_row, delegate_col, value.clone()));
+
+        // 如果剪贴板是单值且有多选区域，则将该值填充到所有选中的单元格
+        let is_single_value =
+            data.len() == 1 && data[0].len() == 1 && self.selection.cell_count() > 1;
+
+        if is_single_value {
+            let value = &data[0][0];
+            for (row, col) in self.selection.all_cells() {
+                let delegate_col = col.saturating_sub(row_number_offset);
+                changes.push((row, delegate_col, value.clone()));
+            }
+        } else {
+            for (row_offset, row_data) in data.iter().enumerate() {
+                for (col_offset, value) in row_data.iter().enumerate() {
+                    let target_row = start.0 + row_offset;
+                    let target_col = start.1 + col_offset;
+                    // 转换为 delegate 的列索引
+                    let delegate_col = target_col.saturating_sub(row_number_offset);
+                    changes.push((target_row, delegate_col, value.clone()));
+                }
             }
         }
 
