@@ -74,6 +74,8 @@ pub enum ContextMenuItem {
     Item {
         label: String,
         event: ContextMenuEvent,
+        /// 是否需要连接处于激活状态才可用
+        requires_active: bool,
     },
     /// 分隔符
     Separator,
@@ -81,6 +83,8 @@ pub enum ContextMenuItem {
     Submenu {
         label: String,
         items: Vec<ContextMenuItem>,
+        /// 是否需要连接处于激活状态才可用
+        requires_active: bool,
     },
 }
 
@@ -94,11 +98,24 @@ pub enum ContextMenuEvent {
 }
 
 impl ContextMenuItem {
-    /// 创建普通菜单项
+    /// 创建普通菜单项（默认需要连接激活）
     pub fn item(label: impl Into<String>, event: impl Into<DbTreeViewEvent>) -> Self {
         Self::Item {
             label: label.into(),
             event: ContextMenuEvent::TreeEvent(event.into()),
+            requires_active: true,
+        }
+    }
+
+    /// 创建不需要连接激活的菜单项（如删除连接）
+    pub fn always_enabled_item(
+        label: impl Into<String>,
+        event: impl Into<DbTreeViewEvent>,
+    ) -> Self {
+        Self::Item {
+            label: label.into(),
+            event: ContextMenuEvent::TreeEvent(event.into()),
+            requires_active: false,
         }
     }
 
@@ -107,11 +124,12 @@ impl ContextMenuItem {
         Self::Separator
     }
 
-    /// 创建子菜单
+    /// 创建子菜单（默认需要连接激活）
     pub fn submenu(label: impl Into<String>, items: Vec<ContextMenuItem>) -> Self {
         Self::Submenu {
             label: label.into(),
             items,
+            requires_active: true,
         }
     }
 }

@@ -452,6 +452,8 @@ impl DataGrid {
                                 is_primary_key: false,
                                 default_value: None,
                                 comment: None,
+                                charset: None,
+                                collation: None,
                             })
                             .collect(),
                     };

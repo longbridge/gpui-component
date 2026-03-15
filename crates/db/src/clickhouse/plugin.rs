@@ -378,6 +378,8 @@ impl DatabasePlugin for ClickHousePlugin {
                         default_value,
                         is_primary_key,
                         comment,
+                        charset: None,
+                        collation: None,
                     });
                 }
             }

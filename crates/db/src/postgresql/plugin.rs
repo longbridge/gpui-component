@@ -676,6 +676,8 @@ impl DatabasePlugin for PostgresPlugin {
                             .unwrap_or(false),
                         default_value: row.get(3).and_then(|v| v.clone()),
                         comment: None,
+                        charset: None,
+                        collation: None,
                     }
                 })
                 .collect())

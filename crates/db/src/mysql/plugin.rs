@@ -398,7 +398,8 @@ impl DatabasePlugin for MySqlPlugin {
         table: &str,
     ) -> Result<Vec<ColumnInfo>> {
         let sql = format!(
-            "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, COLUMN_DEFAULT, COLUMN_COMMENT \
+            "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, COLUMN_DEFAULT, COLUMN_COMMENT, \
+             CHARACTER_SET_NAME, COLLATION_NAME \
              FROM INFORMATION_SCHEMA.COLUMNS \
              WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}' \
              ORDER BY ORDINAL_POSITION",
@@ -429,6 +430,8 @@ impl DatabasePlugin for MySqlPlugin {
                         .unwrap_or(false),
                     default_value: row.get(4).and_then(|v| v.clone()),
                     comment: row.get(5).and_then(|v| v.clone()),
+                    charset: row.get(6).and_then(|v| v.clone()),
+                    collation: row.get(7).and_then(|v| v.clone()),
                 })
                 .collect())
         } else {

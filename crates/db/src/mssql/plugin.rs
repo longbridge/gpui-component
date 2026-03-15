@@ -660,6 +660,8 @@ impl DatabasePlugin for MsSqlPlugin {
                         is_primary_key,
                         default_value: row.get(3).and_then(|v| v.clone()),
                         comment: row.get(5).and_then(|v| v.clone()),
+                        charset: None,
+                        collation: None,
                     }
                 })
                 .collect())

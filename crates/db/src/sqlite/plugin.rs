@@ -494,6 +494,8 @@ impl DatabasePlugin for SqlitePlugin {
                         .unwrap_or(false),
                     default_value: row.get(4).and_then(|v| v.clone()),
                     comment: None,
+                    charset: None,
+                    collation: None,
                 })
                 .collect())
         } else {

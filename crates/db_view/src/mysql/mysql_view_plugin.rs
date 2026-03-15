@@ -102,14 +102,14 @@ impl DatabaseViewPlugin for MySqlDatabaseViewPlugin {
                         },
                     ),
                     ContextMenuItem::separator(),
-                    ContextMenuItem::item(
+                    ContextMenuItem::always_enabled_item(
                         t!("Connection.close_connection").to_string(),
                         DbTreeViewEvent::CloseConnection {
                             node_id: node_id.to_string(),
                         },
                     ),
                     ContextMenuItem::separator(),
-                    ContextMenuItem::item(
+                    ContextMenuItem::always_enabled_item(
                         t!("Connection.delete_connection").to_string(),
                         DbTreeViewEvent::DeleteConnection {
                             node_id: node_id.to_string(),
@@ -178,13 +178,13 @@ impl DatabaseViewPlugin for MySqlDatabaseViewPlugin {
                             node_id: node_id.to_string(),
                         },
                     ),
-                    ContextMenuItem::item(
+                    ContextMenuItem::always_enabled_item(
                         t!("Database.close_database").to_string(),
                         DbTreeViewEvent::CloseDatabase {
                             node_id: node_id.to_string(),
                         },
                     ),
-                    ContextMenuItem::item(
+                    ContextMenuItem::always_enabled_item(
                         t!("Database.delete_database").to_string(),
                         DbTreeViewEvent::DeleteDatabase {
                             node_id: node_id.to_string(),

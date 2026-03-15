@@ -230,6 +230,12 @@ pub struct ColumnInfo {
     pub is_primary_key: bool,
     pub default_value: Option<String>,
     pub comment: Option<String>,
+    /// 列级字符集（如 MySQL 的 CHARACTER_SET_NAME）
+    #[serde(default)]
+    pub charset: Option<String>,
+    /// 列级排序规则（如 MySQL 的 COLLATION_NAME）
+    #[serde(default)]
+    pub collation: Option<String>,
 }
 
 /// Index information
