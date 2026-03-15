@@ -96,7 +96,7 @@ impl CellEditor {
                                     });
                                 });
                             })
-                            .child("..."),
+                            .child(IconName::Calendar),
                     )
                     .child(
                         div()
@@ -143,7 +143,7 @@ impl CellEditor {
                                     });
                                 });
                             })
-                            .child("..."),
+                            .child(IconName::Calendar),
                     )
                     .child(
                         div().w_0().h(px(0.)).overflow_hidden().child(
@@ -190,7 +190,7 @@ impl CellEditor {
                                     });
                                 });
                             })
-                            .child("..."),
+                            .child(IconName::Calendar),
                     )
                     .child(
                         div()

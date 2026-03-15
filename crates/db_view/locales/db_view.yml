@@ -2073,6 +2073,22 @@ TableDataGrid:
     en: "Total %{count} records"
     zh-CN: "共 %{count} 条记录"
     zh-HK: "共 %{count} 條記錄"
+  execute_sql_failed:
+    en: "Failed to execute SQL: %{error}"
+    zh-CN: "SQL 执行失败: %{error}"
+    zh-HK: "SQL 執行失敗: %{error}"
+  get_table_keys_failed:
+    en: "Failed to get table keys: %{error}"
+    zh-CN: "获取表键信息失败: %{error}"
+    zh-HK: "取得表鍵資訊失敗: %{error}"
+  save_changes_failed:
+    en: "Failed to save changes: %{error}"
+    zh-CN: "保存变更失败: %{error}"
+    zh-HK: "儲存變更失敗: %{error}"
+  save_changes_success:
+    en: "Successfully saved %{count} changes"
+    zh-CN: "已成功保存 %{count} 项变更"
+    zh-HK: "已成功儲存 %{count} 項變更"
 SqlRun:
   select_sql_file:
     en: Select SQL file
