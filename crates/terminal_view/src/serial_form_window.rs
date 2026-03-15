@@ -509,7 +509,19 @@ impl SerialFormWindow {
                 .flow_control(flow_control)
                 .timeout(Duration::from_secs(3))
                 .open()
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    let msg = e.to_string();
+                    // macOS 上对 pty 虚拟串口调用 ioctl(TIOCEXCL) 会报 ENOTTY
+                    if msg.contains("Not a typewriter") || msg.contains("ENOTTY") {
+                        format!(
+                            "{}\n{}",
+                            msg,
+                            t!("Serial.enotty_hint")
+                        )
+                    } else {
+                        msg
+                    }
+                })?;
 
             Ok::<(), String>(())
         })();

@@ -570,6 +570,10 @@ Serial:
     en: The serial connection has been disconnected.
     zh-CN: 串口连接已断开。
     zh-HK: 串口連接已斷開。
+  enotty_hint:
+    en: "macOS does not support virtual serial ports (pty). Please use a real serial device."
+    zh-CN: macOS 不支持虚拟串口(pty)，请使用真实串口设备。
+    zh-HK: macOS 不支持虛擬串口(pty)，請使用真實串口設備。
 
 # SSH 会话状态
 SshSession:
