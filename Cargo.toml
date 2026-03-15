@@ -15,8 +15,6 @@ members = [
     "examples/webview",
     "examples/system_monitor",
     "examples/focus_trap",
-    "examples/text_clipping_repro",
-    "examples/issue_2157_markdown_list_clipping",
 ]
 resolver = "2"
 
