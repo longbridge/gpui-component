@@ -10,7 +10,7 @@ use one_core::tab_container::TabItem;
 use redis_view::RedisTabView;
 use sftp_view::{SftpView, SftpViewEvent};
 use terminal::LocalConfig;
-use terminal_view::{TerminalView, TerminalViewEvent, TerminalTheme};
+use terminal_view::{TerminalConnectionKind, TerminalView, TerminalViewEvent, TerminalTheme};
 
 impl HomePage {
     fn register_terminal_view(&mut self, terminal_view: &Entity<TerminalView>) {
@@ -623,5 +623,56 @@ impl HomePage {
                 }
             });
         });
+    }
+
+    /// 复制当前活动标签并打开
+    pub(crate) fn duplicate_active_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let tc = self.tab_container.read(cx);
+
+        // pinned tab 不支持复制
+        if tc.is_pinned_tab_active() {
+            return;
+        }
+
+        let Some(active_tab) = tc.active_tab() else {
+            return;
+        };
+
+        let content_key = active_tab.content().content_key(cx);
+
+        match content_key {
+            "Terminal" => {
+                // 获取终端视图的连接信息
+                let view = active_tab.content().view();
+                let Ok(terminal_view) = view.downcast::<TerminalView>() else {
+                    return;
+                };
+
+                let kind = terminal_view.read(cx).connection_kind(cx);
+                match kind {
+                    TerminalConnectionKind::Ssh => {
+                        // SSH 终端：通过 connection_id 找到 StoredConnection 并打开新连接
+                        let conn_id = terminal_view.read(cx).connection_id(cx);
+                        if let Some(conn_id) = conn_id {
+                            if let Some(conn) = self
+                                .connections
+                                .iter()
+                                .find(|c| c.id == Some(conn_id))
+                                .cloned()
+                            {
+                                self.open_ssh_terminal(conn, window, cx);
+                            }
+                        }
+                    }
+                    TerminalConnectionKind::Local => {
+                        // 本地终端：直接新建
+                        self.add_terminal_tab(window, cx);
+                    }
+                }
+            }
+            _ => {
+                // 其他类型暂不支持复制
+            }
+        }
     }
 }

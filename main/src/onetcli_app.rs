@@ -18,6 +18,7 @@ actions!(
         ActivateTab9,
         ToggleFullscreen,
         MinimizeWindow,
+        DuplicateTab,
     ]
 );
 
@@ -102,6 +103,24 @@ fn minimize_window(cx: &mut App) {
     });
 }
 
+fn duplicate_tab(cx: &mut App) {
+    let Some(active_window) = cx.active_window() else {
+        return;
+    };
+    let Some(home) = cx.try_global::<GlobalHomePage>() else {
+        return;
+    };
+    let home_page = home.home_page.clone();
+
+    cx.defer(move |cx| {
+        _ = active_window.update(cx, |_, window, cx| {
+            home_page.update(cx, |hp, cx| {
+                hp.duplicate_active_tab(window, cx);
+            });
+        });
+    });
+}
+
 pub fn init(cx: &mut App) {
     // 从 RUST_LOG 环境变量读取日志级别，默认 info
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -179,6 +198,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("alt-enter", ToggleFullscreen, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-space", MinimizeWindow, None),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-shift-t", DuplicateTab, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("alt-shift-t", DuplicateTab, None),
     ]);
 
     cx.on_action(|_: &ActivateTab1, cx| activate_tab_by_number(1, cx));
@@ -192,6 +215,7 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &ActivateTab9, cx| activate_tab_by_number(9, cx));
     cx.on_action(|_: &ToggleFullscreen, cx| toggle_fullscreen(cx));
     cx.on_action(|_: &MinimizeWindow, cx| minimize_window(cx));
+    cx.on_action(|_: &DuplicateTab, cx| duplicate_tab(cx));
     cx.on_action(|_: &OpenConnectionQuickOpen, cx| {
         let Some(active_window) = cx.active_window() else {
             return;

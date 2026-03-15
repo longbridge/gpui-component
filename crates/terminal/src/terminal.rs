@@ -643,6 +643,11 @@ impl Terminal {
         self.connection_name.as_deref()
     }
 
+    /// 获取连接 ID
+    pub fn connection_id(&self) -> Option<i64> {
+        self.connection_id
+    }
+
     /// 获取当前工作目录（由 OSC 7 更新，仅 SSH 终端）
     pub fn current_working_dir(&self) -> Option<&str> {
         self.current_working_dir.as_deref()
