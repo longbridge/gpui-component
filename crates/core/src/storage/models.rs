@@ -881,3 +881,84 @@ pub fn parse_db_type(s: &str) -> DatabaseType {
         _ => DatabaseType::MySQL,
     }
 }
+
+#[cfg(test)]
+mod serial_tests {
+    use super::*;
+
+    #[test]
+    fn serial_params_serialize_deserialize() {
+        let params = SerialParams {
+            port_name: "/dev/ttyUSB0".to_string(),
+            baud_rate: 115200,
+            data_bits: 8,
+            stop_bits: 1,
+            parity: SerialParity::None,
+            flow_control: SerialFlowControl::None,
+        };
+        let json = serde_json::to_string(&params).unwrap();
+        let p2: SerialParams = serde_json::from_str(&json).unwrap();
+        assert_eq!(p2.port_name, "/dev/ttyUSB0");
+        assert_eq!(p2.baud_rate, 115200);
+        assert_eq!(p2.data_bits, 8);
+        assert_eq!(p2.stop_bits, 1);
+        assert_eq!(p2.parity, SerialParity::None);
+        assert_eq!(p2.flow_control, SerialFlowControl::None);
+    }
+
+    #[test]
+    fn serial_params_defaults_from_minimal_json() {
+        let json = r#"{"port_name":"/dev/tty0"}"#;
+        let p: SerialParams = serde_json::from_str(json).unwrap();
+        assert_eq!(p.port_name, "/dev/tty0");
+        assert_eq!(p.baud_rate, 115200);
+        assert_eq!(p.data_bits, 8);
+        assert_eq!(p.stop_bits, 1);
+        assert_eq!(p.parity, SerialParity::None);
+        assert_eq!(p.flow_control, SerialFlowControl::None);
+    }
+
+    #[test]
+    fn stored_connection_serial_roundtrip() {
+        let params = SerialParams {
+            port_name: "/dev/cu.usbserial-1420".to_string(),
+            baud_rate: 9600,
+            data_bits: 7,
+            stop_bits: 2,
+            parity: SerialParity::Even,
+            flow_control: SerialFlowControl::Hardware,
+        };
+        let conn = StoredConnection::new_serial("我的串口".to_string(), params, Some(42));
+        assert_eq!(conn.connection_type, ConnectionType::Serial);
+        assert_eq!(conn.name, "我的串口");
+        assert_eq!(conn.workspace_id, Some(42));
+
+        let rt = conn.to_serial_params().unwrap();
+        assert_eq!(rt.port_name, "/dev/cu.usbserial-1420");
+        assert_eq!(rt.baud_rate, 9600);
+        assert_eq!(rt.data_bits, 7);
+        assert_eq!(rt.stop_bits, 2);
+        assert_eq!(rt.parity, SerialParity::Even);
+        assert_eq!(rt.flow_control, SerialFlowControl::Hardware);
+    }
+
+    #[test]
+    fn connection_type_serial_methods() {
+        assert_eq!(ConnectionType::Serial.label(), "串口");
+        assert_eq!(ConnectionType::from_str("Serial"), ConnectionType::Serial);
+        assert_eq!(format!("{}", ConnectionType::Serial), "Serial");
+        assert!(ConnectionType::all().contains(&ConnectionType::Serial));
+    }
+
+    #[test]
+    fn serial_enums_defaults_and_labels() {
+        assert_eq!(SerialParity::default(), SerialParity::None);
+        assert_eq!(SerialFlowControl::default(), SerialFlowControl::None);
+        assert_eq!(SerialParity::all().len(), 3);
+        assert_eq!(SerialFlowControl::all().len(), 3);
+        assert_eq!(SerialParity::Odd.label(), "Odd");
+        assert_eq!(SerialParity::Even.label(), "Even");
+        assert_eq!(SerialFlowControl::Software.label(), "XON/XOFF");
+        assert_eq!(SerialFlowControl::Hardware.label(), "RTS/CTS");
+    }
+}
