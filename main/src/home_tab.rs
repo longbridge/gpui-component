@@ -3,11 +3,7 @@ use std::sync::Arc;
 
 use db_view::connection_form_window::{ConnectionFormWindow, ConnectionFormWindowConfig};
 use gpui::prelude::FluentBuilder;
-use gpui::{
-    AnyElement, App, AppContext, AsyncApp, Context, ElementId, Entity, EventEmitter, FocusHandle,
-    Focusable, FontWeight, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
-    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div, px,
-};
+use gpui::{AnyElement, App, AppContext, AsyncApp, Context, ElementId, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div, px, Subscription};
 use gpui_component::button::{ButtonCustomVariant, ButtonVariant};
 use gpui_component::menu::DropdownMenu;
 use gpui_component::{
@@ -38,7 +34,7 @@ use one_core::storage::{
     PendingCloudDeletionRepository, RedisMode, StoredConnection, Workspace, WorkspaceRepository,
 };
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
-use terminal_view::{TerminalTheme, TerminalView};
+use terminal_view::TerminalView;
 use redis_view::{RedisFormWindow, RedisFormWindowConfig};
 use rust_i18n::t;
 use terminal_view::{SshFormWindow, SshFormWindowConfig};
@@ -67,27 +63,6 @@ pub fn init(cx: &mut App) {
     ]);
 }
 
-/// 终端会话级设置缓存（仅内存同步，不持久化）
-///
-/// 用于在新建终端时继承已有终端的内存设置（主题、光标闪烁等）。
-pub(crate) struct TerminalSessionSettings {
-    pub(crate) theme: Option<TerminalTheme>,
-    pub(crate) cursor_blink: bool,
-    pub(crate) confirm_multiline_paste: bool,
-    pub(crate) confirm_high_risk_command: bool,
-}
-
-impl Default for TerminalSessionSettings {
-    fn default() -> Self {
-        Self {
-            theme: None,
-            cursor_blink: false,
-            confirm_multiline_paste: true,
-            confirm_high_risk_command: true,
-        }
-    }
-}
-
 // HomePage Entity - 管理 home 页面的所有状态
 
 pub struct HomePage {
@@ -104,10 +79,8 @@ pub struct HomePage {
     pub(crate) filtered_workspace_ids: HashSet<i64>,
     pub(crate) workspace_filter_open: bool,
     workspace_filter_list: Option<Entity<ListState<WorkspaceFilterDelegate>>>,
-    pub(crate) _subscriptions: Vec<gpui::Subscription>,
-    pub(crate) terminal_views: Vec<gpui::WeakEntity<TerminalView>>,
-    /// 终端会话级设置缓存（内存同步，不持久化）
-    pub(crate) terminal_session_settings: TerminalSessionSettings,
+    pub(crate) _subscriptions: Vec<Subscription>,
+    pub(crate) terminal_views: Vec<WeakEntity<TerminalView>>,
     /// 云端连接列表（用于同步对比）
     cloud_connections: Vec<CloudConnection>,
     /// 云同步服务
@@ -176,7 +149,6 @@ impl HomePage {
             workspace_filter_list: None,
             _subscriptions: Vec::new(),
             terminal_views: Vec::new(),
-            terminal_session_settings: TerminalSessionSettings::default(),
             cloud_connections: Vec::new(),
             cloud_sync_service: Arc::new(std::sync::RwLock::new(CloudSyncService::new())),
             cloud_error: None,

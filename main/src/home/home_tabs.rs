@@ -10,7 +10,7 @@ use one_core::tab_container::TabItem;
 use redis_view::RedisTabView;
 use sftp_view::{SftpView, SftpViewEvent};
 use terminal::LocalConfig;
-use terminal_view::{TerminalView, TerminalViewEvent};
+use terminal_view::{TerminalView, TerminalViewEvent, TerminalTheme};
 
 impl HomePage {
     fn register_terminal_view(&mut self, terminal_view: &Entity<TerminalView>) {
@@ -30,12 +30,17 @@ impl HomePage {
     ) {
         self.register_terminal_view(terminal_view);
 
-        // 应用当前全局持久化设置
+        // 从 AppSettings 读取所有终端设置并应用
         if cx.has_global::<AppSettings>() {
             let settings = AppSettings::global(cx);
             let font_size = settings.terminal_font_size as f32;
             let auto_copy = settings.terminal_auto_copy;
             let middle_click_paste = settings.terminal_middle_click_paste;
+            let cursor_blink = settings.terminal_cursor_blink;
+            let confirm_multiline = settings.terminal_confirm_multiline_paste;
+            let confirm_high_risk = settings.terminal_confirm_high_risk_command;
+            let theme = TerminalTheme::find_by_name(&settings.terminal_theme);
+
             terminal_view.update(cx, |view, cx| {
                 view.apply_terminal_settings(
                     font_size,
@@ -44,25 +49,16 @@ impl HomePage {
                     window,
                     cx,
                 );
+                view.apply_cursor_blink(cursor_blink, window, cx);
+                view.apply_confirm_multiline_paste(confirm_multiline, cx);
+                view.apply_confirm_high_risk_command(confirm_high_risk, cx);
             });
+            if let Some(theme) = theme {
+                terminal_view.update(cx, |view, cx| {
+                    view.apply_theme(&theme, window, cx);
+                });
+            }
         }
-
-        // 应用内存同步设置（主题、光标闪烁、多行粘贴确认、高危命令确认）
-        let session = &self.terminal_session_settings;
-        if let Some(theme) = &session.theme {
-            let theme = theme.clone();
-            terminal_view.update(cx, |view, cx| {
-                view.apply_theme(&theme, window, cx);
-            });
-        }
-        let cursor_blink = session.cursor_blink;
-        let confirm_multiline = session.confirm_multiline_paste;
-        let confirm_high_risk = session.confirm_high_risk_command;
-        terminal_view.update(cx, |view, cx| {
-            view.apply_cursor_blink(cursor_blink, window, cx);
-            view.apply_confirm_multiline_paste(confirm_multiline, cx);
-            view.apply_confirm_high_risk_command(confirm_high_risk, cx);
-        });
 
         // 单一订阅处理所有 TerminalViewEvent
         let subscription = cx.subscribe_in(
@@ -96,30 +92,42 @@ impl HomePage {
                         this.apply_terminal_settings_to_all(&settings, window, cx);
                     }
 
-                    // ---- 仅内存同步（不持久化） ----
+                    // ---- 持久化到 AppSettings 并同步 ----
                     TerminalViewEvent::ThemeChanged { theme } => {
-                        this.terminal_session_settings.theme = Some(theme.clone());
+                        cx.update_global::<AppSettings, _>(|s, _| {
+                            s.terminal_theme = theme.name.to_string();
+                            s.save();
+                        });
                         let theme = theme.clone();
                         this.for_each_terminal_view(window, cx, |view, window, cx| {
                             view.apply_theme(&theme, window, cx);
                         });
                     }
                     TerminalViewEvent::CursorBlinkChanged { enabled } => {
-                        this.terminal_session_settings.cursor_blink = *enabled;
+                        cx.update_global::<AppSettings, _>(|s, _| {
+                            s.terminal_cursor_blink = *enabled;
+                            s.save();
+                        });
                         let enabled = *enabled;
                         this.for_each_terminal_view(window, cx, |view, window, cx| {
                             view.apply_cursor_blink(enabled, window, cx);
                         });
                     }
                     TerminalViewEvent::ConfirmMultilinePasteChanged { enabled } => {
-                        this.terminal_session_settings.confirm_multiline_paste = *enabled;
+                        cx.update_global::<AppSettings, _>(|s, _| {
+                            s.terminal_confirm_multiline_paste = *enabled;
+                            s.save();
+                        });
                         let enabled = *enabled;
                         this.for_each_terminal_view(window, cx, |view, _window, cx| {
                             view.apply_confirm_multiline_paste(enabled, cx);
                         });
                     }
                     TerminalViewEvent::ConfirmHighRiskCommandChanged { enabled } => {
-                        this.terminal_session_settings.confirm_high_risk_command = *enabled;
+                        cx.update_global::<AppSettings, _>(|s, _| {
+                            s.terminal_confirm_high_risk_command = *enabled;
+                            s.save();
+                        });
                         let enabled = *enabled;
                         this.for_each_terminal_view(window, cx, |view, _window, cx| {
                             view.apply_confirm_high_risk_command(enabled, cx);

@@ -617,6 +617,7 @@ impl TerminalView {
             TerminalModelEvent::WorkingDirChanged(path) => {
                 let path = path.clone();
                 self.sidebar.update(cx, |sidebar, cx| {
+                    sidebar.set_file_manager_initial_dir(path.clone(), cx);
                     sidebar.sync_file_manager_path(path, cx);
                 });
             }

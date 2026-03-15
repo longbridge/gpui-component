@@ -114,6 +114,14 @@ pub struct AppSettings {
     pub terminal_auto_copy: bool,
     #[serde(default = "default_true")]
     pub terminal_middle_click_paste: bool,
+    #[serde(default = "default_terminal_theme")]
+    pub terminal_theme: String,
+    #[serde(default)]
+    pub terminal_cursor_blink: bool,
+    #[serde(default = "default_true")]
+    pub terminal_confirm_multiline_paste: bool,
+    #[serde(default = "default_true")]
+    pub terminal_confirm_high_risk_command: bool,
     #[serde(default = "default_true")]
     pub auto_update: bool,
     #[serde(default)]
@@ -138,6 +146,10 @@ fn default_terminal_font_size() -> f64 {
     15.0
 }
 
+fn default_terminal_theme() -> String {
+    "ocean".to_string()
+}
+
 fn default_true() -> bool {
     true
 }
@@ -157,6 +169,10 @@ impl Default for AppSettings {
             terminal_font_size: default_terminal_font_size(),
             terminal_auto_copy: default_true(),
             terminal_middle_click_paste: default_true(),
+            terminal_theme: default_terminal_theme(),
+            terminal_cursor_blink: false,
+            terminal_confirm_multiline_paste: default_true(),
+            terminal_confirm_high_risk_command: default_true(),
             auto_update: true,
             database_open_mode: DatabaseOpenMode::default(),
             enable_sql_auto_save: true,

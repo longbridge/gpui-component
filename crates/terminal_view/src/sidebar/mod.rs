@@ -416,6 +416,17 @@ impl TerminalSidebar {
         }
     }
 
+    /// 设置文件管理器的初始工作目录（连接前调用）
+    ///
+    /// 当终端收到 OSC 7 但文件管理器尚未连接时，缓存路径供首次连接使用。
+    pub fn set_file_manager_initial_dir(&mut self, path: String, cx: &mut Context<Self>) {
+        if let Some(ref fm_panel) = self.file_manager_panel {
+            fm_panel.update(cx, |panel, _cx| {
+                panel.set_initial_working_dir(path);
+            });
+        }
+    }
+
     /// 渲染工具栏按钮
     fn render_toolbar_button(
         &self,

@@ -387,6 +387,8 @@ pub struct FileManagerPanel {
     progress_refresh_task: Option<gpui::Task<()>>,
     /// 是否有外部文件拖入
     is_dragging_over: bool,
+    /// 终端当前工作目录（连接前由外部设置，连接时作为初始路径）
+    initial_working_dir: Option<String>,
 }
 
 impl FileManagerPanel {
@@ -434,6 +436,7 @@ impl FileManagerPanel {
             next_task_id: 0,
             progress_refresh_task: None,
             is_dragging_over: false,
+            initial_working_dir: None,
         }
     }
 
@@ -458,12 +461,18 @@ impl FileManagerPanel {
             }
         };
 
+        let initial_dir = self.initial_working_dir.take();
         let task = Tokio::spawn(cx, async move {
             let mut client = RusshSftpClient::connect(config).await?;
-            let real_path = client
-                .realpath(".")
-                .await
-                .unwrap_or_else(|_| "/".to_string());
+            // 优先使用终端当前工作目录，否则回退到 realpath(".")
+            let real_path = if let Some(dir) = initial_dir {
+                dir
+            } else {
+                client
+                    .realpath(".")
+                    .await
+                    .unwrap_or_else(|_| "/".to_string())
+            };
             Ok::<_, anyhow::Error>((client, real_path))
         });
 
@@ -506,6 +515,15 @@ impl FileManagerPanel {
     pub fn connect_if_idle(&mut self, cx: &mut Context<Self>) {
         if self.connection_state == ConnectionState::Idle {
             self.connect(cx);
+        }
+    }
+
+    /// 设置初始工作目录（连接前由终端 OSC 7 提供）
+    ///
+    /// 仅在尚未连接时有效，连接后应使用 `sync_navigate_to`。
+    pub fn set_initial_working_dir(&mut self, path: String) {
+        if self.connection_state == ConnectionState::Idle {
+            self.initial_working_dir = Some(path);
         }
     }
 
@@ -1364,6 +1382,10 @@ impl FileManagerPanel {
                             this.refresh_dir(cx);
                         }),
                     )
+                    .tooltip(move |window, cx| {
+                        Tooltip::new(t!("FileManager.refresh").to_string())
+                            .build(window, cx)
+                    })
                     .child(
                         Icon::new(IconName::Refresh)
                             .xsmall()
@@ -1388,6 +1410,10 @@ impl FileManagerPanel {
                             cx.notify();
                         }),
                     )
+                    .tooltip(move |window, cx| {
+                        Tooltip::new(t!("FileManager.toggle_hidden").to_string())
+                            .build(window, cx)
+                    })
                     .child(
                         Icon::new(IconName::Eye)
                             .xsmall()
