@@ -924,6 +924,8 @@ impl DbTreeView {
 
         self.expanded_nodes.insert(connection_id.to_string());
         self.expanded_nodes.insert(node_id.clone());
+        // 同步更新选中节点，确保 lazy_load_children 完成后能正确触发 NodeSelected 事件
+        self.selected_node_id = Some(node_id.clone());
 
         self.lazy_load_children(connection_id.to_string(), cx);
         self.lazy_load_children(node_id.clone(), cx);
@@ -1212,7 +1214,8 @@ impl DbTreeView {
                         if let Some(parent_node) = this.db_nodes.get_mut(&clone_node_id) {
                             parent_node.children = children.clone();
                             parent_node.children_loaded = true;
-                            if parent_node.node_type == DbNodeType::Connection {
+                            // 子节点加载完成后，如果该节点是当前选中节点，重新触发选中事件以刷新对象页签
+                            if this.selected_node_id.as_deref() == Some(&clone_node_id) {
                                 cx.emit(DbTreeViewEvent::NodeSelected{node_id: clone_node_id.clone()})
                             }
                         }
