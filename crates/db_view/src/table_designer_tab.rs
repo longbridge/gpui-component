@@ -15,7 +15,7 @@ use gpui_component::{
     highlighter::Language,
     input::{Input, InputEvent, InputState},
     scroll::Scrollbar,
-    select::{Select, SelectItem, SelectState},
+    select::{Select, SelectEvent, SelectItem, SelectState},
     tab::{Tab, TabBar},
     v_flex,
 };
@@ -1542,7 +1542,7 @@ impl ColumnsEditor {
         let charset_select_clone = charset_select.clone();
         let collation_select_clone = collation_select.clone();
         let charset_sub =
-            cx.observe_in(&charset_select, window, move |this, _, window, cx| {
+            cx.subscribe_in(&charset_select, window, move |this, _, _event: &SelectEvent<Vec<CharsetSelectItem>>, window, cx| {
                 Self::update_collation_for_charset(
                     this.database_type,
                     &charset_select_clone,
@@ -1553,7 +1553,7 @@ impl ColumnsEditor {
                 cx.emit(ColumnsEditorEvent::Changed);
             });
         let collation_sub =
-            cx.observe_in(&collation_select, window, |_this, _, _window, cx| {
+            cx.subscribe_in(&collation_select, window, |_this, _, _event: &SelectEvent<Vec<CollationSelectItem>>, _window, cx| {
                 cx.emit(ColumnsEditorEvent::Changed);
             });
         let enum_values_sub = cx.subscribe_in(
@@ -1839,18 +1839,45 @@ impl ColumnsEditor {
                     .map(|info| CharsetSelectItem { info }),
             )
             .collect();
+            // 根据列已有的 charset 查找对应索引
+            let charset_idx = col
+                .charset
+                .as_ref()
+                .and_then(|cs| charset_items.iter().position(|item| item.info.name == *cs))
+                .unwrap_or(0);
             let charset_select =
-                cx.new(|cx| SelectState::new(charset_items, Some(IndexPath::new(0)), window, cx));
+                cx.new(|cx| SelectState::new(charset_items, Some(IndexPath::new(charset_idx)), window, cx));
 
+            // 根据列已有的 charset 加载对应的排序规则列表，并选中已有值
             let collation_select = cx.new(|cx| {
-                let items = vec![CollationSelectItem {
-                    info: CollationInfo {
-                        name: "".to_string(),
-                        charset: "".to_string(),
-                        is_default: true,
-                    },
-                }];
-                SelectState::new(items, Some(IndexPath::new(0)), window, cx)
+                let (items, selected_idx) = if let Some(ref charset_name) = col.charset {
+                    let collations = if let Some(ref p) = plugin {
+                        p.get_collations(charset_name)
+                    } else {
+                        vec![]
+                    };
+                    let items: Vec<CollationSelectItem> = collations
+                        .into_iter()
+                        .map(|info| CollationSelectItem { info })
+                        .collect();
+                    let idx = col
+                        .collation
+                        .as_ref()
+                        .and_then(|coll| items.iter().position(|item| item.info.name == *coll))
+                        .or_else(|| items.iter().position(|c| c.info.is_default))
+                        .unwrap_or(0);
+                    (items, idx)
+                } else {
+                    let items = vec![CollationSelectItem {
+                        info: CollationInfo {
+                            name: "".into(),
+                            charset: "".into(),
+                            is_default: true,
+                        },
+                    }];
+                    (items, 0)
+                };
+                SelectState::new(items, Some(IndexPath::new(selected_idx)), window, cx)
             });
 
             let enum_values_input = cx.new(|cx| {
@@ -1913,7 +1940,7 @@ impl ColumnsEditor {
             let charset_select_clone = charset_select.clone();
             let collation_select_clone = collation_select.clone();
             let charset_sub =
-                cx.observe_in(&charset_select, window, move |this, _, window, cx| {
+                cx.subscribe_in(&charset_select, window, move |this, _, _event: &SelectEvent<Vec<CharsetSelectItem>>, window, cx| {
                     Self::update_collation_for_charset(
                         this.database_type,
                         &charset_select_clone,
@@ -1924,7 +1951,7 @@ impl ColumnsEditor {
                     cx.emit(ColumnsEditorEvent::Changed);
                 });
             let collation_sub =
-                cx.observe_in(&collation_select, window, |_this, _, _window, cx| {
+                cx.subscribe_in(&collation_select, window, |_this, _, _event: &SelectEvent<Vec<CollationSelectItem>>, _window, cx| {
                     cx.emit(ColumnsEditorEvent::Changed);
                 });
             let enum_values_sub = cx.subscribe_in(
