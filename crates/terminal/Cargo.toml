@@ -16,6 +16,7 @@ ssh = { workspace = true }
 alacritty_terminal.workspace = true
 serde = { workspace = true }
 tracing = { workspace = true }
+serialport = { workspace = true }
 
 
 [target.'cfg(unix)'.dependencies]

@@ -125,6 +125,9 @@ sha2 = "0.10"
 # Terminal emulation
 alacritty_terminal = "0.25"
 
+# Serial port
+serialport = "4"
+
 
 
 parking_lot = "0.12"

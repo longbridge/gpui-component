@@ -24,6 +24,7 @@ pub(crate) fn build_connection_open_strategy(
             connection,
             workspace,
         }),
+        ConnectionType::Serial => Box::new(SerialOpenStrategy { connection }),
         _ => Box::new(NoopOpenStrategy),
     }
 }
@@ -84,6 +85,16 @@ impl ConnectionOpenStrategy for MongoOpenStrategy {
 }
 
 struct NoopOpenStrategy;
+
+struct SerialOpenStrategy {
+    connection: StoredConnection,
+}
+
+impl ConnectionOpenStrategy for SerialOpenStrategy {
+    fn open(self: Box<Self>, home: &mut HomePage, window: &mut Window, cx: &mut Context<HomePage>) {
+        home.open_serial_terminal(self.connection, window, cx);
+    }
+}
 
 impl ConnectionOpenStrategy for NoopOpenStrategy {
     fn open(

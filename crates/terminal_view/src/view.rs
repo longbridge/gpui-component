@@ -380,6 +380,31 @@ impl TerminalView {
         .expect("SSH terminal creation should not fail")
     }
 
+    pub fn new_serial(conn: StoredConnection, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_serial_with_index(conn, None, window, cx)
+    }
+
+    pub fn new_serial_with_index(
+        conn: StoredConnection,
+        tab_index: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let connection_id = conn.id;
+        let stored_conn = conn.clone();
+        let terminal = cx.new(|cx| Terminal::new_serial(conn, cx));
+        Self::new_with_terminal(
+            terminal,
+            connection_id,
+            Some(stored_conn),
+            None,
+            tab_index,
+            window,
+            cx,
+        )
+        .expect("串口终端创建不应失败")
+    }
+
     fn new_with_terminal(
         terminal: Entity<Terminal>,
         connection_id: Option<i64>,

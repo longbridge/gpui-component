@@ -194,6 +194,7 @@ pub enum IconName {
     AI,
     Home,
     SettingColor,
+    SerialPort,
 }
 
 impl IconName {
@@ -377,6 +378,7 @@ impl IconNamed for IconName {
             Self::AI => "icons/ai.svg",
             Self::Home => "icons/home.svg",
             Self::SettingColor => "icons/setting_color.svg",
+            Self::SerialPort => "icons/serial_port.svg",
         }
         .into()
     }

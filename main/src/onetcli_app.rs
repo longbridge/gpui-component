@@ -98,7 +98,11 @@ fn minimize_window(cx: &mut App) {
     };
     cx.defer(move |cx| {
         _ = active_window.update(cx, |_, window, _| {
-            window.minimize_window();
+            if window.is_window_active() {
+                window.minimize_window();
+            } else {
+                window.activate_window();
+            }
         });
     });
 }
@@ -196,6 +200,8 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("ctrl-cmd-f", ToggleFullscreen, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-enter", ToggleFullscreen, None),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-m", MinimizeWindow, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-space", MinimizeWindow, None),
         #[cfg(target_os = "macos")]

@@ -480,6 +480,97 @@ QuickCommand:
     zh-CN: 删除
     zh-HK: 刪除
 
+# 串口连接
+Serial:
+  new:
+    en: New Serial Connection
+    zh-CN: 新建串口连接
+    zh-HK: 新建串口連接
+  edit:
+    en: Edit Serial Connection
+    zh-CN: 编辑串口连接
+    zh-HK: 編輯串口連接
+  name:
+    en: Connection Name
+    zh-CN: 连接名称
+    zh-HK: 連線名稱
+  name_placeholder:
+    en: Enter connection name
+    zh-CN: 请输入连接名称
+    zh-HK: 請輸入連線名稱
+  port_name:
+    en: Serial Port
+    zh-CN: 串口设备
+    zh-HK: 串口設備
+  port_name_placeholder:
+    en: "e.g. /dev/ttyUSB0 or COM1"
+    zh-CN: "如 /dev/ttyUSB0 或 COM1"
+    zh-HK: "如 /dev/ttyUSB0 或 COM1"
+  baud_rate:
+    en: Baud Rate
+    zh-CN: 波特率
+    zh-HK: 波特率
+  data_bits:
+    en: Data Bits
+    zh-CN: 数据位
+    zh-HK: 數據位
+  stop_bits:
+    en: Stop Bits
+    zh-CN: 停止位
+    zh-HK: 停止位
+  parity:
+    en: Parity
+    zh-CN: 校验位
+    zh-HK: 校驗位
+  flow_control:
+    en: Flow Control
+    zh-CN: 流控
+    zh-HK: 流控
+  workspace:
+    en: Workspace
+    zh-CN: 工作区
+    zh-HK: 工作區
+  remark:
+    en: Remark
+    zh-CN: 备注
+    zh-HK: 備註
+  remark_placeholder:
+    en: Enter remark
+    zh-CN: 请输入备注
+    zh-HK: 請輸入備註
+  validation_error:
+    en: Please select a serial port
+    zh-CN: 请选择串口设备
+    zh-HK: 請選擇串口設備
+  test_success:
+    en: Serial port opened successfully
+    zh-CN: 串口打开成功
+    zh-HK: 串口打開成功
+  refresh_ports:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 刷新
+  no_ports:
+    en: No serial ports found
+    zh-CN: 未发现串口设备
+    zh-HK: 未發現串口設備
+  connecting:
+    en: Connecting...
+    zh-CN: 连接中...
+    zh-HK: 連接中...
+  connection_lost:
+    en: Connection Lost
+    zh-CN: 连接已断开
+    zh-HK: 連接已斷開
+  establishing:
+    en: Opening serial port...
+    zh-CN: 正在打开串口...
+    zh-HK: 正在打開串口...
+  disconnected:
+    en: The serial connection has been disconnected.
+    zh-CN: 串口连接已断开。
+    zh-HK: 串口連接已斷開。
+
 # SSH 会话状态
 SshSession:
   connecting:

@@ -1045,3 +1045,10 @@ LlmProviders:
     en: At least one model is required
     zh-CN: 至少需要选择一个模型
     zh-HK: 至少需要選擇一個模型
+
+
+Serial:
+  new:
+    en: Serial
+    zh-CN: 串口
+    zh-HK: 串口

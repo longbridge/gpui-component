@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 1024 1024">
+  <rect x="0" y="0" width="1024" height="1024" rx="181" fill="#6366f1"/>
+  <g transform="translate(512,512)" fill="#FFFFFF">
+    <!-- 上排 3 个圆点 (引脚) -->
+    <circle cx="-180" cy="-140" r="48"/>
+    <circle cx="0" cy="-140" r="48"/>
+    <circle cx="180" cy="-140" r="48"/>
+    <!-- 下排 3 个圆点 (引脚) -->
+    <circle cx="-180" cy="40" r="48"/>
+    <circle cx="0" cy="40" r="48"/>
+    <circle cx="180" cy="40" r="48"/>
+    <!-- 底部横线 (连接端) -->
+    <rect x="-180" y="180" width="360" height="48" rx="24"/>
+  </g>
+</svg>

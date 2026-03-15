@@ -17,7 +17,8 @@ use futures::StreamExt;
 use gpui::*;
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{
-    ActiveConnections, ProxyType as StorageProxyType, SshAuthMethod, StoredConnection,
+    ActiveConnections, ProxyType as StorageProxyType, SerialParams, SshAuthMethod,
+    StoredConnection,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,7 +27,7 @@ use tokio::time::interval;
 
 use crate::pty_backend::{GpuiEventProxy, LocalPtyBackend};
 
-use crate::{LocalConfig, SshBackend, TerminalBackend, TerminalEvent, TerminalSize};
+use crate::{LocalConfig, SerialBackend, SshBackend, TerminalBackend, TerminalEvent, TerminalSize};
 pub use ssh::{
     JumpServerConnectConfig, ProxyConnectConfig, ProxyType, PtyConfig, SshAuth, SshConnectConfig,
 };
@@ -61,6 +62,7 @@ pub enum ConnectionState {
 pub enum TerminalConnectionKind {
     Local,
     Ssh,
+    Serial,
 }
 
 /// SSH 终端配置
@@ -124,6 +126,8 @@ pub struct Terminal {
 
     /// SSH 配置（用于重连）
     ssh_config: Option<SshTerminalConfig>,
+    /// 串口参数（用于重连）
+    serial_params: Option<SerialParams>,
     /// 事件发送器（用于 SSH 重连）
     event_tx: Option<UnboundedSender<TerminalEvent>>,
     /// 事件代理（用于设置 PtyWrite 回写通道）
@@ -230,6 +234,7 @@ impl Terminal {
             cols: DEFAULT_COLS,
             rows: DEFAULT_ROWS,
             ssh_config: None,
+            serial_params: None,
             event_tx: Some(event_tx),
             event_proxy: None, // 本地终端的 event_proxy 已在 LocalPtyBackend 中设置
             connection_id: None,
@@ -364,12 +369,54 @@ impl Terminal {
             cols,
             rows,
             ssh_config: Some(config),
+            serial_params: None,
             event_tx: Some(event_tx),
             event_proxy: Some(event_proxy),
             connection_id: conn.id,
             connection_name: Some(conn.name),
             init_commands,
             connection_kind: TerminalConnectionKind::Ssh,
+        }
+    }
+
+    /// 创建串口终端
+    pub fn new_serial(conn: StoredConnection, cx: &mut Context<Self>) -> Self {
+        let serial_params = conn
+            .to_serial_params()
+            .expect("StoredConnection 应包含有效的 SerialParams");
+
+        let (event_tx, event_rx) = unbounded_channel::<TerminalEvent>();
+        let (term, _event_proxy, _colors) =
+            Self::create_term(DEFAULT_COLS, DEFAULT_ROWS, event_tx.clone());
+        let (disconnect_tx, disconnect_rx) = tokio::sync::oneshot::channel::<()>();
+
+        Self::spawn_disconnect_handler(disconnect_rx, cx);
+        Self::spawn_event_loop(event_rx, cx);
+        Self::spawn_serial_connect(
+            serial_params.clone(),
+            term.clone(),
+            event_tx.clone(),
+            Some(disconnect_tx),
+            cx,
+        );
+
+        Self {
+            term,
+            backend: None,
+            title: String::new(),
+            current_working_dir: None,
+            child_exited: None,
+            connection_state: ConnectionState::Connecting,
+            cols: DEFAULT_COLS,
+            rows: DEFAULT_ROWS,
+            ssh_config: None,
+            serial_params: Some(serial_params),
+            event_tx: Some(event_tx),
+            event_proxy: None,
+            connection_id: conn.id,
+            connection_name: Some(conn.name),
+            init_commands: None,
+            connection_kind: TerminalConnectionKind::Serial,
         }
     }
 
@@ -574,6 +621,56 @@ impl Terminal {
         cx.emit(TerminalModelEvent::Wakeup);
     }
 
+    fn spawn_serial_connect(
+        params: SerialParams,
+        term: Arc<FairMutex<Term<GpuiEventProxy>>>,
+        event_tx: UnboundedSender<TerminalEvent>,
+        on_disconnect: Option<tokio::sync::oneshot::Sender<()>>,
+        cx: &mut Context<Self>,
+    ) {
+        let disconnect_tx = on_disconnect.map(|tx| {
+            let (sender, mut receiver) = unbounded_channel::<()>();
+            Tokio::spawn(cx, async move {
+                if receiver.recv().await.is_some() {
+                    let _ = tx.send(());
+                }
+            })
+            .detach();
+            sender
+        });
+
+        let result = SerialBackend::connect(params, term, event_tx, disconnect_tx);
+
+        cx.spawn(async move |this: WeakEntity<Self>, cx| {
+            let _ = this.update(cx, |this, cx| {
+                this.handle_serial_result(result, cx);
+            });
+        })
+        .detach();
+    }
+
+    fn handle_serial_result(
+        &mut self,
+        result: anyhow::Result<SerialBackend>,
+        cx: &mut Context<Self>,
+    ) {
+        match result {
+            Ok(backend) => {
+                self.connection_state = ConnectionState::Connected;
+                self.set_connection_active(true, cx);
+                self.backend = Some(Box::new(backend));
+                tracing::info!("串口连接成功");
+            }
+            Err(e) => {
+                self.connection_state = ConnectionState::Disconnected {
+                    error: Some(e.to_string()),
+                };
+                self.set_connection_active(false, cx);
+            }
+        }
+        cx.emit(TerminalModelEvent::Wakeup);
+    }
+
     fn set_connection_active(&self, active: bool, cx: &mut Context<Self>) {
         let Some(connection_id) = self.connection_id else {
             return;
@@ -660,7 +757,7 @@ impl Terminal {
 
     /// 是否可以重连
     pub fn can_reconnect(&self) -> bool {
-        self.ssh_config.is_some()
+        self.ssh_config.is_some() || self.serial_params.is_some()
     }
 
     /// 写入数据到终端
@@ -701,30 +798,47 @@ impl Terminal {
         }
     }
 
-    /// 重新连接 SSH
+    /// 重新连接 SSH 或串口
     pub fn reconnect(&mut self, cx: &mut Context<Self>) {
-        let Some(config) = self.ssh_config.clone() else {
-            return;
-        };
-        let Some(event_tx) = self.event_tx.clone() else {
-            return;
-        };
-        let Some(event_proxy) = self.event_proxy.clone() else {
-            return;
-        };
+        if let Some(config) = self.ssh_config.clone() {
+            let Some(event_tx) = self.event_tx.clone() else {
+                return;
+            };
+            let Some(event_proxy) = self.event_proxy.clone() else {
+                return;
+            };
 
-        self.connection_state = ConnectionState::Connecting;
+            self.connection_state = ConnectionState::Connecting;
 
-        let (disconnect_tx, disconnect_rx) = tokio::sync::oneshot::channel::<()>();
-        Self::spawn_disconnect_handler(disconnect_rx, cx);
-        Self::spawn_ssh_connect(
-            config,
-            self.term.clone(),
-            event_proxy,
-            event_tx,
-            Some(disconnect_tx),
-            cx,
-        );
+            let (disconnect_tx, disconnect_rx) = tokio::sync::oneshot::channel::<()>();
+            Self::spawn_disconnect_handler(disconnect_rx, cx);
+            Self::spawn_ssh_connect(
+                config,
+                self.term.clone(),
+                event_proxy,
+                event_tx,
+                Some(disconnect_tx),
+                cx,
+            );
+        } else if let Some(params) = self.serial_params.clone() {
+            let Some(event_tx) = self.event_tx.clone() else {
+                return;
+            };
+
+            self.connection_state = ConnectionState::Connecting;
+
+            let (disconnect_tx, disconnect_rx) = tokio::sync::oneshot::channel::<()>();
+            Self::spawn_disconnect_handler(disconnect_rx, cx);
+            Self::spawn_serial_connect(
+                params,
+                self.term.clone(),
+                event_tx,
+                Some(disconnect_tx),
+                cx,
+            );
+        } else {
+            return;
+        }
 
         cx.emit(TerminalModelEvent::Wakeup);
     }

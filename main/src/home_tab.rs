@@ -38,10 +38,12 @@ use terminal_view::TerminalView;
 use redis_view::{RedisFormWindow, RedisFormWindowConfig};
 use rust_i18n::t;
 use terminal_view::{SshFormWindow, SshFormWindowConfig};
+use terminal_view::{SerialFormWindow, SerialFormWindowConfig};
 
 use crate::auth::{AuthService, show_auth_dialog};
 use crate::encourage::EncourageDialog;
 use crate::home::home_connection_quick_open::ConnectionQuickOpenDelegate;
+use crate::home::home_new_connection::NewConnectionDelegate;
 use crate::home::home_strategy::build_connection_open_strategy;
 use crate::home::home_workspace_filter::WorkspaceFilterDelegate;
 use crate::license::{get_license_service, is_feature_enabled, show_upgrade_dialog};
@@ -73,7 +75,7 @@ pub struct HomePage {
     pub(crate) tab_container: Entity<TabContainer>,
     search_input: Entity<InputState>,
     search_query: Entity<String>,
-    editing_connection_id: Option<i64>,
+    pub(crate) editing_connection_id: Option<i64>,
     selected_connection_id: Option<i64>,
     editing_workspace_id: Option<i64>,
     pub(crate) filtered_workspace_ids: HashSet<i64>,
@@ -913,6 +915,7 @@ impl HomePage {
             ListState::new(delegate, window, cx).searchable(true)
         });
 
+        let list_for_focus = list.clone();
         window.open_dialog(cx, move |dialog, _window, cx| {
             dialog
                 .title("打开连接".to_string())
@@ -936,86 +939,46 @@ impl HomePage {
                         .ok_text(t!("Common.close")),
                 )
         });
+        // 将焦点设置到 List 搜索框，使上下键和 Enter 键可用
+        list_for_focus.update(cx, |state, cx| {
+            state.focus(window, cx);
+        });
     }
 
     pub(crate) fn show_new_connection_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let view = cx.entity();
-        window.open_dialog(cx, move |dialog, window, _cx| {
-            let mut items: Vec<AnyElement> = Vec::new();
+        let parent = cx.entity();
+        let list = cx.new(|cx| {
+            let delegate = NewConnectionDelegate::new(parent);
+            ListState::new(delegate, window, cx).searchable(true)
+        });
 
-            items.push(
-                Button::new("new-conn-workspace")
-                    .label(t!("Workspace.label"))
-                    .on_click(window.listener_for(&view, |this, _, window, cx| {
-                        this.show_workspace_form(None, window, cx);
-                        window.close_dialog(cx);
-                    }))
-                    .into_any_element(),
-            );
-            items.push(
-                Button::new("new-conn-ssh")
-                    .label("SSH")
-                    .on_click(window.listener_for(&view, |this, _, window, cx| {
-                        this.editing_connection_id = None;
-                        this.show_ssh_form(window, cx);
-                        window.close_dialog(cx);
-                    }))
-                    .into_any_element(),
-            );
-            items.push(
-                Button::new("new-conn-terminal")
-                    .label("Terminal")
-                    .on_click(window.listener_for(&view, |this, _, window, cx| {
-                        this.add_terminal_tab(window, cx);
-                        window.close_dialog(cx);
-                    }))
-                    .into_any_element(),
-            );
-            items.push(
-                Button::new("new-conn-redis")
-                    .label("Redis")
-                    .on_click(window.listener_for(&view, |this, _, window, cx| {
-                        this.editing_connection_id = None;
-                        this.show_redis_form(window, cx);
-                        window.close_dialog(cx);
-                    }))
-                    .into_any_element(),
-            );
-            items.push(
-                Button::new("new-conn-mongodb")
-                    .label("MongoDB")
-                    .on_click(window.listener_for(&view, |this, _, window, cx| {
-                        this.editing_connection_id = None;
-                        this.show_mongodb_form(window, cx);
-                        window.close_dialog(cx);
-                    }))
-                    .into_any_element(),
-            );
-
-            for db_type in DatabaseType::all() {
-                let db_type = *db_type;
-                let label = db_type.as_str().to_string();
-                items.push(
-                    Button::new(SharedString::from(format!("new-conn-db-{}", db_type.as_str())))
-                        .label(label)
-                        .on_click(window.listener_for(&view, move |this, _, window, cx| {
-                            this.editing_connection_id = None;
-                            this.show_connection_form(db_type, window, cx);
-                            window.close_dialog(cx);
-                        }))
-                        .into_any_element(),
-                );
-            }
-
+        let list_for_focus = list.clone();
+        window.open_dialog(cx, move |dialog, _window, cx| {
             dialog
                 .title(t!("Home.new_connection").to_string())
                 .w(px(360.0))
-                .child(v_flex().gap_2().children(items))
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(
+                            List::new(&list)
+                                .w_full()
+                                .max_h(px(360.0))
+                                .p(px(8.0))
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded(cx.theme().radius),
+                        ),
+                )
                 .alert()
                 .button_props(
                     gpui_component::dialog::DialogButtonProps::default()
                         .ok_text(t!("Common.close")),
                 )
+        });
+        // 将焦点设置到 List 搜索框，使上下键和 Enter 键可用
+        list_for_focus.update(cx, |state, cx| {
+            state.focus(window, cx);
         });
     }
 
@@ -1210,7 +1173,7 @@ impl HomePage {
         .detach();
     }
 
-    fn show_connection_form(
+    pub(crate) fn show_connection_form(
         &mut self,
         db_type: DatabaseType,
         window: &mut Window,
@@ -1246,7 +1209,7 @@ impl HomePage {
         );
     }
 
-    fn show_ssh_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn show_ssh_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.editing_connection_id.is_none()
             && !self.ensure_master_key_ready_for_new_connection(window, cx)
         {
@@ -1279,7 +1242,7 @@ impl HomePage {
         );
     }
 
-    fn show_redis_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn show_redis_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.editing_connection_id.is_none()
             && !self.ensure_master_key_ready_for_new_connection(window, cx)
         {
@@ -1312,7 +1275,7 @@ impl HomePage {
         );
     }
 
-    fn show_mongodb_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn show_mongodb_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.editing_connection_id.is_none()
             && !self.ensure_master_key_ready_for_new_connection(window, cx)
         {
@@ -1341,6 +1304,39 @@ impl HomePage {
             })
             .size(700.0, 520.0),
             move |window, cx| cx.new(|cx| MongoFormWindow::new(config, window, cx)),
+            cx,
+        );
+    }
+
+    pub(crate) fn show_serial_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing_connection_id.is_none()
+            && !self.ensure_master_key_ready_for_new_connection(window, cx)
+        {
+            return;
+        }
+
+        let editing_conn = self.editing_connection_id.and_then(|id| {
+            self.connections
+                .iter()
+                .find(|c| c.id == Some(id) && c.connection_type == ConnectionType::Serial)
+                .cloned()
+        });
+
+        let config = SerialFormWindowConfig {
+            editing_connection: editing_conn,
+            workspaces: self.workspaces.clone(),
+        };
+
+        self.editing_connection_id = None;
+
+        open_popup_window(
+            PopupWindowOptions::new(if config.editing_connection.is_some() {
+                t!("Serial.edit").to_string()
+            } else {
+                t!("Serial.new").to_string()
+            })
+            .size(700.0, 600.0),
+            move |window, cx| cx.new(|cx| SerialFormWindow::new(config, window, cx)),
             cx,
         );
     }
@@ -1639,6 +1635,21 @@ impl HomePage {
                                                 move |this, _, window, cx| {
                                                     this.editing_connection_id = None;
                                                     this.show_mongodb_form(window, cx);
+                                                },
+                                            )),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new(t!("Serial.new"))
+                                            .icon(
+                                                IconName::SerialPort
+                                                    .color()
+                                                    .with_size(Size::Medium),
+                                            )
+                                            .on_click(window.listener_for(
+                                                &view,
+                                                move |this, _, window, cx| {
+                                                    this.editing_connection_id = None;
+                                                    this.show_serial_form(window, cx);
                                                 },
                                             )),
                                     )
@@ -2508,6 +2519,10 @@ impl HomePage {
                                             this.editing_connection_id = Some(conn_id);
                                             this.show_mongodb_form(window, cx);
                                         }
+                                        ConnectionType::Serial => {
+                                            this.editing_connection_id = Some(conn_id);
+                                            this.show_serial_form(window, cx);
+                                        }
                                         _ => {}
                                     }
                                 }
@@ -2563,6 +2578,10 @@ impl HomePage {
                                     .with_size(px(40.0))
                                     .text_color(gpui::white()),
                                 ConnectionType::MongoDB => IconName::MongoDB
+                                    .color()
+                                    .with_size(px(40.0))
+                                    .text_color(gpui::white()),
+                                ConnectionType::Serial => IconName::SerialPort
                                     .color()
                                     .with_size(px(40.0))
                                     .text_color(gpui::white()),

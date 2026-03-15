@@ -28,3 +28,4 @@ rust-i18n = { workspace = true }
 url.workspace = true
 chrono = { workspace = true }
 tokio = { workspace = true }
+serialport = { workspace = true }

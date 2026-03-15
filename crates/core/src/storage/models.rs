@@ -48,6 +48,7 @@ pub enum ConnectionType {
     Redis,
     MongoDB,
     ChatDB,
+    Serial,
 }
 
 impl fmt::Display for ConnectionType {
@@ -59,6 +60,7 @@ impl fmt::Display for ConnectionType {
             ConnectionType::Redis => "Redis",
             ConnectionType::MongoDB => "MongoDB",
             ConnectionType::ChatDB => "ChatDB",
+            ConnectionType::Serial => "Serial",
         };
         write!(f, "{}", s)
     }
@@ -73,6 +75,7 @@ impl ConnectionType {
             ConnectionType::Redis,
             ConnectionType::MongoDB,
             ConnectionType::ChatDB,
+            ConnectionType::Serial,
         ]
     }
     pub fn from_str(s: &str) -> Self {
@@ -82,6 +85,7 @@ impl ConnectionType {
             "Redis" => ConnectionType::Redis,
             "MongoDB" => ConnectionType::MongoDB,
             "ChatDB" => ConnectionType::ChatDB,
+            "Serial" => ConnectionType::Serial,
             _ => ConnectionType::Database,
         }
     }
@@ -94,6 +98,7 @@ impl ConnectionType {
             ConnectionType::Redis => "Redis",
             ConnectionType::MongoDB => "MongoDB",
             ConnectionType::ChatDB => "ChatDB",
+            ConnectionType::Serial => "串口",
         }
     }
 
@@ -105,6 +110,7 @@ impl ConnectionType {
             ConnectionType::Redis => IconName::Redis,
             ConnectionType::MongoDB => IconName::MongoDB,
             ConnectionType::ChatDB => IconName::AI,
+            ConnectionType::Serial => IconName::SerialPort,
         }
     }
 }
@@ -329,6 +335,103 @@ pub struct MongoDBParams {
     pub connect_timeout_seconds: Option<u64>,
     #[serde(default)]
     pub application_name: Option<String>,
+}
+
+/// 串口校验位
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SerialParity {
+    #[default]
+    None,
+    Odd,
+    Even,
+}
+
+impl SerialParity {
+    pub fn all() -> &'static [SerialParity] {
+        &[SerialParity::None, SerialParity::Odd, SerialParity::Even]
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            SerialParity::None => "None",
+            SerialParity::Odd => "Odd",
+            SerialParity::Even => "Even",
+        }
+    }
+}
+
+/// 串口流控
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SerialFlowControl {
+    #[default]
+    None,
+    Software,
+    Hardware,
+}
+
+impl SerialFlowControl {
+    pub fn all() -> &'static [SerialFlowControl] {
+        &[
+            SerialFlowControl::None,
+            SerialFlowControl::Software,
+            SerialFlowControl::Hardware,
+        ]
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            SerialFlowControl::None => "None",
+            SerialFlowControl::Software => "XON/XOFF",
+            SerialFlowControl::Hardware => "RTS/CTS",
+        }
+    }
+}
+
+/// 串口连接参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerialParams {
+    /// 串口设备路径，如 /dev/ttyUSB0 或 COM1
+    pub port_name: String,
+    /// 波特率
+    #[serde(default = "default_baud_rate")]
+    pub baud_rate: u32,
+    /// 数据位 (5/6/7/8)
+    #[serde(default = "default_data_bits")]
+    pub data_bits: u8,
+    /// 停止位 (1/2)
+    #[serde(default = "default_stop_bits")]
+    pub stop_bits: u8,
+    /// 校验位
+    #[serde(default)]
+    pub parity: SerialParity,
+    /// 流控
+    #[serde(default)]
+    pub flow_control: SerialFlowControl,
+}
+
+fn default_baud_rate() -> u32 {
+    115200
+}
+
+fn default_data_bits() -> u8 {
+    8
+}
+
+fn default_stop_bits() -> u8 {
+    1
+}
+
+impl Default for SerialParams {
+    fn default() -> Self {
+        Self {
+            port_name: String::new(),
+            baud_rate: 115200,
+            data_bits: 8,
+            stop_bits: 1,
+            parity: SerialParity::None,
+            flow_control: SerialFlowControl::None,
+        }
+    }
 }
 
 /// Connection configuration
@@ -572,6 +675,27 @@ impl StoredConnection {
     }
 
     pub fn to_mongodb_params(&self) -> Result<MongoDBParams, serde_json::Error> {
+        serde_json::from_str(&self.params)
+    }
+
+    pub fn new_serial(name: String, params: SerialParams, workspace_id: Option<i64>) -> Self {
+        Self {
+            id: None,
+            name,
+            connection_type: ConnectionType::Serial,
+            params: serde_json::to_string(&params).expect("SerialParams 序列化不应失败"),
+            workspace_id,
+            selected_databases: None,
+            remark: None,
+            sync_enabled: true,
+            cloud_id: None,
+            last_synced_at: None,
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    pub fn to_serial_params(&self) -> Result<SerialParams, serde_json::Error> {
         serde_json::from_str(&self.params)
     }
 
