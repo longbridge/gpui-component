@@ -44,8 +44,8 @@ impl SessionAffinity {
         self.current_agent_id.as_deref()
     }
 
-    /// Whether the affinity is still valid (has not exceeded the round limit).
-    fn is_valid(&self) -> bool {
+    /// 会话亲和性是否仍有效（未超过轮次上限）。
+    pub fn is_valid(&self) -> bool {
         self.current_agent_id.is_some() && self.consecutive_rounds < MAX_AFFINITY_ROUNDS
     }
 }
@@ -91,6 +91,29 @@ impl AgentDispatcher {
             return rx;
         }
 
+        // --- Level 1.5: 亲和性快速路径 ---
+        // 亲和性有效 + 输入看起来像追问 + 当前 agent 仍在可用列表中 → 跳过 LLM 路由
+        if affinity.is_valid() {
+            if let Some(current_id) = affinity.current_agent_id().map(str::to_owned) {
+                if Self::looks_like_followup(&ctx.user_input) {
+                    if let Some(agent) =
+                        available.iter().find(|a| a.descriptor().id == current_id)
+                    {
+                        info!(
+                            agent = current_id.as_str(),
+                            "Dispatched via session affinity fast-path (follow-up detected)"
+                        );
+                        affinity.bind(&current_id);
+                        let agent = Arc::clone(agent);
+                        tokio::spawn(async move {
+                            agent.execute(ctx, tx).await;
+                        });
+                        return rx;
+                    }
+                }
+            }
+        }
+
         // --- Level 2: LLM intent routing ---
         let provider_result = ctx
             .provider_state
@@ -107,6 +130,7 @@ impl AgentDispatcher {
                     provider.as_ref(),
                     &ctx.provider_config,
                     &ctx.cancel_token,
+                    affinity.current_agent_id(),
                 )
                 .await
                 {
@@ -206,5 +230,65 @@ impl AgentDispatcher {
         }
 
         None
+    }
+
+    /// 判断用户输入是否看起来像追问/延续消息。
+    ///
+    /// 包含命令前缀时返回 false（用户明确发起新意图），
+    /// 短消息或包含追问关键词时返回 true，其他情况返回 false（走 LLM 路由）。
+    fn looks_like_followup(user_input: &str) -> bool {
+        let trimmed = user_input.trim();
+
+        // 包含命令前缀 → 不是追问，是明确的新意图
+        if trimmed.starts_with('/') {
+            return false;
+        }
+
+        // 短消息（≤30 字符）大概率是追问
+        if trimmed.chars().count() <= 30 {
+            return true;
+        }
+
+        // 包含追问关键词
+        let followup_keywords = [
+            "继续",
+            "还有",
+            "改一下",
+            "换成",
+            "再来",
+            "接着",
+            "然后呢",
+            "补充",
+            "修改",
+            "调整",
+            "再试",
+            "重新",
+            "另外",
+            "对了",
+            "顺便",
+            "还要",
+            "加上",
+            "去掉",
+            "不要",
+            "改为",
+            "continue",
+            "refine",
+            "also",
+            "more",
+            "again",
+            "update",
+            "change",
+            "modify",
+            "keep going",
+            "go on",
+        ];
+        let input_lower = trimmed.to_lowercase();
+        for kw in &followup_keywords {
+            if input_lower.contains(kw) {
+                return true;
+            }
+        }
+
+        false
     }
 }

@@ -51,12 +51,13 @@ impl IntentRouter {
         provider: &dyn LlmProvider,
         provider_config: &ProviderConfig,
         cancel_token: &CancellationToken,
+        current_agent_id: Option<&str>,
     ) -> Result<RoutingDecision, RouterError> {
         if cancel_token.is_cancelled() {
             return Err(RouterError::Cancelled);
         }
 
-        let system_prompt = Self::build_system_prompt(agents);
+        let system_prompt = Self::build_system_prompt(agents, current_agent_id);
         let agent_ids: Vec<&str> = agents.iter().map(|a| a.descriptor().id).collect();
 
         let mut messages = vec![Message::text(Role::System, &system_prompt)];
@@ -91,7 +92,7 @@ impl IntentRouter {
         Self::parse_response(&response, &agent_ids)
     }
 
-    fn build_system_prompt(agents: &[&DynAgent]) -> String {
+    fn build_system_prompt(agents: &[&DynAgent], current_agent_id: Option<&str>) -> String {
         let mut prompt = String::from(
             "You are an intent router. Given the user's message, decide which agent should handle it.\n\
              Available agents:\n\n",
@@ -108,6 +109,16 @@ impl IntentRouter {
                 prompt.push('\n');
             }
             prompt.push('\n');
+        }
+
+        // 当存在绑定 agent 时，增加会话连续性指导
+        if let Some(agent_id) = current_agent_id {
+            prompt.push_str(&format!(
+                "IMPORTANT: The current conversation is being handled by agent \"{agent_id}\". \
+                 If the user's message is a follow-up, continuation, or refinement of the previous topic, \
+                 you should keep routing to \"{agent_id}\". \
+                 Only route to a different agent if the user clearly switches to a new, unrelated topic.\n\n",
+            ));
         }
 
         prompt.push_str(
