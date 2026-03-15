@@ -682,6 +682,89 @@ Settings:
         zh-CN: 设置自动保存的时间间隔（1-60秒）
         zh-HK: 設置自動保存的時間間隔（1-60秒）
 
+  # 快捷键
+  Shortcuts:
+    title:
+      en: Shortcuts
+      zh-CN: 快捷键
+      zh-HK: 快捷鍵
+    window:
+      en: Window Management
+      zh-CN: 窗口管理
+      zh-HK: 視窗管理
+    tabs:
+      en: Tabs
+      zh-CN: 标签页
+      zh-HK: 標籤頁
+    terminal:
+      en: Terminal
+      zh-CN: 终端
+      zh-HK: 終端
+    minimize_window:
+      en: Minimize / Activate Window
+      zh-CN: 最小化 / 激活窗口
+      zh-HK: 最小化 / 啟用視窗
+    toggle_fullscreen:
+      en: Toggle Fullscreen
+      zh-CN: 切换全屏
+      zh-HK: 切換全螢幕
+    toggle_zoom:
+      en: Toggle Panel Zoom
+      zh-CN: 切换面板缩放
+      zh-HK: 切換面板縮放
+    close_panel:
+      en: Close Panel
+      zh-CN: 关闭面板
+      zh-HK: 關閉面板
+    switch_tab_n:
+      en: "Switch to Tab N"
+      zh-CN: "切换到第 N 个标签页"
+      zh-HK: "切換到第 N 個標籤頁"
+    duplicate_tab:
+      en: Duplicate Tab
+      zh-CN: 复制标签页
+      zh-HK: 複製標籤頁
+    quick_open:
+      en: Quick Open Connection
+      zh-CN: 快速打开连接
+      zh-HK: 快速打開連線
+    new_connection:
+      en: New Connection
+      zh-CN: 新建连接
+      zh-HK: 新建連線
+    terminal_copy:
+      en: Copy
+      zh-CN: 复制
+      zh-HK: 複製
+    terminal_paste:
+      en: Paste
+      zh-CN: 粘贴
+      zh-HK: 貼上
+    terminal_search:
+      en: Search
+      zh-CN: 搜索
+      zh-HK: 搜尋
+    terminal_select_all:
+      en: Select All
+      zh-CN: 全选
+      zh-HK: 全選
+    terminal_zoom_in:
+      en: Zoom In
+      zh-CN: 放大字体
+      zh-HK: 放大字型
+    terminal_zoom_out:
+      en: Zoom Out
+      zh-CN: 缩小字体
+      zh-HK: 縮小字型
+    terminal_zoom_reset:
+      en: Reset Font Size
+      zh-CN: 重置字体
+      zh-HK: 重設字型
+    terminal_toggle_vi:
+      en: Toggle Vi Mode
+      zh-CN: 切换 Vi 模式
+      zh-HK: 切換 Vi 模式
+
   # 关于页面
   About:
     title:
