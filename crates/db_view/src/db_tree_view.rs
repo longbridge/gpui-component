@@ -1129,6 +1129,22 @@ impl DbTreeView {
         self.clear_node_all_state(node_id);
     }
 
+    /// 递归清除节点所有后代的展开状态
+    ///
+    /// 用于关闭连接/数据库时彻底清理展开状态，避免重新连接后自动展开旧节点。
+    fn clear_expanded_descendants(&mut self, node_id: &str) {
+        let child_ids: Vec<String> = if let Some(node) = self.db_nodes.get(node_id) {
+            node.children.iter().map(|c| c.id.clone()).collect()
+        } else {
+            return;
+        };
+
+        for child_id in child_ids {
+            self.clear_expanded_descendants(&child_id);
+            self.expanded_nodes.remove(&child_id);
+        }
+    }
+
     /// 递归清除节点的所有后代
     ///
     /// 注意：此方法不会清除展开状态(expanded_nodes)，因为展开状态是用户的UI状态，
@@ -1772,6 +1788,7 @@ impl DbTreeView {
             cx.global_mut::<ActiveConnections>().remove(conn_id);
         }
 
+        self.clear_expanded_descendants(connection_id);
         self.clear_node_descendants(connection_id);
         self.reset_node_children(connection_id);
         self.clear_node_all_state(connection_id);
@@ -1782,6 +1799,7 @@ impl DbTreeView {
     pub fn close_database(&mut self, database_node_id: &str, cx: &mut Context<Self>) {
         info!("Closing database in DbTreeView: {}", database_node_id);
 
+        self.clear_expanded_descendants(database_node_id);
         self.clear_node_descendants(database_node_id);
         self.reset_node_children(database_node_id);
         self.clear_node_all_state(database_node_id);
