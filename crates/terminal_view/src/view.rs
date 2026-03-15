@@ -391,12 +391,12 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) -> Self {
         let connection_id = conn.id;
-        let stored_conn = conn.clone();
         let terminal = cx.new(|cx| Terminal::new_serial(conn, cx));
+        // 串口不传 stored_connection，避免创建文件管理器面板
         Self::new_with_terminal(
             terminal,
             connection_id,
-            Some(stored_conn),
+            None,
             None,
             tab_index,
             window,
@@ -1989,8 +1989,12 @@ impl TabContent for TerminalView {
         }
     }
 
-    fn icon(&self, _cx: &App) -> Option<Icon> {
-        Some(IconName::TerminalColor.color())
+    fn icon(&self, cx: &App) -> Option<Icon> {
+        if self.connection_kind(cx) == TerminalConnectionKind::Serial {
+            Some(IconName::SerialPort.color())
+        } else {
+            Some(IconName::TerminalColor.color())
+        }
     }
 
     fn closeable(&self, _cx: &App) -> bool {

@@ -2768,6 +2768,44 @@ impl HomePage {
                                 } else {
                                     this
                                 }
+                            })
+                            .when(conn.connection_type == ConnectionType::Serial, |this| {
+                                if let Ok(params) = conn.to_serial_params() {
+                                    // 格式：/dev/ttyUSB0 (115200, 8N1)
+                                    let parity_char = match params.parity {
+                                        one_core::storage::models::SerialParity::None => 'N',
+                                        one_core::storage::models::SerialParity::Odd => 'O',
+                                        one_core::storage::models::SerialParity::Even => 'E',
+                                    };
+                                    let conn_info = format!(
+                                        "{} ({}, {}{}{})",
+                                        params.port_name,
+                                        params.baud_rate,
+                                        params.data_bits,
+                                        parity_char,
+                                        params.stop_bits,
+                                    );
+                                    let tooltip_text: SharedString = conn_info.clone().into();
+                                    this.child(
+                                        div()
+                                            .id(SharedString::from(format!(
+                                                "conn-info-{}",
+                                                conn.id.unwrap_or(0)
+                                            )))
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .overflow_hidden()
+                                            .text_ellipsis()
+                                            .whitespace_nowrap()
+                                            .max_w_full()
+                                            .tooltip(move |window, cx| {
+                                                Tooltip::new(tooltip_text.clone()).build(window, cx)
+                                            })
+                                            .child(conn_info),
+                                    )
+                                } else {
+                                    this
+                                }
                             }),
                     ),
             );
