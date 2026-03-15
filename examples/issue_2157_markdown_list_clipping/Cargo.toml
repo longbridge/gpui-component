@@ -1,0 +1,15 @@
+[package]
+name = "issue_2157_markdown_list_clipping"
+description = "Local reproduction for gpui-component issue #2157."
+version = "0.5.1"
+publish = false
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component.workspace = true
+
+[lints]
+workspace = true
