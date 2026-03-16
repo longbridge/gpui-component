@@ -572,6 +572,8 @@ impl RenderOnce for Dialog {
                             .when_some(self.props.max_width, |this, w| this.max_w(w))
                             .child(
                                 v_flex()
+                                    .flex_1()
+                                    .overflow_hidden()
                                     .gap_y_2()
                                     .when_some(self.header, |this, header| {
                                         this.child(
