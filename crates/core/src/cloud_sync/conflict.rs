@@ -14,7 +14,7 @@
 //! - UseLocal: 使用本地版本（覆盖云端）
 //! - KeepBoth: 保留两个版本（创建副本）
 
-use crate::cloud_sync::models::{CloudConnection, ConflictResolution, ConflictType, SyncConflict};
+use crate::cloud_sync::models::{CloudSyncData, ConflictResolution, ConflictType, SyncConflict};
 use crate::storage::StoredConnection;
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -63,10 +63,12 @@ impl ConflictResolver {
 
     /// 检测冲突
     ///
-    /// 比较本地连接和云端连接，判断是否存在冲突以及冲突类型
+    /// 比较本地连接和云端同步数据，判断是否存在冲突以及冲突类型。
+    /// `cloud_name` 为解密后的云端名称，用于 UI 展示。
     pub fn detect_conflict(
         local: &StoredConnection,
-        cloud: &CloudConnection,
+        cloud: &CloudSyncData,
+        cloud_name: &str,
         last_synced_at: i64,
     ) -> Option<SyncConflict> {
         let local_updated = local.updated_at.unwrap_or(0);
@@ -83,6 +85,7 @@ impl ConflictResolver {
                 return Some(SyncConflict {
                     local: local.clone(),
                     cloud: cloud.clone(),
+                    cloud_name: cloud_name.to_string(),
                     conflict_type: ConflictType::BothModified,
                 });
             }
@@ -96,22 +99,24 @@ impl ConflictResolver {
         local: &StoredConnection,
         cloud_id: &str,
     ) -> SyncConflict {
+        // 构造占位 CloudSyncData
+        let placeholder = CloudSyncData {
+            id: cloud_id.to_string(),
+            owner_id: String::new(),
+            team_id: None,
+            data_type: crate::cloud_sync::models::data_type::CONNECTION.to_string(),
+            encrypted_data: String::new(),
+            key_version: 0,
+            checksum: String::new(),
+            version: 0,
+            updated_at: 0,
+            deleted_at: None,
+        };
+
         SyncConflict {
             local: local.clone(),
-            cloud: CloudConnection {
-                id: cloud_id.to_string(),
-                local_id: local.id,
-                name: local.name.clone(),
-                connection_type: local.connection_type.to_string(),
-                workspace_id: local.workspace_id.map(|id| id.to_string()),
-                selected_databases: local.selected_databases.clone(),
-                remark: local.remark.clone(),
-                encrypted_params: String::new(),
-                key_version: 0,
-                updated_at: 0,
-                checksum: String::new(),
-                deleted_at: None,
-            },
+            cloud: placeholder,
+            cloud_name: local.name.clone(),
             conflict_type: ConflictType::LocalModifiedCloudDeleted,
         }
     }
@@ -119,11 +124,13 @@ impl ConflictResolver {
     /// 检测本地删除但云端已修改的情况
     pub fn detect_local_deleted_cloud_modified(
         local: &StoredConnection,
-        cloud: &CloudConnection,
+        cloud: &CloudSyncData,
+        cloud_name: &str,
     ) -> SyncConflict {
         SyncConflict {
             local: local.clone(),
             cloud: cloud.clone(),
+            cloud_name: cloud_name.to_string(),
             conflict_type: ConflictType::LocalDeletedCloudModified,
         }
     }
@@ -168,12 +175,19 @@ impl ConflictResolver {
         copy
     }
 
-    /// 计算连接的 checksum
+    /// 计算连接的 checksum（字段拼接方式，兼容旧数据）
     fn calculate_checksum(conn: &StoredConnection) -> String {
         let mut hasher = Sha256::new();
         hasher.update(conn.name.as_bytes());
         hasher.update(conn.connection_type.to_string().as_bytes());
         hasher.update(conn.params.as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
+
+    /// 计算整体明文 JSON 的 SHA-256 校验和（新版 blob 模式）
+    pub fn calculate_blob_checksum(plaintext: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(plaintext.as_bytes());
         format!("{:x}", hasher.finalize())
     }
 
@@ -198,13 +212,13 @@ impl ConflictResolver {
 #[derive(Debug, Clone)]
 pub enum ResolvedAction {
     /// 更新本地（使用云端版本）
-    UpdateLocal(CloudConnection),
+    UpdateLocal(CloudSyncData),
     /// 更新云端（使用本地版本）
     UpdateCloud(StoredConnection),
     /// 保留两者（云端版本更新到本地，同时创建本地副本）
     KeepBoth {
-        /// 保留的云端连接
-        keep_cloud: CloudConnection,
+        /// 保留的云端同步数据
+        keep_cloud: CloudSyncData,
         /// 创建的本地副本
         create_local_copy: StoredConnection,
     },
@@ -264,11 +278,11 @@ impl ConflictDetail {
         };
 
         let cloud_info = ConnectionInfo {
-            name: conflict.cloud.name.clone(),
+            name: conflict.cloud_name.clone(),
             last_modified: ConflictResolver::format_timestamp_static(
                 conflict.cloud.updated_at / 1000,
             ),
-            connection_type: conflict.cloud.connection_type.clone(),
+            connection_type: conflict.cloud.data_type.clone(),
         };
 
         let suggested_resolution = match conflict.conflict_type {
@@ -322,6 +336,7 @@ mod tests {
             last_synced_at: Some(100),
             created_at: None,
             updated_at: Some(200),
+            team_id: None,
         };
 
         let copy = resolver.create_conflict_copy(&conn, "本地");

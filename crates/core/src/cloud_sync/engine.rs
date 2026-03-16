@@ -11,7 +11,7 @@
 use super::connection_sync::ConnectionSyncHandler;
 use super::workspace_sync::WorkspaceSyncHandler;
 use crate::cloud_sync::client::CloudApiClient;
-use crate::cloud_sync::models::{ConflictResolution, SyncResult};
+use crate::cloud_sync::models::{ConflictResolution, SyncResult, Team};
 use crate::cloud_sync::queue::OperationQueue;
 use crate::cloud_sync::service::{CloudSyncService, SyncError};
 use crate::crypto;
@@ -44,6 +44,8 @@ pub struct SyncEngine {
     /// 冲突解决策略
     pub(crate) conflict_strategy: ConflictResolution,
     handlers: Vec<Box<dyn SyncHandler>>,
+    /// 当前用户所在团队列表（同步开始时获取）
+    pub(crate) cached_teams: std::sync::RwLock<Vec<Team>>,
 }
 
 impl SyncEngine {
@@ -62,6 +64,7 @@ impl SyncEngine {
                 Box::new(WorkspaceSyncHandler),
                 Box::new(ConnectionSyncHandler),
             ],
+            cached_teams: std::sync::RwLock::new(Vec::new()),
         }
     }
 
@@ -114,12 +117,26 @@ impl SyncEngine {
     /// 执行完整同步
     ///
     /// ## 同步流程
-    /// 1. 先同步工作空间（无外键依赖）
-    /// 2. 再同步连接（依赖工作空间）
+    /// 1. 获取团队列表并缓存
+    /// 2. 先同步工作空间（无外键依赖）
+    /// 3. 再同步连接（依赖工作空间）
     pub async fn sync(&self) -> Result<SyncResult, SyncError> {
         tracing::info!("========== 开始云同步 ==========");
 
         self.ensure_unlocked()?;
+
+        // 获取并缓存团队列表
+        match self.cloud_client.list_teams().await {
+            Ok(teams) => {
+                tracing::info!("[同步] 获取到 {} 个团队", teams.len());
+                if let Ok(mut cache) = self.cached_teams.write() {
+                    *cache = teams;
+                }
+            }
+            Err(e) => {
+                tracing::warn!("[同步] 获取团队列表失败: {}（将仅同步个人数据）", e);
+            }
+        }
 
         let mut result = SyncResult::default();
 
@@ -172,5 +189,21 @@ impl SyncEngine {
 
         service.store_operation_queue(key, queue);
         Ok(())
+    }
+
+    /// 获取缓存的团队列表
+    pub(crate) fn get_cached_teams(&self) -> Vec<Team> {
+        self.cached_teams
+            .read()
+            .map(|teams| teams.clone())
+            .unwrap_or_default()
+    }
+
+    /// 检查团队密钥是否已解锁
+    pub(crate) fn is_team_unlocked(&self, team_id: &str) -> bool {
+        self.crypto_service
+            .read()
+            .map(|service| service.is_team_unlocked(team_id))
+            .unwrap_or(false)
     }
 }

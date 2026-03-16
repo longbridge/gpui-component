@@ -15,40 +15,6 @@ pub struct CloudUserConfig {
     pub updated_at: i64,
 }
 
-/// 云端连接数据（加密存储）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CloudConnection {
-    /// 云端 ID（UUID）
-    pub id: String,
-    /// 本地数据库 ID（用于关联）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub local_id: Option<i64>,
-    /// 连接名称
-    pub name: String,
-    /// 连接类型
-    pub connection_type: String,
-    /// 工作区 ID
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub workspace_id: Option<String>,
-    /// 已选中的数据库列表（JSON数组）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub selected_databases: Option<String>,
-    /// 备注
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub remark: Option<String>,
-    /// 加密的连接参数（ENC:base64...）
-    pub encrypted_params: String,
-    /// 加密时使用的密钥版本
-    pub key_version: u32,
-    /// 更新时间戳
-    pub updated_at: i64,
-    /// 数据校验和（用于冲突检测）
-    pub checksum: String,
-    /// 软删除时间戳（毫秒），None 表示未删除
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deleted_at: Option<i64>,
-}
-
 /// 同步状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SyncStatus {
@@ -94,7 +60,9 @@ pub struct SyncConflict {
     /// 本地数据
     pub local: crate::storage::StoredConnection,
     /// 云端数据
-    pub cloud: CloudConnection,
+    pub cloud: CloudSyncData,
+    /// 解密后的云端名称，用于 UI 展示
+    pub cloud_name: String,
     /// 冲突类型
     pub conflict_type: ConflictType,
 }
@@ -189,12 +157,12 @@ impl Default for SyncResult {
 pub struct SyncPlan {
     /// 需要上传的连接（本地新增）
     pub to_upload: Vec<crate::storage::StoredConnection>,
-    /// 需要更新到云端的连接 (本地连接, 对应的云端连接)
-    pub to_update_cloud: Vec<(crate::storage::StoredConnection, CloudConnection)>,
+    /// 需要更新到云端的连接 (本地连接, 对应的云端同步数据)
+    pub to_update_cloud: Vec<(crate::storage::StoredConnection, CloudSyncData)>,
     /// 需要下载的连接（云端新增）
-    pub to_download: Vec<CloudConnection>,
-    /// 需要更新到本地的连接 (云端连接, 对应的本地连接)
-    pub to_update_local: Vec<(CloudConnection, crate::storage::StoredConnection)>,
+    pub to_download: Vec<CloudSyncData>,
+    /// 需要更新到本地的连接 (云端同步数据, 对应的本地连接)
+    pub to_update_local: Vec<(CloudSyncData, crate::storage::StoredConnection)>,
     /// 需要删除的云端连接 ID
     pub to_delete_cloud: Vec<String>,
     /// 需要删除的本地连接 ID
@@ -231,57 +199,140 @@ impl SyncPlan {
 pub struct WorkspaceSyncPlan {
     /// 需要上传的工作空间（本地新增）
     pub to_upload: Vec<crate::storage::Workspace>,
-    /// 需要更新到云端的工作空间 (本地工作空间, 对应的云端工作空间)
-    pub to_update_cloud: Vec<(crate::storage::Workspace, CloudWorkspace)>,
+    /// 需要更新到云端的工作空间 (本地工作空间, 对应的云端同步数据)
+    pub to_update_cloud: Vec<(crate::storage::Workspace, CloudSyncData)>,
     /// 需要下载的工作空间（云端新增）
-    pub to_download: Vec<CloudWorkspace>,
-    /// 需要更新到本地的工作空间 (云端工作空间, 对应的本地工作空间)
-    pub to_update_local: Vec<(CloudWorkspace, crate::storage::Workspace)>,
+    pub to_download: Vec<CloudSyncData>,
+    /// 需要更新到本地的工作空间 (云端同步数据, 对应的本地工作空间)
+    pub to_update_local: Vec<(CloudSyncData, crate::storage::Workspace)>,
 }
 
-/// 已解决的冲突
-#[derive(Debug, Clone)]
-pub struct ResolvedConflict {
-    /// 原始冲突
-    pub conflict: SyncConflict,
-    /// 解决策略
-    pub resolution: ConflictResolution,
-    /// 结果连接（如果需要创建副本）
-    pub result_connection: Option<crate::storage::StoredConnection>,
-}
+// ============================================================================
+// 统一加密同步数据模型
+// ============================================================================
 
-/// 批量同步请求
+/// 统一云端同步数据
+///
+/// 用一张 `sync_data` 表替代 `connections` + `workspaces`，
+/// 通过 `data_type` 区分数据类型，所有业务数据加密为一个 blob 上传。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncRequest {
-    /// 待上传的连接
-    pub uploads: Vec<CloudConnection>,
-    /// 需要下载的连接 ID 列表
-    pub download_ids: Vec<String>,
-    /// 待删除的连接 ID 列表
-    pub delete_ids: Vec<String>,
-}
-
-/// 批量同步响应
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncResponse {
-    /// 上传成功的 ID 映射（local_id -> cloud_id）
-    pub uploaded_ids: Vec<(Option<i64>, String)>,
-    /// 下载的连接数据
-    pub downloaded: Vec<CloudConnection>,
-    /// 删除成功的 ID 列表
-    pub deleted_ids: Vec<String>,
-    /// 错误信息
-    pub errors: Vec<String>,
-}
-
-/// 云端工作空间数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CloudWorkspace {
-    /// 云端 ID（UUID）
+pub struct CloudSyncData {
+    /// 云端 UUID 主键
     pub id: String,
-    /// 本地数据库 ID（用于关联）
+    /// 记录创建者
+    pub owner_id: String,
+    /// 团队归属：None = 个人数据，Some = 团队共享数据
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub local_id: Option<i64>,
+    pub team_id: Option<String>,
+    /// 数据类型标识（"connection" | "workspace" | ...）
+    pub data_type: String,
+    /// 加密后的完整数据 blob（base64(nonce + AES-256-GCM ciphertext)）
+    pub encrypted_data: String,
+    /// 加密密钥版本
+    pub key_version: u32,
+    /// 明文数据的 SHA-256 校验和（加密前计算，用于冲突检测）
+    #[serde(default)]
+    pub checksum: String,
+    /// 数据版本号（每次更新自动递增，用于乐观并发控制）
+    #[serde(default = "default_version")]
+    pub version: u32,
+    /// 更新时间戳（毫秒）
+    pub updated_at: i64,
+    /// 软删除时间戳（毫秒）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<i64>,
+}
+
+fn default_version() -> u32 {
+    1
+}
+
+/// 数据类型常量
+pub mod data_type {
+    pub const CONNECTION: &str = "connection";
+    pub const WORKSPACE: &str = "workspace";
+}
+
+/// 团队
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Team {
+    /// 团队 UUID
+    pub id: String,
+    /// 团队名称
+    pub name: String,
+    /// 团队拥有者 ID
+    pub owner_id: String,
+    /// 团队描述
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// 团队密钥验证数据（由 owner 设置，成员验证用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_verification: Option<String>,
+    /// 团队密钥版本号
+    #[serde(default)]
+    pub key_version: u32,
+    /// 创建时间戳（毫秒）
+    pub created_at: i64,
+    /// 更新时间戳（毫秒）
+    pub updated_at: i64,
+}
+
+/// 团队成员角色
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TeamRole {
+    #[serde(rename = "owner")]
+    Owner,
+    #[serde(rename = "member")]
+    Member,
+}
+
+impl std::fmt::Display for TeamRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TeamRole::Owner => write!(f, "owner"),
+            TeamRole::Member => write!(f, "member"),
+        }
+    }
+}
+
+/// 团队成员
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamMember {
+    /// 成员记录 UUID
+    pub id: String,
+    /// 所属团队 ID
+    pub team_id: String,
+    /// 用户 ID
+    pub user_id: String,
+    /// 成员角色
+    pub role: TeamRole,
+    /// 加入时间戳（毫秒）
+    pub joined_at: i64,
+}
+
+/// 连接明文数据结构（加密前 / 解密后的 JSON blob）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionPlainData {
+    /// 连接名称
+    pub name: String,
+    /// 连接类型
+    pub connection_type: String,
+    /// 关联的工作空间云端 ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_cloud_id: Option<String>,
+    /// 已选中的数据库列表
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_databases: Option<String>,
+    /// 备注
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remark: Option<String>,
+    /// 连接参数（完整 JSON，包含密码等）
+    pub params: serde_json::Value,
+}
+
+/// 工作空间明文数据结构（加密前 / 解密后的 JSON blob）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspacePlainData {
     /// 工作空间名称
     pub name: String,
     /// 颜色
@@ -290,9 +341,4 @@ pub struct CloudWorkspace {
     /// 图标
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
-    /// 更新时间戳（毫秒）
-    pub updated_at: i64,
-    /// 软删除时间戳（毫秒），None 表示未删除
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub deleted_at: Option<i64>,
 }

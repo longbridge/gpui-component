@@ -1,10 +1,16 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-const MIGRATIONS: &[(&str, &str)] = &[(
-    "20260225000001",
-    include_str!("../../migrations/20260225000001_init.sql"),
-)];
+const MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "20260225000001",
+        include_str!("../../migrations/20260225000001_init.sql"),
+    ),
+    (
+        "20260315000001",
+        include_str!("../../migrations/20260315000001_team_sync.sql"),
+    ),
+];
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(

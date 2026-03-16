@@ -1,5 +1,5 @@
 use crate::cloud_sync::engine::{SyncEngine, SyncFuture, SyncHandler};
-use crate::cloud_sync::models::{CloudWorkspace, SyncResult, WorkspaceSyncPlan};
+use crate::cloud_sync::models::{data_type, CloudSyncData, SyncResult, WorkspaceSyncPlan};
 use crate::cloud_sync::queue::SyncOperation;
 use crate::cloud_sync::service::SyncError;
 use crate::storage::traits::Repository;
@@ -34,15 +34,18 @@ impl SyncEngine {
         let local_workspaces = self.get_local_workspaces()?;
         tracing::info!("[工作空间] 本地工作空间: {} 个", local_workspaces.len());
 
-        let cloud_workspaces = self
+        let cloud_sync_data = self
             .cloud_client
-            .list_workspaces()
+            .list_sync_data(Some(data_type::WORKSPACE), None, None)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
-        tracing::info!("[工作空间] 云端工作空间: {} 个", cloud_workspaces.len());
+        tracing::info!("[工作空间] 云端工作空间数据: {} 个", cloud_sync_data.len());
+
+        // 解密一次建立 cloud_id → name 映射
+        let cloud_name_map = self.build_workspace_name_map(&cloud_sync_data);
 
         let deleted_count =
-            self.process_cloud_soft_deleted_workspaces(&cloud_workspaces, &local_workspaces)?;
+            self.process_cloud_soft_deleted_workspaces_data(&cloud_sync_data, &local_workspaces)?;
         if deleted_count > 0 {
             tracing::info!(
                 "[工作空间] 处理云端软删除: 删除了 {} 个本地工作空间",
@@ -51,17 +54,17 @@ impl SyncEngine {
             result.deleted += deleted_count;
         }
 
-        let active_cloud_workspaces: Vec<_> = cloud_workspaces
+        let active_cloud_data: Vec<_> = cloud_sync_data
             .into_iter()
-            .filter(|ws| ws.deleted_at.is_none())
+            .filter(|d| d.deleted_at.is_none())
             .collect();
         tracing::info!(
-            "[工作空间] 活跃云端工作空间: {} 个",
-            active_cloud_workspaces.len()
+            "[工作空间] 活跃云端工作空间数据: {} 个",
+            active_cloud_data.len()
         );
 
         let plan =
-            self.calculate_workspace_sync_plan(&local_workspaces, &active_cloud_workspaces)?;
+            self.calculate_workspace_sync_plan(&local_workspaces, &active_cloud_data, &cloud_name_map)?;
         tracing::info!(
             "[工作空间计划] 上传: {}, 更新云端: {}, 下载: {}, 更新本地: {}",
             plan.to_upload.len(),
@@ -74,9 +77,9 @@ impl SyncEngine {
             .iter()
             .filter_map(|ws| ws.id.map(|id| (id, ws.clone())))
             .collect();
-        let cloud_workspace_map: HashMap<String, CloudWorkspace> = active_cloud_workspaces
+        let cloud_data_map: HashMap<String, CloudSyncData> = active_cloud_data
             .iter()
-            .map(|ws| (ws.id.clone(), ws.clone()))
+            .map(|d| (d.id.clone(), d.clone()))
             .collect();
 
         let mut operations = Vec::new();
@@ -90,11 +93,11 @@ impl SyncEngine {
             }
         }
 
-        for (local_ws, cloud_ws) in &plan.to_update_cloud {
+        for (local_ws, cloud_data) in &plan.to_update_cloud {
             if let Some(local_id) = local_ws.id {
                 operations.push(SyncOperation::UpdateCloud {
                     local_id,
-                    cloud_id: cloud_ws.id.clone(),
+                    cloud_id: cloud_data.id.clone(),
                 });
             } else {
                 result.errors.push(format!(
@@ -104,20 +107,24 @@ impl SyncEngine {
             }
         }
 
-        for cloud_ws in &plan.to_download {
-            operations.push(SyncOperation::Download(cloud_ws.id.clone()));
+        for cloud_data in &plan.to_download {
+            operations.push(SyncOperation::Download(cloud_data.id.clone()));
         }
 
-        for (cloud_ws, local_ws) in &plan.to_update_local {
+        for (cloud_data, local_ws) in &plan.to_update_local {
             if let Some(local_id) = local_ws.id {
                 operations.push(SyncOperation::UpdateLocal {
                     local_id,
-                    cloud_id: cloud_ws.id.clone(),
+                    cloud_id: cloud_data.id.clone(),
                 });
             } else {
+                let name = cloud_name_map
+                    .get(&cloud_data.id)
+                    .cloned()
+                    .unwrap_or_else(|| cloud_data.id.clone());
                 result.errors.push(format!(
                     "更新本地工作空间失败 {}: 缺少本地 ID",
-                    cloud_ws.name
+                    name
                 ));
             }
         }
@@ -165,14 +172,14 @@ impl SyncEngine {
                             .push(format!("更新云端工作空间失败 {}: 本地数据不存在", local_id));
                         continue;
                     };
-                    let Some(cloud_ws) = cloud_workspace_map.get(&cloud_id) else {
+                    let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
                         result
                             .errors
                             .push(format!("更新云端工作空间失败 {}: 云端数据不存在", cloud_id));
                         continue;
                     };
 
-                    match self.update_cloud_workspace(local_ws, cloud_ws).await {
+                    match self.update_cloud_workspace(local_ws, cloud_data).await {
                         Ok(()) => {
                             result.uploaded += 1;
                             tracing::info!("[更新云端工作空间] 成功: {}", local_ws.name);
@@ -192,42 +199,50 @@ impl SyncEngine {
                             .push(format!("更新本地工作空间失败 {}: 本地数据不存在", local_id));
                         continue;
                     };
-                    let Some(cloud_ws) = cloud_workspace_map.get(&cloud_id) else {
+                    let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
                         result
                             .errors
                             .push(format!("更新本地工作空间失败 {}: 云端数据不存在", cloud_id));
                         continue;
                     };
 
-                    match self.update_local_workspace(cloud_ws, local_ws).await {
+                    let name = cloud_name_map
+                        .get(&cloud_data.id)
+                        .cloned()
+                        .unwrap_or_else(|| cloud_data.id.clone());
+                    match self.update_local_workspace(cloud_data, local_ws).await {
                         Ok(()) => {
                             result.downloaded += 1;
-                            tracing::info!("[更新本地工作空间] 成功: {}", cloud_ws.name);
+                            tracing::info!("[更新本地工作空间] 成功: {}", name);
                         }
                         Err(e) => {
                             let error_message =
-                                format!("更新本地工作空间失败 {}: {}", cloud_ws.name, e);
+                                format!("更新本地工作空间失败 {}: {}", name, e);
                             result.errors.push(error_message.clone());
                             queue.mark_failed(queued_operation, error_message);
                         }
                     }
                 }
                 SyncOperation::Download(cloud_id) => {
-                    let Some(cloud_ws) = cloud_workspace_map.get(&cloud_id) else {
+                    let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
                         result
                             .errors
                             .push(format!("下载工作空间失败 {}: 云端数据不存在", cloud_id));
                         continue;
                     };
 
-                    match self.download_workspace(cloud_ws).await {
+                    let name = cloud_name_map
+                        .get(&cloud_data.id)
+                        .cloned()
+                        .unwrap_or_else(|| cloud_data.id.clone());
+                    match self.download_workspace(cloud_data).await {
                         Ok(()) => {
                             result.downloaded += 1;
-                            tracing::info!("[下载工作空间] 成功: {}", cloud_ws.name);
+                            tracing::info!("[下载工作空间] 成功: {}", name);
                         }
                         Err(e) => {
                             let error_message =
-                                format!("下载工作空间失败 {}: {}", cloud_ws.name, e);
+                                format!("下载工作空间失败 {}: {}", name, e);
                             result.errors.push(error_message.clone());
                             queue.mark_failed(queued_operation, error_message);
                         }
@@ -267,17 +282,34 @@ impl SyncEngine {
         Ok(result)
     }
 
+    /// 解密云端工作空间数据建立 cloud_id → name 映射
+    fn build_workspace_name_map(&self, cloud_data_list: &[CloudSyncData]) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        let service = match self.crypto_service.read() {
+            Ok(s) => s,
+            Err(_) => return map,
+        };
+
+        for data in cloud_data_list {
+            if let Ok(ws) = service.decrypt_sync_data_workspace(data) {
+                map.insert(data.id.clone(), ws.name);
+            }
+        }
+        map
+    }
+
     /// 计算工作空间同步计划
     fn calculate_workspace_sync_plan(
         &self,
         local_workspaces: &[Workspace],
-        cloud_workspaces: &[CloudWorkspace],
+        cloud_data_list: &[CloudSyncData],
+        cloud_name_map: &HashMap<String, String>,
     ) -> Result<WorkspaceSyncPlan, SyncError> {
         let mut plan = WorkspaceSyncPlan::default();
 
-        let cloud_map: HashMap<&str, &CloudWorkspace> = cloud_workspaces
+        let cloud_map: HashMap<&str, &CloudSyncData> = cloud_data_list
             .iter()
-            .map(|ws| (ws.id.as_str(), ws))
+            .map(|d| (d.id.as_str(), d))
             .collect();
 
         let local_cloud_ids: HashSet<String> = local_workspaces
@@ -299,22 +331,23 @@ impl SyncEngine {
         for local_ws in local_workspaces {
             match &local_ws.cloud_id {
                 Some(cloud_id) => {
-                    if let Some(cloud_ws) = cloud_map.get(cloud_id.as_str()) {
+                    if let Some(cloud_data) = cloud_map.get(cloud_id.as_str()) {
                         let local_updated = local_ws.updated_at.unwrap_or(0);
-                        let cloud_updated = cloud_ws.updated_at / 1000;
+                        let cloud_updated = cloud_data.updated_at / 1000;
 
                         if local_updated > cloud_updated {
                             plan.to_update_cloud
-                                .push((local_ws.clone(), (*cloud_ws).clone()));
+                                .push((local_ws.clone(), (*cloud_data).clone()));
                         } else if cloud_updated > local_updated {
                             plan.to_update_local
-                                .push(((*cloud_ws).clone(), local_ws.clone()));
+                                .push(((*cloud_data).clone(), local_ws.clone()));
                         }
                     }
                 }
                 None => {
-                    let has_cloud_match =
-                        cloud_workspaces.iter().any(|cws| cws.name == local_ws.name);
+                    let has_cloud_match = cloud_name_map
+                        .values()
+                        .any(|name| name == &local_ws.name);
                     if !has_cloud_match {
                         plan.to_upload.push(local_ws.clone());
                     }
@@ -323,33 +356,42 @@ impl SyncEngine {
         }
 
         let pending_cloud_ids = self.get_pending_deletion_workspace_cloud_ids();
-        for cloud_ws in cloud_workspaces {
-            if !local_cloud_ids.contains(&cloud_ws.id) {
-                if pending_cloud_ids.contains(&cloud_ws.id) {
-                    tracing::info!("[同步计划] 跳过待删除的云端工作空间: {}", cloud_ws.name);
+        for cloud_data in cloud_data_list {
+            if !local_cloud_ids.contains(&cloud_data.id) {
+                if pending_cloud_ids.contains(&cloud_data.id) {
+                    let name = cloud_name_map
+                        .get(&cloud_data.id)
+                        .cloned()
+                        .unwrap_or_else(|| cloud_data.id.clone());
+                    tracing::info!("[同步计划] 跳过待删除的云端工作空间: {}", name);
                     continue;
                 }
 
-                if let Some(local_ws) = local_unlinked_by_name.get(cloud_ws.name.as_str()) {
+                let cloud_name = cloud_name_map
+                    .get(&cloud_data.id)
+                    .cloned()
+                    .unwrap_or_else(|| cloud_data.id.clone());
+
+                if let Some(local_ws) = local_unlinked_by_name.get(cloud_name.as_str()) {
                     tracing::info!(
                         "[同步计划] 按名称匹配工作空间: {} (云端 {} -> 本地 {:?})",
-                        cloud_ws.name,
-                        cloud_ws.id,
+                        cloud_name,
+                        cloud_data.id,
                         local_ws.id
                     );
                     plan.to_update_local
-                        .push((cloud_ws.clone(), (*local_ws).clone()));
-                } else if let Some(local_ws) = local_all_by_name.get(cloud_ws.name.as_str()) {
+                        .push((cloud_data.clone(), (*local_ws).clone()));
+                } else if let Some(local_ws) = local_all_by_name.get(cloud_name.as_str()) {
                     let local_cloud_id_is_valid = local_ws
                         .cloud_id
                         .as_ref()
                         .is_some_and(|cloud_id| cloud_map.contains_key(cloud_id.as_str()));
                     if !local_cloud_id_is_valid {
                         plan.to_update_local
-                            .push((cloud_ws.clone(), (*local_ws).clone()));
+                            .push((cloud_data.clone(), (*local_ws).clone()));
                     }
                 } else {
-                    plan.to_download.push(cloud_ws.clone());
+                    plan.to_download.push(cloud_data.clone());
                 }
             }
         }
@@ -378,7 +420,7 @@ impl SyncEngine {
 
         for pending in pending_list {
             tracing::info!("[同步] 处理待删除云端工作空间: {}", pending.cloud_id);
-            match self.cloud_client.delete_workspace(&pending.cloud_id).await {
+            match self.cloud_client.delete_sync_data(&pending.cloud_id).await {
                 Ok(_) => {
                     tracing::info!("[同步] 云端工作空间删除成功: {}", pending.cloud_id);
                     if let Err(e) = pending_repo.remove(&pending.cloud_id) {
@@ -411,9 +453,9 @@ impl SyncEngine {
         deleted
     }
 
-    fn process_cloud_soft_deleted_workspaces(
+    fn process_cloud_soft_deleted_workspaces_data(
         &self,
-        cloud_workspaces: &[CloudWorkspace],
+        cloud_data_list: &[CloudSyncData],
         local_workspaces: &[Workspace],
     ) -> Result<usize, SyncError> {
         let repo = self
@@ -423,16 +465,16 @@ impl SyncEngine {
 
         let mut deleted_count = 0;
 
-        for cloud_ws in cloud_workspaces {
-            if cloud_ws.deleted_at.is_some() {
+        for cloud_data in cloud_data_list {
+            if cloud_data.deleted_at.is_some() {
                 if let Some(local_ws) = local_workspaces
                     .iter()
-                    .find(|ws| ws.cloud_id.as_ref() == Some(&cloud_ws.id))
+                    .find(|ws| ws.cloud_id.as_ref() == Some(&cloud_data.id))
                 {
                     if let Some(local_id) = local_ws.id {
                         tracing::info!(
                             "[软删除] 云端工作空间 {} 已被删除，删除对应的本地工作空间 {}",
-                            cloud_ws.name,
+                            cloud_data.id,
                             local_id
                         );
                         if let Err(e) = repo.delete(local_id) {
@@ -471,19 +513,17 @@ impl SyncEngine {
     }
 
     async fn upload_workspace(&self, ws: &Workspace) -> Result<String, SyncError> {
-        let cloud_ws = CloudWorkspace {
-            id: String::new(),
-            local_id: ws.id,
-            name: ws.name.clone(),
-            color: ws.color.clone(),
-            icon: ws.icon.clone(),
-            updated_at: ws.updated_at.unwrap_or(0) * 1000,
-            deleted_at: None,
+        let cloud_data = {
+            let service = self
+                .crypto_service
+                .read()
+                .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
+            service.prepare_workspace_sync_data_upload(ws, None, &[])?
         };
 
         let created = self
             .cloud_client
-            .create_workspace(&cloud_ws)
+            .create_sync_data(&cloud_data)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
@@ -493,78 +533,62 @@ impl SyncEngine {
     async fn update_cloud_workspace(
         &self,
         local_ws: &Workspace,
-        cloud_ws: &CloudWorkspace,
+        cloud_data: &CloudSyncData,
     ) -> Result<(), SyncError> {
-        let updated_cloud_ws = CloudWorkspace {
-            id: cloud_ws.id.clone(),
-            local_id: local_ws.id,
-            name: local_ws.name.clone(),
-            color: local_ws.color.clone(),
-            icon: local_ws.icon.clone(),
-            updated_at: local_ws.updated_at.unwrap_or(0) * 1000,
-            deleted_at: None,
+        let updated_data = {
+            let service = self
+                .crypto_service
+                .read()
+                .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
+            let mut data = service.prepare_workspace_sync_data_upload(local_ws, None, &[])?;
+            data.id = cloud_data.id.clone();
+            data.version = cloud_data.version;
+            data
         };
 
         self.cloud_client
-            .update_workspace(&updated_cloud_ws)
+            .update_sync_data(&updated_data)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
         Ok(())
     }
 
-    async fn download_workspace(&self, cloud_ws: &CloudWorkspace) -> Result<(), SyncError> {
-        let mut local_ws = Workspace {
-            id: None,
-            name: cloud_ws.name.clone(),
-            color: cloud_ws.color.clone(),
-            icon: cloud_ws.icon.clone(),
-            created_at: None,
-            updated_at: Some(cloud_ws.updated_at / 1000),
-            cloud_id: Some(cloud_ws.id.clone()),
-        };
+    async fn download_workspace(&self, cloud_data: &CloudSyncData) -> Result<(), SyncError> {
+        let service = self
+            .crypto_service
+            .read()
+            .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
+
+        let mut local_ws = service.decrypt_sync_data_workspace(cloud_data)?;
+        local_ws.id = None;
+        local_ws.cloud_id = Some(cloud_data.id.clone());
 
         let repo = self
             .storage
             .get::<WorkspaceRepository>()
             .ok_or_else(|| SyncError::StorageError("WorkspaceRepository not found".to_string()))?;
 
-        let new_id = repo
-            .insert(&mut local_ws)
+        repo.insert(&mut local_ws)
             .map_err(|e| SyncError::StorageError(e.to_string()))?;
-
-        let updated_cloud_ws = CloudWorkspace {
-            id: cloud_ws.id.clone(),
-            local_id: Some(new_id),
-            name: cloud_ws.name.clone(),
-            color: cloud_ws.color.clone(),
-            icon: cloud_ws.icon.clone(),
-            updated_at: cloud_ws.updated_at,
-            deleted_at: cloud_ws.deleted_at,
-        };
-
-        self.cloud_client
-            .update_workspace(&updated_cloud_ws)
-            .await
-            .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
         Ok(())
     }
 
     async fn update_local_workspace(
         &self,
-        cloud_ws: &CloudWorkspace,
+        cloud_data: &CloudSyncData,
         local_ws: &Workspace,
     ) -> Result<(), SyncError> {
-        let updated = Workspace {
-            id: local_ws.id,
-            name: cloud_ws.name.clone(),
-            color: cloud_ws.color.clone(),
-            icon: cloud_ws.icon.clone(),
-            created_at: local_ws.created_at,
-            updated_at: Some(cloud_ws.updated_at / 1000),
-            cloud_id: Some(cloud_ws.id.clone()),
-        };
+        let service = self
+            .crypto_service
+            .read()
+            .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
+
+        let mut updated = service.decrypt_sync_data_workspace(cloud_data)?;
+        updated.id = local_ws.id;
+        updated.cloud_id = Some(cloud_data.id.clone());
+        updated.created_at = local_ws.created_at;
 
         let repo = self
             .storage
@@ -579,7 +603,7 @@ impl SyncEngine {
 
     async fn delete_cloud_workspace(&self, cloud_id: &str) -> Result<(), SyncError> {
         self.cloud_client
-            .delete_workspace(cloud_id)
+            .delete_sync_data(cloud_id)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 

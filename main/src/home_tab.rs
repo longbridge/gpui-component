@@ -20,8 +20,7 @@ use gpui_component::{
 };
 use mongodb_view::{MongoFormWindow, MongoFormWindowConfig};
 use one_core::cloud_sync::{
-    CloudApiClient, CloudConnection, CloudSyncService, ConflictResolution, SyncConflict,
-    SyncEngine, UserInfo,
+    CloudApiClient, CloudSyncService, ConflictResolution, SyncConflict, SyncEngine, UserInfo,
 };
 use one_core::connection_notifier::{ConnectionDataEvent, emit_connection_event, get_notifier};
 use one_core::crypto;
@@ -83,8 +82,6 @@ pub struct HomePage {
     workspace_filter_list: Option<Entity<ListState<WorkspaceFilterDelegate>>>,
     pub(crate) _subscriptions: Vec<Subscription>,
     pub(crate) terminal_views: Vec<WeakEntity<TerminalView>>,
-    /// 云端连接列表（用于同步对比）
-    cloud_connections: Vec<CloudConnection>,
     /// 云同步服务
     cloud_sync_service: Arc<std::sync::RwLock<CloudSyncService>>,
     /// 云端加载错误信息
@@ -151,7 +148,6 @@ impl HomePage {
             workspace_filter_list: None,
             _subscriptions: Vec::new(),
             terminal_views: Vec::new(),
-            cloud_connections: Vec::new(),
             cloud_sync_service: Arc::new(std::sync::RwLock::new(CloudSyncService::new())),
             cloud_error: None,
             syncing: false,
@@ -787,7 +783,7 @@ impl HomePage {
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             // 1. 先删除云端连接（如果有）
             if let (Some(cloud_id), Some(client)) = (&cloud_id, cloud_client) {
-                match client.delete_connection(cloud_id).await {
+                match client.delete_sync_data(cloud_id).await {
                     Ok(_) => {
                         tracing::info!("[删除] 云端连接删除成功: {}", cloud_id);
                     }
@@ -1116,7 +1112,7 @@ impl HomePage {
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             // 1. 先删除云端工作空间（如果有）
             if let (Some(cloud_id), Some(client)) = (&cloud_id, cloud_client) {
-                match client.delete_workspace(cloud_id).await {
+                match client.delete_sync_data(cloud_id).await {
                     Ok(_) => {
                         tracing::info!("[删除] 云端工作空间删除成功: {}", cloud_id);
                     }
@@ -1934,7 +1930,6 @@ impl HomePage {
         let global_user = GlobalCurrentUser::get_user(cx);
         if global_user.is_none() && self.current_user.is_some() {
             self.current_user = None;
-            self.cloud_connections.clear();
         }
 
         let filter_types = ConnectionType::all();
@@ -2022,6 +2017,18 @@ impl HomePage {
                                 this.add_settings_tab(window, cx);
                             })),
                     )
+                    .when(self.current_user.is_some(), |this| {
+                        this.child(
+                            Button::new("open_team_management")
+                                .icon(IconName::Building2)
+                                .label(t!("TeamManagement.title"))
+                                .w_full()
+                                .justify_start()
+                                .on_click(cx.listener(|this: &mut HomePage, _, window, cx| {
+                                    this.add_team_management_tab(window, cx);
+                                })),
+                        )
+                    })
                     // 用户头像区域
                     .child({
                         let user = self.current_user.as_ref();
@@ -2849,7 +2856,6 @@ impl Render for HomePage {
         // 检测会话过期：token 刷新失败时由回调设置静态标志，在此处响应
         if crate::auth::check_and_reset_session_expired() {
             self.current_user = None;
-            self.cloud_connections.clear();
             // 延迟弹出登录对话框，避免在 render 中直接修改窗口
             let view = cx.entity();
             window.defer(cx, move |window, cx| {

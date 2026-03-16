@@ -1,6 +1,6 @@
 use crate::cloud_sync::engine::{SyncEngine, SyncFuture, SyncHandler};
 use crate::cloud_sync::models::{
-    CloudConnection, ResolvedConflict, SyncConflict, SyncPlan, SyncResult,
+    data_type, CloudSyncData, ConflictResolution, SyncConflict, SyncPlan, SyncResult,
 };
 use crate::cloud_sync::queue::SyncOperation;
 use crate::cloud_sync::service::SyncError;
@@ -53,28 +53,33 @@ impl SyncEngine {
             );
         }
 
-        tracing::info!("[同步] 正在获取云端连接列表...");
-        let cloud_connections = self
+        tracing::info!("[同步] 正在获取云端同步数据列表...");
+        let cloud_sync_data = self
             .cloud_client
-            .list_connections()
+            .list_sync_data(Some(data_type::CONNECTION), None, None)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
-        tracing::info!("[同步] 云端连接: {} 个", cloud_connections.len());
+        tracing::info!("[同步] 云端连接同步数据: {} 个", cloud_sync_data.len());
 
-        let deleted_count =
-            self.process_cloud_soft_deleted(&cloud_connections, &local_connections)?;
+        // 解密一次建立 cloud_id → name 映射
+        let cloud_name_map = self.build_cloud_name_map(&cloud_sync_data);
+
+        let deleted_count = self.process_cloud_soft_deleted_sync_data(
+            &cloud_sync_data,
+            &local_connections,
+        )?;
         if deleted_count > 0 {
             tracing::info!("[同步] 处理云端软删除: 删除了 {} 个本地连接", deleted_count);
             result.deleted += deleted_count;
         }
 
-        let active_cloud_connections: Vec<_> = cloud_connections
+        let active_cloud_data: Vec<_> = cloud_sync_data
             .into_iter()
-            .filter(|c| c.deleted_at.is_none())
+            .filter(|d| d.deleted_at.is_none())
             .collect();
-        tracing::info!("[同步] 活跃云端连接: {} 个", active_cloud_connections.len());
+        tracing::info!("[同步] 活跃云端连接数据: {} 个", active_cloud_data.len());
 
-        let plan = self.calculate_sync_plan(&local_connections, &active_cloud_connections)?;
+        let plan = self.calculate_sync_plan(&local_connections, &active_cloud_data, &cloud_name_map)?;
         tracing::info!(
             "[同步计划] 上传: {}, 更新云端: {}, 下载: {}, 更新本地: {}, 冲突: {}",
             plan.to_upload.len(),
@@ -108,9 +113,9 @@ impl SyncEngine {
             .iter()
             .filter_map(|conn| conn.id.map(|id| (id, conn.clone())))
             .collect();
-        let cloud_connection_map: HashMap<String, CloudConnection> = active_cloud_connections
+        let cloud_data_map: HashMap<String, CloudSyncData> = active_cloud_data
             .iter()
-            .map(|conn| (conn.id.clone(), conn.clone()))
+            .map(|d| (d.id.clone(), d.clone()))
             .collect();
 
         let mut operations = Vec::new();
@@ -132,7 +137,7 @@ impl SyncEngine {
             }
         }
 
-        for (local_conn, cloud_conn) in &plan.to_update_cloud {
+        for (local_conn, cloud_data) in &plan.to_update_cloud {
             if let Some(local_id) = local_conn.id {
                 if failure_ids.contains(&local_id) {
                     tracing::warn!(
@@ -144,7 +149,7 @@ impl SyncEngine {
                 }
                 operations.push(SyncOperation::UpdateCloud {
                     local_id,
-                    cloud_id: cloud_conn.id.clone(),
+                    cloud_id: cloud_data.id.clone(),
                 });
             } else {
                 result
@@ -153,11 +158,11 @@ impl SyncEngine {
             }
         }
 
-        for cloud_conn in &plan.to_download {
-            operations.push(SyncOperation::Download(cloud_conn.id.clone()));
+        for cloud_data in &plan.to_download {
+            operations.push(SyncOperation::Download(cloud_data.id.clone()));
         }
 
-        for (cloud_conn, local_conn) in &plan.to_update_local {
+        for (cloud_data, local_conn) in &plan.to_update_local {
             if let Some(local_id) = local_conn.id {
                 if failure_ids.contains(&local_id) {
                     tracing::warn!(
@@ -169,12 +174,16 @@ impl SyncEngine {
                 }
                 operations.push(SyncOperation::UpdateLocal {
                     local_id,
-                    cloud_id: cloud_conn.id.clone(),
+                    cloud_id: cloud_data.id.clone(),
                 });
             } else {
+                let name = cloud_name_map
+                    .get(&cloud_data.id)
+                    .cloned()
+                    .unwrap_or_else(|| cloud_data.id.clone());
                 result
                     .errors
-                    .push(format!("更新本地失败 {}: 缺少本地 ID", cloud_conn.name));
+                    .push(format!("更新本地失败 {}: 缺少本地 ID", name));
             }
         }
 
@@ -221,17 +230,17 @@ impl SyncEngine {
                             .push(format!("更新云端失败 {}: 本地数据不存在", local_id));
                         continue;
                     };
-                    let Some(cloud_conn) = cloud_connection_map.get(&cloud_id) else {
+                    let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
                         result
                             .errors
                             .push(format!("更新云端失败 {}: 云端数据不存在", cloud_id));
                         continue;
                     };
-                    match self.update_cloud_connection(local_conn, cloud_conn).await {
+                    match self.update_cloud_connection(local_conn, cloud_data).await {
                         Ok(()) => {
                             match self.update_sync_status(
                                 local_id,
-                                Some(cloud_conn.id.clone()),
+                                Some(cloud_data.id.clone()),
                                 None,
                             ) {
                                 Ok(()) => {
@@ -260,38 +269,46 @@ impl SyncEngine {
                             .push(format!("更新本地失败 {}: 本地数据不存在", local_id));
                         continue;
                     };
-                    let Some(cloud_conn) = cloud_connection_map.get(&cloud_id) else {
+                    let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
                         result
                             .errors
                             .push(format!("更新本地失败 {}: 云端数据不存在", cloud_id));
                         continue;
                     };
-                    match self.update_local_connection(cloud_conn, local_conn).await {
+                    let name = cloud_name_map
+                        .get(&cloud_data.id)
+                        .cloned()
+                        .unwrap_or_else(|| cloud_data.id.clone());
+                    match self.update_local_connection(cloud_data, local_conn).await {
                         Ok(()) => {
                             result.downloaded += 1;
-                            tracing::info!("[更新本地] 成功: {}", cloud_conn.name);
+                            tracing::info!("[更新本地] 成功: {}", name);
                         }
                         Err(e) => {
-                            let error_message = format!("更新本地失败 {}: {}", cloud_conn.name, e);
+                            let error_message = format!("更新本地失败 {}: {}", name, e);
                             result.errors.push(error_message.clone());
                             queue.mark_failed(queued_operation, error_message);
                         }
                     }
                 }
                 SyncOperation::Download(cloud_id) => {
-                    let Some(cloud_conn) = cloud_connection_map.get(&cloud_id) else {
+                    let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
                         result
                             .errors
                             .push(format!("下载失败 {}: 云端数据不存在", cloud_id));
                         continue;
                     };
-                    match self.download_connection(cloud_conn).await {
+                    let name = cloud_name_map
+                        .get(&cloud_data.id)
+                        .cloned()
+                        .unwrap_or_else(|| cloud_data.id.clone());
+                    match self.download_connection(cloud_data).await {
                         Ok(()) => {
                             result.downloaded += 1;
-                            tracing::info!("[下载] 成功: {}", cloud_conn.name);
+                            tracing::info!("[下载] 成功: {}", name);
                         }
                         Err(e) => {
-                            let error_message = format!("下载失败 {}: {}", cloud_conn.name, e);
+                            let error_message = format!("下载失败 {}: {}", name, e);
                             result.errors.push(error_message.clone());
                             queue.mark_failed(queued_operation, error_message);
                         }
@@ -342,6 +359,22 @@ impl SyncEngine {
         Ok(result)
     }
 
+    /// 解密云端数据建立 cloud_id → name 映射
+    fn build_cloud_name_map(&self, cloud_data_list: &[CloudSyncData]) -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        let service = match self.crypto_service.read() {
+            Ok(s) => s,
+            Err(_) => return map,
+        };
+
+        for data in cloud_data_list {
+            if let Ok(conn) = service.decrypt_sync_data_connection(data) {
+                map.insert(data.id.clone(), conn.name);
+            }
+        }
+        map
+    }
+
     fn get_local_connections(&self) -> Result<Vec<StoredConnection>, SyncError> {
         let repo = self
             .storage
@@ -383,7 +416,7 @@ impl SyncEngine {
 
         for pending in pending_list {
             tracing::info!("[同步] 处理待删除云端连接: {}", pending.cloud_id);
-            match self.cloud_client.delete_connection(&pending.cloud_id).await {
+            match self.cloud_client.delete_sync_data(&pending.cloud_id).await {
                 Ok(_) => {
                     tracing::info!("[同步] 云端连接删除成功: {}", pending.cloud_id);
                     if let Err(e) = pending_repo.remove(&pending.cloud_id) {
@@ -416,9 +449,9 @@ impl SyncEngine {
         deleted
     }
 
-    fn process_cloud_soft_deleted(
+    fn process_cloud_soft_deleted_sync_data(
         &self,
-        cloud_connections: &[CloudConnection],
+        cloud_data_list: &[CloudSyncData],
         local_connections: &[StoredConnection],
     ) -> Result<usize, SyncError> {
         let repo = self
@@ -428,16 +461,16 @@ impl SyncEngine {
 
         let mut deleted_count = 0;
 
-        for cloud_conn in cloud_connections {
-            if cloud_conn.deleted_at.is_some() {
+        for cloud_data in cloud_data_list {
+            if cloud_data.deleted_at.is_some() {
                 if let Some(local_conn) = local_connections
                     .iter()
-                    .find(|c| c.cloud_id.as_ref() == Some(&cloud_conn.id))
+                    .find(|c| c.cloud_id.as_ref() == Some(&cloud_data.id))
                 {
                     if let Some(local_id) = local_conn.id {
                         tracing::info!(
-                            "[软删除] 云端连接 {} 已被删除，删除对应的本地连接 {}",
-                            cloud_conn.name,
+                            "[软删除] 云端数据 {} 已被删除，删除对应的本地连接 {}",
+                            cloud_data.id,
                             local_id
                         );
                         if let Err(e) = repo.delete(local_id) {
@@ -456,13 +489,14 @@ impl SyncEngine {
     fn calculate_sync_plan(
         &self,
         local_connections: &[StoredConnection],
-        cloud_connections: &[CloudConnection],
+        cloud_data_list: &[CloudSyncData],
+        cloud_name_map: &HashMap<String, String>,
     ) -> Result<SyncPlan, SyncError> {
         let mut plan = SyncPlan::default();
 
-        let cloud_map: HashMap<&str, &CloudConnection> = cloud_connections
+        let cloud_map: HashMap<&str, &CloudSyncData> = cloud_data_list
             .iter()
-            .map(|c| (c.id.as_str(), c))
+            .map(|d| (d.id.as_str(), d))
             .collect();
 
         let local_cloud_ids: HashSet<String> = local_connections
@@ -483,59 +517,52 @@ impl SyncEngine {
 
             match &local_conn.cloud_id {
                 Some(cloud_id) => {
-                    if let Some(cloud_conn) = cloud_map.get(cloud_id.as_str()) {
+                    if let Some(cloud_data) = cloud_map.get(cloud_id.as_str()) {
                         let local_updated = local_conn.updated_at.unwrap_or(0);
                         let last_synced = local_conn.last_synced_at.unwrap_or(0);
-                        let cloud_updated = cloud_conn.updated_at / 1000;
+                        let cloud_updated = cloud_data.updated_at / 1000;
 
                         let local_changed = local_updated > last_synced;
                         let cloud_changed = cloud_updated > last_synced;
+
+                        let cloud_name = cloud_name_map
+                            .get(&cloud_data.id)
+                            .cloned()
+                            .unwrap_or_else(|| cloud_data.id.clone());
 
                         match (local_changed, cloud_changed) {
                             (true, true) => {
                                 plan.conflicts.push(SyncConflict {
                                     local: local_conn.clone(),
-                                    cloud: (*cloud_conn).clone(),
+                                    cloud: (*cloud_data).clone(),
+                                    cloud_name,
                                     conflict_type:
                                         crate::cloud_sync::models::ConflictType::BothModified,
                                 });
                             }
                             (true, false) => {
                                 plan.to_update_cloud
-                                    .push((local_conn.clone(), (*cloud_conn).clone()));
+                                    .push((local_conn.clone(), (*cloud_data).clone()));
                             }
                             (false, true) => {
                                 plan.to_update_local
-                                    .push(((*cloud_conn).clone(), local_conn.clone()));
+                                    .push(((*cloud_data).clone(), local_conn.clone()));
                             }
                             (false, false) => {}
                         }
                     } else {
-                        plan.conflicts.push(SyncConflict {
-                            local: local_conn.clone(),
-                            cloud: CloudConnection {
-                                id: cloud_id.clone(),
-                                local_id: local_conn.id,
-                                name: local_conn.name.clone(),
-                                connection_type: local_conn.connection_type.to_string(),
-                                workspace_id: local_conn.workspace_id.map(|id| id.to_string()),
-                                selected_databases: local_conn.selected_databases.clone(),
-                                remark: local_conn.remark.clone(),
-                                encrypted_params: String::new(),
-                                key_version: 0,
-                                updated_at: 0,
-                                checksum: String::new(),
-                                deleted_at: None,
-                            },
-                            conflict_type:
-                                crate::cloud_sync::models::ConflictType::LocalModifiedCloudDeleted,
-                        });
+                        plan.conflicts.push(
+                            crate::cloud_sync::conflict::ConflictResolver::detect_local_modified_cloud_deleted(
+                                local_conn,
+                                cloud_id,
+                            ),
+                        );
                     }
                 }
                 None => {
-                    let has_cloud_match = cloud_connections
-                        .iter()
-                        .any(|cc| cc.name == local_conn.name);
+                    let has_cloud_match = cloud_name_map
+                        .values()
+                        .any(|name| name == &local_conn.name);
                     if !has_cloud_match {
                         plan.to_upload.push(local_conn.clone());
                     }
@@ -544,24 +571,33 @@ impl SyncEngine {
         }
 
         let pending_cloud_ids = self.get_pending_deletion_cloud_ids();
-        for cloud_conn in cloud_connections {
-            if !local_cloud_ids.contains(&cloud_conn.id) {
-                if pending_cloud_ids.contains(&cloud_conn.id) {
-                    tracing::info!("[同步计划] 跳过待删除的云端连接: {}", cloud_conn.name);
+        for cloud_data in cloud_data_list {
+            if !local_cloud_ids.contains(&cloud_data.id) {
+                if pending_cloud_ids.contains(&cloud_data.id) {
+                    let name = cloud_name_map
+                        .get(&cloud_data.id)
+                        .cloned()
+                        .unwrap_or_else(|| cloud_data.id.clone());
+                    tracing::info!("[同步计划] 跳过待删除的云端连接: {}", name);
                     continue;
                 }
 
-                if let Some(local_conn) = local_unlinked_by_name.get(cloud_conn.name.as_str()) {
+                let cloud_name = cloud_name_map
+                    .get(&cloud_data.id)
+                    .cloned()
+                    .unwrap_or_else(|| cloud_data.id.clone());
+
+                if let Some(local_conn) = local_unlinked_by_name.get(cloud_name.as_str()) {
                     tracing::info!(
                         "[同步计划] 按名称匹配连接: {} (云端 {} -> 本地 {:?})",
-                        cloud_conn.name,
-                        cloud_conn.id,
+                        cloud_name,
+                        cloud_data.id,
                         local_conn.id
                     );
                     plan.to_update_local
-                        .push((cloud_conn.clone(), (*local_conn).clone()));
+                        .push((cloud_data.clone(), (*local_conn).clone()));
                 } else {
-                    plan.to_download.push(cloud_conn.clone());
+                    plan.to_download.push(cloud_data.clone());
                 }
             }
         }
@@ -572,35 +608,35 @@ impl SyncEngine {
     fn resolve_conflicts(
         &self,
         conflicts: &[SyncConflict],
-    ) -> Result<Vec<ResolvedConflict>, SyncError> {
+    ) -> Result<Vec<ResolvedConflictAction>, SyncError> {
         let mut resolved = Vec::new();
 
         for conflict in conflicts {
             match self.conflict_strategy {
-                crate::cloud_sync::models::ConflictResolution::UseCloud => {
-                    resolved.push(ResolvedConflict {
+                ConflictResolution::UseCloud => {
+                    resolved.push(ResolvedConflictAction {
                         conflict: conflict.clone(),
-                        resolution: crate::cloud_sync::models::ConflictResolution::UseCloud,
+                        resolution: ConflictResolution::UseCloud,
                         result_connection: None,
                     });
                 }
-                crate::cloud_sync::models::ConflictResolution::UseLocal => {
-                    resolved.push(ResolvedConflict {
+                ConflictResolution::UseLocal => {
+                    resolved.push(ResolvedConflictAction {
                         conflict: conflict.clone(),
-                        resolution: crate::cloud_sync::models::ConflictResolution::UseLocal,
+                        resolution: ConflictResolution::UseLocal,
                         result_connection: Some(conflict.local.clone()),
                     });
                 }
-                crate::cloud_sync::models::ConflictResolution::KeepBoth => {
+                ConflictResolution::KeepBoth => {
                     let mut copy = conflict.local.clone();
                     copy.id = None;
                     copy.cloud_id = None;
                     let timestamp = Self::current_timestamp();
                     copy.name = format!("{} (冲突副本 {})", copy.name, timestamp);
 
-                    resolved.push(ResolvedConflict {
+                    resolved.push(ResolvedConflictAction {
                         conflict: conflict.clone(),
-                        resolution: crate::cloud_sync::models::ConflictResolution::KeepBoth,
+                        resolution: ConflictResolution::KeepBoth,
                         result_connection: Some(copy),
                     });
                 }
@@ -611,16 +647,17 @@ impl SyncEngine {
     }
 
     async fn upload_connection(&self, conn: &StoredConnection) -> Result<String, SyncError> {
-        let cloud_conn = {
+        let teams = self.get_cached_teams();
+        let cloud_data = {
             let service = self
                 .crypto_service
                 .read()
                 .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
-            service.prepare_upload(conn)?
+            service.prepare_sync_data_upload(conn, conn.team_id.as_deref(), &teams)?
         };
         let created = self
             .cloud_client
-            .create_connection(&cloud_conn)
+            .create_sync_data(&cloud_data)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
@@ -630,35 +667,41 @@ impl SyncEngine {
     async fn update_cloud_connection(
         &self,
         local_conn: &StoredConnection,
-        cloud_conn: &CloudConnection,
+        cloud_data: &CloudSyncData,
     ) -> Result<(), SyncError> {
-        let updated_cloud_conn = {
+        let teams = self.get_cached_teams();
+        let updated_data = {
             let service = self
                 .crypto_service
                 .read()
                 .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
-            let mut updated_cloud_conn = service.prepare_upload(local_conn)?;
-            updated_cloud_conn.id = cloud_conn.id.clone();
-            updated_cloud_conn
+            let mut data = service.prepare_sync_data_upload(
+                local_conn,
+                local_conn.team_id.as_deref(),
+                &teams,
+            )?;
+            data.id = cloud_data.id.clone();
+            data.version = cloud_data.version;
+            data
         };
 
         self.cloud_client
-            .update_connection(&updated_cloud_conn)
+            .update_sync_data(&updated_data)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
         Ok(())
     }
 
-    async fn download_connection(&self, cloud_conn: &CloudConnection) -> Result<(), SyncError> {
+    async fn download_connection(&self, cloud_data: &CloudSyncData) -> Result<(), SyncError> {
         let service = self
             .crypto_service
             .read()
             .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
 
-        let mut local_conn = service.decrypt_connection(cloud_conn)?;
+        let mut local_conn = service.decrypt_sync_data_connection(cloud_data)?;
         local_conn.id = None;
-        local_conn.cloud_id = Some(cloud_conn.id.clone());
+        local_conn.cloud_id = Some(cloud_data.id.clone());
         local_conn.last_synced_at = Some(Self::current_timestamp());
 
         let repo = self
@@ -674,7 +717,7 @@ impl SyncEngine {
 
     async fn update_local_connection(
         &self,
-        cloud_conn: &CloudConnection,
+        cloud_data: &CloudSyncData,
         local_conn: &StoredConnection,
     ) -> Result<(), SyncError> {
         let service = self
@@ -682,9 +725,9 @@ impl SyncEngine {
             .read()
             .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
 
-        let mut updated = service.decrypt_connection(cloud_conn)?;
+        let mut updated = service.decrypt_sync_data_connection(cloud_data)?;
         updated.id = local_conn.id;
-        updated.cloud_id = Some(cloud_conn.id.clone());
+        updated.cloud_id = Some(cloud_data.id.clone());
         updated.last_synced_at = Some(Self::current_timestamp());
 
         let repo = self
@@ -720,17 +763,20 @@ impl SyncEngine {
         Ok(())
     }
 
-    async fn apply_resolved_conflict(&self, resolved: &ResolvedConflict) -> Result<(), SyncError> {
+    async fn apply_resolved_conflict(
+        &self,
+        resolved: &ResolvedConflictAction,
+    ) -> Result<(), SyncError> {
         match resolved.resolution {
-            crate::cloud_sync::models::ConflictResolution::UseCloud => {
+            ConflictResolution::UseCloud => {
                 self.update_local_connection(&resolved.conflict.cloud, &resolved.conflict.local)
                     .await
             }
-            crate::cloud_sync::models::ConflictResolution::UseLocal => {
+            ConflictResolution::UseLocal => {
                 self.update_cloud_connection(&resolved.conflict.local, &resolved.conflict.cloud)
                     .await
             }
-            crate::cloud_sync::models::ConflictResolution::KeepBoth => {
+            ConflictResolution::KeepBoth => {
                 if let Some(copy) = &resolved.result_connection {
                     let repo = self.storage.get::<ConnectionRepository>().ok_or_else(|| {
                         SyncError::StorageError("ConnectionRepository not found".to_string())
@@ -748,7 +794,7 @@ impl SyncEngine {
 
     pub async fn delete_cloud_connection(&self, cloud_id: &str) -> Result<(), SyncError> {
         self.cloud_client
-            .delete_connection(cloud_id)
+            .delete_sync_data(cloud_id)
             .await
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
@@ -802,4 +848,11 @@ impl SyncEngine {
             Err(_) => HashSet::new(),
         }
     }
+}
+
+/// 已解决的冲突操作（内部使用）
+struct ResolvedConflictAction {
+    conflict: SyncConflict,
+    resolution: ConflictResolution,
+    result_connection: Option<StoredConnection>,
 }

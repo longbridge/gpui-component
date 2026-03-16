@@ -128,60 +128,62 @@ pub trait CloudApiClient: Send + Sync {
     async fn list_models(&self) -> Result<Vec<String>, CloudApiError>;
 
     // ========================================================================
-    // 连接数据同步
+    // 统一同步数据（sync_data 表）
     // ========================================================================
 
-    /// 获取所有云端连接
-    async fn list_connections(&self) -> Result<Vec<CloudConnection>, CloudApiError>;
-
-    /// 获取单个连接
-    async fn get_connection(&self, id: &str) -> Result<Option<CloudConnection>, CloudApiError>;
-
-    /// 创建新连接
-    async fn create_connection(
+    /// 获取同步数据列表
+    ///
+    /// 可选过滤：data_type, team_id, since_timestamp
+    async fn list_sync_data(
         &self,
-        connection: &CloudConnection,
-    ) -> Result<CloudConnection, CloudApiError>;
+        data_type: Option<&str>,
+        team_id: Option<&str>,
+        since: Option<i64>,
+    ) -> Result<Vec<CloudSyncData>, CloudApiError>;
 
-    /// 更新连接
-    async fn update_connection(
+    /// 创建同步数据
+    async fn create_sync_data(
         &self,
-        connection: &CloudConnection,
-    ) -> Result<CloudConnection, CloudApiError>;
+        data: &CloudSyncData,
+    ) -> Result<CloudSyncData, CloudApiError>;
 
-    /// 删除连接
-    async fn delete_connection(&self, id: &str) -> Result<(), CloudApiError>;
-
-    /// 批量同步（上传、下载、删除）
-    async fn batch_sync(&self, request: &SyncRequest) -> Result<SyncResponse, CloudApiError>;
-
-    /// 获取自指定时间戳以来更新的连接
-    async fn get_connections_since(
+    /// 更新同步数据（乐观并发控制）
+    async fn update_sync_data(
         &self,
-        since_timestamp: i64,
-    ) -> Result<Vec<CloudConnection>, CloudApiError>;
+        data: &CloudSyncData,
+    ) -> Result<CloudSyncData, CloudApiError>;
+
+    /// 软删除同步数据
+    async fn delete_sync_data(&self, id: &str) -> Result<(), CloudApiError>;
 
     // ========================================================================
-    // 工作空间数据同步
+    // 团队管理
     // ========================================================================
 
-    /// 获取所有云端工作空间
-    async fn list_workspaces(&self) -> Result<Vec<CloudWorkspace>, CloudApiError>;
+    /// 获取当前用户所在的所有团队
+    async fn list_teams(&self) -> Result<Vec<Team>, CloudApiError>;
 
-    /// 创建新工作空间
-    async fn create_workspace(
-        &self,
-        workspace: &CloudWorkspace,
-    ) -> Result<CloudWorkspace, CloudApiError>;
+    /// 创建团队
+    async fn create_team(&self, team: &Team) -> Result<Team, CloudApiError>;
 
-    /// 更新工作空间
-    async fn update_workspace(
-        &self,
-        workspace: &CloudWorkspace,
-    ) -> Result<CloudWorkspace, CloudApiError>;
+    /// 更新团队信息
+    async fn update_team(&self, team: &Team) -> Result<Team, CloudApiError>;
 
-    /// 删除工作空间
-    async fn delete_workspace(&self, id: &str) -> Result<(), CloudApiError>;
+    /// 删除团队
+    async fn delete_team(&self, id: &str) -> Result<(), CloudApiError>;
+
+    /// 获取团队成员列表
+    async fn list_team_members(&self, team_id: &str) -> Result<Vec<TeamMember>, CloudApiError>;
+
+    /// 添加团队成员
+    async fn add_team_member(&self, member: &TeamMember) -> Result<TeamMember, CloudApiError>;
+
+    /// 移除团队成员
+    async fn remove_team_member(&self, member_id: &str) -> Result<(), CloudApiError>;
+
+    // ========================================================================
+    // AI 聊天
+    // ========================================================================
 
     /// 聊天
     async fn chat(&self, request: &ChatRequest) -> Result<String, CloudApiError>;

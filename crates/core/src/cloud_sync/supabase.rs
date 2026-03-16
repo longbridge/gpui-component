@@ -853,147 +853,6 @@ impl From<SubscriptionRow> for SubscriptionInfo {
     }
 }
 
-/// 连接表记录
-#[derive(Debug, Serialize, Deserialize)]
-struct ConnectionRow {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    user_id: String,
-    local_id: Option<i64>,
-    name: String,
-    connection_type: String,
-    workspace_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    selected_databases: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    remark: Option<String>,
-    encrypted_params: String,
-    key_version: i32,
-    checksum: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    updated_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    created_at: Option<String>,
-    /// 软删除时间戳（ISO 8601 格式）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    deleted_at: Option<String>,
-}
-
-impl From<ConnectionRow> for CloudConnection {
-    fn from(row: ConnectionRow) -> Self {
-        CloudConnection {
-            id: row.id.unwrap_or_default(),
-            local_id: row.local_id,
-            name: row.name,
-            connection_type: row.connection_type,
-            workspace_id: row.workspace_id,
-            selected_databases: row.selected_databases,
-            remark: row.remark,
-            encrypted_params: row.encrypted_params,
-            key_version: row.key_version as u32,
-            updated_at: row
-                .updated_at
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.timestamp_millis())
-                .unwrap_or(0),
-            checksum: row.checksum,
-            deleted_at: row
-                .deleted_at
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.timestamp_millis()),
-        }
-    }
-}
-
-impl From<&CloudConnection> for ConnectionRow {
-    fn from(conn: &CloudConnection) -> Self {
-        ConnectionRow {
-            id: if conn.id.is_empty() {
-                None
-            } else {
-                Some(conn.id.clone())
-            },
-            user_id: String::new(), // 会在插入时设置
-            local_id: conn.local_id,
-            name: conn.name.clone(),
-            connection_type: conn.connection_type.clone(),
-            workspace_id: conn.workspace_id.clone(),
-            selected_databases: conn.selected_databases.clone(),
-            remark: conn.remark.clone(),
-            encrypted_params: conn.encrypted_params.clone(),
-            key_version: conn.key_version as i32,
-            checksum: conn.checksum.clone(),
-            updated_at: None,
-            created_at: None,
-            deleted_at: conn.deleted_at.and_then(|ts| {
-                chrono::DateTime::from_timestamp_millis(ts).map(|dt| dt.to_rfc3339())
-            }),
-        }
-    }
-}
-
-/// 工作空间表记录
-#[derive(Debug, Serialize, Deserialize)]
-struct WorkspaceRow {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
-    user_id: String,
-    local_id: Option<i64>,
-    name: String,
-    color: Option<String>,
-    icon: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    updated_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    created_at: Option<String>,
-    /// 软删除时间戳（ISO 8601 格式）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    deleted_at: Option<String>,
-}
-
-impl From<WorkspaceRow> for CloudWorkspace {
-    fn from(row: WorkspaceRow) -> Self {
-        CloudWorkspace {
-            id: row.id.unwrap_or_default(),
-            local_id: row.local_id,
-            name: row.name,
-            color: row.color,
-            icon: row.icon,
-            updated_at: row
-                .updated_at
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.timestamp_millis())
-                .unwrap_or(0),
-            deleted_at: row
-                .deleted_at
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.timestamp_millis()),
-        }
-    }
-}
-
-impl From<&CloudWorkspace> for WorkspaceRow {
-    fn from(ws: &CloudWorkspace) -> Self {
-        WorkspaceRow {
-            id: if ws.id.is_empty() {
-                None
-            } else {
-                Some(ws.id.clone())
-            },
-            user_id: String::new(), // 会在插入时设置
-            local_id: ws.local_id,
-            name: ws.name.clone(),
-            color: ws.color.clone(),
-            icon: ws.icon.clone(),
-            updated_at: None,
-            created_at: None,
-            deleted_at: ws.deleted_at.and_then(|ts| {
-                chrono::DateTime::from_timestamp_millis(ts).map(|dt| dt.to_rfc3339())
-            }),
-        }
-    }
-}
-
 /// 模型列表记录
 #[derive(Debug, Serialize, Deserialize)]
 struct ModelListRow {
@@ -1005,6 +864,202 @@ struct ModelListRow {
 impl From<ModelListRow> for String {
     fn from(row: ModelListRow) -> Self {
         row.model
+    }
+}
+
+// ============================================================================
+// 统一同步数据行映射（新版 sync_data 表）
+// ============================================================================
+
+/// sync_data 表记录
+#[derive(Debug, Serialize, Deserialize)]
+struct SyncDataRow {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    owner_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    team_id: Option<String>,
+    data_type: String,
+    encrypted_data: String,
+    #[serde(default = "default_key_version")]
+    key_version: i32,
+    #[serde(default)]
+    checksum: String,
+    #[serde(default = "default_row_version")]
+    version: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<String>,
+}
+
+fn default_key_version() -> i32 {
+    1
+}
+fn default_row_version() -> i32 {
+    1
+}
+
+impl From<SyncDataRow> for CloudSyncData {
+    fn from(row: SyncDataRow) -> Self {
+        CloudSyncData {
+            id: row.id.unwrap_or_default(),
+            owner_id: row.owner_id,
+            team_id: row.team_id,
+            data_type: row.data_type,
+            encrypted_data: row.encrypted_data,
+            key_version: row.key_version as u32,
+            checksum: row.checksum,
+            version: row.version as u32,
+            updated_at: row
+                .updated_at
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0),
+            deleted_at: row
+                .deleted_at
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.timestamp_millis()),
+        }
+    }
+}
+
+impl From<&CloudSyncData> for SyncDataRow {
+    fn from(data: &CloudSyncData) -> Self {
+        SyncDataRow {
+            id: if data.id.is_empty() {
+                None
+            } else {
+                Some(data.id.clone())
+            },
+            owner_id: data.owner_id.clone(),
+            team_id: data.team_id.clone(),
+            data_type: data.data_type.clone(),
+            encrypted_data: data.encrypted_data.clone(),
+            key_version: data.key_version as i32,
+            checksum: data.checksum.clone(),
+            version: data.version as i32,
+            updated_at: None,
+            created_at: None,
+            deleted_at: data.deleted_at.and_then(|ts| {
+                chrono::DateTime::from_timestamp_millis(ts).map(|dt| dt.to_rfc3339())
+            }),
+        }
+    }
+}
+
+/// teams 表记录
+#[derive(Debug, Serialize, Deserialize)]
+struct TeamRow {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    name: String,
+    owner_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_verification: Option<String>,
+    #[serde(default)]
+    key_version: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    updated_at: Option<String>,
+}
+
+impl From<TeamRow> for Team {
+    fn from(row: TeamRow) -> Self {
+        Team {
+            id: row.id.unwrap_or_default(),
+            name: row.name,
+            owner_id: row.owner_id,
+            description: row.description,
+            key_verification: row.key_verification,
+            key_version: row.key_version as u32,
+            created_at: row
+                .created_at
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0),
+            updated_at: row
+                .updated_at
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0),
+        }
+    }
+}
+
+impl From<&Team> for TeamRow {
+    fn from(team: &Team) -> Self {
+        TeamRow {
+            id: if team.id.is_empty() {
+                None
+            } else {
+                Some(team.id.clone())
+            },
+            name: team.name.clone(),
+            owner_id: team.owner_id.clone(),
+            description: team.description.clone(),
+            key_verification: team.key_verification.clone(),
+            key_version: team.key_version as i32,
+            created_at: None,
+            updated_at: None,
+        }
+    }
+}
+
+/// team_members 表记录
+#[derive(Debug, Serialize, Deserialize)]
+struct TeamMemberRow {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    team_id: String,
+    user_id: String,
+    #[serde(default = "default_member_role")]
+    role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    joined_at: Option<String>,
+}
+
+fn default_member_role() -> String {
+    "member".to_string()
+}
+
+impl From<TeamMemberRow> for TeamMember {
+    fn from(row: TeamMemberRow) -> Self {
+        TeamMember {
+            id: row.id.unwrap_or_default(),
+            team_id: row.team_id,
+            user_id: row.user_id,
+            role: match row.role.as_str() {
+                "owner" => TeamRole::Owner,
+                _ => TeamRole::Member,
+            },
+            joined_at: row
+                .joined_at
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.timestamp_millis())
+                .unwrap_or(0),
+        }
+    }
+}
+
+impl From<&TeamMember> for TeamMemberRow {
+    fn from(member: &TeamMember) -> Self {
+        TeamMemberRow {
+            id: if member.id.is_empty() {
+                None
+            } else {
+                Some(member.id.clone())
+            },
+            team_id: member.team_id.clone(),
+            user_id: member.user_id.clone(),
+            role: member.role.to_string(),
+            joined_at: None,
+        }
     }
 }
 
@@ -1445,320 +1500,298 @@ impl CloudApiClient for SupabaseClient {
         }
     }
 
-    async fn list_connections(&self) -> Result<Vec<CloudConnection>, CloudApiError> {
-        let url = format!(
-            "{}?select=*&order=updated_at.desc",
-            self.rest_url("connections")
+    // ========================================================================
+    // 统一同步数据（sync_data）
+    // ========================================================================
+
+    async fn list_sync_data(
+        &self,
+        data_type: Option<&str>,
+        team_id: Option<&str>,
+        since: Option<i64>,
+    ) -> Result<Vec<CloudSyncData>, CloudApiError> {
+        let mut url = format!(
+            "{}?order=updated_at.desc",
+            self.rest_url("sync_data")
         );
 
-        let (status, result) = self.get_json_with_retry::<Vec<ConnectionRow>>(&url).await?;
-
-        if status.is_success() {
-            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
-            Ok(rows.into_iter().map(CloudConnection::from).collect())
-        } else {
-            Err(CloudApiError::ServerError(format!(
-                "获取连接列表失败: {}",
-                status
-            )))
+        if let Some(dt) = data_type {
+            url.push_str(&format!("&data_type=eq.{}", dt));
         }
-    }
 
-    async fn get_connection(&self, id: &str) -> Result<Option<CloudConnection>, CloudApiError> {
-        let url = format!("{}?id=eq.{}&select=*", self.rest_url("connections"), id);
-
-        let (status, result) = self.get_json_with_retry::<Vec<ConnectionRow>>(&url).await?;
-
-        if status.is_success() {
-            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
-            Ok(rows.into_iter().next().map(CloudConnection::from))
-        } else {
-            Err(CloudApiError::ServerError(format!(
-                "获取连接失败: {}",
-                status
-            )))
+        match team_id {
+            Some(tid) => url.push_str(&format!("&team_id=eq.{}", tid)),
+            None => {} // RLS 自动过滤
         }
-    }
 
-    async fn create_connection(
-        &self,
-        connection: &CloudConnection,
-    ) -> Result<CloudConnection, CloudApiError> {
-        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
-
-        let mut row = ConnectionRow::from(connection);
-        row.user_id = user_id;
-        row.id = Some(uuid::Uuid::new_v4().to_string());
-
-        let url = self.rest_url("connections");
-        let extra_headers = vec![("Prefer", "return=representation".to_string())];
+        if let Some(ts) = since {
+            if let Some(dt) = chrono::DateTime::from_timestamp_millis(ts) {
+                url.push_str(&format!("&updated_at=gte.{}", dt.to_rfc3339()));
+            }
+        }
 
         let (status, result) = self
-            .post_json_with_retry::<Vec<ConnectionRow>, _>(&url, extra_headers, &row)
-            .await?;
-
-        if status.is_success() || status == StatusCode::CREATED {
-            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
-
-            rows.into_iter()
-                .next()
-                .map(CloudConnection::from)
-                .ok_or_else(|| CloudApiError::ParseError("创建连接后未返回数据".to_string()))
-        } else {
-            // 尝试提取服务端返回的详细错误信息
-            let error_detail = match result {
-                Err(e) => e,
-                Ok(_) => format!("HTTP {}", status.as_u16()),
-            };
-            Err(CloudApiError::ServerError(format!(
-                "创建连接失败: {}",
-                error_detail
-            )))
-        }
-    }
-
-    async fn update_connection(
-        &self,
-        connection: &CloudConnection,
-    ) -> Result<CloudConnection, CloudApiError> {
-        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
-
-        let mut row = ConnectionRow::from(connection);
-        row.user_id = user_id;
-
-        let url = format!("{}?id=eq.{}", self.rest_url("connections"), connection.id);
-        let extra_headers = vec![("Prefer", "return=representation".to_string())];
-
-        let (status, result) = self
-            .patch_json_with_retry::<Vec<ConnectionRow>, _>(&url, extra_headers, &row)
+            .get_json_with_retry::<Vec<SyncDataRow>>(&url)
             .await?;
 
         if status.is_success() {
             let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
-
-            rows.into_iter()
-                .next()
-                .map(CloudConnection::from)
-                .ok_or_else(|| CloudApiError::NotFound("连接不存在".to_string()))
+            Ok(rows.into_iter().map(|r| r.into()).collect())
         } else {
-            Err(CloudApiError::ServerError("更新连接失败".to_string()))
+            Err(CloudApiError::ServerError("获取同步数据失败".to_string()))
         }
     }
 
-    async fn delete_connection(&self, id: &str) -> Result<(), CloudApiError> {
-        // 使用软删除：设置 deleted_at 字段而非真正删除记录
+    async fn create_sync_data(
+        &self,
+        data: &CloudSyncData,
+    ) -> Result<CloudSyncData, CloudApiError> {
+        let url = self.rest_url("sync_data");
+        let row = SyncDataRow::from(data);
+        let extra_headers = vec![("Prefer", "return=representation".to_string())];
+
+        let (status, result) = self
+            .post_json_with_retry::<Vec<SyncDataRow>, _>(&url, extra_headers, &row)
+            .await?;
+
+        if status.is_success() {
+            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
+            rows.into_iter()
+                .next()
+                .map(|r| r.into())
+                .ok_or_else(|| CloudApiError::ParseError("响应为空".to_string()))
+        } else {
+            Err(CloudApiError::ServerError("创建同步数据失败".to_string()))
+        }
+    }
+
+    async fn update_sync_data(
+        &self,
+        data: &CloudSyncData,
+    ) -> Result<CloudSyncData, CloudApiError> {
+        // 乐观并发控制：通过 version 字段确保不覆盖其他修改
+        let url = format!(
+            "{}?id=eq.{}&version=eq.{}",
+            self.rest_url("sync_data"),
+            data.id,
+            data.version
+        );
+
         #[derive(Serialize)]
-        struct SoftDeletePayload {
-            deleted_at: String,
+        struct UpdatePayload {
+            encrypted_data: String,
+            key_version: i32,
+            checksum: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            deleted_at: Option<String>,
         }
 
-        let now = chrono::Utc::now().to_rfc3339();
-        let payload = SoftDeletePayload { deleted_at: now };
-
-        let url = format!("{}?id=eq.{}", self.rest_url("connections"), id);
-        let extra_headers = vec![("Prefer", "return=minimal".to_string())];
-
-        let (status, _) = self
-            .patch_json_with_retry::<serde_json::Value, _>(&url, extra_headers, &payload)
-            .await?;
-
-        if status.is_success() || status == StatusCode::NO_CONTENT {
-            Ok(())
-        } else {
-            Err(CloudApiError::ServerError("删除连接失败".to_string()))
-        }
-    }
-
-    async fn batch_sync(&self, request: &SyncRequest) -> Result<SyncResponse, CloudApiError> {
-        let mut response = SyncResponse {
-            uploaded_ids: Vec::new(),
-            downloaded: Vec::new(),
-            deleted_ids: Vec::new(),
-            errors: Vec::new(),
+        let payload = UpdatePayload {
+            encrypted_data: data.encrypted_data.clone(),
+            key_version: data.key_version as i32,
+            checksum: data.checksum.clone(),
+            deleted_at: data.deleted_at.and_then(|ts| {
+                chrono::DateTime::from_timestamp_millis(ts).map(|dt| dt.to_rfc3339())
+            }),
         };
 
-        // 批量上传
-        for conn in &request.uploads {
-            match self.create_connection(conn).await {
-                Ok(created) => {
-                    response.uploaded_ids.push((conn.local_id, created.id));
-                }
-                Err(e) => {
-                    response
-                        .errors
-                        .push(format!("上传失败 {}: {}", conn.name, e));
-                }
-            }
-        }
-
-        // 批量下载
-        for id in &request.download_ids {
-            match self.get_connection(id).await {
-                Ok(Some(conn)) => {
-                    response.downloaded.push(conn);
-                }
-                Ok(None) => {
-                    response.errors.push(format!("连接不存在: {}", id));
-                }
-                Err(e) => {
-                    response.errors.push(format!("下载失败 {}: {}", id, e));
-                }
-            }
-        }
-
-        // 批量删除
-        for id in &request.delete_ids {
-            match self.delete_connection(id).await {
-                Ok(()) => {
-                    response.deleted_ids.push(id.clone());
-                }
-                Err(e) => {
-                    response.errors.push(format!("删除失败 {}: {}", id, e));
-                }
-            }
-        }
-
-        Ok(response)
-    }
-
-    // ========================================================================
-    // 工作空间数据同步
-    // ========================================================================
-
-    async fn get_connections_since(
-        &self,
-        since_timestamp: i64,
-    ) -> Result<Vec<CloudConnection>, CloudApiError> {
-        // 将时间戳转换为 ISO 8601 格式
-        let since_datetime = chrono::DateTime::from_timestamp_millis(since_timestamp)
-            .map(|dt| dt.to_rfc3339())
-            .unwrap_or_default();
-
-        let url = format!(
-            "{}?updated_at=gt.{}&select=*&order=updated_at.desc",
-            self.rest_url("connections"),
-            Self::url_encode(&since_datetime)
-        );
-
-        let (status, result) = self.get_json_with_retry::<Vec<ConnectionRow>>(&url).await?;
-
-        if status.is_success() {
-            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
-            Ok(rows.into_iter().map(CloudConnection::from).collect())
-        } else {
-            Err(CloudApiError::ServerError(format!(
-                "获取更新连接失败: {}",
-                status
-            )))
-        }
-    }
-
-    async fn list_workspaces(&self) -> Result<Vec<CloudWorkspace>, CloudApiError> {
-        let url = format!(
-            "{}?select=*&order=updated_at.desc",
-            self.rest_url("workspaces"),
-        );
-
-        let (status, result) = self.get_json_with_retry::<Vec<WorkspaceRow>>(&url).await?;
-
-        if status.is_success() {
-            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
-            Ok(rows.into_iter().map(CloudWorkspace::from).collect())
-        } else {
-            Err(CloudApiError::ServerError(format!(
-                "获取工作空间列表失败: {}",
-                status
-            )))
-        }
-    }
-
-    async fn create_workspace(
-        &self,
-        workspace: &CloudWorkspace,
-    ) -> Result<CloudWorkspace, CloudApiError> {
-        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
-
-        let mut row = WorkspaceRow::from(workspace);
-        row.user_id = user_id;
-        row.id = Some(uuid::Uuid::new_v4().to_string());
-
-        let url = self.rest_url("workspaces");
         let extra_headers = vec![("Prefer", "return=representation".to_string())];
 
         let (status, result) = self
-            .post_json_with_retry::<Vec<WorkspaceRow>, _>(&url, extra_headers, &row)
-            .await?;
-
-        if status.is_success() || status == StatusCode::CREATED {
-            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
-
-            rows.into_iter()
-                .next()
-                .map(CloudWorkspace::from)
-                .ok_or_else(|| CloudApiError::ParseError("创建工作空间后未返回数据".to_string()))
-        } else {
-            let error_detail = match result {
-                Err(e) => e,
-                Ok(_) => format!("HTTP {}", status.as_u16()),
-            };
-            Err(CloudApiError::ServerError(format!(
-                "创建工作空间失败: {}",
-                error_detail
-            )))
-        }
-    }
-
-    async fn update_workspace(
-        &self,
-        workspace: &CloudWorkspace,
-    ) -> Result<CloudWorkspace, CloudApiError> {
-        let user_id = self.get_user_id().ok_or(CloudApiError::NotAuthenticated)?;
-
-        let mut row = WorkspaceRow::from(workspace);
-        row.user_id = user_id;
-
-        let url = format!("{}?id=eq.{}", self.rest_url("workspaces"), workspace.id);
-        let extra_headers = vec![("Prefer", "return=representation".to_string())];
-
-        let (status, result) = self
-            .patch_json_with_retry::<Vec<WorkspaceRow>, _>(&url, extra_headers, &row)
+            .patch_json_with_retry::<Vec<SyncDataRow>, _>(&url, extra_headers, &payload)
             .await?;
 
         if status.is_success() {
             let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
-
-            rows.into_iter()
-                .next()
-                .map(CloudWorkspace::from)
-                .ok_or_else(|| CloudApiError::NotFound("工作空间不存在".to_string()))
+            if let Some(row) = rows.into_iter().next() {
+                Ok(row.into())
+            } else {
+                Err(CloudApiError::Conflict(
+                    "版本冲突，数据已被其他客户端修改".to_string(),
+                ))
+            }
+        } else if status == StatusCode::CONFLICT || status.as_u16() == 409 {
+            Err(CloudApiError::Conflict(
+                "版本冲突，数据已被其他客户端修改".to_string(),
+            ))
         } else {
-            Err(CloudApiError::ServerError("更新工作空间失败".to_string()))
+            Err(CloudApiError::ServerError("更新同步数据失败".to_string()))
         }
     }
 
-    async fn delete_workspace(&self, id: &str) -> Result<(), CloudApiError> {
-        // 使用软删除：设置 deleted_at 字段而非真正删除记录
+    async fn delete_sync_data(&self, id: &str) -> Result<(), CloudApiError> {
+        // 软删除：设置 deleted_at
+        let url = format!("{}?id=eq.{}", self.rest_url("sync_data"), id);
+
         #[derive(Serialize)]
-        struct SoftDeletePayload {
+        struct SoftDelete {
             deleted_at: String,
         }
 
-        let now = chrono::Utc::now().to_rfc3339();
-        let payload = SoftDeletePayload { deleted_at: now };
-
-        let url = format!("{}?id=eq.{}", self.rest_url("workspaces"), id);
-        let extra_headers = vec![("Prefer", "return=minimal".to_string())];
+        let payload = SoftDelete {
+            deleted_at: chrono::Utc::now().to_rfc3339(),
+        };
 
         let (status, _) = self
-            .patch_json_with_retry::<serde_json::Value, _>(&url, extra_headers, &payload)
+            .patch_json_with_retry::<serde_json::Value, _>(&url, vec![], &payload)
             .await?;
 
-        if status.is_success() || status == StatusCode::NO_CONTENT {
+        if status.is_success() {
             Ok(())
+        } else if status == StatusCode::NOT_FOUND || status.as_u16() == 404 {
+            Ok(()) // 已删除
         } else {
-            Err(CloudApiError::ServerError("删除工作空间失败".to_string()))
+            Err(CloudApiError::ServerError("删除同步数据失败".to_string()))
         }
     }
+
+    // ========================================================================
+    // 团队管理
+    // ========================================================================
+
+    async fn list_teams(&self) -> Result<Vec<Team>, CloudApiError> {
+        let url = format!(
+            "{}?order=updated_at.desc",
+            self.rest_url("teams")
+        );
+        let (status, result) = self
+            .get_json_with_retry::<Vec<TeamRow>>(&url)
+            .await?;
+
+        if status.is_success() {
+            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
+            Ok(rows.into_iter().map(|r| r.into()).collect())
+        } else {
+            Err(CloudApiError::ServerError("获取团队列表失败".to_string()))
+        }
+    }
+
+    async fn create_team(&self, team: &Team) -> Result<Team, CloudApiError> {
+        let url = self.rest_url("teams");
+        let row = TeamRow::from(team);
+        let extra_headers = vec![("Prefer", "return=representation".to_string())];
+
+        let (status, result) = self
+            .post_json_with_retry::<Vec<TeamRow>, _>(&url, extra_headers, &row)
+            .await?;
+
+        if status.is_success() {
+            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
+            rows.into_iter()
+                .next()
+                .map(|r| r.into())
+                .ok_or_else(|| CloudApiError::ParseError("创建团队响应为空".to_string()))
+        } else {
+            Err(CloudApiError::ServerError("创建团队失败".to_string()))
+        }
+    }
+
+    async fn update_team(&self, team: &Team) -> Result<Team, CloudApiError> {
+        let url = format!("{}?id=eq.{}", self.rest_url("teams"), team.id);
+
+        #[derive(Serialize)]
+        struct UpdateTeam {
+            name: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            key_verification: Option<String>,
+            key_version: i32,
+        }
+
+        let payload = UpdateTeam {
+            name: team.name.clone(),
+            description: team.description.clone(),
+            key_verification: team.key_verification.clone(),
+            key_version: team.key_version as i32,
+        };
+
+        let extra_headers = vec![("Prefer", "return=representation".to_string())];
+
+        let (status, result) = self
+            .patch_json_with_retry::<Vec<TeamRow>, _>(&url, extra_headers, &payload)
+            .await?;
+
+        if status.is_success() {
+            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
+            rows.into_iter()
+                .next()
+                .map(|r| r.into())
+                .ok_or_else(|| CloudApiError::ParseError("更新团队响应为空".to_string()))
+        } else {
+            Err(CloudApiError::ServerError("更新团队失败".to_string()))
+        }
+    }
+
+    async fn delete_team(&self, id: &str) -> Result<(), CloudApiError> {
+        let url = format!("{}?id=eq.{}", self.rest_url("teams"), id);
+
+        let status = self
+            .delete_with_retry(&url)
+            .await?;
+
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(CloudApiError::ServerError("删除团队失败".to_string()))
+        }
+    }
+
+    async fn list_team_members(&self, team_id: &str) -> Result<Vec<TeamMember>, CloudApiError> {
+        let url = format!(
+            "{}?team_id=eq.{}&order=joined_at.asc",
+            self.rest_url("team_members"),
+            team_id
+        );
+        let (status, result) = self
+            .get_json_with_retry::<Vec<TeamMemberRow>>(&url)
+            .await?;
+
+        if status.is_success() {
+            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
+            Ok(rows.into_iter().map(|r| r.into()).collect())
+        } else {
+            Err(CloudApiError::ServerError("获取团队成员失败".to_string()))
+        }
+    }
+
+    async fn add_team_member(&self, member: &TeamMember) -> Result<TeamMember, CloudApiError> {
+        let url = self.rest_url("team_members");
+        let row = TeamMemberRow::from(member);
+        let extra_headers = vec![("Prefer", "return=representation".to_string())];
+
+        let (status, result) = self
+            .post_json_with_retry::<Vec<TeamMemberRow>, _>(&url, extra_headers, &row)
+            .await?;
+
+        if status.is_success() {
+            let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
+            rows.into_iter()
+                .next()
+                .map(|r| r.into())
+                .ok_or_else(|| CloudApiError::ParseError("添加成员响应为空".to_string()))
+        } else {
+            Err(CloudApiError::ServerError("添加团队成员失败".to_string()))
+        }
+    }
+
+    async fn remove_team_member(&self, member_id: &str) -> Result<(), CloudApiError> {
+        let url = format!("{}?id=eq.{}", self.rest_url("team_members"), member_id);
+
+        let status = self
+            .delete_with_retry(&url)
+            .await?;
+
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(CloudApiError::ServerError("移除团队成员失败".to_string()))
+        }
+    }
+
+    // ========================================================================
+    // AI 聊天
+    // ========================================================================
 
     async fn chat(&self, request: &ChatRequest) -> Result<String, CloudApiError> {
         let url = self.functions_url("ai-proxy");
@@ -1902,34 +1935,6 @@ impl CloudApiClient for SupabaseClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_connection_row_conversion() {
-        let cloud_conn = CloudConnection {
-            id: "test-id".to_string(),
-            local_id: Some(123),
-            name: "Test Connection".to_string(),
-            connection_type: "Database".to_string(),
-            workspace_id: Some("ws-1".to_string()),
-            selected_databases: None,
-            remark: None,
-            encrypted_params: "ENC:xxx".to_string(),
-            key_version: 1,
-            updated_at: 1234567890,
-            checksum: "abc123".to_string(),
-            deleted_at: None,
-        };
-
-        let row = ConnectionRow::from(&cloud_conn);
-        assert_eq!(row.id, Some("test-id".to_string()));
-        assert_eq!(row.local_id, Some(123));
-        assert_eq!(row.name, "Test Connection");
-
-        let converted: CloudConnection = row.into();
-        assert_eq!(converted.id, "test-id");
-        assert_eq!(converted.local_id, Some(123));
-    }
-
     #[test]
     fn test_url_encode() {
         assert_eq!(SupabaseClient::url_encode("hello"), "hello");

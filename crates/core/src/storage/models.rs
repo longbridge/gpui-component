@@ -567,6 +567,9 @@ pub struct StoredConnection {
     pub created_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<i64>,
+    /// 团队归属 ID（None = 个人数据）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team_id: Option<String>,
 }
 
 fn default_sync_enabled() -> bool {
@@ -612,6 +615,7 @@ impl StoredConnection {
             last_synced_at: None,
             created_at: None,
             updated_at: None,
+            team_id: None,
         }
     }
 
@@ -629,6 +633,7 @@ impl StoredConnection {
             last_synced_at: None,
             created_at: None,
             updated_at: None,
+            team_id: None,
         }
     }
 
@@ -646,6 +651,7 @@ impl StoredConnection {
             last_synced_at: None,
             created_at: None,
             updated_at: None,
+            team_id: None,
         }
     }
 
@@ -663,6 +669,7 @@ impl StoredConnection {
             last_synced_at: None,
             created_at: None,
             updated_at: None,
+            team_id: None,
         }
     }
 
@@ -692,6 +699,7 @@ impl StoredConnection {
             last_synced_at: None,
             created_at: None,
             updated_at: None,
+            team_id: None,
         }
     }
 
