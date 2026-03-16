@@ -252,18 +252,11 @@ impl TeamManagementPanel {
             return;
         }
 
-        let member = TeamMember {
-            id: String::new(), // 由服务端生成
-            team_id: team.id.clone(),
-            user_id: email, // 此处用 email 作为 user_id（Supabase 端通过 email 查找用户）
-            role: TeamRole::Member,
-            joined_at: 0,
-        };
-
+        let team_id = team.id.clone();
         let client = self.cloud_client.clone();
 
         cx.spawn(async move |this, cx| {
-            match client.add_team_member(&member).await {
+            match client.add_team_member_by_email(&team_id, &email).await {
                 Ok(_) => {
                     this.update(cx, |this, cx| {
                         this.success_message =

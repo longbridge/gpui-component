@@ -41,6 +41,29 @@ impl SyncEngine {
             .map_err(|e| SyncError::NetworkError(e.to_string()))?;
         tracing::info!("[工作空间] 云端工作空间数据: {} 个", cloud_sync_data.len());
 
+        // 过滤掉团队密钥未解锁的团队数据，避免解密失败中断同步
+        let cloud_sync_data: Vec<_> = cloud_sync_data
+            .into_iter()
+            .filter(|d| match &d.team_id {
+                Some(tid) => {
+                    let unlocked = self.is_team_unlocked(tid);
+                    if !unlocked {
+                        tracing::info!(
+                            "[工作空间] 跳过未解锁团队 {} 的云端工作空间数据 {}",
+                            tid,
+                            d.id
+                        );
+                    }
+                    unlocked
+                }
+                None => true,
+            })
+            .collect();
+        tracing::info!(
+            "[工作空间] 可处理的云端工作空间数据: {} 个",
+            cloud_sync_data.len()
+        );
+
         // 解密一次建立 cloud_id → name 映射
         let cloud_name_map = self.build_workspace_name_map(&cloud_sync_data);
 

@@ -178,6 +178,16 @@ pub trait CloudApiClient: Send + Sync {
     /// 添加团队成员
     async fn add_team_member(&self, member: &TeamMember) -> Result<TeamMember, CloudApiError>;
 
+    /// 通过邮箱添加团队成员
+    ///
+    /// 使用服务端 RPC 函数根据邮箱查找用户并添加为团队成员。
+    /// 解决了客户端无法直接访问 auth.users 表的问题。
+    async fn add_team_member_by_email(
+        &self,
+        team_id: &str,
+        email: &str,
+    ) -> Result<TeamMember, CloudApiError>;
+
     /// 移除团队成员
     async fn remove_team_member(&self, member_id: &str) -> Result<(), CloudApiError>;
 

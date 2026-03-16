@@ -1775,6 +1775,69 @@ impl CloudApiClient for SupabaseClient {
         }
     }
 
+    async fn add_team_member_by_email(
+        &self,
+        team_id: &str,
+        email: &str,
+    ) -> Result<TeamMember, CloudApiError> {
+        let url = self.rest_url("rpc/add_team_member_by_email");
+
+        #[derive(Serialize)]
+        struct RpcParams<'a> {
+            p_team_id: &'a str,
+            p_email: &'a str,
+        }
+
+        let params = RpcParams {
+            p_team_id: team_id,
+            p_email: email,
+        };
+
+        let (status, result) = self
+            .post_json_with_retry::<serde_json::Value, _>(&url, vec![], &params)
+            .await?;
+
+        if status.is_success() {
+            let json = result.map_err(CloudApiError::ParseError)?;
+            Ok(TeamMember {
+                id: json
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                team_id: json
+                    .get("team_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                user_id: json
+                    .get("user_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                role: TeamRole::Member,
+                joined_at: json
+                    .get("joined_at")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                    .map(|dt| dt.timestamp_millis())
+                    .unwrap_or(0),
+            })
+        } else {
+            let error_msg = match result {
+                Err(e) => {
+                    // 尝试解析 PostgreSQL 异常信息
+                    serde_json::from_str::<serde_json::Value>(&e)
+                        .ok()
+                        .and_then(|v| v.get("message").and_then(|m| m.as_str()).map(String::from))
+                        .unwrap_or(e)
+                }
+                Ok(_) => "添加成员失败".to_string(),
+            };
+            Err(CloudApiError::ServerError(error_msg))
+        }
+    }
+
     async fn remove_team_member(&self, member_id: &str) -> Result<(), CloudApiError> {
         let url = format!("{}?id=eq.{}", self.rest_url("team_members"), member_id);
 
