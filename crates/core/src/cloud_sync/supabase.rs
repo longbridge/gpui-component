@@ -1711,6 +1711,14 @@ impl CloudApiClient for SupabaseClient {
         let row = TeamRow::from(team);
         let extra_headers = vec![("Prefer", "return=representation".to_string())];
 
+        let auth_user_id = self.get_user_id();
+        info!(
+            "[create_team] team.owner_id={} auth_state.user_id={:?} match={}",
+            team.owner_id,
+            auth_user_id,
+            auth_user_id.as_deref() == Some(team.owner_id.as_str())
+        );
+
         let (status, result) = self
             .post_json_with_retry::<Vec<TeamRow>, _>(&url, extra_headers, &row)
             .await?;

@@ -1230,3 +1230,23 @@ TeamManagement:
     en: Create Team
     zh-CN: 创建团队
     zh-HK: 創建團隊
+  team_name_label:
+    en: Team Name
+    zh-CN: 团队名称
+    zh-HK: 團隊名稱
+  team_desc_label:
+    en: Team Description
+    zh-CN: 团队描述
+    zh-HK: 團隊描述
+  name_required:
+    en: Please enter a team name
+    zh-CN: 请输入团队名称
+    zh-HK: 請輸入團隊名稱
+  no_teams:
+    en: No teams yet
+    zh-CN: 暂无团队
+    zh-HK: 暫無團隊
+  loading:
+    en: Loading...
+    zh-CN: 加载中...
+    zh-HK: 載入中...
