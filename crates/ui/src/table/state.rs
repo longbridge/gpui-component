@@ -1776,7 +1776,6 @@ where
     ) -> Option<impl IntoElement> {
         Some(
             div()
-                .occlude()
                 .absolute()
                 .top(self.options.size.table_row_height())
                 .right_0()
@@ -1792,7 +1791,6 @@ where
         _: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
-            .occlude()
             .absolute()
             .left(self.fixed_head_cols_bounds.size.width)
             .right_0()
