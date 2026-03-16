@@ -666,6 +666,55 @@ impl SyncEngine {
         Ok(resolved)
     }
 
+    /// 使用指定的策略映射解决冲突（支持单个连接独立策略）
+    fn resolve_conflicts_with_strategies(
+        &self,
+        conflicts: &[SyncConflict],
+        strategies: &HashMap<String, ConflictResolution>,
+    ) -> Result<Vec<ResolvedConflictAction>, SyncError> {
+        let mut resolved = Vec::new();
+
+        for conflict in conflicts {
+            let cloud_id = &conflict.cloud.id;
+            let strategy = strategies
+                .get(cloud_id)
+                .copied()
+                .unwrap_or(self.conflict_strategy);
+
+            match strategy {
+                ConflictResolution::UseCloud => {
+                    resolved.push(ResolvedConflictAction {
+                        conflict: conflict.clone(),
+                        resolution: ConflictResolution::UseCloud,
+                        result_connection: None,
+                    });
+                }
+                ConflictResolution::UseLocal => {
+                    resolved.push(ResolvedConflictAction {
+                        conflict: conflict.clone(),
+                        resolution: ConflictResolution::UseLocal,
+                        result_connection: Some(conflict.local.clone()),
+                    });
+                }
+                ConflictResolution::KeepBoth => {
+                    let mut copy = conflict.local.clone();
+                    copy.id = None;
+                    copy.cloud_id = None;
+                    let timestamp = Self::current_timestamp();
+                    copy.name = format!("{} (冲突副本 {})", copy.name, timestamp);
+
+                    resolved.push(ResolvedConflictAction {
+                        conflict: conflict.clone(),
+                        resolution: ConflictResolution::KeepBoth,
+                        result_connection: Some(copy),
+                    });
+                }
+            }
+        }
+
+        Ok(resolved)
+    }
+
     async fn upload_connection(&self, conn: &StoredConnection) -> Result<String, SyncError> {
         let teams = self.get_cached_teams();
         let cloud_data = {
@@ -870,9 +919,9 @@ impl SyncEngine {
     }
 }
 
-/// 已解决的冲突操作（内部使用）
-struct ResolvedConflictAction {
-    conflict: SyncConflict,
-    resolution: ConflictResolution,
-    result_connection: Option<StoredConnection>,
+/// 已解决的冲突操作
+pub struct ResolvedConflictAction {
+    pub conflict: SyncConflict,
+    pub resolution: ConflictResolution,
+    pub result_connection: Option<StoredConnection>,
 }

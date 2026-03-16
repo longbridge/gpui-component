@@ -236,4 +236,166 @@ impl SyncEngine {
             .map(|service| service.is_team_unlocked(team_id))
             .unwrap_or(false)
     }
+
+    /// 使用指定的策略映射应用冲突解决方案
+    ///
+    /// 允许为每个冲突单独指定解决策略，而不是使用全局策略
+    pub async fn apply_conflict_resolutions(
+        &self,
+        conflicts: Vec<crate::cloud_sync::models::SyncConflict>,
+        strategies: std::collections::HashMap<String, ConflictResolution>,
+    ) -> Result<SyncResult, SyncError> {
+        self.ensure_unlocked()?;
+
+        let mut result = SyncResult::default();
+        result.conflicts = conflicts.clone();
+
+        // 为每个冲突应用指定的策略
+        for conflict in &conflicts {
+            let cloud_id = &conflict.cloud.id;
+            let strategy = strategies
+                .get(cloud_id)
+                .copied()
+                .unwrap_or(self.conflict_strategy);
+
+            let resolved_action = self.create_resolved_action(conflict, strategy);
+
+            if let Err(e) = self.apply_single_conflict(&resolved_action).await {
+                result.errors.push(format!("应用冲突解决失败: {}", e));
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// 创建冲突解决操作
+    fn create_resolved_action(
+        &self,
+        conflict: &crate::cloud_sync::models::SyncConflict,
+        strategy: ConflictResolution,
+    ) -> crate::cloud_sync::connection_sync::ResolvedConflictAction {
+        use crate::cloud_sync::connection_sync::ResolvedConflictAction;
+
+        match strategy {
+            ConflictResolution::UseCloud => ResolvedConflictAction {
+                conflict: conflict.clone(),
+                resolution: ConflictResolution::UseCloud,
+                result_connection: None,
+            },
+            ConflictResolution::UseLocal => ResolvedConflictAction {
+                conflict: conflict.clone(),
+                resolution: ConflictResolution::UseLocal,
+                result_connection: Some(conflict.local.clone()),
+            },
+            ConflictResolution::KeepBoth => {
+                let mut copy = conflict.local.clone();
+                copy.id = None;
+                copy.cloud_id = None;
+                let timestamp = Self::current_timestamp();
+                copy.name = format!("{} (冲突副本 {})", copy.name, timestamp);
+
+                ResolvedConflictAction {
+                    conflict: conflict.clone(),
+                    resolution: ConflictResolution::KeepBoth,
+                    result_connection: Some(copy),
+                }
+            }
+        }
+    }
+
+    /// 应用单个冲突解决方案
+    async fn apply_single_conflict(
+        &self,
+        resolved: &crate::cloud_sync::connection_sync::ResolvedConflictAction,
+    ) -> Result<(), SyncError> {
+        use crate::storage::ConnectionRepository;
+        use crate::storage::traits::Repository;
+
+        match resolved.resolution {
+            ConflictResolution::UseCloud => {
+                // 更新本地连接
+                let service = self
+                    .crypto_service
+                    .read()
+                    .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
+
+                let mut updated = service.decrypt_sync_data_connection(&resolved.conflict.cloud)?;
+                updated.id = resolved.conflict.local.id;
+                updated.cloud_id = Some(resolved.conflict.cloud.id.clone());
+                updated.last_synced_at = Some(Self::current_timestamp());
+
+                let repo = self
+                    .storage
+                    .get::<ConnectionRepository>()
+                    .ok_or_else(|| {
+                        SyncError::StorageError("ConnectionRepository not found".to_string())
+                    })?;
+
+                repo.update(&updated)
+                    .map_err(|e| SyncError::StorageError(e.to_string()))?;
+
+                Ok(())
+            }
+            ConflictResolution::UseLocal => {
+                // 更新云端连接
+                let teams = self.get_cached_teams();
+                let updated_data = {
+                    let service = self
+                        .crypto_service
+                        .read()
+                        .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
+                    let mut data = service.prepare_sync_data_upload(
+                        &resolved.conflict.local,
+                        resolved.conflict.local.team_id.as_deref(),
+                        &teams,
+                    )?;
+                    data.id = resolved.conflict.cloud.id.clone();
+                    data.version = resolved.conflict.cloud.version;
+                    data
+                };
+
+                self.cloud_client
+                    .update_sync_data(&updated_data)
+                    .await
+                    .map_err(|e| SyncError::NetworkError(e.to_string()))?;
+
+                Ok(())
+            }
+            ConflictResolution::KeepBoth => {
+                // 创建本地副本
+                if let Some(copy) = &resolved.result_connection {
+                    let repo = self.storage.get::<ConnectionRepository>().ok_or_else(|| {
+                        SyncError::StorageError("ConnectionRepository not found".to_string())
+                    })?;
+
+                    let mut new_conn = copy.clone();
+                    repo.insert(&mut new_conn)
+                        .map_err(|e| SyncError::StorageError(e.to_string()))?;
+                }
+
+                // 同时更新本地连接为云端版本
+                let service = self
+                    .crypto_service
+                    .read()
+                    .map_err(|_| SyncError::StorageError("同步服务锁获取失败".to_string()))?;
+
+                let mut updated = service.decrypt_sync_data_connection(&resolved.conflict.cloud)?;
+                updated.id = resolved.conflict.local.id;
+                updated.cloud_id = Some(resolved.conflict.cloud.id.clone());
+                updated.last_synced_at = Some(Self::current_timestamp());
+
+                let repo = self
+                    .storage
+                    .get::<ConnectionRepository>()
+                    .ok_or_else(|| {
+                        SyncError::StorageError("ConnectionRepository not found".to_string())
+                    })?;
+
+                repo.update(&updated)
+                    .map_err(|e| SyncError::StorageError(e.to_string()))?;
+
+                Ok(())
+            }
+        }
+    }
 }
