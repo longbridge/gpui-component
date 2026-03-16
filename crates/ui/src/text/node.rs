@@ -698,13 +698,14 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        // Fallback matches TextViewStyle::inline_code_background doc
-                        highlight.background_color = Some(
-                            node_cx
-                                .style
-                                .inline_code_background
-                                .unwrap_or(cx.theme().accent),
-                        );
+                        // Use configurable inline_code style, fall back to theme accent
+                        let bg = node_cx
+                            .style
+                            .inline_code
+                            .text
+                            .background_color
+                            .unwrap_or(cx.theme().accent);
+                        highlight.background_color = Some(bg);
                     }
 
                     if let Some(mut link_mark) = style.link.clone() {
