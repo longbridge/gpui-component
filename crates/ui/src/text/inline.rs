@@ -5,13 +5,13 @@ use std::{
 };
 
 use gpui::{
-    point, px, quad, App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId,
-    GlobalElementId, Half, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement,
-    LayoutId, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, StyledText, TextLayout,
-    Window,
+    App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId, GlobalElementId, Half,
+    HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, StyledText, TextLayout, Window,
+    point, px, quad,
 };
 
-use crate::{global_state::GlobalState, input::Selection, text::node::LinkMark, ActiveTheme};
+use crate::{ActiveTheme, global_state::GlobalState, input::Selection, text::node::LinkMark};
 
 /// A inline element used to render a inline text and support selectable.
 ///
@@ -129,13 +129,8 @@ impl Inline {
                 }
             }
 
-            if point_in_text_selection(
-                pos,
-                char_width,
-                selection_start,
-                selection_end,
-                line_height,
-            ) {
+            if point_in_text_selection(pos, char_width, selection_start, selection_end, line_height)
+            {
                 if selection.is_none() {
                     selection = Some((offset..offset).into());
                 }
@@ -354,9 +349,10 @@ impl Element for Inline {
             window.on_mouse_event({
                 let links = self.links.clone();
                 let text_layout = text_layout.clone();
+                let hitbox = hitbox.clone();
 
-                move |event: &MouseUpEvent, phase, _, cx| {
-                    if !bounds.contains(&event.position) || !phase.bubble() {
+                move |event: &MouseUpEvent, phase, window, cx| {
+                    if !phase.bubble() || !hitbox.is_hovered(window) {
                         return;
                     }
 
