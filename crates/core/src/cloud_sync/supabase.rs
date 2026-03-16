@@ -770,6 +770,29 @@ impl SupabaseClient {
         }
         result
     }
+
+    fn format_error_summary<T>(result: &Result<T, String>) -> String {
+        match result {
+            Ok(_) => "响应解析成功但状态非成功".to_string(),
+            Err(body) => Self::truncate_error_body(body),
+        }
+    }
+
+    fn truncate_error_body(body: &str) -> String {
+        let trimmed = body.trim();
+        if trimmed.is_empty() {
+            return "错误响应为空".to_string();
+        }
+
+        let max_chars = 800;
+        let total = trimmed.chars().count();
+        if total > max_chars {
+            let truncated: String = trimmed.chars().take(max_chars).collect();
+            return format!("{}...(已截断，总长度 {} 字符)", truncated, total);
+        }
+
+        trimmed.to_string()
+    }
 }
 
 // ============================================================================
@@ -1538,6 +1561,16 @@ impl CloudApiClient for SupabaseClient {
             let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
             Ok(rows.into_iter().map(|r| r.into()).collect())
         } else {
+            let error_body = Self::format_error_summary(&result);
+            warn!(
+                status = status.as_u16(),
+                url = %url,
+                data_type = ?data_type,
+                team_id = ?team_id,
+                since = ?since,
+                error_body = %error_body,
+                "获取同步数据失败"
+            );
             Err(CloudApiError::ServerError("获取同步数据失败".to_string()))
         }
     }
@@ -1662,6 +1695,13 @@ impl CloudApiClient for SupabaseClient {
             let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
             Ok(rows.into_iter().map(|r| r.into()).collect())
         } else {
+            let error_body = Self::format_error_summary(&result);
+            warn!(
+                status = status.as_u16(),
+                url = %url,
+                error_body = %error_body,
+                "获取团队列表失败"
+            );
             Err(CloudApiError::ServerError("获取团队列表失败".to_string()))
         }
     }

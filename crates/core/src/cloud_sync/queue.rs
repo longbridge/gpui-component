@@ -132,7 +132,7 @@ impl QueuedOperation {
 /// - 操作入队和去重
 /// - 失败重试（指数退避）
 /// - 批量处理
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OperationQueue {
     /// 待处理操作
     pending: VecDeque<QueuedOperation>,
@@ -145,6 +145,12 @@ pub struct OperationQueue {
 
 fn default_max_retries() -> u32 {
     3
+}
+
+impl Default for OperationQueue {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OperationQueue {
@@ -355,6 +361,12 @@ mod tests {
 
         assert_eq!(queue.pending_count(), 0);
         assert_eq!(queue.failed_count(), 1);
+    }
+
+    #[test]
+    fn test_default_max_retries() {
+        let queue = OperationQueue::default();
+        assert_eq!(queue.max_retries, 3);
     }
 
     #[test]

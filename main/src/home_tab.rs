@@ -346,6 +346,14 @@ impl HomePage {
         let cloud_client = self.auth_service.cloud_client();
         let sync_service = self.cloud_sync_service.clone();
 
+        if let Some(user) = &self.current_user {
+            if let Ok(mut service) = sync_service.write() {
+                service.set_logged_in(user.id.clone());
+            } else {
+                tracing::warn!("同步前设置用户ID失败：无法获取云同步服务写锁");
+            }
+        }
+
         // 创建同步引擎
         let engine = SyncEngine::new(cloud_client, sync_service, storage);
 
@@ -482,10 +490,12 @@ impl HomePage {
                 )
                 .child(
                     div()
+                        .id("conflict_items")
                         .flex()
                         .flex_col()
                         .gap_2()
                         .max_h(px(300.0))
+                        .overflow_y_scroll()
                         .children(conflict_items)
                         .child(
                             div()
@@ -496,6 +506,7 @@ impl HomePage {
                         )
                         .into_any_element(),
                 )
+                .confirm()
                 .button_props(
                     gpui_component::dialog::DialogButtonProps::default()
                         .ok_text(t!("Home.sync_conflict_use_cloud"))
@@ -535,6 +546,15 @@ impl HomePage {
 
         let cloud_client = self.auth_service.cloud_client();
         let sync_service = self.cloud_sync_service.clone();
+
+        if let Some(user) = &self.current_user {
+            if let Ok(mut service) = sync_service.write() {
+                service.set_logged_in(user.id.clone());
+            } else {
+                tracing::warn!("冲突解决前设置用户ID失败：无法获取云同步服务写锁");
+            }
+        }
+
         let storage = cx.global::<GlobalStorageState>().storage.clone();
         self.log_sync_decrypt_health(&storage, "冲突解决");
         self.syncing = true;
