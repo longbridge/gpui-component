@@ -938,6 +938,8 @@ impl BlockNode {
                 ..
             } => v_flex()
                 .id(("li", options.ix))
+                .w_full()
+                .min_w_0()
                 .when(*spread, |this| this.child(div()))
                 .children({
                     let mut items: Vec<Div> = Vec::with_capacity(children.len());
@@ -964,7 +966,12 @@ impl BlockNode {
                                 if last_not_list {
                                     if let Some(item_item) = items.last_mut() {
                                         item_item.extend(vec![
-                                            div().overflow_hidden().child(text).into_any_element(),
+                                            div()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .overflow_hidden()
+                                                .child(text)
+                                                .into_any_element(),
                                         ]);
                                         continue;
                                     }
@@ -972,7 +979,9 @@ impl BlockNode {
 
                                 items.push(
                                     h_flex()
+                                        .w_full()
                                         .flex_1()
+                                        .min_w_0()
                                         .relative()
                                         .items_start()
                                         .content_start()
@@ -1006,7 +1015,13 @@ impl BlockNode {
                                                     }),
                                             )
                                         })
-                                        .child(div().flex_1().overflow_hidden().child(text)),
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .overflow_hidden()
+                                                .child(text),
+                                        ),
                                 );
                             }
                             BlockNode::List { .. } => {
