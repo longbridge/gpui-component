@@ -1722,6 +1722,13 @@ impl CloudApiClient for SupabaseClient {
                 .map(|r| r.into())
                 .ok_or_else(|| CloudApiError::ParseError("创建团队响应为空".to_string()))
         } else {
+            let error_body = Self::format_error_summary(&result);
+            warn!(
+                status = status.as_u16(),
+                url = %url,
+                error_body = %error_body,
+                "创建团队失败"
+            );
             Err(CloudApiError::ServerError("创建团队失败".to_string()))
         }
     }

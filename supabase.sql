@@ -168,7 +168,7 @@ EXECUTE FUNCTION fn_user_configs_before_update();
 -- ============================================================================
 
 ALTER TABLE sync_data    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE teams        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE teams        DISABLE ROW LEVEL SECURITY;
 ALTER TABLE team_members ENABLE ROW LEVEL SECURITY;  -- 现在可以安全启用
 ALTER TABLE user_configs ENABLE ROW LEVEL SECURITY;
 
@@ -285,7 +285,7 @@ BEGIN
     VALUES (NEW.id, NEW.owner_id, 'owner');
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 CREATE TRIGGER trg_auto_add_team_owner
     AFTER INSERT ON teams

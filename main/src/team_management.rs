@@ -184,6 +184,24 @@ impl TeamManagementPanel {
             return;
         }
 
+        if !GlobalCloudUser::is_logged_in(cx) {
+            self.error = Some(t!("TeamManagement.not_logged_in").to_string());
+            cx.notify();
+            return;
+        }
+
+        let Some(user_id) = self.current_user_id(cx) else {
+            self.error = Some(t!("TeamManagement.not_logged_in").to_string());
+            cx.notify();
+            return;
+        };
+
+        if user_id.trim().is_empty() {
+            self.error = Some(t!("TeamManagement.not_logged_in").to_string());
+            cx.notify();
+            return;
+        }
+
         self.creating = true;
         self.error = None;
         cx.notify();
@@ -194,10 +212,6 @@ impl TeamManagementPanel {
         } else {
             Some(desc_text)
         };
-
-        let user_id = self
-            .current_user_id(cx)
-            .unwrap_or_default();
 
         let team = Team {
             id: String::new(), // 由服务端生成
