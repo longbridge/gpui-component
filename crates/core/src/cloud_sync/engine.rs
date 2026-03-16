@@ -9,7 +9,9 @@
 //! - 提供完整同步和增量同步两种模式
 
 use super::connection_sync::ConnectionSyncHandler;
-use super::workspace_sync::WorkspaceSyncHandler;
+use super::generic_sync::generic_sync;
+use super::sync_type::SyncTypeHandler;
+use super::workspace_sync::WorkspaceSyncType;
 use crate::cloud_sync::client::CloudApiClient;
 use crate::cloud_sync::models::{ConflictResolution, SyncResult, Team};
 use crate::cloud_sync::queue::OperationQueue;
@@ -26,6 +28,24 @@ pub type SyncFuture<'a> = Pin<Box<dyn Future<Output = Result<SyncResult, SyncErr
 pub trait SyncHandler: Send + Sync {
     fn name(&self) -> &'static str;
     fn sync<'a>(&'a self, engine: &'a SyncEngine) -> SyncFuture<'a>;
+}
+
+/// 泛型桥接器：将 `SyncTypeHandler` 适配为 `SyncHandler`
+///
+/// 通过 `generic_sync` 通用流程执行同步，使新数据类型只需实现
+/// `SyncTypeHandler` trait 即可接入同步引擎。
+pub struct TypedSyncBridge<H: SyncTypeHandler> {
+    handler: H,
+}
+
+impl<H: SyncTypeHandler> SyncHandler for TypedSyncBridge<H> {
+    fn name(&self) -> &'static str {
+        self.handler.display_name()
+    }
+
+    fn sync<'a>(&'a self, engine: &'a SyncEngine) -> SyncFuture<'a> {
+        Box::pin(generic_sync(engine, &self.handler))
+    }
 }
 
 /// 同步引擎
@@ -61,7 +81,9 @@ impl SyncEngine {
             storage,
             conflict_strategy: ConflictResolution::UseCloud, // 默认使用云端版本
             handlers: vec![
-                Box::new(WorkspaceSyncHandler),
+                Box::new(TypedSyncBridge {
+                    handler: WorkspaceSyncType,
+                }),
                 Box::new(ConnectionSyncHandler),
             ],
             cached_teams: std::sync::RwLock::new(Vec::new()),
@@ -76,6 +98,14 @@ impl SyncEngine {
 
     pub fn register_handler(&mut self, handler: Box<dyn SyncHandler>) {
         self.handlers.push(handler);
+    }
+
+    /// 注册一个类型化同步处理器
+    ///
+    /// 通过 `TypedSyncBridge` 适配为 `SyncHandler`，自动接入 `generic_sync` 通用流程。
+    pub fn register_type<H: SyncTypeHandler>(mut self, handler: H) -> Self {
+        self.handlers.push(Box::new(TypedSyncBridge { handler }));
+        self
     }
 
     /// 获取当前时间戳（秒）

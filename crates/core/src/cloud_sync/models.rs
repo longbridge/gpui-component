@@ -194,19 +194,6 @@ impl SyncPlan {
     }
 }
 
-/// 工作空间同步计划
-#[derive(Debug, Default)]
-pub struct WorkspaceSyncPlan {
-    /// 需要上传的工作空间（本地新增）
-    pub to_upload: Vec<crate::storage::Workspace>,
-    /// 需要更新到云端的工作空间 (本地工作空间, 对应的云端同步数据)
-    pub to_update_cloud: Vec<(crate::storage::Workspace, CloudSyncData)>,
-    /// 需要下载的工作空间（云端新增）
-    pub to_download: Vec<CloudSyncData>,
-    /// 需要更新到本地的工作空间 (云端同步数据, 对应的本地工作空间)
-    pub to_update_local: Vec<(CloudSyncData, crate::storage::Workspace)>,
-}
-
 // ============================================================================
 // 统一加密同步数据模型
 // ============================================================================

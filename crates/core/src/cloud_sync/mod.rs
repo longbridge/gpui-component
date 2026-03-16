@@ -21,11 +21,13 @@ pub mod client;
 pub mod conflict;
 mod connection_sync;
 pub mod engine;
+mod generic_sync;
 mod models;
 pub mod queue;
 mod service;
 pub mod state_manager;
 pub mod supabase;
+pub mod sync_type;
 mod workspace_sync;
 
 use std::sync::{Arc, RwLock};
@@ -39,6 +41,7 @@ pub use models::*;
 pub use queue::*;
 pub use service::*;
 pub use state_manager::*;
+pub use sync_type::*;
 
 // ============================================================================
 // 全局用户状态

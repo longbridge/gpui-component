@@ -1,3 +1,4 @@
+use crate::cloud_sync::sync_type::SyncableItem;
 use crate::crypto;
 use crate::storage::traits::Entity;
 use gpui::Global;
@@ -539,6 +540,32 @@ impl Workspace {
     }
 }
 
+impl SyncableItem for Workspace {
+    fn local_id(&self) -> Option<i64> {
+        self.id
+    }
+
+    fn set_local_id(&mut self, id: Option<i64>) {
+        self.id = id;
+    }
+
+    fn item_name(&self) -> &str {
+        &self.name
+    }
+
+    fn cloud_id(&self) -> Option<&str> {
+        self.cloud_id.as_deref()
+    }
+
+    fn set_cloud_id(&mut self, cloud_id: Option<String>) {
+        self.cloud_id = cloud_id;
+    }
+
+    fn updated_at(&self) -> Option<i64> {
+        self.updated_at
+    }
+}
+
 /// Stored connection with ID
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredConnection {
@@ -589,6 +616,44 @@ impl Entity for StoredConnection {
     fn updated_at(&self) -> i64 {
         self.updated_at
             .expect("updated_at 在从数据库读取后应该存在")
+    }
+}
+
+impl SyncableItem for StoredConnection {
+    fn local_id(&self) -> Option<i64> {
+        self.id
+    }
+
+    fn set_local_id(&mut self, id: Option<i64>) {
+        self.id = id;
+    }
+
+    fn item_name(&self) -> &str {
+        &self.name
+    }
+
+    fn cloud_id(&self) -> Option<&str> {
+        self.cloud_id.as_deref()
+    }
+
+    fn set_cloud_id(&mut self, cloud_id: Option<String>) {
+        self.cloud_id = cloud_id;
+    }
+
+    fn updated_at(&self) -> Option<i64> {
+        self.updated_at
+    }
+
+    fn is_sync_enabled(&self) -> bool {
+        self.sync_enabled
+    }
+
+    fn last_synced_at(&self) -> Option<i64> {
+        self.last_synced_at
+    }
+
+    fn team_id(&self) -> Option<&str> {
+        self.team_id.as_deref()
     }
 }
 
