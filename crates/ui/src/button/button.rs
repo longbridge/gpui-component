@@ -642,7 +642,7 @@ impl ButtonVariant {
 
         match self {
             Self::Default => cx.theme().input_background(),
-            Self::Primary => cx.theme().primary,
+            Self::Primary => cx.theme().button_primary,
             Self::Secondary => cx.theme().secondary,
             Self::Danger => cx.theme().danger.mix_oklab(cx.theme().transparent, 0.2),
             Self::Warning => cx.theme().warning.mix_oklab(cx.theme().transparent, 0.2),
@@ -658,9 +658,9 @@ impl ButtonVariant {
             Self::Default => cx.theme().foreground,
             Self::Primary => {
                 if outline {
-                    cx.theme().primary
+                    cx.theme().button_primary
                 } else {
-                    cx.theme().primary_foreground
+                    cx.theme().button_primary_foreground
                 }
             }
             Self::Secondary | Self::Ghost => cx.theme().secondary_foreground,
@@ -678,7 +678,7 @@ impl ButtonVariant {
         match self {
             Self::Default => cx.theme().input,
             Self::Secondary => cx.theme().border,
-            Self::Primary => cx.theme().primary,
+            Self::Primary => cx.theme().button_primary,
             Self::Danger => {
                 if outline {
                     cx.theme().danger.mix_oklab(transparent_white(), 0.4)
@@ -755,9 +755,11 @@ impl ButtonVariant {
             Self::Default => cx.theme().input.mix_oklab(cx.theme().transparent, 0.5),
             Self::Primary => {
                 if outline {
-                    cx.theme().primary.mix_oklab(cx.theme().transparent, 0.2)
+                    cx.theme()
+                        .button_primary
+                        .mix_oklab(cx.theme().transparent, 0.2)
                 } else {
-                    cx.theme().primary_hover
+                    cx.theme().button_primary_hover
                 }
             }
             Self::Secondary => cx.theme().secondary_hover,
@@ -830,9 +832,11 @@ impl ButtonVariant {
             Self::Default => cx.theme().input.mix_oklab(cx.theme().transparent, 0.7),
             Self::Primary => {
                 if outline {
-                    cx.theme().primary.mix_oklab(cx.theme().transparent, 0.4)
+                    cx.theme()
+                        .button_primary
+                        .mix_oklab(cx.theme().transparent, 0.4)
                 } else {
-                    cx.theme().primary_active
+                    cx.theme().button_primary_active
                 }
             }
             Self::Secondary => cx.theme().secondary_active,
@@ -872,7 +876,7 @@ impl ButtonVariant {
     fn selected(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
         let bg = match self {
             Self::Default => cx.theme().input.mix_oklab(cx.theme().transparent, 0.7),
-            Self::Primary => cx.theme().primary_active,
+            Self::Primary => cx.theme().button_primary_active,
             Self::Secondary | Self::Ghost => cx.theme().secondary_active,
             Self::Danger => cx.theme().danger_active,
             Self::Warning => cx.theme().warning_active,
@@ -904,7 +908,7 @@ impl ButtonVariant {
     fn disabled(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
         let bg = match self {
             Self::Default | Self::Link | Self::Ghost | Self::Text => cx.theme().transparent,
-            Self::Primary => cx.theme().primary.opacity(0.15),
+            Self::Primary => cx.theme().button_primary.opacity(0.15),
             Self::Danger => cx.theme().danger.opacity(0.15),
             Self::Warning => cx.theme().warning.opacity(0.15),
             Self::Success => cx.theme().success.opacity(0.15),
