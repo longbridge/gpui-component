@@ -810,11 +810,16 @@ impl EditTableDelegate for EditorTableDelegate {
             return;
         };
 
-        if let Err(error) = data_grid.update(cx, |grid, cx| {
-            grid.apply_column_sort(&column_name, sort, window, cx);
-        }) {
-            tracing::error!("Failed to apply column sort: {}", error);
-        }
+        // `EditTableState::perform_sort` 会在当前表格实体的 update 闭包中调用 delegate。
+        // 如果这里同步触发 `DataGrid::apply_column_sort`，后者会再次更新同一个表格实体，
+        // 从而命中 GPUI 的重入更新保护并 panic。
+        window.defer(cx, move |window, cx| {
+            if let Err(error) = data_grid.update(cx, |grid, cx| {
+                grid.apply_column_sort(&column_name, sort, window, cx);
+            }) {
+                tracing::error!("Failed to apply column sort: {}", error);
+            }
+        });
     }
 
     fn render_th(
