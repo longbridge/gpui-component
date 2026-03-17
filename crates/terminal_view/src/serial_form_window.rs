@@ -227,9 +227,7 @@ fn enumerate_ports() -> Vec<PortItem> {
     match serialport::available_ports() {
         Ok(ports) => ports
             .into_iter()
-            .map(|p| PortItem {
-                name: p.port_name,
-            })
+            .map(|p| PortItem { name: p.port_name })
             .collect(),
         Err(_) => Vec::new(),
     }
@@ -265,9 +263,8 @@ impl SerialFormWindow {
 
         let name_input =
             cx.new(|cx| InputState::new(window, cx).placeholder(t!("Serial.name_placeholder")));
-        let port_name_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder(t!("Serial.port_name_placeholder"))
-        });
+        let port_name_input = cx
+            .new(|cx| InputState::new(window, cx).placeholder(t!("Serial.port_name_placeholder")));
         let remark_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder(t!("Serial.remark_placeholder"))
@@ -276,16 +273,14 @@ impl SerialFormWindow {
 
         // 串口选择
         let ports = enumerate_ports();
-        let port_select =
-            cx.new(|cx| SelectState::new(ports, None, window, cx));
+        let port_select = cx.new(|cx| SelectState::new(ports, None, window, cx));
 
         // 波特率选择，默认 115200（索引 8）
-        let baud_items: Vec<BaudRateItem> =
-            BAUD_RATES.iter().map(|&r| BaudRateItem { rate: r }).collect();
-        let default_baud_index = BAUD_RATES
+        let baud_items: Vec<BaudRateItem> = BAUD_RATES
             .iter()
-            .position(|&r| r == 115200)
-            .unwrap_or(8);
+            .map(|&r| BaudRateItem { rate: r })
+            .collect();
+        let default_baud_index = BAUD_RATES.iter().position(|&r| r == 115200).unwrap_or(8);
         let baud_rate_select = cx.new(|cx| {
             SelectState::new(
                 baud_items,
@@ -332,12 +327,7 @@ impl SerialFormWindow {
             })
             .collect();
         let parity_select = cx.new(|cx| {
-            SelectState::new(
-                parity_items,
-                Some(IndexPath::default().row(0)),
-                window,
-                cx,
-            )
+            SelectState::new(parity_items, Some(IndexPath::default().row(0)), window, cx)
         });
 
         // 流控选择，默认 None（索引 0）
@@ -348,14 +338,8 @@ impl SerialFormWindow {
                 label: f.label(),
             })
             .collect();
-        let flow_control_select = cx.new(|cx| {
-            SelectState::new(
-                flow_items,
-                Some(IndexPath::default().row(0)),
-                window,
-                cx,
-            )
-        });
+        let flow_control_select = cx
+            .new(|cx| SelectState::new(flow_items, Some(IndexPath::default().row(0)), window, cx));
 
         // 工作区选择
         let mut workspace_items = vec![WorkspaceSelectItem::none()];
@@ -573,11 +557,7 @@ impl SerialFormWindow {
                     let msg = e.to_string();
                     // macOS 上对 pty 虚拟串口调用 ioctl(TIOCEXCL) 会报 ENOTTY
                     if msg.contains("Not a typewriter") || msg.contains("ENOTTY") {
-                        format!(
-                            "{}\n{}",
-                            msg,
-                            t!("Serial.enotty_hint")
-                        )
+                        format!("{}\n{}", msg, t!("Serial.enotty_hint"))
                     } else {
                         msg
                     }
@@ -775,9 +755,9 @@ impl Render for SerialFormWindow {
                                     h_flex()
                                         .gap_2()
                                         .child(
-                                            div().flex_1().child(
-                                                Select::new(&self.port_select).w_full(),
-                                            ),
+                                            div()
+                                                .flex_1()
+                                                .child(Select::new(&self.port_select).w_full()),
                                         )
                                         .child(
                                             Button::new("refresh-ports")
@@ -790,48 +770,31 @@ impl Render for SerialFormWindow {
                                         ),
                                 ),
                             )
-                            .child(
-                                self.render_form_row(
-                                    "",
-                                    Input::new(&self.port_name_input),
-                                ),
-                            )
-                            .child(
-                                self.render_form_row(
-                                    &t!("Serial.baud_rate"),
-                                    Select::new(&self.baud_rate_select).w_full(),
-                                ),
-                            )
-                            .child(
-                                self.render_form_row(
-                                    &t!("Serial.data_bits"),
-                                    Select::new(&self.data_bits_select).w_full(),
-                                ),
-                            )
-                            .child(
-                                self.render_form_row(
-                                    &t!("Serial.stop_bits"),
-                                    Select::new(&self.stop_bits_select).w_full(),
-                                ),
-                            )
-                            .child(
-                                self.render_form_row(
-                                    &t!("Serial.parity"),
-                                    Select::new(&self.parity_select).w_full(),
-                                ),
-                            )
-                            .child(
-                                self.render_form_row(
-                                    &t!("Serial.flow_control"),
-                                    Select::new(&self.flow_control_select).w_full(),
-                                ),
-                            )
-                            .child(
-                                self.render_form_row(
-                                    &t!("Serial.workspace"),
-                                    Select::new(&self.workspace_select).w_full(),
-                                ),
-                            )
+                            .child(self.render_form_row("", Input::new(&self.port_name_input)))
+                            .child(self.render_form_row(
+                                &t!("Serial.baud_rate"),
+                                Select::new(&self.baud_rate_select).w_full(),
+                            ))
+                            .child(self.render_form_row(
+                                &t!("Serial.data_bits"),
+                                Select::new(&self.data_bits_select).w_full(),
+                            ))
+                            .child(self.render_form_row(
+                                &t!("Serial.stop_bits"),
+                                Select::new(&self.stop_bits_select).w_full(),
+                            ))
+                            .child(self.render_form_row(
+                                &t!("Serial.parity"),
+                                Select::new(&self.parity_select).w_full(),
+                            ))
+                            .child(self.render_form_row(
+                                &t!("Serial.flow_control"),
+                                Select::new(&self.flow_control_select).w_full(),
+                            ))
+                            .child(self.render_form_row(
+                                &t!("Serial.workspace"),
+                                Select::new(&self.workspace_select).w_full(),
+                            ))
                             .child(
                                 self.render_form_row(
                                     &t!("TeamSync.team_label"),
@@ -862,12 +825,10 @@ impl Render for SerialFormWindow {
                                         ),
                                 ),
                             )
-                            .child(
-                                self.render_form_row(
-                                    &t!("Serial.remark"),
-                                    Input::new(&self.remark_input),
-                                ),
-                            ),
+                            .child(self.render_form_row(
+                                &t!("Serial.remark"),
+                                Input::new(&self.remark_input),
+                            )),
                     ),
             )
             // 测试结果

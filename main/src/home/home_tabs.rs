@@ -10,7 +10,7 @@ use one_core::tab_container::TabItem;
 use redis_view::RedisTabView;
 use sftp_view::{SftpView, SftpViewEvent};
 use terminal::LocalConfig;
-use terminal_view::{TerminalConnectionKind, TerminalView, TerminalViewEvent, TerminalTheme};
+use terminal_view::{TerminalConnectionKind, TerminalTheme, TerminalView, TerminalViewEvent};
 
 impl HomePage {
     fn register_terminal_view(&mut self, terminal_view: &Entity<TerminalView>) {
@@ -42,13 +42,7 @@ impl HomePage {
             let theme = TerminalTheme::find_by_name(&settings.terminal_theme);
 
             terminal_view.update(cx, |view, cx| {
-                view.apply_terminal_settings(
-                    font_size,
-                    auto_copy,
-                    middle_click_paste,
-                    window,
-                    cx,
-                );
+                view.apply_terminal_settings(font_size, auto_copy, middle_click_paste, window, cx);
                 view.apply_cursor_blink(cursor_blink, window, cx);
                 view.apply_confirm_multiline_paste(confirm_multiline, cx);
                 view.apply_confirm_high_risk_command(confirm_high_risk, cx);

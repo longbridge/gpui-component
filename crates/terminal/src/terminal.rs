@@ -17,8 +17,7 @@ use futures::StreamExt;
 use gpui::*;
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{
-    ActiveConnections, ProxyType as StorageProxyType, SerialParams, SshAuthMethod,
-    StoredConnection,
+    ActiveConnections, ProxyType as StorageProxyType, SerialParams, SshAuthMethod, StoredConnection,
 };
 use std::sync::Arc;
 use std::time::Duration;

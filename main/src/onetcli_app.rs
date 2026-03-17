@@ -337,6 +337,12 @@ impl OnetCliApp {
         )
         .detach();
 
+        cx.on_release(|_, cx| {
+            tracing::info!("主窗口已释放，开始退出应用");
+            cx.quit();
+        })
+        .detach();
+
         cx.on_app_quit({
             let tab_container = tab_container.clone();
             move |_, cx| {

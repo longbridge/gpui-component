@@ -20,19 +20,44 @@ use crate::table_data::multi_text_editor::create_multi_text_editor_with_content;
 use crate::table_data::results_delegate::{EditorTableDelegate, RowChange};
 use chrono::Local;
 use db::{
-    ColumnInfo, ExecOptions, GlobalDbState, IndexInfo, QueryResult, SqlResult, TableCellChange,
-    TableDataRequest, TableRowChange, TableSaveRequest,
+    ColumnInfo, DbManager, ExecOptions, GlobalDbState, IndexInfo, QueryResult, SqlResult,
+    TableCellChange, TableDataRequest, TableRowChange, TableSaveRequest,
 };
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::menu::{DropdownMenu, PopupMenuItem};
 use one_core::popup_window::{PopupWindowOptions, open_popup_window};
+use one_core::storage::DatabaseType;
 use one_core::tab_container::TabContainer;
+use one_ui::edit_table::ColumnSort;
 use std::path::PathBuf;
 
 actions!(
     data_grid,
     [Page500, Page1000, Page2000, Page10000, Page100000]
 );
+
+fn build_header_order_by_clause(
+    db_manager: &DbManager,
+    database_type: DatabaseType,
+    column_name: &str,
+    sort: ColumnSort,
+) -> Result<Option<String>, String> {
+    let direction = match sort {
+        ColumnSort::Ascending => "ASC",
+        ColumnSort::Descending => "DESC",
+        ColumnSort::Default => return Ok(None),
+    };
+
+    let plugin = db_manager
+        .get_plugin(&database_type)
+        .map_err(|_| t!("TableDataGrid.plugin_unavailable").to_string())?;
+
+    Ok(Some(format!(
+        "{} {}",
+        plugin.quote_identifier(column_name),
+        direction
+    )))
+}
 
 /// 数据表格使用场景
 #[derive(Clone, Debug, PartialEq)]
@@ -342,6 +367,39 @@ impl DataGrid {
         cx.notify();
     }
 
+    pub(crate) fn apply_column_sort(
+        &mut self,
+        column_name: &str,
+        sort: ColumnSort,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if self.config.usage != DataGridUsage::TableData {
+            return;
+        }
+
+        let global_state = cx.global::<GlobalDbState>().clone();
+        let order_by_clause = match build_header_order_by_clause(
+            &global_state.db_manager,
+            self.config.database_type,
+            column_name,
+            sort,
+        ) {
+            Ok(Some(clause)) => clause,
+            Ok(None) => String::new(),
+            Err(error) => {
+                window.push_notification(error, cx);
+                return;
+            }
+        };
+
+        self.filter_editor.update(cx, |editor, cx| {
+            editor.set_order_by_clause(order_by_clause.clone(), window, cx);
+        });
+
+        self.load_data_with_clauses(1, cx);
+    }
+
     // ========== 数据加载 ==========
 
     fn load_data_with_clauses(&self, page: usize, cx: &mut App) {
@@ -485,6 +543,7 @@ impl DataGrid {
                             state.delegate_mut().set_loading(false);
                             state.delegate_mut().set_column_meta(column_meta);
                             state.delegate_mut().update_data(columns, rows, rowids, cx);
+                            state.delegate_mut().apply_order_by_clause(&order_by_clause);
                             state.refresh(cx);
                         });
                     });
@@ -903,7 +962,10 @@ impl DataGrid {
 
             match result {
                 Err(err) => cx.update(|cx| {
-                    notification(cx, t!("TableDataGrid.execute_sql_failed", error = err.to_string()).to_string());
+                    notification(
+                        cx,
+                        t!("TableDataGrid.execute_sql_failed", error = err.to_string()).to_string(),
+                    );
                 }),
                 Ok(results) => {
                     let (result, column_meta) = results;
@@ -1531,7 +1593,14 @@ impl DataGrid {
                     Ok(infos) => infos,
                     Err(err) => {
                         cx.update(|cx| {
-                            notification(cx, t!("TableDataGrid.get_table_keys_failed", error = err.to_string()).to_string());
+                            notification(
+                                cx,
+                                t!(
+                                    "TableDataGrid.get_table_keys_failed",
+                                    error = err.to_string()
+                                )
+                                .to_string(),
+                            );
                         });
                         return;
                     }
@@ -1593,10 +1662,17 @@ impl DataGrid {
                         SqlResult::Error(err) => Some(err.message.clone()),
                         _ => None,
                     }) {
-                        notification(cx, t!("TableDataGrid.save_changes_failed", error = err_msg).to_string());
+                        notification(
+                            cx,
+                            t!("TableDataGrid.save_changes_failed", error = err_msg).to_string(),
+                        );
                     } else {
                         this.clear_changes(cx);
-                        notification(cx, t!("TableDataGrid.save_changes_success", count = change_count).to_string());
+                        notification(
+                            cx,
+                            t!("TableDataGrid.save_changes_success", count = change_count)
+                                .to_string(),
+                        );
                         if let Some(window_id) = cx.active_window() {
                             let _ = cx.update_window(window_id, |_, _window, cx| {
                                 tab_container.update(cx, |container, cx| {
@@ -1607,7 +1683,10 @@ impl DataGrid {
                     }
                 }
                 Err(e) => {
-                    notification(cx, t!("TableDataGrid.save_changes_failed", error = e.to_string()).to_string());
+                    notification(
+                        cx,
+                        t!("TableDataGrid.save_changes_failed", error = e.to_string()).to_string(),
+                    );
                 }
             });
         })
@@ -1649,7 +1728,14 @@ impl DataGrid {
                     Ok(infos) => infos,
                     Err(err) => {
                         cx.update(|cx| {
-                            notification(cx, t!("TableDataGrid.get_table_keys_failed", error = err.to_string()).to_string());
+                            notification(
+                                cx,
+                                t!(
+                                    "TableDataGrid.get_table_keys_failed",
+                                    error = err.to_string()
+                                )
+                                .to_string(),
+                            );
                         });
                         return;
                     }
@@ -1711,14 +1797,24 @@ impl DataGrid {
                         SqlResult::Error(err) => Some(err.message.clone()),
                         _ => None,
                     }) {
-                        notification(cx, t!("TableDataGrid.save_changes_failed", error = err_msg).to_string());
+                        notification(
+                            cx,
+                            t!("TableDataGrid.save_changes_failed", error = err_msg).to_string(),
+                        );
                     } else {
                         this.clear_changes(cx);
-                        notification(cx, t!("TableDataGrid.save_changes_success", count = change_count).to_string());
+                        notification(
+                            cx,
+                            t!("TableDataGrid.save_changes_success", count = change_count)
+                                .to_string(),
+                        );
                     }
                 }
                 Err(e) => {
-                    notification(cx, t!("TableDataGrid.save_changes_failed", error = e.to_string()).to_string());
+                    notification(
+                        cx,
+                        t!("TableDataGrid.save_changes_failed", error = e.to_string()).to_string(),
+                    );
                 }
             });
         })
@@ -1760,7 +1856,14 @@ impl DataGrid {
                     Ok(index_infos) => index_infos,
                     Err(err) => {
                         cx.update(|cx| {
-                            notification(cx, t!("TableDataGrid.get_table_keys_failed", error = err.to_string()).to_string());
+                            notification(
+                                cx,
+                                t!(
+                                    "TableDataGrid.get_table_keys_failed",
+                                    error = err.to_string()
+                                )
+                                .to_string(),
+                            );
                         });
                         return;
                     }
@@ -2384,4 +2487,51 @@ pub fn notification(cx: &mut App, error: String) {
     if let Some(window) = cx.active_window() {
         _ = window.update(cx, |_, w, cx| w.push_notification(error, cx));
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_header_order_by_clause;
+    use db::DbManager;
+    use one_core::storage::DatabaseType;
+    use one_ui::edit_table::ColumnSort;
+
+    #[test]
+    fn build_header_order_by_clause_quotes_mysql_identifier() {
+        let clause = build_header_order_by_clause(
+            &DbManager::default(),
+            DatabaseType::MySQL,
+            "order",
+            ColumnSort::Descending,
+        )
+        .expect("should build order by clause");
+
+        assert_eq!(clause.as_deref(), Some("`order` DESC"));
+    }
+
+    #[test]
+    fn build_header_order_by_clause_quotes_postgresql_identifier() {
+        let clause = build_header_order_by_clause(
+            &DbManager::default(),
+            DatabaseType::PostgreSQL,
+            "created_at",
+            ColumnSort::Ascending,
+        )
+        .expect("should build order by clause");
+
+        assert_eq!(clause.as_deref(), Some("\"created_at\" ASC"));
+    }
+
+    #[test]
+    fn build_header_order_by_clause_clears_default_sort() {
+        let clause = build_header_order_by_clause(
+            &DbManager::default(),
+            DatabaseType::SQLite,
+            "id",
+            ColumnSort::Default,
+        )
+        .expect("default sort should not require a clause");
+
+        assert!(clause.is_none());
+    }
 }

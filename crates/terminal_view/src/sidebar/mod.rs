@@ -143,9 +143,8 @@ impl TerminalSidebar {
     ) -> Self {
         let colors = initial_theme.colors();
         let has_file_manager = stored_connection.is_some();
-        let settings_panel = cx.new(|cx| {
-            SettingsPanel::new(initial_theme, has_file_manager, true, true, window, cx)
-        });
+        let settings_panel = cx
+            .new(|cx| SettingsPanel::new(initial_theme, has_file_manager, true, true, window, cx));
         let quick_command_panel = cx.new(|cx| QuickCommandPanel::new(connection_id, window, cx));
         let ai_chat_panel = cx.new(|cx| AiChatPanel::new(window, cx));
 

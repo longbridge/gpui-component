@@ -505,9 +505,7 @@ impl SettingsPanel {
                             SettingItem::new(
                                 t!("Settings.General.Terminal.middle_click_paste"),
                                 SettingField::switch(
-                                    |cx: &App| {
-                                        AppSettings::global(cx).terminal_middle_click_paste
-                                    },
+                                    |cx: &App| AppSettings::global(cx).terminal_middle_click_paste,
                                     |val: bool, cx: &mut App| {
                                         let settings = AppSettings::global_mut(cx);
                                         settings.terminal_middle_click_paste = val;

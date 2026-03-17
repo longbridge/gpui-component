@@ -634,6 +634,20 @@ impl TableFilterEditor {
         self.order_by_editor.read(cx).get_text_from_app(cx)
     }
 
+    pub fn set_order_by_clause(
+        &mut self,
+        clause: impl Into<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let clause = clause.into();
+        self.order_by_editor.update(cx, |editor, cx| {
+            editor.editor.update(cx, |input_state, cx| {
+                input_state.set_value(clause.clone(), window, cx);
+            });
+        });
+    }
+
     pub fn set_schema(&mut self, schema: TableSchema, cx: &mut Context<Self>) {
         let schema_clone = schema.clone();
 

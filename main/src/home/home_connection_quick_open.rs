@@ -1,9 +1,8 @@
 use crate::home_tab::HomePage;
-use gpui::{
-    App, Context, Entity, ParentElement, SharedString, Styled, Task, Window, div, px,
-};
+use gpui::{App, Context, Entity, ParentElement, SharedString, Styled, Task, Window, div, px};
 use gpui_component::{
-    ActiveTheme, IndexPath, WindowExt, h_flex, list::{ListDelegate, ListItem, ListState},
+    ActiveTheme, IndexPath, WindowExt, h_flex,
+    list::{ListDelegate, ListItem, ListState},
 };
 use one_core::storage::StoredConnection;
 

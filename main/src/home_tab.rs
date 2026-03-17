@@ -3,7 +3,12 @@ use std::sync::Arc;
 
 use db_view::connection_form_window::{ConnectionFormWindow, ConnectionFormWindowConfig};
 use gpui::prelude::FluentBuilder;
-use gpui::{AnyElement, App, AppContext, AsyncApp, Context, ElementId, Entity, EventEmitter, FocusHandle, Focusable, FontWeight, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, actions, div, px, Subscription};
+use gpui::{
+    AnyElement, App, AppContext, AsyncApp, Context, ElementId, Entity, EventEmitter, FocusHandle,
+    Focusable, FontWeight, InteractiveElement, IntoElement, KeyBinding, ParentElement, Render,
+    SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window, actions,
+    div, px,
+};
 use gpui_component::button::{ButtonCustomVariant, ButtonVariant};
 use gpui_component::menu::DropdownMenu;
 use gpui_component::{
@@ -34,11 +39,11 @@ use one_core::storage::{
     PendingCloudDeletionRepository, RedisMode, StoredConnection, Workspace, WorkspaceRepository,
 };
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
-use terminal_view::TerminalView;
 use redis_view::{RedisFormWindow, RedisFormWindowConfig};
 use rust_i18n::t;
-use terminal_view::{SshFormWindow, SshFormWindowConfig};
+use terminal_view::TerminalView;
 use terminal_view::{SerialFormWindow, SerialFormWindowConfig};
+use terminal_view::{SshFormWindow, SshFormWindowConfig};
 
 use crate::auth::{AuthService, show_auth_dialog};
 use crate::encourage::EncourageDialog;
@@ -1074,7 +1079,11 @@ impl HomePage {
         });
     }
 
-    pub(crate) fn show_connection_quick_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn show_connection_quick_open(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let parent = cx.entity();
         let connections = self.connections.clone();
         let list = cx.new(|cx| {
@@ -1089,17 +1098,15 @@ impl HomePage {
                 .title("打开连接".to_string())
                 .w(px(520.0))
                 .child(
-                    v_flex()
-                        .gap_2()
-                        .child(
-                            List::new(&list)
-                                .w_full()
-                                .max_h(px(360.0))
-                                .p(px(8.0))
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded(cx.theme().radius),
-                        ),
+                    v_flex().gap_2().child(
+                        List::new(&list)
+                            .w_full()
+                            .max_h(px(360.0))
+                            .p(px(8.0))
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .rounded(cx.theme().radius),
+                    ),
                 )
                 .alert()
                 .button_props(
@@ -1113,7 +1120,11 @@ impl HomePage {
         });
     }
 
-    pub(crate) fn show_new_connection_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn show_new_connection_dialog(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let parent = cx.entity();
         let list = cx.new(|cx| {
             let delegate = NewConnectionDelegate::new(parent);
@@ -1126,17 +1137,15 @@ impl HomePage {
                 .title(t!("Home.new_connection").to_string())
                 .w(px(360.0))
                 .child(
-                    v_flex()
-                        .gap_2()
-                        .child(
-                            List::new(&list)
-                                .w_full()
-                                .max_h(px(360.0))
-                                .p(px(8.0))
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded(cx.theme().radius),
-                        ),
+                    v_flex().gap_2().child(
+                        List::new(&list)
+                            .w_full()
+                            .max_h(px(360.0))
+                            .p(px(8.0))
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .rounded(cx.theme().radius),
+                    ),
                 )
                 .alert()
                 .button_props(
@@ -3076,29 +3085,26 @@ impl Render for HomePage {
             });
         }
 
-        div()
-            .size_full()
-            .track_focus(&self.focus_handle)
-            .child(
-                h_flex()
-                    .size_full()
-                    .child(self.render_sidebar(window, cx))
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .h_full()
-                            .bg(cx.theme().background)
-                            .child(self.render_toolbar(window, cx))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .w_full()
-                                    .overflow_hidden()
-                                    .bg(cx.theme().muted)
-                                    .child(self.render_content_area(cx)),
-                            ),
-                    ),
-            )
+        div().size_full().track_focus(&self.focus_handle).child(
+            h_flex()
+                .size_full()
+                .child(self.render_sidebar(window, cx))
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .h_full()
+                        .bg(cx.theme().background)
+                        .child(self.render_toolbar(window, cx))
+                        .child(
+                            div()
+                                .flex_1()
+                                .w_full()
+                                .overflow_hidden()
+                                .bg(cx.theme().muted)
+                                .child(self.render_content_area(cx)),
+                        ),
+                ),
+        )
     }
 }
 
