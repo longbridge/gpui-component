@@ -1968,7 +1968,10 @@ impl InputState {
         self.text.slice(range)
     }
 
-    pub(crate) fn range_to_bounds(&self, range: &Range<usize>) -> Option<Bounds<Pixels>> {
+    /// Return the rendered bounds for a UTF-8 byte range in the current input contents.
+    ///
+    /// Returns `None` when the requested range is not currently laid out or visible.
+    pub fn range_to_bounds(&self, range: &Range<usize>) -> Option<Bounds<Pixels>> {
         let Some(last_layout) = self.last_layout.as_ref() else {
             return None;
         };
