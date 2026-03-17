@@ -1,6 +1,5 @@
 use crate::home_tab::HomePage;
 use crate::setting_tab::{AppSettings, DatabaseOpenMode, SettingsPanel};
-use crate::team_management::TeamManagementPanel;
 use db_view::chatdb::chat_panel::ChatPanel;
 use db_view::database_tab::DatabaseTabView;
 use gpui::AppContext;
@@ -516,27 +515,6 @@ impl HomePage {
                     |win, cx| {
                         let settings = cx.new(|cx| SettingsPanel::new(win, cx));
                         TabItem::new("settings", "home", settings)
-                    },
-                    window,
-                    cx,
-                );
-            });
-        });
-    }
-
-    pub(crate) fn add_team_management_tab(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let tab_container = self.tab_container.clone();
-        window.defer(cx, move |window, cx| {
-            tab_container.update(cx, |tc, cx| {
-                tc.activate_or_add_tab_lazy(
-                    "team-management",
-                    |win, cx| {
-                        let panel = cx.new(|cx| TeamManagementPanel::new(win, cx));
-                        TabItem::new("team-management", "home", panel)
                     },
                     window,
                     cx,

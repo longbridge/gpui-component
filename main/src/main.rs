@@ -11,7 +11,6 @@ mod license;
 mod onetcli_app;
 mod setting_tab;
 mod settings;
-mod team_management;
 mod update;
 mod user_avatar;
 

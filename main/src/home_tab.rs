@@ -2188,18 +2188,6 @@ impl HomePage {
                                 this.add_settings_tab(window, cx);
                             })),
                     )
-                    .when(self.current_user.is_some(), |this| {
-                        this.child(
-                            Button::new("open_team_management")
-                                .icon(IconName::Building2)
-                                .label(t!("TeamManagement.title"))
-                                .w_full()
-                                .justify_start()
-                                .on_click(cx.listener(|this: &mut HomePage, _, window, cx| {
-                                    this.add_team_management_tab(window, cx);
-                                })),
-                        )
-                    })
                     // 用户头像区域
                     .child({
                         let user = self.current_user.as_ref();
