@@ -21,6 +21,14 @@ pub struct ThemeColor {
     pub background: Hsla,
     /// Default border color
     pub border: Hsla,
+    /// Button primary background color, fallback to `primary`.
+    pub button_primary: Hsla,
+    /// Button primary active background color, fallback to `primary_active`.
+    pub button_primary_active: Hsla,
+    /// Button primary text color, fallback to `primary_foreground`.
+    pub button_primary_foreground: Hsla,
+    /// Button primary hover background color, fallback to `primary_hover`.
+    pub button_primary_hover: Hsla,
     /// Background color for GroupBox.
     pub group_box: Hsla,
     /// Text color for GroupBox.

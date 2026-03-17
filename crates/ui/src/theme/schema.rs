@@ -89,6 +89,18 @@ pub struct ThemeConfigColors {
     /// Default border color
     #[serde(rename = "border")]
     pub border: Option<SharedString>,
+    /// Button primary background color, fallback to `primary`.
+    #[serde(rename = "button.primary.background")]
+    pub button_primary: Option<SharedString>,
+    /// Button primary active background color, fallback to `primary_active`.
+    #[serde(rename = "button.primary.active.background")]
+    pub button_primary_active: Option<SharedString>,
+    /// Button primary text color, fallback to `primary_foreground`.
+    #[serde(rename = "button.primary.foreground")]
+    pub button_primary_foreground: Option<SharedString>,
+    /// Button primary hover background color, fallback to `primary_hover`.
+    #[serde(rename = "button.primary.hover.background")]
+    pub button_primary_hover: Option<SharedString>,
     /// Background color for GroupBox.
     #[serde(rename = "group_box.background")]
     pub group_box: Option<SharedString>,
@@ -494,6 +506,13 @@ impl ThemeColor {
             primary_active,
             fallback = self.primary.darken(active_darken)
         );
+        apply_color!(button_primary, fallback = self.primary);
+        apply_color!(
+            button_primary_foreground,
+            fallback = self.primary_foreground
+        );
+        apply_color!(button_primary_hover, fallback = self.primary_hover);
+        apply_color!(button_primary_active, fallback = self.primary_active);
         apply_color!(secondary);
         apply_color!(secondary_foreground, fallback = self.foreground);
         apply_color!(
