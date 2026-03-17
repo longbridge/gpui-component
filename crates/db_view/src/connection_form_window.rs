@@ -10,6 +10,7 @@ use gpui_component::{
     scroll::ScrollableElement,
     v_flex,
 };
+use one_core::cloud_sync::TeamOption;
 use one_core::connection_notifier::{ConnectionDataEvent, emit_connection_event};
 use one_core::storage::{DatabaseType, StoredConnection, Workspace};
 use rust_i18n::t;
@@ -22,6 +23,7 @@ pub struct ConnectionFormWindowConfig {
     pub db_type: DatabaseType,
     pub editing_connection: Option<StoredConnection>,
     pub workspaces: Vec<Workspace>,
+    pub teams: Vec<TeamOption>,
 }
 
 /// 连接表单窗口
@@ -58,6 +60,7 @@ impl ConnectionFormWindow {
 
         form.update(cx, |f, cx| {
             f.set_workspaces(config.workspaces.clone(), window, cx);
+            f.set_teams(config.teams.clone(), window, cx);
         });
 
         if let Some(ref conn) = config.editing_connection {

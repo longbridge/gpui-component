@@ -355,6 +355,7 @@ impl CloudSyncService {
             remark: conn.remark.clone(),
             params: serde_json::from_str(&conn.params)
                 .unwrap_or(Value::Object(serde_json::Map::new())),
+            owner_id: conn.owner_id.clone(),
         };
 
         let plaintext = serde_json::to_string(&plain_data)
@@ -439,6 +440,7 @@ impl CloudSyncService {
             created_at: None,
             updated_at: None,
             team_id: cloud_data.team_id.clone(),
+            owner_id: plain_data.owner_id,
         })
     }
 

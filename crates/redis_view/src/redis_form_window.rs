@@ -22,6 +22,7 @@ use one_core::storage::traits::Repository;
 use one_core::storage::{
     RedisClusterConfig, RedisMode, RedisParams, RedisSentinelConfig, StoredConnection, Workspace,
 };
+use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use rust_i18n::t;
 use tracing::error;
 
@@ -31,6 +32,7 @@ use crate::{RedisConnectionConfig, RedisConnectionMode, RedisManager};
 pub struct RedisFormWindowConfig {
     pub editing_connection: Option<StoredConnection>,
     pub workspaces: Vec<Workspace>,
+    pub teams: Vec<TeamOption>,
 }
 
 #[derive(Clone, Default, PartialEq)]
@@ -57,6 +59,40 @@ impl WorkspaceSelectItem {
 
 impl SelectItem for WorkspaceSelectItem {
     type Value = Option<i64>;
+
+    fn title(&self) -> SharedString {
+        self.name.clone().into()
+    }
+
+    fn value(&self) -> &Self::Value {
+        &self.id
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+struct TeamSelectItem {
+    id: Option<String>,
+    name: String,
+}
+
+impl TeamSelectItem {
+    fn personal() -> Self {
+        Self {
+            id: None,
+            name: t!("TeamSync.personal").to_string(),
+        }
+    }
+
+    fn from_team(team: &TeamOption) -> Self {
+        Self {
+            id: Some(team.id.clone()),
+            name: team.name.clone(),
+        }
+    }
+}
+
+impl SelectItem for TeamSelectItem {
+    type Value = Option<String>;
 
     fn title(&self) -> SharedString {
         self.name.clone().into()
@@ -116,6 +152,7 @@ pub struct RedisFormWindow {
 
     // 工作区选择
     workspace_select: Entity<SelectState<Vec<WorkspaceSelectItem>>>,
+    team_select: Entity<SelectState<Vec<TeamSelectItem>>>,
 
     // 连接模式
     mode: ModeSelection,
@@ -332,6 +369,23 @@ impl RedisFormWindow {
             state
         });
 
+        // 团队选择
+        let mut team_items = vec![TeamSelectItem::personal()];
+        team_items.extend(config.teams.iter().map(TeamSelectItem::from_team));
+
+        let selected_team_id = config
+            .editing_connection
+            .as_ref()
+            .and_then(|c| c.team_id.clone());
+
+        let team_select = cx.new(|cx| {
+            let mut state = SelectState::new(team_items, Some(Default::default()), window, cx);
+            if let Some(ref team_id) = selected_team_id {
+                state.set_selected_value(&Some(team_id.clone()), window, cx);
+            }
+            state
+        });
+
         // 加载模式和高级设置
         let mut mode = ModeSelection::Standalone;
         let mut use_tls = false;
@@ -361,6 +415,7 @@ impl RedisFormWindow {
             password_input,
             db_index_input,
             workspace_select,
+            team_select,
             mode,
             sentinel_master_name_input,
             sentinel_nodes_input,
@@ -378,6 +433,15 @@ impl RedisFormWindow {
     /// 获取工作区 ID
     fn get_workspace_id(&self, cx: &App) -> Option<i64> {
         self.workspace_select
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .flatten()
+    }
+
+    /// 获取团队 ID
+    fn get_team_id(&self, cx: &App) -> Option<String> {
+        self.team_select
             .read(cx)
             .selected_value()
             .cloned()
@@ -540,6 +604,8 @@ impl RedisFormWindow {
         };
 
         let workspace_id = self.get_workspace_id(cx);
+        let team_id = self.get_team_id(cx);
+        let owner_id = GlobalCloudUser::get_user(cx).map(|u| u.id);
         let remark = {
             let r = self.remark_input.read(cx).text().to_string();
             if r.is_empty() { None } else { Some(r) }
@@ -564,6 +630,10 @@ impl RedisFormWindow {
                 let mut conn = StoredConnection::new_redis(name, params, workspace_id);
                 conn.sync_enabled = sync_enabled;
                 conn.remark = remark;
+                conn.team_id = team_id;
+                if !is_editing {
+                    conn.owner_id = owner_id;
+                }
 
                 if is_editing {
                     conn.id = editing_id;
@@ -639,6 +709,10 @@ impl RedisFormWindow {
             .child(self.render_form_row(
                 &t!("Redis.workspace"),
                 Select::new(&self.workspace_select).w_full(),
+            ))
+            .child(self.render_form_row(
+                &t!("TeamSync.team_label"),
+                Select::new(&self.team_select).w_full(),
             ))
             .child(
                 self.render_form_row(

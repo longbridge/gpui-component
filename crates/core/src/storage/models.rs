@@ -597,6 +597,9 @@ pub struct StoredConnection {
     /// 团队归属 ID（None = 个人数据）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub team_id: Option<String>,
+    /// 连接创建者 ID（用户 UUID，用于权限判断）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<String>,
 }
 
 fn default_sync_enabled() -> bool {
@@ -681,6 +684,7 @@ impl StoredConnection {
             created_at: None,
             updated_at: None,
             team_id: None,
+            owner_id: None,
         }
     }
 
@@ -699,6 +703,7 @@ impl StoredConnection {
             created_at: None,
             updated_at: None,
             team_id: None,
+            owner_id: None,
         }
     }
 
@@ -717,6 +722,7 @@ impl StoredConnection {
             created_at: None,
             updated_at: None,
             team_id: None,
+            owner_id: None,
         }
     }
 
@@ -735,6 +741,7 @@ impl StoredConnection {
             created_at: None,
             updated_at: None,
             team_id: None,
+            owner_id: None,
         }
     }
 
@@ -765,6 +772,7 @@ impl StoredConnection {
             created_at: None,
             updated_at: None,
             team_id: None,
+            owner_id: None,
         }
     }
 

@@ -19,6 +19,7 @@ use gpui_component::{
 use one_core::connection_notifier::{ConnectionDataEvent, get_notifier};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
+use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use one_core::storage::{MongoDBParams, StoredConnection, Workspace};
 use rust_i18n::t;
 use tracing::error;
@@ -29,6 +30,7 @@ use crate::MongoManager;
 pub struct MongoFormWindowConfig {
     pub editing_connection: Option<StoredConnection>,
     pub workspaces: Vec<Workspace>,
+    pub teams: Vec<TeamOption>,
 }
 
 #[derive(Clone, Default, PartialEq)]
@@ -55,6 +57,40 @@ impl WorkspaceSelectItem {
 
 impl SelectItem for WorkspaceSelectItem {
     type Value = Option<i64>;
+
+    fn title(&self) -> SharedString {
+        self.name.clone().into()
+    }
+
+    fn value(&self) -> &Self::Value {
+        &self.id
+    }
+}
+
+#[derive(Clone, Default, PartialEq)]
+struct TeamSelectItem {
+    id: Option<String>,
+    name: String,
+}
+
+impl TeamSelectItem {
+    fn personal() -> Self {
+        Self {
+            id: None,
+            name: t!("TeamSync.personal").to_string(),
+        }
+    }
+
+    fn from_team(team: &TeamOption) -> Self {
+        Self {
+            id: Some(team.id.clone()),
+            name: team.name.clone(),
+        }
+    }
+}
+
+impl SelectItem for TeamSelectItem {
+    type Value = Option<String>;
 
     fn title(&self) -> SharedString {
         self.name.clone().into()
@@ -93,6 +129,7 @@ pub struct MongoFormWindow {
     use_tls: bool,
 
     workspace_select: Entity<SelectState<Vec<WorkspaceSelectItem>>>,
+    team_select: Entity<SelectState<Vec<TeamSelectItem>>>,
     remark_input: Entity<InputState>,
     sync_enabled: bool,
 
@@ -297,6 +334,24 @@ impl MongoFormWindow {
             state
         });
 
+        let team_items = {
+            let mut items = vec![TeamSelectItem::personal()];
+            items.extend(config.teams.iter().map(TeamSelectItem::from_team));
+            items
+        };
+
+        let team_select = cx.new(|cx| {
+            let mut state = SelectState::new(team_items, None, window, cx);
+            if let Some(team_id) = config
+                .editing_connection
+                .as_ref()
+                .and_then(|c| c.team_id.clone())
+            {
+                state.set_selected_value(&Some(team_id), window, cx);
+            }
+            state
+        });
+
         let sync_enabled = config
             .editing_connection
             .as_ref()
@@ -339,6 +394,7 @@ impl MongoFormWindow {
             direct_connection,
             use_tls,
             workspace_select,
+            team_select,
             remark_input,
             sync_enabled,
             is_testing: false,
@@ -348,6 +404,14 @@ impl MongoFormWindow {
 
     fn get_workspace_id(&self, cx: &App) -> Option<i64> {
         self.workspace_select
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .flatten()
+    }
+
+    fn get_team_id(&self, cx: &App) -> Option<String> {
+        self.team_select
             .read(cx)
             .selected_value()
             .cloned()
@@ -524,6 +588,12 @@ impl MongoFormWindow {
         };
 
         let workspace_id = self.get_workspace_id(cx);
+        let team_id = self.get_team_id(cx);
+        let owner_id = if !self.is_editing {
+            GlobalCloudUser::get_user(cx).map(|u| u.id)
+        } else {
+            None
+        };
         let remark = {
             let value = self.remark_input.read(cx).text().to_string();
             if value.is_empty() { None } else { Some(value) }
@@ -548,6 +618,10 @@ impl MongoFormWindow {
                 let mut connection = StoredConnection::new_mongodb(name, parameters, workspace_id);
                 connection.sync_enabled = sync_enabled;
                 connection.remark = remark;
+                connection.team_id = team_id;
+                if !is_editing {
+                    connection.owner_id = owner_id;
+                }
 
                 if is_editing {
                     connection.id = editing_id;
@@ -641,6 +715,10 @@ impl MongoFormWindow {
             .child(self.render_form_row(
                 t!("MongoForm.workspace_label").as_ref(),
                 Select::new(&self.workspace_select).w_full(),
+            ))
+            .child(self.render_form_row(
+                t!("TeamSync.team_label").as_ref(),
+                Select::new(&self.team_select).w_full(),
             ))
             .child(
                 self.render_form_row(

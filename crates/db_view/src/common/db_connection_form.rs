@@ -19,6 +19,7 @@ use gpui_component::{
     tab::{Tab, TabBar},
     v_flex,
 };
+use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
 use one_core::storage::{
@@ -80,6 +81,41 @@ impl WorkspaceSelectItem {
 
 impl SelectItem for WorkspaceSelectItem {
     type Value = Option<i64>;
+
+    fn title(&self) -> SharedString {
+        self.name.clone().into()
+    }
+
+    fn value(&self) -> &Self::Value {
+        &self.id
+    }
+}
+
+/// Team select item for dropdown
+#[derive(Clone, Debug)]
+pub struct TeamSelectItem {
+    pub id: Option<String>,
+    pub name: String,
+}
+
+impl TeamSelectItem {
+    pub fn personal() -> Self {
+        Self {
+            id: None,
+            name: t!("TeamSync.personal").to_string(),
+        }
+    }
+
+    pub fn from_team(team: &TeamOption) -> Self {
+        Self {
+            id: Some(team.id.clone()),
+            name: team.name.clone(),
+        }
+    }
+}
+
+impl SelectItem for TeamSelectItem {
+    type Value = Option<String>;
 
     fn title(&self) -> SharedString {
         self.name.clone().into()
@@ -760,6 +796,7 @@ pub struct DbConnectionForm {
     is_testing: Entity<bool>,
     test_result: Entity<Option<Result<bool, String>>>,
     workspace_select: Entity<SelectState<Vec<WorkspaceSelectItem>>>,
+    team_select: Entity<SelectState<Vec<TeamSelectItem>>>,
     pending_file_path: Entity<Option<String>>,
     editing_connection: Option<StoredConnection>,
     /// 是否启用云同步
@@ -871,6 +908,10 @@ impl DbConnectionForm {
         let workspace_select =
             cx.new(|cx| SelectState::new(workspace_items, Some(Default::default()), window, cx));
 
+        let team_items = vec![TeamSelectItem::personal()];
+        let team_select =
+            cx.new(|cx| SelectState::new(team_items, Some(Default::default()), window, cx));
+
         let pending_file_path = cx.new(|_| None);
 
         // 默认启用云同步
@@ -889,6 +930,7 @@ impl DbConnectionForm {
             is_testing,
             test_result,
             workspace_select,
+            team_select,
             pending_file_path,
             editing_connection: None,
             sync_enabled,
@@ -985,6 +1027,21 @@ impl DbConnectionForm {
         cx.notify();
     }
 
+    pub fn set_teams(
+        &mut self,
+        teams: Vec<TeamOption>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut items = vec![TeamSelectItem::personal()];
+        items.extend(teams.iter().map(TeamSelectItem::from_team));
+
+        self.team_select.update(cx, |select, cx| {
+            select.set_items(items, window, cx);
+        });
+        cx.notify();
+    }
+
     pub fn load_connection(
         &mut self,
         connection: &StoredConnection,
@@ -1029,6 +1086,17 @@ impl DbConnectionForm {
             });
         } else {
             self.workspace_select.update(cx, |select, cx| {
+                select.set_selected_value(&None, window, cx);
+            });
+        }
+
+        // 加载团队归属
+        if let Some(ref team_id) = connection.team_id {
+            self.team_select.update(cx, |select, cx| {
+                select.set_selected_value(&Some(team_id.clone()), window, cx);
+            });
+        } else {
+            self.team_select.update(cx, |select, cx| {
                 select.set_selected_value(&None, window, cx);
             });
         }
@@ -1315,6 +1383,12 @@ impl DbConnectionForm {
         let remark = self.get_field_value("remark", cx);
         let is_update = self.editing_connection.is_some();
         let sync_enabled = *self.sync_enabled.read(cx);
+        let team_id = self
+            .team_select
+            .read(cx)
+            .selected_value()
+            .cloned()
+            .flatten();
 
         let mut stored = match &self.editing_connection {
             Some(conn) => {
@@ -1322,6 +1396,7 @@ impl DbConnectionForm {
                 c.name = connection.name.clone();
                 c.workspace_id = connection.workspace_id;
                 c.sync_enabled = sync_enabled;
+                c.team_id = team_id;
                 c.params = serde_json::to_string(&connection)
                     .map_err(|e| format!("{}: {}", t!("ConnectionForm.serialize_failed"), e))?;
                 c
@@ -1329,6 +1404,9 @@ impl DbConnectionForm {
             None => {
                 let mut c = StoredConnection::from_db_connection(connection);
                 c.sync_enabled = sync_enabled;
+                c.team_id = team_id;
+                // 新建时自动填充 owner_id
+                c.owner_id = GlobalCloudUser::get_user(cx).map(|u| u.id);
                 c
             }
         };
@@ -1620,6 +1698,13 @@ impl Render for DbConnectionForm {
                                             .items_center()
                                             .label_justify_end()
                                             .child(Select::new(&self.workspace_select).w_full()),
+                                    )
+                                    .child(
+                                        field()
+                                            .label(t!("TeamSync.team_label").to_string())
+                                            .items_center()
+                                            .label_justify_end()
+                                            .child(Select::new(&self.team_select).w_full()),
                                     )
                                     .child(
                                         field()

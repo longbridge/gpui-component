@@ -21,6 +21,7 @@ use gpui_component::{
 use mongodb_view::{MongoFormWindow, MongoFormWindowConfig};
 use one_core::cloud_sync::{
     CloudApiClient, CloudSyncService, ConflictResolution, SyncConflict, SyncEngine, UserInfo,
+    can_edit_connection, get_cached_team_options,
 };
 use one_core::connection_notifier::{ConnectionDataEvent, emit_connection_event, get_notifier};
 use one_core::crypto;
@@ -1360,6 +1361,7 @@ impl HomePage {
             db_type,
             editing_connection: editing_conn,
             workspaces: self.workspaces.clone(),
+            teams: get_cached_team_options(cx),
         };
 
         self.editing_connection_id = None;
@@ -1393,6 +1395,7 @@ impl HomePage {
         let config = SshFormWindowConfig {
             editing_connection: editing_conn,
             workspaces: self.workspaces.clone(),
+            teams: get_cached_team_options(cx),
         };
 
         self.editing_connection_id = None;
@@ -1426,6 +1429,7 @@ impl HomePage {
         let config = RedisFormWindowConfig {
             editing_connection: editing_conn,
             workspaces: self.workspaces.clone(),
+            teams: get_cached_team_options(cx),
         };
 
         self.editing_connection_id = None;
@@ -1459,6 +1463,7 @@ impl HomePage {
         let config = MongoFormWindowConfig {
             editing_connection: editing_conn,
             workspaces: self.workspaces.clone(),
+            teams: get_cached_team_options(cx),
         };
 
         self.editing_connection_id = None;
@@ -1492,6 +1497,7 @@ impl HomePage {
         let config = SerialFormWindowConfig {
             editing_connection: editing_conn,
             workspaces: self.workspaces.clone(),
+            teams: get_cached_team_options(cx),
         };
 
         self.editing_connection_id = None;
@@ -2570,6 +2576,9 @@ impl HomePage {
             .id
             .map_or(false, |id| cx.global::<ActiveConnections>().is_active(id));
 
+        let can_edit = can_edit_connection(&conn, cx);
+        let has_team = conn.team_id.is_some();
+
         let card = v_flex()
             .justify_center()
             .id(SharedString::from(format!(
@@ -2649,71 +2658,73 @@ impl HomePage {
                             )),
                         )
                     })
-                    .child(
-                        Button::new(SharedString::from(format!(
-                            "edit-conn-{}",
-                            conn.id.unwrap_or(0)
-                        )))
-                        .icon(IconName::Edit)
-                        .with_size(Size::Small)
-                        .primary()
-                        .tooltip(t!("Home.edit_connection"))
-                        .on_click(cx.listener(
-                            move |this, _, window, cx| {
-                                cx.stop_propagation();
-                                if let Some(conn_id) = edit_conn.id {
-                                    let conn_name = edit_conn_name.clone();
-                                    match edit_conn_type {
-                                        ConnectionType::SshSftp => {
-                                            this.editing_connection_id = Some(conn_id);
-                                            this.show_ssh_form(window, cx);
+                    .when(can_edit, |this| {
+                        this.child(
+                            Button::new(SharedString::from(format!(
+                                "edit-conn-{}",
+                                conn.id.unwrap_or(0)
+                            )))
+                            .icon(IconName::Edit)
+                            .with_size(Size::Small)
+                            .primary()
+                            .tooltip(t!("Home.edit_connection"))
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    if let Some(conn_id) = edit_conn.id {
+                                        let conn_name = edit_conn_name.clone();
+                                        match edit_conn_type {
+                                            ConnectionType::SshSftp => {
+                                                this.editing_connection_id = Some(conn_id);
+                                                this.show_ssh_form(window, cx);
+                                            }
+                                            ConnectionType::Database => {
+                                                let db_type = edit_conn
+                                                    .to_db_connection()
+                                                    .ok()
+                                                    .map(|p| p.database_type);
+                                                this.confirm_edit_connection(
+                                                    conn_id, conn_name, db_type, window, cx,
+                                                );
+                                            }
+                                            ConnectionType::Redis => {
+                                                this.editing_connection_id = Some(conn_id);
+                                                this.show_redis_form(window, cx);
+                                            }
+                                            ConnectionType::MongoDB => {
+                                                this.editing_connection_id = Some(conn_id);
+                                                this.show_mongodb_form(window, cx);
+                                            }
+                                            ConnectionType::Serial => {
+                                                this.editing_connection_id = Some(conn_id);
+                                                this.show_serial_form(window, cx);
+                                            }
+                                            _ => {}
                                         }
-                                        ConnectionType::Database => {
-                                            let db_type = edit_conn
-                                                .to_db_connection()
-                                                .ok()
-                                                .map(|p| p.database_type);
-                                            this.confirm_edit_connection(
-                                                conn_id, conn_name, db_type, window, cx,
-                                            );
-                                        }
-                                        ConnectionType::Redis => {
-                                            this.editing_connection_id = Some(conn_id);
-                                            this.show_redis_form(window, cx);
-                                        }
-                                        ConnectionType::MongoDB => {
-                                            this.editing_connection_id = Some(conn_id);
-                                            this.show_mongodb_form(window, cx);
-                                        }
-                                        ConnectionType::Serial => {
-                                            this.editing_connection_id = Some(conn_id);
-                                            this.show_serial_form(window, cx);
-                                        }
-                                        _ => {}
                                     }
-                                }
-                            },
-                        )),
-                    )
-                    .child(
-                        Button::new(SharedString::from(format!(
-                            "delete-conn-{}",
-                            conn.id.unwrap_or(0)
-                        )))
-                        .icon(IconName::Remove)
-                        .with_size(Size::Small)
-                        .danger()
-                        .tooltip(t!("Home.delete_connection"))
-                        .on_click(cx.listener(
-                            move |this, _, window, cx| {
-                                cx.stop_propagation();
-                                if let Some(conn_id) = delete_conn_id {
-                                    let conn_name = delete_conn_name.clone();
-                                    this.confirm_delete_connection(conn_id, conn_name, window, cx);
-                                }
-                            },
-                        )),
-                    ),
+                                },
+                            )),
+                        )
+                        .child(
+                            Button::new(SharedString::from(format!(
+                                "delete-conn-{}",
+                                conn.id.unwrap_or(0)
+                            )))
+                            .icon(IconName::Remove)
+                            .with_size(Size::Small)
+                            .danger()
+                            .tooltip(t!("Home.delete_connection"))
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    if let Some(conn_id) = delete_conn_id {
+                                        let conn_name = delete_conn_name.clone();
+                                        this.confirm_delete_connection(conn_id, conn_name, window, cx);
+                                    }
+                                },
+                            )),
+                        )
+                    }),
             )
             .child(
                 h_flex()
@@ -2765,22 +2776,40 @@ impl HomePage {
                             .overflow_hidden()
                             .child({
                                 let name_tooltip: SharedString = conn.name.clone().into();
-                                div()
-                                    .id(SharedString::from(format!(
-                                        "conn-name-{}",
-                                        conn.id.unwrap_or(0)
-                                    )))
-                                    .text_sm()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(cx.theme().foreground)
+                                h_flex()
+                                    .gap_1()
                                     .overflow_hidden()
-                                    .text_ellipsis()
-                                    .whitespace_nowrap()
-                                    .max_w_full()
-                                    .tooltip(move |window, cx| {
-                                        Tooltip::new(name_tooltip.clone()).build(window, cx)
+                                    .child(
+                                        div()
+                                            .id(SharedString::from(format!(
+                                                "conn-name-{}",
+                                                conn.id.unwrap_or(0)
+                                            )))
+                                            .text_sm()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(cx.theme().foreground)
+                                            .overflow_hidden()
+                                            .text_ellipsis()
+                                            .whitespace_nowrap()
+                                            .flex_shrink()
+                                            .min_w_0()
+                                            .tooltip(move |window, cx| {
+                                                Tooltip::new(name_tooltip.clone()).build(window, cx)
+                                            })
+                                            .child(conn.name.clone()),
+                                    )
+                                    .when(has_team, |this| {
+                                        this.child(
+                                            div()
+                                                .flex_shrink_0()
+                                                .px_1()
+                                                .rounded(px(3.0))
+                                                .bg(cx.theme().accent.opacity(0.15))
+                                                .text_color(cx.theme().accent)
+                                                .text_xs()
+                                                .child(t!("Home.team_badge").to_string()),
+                                        )
                                     })
-                                    .child(conn.name.clone())
                             })
                             .when(conn.connection_type == ConnectionType::Database, |this| {
                                 if let Ok(params) = conn.to_db_connection() {

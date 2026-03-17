@@ -315,6 +315,9 @@ pub struct ConnectionPlainData {
     pub remark: Option<String>,
     /// 连接参数（完整 JSON，包含密码等）
     pub params: serde_json::Value,
+    /// 连接创建者 ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<String>,
 }
 
 /// 工作空间明文数据结构（加密前 / 解密后的 JSON blob）

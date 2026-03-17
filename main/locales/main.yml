@@ -149,6 +149,29 @@ Home:
     en: Delete Connection
     zh-CN: 删除连接
     zh-HK: 刪除連線
+  team_badge:
+    en: Team
+    zh-CN: 团队
+    zh-HK: 團隊
+
+# 团队同步
+TeamSync:
+  personal:
+    en: Personal
+    zh-CN: 个人
+    zh-HK: 個人
+  select_team:
+    en: Team
+    zh-CN: 团队
+    zh-HK: 團隊
+  team_label:
+    en: Team
+    zh-CN: 团队归属
+    zh-HK: 團隊歸屬
+  no_permission:
+    en: No edit permission
+    zh-CN: 无编辑权限
+    zh-HK: 無編輯權限
 
 # 鼓励作者
 Encourage:

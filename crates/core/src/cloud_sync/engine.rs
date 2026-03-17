@@ -17,7 +17,7 @@ use crate::cloud_sync::models::{ConflictResolution, SyncResult, Team};
 use crate::cloud_sync::queue::OperationQueue;
 use crate::cloud_sync::service::{CloudSyncService, SyncError};
 use crate::crypto;
-use crate::storage::StorageManager;
+use crate::storage::{StorageManager, TeamKeyCacheRepository};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -159,6 +159,19 @@ impl SyncEngine {
         match self.cloud_client.list_teams().await {
             Ok(teams) => {
                 tracing::info!("[同步] 获取到 {} 个团队", teams.len());
+
+                // 获取当前用户 ID
+                let user_id = self
+                    .crypto_service
+                    .read()
+                    .ok()
+                    .and_then(|s| s.user_id().map(|id| id.to_string()));
+
+                // 缓存团队角色信息到 team_key_cache
+                if let Some(uid) = &user_id {
+                    self.cache_team_roles(&teams, uid).await;
+                }
+
                 if let Ok(mut cache) = self.cached_teams.write() {
                     *cache = teams;
                 }
@@ -235,6 +248,45 @@ impl SyncEngine {
             .read()
             .map(|service| service.is_team_unlocked(team_id))
             .unwrap_or(false)
+    }
+
+    /// 缓存团队角色信息到 team_key_cache 表
+    async fn cache_team_roles(&self, teams: &[Team], user_id: &str) {
+        let repo = match self.storage.get::<TeamKeyCacheRepository>() {
+            Some(repo) => repo,
+            None => return,
+        };
+
+        for team in teams {
+            match self.cloud_client.list_team_members(&team.id).await {
+                Ok(members) => {
+                    if let Some(member) = members.iter().find(|m| m.user_id == user_id) {
+                        let role_str = match member.role {
+                            crate::cloud_sync::models::TeamRole::Owner => "owner",
+                            crate::cloud_sync::models::TeamRole::Member => "member",
+                        };
+                        // 更新已有缓存的 role 字段
+                        if let Ok(Some(mut cache)) = repo.get(&team.id) {
+                            cache.role = Some(role_str.to_string());
+                            if let Err(e) = repo.upsert(&cache) {
+                                tracing::warn!(
+                                    "[同步] 更新团队 {} 角色缓存失败: {}",
+                                    team.id,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "[同步] 获取团队 {} 成员列表失败: {}",
+                        team.id,
+                        e
+                    );
+                }
+            }
+        }
     }
 
     /// 使用指定的策略映射应用冲突解决方案
