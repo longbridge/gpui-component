@@ -237,10 +237,7 @@ where
     }
 
     pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
-        let col_ix = col_ix.saturating_sub(self.fixed_left_cols_count());
-
-        self.horizontal_scroll_handle
-            .scroll_to_item(col_ix, ScrollStrategy::Top);
+        self.ensure_col_visible(col_ix, cx);
         cx.notify();
     }
 
@@ -348,7 +345,7 @@ where
         self.selected_cell = Some((row_ix, col_ix));
         self.selected_col = None;
         self.selected_row = None;
-        self.scroll_to_col(col_ix, cx);
+        self.queue_cell_scroll(row_ix, col_ix, ScrollStrategy::Center, cx);
         cx.emit(EditTableEvent::SelectCell(row_ix, col_ix));
         cx.notify();
     }
@@ -374,10 +371,78 @@ where
         (self.col_groups.len() > first_col_ix).then_some(self.col_groups.len() - 1)
     }
 
+    fn queue_cell_scroll(
+        &mut self,
+        row_ix: usize,
+        col_ix: usize,
+        row_strategy: ScrollStrategy,
+        cx: &mut Context<Self>,
+    ) {
+        self.vertical_scroll_handle
+            .scroll_to_item(row_ix, row_strategy);
+        self.ensure_col_visible(col_ix, cx);
+    }
+
     fn select_cell_for_navigation(&mut self, row_ix: usize, col_ix: usize, cx: &mut Context<Self>) {
         self.select_cell(row_ix, col_ix, cx);
-        self.vertical_scroll_handle
-            .scroll_to_item(row_ix, ScrollStrategy::Center);
+        self.queue_cell_scroll(row_ix, col_ix, ScrollStrategy::Center, cx);
+        cx.notify();
+    }
+
+    fn ensure_col_visible(&mut self, col_ix: usize, cx: &mut Context<Self>) {
+        let fixed_left = self.fixed_left_cols_count();
+        if col_ix < fixed_left {
+            return;
+        }
+
+        let Some(col_group) = self.col_groups.get(col_ix) else {
+            return;
+        };
+
+        if self.bounds.size.width.is_zero() || col_group.bounds.size.width.is_zero() {
+            let scroll_col_ix = col_ix - fixed_left;
+            self.horizontal_scroll_handle
+                .base_handle()
+                .scroll_to_item(scroll_col_ix);
+            return;
+        }
+
+        let mut viewport_left = self.bounds.left();
+        let mut viewport_right = self.bounds.right();
+
+        if fixed_left > 0 {
+            if !self.fixed_head_cols_bounds.size.width.is_zero() {
+                viewport_left = self.fixed_head_cols_bounds.right();
+            } else {
+                let fixed_width = self
+                    .col_groups
+                    .iter()
+                    .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
+                    .fold(px(0.), |acc, col| acc + col.width);
+                viewport_left += fixed_width;
+            }
+        }
+
+        if self.options.scrollbar_visible.right && self.delegate.rows_count(cx) > 0 {
+            viewport_right -= SCROLLBAR_WIDTH;
+        }
+
+        if viewport_right <= viewport_left {
+            return;
+        }
+
+        let col_bounds = col_group.bounds;
+        let mut offset = self.horizontal_scroll_handle.offset();
+
+        if col_bounds.left() < viewport_left {
+            offset.x += viewport_left - col_bounds.left();
+        } else if col_bounds.right() > viewport_right {
+            offset.x += viewport_right - col_bounds.right();
+        } else {
+            return;
+        }
+
+        self.horizontal_scroll_handle.set_offset(offset);
     }
 
     fn move_to_prev_cell(&mut self, cx: &mut Context<Self>) {
