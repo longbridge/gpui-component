@@ -1129,13 +1129,6 @@ impl SqlEditorTab {
                             .icon(IconName::Plus)
                             .on_click(cx.listener(Self::handle_save_query)),
                     )
-                    .child(
-                        Button::new("compress-query")
-                            .with_size(Size::Small)
-                            .ghost()
-                            .label(t!("Query.compress"))
-                            .on_click(cx.listener(Self::handle_compress_query)),
-                    ),
             )
             .child(
                 // Editor
