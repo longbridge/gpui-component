@@ -838,6 +838,11 @@ struct ShortcutGroup {
 
 const WINDOW_SHORTCUTS: &[ShortcutEntry] = &[
     ShortcutEntry {
+        key_macos: "cmd-q",
+        key_other: "alt-f4",
+        label_key: "Settings.Shortcuts.quit_app",
+    },
+    ShortcutEntry {
         key_macos: "cmd-m",
         key_other: "ctrl-space",
         label_key: "Settings.Shortcuts.minimize_window",
