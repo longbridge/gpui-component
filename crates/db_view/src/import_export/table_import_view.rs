@@ -691,6 +691,17 @@ impl TableImportView {
                                     )
                                     .to_string(),
                                 });
+
+                                for error in &import_result.errors {
+                                    l.push(LogEntry {
+                                        table: "".to_string(),
+                                        message: t!(
+                                            "ImportExport.import_error_with_message",
+                                            message = error
+                                        )
+                                        .to_string(),
+                                    });
+                                }
                                 cx.notify();
                             });
                             error_count.update(cx, |e, cx| {
