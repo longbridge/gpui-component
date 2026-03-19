@@ -601,6 +601,10 @@ pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    /// Custom highlight ranges (byte offsets into the source text) injected by
+    /// the caller via `TextView::with_highlights()`. Merged into `Inline`
+    /// highlights during paragraph rendering.
+    pub(crate) custom_highlights: Vec<(Range<usize>, HighlightStyle)>,
 }
 
 impl NodeContext {
@@ -611,8 +615,55 @@ impl NodeContext {
 
 impl PartialEq for NodeContext {
     fn eq(&self, other: &Self) -> bool {
-        self.link_refs == other.link_refs && self.style == other.style
-        // Note: code_block_buttons is intentionally not compared (closures can't be compared)
+        self.link_refs == other.link_refs
+            && self.style == other.style
+            && self.custom_highlights == other.custom_highlights
+        // Note: code_block_actions intentionally not compared (closures can't impl Eq).
+        // custom_highlights MUST be compared — without this, changed highlights with
+        // unchanged text cause GPUI to reuse stale Inline elements, desyncing
+        // TextRuns from content and crashing in StyledText::with_runs.
+    }
+}
+
+/// Merge caller-provided custom highlights into the paragraph's own highlights.
+///
+/// Custom highlights use byte offsets into the full source text. This function
+/// clips them to the current Inline chunk (starting at `chunk_start` in source
+/// coordinates, with length `chunk_len`) and translates to chunk-local offsets.
+fn merge_custom_highlights(
+    highlights: Vec<(Range<usize>, HighlightStyle)>,
+    custom: &[(Range<usize>, HighlightStyle)],
+    chunk_start: usize,
+    chunk_len: usize,
+) -> Vec<(Range<usize>, HighlightStyle)> {
+    if custom.is_empty() {
+        return highlights;
+    }
+    let chunk_end = chunk_start + chunk_len;
+    let clipped: Vec<_> = custom
+        .iter()
+        .filter_map(|(range, style)| {
+            let start = range.start.max(chunk_start);
+            let end = range.end.min(chunk_end);
+            if start < end {
+                let local_start = start - chunk_start;
+                let local_end = end - chunk_start;
+                // Safety net: skip highlights that exceed chunk bounds after clipping.
+                // Prevents StyledText::with_runs panic if chunks and highlights are
+                // from different parse cycles (e.g. markdown re-parsed, highlights stale).
+                if local_end > chunk_len {
+                    return None;
+                }
+                Some((local_start..local_end, *style))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if clipped.is_empty() {
+        highlights
+    } else {
+        gpui::combine_highlights(highlights, clipped).collect()
     }
 }
 
@@ -632,6 +683,10 @@ impl Paragraph {
         let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
         let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
         let mut offset = 0;
+        // Tracks how many bytes of text have been flushed to previous Inline
+        // elements (at image boundaries), so custom highlights map correctly.
+        let para_start = span.map(|s| s.start).unwrap_or(0);
+        let mut cumulative_offset: usize = 0;
 
         let mut ix = 0;
         for inline_node in children {
@@ -640,6 +695,8 @@ impl Paragraph {
 
             if let Some(image) = &inline_node.image {
                 if text.len() > 0 {
+                    let merged_highlights =
+                        merge_custom_highlights(highlights.clone(), &node_cx.custom_highlights, para_start + cumulative_offset, text.len());
                     inline_node
                         .state
                         .lock()
@@ -650,7 +707,7 @@ impl Paragraph {
                             ix,
                             inline_node.state.clone(),
                             links.clone(),
-                            highlights.clone(),
+                            merged_highlights,
                         )
                         .into_any_element(),
                     );
@@ -675,6 +732,7 @@ impl Paragraph {
                         .into_any_element(),
                 );
 
+                cumulative_offset += text.len();
                 text.clear();
                 links.clear();
                 highlights.clear();
@@ -729,9 +787,11 @@ impl Paragraph {
 
         // Add the last text node
         if text.len() > 0 {
+            let merged_highlights =
+                merge_custom_highlights(highlights, &node_cx.custom_highlights, para_start + cumulative_offset, text.len());
             self.state.lock().unwrap().set_text(text.into());
             child_nodes
-                .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
+                .push(Inline::new(ix, self.state.clone(), links, merged_highlights).into_any_element());
         }
 
         div().id(span.unwrap_or_default()).children(child_nodes)
