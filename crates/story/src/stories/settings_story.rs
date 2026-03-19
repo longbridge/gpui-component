@@ -131,6 +131,7 @@ impl SettingsStory {
             SettingPage::new("General")
                 .resettable(resettable)
                 .default_open(true)
+                .icon(Icon::new(IconName::Settings2))
                 .groups(vec![
                     SettingGroup::new().title("Appearance").items(vec![
                         SettingItem::new(
@@ -333,6 +334,7 @@ impl SettingsStory {
                 ]),
             SettingPage::new("Software Update")
                 .resettable(resettable)
+                .icon(Icon::new(IconName::Cpu))
                 .groups(vec![SettingGroup::new().title("Updates").items(vec![
                     SettingItem::new(
                         "Enable Notifications",
@@ -359,6 +361,7 @@ impl SettingsStory {
                 ])]),
             SettingPage::new("About")
                 .resettable(resettable)
+                .icon(Icon::new(IconName::Info))
                 .group(
                     SettingGroup::new().item(SettingItem::render(|_options, _, cx| {
                         v_flex()

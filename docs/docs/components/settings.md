@@ -119,6 +119,14 @@ SettingPage::new("General")
     ])
 ```
 
+### Icon
+
+```rust
+SettingPage::new("General")
+    .icon(IconName::Settings)
+    .groups(vec![...])
+```
+
 ### Default Open
 
 ```rust
