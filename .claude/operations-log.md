@@ -458,3 +458,82 @@
 ### 本地验证
 - `cargo build -p main`
 - 结果：成功（包含 future-incompat 警告：num-bigint-dig v0.8.4）
+
+
+## 编码前检查 - CSV 导入修复
+时间：2026-03-19 14:33:08 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-csv-import-fix.md`
+□ 将使用以下可复用组件：
+- `crates/db/src/import_export/formats/json.rs`：INSERT 值映射模式
+- `crates/db/src/import_export/formats/txt.rs`：列数校验和错误处理模式
+- `crates/db/src/plugin.rs`：格式分发链路
+□ 将遵循命名约定：Rust `snake_case`/`PascalCase`
+□ 将遵循代码风格：最小改动、保持 `FormatHandler` 结构不变
+□ 确认不重复造轮子，证明：复用既有 CSV 导入主流程，仅修复值转换分支
+
+## 编码后声明 - CSV 导入修复
+时间：2026-03-19 14:33:08 +0800
+
+### 1. 复用了以下既有组件
+- `JsonFormatHandler` 的 SQL 构建与错误收集模式
+- `TxtFormatHandler` 的导入循环与列数校验模式
+- `plugin.rs` 的 `DataFormat::Csv` 分发机制（未改动）
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `append_sql_value`，使用 `snake_case`
+- 代码风格：保持 `CsvFormatHandler` 原有组织结构，仅提取单一辅助函数
+- 文件组织：测试内聚到 `csv.rs` 的 `#[cfg(test)]` 模块
+
+### 3. 对比了以下相似实现
+- `crates/db/src/import_export/formats/json.rs`：值到 SQL 字面量的映射逻辑
+- `crates/db/src/import_export/formats/txt.rs`：导入流程控制与报错策略
+- `crates/db/src/import_export/formats/csv.rs`：CSV 解析与导入主路径
+
+### 4. 未重复造轮子的证明
+- 未新建导入框架，直接复用现有 `FormatHandler` 和 `ImportConfig` 链路
+- 仅修复 `Option<String>` 处理错误并补充回归测试
+
+## 实施与验证记录 - CSV 导入修复
+时间：2026-03-19 14:33:08 +0800
+
+### 已完成修改
+- 修复 `crates/db/src/import_export/formats/csv.rs` 中 `Option<String>` 被当作 `String` 使用导致的编译错误
+- 提取 `append_sql_value` 统一处理 `None/"null"/普通字符串` 的 SQL 输出
+- 新增 2 个单元测试覆盖空字符串与 NULL 区分、单引号转义
+
+### 本地验证
+- `cargo test -p db csv::tests -- --nocapture`
+- 结果：通过（2 passed, 0 failed）
+
+
+## 修复记录 - CSV 导入错误明细日志缺失
+时间：2026-03-19 14:33:08 +0800
+
+### 原因定位
+- `TableImportView` 在 `import_result.success == false` 时只记录“部分成功汇总”，未遍历 `import_result.errors` 输出具体错误文本。
+
+### 修复内容
+- 在 `crates/db_view/src/import_export/table_import_view.rs` 的失败分支中，新增对 `import_result.errors` 的逐条日志写入，复用 `ImportExport.import_error_with_message` 文案。
+
+### 本地验证
+- `cargo check -p db_view`
+- 结果：通过（仅既有 `unused import: compress_sql` 警告）
+
+
+## 修复记录 - CSV 多行字段导致列数不匹配
+时间：2026-03-19 14:33:08 +0800
+
+### 原因定位
+- `CsvFormatHandler` 使用 `data.lines()` 逐行导入，字段内包含换行时会被错误切分为多条记录，触发 `column count mismatch`。
+
+### 修复内容
+- 在 `crates/db/src/import_export/formats/csv.rs` 新增 `parse_csv_data_with_config`，按 CSV 引号状态进行整文件解析：
+  - 仅在“非引号状态”把分隔符和换行识别为边界
+  - 支持字段内换行
+  - 保留空字段与空字符串的区分语义（`None` vs `Some("")`）
+- 导入主流程从“按行解析”切换为“按记录解析”。
+
+### 本地验证
+- `cargo test -p db csv::tests -- --nocapture`：通过（2 passed）
+- `cargo check -p db_view`：通过（仅既有 warning）

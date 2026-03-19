@@ -194,3 +194,39 @@
 ### 结论
 - 终端设置变更已通过 HomePage 广播到所有终端实例，侧边栏输入框同步采用抑制机制避免回流循环。
 - 本地验证执行 `cargo build -p main`，通过（future-incompat 警告同前）。
+
+
+---
+
+## 审查报告（csv-import-fix）
+生成时间：2026-03-19 14:33:08 +0800
+
+### 技术维度评分
+- 代码质量：93/100（修复了 `Option<String>` 值映射错误，新增统一转换函数）
+- 测试覆盖：88/100（新增 2 个 CSV 单元测试，覆盖空字符串/NULL/转义）
+- 规范遵循：94/100（保持现有 `FormatHandler` 结构与命名风格）
+
+### 战略维度评分
+- 需求匹配：95/100（解决导入报错且补齐错误明细日志）
+- 架构一致：93/100（最小改动，未改接口）
+- 风险评估：90/100（主要风险为超大量错误日志可能导致 UI 卡顿）
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- `crates/db/src/import_export/formats/csv.rs` 修复了 CSV 导入时 `Option<String>` 被误当作 `String` 的编译与语义错误。
+- `crates/db_view/src/import_export/table_import_view.rs` 在“部分成功”分支中新增逐条错误日志输出，避免只显示错误计数不显示详情。
+- 本地验证：
+  - `cargo test -p db csv::tests -- --nocapture` 通过（2 passed）
+  - `cargo check -p db_view` 通过（仅存在既有 unused import 警告）
+
+
+### 审查补充（CSV 列数不匹配）
+- 症状：导入 `ai_app_report_record` 类 CSV 时提示列数量不匹配。
+- 根因：旧实现按文本行分割，无法处理带引号多行字段。
+- 修复：改为状态机按记录解析，换行仅在非引号状态下生效；并保持空字段语义。
+- 验证：
+  - `cargo test -p db csv::tests -- --nocapture` 通过
+  - `cargo check -p db_view` 通过
