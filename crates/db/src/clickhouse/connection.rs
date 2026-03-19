@@ -10,7 +10,9 @@ use clickhouse::Client;
 use one_core::storage::DbConnectionConfig;
 use serde::Deserialize;
 use ssh::LocalPortForwardTunnel;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+use tokio::time::timeout;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
 
@@ -229,15 +231,31 @@ impl DbConnection for ClickHouseDbConnection {
             }
         }
 
-        debug!("[ClickHouse] Testing connection...");
-        client
-            .query("SELECT 1")
-            .fetch_all::<u8>()
-            .await
-            .map_err(|e| {
+        // 获取连接超时，默认 30 秒
+        let connect_timeout_secs = config.get_param_as::<u64>("connect_timeout").unwrap_or(30);
+        debug!("[ClickHouse] Testing connection with timeout {}s...", connect_timeout_secs);
+
+        // 使用 tokio::timeout 包装连接测试
+        let test_result = timeout(
+            Duration::from_secs(connect_timeout_secs),
+            client.query("SELECT 1").fetch_all::<u8>(),
+        )
+        .await;
+
+        match test_result {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
                 error!("[ClickHouse] Connection failed: {}", e);
-                DbError::connection_with_source("failed to connect", e)
-            })?;
+                return Err(DbError::connection_with_source("failed to connect", e));
+            }
+            Err(_) => {
+                error!("[ClickHouse] Connection timed out after {}s", connect_timeout_secs);
+                return Err(DbError::connection(format!(
+                    "connection timed out after {}s",
+                    connect_timeout_secs
+                )));
+            }
+        }
 
         self.client = Some(client);
         info!("[ClickHouse] Connected successfully");
