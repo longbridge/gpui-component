@@ -1,6 +1,6 @@
 use crate::sql_editor::SqlEditor;
 use crate::sql_result_tab::SqlResultTabContainer;
-use db::{DbManager, GlobalDbState, SqlSource, StreamingSqlParser, compress_sql, format_sql};
+use db::{DbManager, GlobalDbState, SqlSource, StreamingSqlParser, format_sql};
 use gpui::prelude::*;
 use gpui::{
     App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity, EventEmitter,
