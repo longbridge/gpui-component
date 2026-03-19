@@ -712,3 +712,14 @@ FileManager:
     en: Transfer connection failed
     zh-CN: 传输连接建立失败
     zh-HK: 傳輸連接建立失敗
+
+# 团队同步
+TeamSync:
+  personal:
+    en: Personal
+    zh-CN: 个人
+    zh-HK: 個人
+  team_label:
+    en: Team
+    zh-CN: 团队归属
+    zh-HK: 團隊歸屬

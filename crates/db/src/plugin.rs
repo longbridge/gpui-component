@@ -1981,7 +1981,14 @@ pub trait DatabasePlugin: Send + Sync {
                 for row in &query_result.rows {
                     output.push_str("INSERT INTO ");
                     output.push_str(&table_ident);
-                    output.push_str(" VALUES (");
+                    output.push_str(" (");
+                    for (i, col) in query_result.columns.iter().enumerate() {
+                        if i > 0 {
+                            output.push_str(", ");
+                        }
+                        output.push_str(&self.quote_identifier(col));
+                    }
+                    output.push_str(") VALUES (");
 
                     for (i, value) in row.iter().enumerate() {
                         if i > 0 {

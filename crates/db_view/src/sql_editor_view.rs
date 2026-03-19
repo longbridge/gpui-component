@@ -821,35 +821,6 @@ impl SqlEditorTab {
         .detach();
     }
 
-    fn handle_compress_query(
-        &mut self,
-        _: &ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let text = self.get_sql_text(cx);
-        if text.trim().is_empty() {
-            window.push_notification(t!("Query.no_sql_to_compress").to_string(), cx);
-            return;
-        }
-        let window_option = cx.active_window().clone();
-        cx.spawn(async move |entity: WeakEntity<Self>, cx: &mut AsyncApp| {
-            entity
-                .update(cx, |this, cx| {
-                    let compressed = compress_sql(&text);
-                    if let Some(window_id) = window_option {
-                        cx.update_window(window_id, move |_entity, window, cx| {
-                            this.editor
-                                .update(cx, |e, cx| e.set_value(compressed, window, cx));
-                        })
-                        .ok();
-                    }
-                })
-                .ok()
-        })
-        .detach();
-    }
-
     pub fn save_query(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.save_to_file(cx);
     }
