@@ -269,21 +269,13 @@ impl SyncEngine {
                         if let Ok(Some(mut cache)) = repo.get(&team.id) {
                             cache.role = Some(role_str.to_string());
                             if let Err(e) = repo.upsert(&cache) {
-                                tracing::warn!(
-                                    "[同步] 更新团队 {} 角色缓存失败: {}",
-                                    team.id,
-                                    e
-                                );
+                                tracing::warn!("[同步] 更新团队 {} 角色缓存失败: {}", team.id, e);
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(
-                        "[同步] 获取团队 {} 成员列表失败: {}",
-                        team.id,
-                        e
-                    );
+                    tracing::warn!("[同步] 获取团队 {} 成员列表失败: {}", team.id, e);
                 }
             }
         }
@@ -376,12 +368,9 @@ impl SyncEngine {
                 updated.cloud_id = Some(resolved.conflict.cloud.id.clone());
                 updated.last_synced_at = Some(Self::current_timestamp());
 
-                let repo = self
-                    .storage
-                    .get::<ConnectionRepository>()
-                    .ok_or_else(|| {
-                        SyncError::StorageError("ConnectionRepository not found".to_string())
-                    })?;
+                let repo = self.storage.get::<ConnectionRepository>().ok_or_else(|| {
+                    SyncError::StorageError("ConnectionRepository not found".to_string())
+                })?;
 
                 repo.update(&updated)
                     .map_err(|e| SyncError::StorageError(e.to_string()))?;
@@ -436,12 +425,9 @@ impl SyncEngine {
                 updated.cloud_id = Some(resolved.conflict.cloud.id.clone());
                 updated.last_synced_at = Some(Self::current_timestamp());
 
-                let repo = self
-                    .storage
-                    .get::<ConnectionRepository>()
-                    .ok_or_else(|| {
-                        SyncError::StorageError("ConnectionRepository not found".to_string())
-                    })?;
+                let repo = self.storage.get::<ConnectionRepository>().ok_or_else(|| {
+                    SyncError::StorageError("ConnectionRepository not found".to_string())
+                })?;
 
                 repo.update(&updated)
                     .map_err(|e| SyncError::StorageError(e.to_string()))?;

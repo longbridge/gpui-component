@@ -37,11 +37,7 @@ impl SyncTypeHandler for WorkspaceSyncType {
             .map_err(|e| SyncError::StorageError(e.to_string()))
     }
 
-    fn insert_local(
-        &self,
-        engine: &SyncEngine,
-        item: &mut Workspace,
-    ) -> Result<(), SyncError> {
+    fn insert_local(&self, engine: &SyncEngine, item: &mut Workspace) -> Result<(), SyncError> {
         let repo = engine
             .storage
             .get::<WorkspaceRepository>()
@@ -53,11 +49,7 @@ impl SyncTypeHandler for WorkspaceSyncType {
         Ok(())
     }
 
-    fn update_local_item(
-        &self,
-        engine: &SyncEngine,
-        item: &Workspace,
-    ) -> Result<(), SyncError> {
+    fn update_local_item(&self, engine: &SyncEngine, item: &Workspace) -> Result<(), SyncError> {
         let repo = engine
             .storage
             .get::<WorkspaceRepository>()
@@ -92,11 +84,7 @@ impl SyncTypeHandler for WorkspaceSyncType {
             .map_err(|e| SyncError::StorageError(e.to_string()))
     }
 
-    fn decrypt_name(
-        &self,
-        service: &CloudSyncService,
-        data: &CloudSyncData,
-    ) -> Option<String> {
+    fn decrypt_name(&self, service: &CloudSyncService, data: &CloudSyncData) -> Option<String> {
         service
             .decrypt_sync_data_workspace(data)
             .ok()

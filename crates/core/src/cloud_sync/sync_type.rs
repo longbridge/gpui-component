@@ -4,9 +4,9 @@
 //! 将不同数据类型的同步逻辑从流程控制中解耦。
 //! 新增同步数据类型只需实现 trait 并通过 `SyncEngine::register_type` 注册即可。
 
+use crate::cloud_sync::engine::SyncEngine;
 use crate::cloud_sync::models::{CloudSyncData, Team};
 use crate::cloud_sync::service::{CloudSyncService, SyncError};
-use crate::cloud_sync::engine::SyncEngine;
 use crate::storage::PendingCloudDeletion;
 
 /// 可同步数据项的统一抽象

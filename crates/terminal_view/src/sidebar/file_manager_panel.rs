@@ -1383,8 +1383,7 @@ impl FileManagerPanel {
                         }),
                     )
                     .tooltip(move |window, cx| {
-                        Tooltip::new(t!("FileManager.refresh").to_string())
-                            .build(window, cx)
+                        Tooltip::new(t!("FileManager.refresh").to_string()).build(window, cx)
                     })
                     .child(
                         Icon::new(IconName::Refresh)
@@ -1411,8 +1410,7 @@ impl FileManagerPanel {
                         }),
                     )
                     .tooltip(move |window, cx| {
-                        Tooltip::new(t!("FileManager.toggle_hidden").to_string())
-                            .build(window, cx)
+                        Tooltip::new(t!("FileManager.toggle_hidden").to_string()).build(window, cx)
                     })
                     .child(
                         Icon::new(IconName::Eye)

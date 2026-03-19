@@ -1,6 +1,6 @@
 use crate::cloud_sync::engine::{SyncEngine, SyncFuture, SyncHandler};
 use crate::cloud_sync::models::{
-    data_type, CloudSyncData, ConflictResolution, SyncConflict, SyncPlan, SyncResult,
+    CloudSyncData, ConflictResolution, SyncConflict, SyncPlan, SyncResult, data_type,
 };
 use crate::cloud_sync::queue::SyncOperation;
 use crate::cloud_sync::service::SyncError;
@@ -68,11 +68,7 @@ impl SyncEngine {
                 Some(tid) => {
                     let unlocked = self.is_team_unlocked(tid);
                     if !unlocked {
-                        tracing::info!(
-                            "[同步] 跳过未解锁团队 {} 的云端连接数据 {}",
-                            tid,
-                            d.id
-                        );
+                        tracing::info!("[同步] 跳过未解锁团队 {} 的云端连接数据 {}", tid, d.id);
                     }
                     unlocked
                 }
@@ -84,10 +80,8 @@ impl SyncEngine {
         // 解密一次建立 cloud_id → name 映射
         let cloud_name_map = self.build_cloud_name_map(&cloud_sync_data);
 
-        let deleted_count = self.process_cloud_soft_deleted_sync_data(
-            &cloud_sync_data,
-            &local_connections,
-        )?;
+        let deleted_count =
+            self.process_cloud_soft_deleted_sync_data(&cloud_sync_data, &local_connections)?;
         if deleted_count > 0 {
             tracing::info!("[同步] 处理云端软删除: 删除了 {} 个本地连接", deleted_count);
             result.deleted += deleted_count;
@@ -99,7 +93,8 @@ impl SyncEngine {
             .collect();
         tracing::info!("[同步] 活跃云端连接数据: {} 个", active_cloud_data.len());
 
-        let plan = self.calculate_sync_plan(&local_connections, &active_cloud_data, &cloud_name_map)?;
+        let plan =
+            self.calculate_sync_plan(&local_connections, &active_cloud_data, &cloud_name_map)?;
         tracing::info!(
             "[同步计划] 上传: {}, 更新云端: {}, 下载: {}, 更新本地: {}, 冲突: {}",
             plan.to_upload.len(),
@@ -514,10 +509,8 @@ impl SyncEngine {
     ) -> Result<SyncPlan, SyncError> {
         let mut plan = SyncPlan::default();
 
-        let cloud_map: HashMap<&str, &CloudSyncData> = cloud_data_list
-            .iter()
-            .map(|d| (d.id.as_str(), d))
-            .collect();
+        let cloud_map: HashMap<&str, &CloudSyncData> =
+            cloud_data_list.iter().map(|d| (d.id.as_str(), d)).collect();
 
         let local_cloud_ids: HashSet<String> = local_connections
             .iter()
@@ -580,9 +573,8 @@ impl SyncEngine {
                     }
                 }
                 None => {
-                    let has_cloud_match = cloud_name_map
-                        .values()
-                        .any(|name| name == &local_conn.name);
+                    let has_cloud_match =
+                        cloud_name_map.values().any(|name| name == &local_conn.name);
                     if !has_cloud_match {
                         plan.to_upload.push(local_conn.clone());
                     }

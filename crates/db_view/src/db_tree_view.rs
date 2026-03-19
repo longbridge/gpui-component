@@ -393,14 +393,11 @@ impl DbTreeView {
                     match event {
                         ContextMenuEvent::TreeEvent(tree_event) => {
                             let view_clone = view.clone();
-                            let item = PopupMenuItem::new(label)
-                                .disabled(disabled)
-                                .on_click(window.listener_for(
-                                    &view_clone,
-                                    move |_this, _, _, cx| {
-                                        cx.emit(tree_event.clone());
-                                    },
-                                ));
+                            let item = PopupMenuItem::new(label).disabled(disabled).on_click(
+                                window.listener_for(&view_clone, move |_this, _, _, cx| {
+                                    cx.emit(tree_event.clone());
+                                }),
+                            );
                             result_menu = result_menu.item(item);
                         }
                         ContextMenuEvent::Custom(_) => {
@@ -418,19 +415,19 @@ impl DbTreeView {
                 } => {
                     let disabled = requires_active && !is_active;
                     let view_submenu = view.clone();
-                    let submenu_entity = PopupMenu::build(window, cx, move |submenu, window, cx| {
-                        Self::render_context_menu_items(
-                            submenu,
-                            sub_items.clone(),
-                            is_active,
-                            &view_submenu,
-                            window,
-                            cx,
-                        )
-                    });
-                    result_menu = result_menu.item(
-                        PopupMenuItem::submenu(label, submenu_entity).disabled(disabled),
-                    );
+                    let submenu_entity =
+                        PopupMenu::build(window, cx, move |submenu, window, cx| {
+                            Self::render_context_menu_items(
+                                submenu,
+                                sub_items.clone(),
+                                is_active,
+                                &view_submenu,
+                                window,
+                                cx,
+                            )
+                        });
+                    result_menu = result_menu
+                        .item(PopupMenuItem::submenu(label, submenu_entity).disabled(disabled));
                 }
             }
         }
@@ -2062,9 +2059,7 @@ impl Render for DbTreeView {
                                             .child(
                                                 div()
                                                     .text_color(cx.theme().muted_foreground)
-                                                    .child(
-                                                        t!("Common.not_found").to_string(),
-                                                    ),
+                                                    .child(t!("Common.not_found").to_string()),
                                             ),
                                     )
                                 } else {
@@ -2495,8 +2490,8 @@ impl DbTreeView {
             .ok()
             .map(|conn_id| cx.global::<ActiveConnections>().is_active(conn_id))
             .unwrap_or(false);
-        let is_active = conn_active
-            && (node.node_type != DbNodeType::Database || node.children_loaded);
+        let is_active =
+            conn_active && (node.node_type != DbNodeType::Database || node.children_loaded);
 
         // 尝试从 plugin 获取菜单
         let registry = cx.global::<DatabaseViewPluginRegistry>();
@@ -2505,7 +2500,8 @@ impl DbTreeView {
 
             if !menu_items.is_empty() {
                 // 渲染 plugin 提供的菜单，传入连接激活状态
-                menu = Self::render_context_menu_items(menu, menu_items, is_active, view, window, cx);
+                menu =
+                    Self::render_context_menu_items(menu, menu_items, is_active, view, window, cx);
             }
         }
 

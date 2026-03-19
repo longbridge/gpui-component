@@ -218,6 +218,37 @@
 ### 结论
 - `crates/db/src/import_export/formats/csv.rs` 修复了 CSV 导入时 `Option<String>` 被误当作 `String` 的编译与语义错误。
 - `crates/db_view/src/import_export/table_import_view.rs` 在“部分成功”分支中新增逐条错误日志输出，避免只显示错误计数不显示详情。
+
+---
+
+## 审查报告（table-designer-sql-preview）
+生成时间：2026-03-19 18:43:02 +0800
+
+### 需求完整性检查
+- 目标明确：修复表设计页在未修改字段时仍生成 `ALTER TABLE ... MODIFY COLUMN` 的问题。
+- 范围明确：仅涉及 `TableDesigner` 的原始列定义归一化、`ColumnsEditor` 的属性保真，以及 MySQL 回归测试。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地测试记录、审查报告。
+- 风险与依赖明确：依赖现有 `parse_column_type`、`build_alter_table_sql`、`ColumnInfo` 元数据；GUI 手动验证未自动执行。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：89/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：95/100
+- 风险评估：91/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：`crates/db_view/src/table_designer_tab.rs` 的 `build_original_design` 之前丢失了 `charset/collation` 等列级元数据，且界面态未保留 `is_unsigned`，导致 `column_changed` 将等价列定义误判为变更。
+- 修复遵循现有架构：继续由设计器负责 `ColumnInfo -> ColumnDefinition` 归一化，由插件负责 diff 与 SQL 生成，没有把方言判断扩散到通用比较逻辑。
+- 本地验证充分：`cargo test -p db_view test_column_info_to_definition -- --nocapture` 通过 2 个测试，`cargo test -p db test_build_alter_table_sql_no_changes_with_text_metadata -- --nocapture` 通过 1 个测试。
+- 残余风险可控：未自动执行 GUI 级交互验证，因此仍建议在真实表设计页打开一个现有 MySQL 表确认 SQL 预览为空；但逻辑链关键节点已被纯函数测试与插件测试覆盖。
 - 本地验证：
   - `cargo test -p db csv::tests -- --nocapture` 通过（2 passed）
   - `cargo check -p db_view` 通过（仅存在既有 unused import 警告）

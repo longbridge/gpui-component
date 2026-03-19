@@ -96,8 +96,7 @@ impl AgentDispatcher {
         if affinity.is_valid() {
             if let Some(current_id) = affinity.current_agent_id().map(str::to_owned) {
                 if Self::looks_like_followup(&ctx.user_input) {
-                    if let Some(agent) =
-                        available.iter().find(|a| a.descriptor().id == current_id)
+                    if let Some(agent) = available.iter().find(|a| a.descriptor().id == current_id)
                     {
                         info!(
                             agent = current_id.as_str(),

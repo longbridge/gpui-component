@@ -27,7 +27,7 @@ use crate::database_view_plugin::{ColumnEditorCapabilities, DatabaseViewPluginRe
 use db::GlobalDbState;
 use db::types::{
     CharsetInfo, CollationInfo, ColumnDefinition, ColumnInfo, IndexDefinition, IndexInfo,
-    TableDesign, TableOptions,
+    ParsedColumnType, TableDesign, TableOptions,
 };
 use gpui_component::select::SearchableVec;
 use one_core::storage::DatabaseType;
@@ -678,6 +678,7 @@ impl TableDesigner {
                                 let original_design = designer.build_original_design(
                                     columns.unwrap_or_default(),
                                     indexes.unwrap_or_default(),
+                                    cx,
                                 );
                                 designer.original_design = Some(original_design);
 
@@ -724,33 +725,21 @@ impl TableDesigner {
         &self,
         columns: Vec<ColumnInfo>,
         indexes: Vec<IndexInfo>,
+        cx: &App,
     ) -> TableDesign {
-        let is_sqlite = self.config.database_type == DatabaseType::SQLite;
+        let global_state = cx.global::<GlobalDbState>();
+        let plugin = global_state
+            .db_manager
+            .get_plugin(&self.config.database_type)
+            .ok();
         let column_defs: Vec<ColumnDefinition> = columns
             .iter()
             .map(|col| {
-                let (data_type, length) = Self::parse_data_type(&col.data_type);
-                let scale = Self::extract_scale_from_type_str(&col.data_type);
-                let is_auto_increment = if is_sqlite {
-                    col.is_primary_key && data_type.to_uppercase() == "INTEGER"
-                } else {
-                    col.data_type.to_uppercase().contains("AUTO_INCREMENT")
-                };
-                ColumnDefinition {
-                    name: col.name.clone(),
-                    data_type,
-                    length,
-                    precision: None,
-                    scale,
-                    is_nullable: col.is_nullable,
-                    is_primary_key: col.is_primary_key,
-                    is_auto_increment,
-                    is_unsigned: col.data_type.to_uppercase().contains("UNSIGNED"),
-                    default_value: col.default_value.clone(),
-                    comment: col.comment.clone().unwrap_or_default(),
-                    charset: None,
-                    collation: None,
-                }
+                let parsed = plugin
+                    .as_deref()
+                    .map(|plugin| plugin.parse_column_type(&col.data_type))
+                    .unwrap_or_else(|| Self::fallback_parse_column_type(&col.data_type));
+                Self::column_info_to_definition(self.config.database_type, col, parsed)
             })
             .collect();
 
@@ -774,6 +763,52 @@ impl TableDesigner {
             indexes: index_defs,
             foreign_keys: vec![],
             options: TableOptions::default(),
+        }
+    }
+
+    fn column_info_to_definition(
+        database_type: DatabaseType,
+        col: &ColumnInfo,
+        parsed: ParsedColumnType,
+    ) -> ColumnDefinition {
+        let base_type = parsed.base_type;
+        let data_type = if let Some(enum_values) = parsed.enum_values {
+            format!("{}({})", base_type, enum_values)
+        } else {
+            base_type.clone()
+        };
+        let is_auto_increment = if database_type == DatabaseType::SQLite {
+            col.is_primary_key && base_type.eq_ignore_ascii_case("INTEGER")
+        } else {
+            parsed.is_auto_increment
+        };
+
+        ColumnDefinition {
+            name: col.name.clone(),
+            data_type,
+            length: parsed.length,
+            precision: None,
+            scale: parsed.scale,
+            is_nullable: col.is_nullable,
+            is_primary_key: col.is_primary_key,
+            is_auto_increment,
+            is_unsigned: parsed.is_unsigned,
+            default_value: col.default_value.clone(),
+            comment: col.comment.clone().unwrap_or_default(),
+            charset: col.charset.clone(),
+            collation: col.collation.clone(),
+        }
+    }
+
+    fn fallback_parse_column_type(data_type: &str) -> ParsedColumnType {
+        let (base_type, length) = Self::parse_data_type(data_type);
+        ParsedColumnType {
+            base_type,
+            length,
+            scale: Self::extract_scale_from_type_str(data_type),
+            enum_values: None,
+            is_unsigned: data_type.to_uppercase().contains("UNSIGNED"),
+            is_auto_increment: data_type.to_uppercase().contains("AUTO_INCREMENT"),
         }
     }
 
@@ -1302,6 +1337,7 @@ struct ColumnEditorRow {
     nullable: bool,
     is_pk: bool,
     auto_increment: bool,
+    is_unsigned: bool,
     default_input: Entity<InputState>,
     comment_input: Entity<InputState>,
     charset_select: Entity<SelectState<Vec<CharsetSelectItem>>>,
@@ -1541,8 +1577,10 @@ impl ColumnsEditor {
         });
         let charset_select_clone = charset_select.clone();
         let collation_select_clone = collation_select.clone();
-        let charset_sub =
-            cx.subscribe_in(&charset_select, window, move |this, _, _event: &SelectEvent<Vec<CharsetSelectItem>>, window, cx| {
+        let charset_sub = cx.subscribe_in(
+            &charset_select,
+            window,
+            move |this, _, _event: &SelectEvent<Vec<CharsetSelectItem>>, window, cx| {
                 Self::update_collation_for_charset(
                     this.database_type,
                     &charset_select_clone,
@@ -1551,11 +1589,15 @@ impl ColumnsEditor {
                     cx,
                 );
                 cx.emit(ColumnsEditorEvent::Changed);
-            });
-        let collation_sub =
-            cx.subscribe_in(&collation_select, window, |_this, _, _event: &SelectEvent<Vec<CollationSelectItem>>, _window, cx| {
+            },
+        );
+        let collation_sub = cx.subscribe_in(
+            &collation_select,
+            window,
+            |_this, _, _event: &SelectEvent<Vec<CollationSelectItem>>, _window, cx| {
                 cx.emit(ColumnsEditorEvent::Changed);
-            });
+            },
+        );
         let enum_values_sub = cx.subscribe_in(
             &enum_values_input,
             window,
@@ -1587,6 +1629,7 @@ impl ColumnsEditor {
             nullable: true,
             is_pk: false,
             auto_increment: false,
+            is_unsigned: false,
             default_input,
             comment_input,
             charset_select,
@@ -1692,6 +1735,7 @@ impl ColumnsEditor {
                 } else {
                     base_type
                 };
+                let is_unsigned = row.is_unsigned && Self::supports_unsigned_type(&data_type);
 
                 let default_value = {
                     let val = row.default_input.read(cx).text().to_string();
@@ -1720,7 +1764,7 @@ impl ColumnsEditor {
                     is_nullable: row.nullable,
                     is_primary_key: row.is_pk,
                     is_auto_increment: row.auto_increment,
-                    is_unsigned: false,
+                    is_unsigned,
                     default_value,
                     comment,
                     charset,
@@ -1771,10 +1815,11 @@ impl ColumnsEditor {
             });
 
             let select_type_items = SearchableVec::new(self.data_types.clone());
-            let base_type = plugin
+            let parsed_type = plugin
                 .as_ref()
-                .map(|p| p.parse_column_type(&col.data_type).base_type)
-                .unwrap_or_else(|| col.data_type.clone());
+                .map(|p| p.parse_column_type(&col.data_type))
+                .unwrap_or_else(|| TableDesigner::fallback_parse_column_type(&col.data_type));
+            let base_type = parsed_type.base_type.clone();
             let type_idx = self
                 .data_types
                 .iter()
@@ -1845,8 +1890,9 @@ impl ColumnsEditor {
                 .as_ref()
                 .and_then(|cs| charset_items.iter().position(|item| item.info.name == *cs))
                 .unwrap_or(0);
-            let charset_select =
-                cx.new(|cx| SelectState::new(charset_items, Some(IndexPath::new(charset_idx)), window, cx));
+            let charset_select = cx.new(|cx| {
+                SelectState::new(charset_items, Some(IndexPath::new(charset_idx)), window, cx)
+            });
 
             // 根据列已有的 charset 加载对应的排序规则列表，并选中已有值
             let collation_select = cx.new(|cx| {
@@ -1939,8 +1985,10 @@ impl ColumnsEditor {
             });
             let charset_select_clone = charset_select.clone();
             let collation_select_clone = collation_select.clone();
-            let charset_sub =
-                cx.subscribe_in(&charset_select, window, move |this, _, _event: &SelectEvent<Vec<CharsetSelectItem>>, window, cx| {
+            let charset_sub = cx.subscribe_in(
+                &charset_select,
+                window,
+                move |this, _, _event: &SelectEvent<Vec<CharsetSelectItem>>, window, cx| {
                     Self::update_collation_for_charset(
                         this.database_type,
                         &charset_select_clone,
@@ -1949,11 +1997,15 @@ impl ColumnsEditor {
                         cx,
                     );
                     cx.emit(ColumnsEditorEvent::Changed);
-                });
-            let collation_sub =
-                cx.subscribe_in(&collation_select, window, |_this, _, _event: &SelectEvent<Vec<CollationSelectItem>>, _window, cx| {
+                },
+            );
+            let collation_sub = cx.subscribe_in(
+                &collation_select,
+                window,
+                |_this, _, _event: &SelectEvent<Vec<CollationSelectItem>>, _window, cx| {
                     cx.emit(ColumnsEditorEvent::Changed);
-                });
+                },
+            );
             let enum_values_sub = cx.subscribe_in(
                 &enum_values_input,
                 window,
@@ -1984,7 +2036,12 @@ impl ColumnsEditor {
                 scale_input,
                 nullable: col.is_nullable,
                 is_pk: col.is_primary_key,
-                auto_increment: col.data_type.to_uppercase().contains("AUTO_INCREMENT"),
+                auto_increment: if self.database_type == DatabaseType::SQLite {
+                    col.is_primary_key && parsed_type.base_type.eq_ignore_ascii_case("INTEGER")
+                } else {
+                    parsed_type.is_auto_increment
+                },
+                is_unsigned: parsed_type.is_unsigned,
                 default_input,
                 comment_input,
                 charset_select,
@@ -2009,6 +2066,23 @@ impl ColumnsEditor {
             }
         }
         None
+    }
+
+    fn supports_unsigned_type(data_type: &str) -> bool {
+        matches!(
+            data_type.to_uppercase().as_str(),
+            "TINYINT"
+                | "SMALLINT"
+                | "MEDIUMINT"
+                | "INT"
+                | "INTEGER"
+                | "BIGINT"
+                | "DECIMAL"
+                | "NUMERIC"
+                | "FLOAT"
+                | "DOUBLE"
+                | "REAL"
+        )
     }
 
     fn extract_scale_from_type(data_type: &str) -> Option<u32> {
@@ -2838,20 +2912,18 @@ impl TableOptionsEditor {
         });
         let charset_select_clone = charset_select.clone();
         let collation_select_clone = collation_select.clone();
-        let charset_sub =
-            cx.observe_in(&charset_select, window, move |this, _, window, cx| {
-                this.update_collations_for_charset(
-                    &charset_select_clone,
-                    &collation_select_clone,
-                    window,
-                    cx,
-                );
-                cx.emit(TableOptionsEvent::Changed);
-            });
-        let collation_sub =
-            cx.observe_in(&collation_select, window, |_this, _, _window, cx| {
-                cx.emit(TableOptionsEvent::Changed);
-            });
+        let charset_sub = cx.observe_in(&charset_select, window, move |this, _, window, cx| {
+            this.update_collations_for_charset(
+                &charset_select_clone,
+                &collation_select_clone,
+                window,
+                cx,
+            );
+            cx.emit(TableOptionsEvent::Changed);
+        });
+        let collation_sub = cx.observe_in(&collation_select, window, |_this, _, _window, cx| {
+            cx.emit(TableOptionsEvent::Changed);
+        });
         let comment_sub = cx.subscribe_in(
             &comment_input,
             window,
@@ -4033,5 +4105,69 @@ mod tests {
                 database_type
             );
         }
+    }
+
+    #[test]
+    fn test_column_info_to_definition_preserves_text_metadata() {
+        let column = ColumnInfo {
+            name: "session_id".to_string(),
+            data_type: "varchar(255)".to_string(),
+            is_nullable: false,
+            is_primary_key: false,
+            default_value: None,
+            comment: Some("会话ID".to_string()),
+            charset: Some("utf8mb4".to_string()),
+            collation: Some("utf8mb4_general_ci".to_string()),
+        };
+        let parsed = MySqlPlugin::new().parse_column_type(&column.data_type);
+
+        let definition =
+            TableDesigner::column_info_to_definition(DatabaseType::MySQL, &column, parsed);
+
+        assert_eq!(definition.data_type, "varchar");
+        assert_eq!(definition.length, Some(255));
+        assert_eq!(definition.comment, "会话ID");
+        assert_eq!(definition.charset.as_deref(), Some("utf8mb4"));
+        assert_eq!(definition.collation.as_deref(), Some("utf8mb4_general_ci"));
+    }
+
+    #[test]
+    fn test_column_info_to_definition_preserves_unsigned_and_enum_values() {
+        let numeric = ColumnInfo {
+            name: "amount".to_string(),
+            data_type: "int(11) unsigned".to_string(),
+            is_nullable: false,
+            is_primary_key: false,
+            default_value: Some("0".to_string()),
+            comment: None,
+            charset: None,
+            collation: None,
+        };
+        let enum_col = ColumnInfo {
+            name: "status".to_string(),
+            data_type: "enum('todo','done')".to_string(),
+            is_nullable: false,
+            is_primary_key: false,
+            default_value: Some("'todo'".to_string()),
+            comment: None,
+            charset: Some("utf8mb4".to_string()),
+            collation: Some("utf8mb4_bin".to_string()),
+        };
+
+        let numeric_definition = TableDesigner::column_info_to_definition(
+            DatabaseType::MySQL,
+            &numeric,
+            MySqlPlugin::new().parse_column_type(&numeric.data_type),
+        );
+        let enum_definition = TableDesigner::column_info_to_definition(
+            DatabaseType::MySQL,
+            &enum_col,
+            MySqlPlugin::new().parse_column_type(&enum_col.data_type),
+        );
+
+        assert!(numeric_definition.is_unsigned);
+        assert_eq!(numeric_definition.length, Some(11));
+        assert_eq!(enum_definition.data_type, "enum('todo','done')");
+        assert_eq!(enum_definition.collation.as_deref(), Some("utf8mb4_bin"));
     }
 }

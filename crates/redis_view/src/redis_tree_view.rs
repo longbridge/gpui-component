@@ -1897,10 +1897,7 @@ impl RedisTreeView {
                                 )
                                 .separator()
                                 .item(
-                                    PopupMenuItem::new(
-                                        t!("Common.delete").to_string(),
-                                    )
-                                    .on_click(
+                                    PopupMenuItem::new(t!("Common.delete").to_string()).on_click(
                                         window.listener_for(
                                             &view_for_delete,
                                             move |_view, _, _, cx| {

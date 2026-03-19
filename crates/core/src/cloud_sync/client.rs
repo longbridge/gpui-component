@@ -142,16 +142,10 @@ pub trait CloudApiClient: Send + Sync {
     ) -> Result<Vec<CloudSyncData>, CloudApiError>;
 
     /// 创建同步数据
-    async fn create_sync_data(
-        &self,
-        data: &CloudSyncData,
-    ) -> Result<CloudSyncData, CloudApiError>;
+    async fn create_sync_data(&self, data: &CloudSyncData) -> Result<CloudSyncData, CloudApiError>;
 
     /// 更新同步数据（乐观并发控制）
-    async fn update_sync_data(
-        &self,
-        data: &CloudSyncData,
-    ) -> Result<CloudSyncData, CloudApiError>;
+    async fn update_sync_data(&self, data: &CloudSyncData) -> Result<CloudSyncData, CloudApiError>;
 
     /// 软删除同步数据
     async fn delete_sync_data(&self, id: &str) -> Result<(), CloudApiError>;

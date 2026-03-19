@@ -165,7 +165,11 @@ mod tests {
     ) -> Arc<FairMutex<Term<GpuiEventProxy>>> {
         let config = alacritty_terminal::term::Config::default();
         let event_proxy = GpuiEventProxy::new(event_tx);
-        Arc::new(FairMutex::new(Term::new(config, &TestDimensions, event_proxy)))
+        Arc::new(FairMutex::new(Term::new(
+            config,
+            &TestDimensions,
+            event_proxy,
+        )))
     }
 
     fn create_virtual_serial_pair() -> Option<(std::process::Child, String, String)> {
@@ -319,9 +323,7 @@ mod tests {
                     }
                 }
                 assert!(got_wakeup, "应收到 Wakeup 事件");
-                println!(
-                    "[PASS] SerialBackend 读取线程成功接收对端数据并触发 Wakeup 事件"
-                );
+                println!("[PASS] SerialBackend 读取线程成功接收对端数据并触发 Wakeup 事件");
                 backend.shutdown();
                 drop(writer);
             }

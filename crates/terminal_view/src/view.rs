@@ -393,16 +393,8 @@ impl TerminalView {
         let connection_id = conn.id;
         let terminal = cx.new(|cx| Terminal::new_serial(conn, cx));
         // 串口不传 stored_connection，避免创建文件管理器面板
-        Self::new_with_terminal(
-            terminal,
-            connection_id,
-            None,
-            None,
-            tab_index,
-            window,
-            cx,
-        )
-        .expect("串口终端创建不应失败")
+        Self::new_with_terminal(terminal, connection_id, None, None, tab_index, window, cx)
+            .expect("串口终端创建不应失败")
     }
 
     fn new_with_terminal(
@@ -560,21 +552,15 @@ impl TerminalView {
                 } else {
                     self.blink_manager.update(cx, BlinkCursor::stop);
                 }
-                cx.emit(TerminalViewEvent::CursorBlinkChanged {
-                    enabled: *enabled,
-                });
+                cx.emit(TerminalViewEvent::CursorBlinkChanged { enabled: *enabled });
             }
             TerminalSidebarEvent::ConfirmMultilinePasteChanged(enabled) => {
                 self.confirm_multiline_paste = *enabled;
-                cx.emit(TerminalViewEvent::ConfirmMultilinePasteChanged {
-                    enabled: *enabled,
-                });
+                cx.emit(TerminalViewEvent::ConfirmMultilinePasteChanged { enabled: *enabled });
             }
             TerminalSidebarEvent::ConfirmHighRiskCommandChanged(enabled) => {
                 self.confirm_high_risk_command = *enabled;
-                cx.emit(TerminalViewEvent::ConfirmHighRiskCommandChanged {
-                    enabled: *enabled,
-                });
+                cx.emit(TerminalViewEvent::ConfirmHighRiskCommandChanged { enabled: *enabled });
             }
             TerminalSidebarEvent::AutoCopyChanged(enabled) => {
                 self.set_auto_copy(*enabled, cx);
@@ -588,7 +574,12 @@ impl TerminalView {
                 self.write_to_pty(cmd.into_bytes(), cx);
             }
             TerminalSidebarEvent::SyncWorkingDir => {
-                if let Some(path) = self.terminal.read(cx).current_working_dir().map(str::to_string) {
+                if let Some(path) = self
+                    .terminal
+                    .read(cx)
+                    .current_working_dir()
+                    .map(str::to_string)
+                {
                     self.sidebar.update(cx, |sidebar, cx| {
                         sidebar.sync_file_manager_path(path, cx);
                     });
@@ -733,7 +724,12 @@ impl TerminalView {
     }
 
     /// 应用主题（不 emit 事件，用于跨 tab 同步）
-    pub fn apply_theme(&mut self, theme: &TerminalTheme, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn apply_theme(
+        &mut self,
+        theme: &TerminalTheme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.current_theme.name == theme.name {
             return;
         }
@@ -745,7 +741,12 @@ impl TerminalView {
     }
 
     /// 应用光标闪烁（不 emit 事件，用于跨 tab 同步）
-    pub fn apply_cursor_blink(&mut self, enabled: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn apply_cursor_blink(
+        &mut self,
+        enabled: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.cursor_blink_enabled = enabled;
         if enabled {
             if self.focus_handle.is_focused(window) {
@@ -862,13 +863,7 @@ impl TerminalView {
 
     fn write_to_pty(&mut self, data: Vec<u8>, cx: &mut Context<Self>) {
         // 用户输入时自动滚动到底部
-        let display_offset = self
-            .terminal
-            .read(cx)
-            .term()
-            .lock()
-            .grid()
-            .display_offset();
+        let display_offset = self.terminal.read(cx).term().lock().grid().display_offset();
         if display_offset > 0 {
             self.terminal.update(cx, |terminal, _| {
                 terminal
@@ -2107,7 +2102,10 @@ impl Render for TerminalView {
                     .overflow_hidden()
                     .on_scroll_wheel(cx.listener(Self::handle_scroll))
                     .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
-                    .on_mouse_down(MouseButton::Middle, cx.listener(Self::handle_middle_mouse_down))
+                    .on_mouse_down(
+                        MouseButton::Middle,
+                        cx.listener(Self::handle_middle_mouse_down),
+                    )
                     .on_mouse_move(cx.listener(Self::handle_mouse_move))
                     .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
                     .child(

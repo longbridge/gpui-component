@@ -615,7 +615,9 @@ impl SettingsPanel {
                                     .small()
                                     .on_click(cx.listener(|this, checked: &bool, _window, cx| {
                                         this.middle_click_paste = *checked;
-                                        cx.emit(SettingsPanelEvent::MiddleClickPasteChanged(*checked));
+                                        cx.emit(SettingsPanelEvent::MiddleClickPasteChanged(
+                                            *checked,
+                                        ));
                                     })),
                             ),
                     ),

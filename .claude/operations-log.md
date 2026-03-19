@@ -537,3 +537,57 @@
 ### 本地验证
 - `cargo test -p db csv::tests -- --nocapture`：通过（2 passed）
 - `cargo check -p db_view`：通过（仅既有 warning）
+
+## 编码前检查 - 表设计 SQL 预览误报
+时间：2026-03-19 18:35:56 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-table-designer-sql-preview.md`
+□ 将使用以下可复用组件：
+- `crates/db_view/src/table_designer_tab.rs`：`collect_design`、`build_original_design`、`ColumnsEditor::load_columns/get_columns`
+- `crates/db/src/plugin.rs`：`parse_column_type`
+- `crates/db/src/mysql/plugin.rs`：`list_columns`、`build_alter_table_sql`、现有 MySQL DDL 测试模式
+□ 将遵循命名约定：Rust `snake_case`/`PascalCase`
+□ 将遵循代码风格：最小改动、归一化收口到单点辅助函数、不扩散到无关数据库插件
+□ 确认不重复造轮子，证明：复用现有插件类型解析与 SQL 生成，只修复设计器原始状态构造和回归测试
+
+## 编码后声明 - 表设计 SQL 预览误报
+时间：2026-03-19 18:43:02 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db/src/plugin.rs` 的 `parse_column_type` 语义，用于统一 `ColumnInfo -> ColumnDefinition` 归一化
+- `crates/db_view/src/table_designer_tab.rs` 现有 `collect_design` / `ColumnsEditor::load_columns/get_columns` 链路
+- `crates/db/src/mysql/plugin.rs` 既有 `build_alter_table_sql` 与测试模块
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `column_info_to_definition`、`fallback_parse_column_type`、`supports_unsigned_type`，均使用 `snake_case`
+- 代码风格：保持 `TableDesigner` 与 `ColumnsEditor` 原有职责边界，只在归一化层补齐缺失属性
+- 文件组织：测试继续内聚在原文件 `#[cfg(test)]` 模块，没有新增测试基础设施
+
+### 3. 对比了以下相似实现
+- `crates/db_view/src/table_designer_tab.rs`：`build_original_design` 与 `ColumnsEditor::get_columns/load_columns`
+- `crates/db/src/mysql/plugin.rs`：`list_columns` 与 `build_alter_table_sql`
+- `crates/db/src/plugin.rs`：默认 `parse_column_type` 归一化逻辑
+
+### 4. 未重复造轮子的证明
+- 未新增 schema diff 框架，直接复用现有插件解析和 SQL 生成链路
+- 未对所有数据库插件加特判，而是在设计器入口统一原始列定义
+
+## 实施与验证记录 - 表设计 SQL 预览误报
+时间：2026-03-19 18:43:02 +0800
+
+### 已完成修改
+- `crates/db_view/src/table_designer_tab.rs`
+  - `build_original_design` 改为基于插件 `parse_column_type` 统一构造原始列定义
+  - 新增 `column_info_to_definition`，补齐 `charset/collation/is_unsigned`、枚举值和 SQLite 自增语义
+  - `ColumnsEditor` 内部状态新增 `is_unsigned`，避免只打开不修改时丢失无符号属性
+- `crates/db/src/mysql/plugin.rs`
+  - 新增“文本列元数据完全一致时返回 no changes”的回归测试
+- `crates/db_view/src/table_designer_tab.rs` 测试模块
+  - 新增 2 个纯函数测试，覆盖文本列元数据、无符号数值列与枚举值保真
+
+### 本地验证
+- `cargo test -p db_view test_column_info_to_definition -- --nocapture`
+- 结果：通过（2 passed, 0 failed）
+- `cargo test -p db test_build_alter_table_sql_no_changes_with_text_metadata -- --nocapture`
+- 结果：通过（1 passed, 0 failed）
+- 未执行 GUI 级手动验证：当前环境无法自动完成图形界面交互，需在表设计页实际打开已有 MySQL 表做最终体验确认

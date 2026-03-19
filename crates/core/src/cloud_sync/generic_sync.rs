@@ -45,11 +45,7 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
         .list_sync_data(Some(handler.data_type()), None, None)
         .await
         .map_err(|e| SyncError::NetworkError(e.to_string()))?;
-    tracing::info!(
-        "[{}] 云端同步数据: {} 个",
-        type_name,
-        cloud_sync_data.len()
-    );
+    tracing::info!("[{}] 云端同步数据: {} 个", type_name, cloud_sync_data.len());
 
     // ========== 4. 过滤未解锁团队数据 ==========
     let cloud_sync_data: Vec<_> = cloud_sync_data
@@ -58,12 +54,7 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
             Some(tid) => {
                 let unlocked = engine.is_team_unlocked(tid);
                 if !unlocked {
-                    tracing::info!(
-                        "[{}] 跳过未解锁团队 {} 的云端数据 {}",
-                        type_name,
-                        tid,
-                        d.id
-                    );
+                    tracing::info!("[{}] 跳过未解锁团队 {} 的云端数据 {}", type_name, tid, d.id);
                 }
                 unlocked
             }
@@ -133,9 +124,11 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
         if let Some(local_id) = item.local_id() {
             operations.push(SyncOperation::Upload { local_id });
         } else {
-            result
-                .errors
-                .push(format!("上传{}失败 {}: 缺少本地 ID", type_name, item.item_name()));
+            result.errors.push(format!(
+                "上传{}失败 {}: 缺少本地 ID",
+                type_name,
+                item.item_name()
+            ));
         }
     }
 
@@ -185,9 +178,10 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
         match operation {
             SyncOperation::Upload { local_id } => {
                 let Some(local_item) = local_item_map.get(&local_id) else {
-                    result
-                        .errors
-                        .push(format!("上传{}失败 {}: 本地数据不存在", type_name, local_id));
+                    result.errors.push(format!(
+                        "上传{}失败 {}: 本地数据不存在",
+                        type_name, local_id
+                    ));
                     continue;
                 };
 
@@ -195,19 +189,11 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
                     Ok(cloud_id) => match handler.on_uploaded(engine, local_id, &cloud_id) {
                         Ok(()) => {
                             result.uploaded += 1;
-                            tracing::info!(
-                                "[上传{}] 成功: {}",
-                                type_name,
-                                local_item.item_name()
-                            );
+                            tracing::info!("[上传{}] 成功: {}", type_name, local_item.item_name());
                         }
                         Err(e) => {
-                            let msg = format!(
-                                "上传{}失败 {}: {}",
-                                type_name,
-                                local_item.item_name(),
-                                e
-                            );
+                            let msg =
+                                format!("上传{}失败 {}: {}", type_name, local_item.item_name(), e);
                             result.errors.push(msg.clone());
                             queue.mark_failed(queued_operation, msg);
                         }
@@ -222,26 +208,24 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
             }
             SyncOperation::UpdateCloud { local_id, cloud_id } => {
                 let Some(local_item) = local_item_map.get(&local_id) else {
-                    result
-                        .errors
-                        .push(format!("更新云端{}失败 {}: 本地数据不存在", type_name, local_id));
+                    result.errors.push(format!(
+                        "更新云端{}失败 {}: 本地数据不存在",
+                        type_name, local_id
+                    ));
                     continue;
                 };
                 let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
-                    result
-                        .errors
-                        .push(format!("更新云端{}失败 {}: 云端数据不存在", type_name, cloud_id));
+                    result.errors.push(format!(
+                        "更新云端{}失败 {}: 云端数据不存在",
+                        type_name, cloud_id
+                    ));
                     continue;
                 };
 
                 match update_cloud_item(engine, handler, local_item, cloud_data).await {
                     Ok(()) => {
                         result.uploaded += 1;
-                        tracing::info!(
-                            "[更新云端{}] 成功: {}",
-                            type_name,
-                            local_item.item_name()
-                        );
+                        tracing::info!("[更新云端{}] 成功: {}", type_name, local_item.item_name());
                     }
                     Err(e) => {
                         let msg = format!(
@@ -257,15 +241,17 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
             }
             SyncOperation::UpdateLocal { local_id, cloud_id } => {
                 let Some(local_item) = local_item_map.get(&local_id) else {
-                    result
-                        .errors
-                        .push(format!("更新本地{}失败 {}: 本地数据不存在", type_name, local_id));
+                    result.errors.push(format!(
+                        "更新本地{}失败 {}: 本地数据不存在",
+                        type_name, local_id
+                    ));
                     continue;
                 };
                 let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
-                    result
-                        .errors
-                        .push(format!("更新本地{}失败 {}: 云端数据不存在", type_name, cloud_id));
+                    result.errors.push(format!(
+                        "更新本地{}失败 {}: 云端数据不存在",
+                        type_name, cloud_id
+                    ));
                     continue;
                 };
 
@@ -287,9 +273,10 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
             }
             SyncOperation::Download(cloud_id) => {
                 let Some(cloud_data) = cloud_data_map.get(&cloud_id) else {
-                    result
-                        .errors
-                        .push(format!("下载{}失败 {}: 云端数据不存在", type_name, cloud_id));
+                    result.errors.push(format!(
+                        "下载{}失败 {}: 云端数据不存在",
+                        type_name, cloud_id
+                    ));
                     continue;
                 };
 
@@ -327,19 +314,17 @@ pub(crate) async fn generic_sync<H: SyncTypeHandler>(
                     }
                 }
             }
-            SyncOperation::DeleteLocal(local_id) => {
-                match handler.delete_local(engine, local_id) {
-                    Ok(()) => {
-                        result.deleted += 1;
-                        tracing::info!("[删除本地{}] 成功: {}", type_name, local_id);
-                    }
-                    Err(e) => {
-                        let msg = format!("删除本地{}失败 {}: {}", type_name, local_id, e);
-                        result.errors.push(msg.clone());
-                        queue.mark_failed(queued_operation, msg);
-                    }
+            SyncOperation::DeleteLocal(local_id) => match handler.delete_local(engine, local_id) {
+                Ok(()) => {
+                    result.deleted += 1;
+                    tracing::info!("[删除本地{}] 成功: {}", type_name, local_id);
                 }
-            }
+                Err(e) => {
+                    let msg = format!("删除本地{}失败 {}: {}", type_name, local_id, e);
+                    result.errors.push(msg.clone());
+                    queue.mark_failed(queued_operation, msg);
+                }
+            },
         }
     }
 
@@ -455,11 +440,7 @@ fn process_soft_deletions<H: SyncTypeHandler>(
                     match handler.delete_local(engine, local_id) {
                         Ok(()) => deleted_count += 1,
                         Err(e) => {
-                            tracing::error!(
-                                "[软删除] 删除本地数据失败: {} - {}",
-                                local_id,
-                                e
-                            );
+                            tracing::error!("[软删除] 删除本地数据失败: {} - {}", local_id, e);
                         }
                     }
                 }
@@ -480,10 +461,8 @@ fn calculate_sync_plan<H: SyncTypeHandler>(
 ) -> Result<GenericSyncPlan<H::Item>, SyncError> {
     let mut plan = GenericSyncPlan::default();
 
-    let cloud_map: HashMap<&str, &CloudSyncData> = cloud_data_list
-        .iter()
-        .map(|d| (d.id.as_str(), d))
-        .collect();
+    let cloud_map: HashMap<&str, &CloudSyncData> =
+        cloud_data_list.iter().map(|d| (d.id.as_str(), d)).collect();
 
     let local_cloud_ids: HashSet<String> = local_items
         .iter()
@@ -581,10 +560,7 @@ fn calculate_sync_plan<H: SyncTypeHandler>(
 }
 
 /// 获取待删除的云端 ID 集合
-fn get_pending_cloud_ids<H: SyncTypeHandler>(
-    engine: &SyncEngine,
-    handler: &H,
-) -> HashSet<String> {
+fn get_pending_cloud_ids<H: SyncTypeHandler>(engine: &SyncEngine, handler: &H) -> HashSet<String> {
     handler
         .list_pending_deletions(engine)
         .into_iter()

@@ -903,7 +903,10 @@ impl DataGrid {
 
             match result {
                 Err(err) => cx.update(|cx| {
-                    notification(cx, t!("TableDataGrid.execute_sql_failed", error = err.to_string()).to_string());
+                    notification(
+                        cx,
+                        t!("TableDataGrid.execute_sql_failed", error = err.to_string()).to_string(),
+                    );
                 }),
                 Ok(results) => {
                     let (result, column_meta) = results;
@@ -1531,7 +1534,14 @@ impl DataGrid {
                     Ok(infos) => infos,
                     Err(err) => {
                         cx.update(|cx| {
-                            notification(cx, t!("TableDataGrid.get_table_keys_failed", error = err.to_string()).to_string());
+                            notification(
+                                cx,
+                                t!(
+                                    "TableDataGrid.get_table_keys_failed",
+                                    error = err.to_string()
+                                )
+                                .to_string(),
+                            );
                         });
                         return;
                     }
@@ -1593,10 +1603,17 @@ impl DataGrid {
                         SqlResult::Error(err) => Some(err.message.clone()),
                         _ => None,
                     }) {
-                        notification(cx, t!("TableDataGrid.save_changes_failed", error = err_msg).to_string());
+                        notification(
+                            cx,
+                            t!("TableDataGrid.save_changes_failed", error = err_msg).to_string(),
+                        );
                     } else {
                         this.clear_changes(cx);
-                        notification(cx, t!("TableDataGrid.save_changes_success", count = change_count).to_string());
+                        notification(
+                            cx,
+                            t!("TableDataGrid.save_changes_success", count = change_count)
+                                .to_string(),
+                        );
                         if let Some(window_id) = cx.active_window() {
                             let _ = cx.update_window(window_id, |_, _window, cx| {
                                 tab_container.update(cx, |container, cx| {
@@ -1607,7 +1624,10 @@ impl DataGrid {
                     }
                 }
                 Err(e) => {
-                    notification(cx, t!("TableDataGrid.save_changes_failed", error = e.to_string()).to_string());
+                    notification(
+                        cx,
+                        t!("TableDataGrid.save_changes_failed", error = e.to_string()).to_string(),
+                    );
                 }
             });
         })
@@ -1649,7 +1669,14 @@ impl DataGrid {
                     Ok(infos) => infos,
                     Err(err) => {
                         cx.update(|cx| {
-                            notification(cx, t!("TableDataGrid.get_table_keys_failed", error = err.to_string()).to_string());
+                            notification(
+                                cx,
+                                t!(
+                                    "TableDataGrid.get_table_keys_failed",
+                                    error = err.to_string()
+                                )
+                                .to_string(),
+                            );
                         });
                         return;
                     }
@@ -1711,14 +1738,24 @@ impl DataGrid {
                         SqlResult::Error(err) => Some(err.message.clone()),
                         _ => None,
                     }) {
-                        notification(cx, t!("TableDataGrid.save_changes_failed", error = err_msg).to_string());
+                        notification(
+                            cx,
+                            t!("TableDataGrid.save_changes_failed", error = err_msg).to_string(),
+                        );
                     } else {
                         this.clear_changes(cx);
-                        notification(cx, t!("TableDataGrid.save_changes_success", count = change_count).to_string());
+                        notification(
+                            cx,
+                            t!("TableDataGrid.save_changes_success", count = change_count)
+                                .to_string(),
+                        );
                     }
                 }
                 Err(e) => {
-                    notification(cx, t!("TableDataGrid.save_changes_failed", error = e.to_string()).to_string());
+                    notification(
+                        cx,
+                        t!("TableDataGrid.save_changes_failed", error = e.to_string()).to_string(),
+                    );
                 }
             });
         })
@@ -1760,7 +1797,14 @@ impl DataGrid {
                     Ok(index_infos) => index_infos,
                     Err(err) => {
                         cx.update(|cx| {
-                            notification(cx, t!("TableDataGrid.get_table_keys_failed", error = err.to_string()).to_string());
+                            notification(
+                                cx,
+                                t!(
+                                    "TableDataGrid.get_table_keys_failed",
+                                    error = err.to_string()
+                                )
+                                .to_string(),
+                            );
                         });
                         return;
                     }
