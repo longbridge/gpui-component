@@ -2579,6 +2579,12 @@ impl HomePage {
                     .border_color(cx.theme().list_active_border)
             })
             .on_double_click(cx.listener(move |this, _, w, cx| {
+                // 如果主密钥未解锁且已设置过密码，拦截连接操作并弹出解锁对话框
+                if !crypto::has_master_key() && crypto::has_repo_password_set() {
+                    this.show_encryption_key_dialog(w, cx);
+                    return;
+                }
+
                 let strategy =
                     build_connection_open_strategy(clone_conn.clone(), workspace.clone());
                 strategy.open(this, w, cx);
