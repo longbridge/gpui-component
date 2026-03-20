@@ -3,6 +3,38 @@
 
 ---
 
+## 审查报告（ci-machete-db-once-cell）
+生成时间：2026-03-20 15:11:51 +0800
+
+### 需求完整性检查
+- 目标明确：修复 GitHub Actions `Test (aarch64-apple-darwin, macos-latest)` 中 `Machete` 步骤持续失败的问题
+- 范围明确：定位截图中 `db -- ./crates/db/Cargo.toml: once_cell` 的未使用依赖并修复
+- 交付物明确：依赖清理、上下文摘要、操作日志、审查报告
+- 风险与依赖明确：本机未安装 `cargo-machete`，最终闭环需要 CI 重新执行
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：84/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：96/100
+- 风险评估：90/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：CI workflow [`ci.yml`](/Users/hufei/RustroverProjects/onetcli/.github/workflows/ci.yml#L27) 的 `Machete` 步骤只在 macOS job 运行，而截图已经明确指向 `db -- ./crates/db/Cargo.toml: once_cell`。
+- 代码证据支持“真实未使用依赖”而非误报：[`crates/db/Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/crates/db/Cargo.toml#L1) 原先声明了 `once_cell.workspace = true`，但对 `crates/db/src` 的搜索没有发现 `once_cell`/`OnceCell`/`Lazy` 使用痕迹。
+- 修复策略正确：参考 [`crates/macros/Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/crates/macros/Cargo.toml#L20) 已有的 `cargo-machete` ignore 模式后，判断当前不属于误报，因此直接删除 `db` crate 的未使用依赖，而不是加 ignore。
+- 本地验证有效：`cargo check -p db` 已通过，说明删除 `once_cell` 不会导致 `db` crate 编译回归；唯一保留的是既有 `num-bigint-dig v0.8.4` future-incompat 提示。
+- 残余风险可控：当前机器未安装 `cargo-machete`，所以还不能本机直接复跑 `cargo machete`；若 CI 下一次仍报其他未使用依赖，需要按同样方式继续清理。
+
+---
+
 ## 审查报告（libudev-linux-gnu-build）
 生成时间：2026-03-20 15:03:18 +0800
 

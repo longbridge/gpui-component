@@ -1,5 +1,57 @@
 ## 操作日志
 
+## 编码前检查 - ci-machete-db-once-cell
+时间：2026-03-20 15:10:42 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-ci-machete-db-once-cell.md`
+- 已分析相似实现：
+  - `.github/workflows/ci.yml`
+  - `crates/macros/Cargo.toml`
+  - `crates/db/Cargo.toml`
+- 将使用以下可复用组件：
+  - `.github/workflows/ci.yml`：确认 `Machete` 只跑在 macOS job
+  - `crates/macros/Cargo.toml`：作为 `cargo-machete` ignore 的既有范式
+- 将遵循命名约定：不新增 crate 或脚本，仅调整现有依赖声明
+- 将遵循代码风格：优先删除真实未使用依赖，不用 metadata 掩盖实际问题
+- 确认不重复造轮子，证明：已检查 CI workflow、现有 `cargo-machete` metadata 用法以及 `db` crate 依赖，当前问题属于依赖声明清理，不需要新增脚本或额外配置
+
+## 编码后声明 - ci-machete-db-once-cell
+时间：2026-03-20 15:11:51 +0800
+
+### 1. 复用了以下既有组件
+- `.github/workflows/ci.yml`：继续沿用现有 `Machete` 步骤，不改 CI 编排
+- `crates/macros/Cargo.toml`：作为“只有误报才加 ignore”的既有治理模式参考
+- `crates/db/Cargo.toml`：直接在目标 crate 清理未使用依赖
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增文件或模块，仅调整现有依赖列表
+- 代码风格：优先删除真实未使用依赖，而不是增加 `cargo-machete` ignore 掩盖问题
+- 文件组织：改动仅落在 `crates/db/Cargo.toml`，文档留痕写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `ci.yml` 显示 `Machete` 仅在 macOS job 运行，因此失败与依赖治理直接相关
+- `crates/macros/Cargo.toml` 已有 `package.metadata.cargo-machete.ignored`，证明项目只在确认为误报时才使用 ignore
+- `crates/db/Cargo.toml` 属于普通业务 crate，且源码搜索未发现 `once_cell` 使用，因此应直接删除依赖
+
+### 4. 未重复造轮子的证明
+- 已检查 `.github/workflows/ci.yml`、`crates/macros/Cargo.toml`、`crates/db/Cargo.toml` 以及 `crates/db/src`
+- 结论：当前问题是 `db` crate 真实未使用依赖，不需要新增脚本、规则或 workaround
+
+## 实施与验证记录 - ci-machete-db-once-cell
+时间：2026-03-20 15:11:51 +0800
+
+### 已完成修改
+- 从 `crates/db/Cargo.toml` 删除未使用的 `once_cell.workspace = true`
+- 新增 `.claude/context-summary-ci-machete-db-once-cell.md`，记录 CI 失败入口、依赖治理模式与验证限制
+
+### 本地验证
+- 搜索 `crates/db` 中的 `once_cell`
+  - 结果：无匹配，未发现 `once_cell`/`OnceCell`/`Lazy` 使用证据
+- `cargo check -p db`
+  - 结果：通过；仅保留既有 `num-bigint-dig v0.8.4` future-incompat 提示，与本次修改无关
+- `cargo machete`
+  - 结果：当前本机未安装该子命令，无法直接本地复跑；最终闭环需依赖 CI 再次执行
+
 ## 编码前检查 - libudev-linux-gnu-build
 时间：2026-03-20 15:02:02 +0800
 
