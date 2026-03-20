@@ -3,6 +3,37 @@
 
 ---
 
+## 审查报告（windows-owner-id-build）
+生成时间：2026-03-20 15:30:18 +0800
+
+### 需求完整性检查
+- 目标明确：修复 Windows CI 中 `StoredConnection` 初始化缺少 `owner_id` 字段导致的编译失败
+- 范围明确：仅涉及 `crates/core/src/cloud_sync/conflict.rs` 的测试初始化与 `.claude/` 留痕文档
+- 交付物明确：代码修复、上下文摘要、操作日志、审查报告、本地编译验证
+- 风险与依赖明确：当前修复针对截图中已知报错点；若还有其他手写初始化漏字段，CI 会继续暴露
+
+### 技术维度评分
+- 代码质量：96/100
+- 测试覆盖：85/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：92/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：[`crates/core/src/storage/models.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/storage/models.rs#L570) 的 `StoredConnection` 已新增 `owner_id` 字段，但 [`crates/core/src/cloud_sync/conflict.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/cloud_sync/conflict.rs#L326) 的测试字面量初始化没有同步补齐。
+- 现有模式清晰：`StoredConnection::new_database/new_ssh/new_redis/new_mongodb/new_serial` 全部采用 `owner_id: None`，而 [`storage/repository.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/storage/repository.rs#L54) 也已显式映射 `owner_id: row.owner_id`，说明字段已经在模型层和持久化层全面接入。
+- 修复策略正确：在冲突测试的字面量初始化中补上 `owner_id: None`，与现有默认构造语义保持一致，没有扩大改动范围。
+- 本地验证有效：`cargo check -p one-core --tests` 已通过，足以证明截图中的 Windows 编译错误 `E0063 missing field owner_id` 已修复。
+
+---
+
 ## 审查报告（terminal-serial-active-close）
 生成时间：2026-03-20 15:24:31 +0800
 

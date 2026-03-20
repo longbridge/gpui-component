@@ -1,5 +1,54 @@
 ## 操作日志
 
+## 编码前检查 - windows-owner-id-build
+时间：2026-03-20 15:29:09 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-windows-owner-id-build.md`
+- 已分析相似实现：
+  - `crates/core/src/storage/models.rs`
+  - `crates/core/src/storage/repository.rs`
+  - `crates/core/src/cloud_sync/conflict.rs`
+- 将使用以下可复用组件：
+  - `StoredConnection` 结构定义
+  - `StoredConnection::new_*` 构造函数中的默认字段模式
+  - `repository.rs` 中从数据库行恢复 `owner_id` 的映射方式
+- 将遵循命名约定：仅补现有字段，不引入新类型或新接口
+- 将遵循代码风格：最小改动，只修复漏掉的结构体字段初始化
+- 确认不重复造轮子，证明：已检查结构定义、构造函数和 repository 映射，当前问题属于字面量初始化遗漏，不需要新增抽象
+
+## 编码后声明 - windows-owner-id-build
+时间：2026-03-20 15:30:18 +0800
+
+### 1. 复用了以下既有组件
+- `StoredConnection` 结构定义：确认新增字段 `owner_id`
+- `StoredConnection::new_*` 构造函数：确认默认值语义为 `owner_id: None`
+- `repository.rs` 的 `From<ConnectionRow>`：确认持久化层已完整映射 `owner_id`
+
+### 2. 遵循了以下项目约定
+- 命名约定：未引入新字段或新接口，只补现有结构体字面量
+- 代码风格：最小改动，仅修正测试中的缺失字段初始化
+- 文件组织：代码修改仅限 `crates/core/src/cloud_sync/conflict.rs`，留痕文档写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `storage/models.rs` 中所有 `new_*` 构造函数都显式设置 `owner_id: None`
+- `storage/repository.rs` 从数据库行构造 `StoredConnection` 时显式映射 `owner_id: row.owner_id`
+- `cloud_sync/conflict.rs` 的测试是少数仍在手写完整字面量初始化的位置，因此最容易漏字段
+
+### 4. 未重复造轮子的证明
+- 已检查 `StoredConnection` 定义、构造函数和 repository 映射
+- 结论：当前问题是新增字段后的单点初始化遗漏，不需要额外抽象或重构
+
+## 实施与验证记录 - windows-owner-id-build
+时间：2026-03-20 15:30:18 +0800
+
+### 已完成修改
+- 在 `crates/core/src/cloud_sync/conflict.rs` 的测试用 `StoredConnection` 初始化中补上 `owner_id: None`
+- 新增 `.claude/context-summary-windows-owner-id-build.md`，记录结构定义、相似初始化模式和验证策略
+
+### 本地验证
+- `cargo check -p one-core --tests`
+  - 结果：通过，`one-core` 测试编译成功，截图中的 `E0063 missing field owner_id` 已消失
+
 ## 编码前检查 - terminal-serial-active-close
 时间：2026-03-20 15:23:03 +0800
 
