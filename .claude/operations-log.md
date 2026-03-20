@@ -1,5 +1,61 @@
 ## 操作日志
 
+## 编码前检查 - terminal-serial-active-close
+时间：2026-03-20 15:23:03 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-terminal-serial-active-close.md`
+- 已分析相似实现：
+  - `main/src/home_tab.rs`
+  - `crates/sftp_view/src/lib.rs`
+  - `crates/mongodb_view/src/mongo_tab.rs`
+  - `crates/terminal_view/src/view.rs`
+- 将使用以下可复用组件：
+  - `ActiveConnections`：全局活跃连接状态
+  - `Terminal::connection_id()`：读取当前终端关联连接 ID
+  - `Terminal::shutdown()`：保留原有底层关闭逻辑
+- 将遵循命名约定：Rust 使用 `snake_case`，不引入额外全局状态类型
+- 将遵循代码风格：最小改动，只补 TerminalView 关闭路径中的状态回收
+- 确认不重复造轮子，证明：已检查 HomePage、Terminal、SFTP、MongoTab 的关闭模式，仓库已有“try_close 内显式移除 ActiveConnections”的先例
+
+## 编码后声明 - terminal-serial-active-close
+时间：2026-03-20 15:24:31 +0800
+
+### 1. 复用了以下既有组件
+- `ActiveConnections`：继续作为主页判断连接是否活跃的唯一数据源
+- `Terminal::connection_id()`：直接读取当前终端绑定的连接 ID
+- `Terminal::shutdown()`：保留原有底层连接关闭逻辑
+- `MongoTabView::try_close()` / `SftpPanel::try_close()`：参考其“关闭前同步回收活跃状态”的模式
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增辅助方法 `release_active_connection`，保持 `snake_case`
+- 代码风格：只改 `TerminalView` 的关闭路径，不扩散到 HomePage、TabContainer 或 Terminal
+- 文件组织：功能修复集中在 `crates/terminal_view/src/view.rs`，留痕文件写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `main/src/home_tab.rs`：确认编辑/删除禁用依赖 `ActiveConnections::is_active`
+- `crates/sftp_view/src/lib.rs`：SFTP 在关闭/断开路径中显式 `set_connection_active(false, cx)`
+- `crates/mongodb_view/src/mongo_tab.rs`：MongoTab 在 `try_close()` 内直接 `ActiveConnections.remove(connection_id)`
+- `crates/terminal/src/terminal.rs`：Terminal 现有 `remove` 主要依赖异步断开回调，解释了为什么 tab 立即关闭时会残留状态
+
+### 4. 未重复造轮子的证明
+- 已检查 HomePage、Terminal、SFTP、MongoTab、TabContainer
+- 结论：仓库已有“try_close 同步回收活跃状态”的成熟模式，本次只是在 TerminalView 上补齐缺失
+
+## 实施与验证记录 - terminal-serial-active-close
+时间：2026-03-20 15:24:31 +0800
+
+### 已完成修改
+- 在 `crates/terminal_view/src/view.rs` 引入 `ActiveConnections`
+- 新增 `release_active_connection` 辅助方法
+- 在 `TerminalView::try_close()` 中先同步回收活跃连接状态，再执行原有 `shutdown()`
+
+### 本地验证
+- `cargo check -p terminal_view`
+  - 结果：通过；仅保留既有 `num-bigint-dig v0.8.4` future-incompat 提示，与本次修改无关
+
+### 当前限制
+- 尚未执行 GUI 手动回归；需要实际打开串口 tab、关闭后返回首页确认卡片不再显示活跃且允许编辑
+
 ## 编码前检查 - ci-machete-db-once-cell
 时间：2026-03-20 15:10:42 +0800
 

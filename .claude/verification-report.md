@@ -3,6 +3,38 @@
 
 ---
 
+## 审查报告（terminal-serial-active-close）
+生成时间：2026-03-20 15:24:31 +0800
+
+### 需求完整性检查
+- 目标明确：修复串口 tab 关闭后主页连接卡片仍显示活跃、导致无法编辑的问题
+- 范围明确：仅涉及 `TerminalView` 的关闭路径与 `.claude/` 留痕文档
+- 交付物明确：代码修复、上下文摘要、操作日志、审查报告、本地编译验证
+- 风险与依赖明确：最终行为闭环需通过 GUI 手动验证确认
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：82/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：90/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：[`main/src/home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs#L824) 通过 `ActiveConnections::is_active` 禁止编辑/删除，而 [`crates/terminal_view/src/view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/view.rs#L2000) 之前在 `try_close()` 中只调用 `shutdown()`，没有同步回收活跃状态。
+- 时序问题解释充分：[`crates/terminal/src/terminal.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal/src/terminal.rs#L500) 中 `set_connection_active(false, cx)` 主要依赖异步断开回调；tab 关闭后实体会立即从容器中移除，因此串口连接可能来不及回调就留下了残余活跃标记。
+- 修复策略与现有模式一致：参照 [`crates/sftp_view/src/lib.rs`](/Users/hufei/RustroverProjects/onetcli/crates/sftp_view/src/lib.rs#L712) 和 [`crates/mongodb_view/src/mongo_tab.rs`](/Users/hufei/RustroverProjects/onetcli/crates/mongodb_view/src/mongo_tab.rs#L264)，现在 `TerminalView::try_close()` 会先同步移除 `ActiveConnections`，再执行原有 `shutdown()`。
+- 本地验证有效：`cargo check -p terminal_view` 已通过，说明改动没有引入编译回归；唯一保留的是既有 `num-bigint-dig v0.8.4` future-incompat 提示。
+- 残余风险可控：GUI 手动回归尚未执行，因此仍建议实际关闭一个串口 tab 后回首页确认卡片活跃标记与编辑按钮状态都已恢复。
+
+---
+
 ## 审查报告（ci-machete-db-once-cell）
 生成时间：2026-03-20 15:11:51 +0800
 

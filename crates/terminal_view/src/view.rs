@@ -22,7 +22,7 @@ use crate::sidebar::{SidebarPanel, TerminalSidebar, TerminalSidebarEvent};
 use crate::terminal_element::{RenderCache, TerminalElement};
 use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
 use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH};
-use one_core::storage::models::StoredConnection;
+use one_core::storage::models::{ActiveConnections, StoredConnection};
 use one_core::tab_container::{TabContent, TabContentEvent};
 use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
 use rust_i18n::t;
@@ -328,6 +328,14 @@ impl ScrollbarHandle for TerminalScrollbarHandle {
 }
 
 impl TerminalView {
+    fn release_active_connection(&self, cx: &mut Context<Self>) {
+        let Some(connection_id) = self.terminal.read(cx).connection_id() else {
+            return;
+        };
+
+        cx.global_mut::<ActiveConnections>().remove(connection_id);
+    }
+
     pub fn new(config: LocalConfig, window: &mut Window, cx: &mut Context<Self>) -> Result<Self> {
         Self::new_with_index(config, None, window, cx)
     }
@@ -2002,6 +2010,8 @@ impl TabContent for TerminalView {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Task<bool> {
+        // tab 会立即从容器中移除，先同步回收活跃状态，避免主页残留“连接使用中”标记。
+        self.release_active_connection(cx);
         // 关闭终端连接
         self.terminal.read(cx).shutdown();
         Task::ready(true)
