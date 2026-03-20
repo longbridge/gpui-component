@@ -1006,3 +1006,54 @@
 - `cargo machete`
 - 结果：全部通过
 - 备注：`db_view` 与 `terminal_view` 的 `cargo check` 仍提示既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关
+
+## 编码前检查 - file-manager-upload-conflict
+时间：2026-03-20 18:00:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-file-manager-upload-conflict.md`
+□ 将使用以下可复用组件：
+- `crates/sftp_view/src/lib.rs`：现有上传冲突检测与冲突对话框实现
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs`：现有传输队列与上传执行逻辑
+- `crates/sftp/src/russh_impl.rs`：确认底层直接覆盖的上传行为
+□ 将遵循命名约定：新增辅助结构与函数使用 Rust 现有命名风格
+□ 将遵循代码风格：优先复用现有 dialog/button/notification 模式和 i18n 文案组织
+□ 确认不重复造轮子，证明：不新建上传抽象，不改 sftp crate 接口，只把 sftp_view 已有策略接入侧边栏上传入口
+
+## 编码后声明 - file-manager-upload-conflict
+时间：2026-03-20 18:07:00 +0800
+
+### 1. 复用了以下既有组件
+- `crates/sftp_view/src/lib.rs` 的 `generate_unique_name`、重名改名策略和冲突对话框按钮设计
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs` 既有的传输队列与上传执行逻辑
+- `crates/sftp/src/russh_impl.rs` 既有上传实现，未修改底层 SFTP 接口
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `PendingUpload` 和辅助函数保持 Rust 现有命名风格
+- 代码风格：上传入口继续走异步 `list_dir` -> `update_in` -> 队列排队，与现有文件选择/上传模式一致
+- 文件组织：仅修改 `file_manager_panel.rs` 和 `terminal_view.yml`
+
+### 3. 对比了以下相似实现
+- `crates/sftp_view/src/lib.rs`：完整上传冲突检测和冲突对话框
+- `main/src/home_tab.rs`：项目中现有确认对话框构建模式
+- `crates/sftp/src/russh_impl.rs`：底层上传直接覆盖的行为证据
+
+### 4. 未重复造轮子的证明
+- 没有新增新的上传抽象层
+- 没有修改 `RusshSftpClient` 接口，而是在现有面板层补前置冲突检测
+
+## 实施与验证记录 - file-manager-upload-conflict
+时间：2026-03-20 18:07:00 +0800
+
+### 已完成修改
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs`
+  - 为文件选择上传、文件夹选择上传、拖拽上传统一增加远端重名检测
+  - 新增上传冲突对话框，支持跳过、保留两者、目录合并、覆盖四种策略
+  - 保留现有传输队列与上传执行逻辑，仅在入队前插入冲突处理
+- `crates/terminal_view/locales/terminal_view.yml`
+  - 补充 `Dialog.file_conflict` 和 `Conflict.*` 文案
+  - 补充 `FileManager.read_dir_failed` 错误提示
+
+### 本地验证
+- `cargo check -p terminal_view`
+- 结果：通过
+- 备注：仍存在既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关

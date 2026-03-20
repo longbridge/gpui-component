@@ -712,6 +712,46 @@ FileManager:
     en: Transfer connection failed
     zh-CN: 传输连接建立失败
     zh-HK: 傳輸連接建立失敗
+  read_dir_failed:
+    en: "Failed to read directory: %{error}"
+    zh-CN: "读取目录失败: %{error}"
+    zh-HK: "讀取目錄失敗: %{error}"
+
+Dialog:
+  file_conflict:
+    en: File Conflict
+    zh-CN: 文件冲突
+    zh-HK: 文件衝突
+
+Conflict:
+  files_exist:
+    en: "The following files already exist at destination:"
+    zh-CN: "以下文件在目标位置已存在："
+    zh-HK: "以下文件在目標位置已存在："
+  choose_action:
+    en: "Choose how to proceed:"
+    zh-CN: "请选择处理方式："
+    zh-HK: "請選擇處理方式："
+  skip:
+    en: Skip
+    zh-CN: 跳过
+    zh-HK: 跳過
+  keep_both:
+    en: Keep Both
+    zh-CN: 保留两者
+    zh-HK: 保留兩者
+  merge:
+    en: Merge
+    zh-CN: 合并
+    zh-HK: 合併
+  overwrite:
+    en: Overwrite
+    zh-CN: 覆盖
+    zh-HK: 覆蓋
+  n_files:
+    en: "%{name} and %{count} other files"
+    zh-CN: "%{name} 等 %{count} 个文件"
+    zh-HK: "%{name} 等 %{count} 個文件"
 
 # 团队同步
 TeamSync:

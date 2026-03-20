@@ -12,9 +12,12 @@ use gpui::{
     UniformListScrollHandle, Window,
 };
 use gpui_component::{
+    WindowExt,
+    button::{Button, ButtonVariants},
     h_flex,
     input::{Input, InputEvent, InputState},
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
+    notification::Notification,
     progress::Progress,
     spinner::Spinner,
     tooltip::Tooltip,
@@ -90,6 +93,15 @@ struct TransferTask {
     state: TransferTaskState,
     shared_progress: Arc<SharedProgress>,
     error: Option<String>,
+}
+
+#[derive(Clone)]
+struct PendingUpload {
+    name: String,
+    local_path: PathBuf,
+    remote_path: String,
+    is_dir: bool,
+    has_conflict: bool,
 }
 
 /// 传输队列（单任务串行执行）
@@ -274,6 +286,70 @@ fn join_remote_path(base: &str, name: &str) -> String {
 /// 判断传输错误是否为取消
 fn is_transfer_cancelled(error: &anyhow::Error) -> bool {
     error.downcast_ref::<TransferCancelled>().is_some()
+}
+
+fn generate_unique_name(original_name: &str, existing_names: &HashSet<String>) -> String {
+    let (stem, ext) = if let Some(dot_pos) = original_name.rfind('.') {
+        if dot_pos > 0 {
+            (
+                original_name[..dot_pos].to_string(),
+                Some(original_name[dot_pos..].to_string()),
+            )
+        } else {
+            (original_name.to_string(), None)
+        }
+    } else {
+        (original_name.to_string(), None)
+    };
+
+    let mut counter = 1;
+    loop {
+        let new_name = if counter == 1 {
+            if let Some(ref ext) = ext {
+                format!("{} (copy){}", stem, ext)
+            } else {
+                format!("{} (copy)", stem)
+            }
+        } else if let Some(ref ext) = ext {
+            format!("{} (copy {}){}", stem, counter, ext)
+        } else {
+            format!("{} (copy {})", stem, counter)
+        };
+
+        if !existing_names.contains(&new_name) {
+            return new_name;
+        }
+        counter += 1;
+    }
+}
+
+fn rename_conflicting_uploads(
+    mut uploads: Vec<PendingUpload>,
+    existing_names: HashSet<String>,
+) -> Vec<PendingUpload> {
+    let mut used_names = existing_names;
+
+    for upload in &mut uploads {
+        if upload.has_conflict {
+            let new_name = generate_unique_name(&upload.name, &used_names);
+            used_names.insert(new_name.clone());
+
+            let dir_part = if let Some(slash_pos) = upload.remote_path.rfind('/') {
+                Some(upload.remote_path[..=slash_pos].to_string())
+            } else {
+                None
+            };
+
+            upload.remote_path = if let Some(dir) = dir_part {
+                format!("{}{}", dir, new_name)
+            } else {
+                new_name.clone()
+            };
+            upload.name = new_name;
+        }
+    }
+
+    uploads
 }
 
 /// 从 StoredConnection 构建 SshConnectConfig
@@ -1116,22 +1192,15 @@ impl FileManagerPanel {
 
     // ── 传输入口 ──────────────────────────────────────────────
 
-    /// 入队上传任务
-    fn enqueue_uploads(&mut self, paths: Vec<PathBuf>, remote_dir: &str, cx: &mut Context<Self>) {
-        for path in paths {
-            let file_name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default();
-            let remote_path = join_remote_path(remote_dir, &file_name);
-            let is_dir = path.is_dir();
-
+    /// 将待上传项加入传输队列
+    fn enqueue_pending_uploads(&mut self, uploads: Vec<PendingUpload>, cx: &mut Context<Self>) {
+        for upload in uploads {
             let task = TransferTask {
                 id: self.alloc_task_id(),
                 operation: TransferOperation::Upload {
-                    local_path: path,
-                    remote_path,
-                    is_dir,
+                    local_path: upload.local_path,
+                    remote_path: upload.remote_path,
+                    is_dir: upload.is_dir,
                 },
                 state: TransferTaskState::Pending,
                 shared_progress: SharedProgress::new(),
@@ -1141,6 +1210,267 @@ impl FileManagerPanel {
         }
 
         self.ensure_transfer_client_and_schedule(cx);
+    }
+
+    /// 上传前先检测目标目录中的重名项，必要时弹出冲突提示
+    fn prepare_uploads(
+        &mut self,
+        paths: Vec<PathBuf>,
+        remote_dir: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if paths.is_empty() {
+            return;
+        }
+
+        let Some(client) = self.sftp_client.clone() else {
+            let uploads: Vec<_> = paths
+                .into_iter()
+                .map(|path| {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    PendingUpload {
+                        remote_path: join_remote_path(remote_dir, &name),
+                        is_dir: path.is_dir(),
+                        local_path: path,
+                        name,
+                        has_conflict: false,
+                    }
+                })
+                .collect();
+            self.enqueue_pending_uploads(uploads, cx);
+            return;
+        };
+
+        let remote_dir = remote_dir.to_string();
+        let view = cx.entity().clone();
+        let list_task = Tokio::spawn(cx, {
+            let remote_dir = remote_dir.clone();
+            async move {
+                let mut client_guard = client.lock().await;
+                client_guard.list_dir(&remote_dir).await
+            }
+        });
+
+        window
+            .spawn(cx, async move |cx| {
+                let remote_names: HashSet<String> = match list_task.await {
+                    Ok(Ok(entries)) => entries
+                        .into_iter()
+                        .filter(|entry| entry.name != "." && entry.name != "..")
+                        .map(|entry| entry.name)
+                        .collect(),
+                    Ok(Err(e)) => {
+                        tracing::error!("读取远程目录失败: {}", e);
+                        let error_msg = t!("FileManager.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
+                    }
+                    Err(e) => {
+                        tracing::error!("远程目录检查任务失败: {}", e);
+                        let error_msg = t!("FileManager.read_dir_failed", error = e).to_string();
+                        let _ = view.update_in(cx, |_this, window, cx| {
+                            window.push_notification(Notification::error(error_msg.clone()), cx);
+                        });
+                        return;
+                    }
+                };
+
+                let _ = view.update_in(cx, |this, window, cx| {
+                    let mut pending_uploads = Vec::new();
+                    let mut has_conflict = false;
+
+                    for path in paths {
+                        let name = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        let has_name_conflict = remote_names.contains(&name);
+                        if has_name_conflict {
+                            has_conflict = true;
+                        }
+                        pending_uploads.push(PendingUpload {
+                            remote_path: join_remote_path(&remote_dir, &name),
+                            is_dir: path.is_dir(),
+                            local_path: path,
+                            name,
+                            has_conflict: has_name_conflict,
+                        });
+                    }
+
+                    if pending_uploads.is_empty() {
+                        return;
+                    }
+
+                    if has_conflict {
+                        let conflict_names = pending_uploads
+                            .iter()
+                            .filter(|upload| upload.has_conflict)
+                            .map(|upload| upload.name.clone())
+                            .collect();
+                        this.show_upload_conflict_dialog(
+                            conflict_names,
+                            pending_uploads,
+                            remote_names,
+                            window,
+                            cx,
+                        );
+                    } else {
+                        this.enqueue_pending_uploads(pending_uploads, cx);
+                    }
+                });
+            })
+            .detach();
+    }
+
+    fn show_upload_conflict_dialog(
+        &mut self,
+        conflict_names: Vec<String>,
+        pending_uploads: Vec<PendingUpload>,
+        existing_names: HashSet<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let view = cx.entity().clone();
+        let conflict_count = conflict_names.len();
+        let conflict_list = if conflict_count <= 3 {
+            conflict_names.join(", ")
+        } else {
+            t!(
+                "Conflict.n_files",
+                name = conflict_names[..3].join(", "),
+                count = conflict_count
+            )
+            .to_string()
+        };
+        let has_dir_conflict = pending_uploads
+            .iter()
+            .any(|upload| upload.has_conflict && upload.is_dir);
+
+        window.open_dialog(cx, move |dialog, _window, cx| {
+            let view_overwrite = view.clone();
+            let view_keep = view.clone();
+            let view_skip = view.clone();
+            let view_merge = view.clone();
+
+            let uploads_overwrite = pending_uploads.clone();
+            let uploads_keep = pending_uploads.clone();
+            let uploads_skip = pending_uploads.clone();
+            let uploads_merge = pending_uploads.clone();
+            let existing_names_keep = existing_names.clone();
+
+            dialog
+                .title(t!("Dialog.file_conflict").to_string())
+                .w(px(450.))
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(t!("Conflict.files_exist").to_string())
+                        .child(
+                            div()
+                                .p_2()
+                                .bg(cx.theme().secondary)
+                                .rounded_md()
+                                .text_sm()
+                                .child(conflict_list.clone()),
+                        )
+                        .child(t!("Conflict.choose_action").to_string()),
+                )
+                .footer(move |_, _, _window, _cx| {
+                    let mut buttons: Vec<gpui::AnyElement> = vec![
+                        Button::new("skip")
+                            .label(t!("Conflict.skip").to_string())
+                            .ghost()
+                            .on_click({
+                                let view = view_skip.clone();
+                                let uploads = uploads_skip.clone();
+                                move |_, window, cx| {
+                                    window.close_dialog(cx);
+                                    let uploads: Vec<_> = uploads
+                                        .iter()
+                                        .filter(|upload| !upload.has_conflict)
+                                        .cloned()
+                                        .collect();
+                                    if !uploads.is_empty() {
+                                        view.update(cx, |this, cx| {
+                                            this.enqueue_pending_uploads(uploads, cx);
+                                        });
+                                    }
+                                }
+                            })
+                            .into_any_element(),
+                        Button::new("keep_both")
+                            .label(t!("Conflict.keep_both").to_string())
+                            .ghost()
+                            .on_click({
+                                let view = view_keep.clone();
+                                let uploads = uploads_keep.clone();
+                                let existing = existing_names_keep.clone();
+                                move |_, window, cx| {
+                                    window.close_dialog(cx);
+                                    let uploads =
+                                        rename_conflicting_uploads(uploads.clone(), existing.clone());
+                                    view.update(cx, |this, cx| {
+                                        this.enqueue_pending_uploads(uploads, cx);
+                                    });
+                                }
+                            })
+                            .into_any_element(),
+                    ];
+
+                    if has_dir_conflict {
+                        buttons.push(
+                            Button::new("merge")
+                                .label(t!("Conflict.merge").to_string())
+                                .ghost()
+                                .on_click({
+                                    let view = view_merge.clone();
+                                    let uploads = uploads_merge.clone();
+                                    move |_, window, cx| {
+                                        window.close_dialog(cx);
+                                        let uploads: Vec<_> = uploads
+                                            .iter()
+                                            .filter(|upload| !upload.has_conflict || upload.is_dir)
+                                            .cloned()
+                                            .collect();
+                                        if !uploads.is_empty() {
+                                            view.update(cx, |this, cx| {
+                                                this.enqueue_pending_uploads(uploads, cx);
+                                            });
+                                        }
+                                    }
+                                })
+                                .into_any_element(),
+                        );
+                    }
+
+                    buttons.push(
+                        Button::new("overwrite")
+                            .label(t!("Conflict.overwrite").to_string())
+                            .primary()
+                            .on_click({
+                                let view = view_overwrite.clone();
+                                let uploads = uploads_overwrite.clone();
+                                move |_, window, cx| {
+                                    window.close_dialog(cx);
+                                    view.update(cx, |this, cx| {
+                                        this.enqueue_pending_uploads(uploads.clone(), cx);
+                                    });
+                                }
+                            })
+                            .into_any_element(),
+                    );
+
+                    buttons
+                })
+                .overlay_closable(false)
+                .close_button(true)
+        });
     }
 
     /// 入队下载任务
@@ -1167,7 +1497,7 @@ impl FileManagerPanel {
     }
 
     /// 通过文件选择器上传文件
-    fn select_and_upload_files(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    fn select_and_upload_files(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let remote_dir = self.current_path.clone();
         let view = cx.entity().clone();
 
@@ -1178,21 +1508,22 @@ impl FileManagerPanel {
             prompt: Some(t!("FileManager.select_upload_files").to_string().into()),
         });
 
-        cx.spawn(async move |_this, cx| {
-            if let Ok(Ok(Some(paths))) = future.await {
-                if paths.is_empty() {
-                    return;
+        window
+            .spawn(cx, async move |cx| {
+                if let Ok(Ok(Some(paths))) = future.await {
+                    if paths.is_empty() {
+                        return;
+                    }
+                    let _ = view.update_in(cx, |this, window, cx| {
+                        this.prepare_uploads(paths, &remote_dir, window, cx);
+                    });
                 }
-                view.update(cx, |this, cx| {
-                    this.enqueue_uploads(paths, &remote_dir, cx);
-                });
-            }
-        })
-        .detach();
+            })
+            .detach();
     }
 
     /// 通过文件夹选择器上传文件夹
-    fn select_and_upload_folder(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    fn select_and_upload_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let remote_dir = self.current_path.clone();
         let view = cx.entity().clone();
 
@@ -1203,17 +1534,18 @@ impl FileManagerPanel {
             prompt: Some(t!("FileManager.select_upload_folder").to_string().into()),
         });
 
-        cx.spawn(async move |_this, cx| {
-            if let Ok(Ok(Some(paths))) = future.await {
-                if paths.is_empty() {
-                    return;
+        window
+            .spawn(cx, async move |cx| {
+                if let Ok(Ok(Some(paths))) = future.await {
+                    if paths.is_empty() {
+                        return;
+                    }
+                    let _ = view.update_in(cx, |this, window, cx| {
+                        this.prepare_uploads(paths, &remote_dir, window, cx);
+                    });
                 }
-                view.update(cx, |this, cx| {
-                    this.enqueue_uploads(paths, &remote_dir, cx);
-                });
-            }
-        })
-        .detach();
+            })
+            .detach();
     }
 
     /// 通过保存目录选择器下载远程文件/文件夹
@@ -2040,12 +2372,12 @@ impl FileManagerPanel {
                         .relative()
                         // 拖拽上传支持
                         .drag_over::<ExternalPaths>(|el, _, _, _cx| el.bg(gpui::rgba(0x3b82f620)))
-                        .on_drop(cx.listener(|this, paths: &ExternalPaths, _window, cx| {
+                        .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
                             this.is_dragging_over = false;
                             let file_paths = paths.paths().to_vec();
                             if !file_paths.is_empty() {
                                 let remote_dir = this.current_path.clone();
-                                this.enqueue_uploads(file_paths, &remote_dir, cx);
+                                this.prepare_uploads(file_paths, &remote_dir, window, cx);
                             }
                         }))
                         .child(
