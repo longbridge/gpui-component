@@ -237,6 +237,11 @@ impl HomePage {
                     | ConnectionDataEvent::WorkspaceUpdated { .. }
                     | ConnectionDataEvent::WorkspaceDeleted { .. } => {
                         this.load_workspaces(cx);
+                        // 如果已登录且密钥已解锁，自动触发同步
+                        if this.current_user.is_some() && crypto::has_master_key() {
+                            tracing::info!("工作区数据变化，自动触发云同步");
+                            this.trigger_sync(cx);
+                        }
                     }
                     ConnectionDataEvent::SchemaChanged { .. } => {
                         // SchemaChanged 由 db_tree_view 处理，此处无需操作
@@ -1176,6 +1181,11 @@ impl HomePage {
                         );
                     }
                     this.editing_workspace_id = None;
+                    // 兜底触发一次自动同步，避免当前页对自身工作区事件未回流时漏同步。
+                    if this.current_user.is_some() && crypto::has_master_key() {
+                        tracing::info!("本地工作区保存成功，自动触发云同步");
+                        this.trigger_sync(cx);
+                    }
                     cx.notify();
                 });
             }
@@ -1285,6 +1295,11 @@ impl HomePage {
                             ConnectionDataEvent::WorkspaceDeleted { workspace_id },
                             cx,
                         );
+                        // 兜底触发一次自动同步，避免当前页对自身工作区事件未回流时漏同步。
+                        if this.current_user.is_some() && crypto::has_master_key() {
+                            tracing::info!("本地工作区删除成功，自动触发云同步");
+                            this.trigger_sync(cx);
+                        }
                         cx.notify();
                     });
                 }

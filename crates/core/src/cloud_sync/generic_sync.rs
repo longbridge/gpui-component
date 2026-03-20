@@ -495,8 +495,15 @@ fn calculate_sync_plan<H: SyncTypeHandler>(
                         plan.to_update_local
                             .push(((*cloud_data).clone(), local_item.clone()));
                     }
+                } else {
+                    tracing::info!(
+                        "[同步计划] {} '{}' 的云端记录 {} 不存在，重新加入上传计划",
+                        handler.display_name(),
+                        local_item.item_name(),
+                        cloud_id
+                    );
+                    plan.to_upload.push(local_item.clone());
                 }
-                // 注意：云端不存在但本地有 cloud_id 的情况，通用版不做冲突检测
             }
             None => {
                 let has_cloud_match = cloud_name_map
