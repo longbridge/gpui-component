@@ -950,3 +950,59 @@
 - `cargo check -p main`
 - 结果：通过
 - 备注：仍存在既有依赖 `num-bigint-dig v0.8.4` 的 future-incompat 警告，与本次改动无关
+
+## 编码前检查 - ci-machete-four-crates
+时间：2026-03-20 17:38:07 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-ci-machete-four-crates.md`
+□ 将使用以下可复用组件：
+- `/.github/workflows/ci.yml`：确认 CI 实际执行的是 `cargo machete`
+- `/Cargo.toml`：确认工作区依赖来源和声明风格
+- `/crates/macros/Cargo.toml`：确认仅误报场景才用 `package.metadata.cargo-machete`
+□ 将遵循命名约定：不新增 crate 和接口，只调整现有依赖声明
+□ 将遵循代码风格：优先删除真实未使用依赖，不扩大 ignored 范围
+□ 确认不重复造轮子，证明：不改 workflow，不加新脚本，只修四个 crate 的 `Cargo.toml`
+
+## 编码后声明 - ci-machete-four-crates
+时间：2026-03-20 17:39:45 +0800
+
+### 1. 复用了以下既有组件
+- `/.github/workflows/ci.yml` 的 `Machete` 步骤，作为本地复现与验收标准
+- `/Cargo.toml` 的工作区依赖声明方式，保持 crate 内依赖最小集
+- `/crates/macros/Cargo.toml` 的包级 metadata 模式，作为“误报时才忽略”的对照样例
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增依赖别名，沿用原有工作区依赖写法
+- 代码风格：四处改动均为删除未使用依赖，没有引入新的 metadata 或脚本
+- 文件组织：只修改目标 crate 的 `Cargo.toml`
+
+### 3. 对比了以下相似实现
+- `/.github/workflows/ci.yml`：确认 CI 仅执行普通 `cargo machete`
+- `/Cargo.toml`：确认工作区依赖统一维护，允许 crate 局部裁剪
+- `/crates/macros/Cargo.toml`：确认仓库已有 `cargo-machete` 忽略配置范式，但本次无需使用
+
+### 4. 未重复造轮子的证明
+- 没有改动 CI workflow，只修失败源头
+- 没有新增 ignore 规避真实问题，而是直接清理冗余依赖
+
+## 实施与验证记录 - ci-machete-four-crates
+时间：2026-03-20 17:39:45 +0800
+
+### 已完成修改
+- `crates/db_view/Cargo.toml`
+  - 删除未使用依赖 `once_cell`
+- `crates/redis_view/Cargo.toml`
+  - 删除未使用依赖 `chrono`、`smol`
+- `crates/terminal_view/Cargo.toml`
+  - 删除未使用依赖 `serde_json`、`once_cell`
+- `crates/one_ui/Cargo.toml`
+  - 删除未使用依赖 `anyhow`、`chrono`、`enum-iterator`、`futures`、`gpui-macros`、`itertools`、`notify`、`once_cell`、`one-core`、`paste`、`regex`、`ropey`、`rust-i18n`、`schemars`、`serde`、`serde_json`、`serde_repr`、`smallvec`、`smol`、`sum-tree`、`unicode-segmentation`、`uuid`
+
+### 本地验证
+- `cargo check -p db_view`
+- `cargo check -p redis_view`
+- `cargo check -p terminal_view`
+- `cargo check -p one-ui`
+- `cargo machete`
+- 结果：全部通过
+- 备注：`db_view` 与 `terminal_view` 的 `cargo check` 仍提示既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关
