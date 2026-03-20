@@ -2573,6 +2573,10 @@ QueryWorkflow:
     en: AI analysis
     zh-CN: AI 分析
     zh-HK: AI 分析
+  source_history:
+    en: History reuse
+    zh-CN: 历史复用
+    zh-HK: 歷史複用
   related_tables_header:
     en: "**Related Tables** (%{source}):\n"
     zh-CN: "**相关表**（%{source}）：\n"
@@ -2687,6 +2691,10 @@ SqlWorkflow:
     en: AI selecting relevant tables...
     zh-CN: AI 选择相关表...
     zh-HK: AI 選擇相關表...
+  reusing_history_tables:
+    en: Reusing tables from previous conversation...
+    zh-CN: 复用上一轮对话中的表...
+    zh-HK: 複用上一輪對話中的表...
   no_tables_selected:
     en: AI did not select any related tables
     zh-CN: AI 未能选择任何相关表

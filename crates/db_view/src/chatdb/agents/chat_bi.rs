@@ -14,7 +14,8 @@ use one_core::agent::types::{Agent, AgentContext, AgentDescriptor, AgentEvent, A
 use one_core::llm::{ChatRequest, Message, Role};
 
 use crate::chatdb::agents::query_workflow::{
-    TableBrief, build_table_selection_prompt, parse_table_selection_response, parse_user_input,
+    TableBrief, TableSelectionSource, build_table_selection_prompt, extract_tables_from_history,
+    is_followup_question, parse_table_selection_response, parse_user_input,
 };
 
 use super::db_metadata::{CAP_DB_METADATA, DatabaseMetadataProvider};
@@ -88,15 +89,22 @@ impl ChatBiAgent {
             parsed.clean_question
         };
 
-        let is_user_mentioned = !parsed.mentioned_tables.is_empty();
-        let selected_tables = if is_user_mentioned {
-            parsed.mentioned_tables
+        let (selected_tables, table_source) = if !parsed.mentioned_tables.is_empty() {
+            // 优先级1: 用户显式 @表名
+            (parsed.mentioned_tables, TableSelectionSource::UserMentioned)
+        } else if is_followup_question(&question)
+            && let Some(history_tables) = extract_tables_from_history(&ctx.chat_history)
+        {
+            // 优先级2: 追问场景 + 历史中有已选表 → 复用
+            (history_tables, TableSelectionSource::HistoryReused)
         } else {
+            // 优先级3: AI 选表
             let tables = db_meta
                 .list_tables()
                 .await
                 .map_err(|e| format!("获取表列表失败: {}", e))?;
-            self.ai_select_tables(&ctx, &tables, &question).await?
+            let selected = self.ai_select_tables(&ctx, &tables, &question).await?;
+            (selected, TableSelectionSource::AiSelected)
         };
 
         if selected_tables.is_empty() {
@@ -104,10 +112,10 @@ impl ChatBiAgent {
         }
 
         // 发送选表信息（类似 SqlWorkflowAgent 的 workflow_summary）
-        let source = if is_user_mentioned {
-            t!("QueryWorkflow.source_user").to_string()
-        } else {
-            t!("QueryWorkflow.source_ai").to_string()
+        let source = match table_source {
+            TableSelectionSource::UserMentioned => t!("QueryWorkflow.source_user").to_string(),
+            TableSelectionSource::AiSelected => t!("QueryWorkflow.source_ai").to_string(),
+            TableSelectionSource::HistoryReused => t!("QueryWorkflow.source_history").to_string(),
         };
         let mut workflow_prefix = String::new();
         workflow_prefix
@@ -189,7 +197,7 @@ impl ChatBiAgent {
         tables: &[TableBrief],
         user_question: &str,
     ) -> Result<Vec<String>, String> {
-        let prompt = build_table_selection_prompt(tables, user_question);
+        let prompt = build_table_selection_prompt(tables, user_question, &ctx.chat_history);
         let provider = ctx
             .provider_state
             .manager()

@@ -91,28 +91,6 @@ impl AgentDispatcher {
             return rx;
         }
 
-        // --- Level 1.5: 亲和性快速路径 ---
-        // 亲和性有效 + 输入看起来像追问 + 当前 agent 仍在可用列表中 → 跳过 LLM 路由
-        if affinity.is_valid() {
-            if let Some(current_id) = affinity.current_agent_id().map(str::to_owned) {
-                if Self::looks_like_followup(&ctx.user_input) {
-                    if let Some(agent) = available.iter().find(|a| a.descriptor().id == current_id)
-                    {
-                        info!(
-                            agent = current_id.as_str(),
-                            "Dispatched via session affinity fast-path (follow-up detected)"
-                        );
-                        affinity.bind(&current_id);
-                        let agent = Arc::clone(agent);
-                        tokio::spawn(async move {
-                            agent.execute(ctx, tx).await;
-                        });
-                        return rx;
-                    }
-                }
-            }
-        }
-
         // --- Level 2: LLM intent routing ---
         let provider_result = ctx
             .provider_state
@@ -179,9 +157,9 @@ impl AgentDispatcher {
         }
     }
 
-    /// Level 1: Rule-based matching.
+    /// Rule-based fallback matching (仅在 LLM 路由不可用时使用).
     ///
-    /// Checks command prefix first, then keywords, then session affinity.
+    /// 优先级：命令前缀 > 会话亲和性 > 关键词匹配。
     fn rule_match<'a>(
         user_input: &str,
         available: &[&'a DynAgent],
@@ -189,7 +167,7 @@ impl AgentDispatcher {
     ) -> Option<&'a DynAgent> {
         let input_lower = user_input.to_lowercase();
 
-        // 1a: Command prefix match (e.g. "/sql SELECT ...")
+        // 1. Command prefix match (e.g. "/sql SELECT ...") — 明确新意图，最高优先
         for agent in available {
             if agent
                 .descriptor()
@@ -200,7 +178,18 @@ impl AgentDispatcher {
             }
         }
 
-        // 1b: Keyword match — pick the agent with the most keyword hits.
+        // 2. Session affinity — 有活跃会话时优先保持连续性
+        if affinity.is_valid()
+            && let Some(id) = affinity.current_agent_id()
+        {
+            for agent in available {
+                if agent.descriptor().id == id {
+                    return Some(agent);
+                }
+            }
+        }
+
+        // 3. Keyword match — 仅在无亲和性时用于首次路由
         let mut best: Option<(&DynAgent, usize)> = None;
         for agent in available {
             let hits = agent
@@ -217,77 +206,6 @@ impl AgentDispatcher {
             return Some(agent);
         }
 
-        // 1c: Session affinity (if still valid).
-        if affinity.is_valid()
-            && let Some(id) = affinity.current_agent_id()
-        {
-            for agent in available {
-                if agent.descriptor().id == id {
-                    return Some(agent);
-                }
-            }
-        }
-
         None
-    }
-
-    /// 判断用户输入是否看起来像追问/延续消息。
-    ///
-    /// 包含命令前缀时返回 false（用户明确发起新意图），
-    /// 短消息或包含追问关键词时返回 true，其他情况返回 false（走 LLM 路由）。
-    fn looks_like_followup(user_input: &str) -> bool {
-        let trimmed = user_input.trim();
-
-        // 包含命令前缀 → 不是追问，是明确的新意图
-        if trimmed.starts_with('/') {
-            return false;
-        }
-
-        // 短消息（≤30 字符）大概率是追问
-        if trimmed.chars().count() <= 30 {
-            return true;
-        }
-
-        // 包含追问关键词
-        let followup_keywords = [
-            "继续",
-            "还有",
-            "改一下",
-            "换成",
-            "再来",
-            "接着",
-            "然后呢",
-            "补充",
-            "修改",
-            "调整",
-            "再试",
-            "重新",
-            "另外",
-            "对了",
-            "顺便",
-            "还要",
-            "加上",
-            "去掉",
-            "不要",
-            "改为",
-            "continue",
-            "refine",
-            "also",
-            "more",
-            "again",
-            "update",
-            "change",
-            "modify",
-            "keep going",
-            "go on",
-        ];
-        let input_lower = trimmed.to_lowercase();
-        for kw in &followup_keywords {
-            if input_lower.contains(kw) {
-                return true;
-            }
-        }
-
-        false
     }
 }

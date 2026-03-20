@@ -10,7 +10,8 @@ use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, Size, button::ButtonVariants, h_flex, text::TextView,
 };
 use rust_i18n::t;
-
+use gpui_component::button::Button;
+use gpui_component::clipboard::Clipboard;
 use crate::ai_chat::panel::CodeBlockActionRegistry;
 use crate::ai_chat::types::{ChatMessageUIGeneric, ChatRole, MessageExtension, MessageVariant};
 
@@ -139,7 +140,7 @@ impl ChatMessageRenderer {
                             let matched_actions = registry.get_actions_for_lang(lang_str);
 
                             let mut row = h_flex().gap_1().child(
-                                gpui_component::clipboard::Clipboard::new("copy")
+                                Clipboard::new("copy")
                                     .value(code.clone()),
                             );
 
@@ -150,7 +151,7 @@ impl ChatMessageRenderer {
                                 let label = action.label.clone();
                                 let code = code.to_string();
                                 let lang = lang.as_ref().map(|s| s.to_string());
-                                let mut btn = gpui_component::button::Button::new(btn_id)
+                                let mut btn = Button::new(btn_id)
                                     .icon(icon)
                                     .ghost()
                                     .xsmall()
@@ -163,7 +164,7 @@ impl ChatMessageRenderer {
                                     });
 
                                 if let Some(lbl) = label {
-                                    btn = btn.label(lbl);
+                                    btn = btn.tooltip(lbl);
                                 }
 
                                 row = row.child(btn);

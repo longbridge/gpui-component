@@ -1786,7 +1786,7 @@ impl ChatPanel {
                                                 .icon(IconName::SquareTerminal)
                                                 .ghost()
                                                 .xsmall()
-                                                .label(t!("ChatSqlBlock.run").to_string())
+                                                .tooltip(t!("ChatSqlBlock.run").to_string())
                                                 .on_click({
                                                     let panel = panel.clone();
                                                     let message_id = message_id.clone();

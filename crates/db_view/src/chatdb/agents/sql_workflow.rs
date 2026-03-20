@@ -15,7 +15,8 @@ use one_core::agent::types::{Agent, AgentContext, AgentDescriptor, AgentEvent, A
 use one_core::llm::{ChatRequest, Message, Role};
 
 use crate::chatdb::agents::query_workflow::{
-    QueryContext, TABLE_COUNT_THRESHOLD, TableBrief, build_table_selection_prompt,
+    QueryContext, TABLE_COUNT_THRESHOLD, TableBrief, TableSelectionSource,
+    build_table_selection_prompt, extract_tables_from_history, is_followup_question,
     parse_table_selection_response, parse_user_input,
 };
 
@@ -91,11 +92,28 @@ impl SqlWorkflowAgent {
         };
 
         // Step 2: Determine table selection strategy
-        let (selected_tables, is_user_mentioned, warning) = if !parsed.mentioned_tables.is_empty() {
-            // User explicitly mentioned tables
-            (parsed.mentioned_tables.clone(), true, None)
+        //  优先级1: 用户显式 @表名
+        //  优先级2: 追问场景 + 历史中有已选表 → 复用
+        //  优先级3: AI 选表
+        let history_tables = if is_followup_question(&user_question) {
+            extract_tables_from_history(&ctx.chat_history)
         } else {
-            // Need to discover tables
+            None
+        };
+
+        let (selected_tables, table_source, warning) = if !parsed.mentioned_tables.is_empty() {
+            (parsed.mentioned_tables.clone(), TableSelectionSource::UserMentioned, None)
+        } else if let Some(history_tables) = history_tables {
+            // 优先级2: 从对话历史中复用已选表
+            let _ = tx
+                .send(AgentEvent::Progress(
+                    t!("SqlWorkflow.reusing_history_tables").to_string(),
+                ))
+                .await;
+            info!(tables = ?history_tables, "Reusing tables from history");
+            (history_tables, TableSelectionSource::HistoryReused, None)
+        } else {
+            // 优先级3: AI 选表
             let _ = tx
                 .send(AgentEvent::Progress(
                     t!("SqlWorkflow.fetch_tables").to_string(),
@@ -140,7 +158,7 @@ impl SqlWorkflowAgent {
             }
 
             info!(tables = ?selected, "AI selected tables");
-            (selected, false, warning)
+            (selected, TableSelectionSource::AiSelected, warning)
         };
 
         // Step 3: Fetch metadata for selected tables
@@ -189,7 +207,7 @@ impl SqlWorkflowAgent {
             database_type: db_meta.database_type,
             tables: table_metas,
             selected_table_names: selected_tables,
-            is_user_mentioned,
+            table_source,
             warning,
         };
 
@@ -212,7 +230,7 @@ impl SqlWorkflowAgent {
         tables: &[TableBrief],
         user_question: &str,
     ) -> Result<Vec<String>, String> {
-        let prompt = build_table_selection_prompt(tables, user_question);
+        let prompt = build_table_selection_prompt(tables, user_question, &ctx.chat_history);
 
         let provider = ctx
             .provider_state
