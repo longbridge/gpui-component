@@ -2145,7 +2145,6 @@ dependencies = [
  "hex",
  "moka",
  "mysql_async",
- "once_cell",
  "one-core",
  "oracle",
  "proptest",

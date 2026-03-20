@@ -1533,10 +1533,7 @@ impl CloudApiClient for SupabaseClient {
         team_id: Option<&str>,
         since: Option<i64>,
     ) -> Result<Vec<CloudSyncData>, CloudApiError> {
-        let mut url = format!(
-            "{}?order=updated_at.desc",
-            self.rest_url("sync_data")
-        );
+        let mut url = format!("{}?order=updated_at.desc", self.rest_url("sync_data"));
 
         if let Some(dt) = data_type {
             url.push_str(&format!("&data_type=eq.{}", dt));
@@ -1553,9 +1550,7 @@ impl CloudApiClient for SupabaseClient {
             }
         }
 
-        let (status, result) = self
-            .get_json_with_retry::<Vec<SyncDataRow>>(&url)
-            .await?;
+        let (status, result) = self.get_json_with_retry::<Vec<SyncDataRow>>(&url).await?;
 
         if status.is_success() {
             let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
@@ -1575,10 +1570,7 @@ impl CloudApiClient for SupabaseClient {
         }
     }
 
-    async fn create_sync_data(
-        &self,
-        data: &CloudSyncData,
-    ) -> Result<CloudSyncData, CloudApiError> {
+    async fn create_sync_data(&self, data: &CloudSyncData) -> Result<CloudSyncData, CloudApiError> {
         let url = self.rest_url("sync_data");
         let row = SyncDataRow::from(data);
         let extra_headers = vec![("Prefer", "return=representation".to_string())];
@@ -1598,10 +1590,7 @@ impl CloudApiClient for SupabaseClient {
         }
     }
 
-    async fn update_sync_data(
-        &self,
-        data: &CloudSyncData,
-    ) -> Result<CloudSyncData, CloudApiError> {
+    async fn update_sync_data(&self, data: &CloudSyncData) -> Result<CloudSyncData, CloudApiError> {
         // 乐观并发控制：通过 version 字段确保不覆盖其他修改
         let url = format!(
             "{}?id=eq.{}&version=eq.{}",
@@ -1683,13 +1672,8 @@ impl CloudApiClient for SupabaseClient {
     // ========================================================================
 
     async fn list_teams(&self) -> Result<Vec<Team>, CloudApiError> {
-        let url = format!(
-            "{}?order=updated_at.desc",
-            self.rest_url("teams")
-        );
-        let (status, result) = self
-            .get_json_with_retry::<Vec<TeamRow>>(&url)
-            .await?;
+        let url = format!("{}?order=updated_at.desc", self.rest_url("teams"));
+        let (status, result) = self.get_json_with_retry::<Vec<TeamRow>>(&url).await?;
 
         if status.is_success() {
             let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
@@ -1781,9 +1765,7 @@ impl CloudApiClient for SupabaseClient {
     async fn delete_team(&self, id: &str) -> Result<(), CloudApiError> {
         let url = format!("{}?id=eq.{}", self.rest_url("teams"), id);
 
-        let status = self
-            .delete_with_retry(&url)
-            .await?;
+        let status = self.delete_with_retry(&url).await?;
 
         if status.is_success() {
             Ok(())
@@ -1798,9 +1780,7 @@ impl CloudApiClient for SupabaseClient {
             self.rest_url("team_members"),
             team_id
         );
-        let (status, result) = self
-            .get_json_with_retry::<Vec<TeamMemberRow>>(&url)
-            .await?;
+        let (status, result) = self.get_json_with_retry::<Vec<TeamMemberRow>>(&url).await?;
 
         if status.is_success() {
             let rows = result.map_err(|e| CloudApiError::ParseError(e))?;
@@ -1896,9 +1876,7 @@ impl CloudApiClient for SupabaseClient {
     async fn remove_team_member(&self, member_id: &str) -> Result<(), CloudApiError> {
         let url = format!("{}?id=eq.{}", self.rest_url("team_members"), member_id);
 
-        let status = self
-            .delete_with_retry(&url)
-            .await?;
+        let status = self.delete_with_retry(&url).await?;
 
         if status.is_success() {
             Ok(())

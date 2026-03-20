@@ -14,10 +14,10 @@ use gpui_component::{
     tab::{Tab, TabBar},
     v_flex, ActiveTheme, Disableable, Sizable, Size, TitleBar,
 };
+use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use one_core::connection_notifier::{get_notifier, ConnectionDataEvent};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
-use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use one_core::storage::{
     JumpServerConfig, ProxyConfig, ProxyType as StorageProxyType, SshAuthMethod, SshParams,
     StoredConnection, Workspace,

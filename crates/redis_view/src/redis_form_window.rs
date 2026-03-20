@@ -16,13 +16,13 @@ use gpui_component::{
     tab::{Tab, TabBar},
     v_flex,
 };
+use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use one_core::connection_notifier::{ConnectionDataEvent, get_notifier};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
 use one_core::storage::{
     RedisClusterConfig, RedisMode, RedisParams, RedisSentinelConfig, StoredConnection, Workspace,
 };
-use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use rust_i18n::t;
 use tracing::error;
 

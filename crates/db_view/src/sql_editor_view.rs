@@ -1099,7 +1099,7 @@ impl SqlEditorTab {
                             .label(t!("Query.save"))
                             .icon(IconName::Plus)
                             .on_click(cx.listener(Self::handle_save_query)),
-                    )
+                    ),
             )
             .child(
                 // Editor

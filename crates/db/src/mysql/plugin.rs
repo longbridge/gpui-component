@@ -2187,6 +2187,41 @@ mod tests {
         assert!(sql.contains("VARCHAR(100)"));
     }
 
+    #[test]
+    fn test_build_alter_table_sql_no_changes_with_text_metadata() {
+        let plugin = create_plugin();
+
+        let column = ColumnDefinition {
+            name: "session_id".to_string(),
+            data_type: "varchar".to_string(),
+            length: Some(255),
+            is_nullable: false,
+            comment: "会话ID".to_string(),
+            charset: Some("utf8mb4".to_string()),
+            collation: Some("utf8mb4_general_ci".to_string()),
+            ..Default::default()
+        };
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "task_execution_record".to_string(),
+            columns: vec![column.clone()],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "task_execution_record".to_string(),
+            columns: vec![column],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert_eq!(sql, "-- No changes detected");
+    }
+
     // ==================== Charset & Collation Tests ====================
 
     #[test]

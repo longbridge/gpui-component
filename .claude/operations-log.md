@@ -1,5 +1,219 @@
 ## 操作日志
 
+## 编码前检查 - windows-owner-id-build
+时间：2026-03-20 15:29:09 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-windows-owner-id-build.md`
+- 已分析相似实现：
+  - `crates/core/src/storage/models.rs`
+  - `crates/core/src/storage/repository.rs`
+  - `crates/core/src/cloud_sync/conflict.rs`
+- 将使用以下可复用组件：
+  - `StoredConnection` 结构定义
+  - `StoredConnection::new_*` 构造函数中的默认字段模式
+  - `repository.rs` 中从数据库行恢复 `owner_id` 的映射方式
+- 将遵循命名约定：仅补现有字段，不引入新类型或新接口
+- 将遵循代码风格：最小改动，只修复漏掉的结构体字段初始化
+- 确认不重复造轮子，证明：已检查结构定义、构造函数和 repository 映射，当前问题属于字面量初始化遗漏，不需要新增抽象
+
+## 编码后声明 - windows-owner-id-build
+时间：2026-03-20 15:30:18 +0800
+
+### 1. 复用了以下既有组件
+- `StoredConnection` 结构定义：确认新增字段 `owner_id`
+- `StoredConnection::new_*` 构造函数：确认默认值语义为 `owner_id: None`
+- `repository.rs` 的 `From<ConnectionRow>`：确认持久化层已完整映射 `owner_id`
+
+### 2. 遵循了以下项目约定
+- 命名约定：未引入新字段或新接口，只补现有结构体字面量
+- 代码风格：最小改动，仅修正测试中的缺失字段初始化
+- 文件组织：代码修改仅限 `crates/core/src/cloud_sync/conflict.rs`，留痕文档写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `storage/models.rs` 中所有 `new_*` 构造函数都显式设置 `owner_id: None`
+- `storage/repository.rs` 从数据库行构造 `StoredConnection` 时显式映射 `owner_id: row.owner_id`
+- `cloud_sync/conflict.rs` 的测试是少数仍在手写完整字面量初始化的位置，因此最容易漏字段
+
+### 4. 未重复造轮子的证明
+- 已检查 `StoredConnection` 定义、构造函数和 repository 映射
+- 结论：当前问题是新增字段后的单点初始化遗漏，不需要额外抽象或重构
+
+## 实施与验证记录 - windows-owner-id-build
+时间：2026-03-20 15:30:18 +0800
+
+### 已完成修改
+- 在 `crates/core/src/cloud_sync/conflict.rs` 的测试用 `StoredConnection` 初始化中补上 `owner_id: None`
+- 新增 `.claude/context-summary-windows-owner-id-build.md`，记录结构定义、相似初始化模式和验证策略
+
+### 本地验证
+- `cargo check -p one-core --tests`
+  - 结果：通过，`one-core` 测试编译成功，截图中的 `E0063 missing field owner_id` 已消失
+
+## 编码前检查 - terminal-serial-active-close
+时间：2026-03-20 15:23:03 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-terminal-serial-active-close.md`
+- 已分析相似实现：
+  - `main/src/home_tab.rs`
+  - `crates/sftp_view/src/lib.rs`
+  - `crates/mongodb_view/src/mongo_tab.rs`
+  - `crates/terminal_view/src/view.rs`
+- 将使用以下可复用组件：
+  - `ActiveConnections`：全局活跃连接状态
+  - `Terminal::connection_id()`：读取当前终端关联连接 ID
+  - `Terminal::shutdown()`：保留原有底层关闭逻辑
+- 将遵循命名约定：Rust 使用 `snake_case`，不引入额外全局状态类型
+- 将遵循代码风格：最小改动，只补 TerminalView 关闭路径中的状态回收
+- 确认不重复造轮子，证明：已检查 HomePage、Terminal、SFTP、MongoTab 的关闭模式，仓库已有“try_close 内显式移除 ActiveConnections”的先例
+
+## 编码后声明 - terminal-serial-active-close
+时间：2026-03-20 15:24:31 +0800
+
+### 1. 复用了以下既有组件
+- `ActiveConnections`：继续作为主页判断连接是否活跃的唯一数据源
+- `Terminal::connection_id()`：直接读取当前终端绑定的连接 ID
+- `Terminal::shutdown()`：保留原有底层连接关闭逻辑
+- `MongoTabView::try_close()` / `SftpPanel::try_close()`：参考其“关闭前同步回收活跃状态”的模式
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增辅助方法 `release_active_connection`，保持 `snake_case`
+- 代码风格：只改 `TerminalView` 的关闭路径，不扩散到 HomePage、TabContainer 或 Terminal
+- 文件组织：功能修复集中在 `crates/terminal_view/src/view.rs`，留痕文件写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `main/src/home_tab.rs`：确认编辑/删除禁用依赖 `ActiveConnections::is_active`
+- `crates/sftp_view/src/lib.rs`：SFTP 在关闭/断开路径中显式 `set_connection_active(false, cx)`
+- `crates/mongodb_view/src/mongo_tab.rs`：MongoTab 在 `try_close()` 内直接 `ActiveConnections.remove(connection_id)`
+- `crates/terminal/src/terminal.rs`：Terminal 现有 `remove` 主要依赖异步断开回调，解释了为什么 tab 立即关闭时会残留状态
+
+### 4. 未重复造轮子的证明
+- 已检查 HomePage、Terminal、SFTP、MongoTab、TabContainer
+- 结论：仓库已有“try_close 同步回收活跃状态”的成熟模式，本次只是在 TerminalView 上补齐缺失
+
+## 实施与验证记录 - terminal-serial-active-close
+时间：2026-03-20 15:24:31 +0800
+
+### 已完成修改
+- 在 `crates/terminal_view/src/view.rs` 引入 `ActiveConnections`
+- 新增 `release_active_connection` 辅助方法
+- 在 `TerminalView::try_close()` 中先同步回收活跃连接状态，再执行原有 `shutdown()`
+
+### 本地验证
+- `cargo check -p terminal_view`
+  - 结果：通过；仅保留既有 `num-bigint-dig v0.8.4` future-incompat 提示，与本次修改无关
+
+### 当前限制
+- 尚未执行 GUI 手动回归；需要实际打开串口 tab、关闭后返回首页确认卡片不再显示活跃且允许编辑
+
+## 编码前检查 - ci-machete-db-once-cell
+时间：2026-03-20 15:10:42 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-ci-machete-db-once-cell.md`
+- 已分析相似实现：
+  - `.github/workflows/ci.yml`
+  - `crates/macros/Cargo.toml`
+  - `crates/db/Cargo.toml`
+- 将使用以下可复用组件：
+  - `.github/workflows/ci.yml`：确认 `Machete` 只跑在 macOS job
+  - `crates/macros/Cargo.toml`：作为 `cargo-machete` ignore 的既有范式
+- 将遵循命名约定：不新增 crate 或脚本，仅调整现有依赖声明
+- 将遵循代码风格：优先删除真实未使用依赖，不用 metadata 掩盖实际问题
+- 确认不重复造轮子，证明：已检查 CI workflow、现有 `cargo-machete` metadata 用法以及 `db` crate 依赖，当前问题属于依赖声明清理，不需要新增脚本或额外配置
+
+## 编码后声明 - ci-machete-db-once-cell
+时间：2026-03-20 15:11:51 +0800
+
+### 1. 复用了以下既有组件
+- `.github/workflows/ci.yml`：继续沿用现有 `Machete` 步骤，不改 CI 编排
+- `crates/macros/Cargo.toml`：作为“只有误报才加 ignore”的既有治理模式参考
+- `crates/db/Cargo.toml`：直接在目标 crate 清理未使用依赖
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增文件或模块，仅调整现有依赖列表
+- 代码风格：优先删除真实未使用依赖，而不是增加 `cargo-machete` ignore 掩盖问题
+- 文件组织：改动仅落在 `crates/db/Cargo.toml`，文档留痕写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `ci.yml` 显示 `Machete` 仅在 macOS job 运行，因此失败与依赖治理直接相关
+- `crates/macros/Cargo.toml` 已有 `package.metadata.cargo-machete.ignored`，证明项目只在确认为误报时才使用 ignore
+- `crates/db/Cargo.toml` 属于普通业务 crate，且源码搜索未发现 `once_cell` 使用，因此应直接删除依赖
+
+### 4. 未重复造轮子的证明
+- 已检查 `.github/workflows/ci.yml`、`crates/macros/Cargo.toml`、`crates/db/Cargo.toml` 以及 `crates/db/src`
+- 结论：当前问题是 `db` crate 真实未使用依赖，不需要新增脚本、规则或 workaround
+
+## 实施与验证记录 - ci-machete-db-once-cell
+时间：2026-03-20 15:11:51 +0800
+
+### 已完成修改
+- 从 `crates/db/Cargo.toml` 删除未使用的 `once_cell.workspace = true`
+- 新增 `.claude/context-summary-ci-machete-db-once-cell.md`，记录 CI 失败入口、依赖治理模式与验证限制
+
+### 本地验证
+- 搜索 `crates/db` 中的 `once_cell`
+  - 结果：无匹配，未发现 `once_cell`/`OnceCell`/`Lazy` 使用证据
+- `cargo check -p db`
+  - 结果：通过；仅保留既有 `num-bigint-dig v0.8.4` future-incompat 提示，与本次修改无关
+- `cargo machete`
+  - 结果：当前本机未安装该子命令，无法直接本地复跑；最终闭环需依赖 CI 再次执行
+
+## 编码前检查 - libudev-linux-gnu-build
+时间：2026-03-20 15:02:02 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-libudev-linux-gnu-build.md`
+- 已分析相似实现：
+  - `.github/workflows/release.yml`
+  - `.github/workflows/ci.yml`
+  - `script/install-linux.sh`
+  - `crates/terminal_view/src/serial_form_window.rs`
+- 将使用以下可复用组件：
+  - `script/bootstrap`：统一的 Linux/macOS 依赖安装入口
+  - `script/install-linux.sh`：Linux 系统依赖清单集中维护点
+- 将遵循命名约定：沿用现有 shell 脚本与 workflow 命名，不新增自定义脚本
+- 将遵循代码风格：只在现有 `apt install -y` 清单中补包，不改 workflow 调用链
+- 确认不重复造轮子，证明：已检查 `release.yml`、`ci.yml`、`install-linux.sh`，仓库已有统一依赖安装入口，无需在多个 workflow 中重复写 Linux 安装逻辑
+
+## 编码后声明 - libudev-linux-gnu-build
+时间：2026-03-20 15:03:18 +0800
+
+### 1. 复用了以下既有组件
+- `script/bootstrap`：继续作为 Linux/macOS 依赖安装统一入口
+- `script/install-linux.sh`：继续作为 Ubuntu 构建依赖集中清单，只补缺失系统包
+- `.github/workflows/release.yml` / `.github/workflows/ci.yml`：保留现有调用链，不在 workflow 中重复实现 apt 安装
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增脚本或 workflow，沿用现有文件命名
+- 代码风格：保持单一 `apt install -y` 包列表风格
+- 文件组织：代码改动仅限 `script/install-linux.sh`，上下文与审查文档写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `release.yml` 与 `ci.yml` 都通过 `script/bootstrap` 进入统一安装链，因此修复应落在脚本层而不是 workflow 层
+- `serial_form_window.rs` 直接使用 `serialport::available_ports()`，因此不能靠关闭 `serialport` 默认 feature 来规避 `libudev`
+- `terminal/Cargo.toml` 与 `terminal_view/Cargo.toml` 都直接依赖 `serialport`，说明这是现有产品能力的一部分，不是偶发的无用依赖
+
+### 4. 未重复造轮子的证明
+- 已检查 `script/bootstrap`、`script/install-linux.sh`、`.github/workflows/release.yml`、`.github/workflows/ci.yml`
+- 结论：仓库已经存在统一 Linux 依赖安装入口，本次仅在该入口补齐 `libudev-dev`
+
+## 实施与验证记录 - libudev-linux-gnu-build
+时间：2026-03-20 15:03:18 +0800
+
+### 已完成修改
+- 在 `script/install-linux.sh` 的 Ubuntu 依赖清单中新增 `libudev-dev`
+- 新增 `.claude/context-summary-libudev-linux-gnu-build.md`，记录依赖链、相似实现、测试策略与风险
+
+### 本地验证
+- `bash -n /Users/hufei/RustroverProjects/onetcli/script/install-linux.sh`
+  - 结果：通过，脚本语法有效
+- `cargo tree -i libudev-sys --target x86_64-unknown-linux-gnu -p main`
+  - 结果：确认依赖链为 `libudev-sys -> libudev -> serialport -> terminal/terminal_view -> main`
+- workflow 静态检查
+  - 结果：已确认 `.github/workflows/release.yml` 与 `.github/workflows/ci.yml` 的 Linux job 仍统一走 `script/bootstrap`
+
+### 当前限制
+- 当前主机为 macOS，无法本地直接执行 Ubuntu GNU release/CI 构建
+- 最终闭环验证需在 GitHub Actions Linux job 或 Ubuntu 本机执行 `script/bootstrap && cargo build --release -p main --target x86_64-unknown-linux-gnu`
+
 - 时间：2026-03-09
 - 任务：分析 `terminal_view/src/view.rs` 中滚动方向与 macOS “自然滚动”配置相反的原因。
 - 当前阶段：上下文检索与原因分析。
@@ -537,3 +751,202 @@
 ### 本地验证
 - `cargo test -p db csv::tests -- --nocapture`：通过（2 passed）
 - `cargo check -p db_view`：通过（仅既有 warning）
+
+## 编码前检查 - 表设计 SQL 预览误报
+时间：2026-03-19 18:35:56 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-table-designer-sql-preview.md`
+□ 将使用以下可复用组件：
+- `crates/db_view/src/table_designer_tab.rs`：`collect_design`、`build_original_design`、`ColumnsEditor::load_columns/get_columns`
+- `crates/db/src/plugin.rs`：`parse_column_type`
+- `crates/db/src/mysql/plugin.rs`：`list_columns`、`build_alter_table_sql`、现有 MySQL DDL 测试模式
+□ 将遵循命名约定：Rust `snake_case`/`PascalCase`
+□ 将遵循代码风格：最小改动、归一化收口到单点辅助函数、不扩散到无关数据库插件
+□ 确认不重复造轮子，证明：复用现有插件类型解析与 SQL 生成，只修复设计器原始状态构造和回归测试
+
+## 编码后声明 - 表设计 SQL 预览误报
+时间：2026-03-19 18:43:02 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db/src/plugin.rs` 的 `parse_column_type` 语义，用于统一 `ColumnInfo -> ColumnDefinition` 归一化
+- `crates/db_view/src/table_designer_tab.rs` 现有 `collect_design` / `ColumnsEditor::load_columns/get_columns` 链路
+- `crates/db/src/mysql/plugin.rs` 既有 `build_alter_table_sql` 与测试模块
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `column_info_to_definition`、`fallback_parse_column_type`、`supports_unsigned_type`，均使用 `snake_case`
+- 代码风格：保持 `TableDesigner` 与 `ColumnsEditor` 原有职责边界，只在归一化层补齐缺失属性
+- 文件组织：测试继续内聚在原文件 `#[cfg(test)]` 模块，没有新增测试基础设施
+
+### 3. 对比了以下相似实现
+- `crates/db_view/src/table_designer_tab.rs`：`build_original_design` 与 `ColumnsEditor::get_columns/load_columns`
+- `crates/db/src/mysql/plugin.rs`：`list_columns` 与 `build_alter_table_sql`
+- `crates/db/src/plugin.rs`：默认 `parse_column_type` 归一化逻辑
+
+### 4. 未重复造轮子的证明
+- 未新增 schema diff 框架，直接复用现有插件解析和 SQL 生成链路
+- 未对所有数据库插件加特判，而是在设计器入口统一原始列定义
+
+## 实施与验证记录 - 表设计 SQL 预览误报
+时间：2026-03-19 18:43:02 +0800
+
+### 已完成修改
+- `crates/db_view/src/table_designer_tab.rs`
+  - `build_original_design` 改为基于插件 `parse_column_type` 统一构造原始列定义
+  - 新增 `column_info_to_definition`，补齐 `charset/collation/is_unsigned`、枚举值和 SQLite 自增语义
+  - `ColumnsEditor` 内部状态新增 `is_unsigned`，避免只打开不修改时丢失无符号属性
+- `crates/db/src/mysql/plugin.rs`
+  - 新增“文本列元数据完全一致时返回 no changes”的回归测试
+- `crates/db_view/src/table_designer_tab.rs` 测试模块
+  - 新增 2 个纯函数测试，覆盖文本列元数据、无符号数值列与枚举值保真
+
+### 本地验证
+- `cargo test -p db_view test_column_info_to_definition -- --nocapture`
+- 结果：通过（2 passed, 0 failed）
+- `cargo test -p db test_build_alter_table_sql_no_changes_with_text_metadata -- --nocapture`
+- 结果：通过（1 passed, 0 failed）
+- 未执行 GUI 级手动验证：当前环境无法自动完成图形界面交互，需在表设计页实际打开已有 MySQL 表做最终体验确认
+
+## 编码前检查 - db_tree_view 刷新缓存失效
+时间：2026-03-20 15:39:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-db-tree-refresh-cache.md`
+□ 将使用以下可复用组件：
+- `crates/db_view/src/db_tree_view.rs`：`refresh_tree`、`clear_node_descendants`、`reset_node_children`
+- `crates/db/src/cache.rs`：`invalidate_node_recursive`
+- `crates/db/src/cache_manager.rs`：`invalidate_database`、`invalidate_connection_metadata`、`process_sql_for_invalidation`
+□ 将遵循命名约定：Rust `snake_case` / `PascalCase`
+□ 将遵循代码风格：保持 `cx.spawn -> this.update` 的异步 UI 更新模式，不引入新框架
+□ 确认不重复造轮子，证明：已对比 `refresh_tree`、`close_connection`、`process_sql_for_invalidation` 三处现有失效逻辑，仅收敛到现有刷新入口修复时序和失效范围
+
+## 编码后声明 - db_tree_view 刷新缓存失效
+时间：2026-03-20 15:47:00 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db_view/src/db_tree_view.rs` 的 `clear_node_descendants`、`clear_node_loading_state`、`reset_node_children`
+- `crates/db/src/cache.rs` 的 `invalidate_node_recursive`
+- `crates/db/src/cache_manager.rs` 的 `invalidate_database`、`invalidate_connection_metadata`
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `RefreshMetadataScope`、`resolve_refresh_metadata_scope`，保持现有 Rust 命名风格
+- 代码风格：继续使用 `cx.spawn(async move |this, cx| ...) -> this.update(...)` 的 UI 异步更新模式
+- 文件组织：修复与纯函数测试都内聚在 `crates/db_view/src/db_tree_view.rs`
+
+### 3. 对比了以下相似实现
+- `crates/db_view/src/db_tree_view.rs:1069-1096`：原有刷新逻辑的问题在于 detached 失效与立即 reload 并行
+- `crates/db_view/src/db_tree_view.rs:1778-1805`：复用了关闭连接时“节点缓存 + 元数据缓存”双层清理思路
+- `crates/db/src/cache_manager.rs:445-463`：沿用了 DDL 自动刷新里“先失效缓存，再刷新 UI”的顺序
+
+### 4. 未重复造轮子的证明
+- 未新增新的刷新入口，右键刷新和自动 DDL 刷新仍共用 `refresh_tree`
+- 未新增缓存接口，只复用现有 `GlobalNodeCache` 公开失效方法
+
+## 实施与验证记录 - db_tree_view 刷新缓存失效
+时间：2026-03-20 15:47:00 +0800
+
+### 已完成修改
+- `crates/db_view/src/db_tree_view.rs`
+  - 新增 `RefreshMetadataScope` 与 `resolve_refresh_metadata_scope`，按节点上下文决定是否做连接级或数据库级元数据失效
+  - `refresh_tree` 改为先清理本地树状态并重建 UI，再等待缓存失效完成后触发 `lazy_load_children` / `rebuild_tree`
+  - 新增 3 个纯函数测试，覆盖连接级、数据库级和无需元数据失效三类刷新场景
+
+### 本地验证
+- `cargo fmt --all`
+- 结果：通过
+- `cargo test -p db_view db_tree_view::tests -- --nocapture`
+- 结果：通过（3 passed, 0 failed）
+- 备注：测试阶段仍出现既有依赖 `num-bigint-dig v0.8.4` 的 future-incompat 警告，与本次改动无关
+
+## 编码前检查 - workspace-sync-data
+时间：2026-03-20 16:04:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-workspace-sync-data.md`
+□ 将使用以下可复用组件：
+- `crates/core/src/cloud_sync/engine.rs`：同步引擎注册工作区与连接处理器
+- `crates/core/src/cloud_sync/workspace_sync.rs`：工作区同步类型定义
+- `main/src/home_tab.rs`：连接事件的自动同步模式
+□ 将遵循命名约定：复用现有 `trigger_sync` / `load_workspaces` / `ConnectionDataEvent::*`
+□ 将遵循代码风格：最小改动，仅在事件分支中补齐现有日志与同步调用
+□ 确认不重复造轮子，证明：不改同步引擎和 `sync_data` 结构，只修事件入口缺失
+
+## 编码后声明 - workspace-sync-data
+时间：2026-03-20 16:06:00 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/home_tab.rs` 中连接事件已有的自动同步条件 `current_user.is_some() && crypto::has_master_key()`
+- `HomePage::trigger_sync`
+- `WorkspaceSyncType` 和 `CloudSyncData.data_type = workspace` 的既有同步链路
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增接口，直接复用现有事件和方法命名
+- 代码风格：在工作区事件分支保持 `load_workspaces(cx)` 后追加自动同步，与连接事件风格一致
+- 文件组织：只修改 `main/src/home_tab.rs`
+
+### 3. 对比了以下相似实现
+- `main/src/home_tab.rs:216-233`：连接创建/删除后的自动同步逻辑
+- `main/src/home_tab.rs:236-240`：工作区事件原先只有本地刷新，没有自动同步
+- `crates/core/src/cloud_sync/workspace_sync.rs:13-111`：工作区本身已完整接入 sync_data
+
+### 4. 未重复造轮子的证明
+- 没有新增新的同步入口，继续走 `trigger_sync(cx)`
+- 没有修改 `SyncEngine`、`WorkspaceSyncType`、`CloudSyncData`，只补齐遗漏的事件触发
+
+## 实施与验证记录 - workspace-sync-data
+时间：2026-03-20 16:06:00 +0800
+
+### 已完成修改
+- `main/src/home_tab.rs`
+  - 在 `WorkspaceCreated/WorkspaceUpdated/WorkspaceDeleted` 事件分支中补上与连接事件一致的自动同步触发
+  - 保留原有 `load_workspaces(cx)`，确保本地列表刷新行为不变
+  - 在 `save_workspace` / `delete_workspace` 的本地成功路径再补一层 `trigger_sync(cx)` 兜底，避免当前页对自身工作区事件未回流时漏同步
+
+### 本地验证
+- `cargo check -p main`
+- 结果：通过
+- 备注：仍存在既有依赖 `num-bigint-dig v0.8.4` 的 future-incompat 警告，与本次改动无关
+
+## 编码前检查 - generic-sync-stale-cloud-id
+时间：2026-03-20 16:13:00 +0800
+
+□ 已查阅上下文摘要文件：基于用户提供的工作区同步日志与既有 `workspace-sync-data` 调查结果继续定位
+□ 将使用以下可复用组件：
+- `crates/core/src/cloud_sync/generic_sync.rs`：通用同步计划构建逻辑
+- `crates/core/src/cloud_sync/connection_sync.rs`：连接专用同步对云端缺失场景的处理参考
+- `SyncTypeHandler::on_uploaded`：上传成功后回写新的 cloud_id
+□ 将遵循命名约定：不新增接口，只在既有 `calculate_sync_plan` 分支内补逻辑和日志
+□ 将遵循代码风格：保持现有 `tracing::info!` 与 `plan.to_*` 组织方式
+□ 确认不重复造轮子，证明：不改 WorkspaceSyncType，不加新操作类型，只补通用计划缺口
+
+## 编码后声明 - generic-sync-stale-cloud-id
+时间：2026-03-20 16:14:00 +0800
+
+### 1. 复用了以下既有组件
+- `generic_sync::calculate_sync_plan` 的现有 `plan.to_upload` / `plan.to_update_local` / `plan.to_update_cloud` 链路
+- `SyncTypeHandler::on_uploaded` 的既有 cloud_id 回写机制
+- `connection_sync::calculate_sync_plan` 中“云端缺失需要特殊处理”的思路
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增类型和接口，只补 `Some(cloud_id)` 分支
+- 代码风格：保持 `tracing::info!` 中文日志和现有同步计划结构
+- 文件组织：只修改 `crates/core/src/cloud_sync/generic_sync.rs`
+
+### 3. 对比了以下相似实现
+- `crates/core/src/cloud_sync/generic_sync.rs`：原逻辑在 `cloud_map.get(cloud_id)` 为空时直接跳过
+- `crates/core/src/cloud_sync/connection_sync.rs`：连接专用逻辑在同场景至少会进入冲突处理，不会静默丢失
+- 用户现场日志：`[工作空间] 本地数据: 4 个`、`云端同步数据: 0 个`、`上传: 0`
+
+### 4. 未重复造轮子的证明
+- 没有增加新的同步动作类型，仍然走 `Upload -> on_uploaded`
+- 没有修改 `WorkspaceSyncType`，修复对所有使用 `generic_sync` 的类型都生效
+
+## 实施与验证记录 - generic-sync-stale-cloud-id
+时间：2026-03-20 16:14:00 +0800
+
+### 已完成修改
+- `crates/core/src/cloud_sync/generic_sync.rs`
+  - 当本地数据存在 `cloud_id` 但云端无对应记录时，改为重新加入 `to_upload`
+  - 新增显式日志，提示该数据因云端记录缺失而重新上传
+
+### 本地验证
+- `cargo check -p main`
+- 结果：通过
+- 备注：仍存在既有依赖 `num-bigint-dig v0.8.4` 的 future-incompat 警告，与本次改动无关

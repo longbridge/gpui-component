@@ -301,10 +301,7 @@ impl CloudSyncService {
                 .get(tid)
                 .map(|s| s.as_str())
                 .ok_or(SyncError::NotUnlocked),
-            None => self
-                .master_key
-                .as_deref()
-                .ok_or(SyncError::NotUnlocked),
+            None => self.master_key.as_deref().ok_or(SyncError::NotUnlocked),
         }
     }
 
@@ -321,13 +318,21 @@ impl CloudSyncService {
     }
 
     /// 加密整体明文 JSON 为 blob
-    pub fn encrypt_blob(&self, plaintext: &str, team_id: Option<&str>) -> Result<String, SyncError> {
+    pub fn encrypt_blob(
+        &self,
+        plaintext: &str,
+        team_id: Option<&str>,
+    ) -> Result<String, SyncError> {
         let key = self.select_encrypt_key(team_id)?;
         Ok(crypto::encrypt_with_key(plaintext, key))
     }
 
     /// 解密整体 blob 为明文 JSON
-    pub fn decrypt_blob(&self, encrypted: &str, team_id: Option<&str>) -> Result<String, SyncError> {
+    pub fn decrypt_blob(
+        &self,
+        encrypted: &str,
+        team_id: Option<&str>,
+    ) -> Result<String, SyncError> {
         let key = self.select_encrypt_key(team_id)?;
         crypto::decrypt_with_key(encrypted, key).map_err(SyncError::CryptoError)
     }
@@ -418,13 +423,13 @@ impl CloudSyncService {
         &self,
         cloud_data: &CloudSyncData,
     ) -> Result<StoredConnection, SyncError> {
-        let plaintext = self.decrypt_blob(&cloud_data.encrypted_data, cloud_data.team_id.as_deref())?;
+        let plaintext =
+            self.decrypt_blob(&cloud_data.encrypted_data, cloud_data.team_id.as_deref())?;
         let plain_data: ConnectionPlainData = serde_json::from_str(&plaintext)
             .map_err(|e| SyncError::DataFormatError(e.to_string()))?;
 
         let connection_type = ConnectionType::from_str(&plain_data.connection_type);
-        let params = serde_json::to_string(&plain_data.params)
-            .unwrap_or_else(|_| "{}".to_string());
+        let params = serde_json::to_string(&plain_data.params).unwrap_or_else(|_| "{}".to_string());
 
         Ok(StoredConnection {
             id: None,
@@ -449,7 +454,8 @@ impl CloudSyncService {
         &self,
         cloud_data: &CloudSyncData,
     ) -> Result<crate::storage::Workspace, SyncError> {
-        let plaintext = self.decrypt_blob(&cloud_data.encrypted_data, cloud_data.team_id.as_deref())?;
+        let plaintext =
+            self.decrypt_blob(&cloud_data.encrypted_data, cloud_data.team_id.as_deref())?;
         let plain_data: WorkspacePlainData = serde_json::from_str(&plaintext)
             .map_err(|e| SyncError::DataFormatError(e.to_string()))?;
 

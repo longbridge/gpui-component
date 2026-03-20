@@ -26,17 +26,16 @@ impl CsvFormatHandler {
         let mut was_quoted = false;
         let mut chars = data.chars().peekable();
 
-        let push_field = |record: &mut Vec<Option<String>>,
-                          field: &mut String,
-                          quoted: &mut bool| {
-            let value = if field.is_empty() && !*quoted {
-                None
-            } else {
-                Some(std::mem::take(field))
+        let push_field =
+            |record: &mut Vec<Option<String>>, field: &mut String, quoted: &mut bool| {
+                let value = if field.is_empty() && !*quoted {
+                    None
+                } else {
+                    Some(std::mem::take(field))
+                };
+                record.push(value);
+                *quoted = false;
             };
-            record.push(value);
-            *quoted = false;
-        };
 
         while let Some(ch) = chars.next() {
             if let Some(q) = qualifier {
@@ -233,11 +232,7 @@ impl FormatHandler for CsvFormatHandler {
                                 total_rows += exec_result.rows_affected;
                             }
                             SqlResult::Error(err) => {
-                                errors.push(format!(
-                                    "Record {}: {}",
-                                    record_number,
-                                    err.message
-                                ));
+                                errors.push(format!("Record {}: {}", record_number, err.message));
                                 if config.stop_on_error {
                                     break;
                                 }
@@ -423,7 +418,10 @@ mod tests {
         let input = "id,content\n1,\"line1\nline2\"\n2,plain\n";
         let records = CsvFormatHandler::parse_csv_data_with_config(input, ',', Some('"'));
         assert_eq!(records.len(), 3);
-        assert_eq!(records[0], vec![Some("id".to_string()), Some("content".to_string())]);
+        assert_eq!(
+            records[0],
+            vec![Some("id".to_string()), Some("content".to_string())]
+        );
         assert_eq!(
             records[1],
             vec![Some("1".to_string()), Some("line1\nline2".to_string())]

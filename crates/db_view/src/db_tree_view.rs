@@ -57,6 +57,23 @@ pub enum SqlDumpMode {
     StructureAndData,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RefreshMetadataScope {
+    None,
+    Connection,
+    Database(String),
+}
+
+fn resolve_refresh_metadata_scope(node: &DbNode) -> RefreshMetadataScope {
+    match node.node_type {
+        DbNodeType::Connection => RefreshMetadataScope::Connection,
+        _ => node
+            .get_database_name()
+            .map(RefreshMetadataScope::Database)
+            .unwrap_or(RefreshMetadataScope::None),
+    }
+}
+
 // ============================================================================
 // FlatDbEntry - 扁平化的树条目（用于 uniform_list 渲染）
 // ============================================================================
@@ -1068,35 +1085,54 @@ impl DbTreeView {
 
         info!("Refreshing node in DbTreeView: {}", refresh_node_id);
 
-        // 清除缓存
-        if let Some(node) = self.db_nodes.get(&refresh_node_id) {
-            let connection_id = node.connection_id.clone();
-
-            let global_state = cx.global::<GlobalDbState>().clone();
-            if let Some(config) = global_state.get_config(&connection_id) {
-                let cache_ctx = db::CacheContext::from_config(&config);
-                if let Some(cache) = cx.try_global::<db::GlobalNodeCache>().cloned() {
-                    let node_id_for_cache = refresh_node_id.clone();
-                    Tokio::spawn(cx, async move {
-                        cache
-                            .invalidate_node_recursive(&cache_ctx, &node_id_for_cache)
-                            .await;
-                        Ok::<_, anyhow::Error>(())
-                    })
-                    .detach();
-                }
-            }
-        }
-
+        let should_reload_children = self.expanded_nodes.contains(&refresh_node_id);
+        let refresh_node = self.db_nodes.get(&refresh_node_id).cloned();
         self.clear_node_descendants(&refresh_node_id);
         self.clear_node_loading_state(&refresh_node_id);
         self.reset_node_children(&refresh_node_id);
+        self.rebuild_tree(cx);
 
-        if self.expanded_nodes.contains(&refresh_node_id) {
-            self.lazy_load_children(refresh_node_id, cx);
-        } else {
-            self.rebuild_tree(cx);
-        }
+        let Some(refresh_node) = refresh_node else {
+            return;
+        };
+
+        let refresh_scope = resolve_refresh_metadata_scope(&refresh_node);
+        let connection_id = refresh_node.connection_id.clone();
+        let global_state = cx.global::<GlobalDbState>().clone();
+        let cache_ctx = global_state
+            .get_config(&connection_id)
+            .map(|config| db::CacheContext::from_config(&config));
+        let cache = cx.try_global::<db::GlobalNodeCache>().cloned();
+        let refresh_node_id_for_task = refresh_node_id.clone();
+
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            if let Some(cache) = cache {
+                if let Some(cache_ctx) = cache_ctx.as_ref() {
+                    cache
+                        .invalidate_node_recursive(cache_ctx, &refresh_node_id_for_task)
+                        .await;
+                }
+
+                match refresh_scope {
+                    RefreshMetadataScope::None => {}
+                    RefreshMetadataScope::Connection => {
+                        cache.invalidate_connection_metadata(&connection_id).await;
+                    }
+                    RefreshMetadataScope::Database(database) => {
+                        cache.invalidate_database(&connection_id, &database).await;
+                    }
+                }
+            }
+
+            _ = this.update(cx, |this, cx| {
+                if should_reload_children {
+                    this.lazy_load_children(refresh_node_id_for_task.clone(), cx);
+                } else {
+                    this.rebuild_tree(cx);
+                }
+            });
+        })
+        .detach();
     }
 
     /// 清理节点的加载/错误状态（不包含展开状态）
@@ -2490,7 +2526,8 @@ impl DbTreeView {
             .map(|conn_id| cx.global::<ActiveConnections>().is_active(conn_id))
             .unwrap_or(false);
         let is_active =
-            conn_active && (node.node_type == DbNodeType::Connection || node.children_loaded);
+            conn_active && (node.node_type != DbNodeType::Database || node.children_loaded);
+
 
         // 尝试从 plugin 获取菜单
         let registry = cx.global::<DatabaseViewPluginRegistry>();
@@ -2523,5 +2560,74 @@ impl EventEmitter<DbTreeViewEvent> for DbTreeView {}
 impl Focusable for DbTreeView {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn build_node(node_type: DbNodeType, name: &str, metadata: &[(&str, &str)]) -> DbNode {
+        let metadata = metadata
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect();
+
+        DbNode::new(
+            format!("node-{name}"),
+            name,
+            node_type,
+            "conn-1".to_string(),
+            DatabaseType::MySQL,
+        )
+        .with_metadata(metadata)
+    }
+
+    #[test]
+    fn refresh_connection_node_uses_connection_scope() {
+        let node = build_node(DbNodeType::Connection, "conn", &[]);
+        assert_eq!(
+            resolve_refresh_metadata_scope(&node),
+            RefreshMetadataScope::Connection
+        );
+    }
+
+    #[test]
+    fn refresh_nodes_with_database_context_use_database_scope() {
+        let cases = [
+            build_node(DbNodeType::Database, "analytics", &[]),
+            build_node(DbNodeType::Schema, "public", &[("database", "analytics")]),
+            build_node(
+                DbNodeType::Table,
+                "users",
+                &[("database", "analytics"), ("schema", "public")],
+            ),
+            build_node(
+                DbNodeType::ViewsFolder,
+                "views",
+                &[("database", "analytics"), ("schema", "public")],
+            ),
+            build_node(
+                DbNodeType::Function,
+                "fn_count",
+                &[("database", "analytics")],
+            ),
+        ];
+
+        for node in cases {
+            assert_eq!(
+                resolve_refresh_metadata_scope(&node),
+                RefreshMetadataScope::Database("analytics".to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn refresh_nodes_without_database_context_skip_metadata_invalidation() {
+        let node = build_node(DbNodeType::QueriesFolder, "queries", &[]);
+        assert_eq!(
+            resolve_refresh_metadata_scope(&node),
+            RefreshMetadataScope::None
+        );
     }
 }

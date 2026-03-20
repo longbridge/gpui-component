@@ -10,7 +10,6 @@ serde.workspace = true
 serde_json.workspace = true
 rusqlite.workspace = true
 tokio.workspace = true
-once_cell.workspace = true
 tracing.workspace = true
 hex.workspace = true
 gpui.workspace = true

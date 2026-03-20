@@ -11,12 +11,12 @@ use gpui_component::{
     select::{Select, SelectItem, SelectState},
     v_flex, ActiveTheme, Disableable, IndexPath, Sizable, TitleBar,
 };
+use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use one_core::connection_notifier::{get_notifier, ConnectionDataEvent};
 use one_core::storage::traits::Repository;
 use one_core::storage::{
     SerialFlowControl, SerialParams, SerialParity, StoredConnection, Workspace,
 };
-use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use rust_i18n::t;
 
 pub struct SerialFormWindowConfig {
@@ -795,12 +795,11 @@ impl Render for SerialFormWindow {
                                 &t!("Serial.workspace"),
                                 Select::new(&self.workspace_select).w_full(),
                             ))
-                            .child(
-                                self.render_form_row(
-                                    &t!("TeamSync.team_label"),
-                                    Select::new(&self.team_select).w_full(),
-                                ),
-                            )
+
+                            .child(self.render_form_row(
+                                &t!("TeamSync.team_label"),
+                                Select::new(&self.team_select).w_full(),
+                            ))
                             .child(
                                 self.render_form_row(
                                     &t!("ConnectionForm.cloud_sync"),

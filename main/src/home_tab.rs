@@ -237,6 +237,11 @@ impl HomePage {
                     | ConnectionDataEvent::WorkspaceUpdated { .. }
                     | ConnectionDataEvent::WorkspaceDeleted { .. } => {
                         this.load_workspaces(cx);
+                        // 如果已登录且密钥已解锁，自动触发同步
+                        if this.current_user.is_some() && crypto::has_master_key() {
+                            tracing::info!("工作区数据变化，自动触发云同步");
+                            this.trigger_sync(cx);
+                        }
                     }
                     ConnectionDataEvent::SchemaChanged { .. } => {
                         // SchemaChanged 由 db_tree_view 处理，此处无需操作
@@ -513,59 +518,80 @@ impl HomePage {
                                 .gap_2()
                                 .mt_2()
                                 .child(
-                                    Button::new(ElementId::Name(format!("use_cloud_{}", cloud_id).into()))
+                                    Button::new(ElementId::Name(
+                                        format!("use_cloud_{}", cloud_id).into(),
+                                    ))
                                     .label(t!("Home.sync_conflict_use_cloud"))
-                                    .with_variant(if current_strategy == ConflictResolution::UseCloud {
-                                        ButtonVariant::Primary
-                                    } else {
-                                        ButtonVariant::Ghost
-                                    })
+                                    .with_variant(
+                                        if current_strategy == ConflictResolution::UseCloud {
+                                            ButtonVariant::Primary
+                                        } else {
+                                            ButtonVariant::Ghost
+                                        },
+                                    )
                                     .xsmall()
                                     .on_click({
                                         let cloud_id = cloud_id.clone();
                                         let strategies = strategies_clone.clone();
                                         move |_, _, cx| {
                                             strategies.update(cx, |s, cx| {
-                                                s.insert(cloud_id.clone(), ConflictResolution::UseCloud);
+                                                s.insert(
+                                                    cloud_id.clone(),
+                                                    ConflictResolution::UseCloud,
+                                                );
                                                 cx.notify();
                                             });
                                         }
                                     }),
                                 )
                                 .child(
-                                    Button::new(ElementId::Name(format!("use_local_{}", cloud_id).into()))
+                                    Button::new(ElementId::Name(
+                                        format!("use_local_{}", cloud_id).into(),
+                                    ))
                                     .label(t!("Home.sync_conflict_use_local"))
-                                    .with_variant(if current_strategy == ConflictResolution::UseLocal {
-                                        ButtonVariant::Primary
-                                    } else {
-                                        ButtonVariant::Ghost
-                                    })
+                                    .with_variant(
+                                        if current_strategy == ConflictResolution::UseLocal {
+                                            ButtonVariant::Primary
+                                        } else {
+                                            ButtonVariant::Ghost
+                                        },
+                                    )
                                     .xsmall()
                                     .on_click({
                                         let cloud_id = cloud_id.clone();
                                         let strategies = strategies_clone.clone();
                                         move |_, _, cx| {
                                             strategies.update(cx, |s, cx| {
-                                                s.insert(cloud_id.clone(), ConflictResolution::UseLocal);
+                                                s.insert(
+                                                    cloud_id.clone(),
+                                                    ConflictResolution::UseLocal,
+                                                );
                                                 cx.notify();
                                             });
                                         }
                                     }),
                                 )
                                 .child(
-                                    Button::new(ElementId::Name(format!("keep_both_{}", cloud_id).into()))
+                                    Button::new(ElementId::Name(
+                                        format!("keep_both_{}", cloud_id).into(),
+                                    ))
                                     .label(t!("Home.sync_conflict_keep_both"))
-                                    .with_variant(if current_strategy == ConflictResolution::KeepBoth {
-                                        ButtonVariant::Primary
-                                    } else {
-                                        ButtonVariant::Ghost
-                                    })
+                                    .with_variant(
+                                        if current_strategy == ConflictResolution::KeepBoth {
+                                            ButtonVariant::Primary
+                                        } else {
+                                            ButtonVariant::Ghost
+                                        },
+                                    )
                                     .xsmall()
                                     .on_click({
                                         let strategies = strategies_clone.clone();
                                         move |_, _, cx| {
                                             strategies.update(cx, |s, cx| {
-                                                s.insert(cloud_id.clone(), ConflictResolution::KeepBoth);
+                                                s.insert(
+                                                    cloud_id.clone(),
+                                                    ConflictResolution::KeepBoth,
+                                                );
                                                 cx.notify();
                                             });
                                         }
@@ -621,10 +647,7 @@ impl HomePage {
             return;
         }
 
-        tracing::info!(
-            "使用单独策略解决 {} 个冲突",
-            self.pending_conflicts.len()
-        );
+        tracing::info!("使用单独策略解决 {} 个冲突", self.pending_conflicts.len());
 
         if self.syncing {
             self.sync_requested = true;
@@ -655,7 +678,9 @@ impl HomePage {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             // 使用策略映射应用冲突解决方案
-            let result = engine.apply_conflict_resolutions(conflicts, strategies).await;
+            let result = engine
+                .apply_conflict_resolutions(conflicts, strategies)
+                .await;
 
             _ = this.update(cx, |this, cx| {
                 this.syncing = false;
@@ -1156,6 +1181,11 @@ impl HomePage {
                         );
                     }
                     this.editing_workspace_id = None;
+                    // 兜底触发一次自动同步，避免当前页对自身工作区事件未回流时漏同步。
+                    if this.current_user.is_some() && crypto::has_master_key() {
+                        tracing::info!("本地工作区保存成功，自动触发云同步");
+                        this.trigger_sync(cx);
+                    }
                     cx.notify();
                 });
             }
@@ -1265,6 +1295,11 @@ impl HomePage {
                             ConnectionDataEvent::WorkspaceDeleted { workspace_id },
                             cx,
                         );
+                        // 兜底触发一次自动同步，避免当前页对自身工作区事件未回流时漏同步。
+                        if this.current_user.is_some() && crypto::has_master_key() {
+                            tracing::info!("本地工作区删除成功，自动触发云同步");
+                            this.trigger_sync(cx);
+                        }
                         cx.notify();
                     });
                 }
@@ -2654,7 +2689,9 @@ impl HomePage {
                                     cx.stop_propagation();
                                     if let Some(conn_id) = delete_conn_id {
                                         let conn_name = delete_conn_name.clone();
-                                        this.confirm_delete_connection(conn_id, conn_name, window, cx);
+                                        this.confirm_delete_connection(
+                                            conn_id, conn_name, window, cx,
+                                        );
                                     }
                                 },
                             )),

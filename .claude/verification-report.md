@@ -1,6 +1,132 @@
 ## 审查报告
 生成时间：2026-03-10 00:00:00 +0800
 
+---
+
+## 审查报告（windows-owner-id-build）
+生成时间：2026-03-20 15:30:18 +0800
+
+### 需求完整性检查
+- 目标明确：修复 Windows CI 中 `StoredConnection` 初始化缺少 `owner_id` 字段导致的编译失败
+- 范围明确：仅涉及 `crates/core/src/cloud_sync/conflict.rs` 的测试初始化与 `.claude/` 留痕文档
+- 交付物明确：代码修复、上下文摘要、操作日志、审查报告、本地编译验证
+- 风险与依赖明确：当前修复针对截图中已知报错点；若还有其他手写初始化漏字段，CI 会继续暴露
+
+### 技术维度评分
+- 代码质量：96/100
+- 测试覆盖：85/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：92/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：[`crates/core/src/storage/models.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/storage/models.rs#L570) 的 `StoredConnection` 已新增 `owner_id` 字段，但 [`crates/core/src/cloud_sync/conflict.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/cloud_sync/conflict.rs#L326) 的测试字面量初始化没有同步补齐。
+- 现有模式清晰：`StoredConnection::new_database/new_ssh/new_redis/new_mongodb/new_serial` 全部采用 `owner_id: None`，而 [`storage/repository.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/storage/repository.rs#L54) 也已显式映射 `owner_id: row.owner_id`，说明字段已经在模型层和持久化层全面接入。
+- 修复策略正确：在冲突测试的字面量初始化中补上 `owner_id: None`，与现有默认构造语义保持一致，没有扩大改动范围。
+- 本地验证有效：`cargo check -p one-core --tests` 已通过，足以证明截图中的 Windows 编译错误 `E0063 missing field owner_id` 已修复。
+
+---
+
+## 审查报告（terminal-serial-active-close）
+生成时间：2026-03-20 15:24:31 +0800
+
+### 需求完整性检查
+- 目标明确：修复串口 tab 关闭后主页连接卡片仍显示活跃、导致无法编辑的问题
+- 范围明确：仅涉及 `TerminalView` 的关闭路径与 `.claude/` 留痕文档
+- 交付物明确：代码修复、上下文摘要、操作日志、审查报告、本地编译验证
+- 风险与依赖明确：最终行为闭环需通过 GUI 手动验证确认
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：82/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：90/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：[`main/src/home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs#L824) 通过 `ActiveConnections::is_active` 禁止编辑/删除，而 [`crates/terminal_view/src/view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/view.rs#L2000) 之前在 `try_close()` 中只调用 `shutdown()`，没有同步回收活跃状态。
+- 时序问题解释充分：[`crates/terminal/src/terminal.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal/src/terminal.rs#L500) 中 `set_connection_active(false, cx)` 主要依赖异步断开回调；tab 关闭后实体会立即从容器中移除，因此串口连接可能来不及回调就留下了残余活跃标记。
+- 修复策略与现有模式一致：参照 [`crates/sftp_view/src/lib.rs`](/Users/hufei/RustroverProjects/onetcli/crates/sftp_view/src/lib.rs#L712) 和 [`crates/mongodb_view/src/mongo_tab.rs`](/Users/hufei/RustroverProjects/onetcli/crates/mongodb_view/src/mongo_tab.rs#L264)，现在 `TerminalView::try_close()` 会先同步移除 `ActiveConnections`，再执行原有 `shutdown()`。
+- 本地验证有效：`cargo check -p terminal_view` 已通过，说明改动没有引入编译回归；唯一保留的是既有 `num-bigint-dig v0.8.4` future-incompat 提示。
+- 残余风险可控：GUI 手动回归尚未执行，因此仍建议实际关闭一个串口 tab 后回首页确认卡片活跃标记与编辑按钮状态都已恢复。
+
+---
+
+## 审查报告（ci-machete-db-once-cell）
+生成时间：2026-03-20 15:11:51 +0800
+
+### 需求完整性检查
+- 目标明确：修复 GitHub Actions `Test (aarch64-apple-darwin, macos-latest)` 中 `Machete` 步骤持续失败的问题
+- 范围明确：定位截图中 `db -- ./crates/db/Cargo.toml: once_cell` 的未使用依赖并修复
+- 交付物明确：依赖清理、上下文摘要、操作日志、审查报告
+- 风险与依赖明确：本机未安装 `cargo-machete`，最终闭环需要 CI 重新执行
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：84/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：96/100
+- 风险评估：90/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：CI workflow [`ci.yml`](/Users/hufei/RustroverProjects/onetcli/.github/workflows/ci.yml#L27) 的 `Machete` 步骤只在 macOS job 运行，而截图已经明确指向 `db -- ./crates/db/Cargo.toml: once_cell`。
+- 代码证据支持“真实未使用依赖”而非误报：[`crates/db/Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/crates/db/Cargo.toml#L1) 原先声明了 `once_cell.workspace = true`，但对 `crates/db/src` 的搜索没有发现 `once_cell`/`OnceCell`/`Lazy` 使用痕迹。
+- 修复策略正确：参考 [`crates/macros/Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/crates/macros/Cargo.toml#L20) 已有的 `cargo-machete` ignore 模式后，判断当前不属于误报，因此直接删除 `db` crate 的未使用依赖，而不是加 ignore。
+- 本地验证有效：`cargo check -p db` 已通过，说明删除 `once_cell` 不会导致 `db` crate 编译回归；唯一保留的是既有 `num-bigint-dig v0.8.4` future-incompat 提示。
+- 残余风险可控：当前机器未安装 `cargo-machete`，所以还不能本机直接复跑 `cargo machete`；若 CI 下一次仍报其他未使用依赖，需要按同样方式继续清理。
+
+---
+
+## 审查报告（libudev-linux-gnu-build）
+生成时间：2026-03-20 15:03:18 +0800
+
+### 需求完整性检查
+- 目标明确：修复 GitHub Actions Linux GNU 构建中 `libudev-sys` 因缺失 `libudev.pc` 失败的问题
+- 范围明确：仅涉及 Linux 系统依赖安装脚本与 `.claude/` 留痕文档
+- 交付物明确：脚本修复、上下文摘要、操作日志、审查报告
+- 风险与依赖明确：依赖现有 `script/bootstrap` 调用链；Ubuntu 构建闭环需在 Linux 环境完成
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：82/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：92/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：`cargo tree -i libudev-sys --target x86_64-unknown-linux-gnu -p main` 已证实依赖链为 `libudev-sys -> libudev -> serialport -> terminal/terminal_view -> main`，而 [`script/install-linux.sh`](/Users/hufei/RustroverProjects/onetcli/script/install-linux.sh#L1) 之前没有安装 `libudev-dev`。
+- 修复点正确且最小：在 [`script/install-linux.sh`](/Users/hufei/RustroverProjects/onetcli/script/install-linux.sh#L5) 的统一 Ubuntu 安装清单中补入 `libudev-dev`，没有破坏现有 workflow 结构。
+- 不采用 `serialport --no-default-features` 的理由充分：[`crates/terminal_view/src/serial_form_window.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/serial_form_window.rs#L226) 直接调用 `serialport::available_ports()`；结合 `serialport-rs` 官方文档，关闭默认 feature 会移除 Linux `libudev` 相关能力，存在功能回归风险。
+- 本地验证有效但有限：已执行 `bash -n` 校验脚本语法，通过；已确认 workflow 仍统一走 `script/bootstrap`。由于当前环境为 macOS，尚未直接执行 Ubuntu GNU 构建，因此最终闭环仍需依赖 GitHub Linux job 或 Ubuntu 本机验证。
+
 ### 技术维度评分
 - 代码质量：93/100
 - 测试覆盖：76/100
@@ -218,6 +344,37 @@
 ### 结论
 - `crates/db/src/import_export/formats/csv.rs` 修复了 CSV 导入时 `Option<String>` 被误当作 `String` 的编译与语义错误。
 - `crates/db_view/src/import_export/table_import_view.rs` 在“部分成功”分支中新增逐条错误日志输出，避免只显示错误计数不显示详情。
+
+---
+
+## 审查报告（table-designer-sql-preview）
+生成时间：2026-03-19 18:43:02 +0800
+
+### 需求完整性检查
+- 目标明确：修复表设计页在未修改字段时仍生成 `ALTER TABLE ... MODIFY COLUMN` 的问题。
+- 范围明确：仅涉及 `TableDesigner` 的原始列定义归一化、`ColumnsEditor` 的属性保真，以及 MySQL 回归测试。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地测试记录、审查报告。
+- 风险与依赖明确：依赖现有 `parse_column_type`、`build_alter_table_sql`、`ColumnInfo` 元数据；GUI 手动验证未自动执行。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：89/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：95/100
+- 风险评估：91/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：`crates/db_view/src/table_designer_tab.rs` 的 `build_original_design` 之前丢失了 `charset/collation` 等列级元数据，且界面态未保留 `is_unsigned`，导致 `column_changed` 将等价列定义误判为变更。
+- 修复遵循现有架构：继续由设计器负责 `ColumnInfo -> ColumnDefinition` 归一化，由插件负责 diff 与 SQL 生成，没有把方言判断扩散到通用比较逻辑。
+- 本地验证充分：`cargo test -p db_view test_column_info_to_definition -- --nocapture` 通过 2 个测试，`cargo test -p db test_build_alter_table_sql_no_changes_with_text_metadata -- --nocapture` 通过 1 个测试。
+- 残余风险可控：未自动执行 GUI 级交互验证，因此仍建议在真实表设计页打开一个现有 MySQL 表确认 SQL 预览为空；但逻辑链关键节点已被纯函数测试与插件测试覆盖。
 - 本地验证：
   - `cargo test -p db csv::tests -- --nocapture` 通过（2 passed）
   - `cargo check -p db_view` 通过（仅存在既有 unused import 警告）
@@ -230,3 +387,99 @@
 - 验证：
   - `cargo test -p db csv::tests -- --nocapture` 通过
   - `cargo check -p db_view` 通过
+
+---
+
+## 审查报告（db_tree_view 刷新缓存失效）
+生成时间：2026-03-20 15:47:00 +0800
+
+### 需求完整性检查
+- 目标明确：修复 `db_tree_view` 手动刷新后仍显示旧树节点的问题。
+- 范围明确：仅调整 `crates/db_view/src/db_tree_view.rs` 的刷新时序和缓存失效范围，并补充纯函数测试。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地测试记录、审查报告。
+- 风险与依赖明确：依赖现有 `GlobalNodeCache`、`GlobalDbState`、`DbNode` 元数据；GUI 真实刷新体验未做自动化验证。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：87/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：95/100
+- 风险评估：90/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：`refresh_tree` 之前将 `invalidate_node_recursive` 放入 detached 异步任务后立刻 reload，导致旧缓存可能在失效完成前再次被 `load_node_children` 命中。
+- 修复保持既有架构：仍以 `refresh_tree` 为唯一刷新入口，只调整为“先清理本地树状态，再等待缓存失效完成，最后 reload”。
+- 缓存策略更完整：连接节点做连接级元数据失效，其余带数据库上下文的节点做数据库级元数据失效，避免只清节点缓存导致关联元数据仍旧。
+- 本地验证通过：`cargo fmt --all` 成功，`cargo test -p db_view db_tree_view::tests -- --nocapture` 通过 3 个测试。
+- 残余风险：未执行真实 GUI 场景验证，因此仍建议在数据库树中对连接、数据库和表节点各手动点一次刷新，确认界面表现符合预期。
+
+---
+
+## 审查报告（workspace-sync-data）
+生成时间：2026-03-20 16:06:00 +0800
+
+### 需求完整性检查
+- 目标明确：确认 `sync_data` 是否支持工作区，并修复工作区不会自动进入同步的问题。
+- 范围明确：只修 `main/src/home_tab.rs` 的工作区事件触发，不改同步引擎和存储模型。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地验证记录、审查报告。
+- 风险与依赖明确：依赖现有 `WorkspaceSyncType`、`SyncEngine` 和 `trigger_sync(cx)` 链路。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：82/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：91/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 代码证据表明 `sync_data` 本身支持工作区：`CloudSyncData.data_type` 包含 `workspace`，`SyncEngine` 也会注册 `WorkspaceSyncType`。
+- 根因在首页事件链：工作区创建/更新/删除之前只刷新本地列表，没有像连接变更那样自动调用 `trigger_sync(cx)`。
+- 修复后，工作区事件与连接事件使用相同的自动同步条件；同时在本地保存/删除工作区成功路径再补一层直接触发，避免事件未回流时漏掉同步。
+- 本地验证已执行：`cargo check -p main` 通过。
+- 残余风险：本次未直接验证真实云端 API 返回的数据内容，如需最终确认，建议在新增工作区后观察云端是否出现 `data_type=workspace` 记录。
+
+---
+
+## 审查报告（generic-sync-stale-cloud-id）
+生成时间：2026-03-20 16:14:00 +0800
+
+### 需求完整性检查
+- 目标明确：修复工作区本地有数据、云端为空时仍不上传的问题。
+- 范围明确：只修改 `generic_sync::calculate_sync_plan` 的 stale `cloud_id` 分支。
+- 交付物明确：代码修复、操作日志、本地编译验证、审查报告。
+- 风险与依赖明确：依赖既有 `on_uploaded` 回写 cloud_id 逻辑，无需修改 `WorkspaceSyncType`。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：80/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：96/100
+- 风险评估：92/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 根因已由用户日志直接证实：`[工作空间] 本地数据: 4 个`、`云端同步数据: 0 个`、`上传: 0`，与 `generic_sync` 在“本地有 cloud_id 但云端无记录”时静默跳过完全吻合。
+- 修复后，这类数据会重新加入上传计划，并新增显式日志说明“云端记录不存在，重新加入上传计划”。
+- 该改动保持现有上传链路不变，仍由 `on_uploaded` 在成功后回写新的 cloud_id。
+- 本地验证已执行：`cargo check -p main` 通过。
+- 残余风险：尚未直接跑真实云端同步验证，但下次同步时应能从日志立刻观察到是否命中新分支。
