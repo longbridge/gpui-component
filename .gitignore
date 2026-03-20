@@ -42,3 +42,6 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Local-only scripts
+/supabase.sql
