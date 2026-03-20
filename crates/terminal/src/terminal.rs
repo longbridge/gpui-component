@@ -97,8 +97,7 @@ fn build_cd_command(dir: &str) -> String {
     format!("cd -- {}", shell_escape_arg(dir))
 }
 
-const OSC7_PROMPT_COMMAND: &str =
-    r#"export PROMPT_COMMAND='printf "\033]7;file://%s%s\007" "$HOSTNAME" "$PWD"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}"#;
+const OSC7_PROMPT_COMMAND: &str = r#"export PROMPT_COMMAND='printf "\033]7;file://%s%s\007" "$HOSTNAME" "$PWD"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}"#;
 
 fn build_ssh_init_commands(
     working_dir: Option<&str>,

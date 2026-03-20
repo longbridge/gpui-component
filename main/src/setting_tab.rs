@@ -2,18 +2,17 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use gpui::{
-    App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable, FontWeight,
-    InteractiveElement, IntoElement, Keystroke, ParentElement, PathPromptOptions, Render,
-    SharedString, Styled, Window, div,
+    div, App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable,
+    FontWeight, InteractiveElement, IntoElement, Keystroke, ParentElement, PathPromptOptions,
+    Render, SharedString, Styled, Window,
 };
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, Size, Theme, ThemeMode, WindowExt,
     button::{Button, ButtonVariants as _},
     group_box::GroupBoxVariant,
     h_flex,
     kbd::Kbd,
     setting::{NumberFieldOptions, SettingField, SettingGroup, SettingItem, SettingPage, Settings},
-    v_flex,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, Theme, ThemeMode, WindowExt,
 };
 use one_core::cloud_sync::GlobalCloudUser;
 use one_core::cloud_sync::UserInfo;
@@ -338,37 +337,29 @@ impl SettingsPanel {
                 .groups(vec![
                     SettingGroup::new()
                         .title(t!("Settings.General.Language.group_title"))
-                        .items(vec![
-                            SettingItem::new(
-                                t!("Settings.General.Language.ui_language"),
-                                SettingField::dropdown(
-                                    vec![
-                                        (
-                                            "zh-CN".into(),
-                                            t!("Settings.General.Language.zh_cn").into(),
-                                        ),
-                                        (
-                                            "zh-HK".into(),
-                                            t!("Settings.General.Language.zh_hk").into(),
-                                        ),
-                                        ("en".into(), t!("Settings.General.Language.en").into()),
-                                    ],
-                                    |cx: &App| {
-                                        SharedString::from(AppSettings::global(cx).locale.clone())
-                                    },
-                                    |val: SharedString, cx: &mut App| {
-                                        let settings = AppSettings::global_mut(cx);
-                                        settings.locale = val.to_string();
-                                        gpui_component::set_locale(&settings.locale);
-                                        settings.save();
-                                    },
-                                )
-                                .default_value(SharedString::from(default_settings.locale)),
+                        .items(vec![SettingItem::new(
+                            t!("Settings.General.Language.ui_language"),
+                            SettingField::dropdown(
+                                vec![
+                                    ("zh-CN".into(), t!("Settings.General.Language.zh_cn").into()),
+                                    ("zh-HK".into(), t!("Settings.General.Language.zh_hk").into()),
+                                    ("en".into(), t!("Settings.General.Language.en").into()),
+                                ],
+                                |cx: &App| {
+                                    SharedString::from(AppSettings::global(cx).locale.clone())
+                                },
+                                |val: SharedString, cx: &mut App| {
+                                    let settings = AppSettings::global_mut(cx);
+                                    settings.locale = val.to_string();
+                                    gpui_component::set_locale(&settings.locale);
+                                    settings.save();
+                                },
                             )
-                            .description(
-                                t!("Settings.General.Language.ui_language_desc").to_string(),
-                            ),
-                        ]),
+                            .default_value(SharedString::from(default_settings.locale)),
+                        )
+                        .description(
+                            t!("Settings.General.Language.ui_language_desc").to_string(),
+                        )]),
                     SettingGroup::new()
                         .title(t!("Settings.General.Appearance.group_title"))
                         .items(vec![

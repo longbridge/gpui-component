@@ -640,6 +640,18 @@ FileManager:
     en: Refresh
     zh-CN: 刷新
     zh-HK: 刷新
+  go_back:
+    en: Go Back
+    zh-CN: 返回上一级历史
+    zh-HK: 返回上一級歷史
+  go_home:
+    en: Go Home
+    zh-CN: 回到初始目录
+    zh-HK: 回到初始目錄
+  go_parent:
+    en: Go Parent Directory
+    zh-CN: 进入上级目录
+    zh-HK: 進入上級目錄
   toggle_hidden:
     en: Toggle Hidden Files
     zh-CN: 显示/隐藏文件

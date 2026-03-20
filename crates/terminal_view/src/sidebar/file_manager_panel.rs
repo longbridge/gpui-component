@@ -12,6 +12,7 @@ use gpui::{
     UniformListScrollHandle, Window,
 };
 use gpui_component::{
+    breadcrumb::{Breadcrumb, BreadcrumbItem},
     button::{Button, ButtonVariants},
     dialog::DialogButtonProps,
     h_flex,
@@ -290,6 +291,17 @@ fn is_valid_entry_name(name: &str) -> bool {
         && !name.contains('/')
         && !name.contains('\\')
         && !name.contains('\0')
+}
+
+fn breadcrumb_item(label: impl Into<SharedString>) -> BreadcrumbItem {
+    const BREADCRUMB_ITEM_MAX_WIDTH: f32 = 180.;
+
+    BreadcrumbItem::new(label)
+        .flex_shrink()
+        .min_w(px(0.))
+        .max_w(px(BREADCRUMB_ITEM_MAX_WIDTH))
+        .overflow_hidden()
+        .text_ellipsis()
 }
 
 /// 判断传输错误是否为取消
@@ -676,6 +688,79 @@ impl FileManagerPanel {
             self.path_editing = false;
             cx.notify();
         }
+    }
+
+    fn render_path_breadcrumb(&self, cx: &mut Context<Self>) -> Breadcrumb {
+        let mut breadcrumb = Breadcrumb::new();
+        const MAX_VISIBLE: usize = 4;
+
+        if self.current_path == "." {
+            return breadcrumb.child(breadcrumb_item("."));
+        }
+
+        let parts: Vec<&str> = self
+            .current_path
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .collect();
+        let starts_with_slash = self.current_path.starts_with('/');
+        let total = parts.len() + if starts_with_slash { 1 } else { 0 };
+
+        if total <= MAX_VISIBLE {
+            if starts_with_slash {
+                breadcrumb = breadcrumb.child(breadcrumb_item("/").on_click(cx.listener(
+                    |this, _, _window, cx| {
+                        cx.stop_propagation();
+                        this.navigate_to("/".to_string(), cx);
+                    },
+                )));
+            }
+
+            for (idx, part) in parts.iter().enumerate() {
+                let path_so_far = if starts_with_slash {
+                    format!("/{}", parts[..=idx].join("/"))
+                } else {
+                    parts[..=idx].join("/")
+                };
+
+                breadcrumb = breadcrumb.child(breadcrumb_item(part.to_string()).on_click(
+                    cx.listener(move |this, _, _window, cx| {
+                        cx.stop_propagation();
+                        this.navigate_to(path_so_far.clone(), cx);
+                    }),
+                ));
+            }
+        } else {
+            if starts_with_slash {
+                breadcrumb = breadcrumb.child(breadcrumb_item("/").on_click(cx.listener(
+                    |this, _, _window, cx| {
+                        cx.stop_propagation();
+                        this.navigate_to("/".to_string(), cx);
+                    },
+                )));
+            }
+
+            breadcrumb = breadcrumb.child(breadcrumb_item("...").disabled(true));
+
+            let visible_count = MAX_VISIBLE - 2;
+            let visible_start = parts.len().saturating_sub(visible_count);
+            for idx in visible_start..parts.len() {
+                let path_so_far = if starts_with_slash {
+                    format!("/{}", parts[..=idx].join("/"))
+                } else {
+                    parts[..=idx].join("/")
+                };
+
+                breadcrumb = breadcrumb.child(breadcrumb_item(parts[idx].to_string()).on_click(
+                    cx.listener(move |this, _, _window, cx| {
+                        cx.stop_propagation();
+                        this.navigate_to(path_so_far.clone(), cx);
+                    }),
+                ));
+            }
+        }
+
+        breadcrumb
     }
 
     // ── 目录浏览 ──────────────────────────────────────────────
@@ -1742,6 +1827,7 @@ impl FileManagerPanel {
     /// 渲染工具栏
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let can_go_back = self.history_index > 0;
+        let breadcrumb = self.render_path_breadcrumb(cx);
 
         v_flex()
             .border_b_1()
@@ -1749,7 +1835,7 @@ impl FileManagerPanel {
             .bg(cx.theme().title_bar)
             .child(
                 h_flex()
-                    .h_8()
+                    .h_9()
                     .px_2()
                     .gap_1()
                     .items_center()
@@ -1759,7 +1845,7 @@ impl FileManagerPanel {
                             .id("fm-back")
                             .cursor_pointer()
                             .rounded_md()
-                            .p(px(4.))
+                            .p(px(5.))
                             .when(!can_go_back, |el| el.opacity(0.4))
                             .when(can_go_back, |el| el.hover(|s| s.bg(cx.theme().list_active)))
                             .on_mouse_down(
@@ -1768,9 +1854,13 @@ impl FileManagerPanel {
                                     this.go_back(cx);
                                 }),
                             )
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(t!("FileManager.go_back").to_string())
+                                    .build(window, cx)
+                            })
                             .child(
                                 Icon::new(IconName::ArrowLeft)
-                                    .xsmall()
+                                    .small()
                                     .text_color(cx.theme().muted_foreground),
                             ),
                     )
@@ -1780,7 +1870,7 @@ impl FileManagerPanel {
                             .id("fm-home")
                             .cursor_pointer()
                             .rounded_md()
-                            .p(px(4.))
+                            .p(px(5.))
                             .hover(|s| s.bg(cx.theme().list_active))
                             .on_mouse_down(
                                 MouseButton::Left,
@@ -1788,9 +1878,13 @@ impl FileManagerPanel {
                                     this.go_home(cx);
                                 }),
                             )
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(t!("FileManager.go_home").to_string())
+                                    .build(window, cx)
+                            })
                             .child(
                                 Icon::new(IconName::Home)
-                                    .xsmall()
+                                    .small()
                                     .text_color(cx.theme().muted_foreground),
                             ),
                     )
@@ -1800,7 +1894,7 @@ impl FileManagerPanel {
                             .id("fm-parent")
                             .cursor_pointer()
                             .rounded_md()
-                            .p(px(4.))
+                            .p(px(5.))
                             .when(self.is_at_root(), |el| el.opacity(0.4))
                             .when(!self.is_at_root(), |el| {
                                 el.hover(|s| s.bg(cx.theme().list_active))
@@ -1811,9 +1905,13 @@ impl FileManagerPanel {
                                     this.go_parent(cx);
                                 }),
                             )
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(t!("FileManager.go_parent").to_string())
+                                    .build(window, cx)
+                            })
                             .child(
                                 Icon::new(IconName::ArrowUp)
-                                    .xsmall()
+                                    .small()
                                     .text_color(cx.theme().muted_foreground),
                             ),
                     )
@@ -1844,7 +1942,7 @@ impl FileManagerPanel {
                             .id("fm-sync-terminal")
                             .cursor_pointer()
                             .rounded_md()
-                            .p(px(4.))
+                            .p(px(5.))
                             .hover(|s| s.bg(cx.theme().list_active))
                             .on_mouse_down(
                                 MouseButton::Left,
@@ -1858,7 +1956,7 @@ impl FileManagerPanel {
                             })
                             .child(
                                 Icon::new(IconName::Sync)
-                                    .xsmall()
+                                    .small()
                                     .text_color(cx.theme().muted_foreground),
                             ),
                     )
@@ -1868,7 +1966,7 @@ impl FileManagerPanel {
                             .id("fm-refresh")
                             .cursor_pointer()
                             .rounded_md()
-                            .p(px(4.))
+                            .p(px(5.))
                             .hover(|s| s.bg(cx.theme().list_active))
                             .on_mouse_down(
                                 MouseButton::Left,
@@ -1882,7 +1980,7 @@ impl FileManagerPanel {
                             })
                             .child(
                                 Icon::new(IconName::Refresh)
-                                    .xsmall()
+                                    .small()
                                     .text_color(cx.theme().muted_foreground),
                             ),
                     )
@@ -1892,7 +1990,7 @@ impl FileManagerPanel {
                             .id("fm-hidden")
                             .cursor_pointer()
                             .rounded_md()
-                            .p(px(4.))
+                            .p(px(5.))
                             .hover(|s| s.bg(cx.theme().list_active))
                             .when(self.show_hidden, |el| el.bg(cx.theme().list_active))
                             .on_mouse_down(
@@ -1910,7 +2008,7 @@ impl FileManagerPanel {
                             })
                             .child(
                                 Icon::new(IconName::Eye)
-                                    .xsmall()
+                                    .small()
                                     .text_color(cx.theme().muted_foreground),
                             ),
                     )
@@ -1920,7 +2018,7 @@ impl FileManagerPanel {
                             .id("fm-close")
                             .cursor_pointer()
                             .rounded_md()
-                            .p(px(4.))
+                            .p(px(5.))
                             .hover(|s| s.bg(cx.theme().list_active))
                             .on_mouse_down(
                                 MouseButton::Left,
@@ -1930,7 +2028,7 @@ impl FileManagerPanel {
                             )
                             .child(
                                 Icon::new(IconName::Close)
-                                    .xsmall()
+                                    .small()
                                     .text_color(cx.theme().muted_foreground),
                             ),
                     ),
@@ -1971,23 +2069,10 @@ impl FileManagerPanel {
                             .cursor_text()
                             .rounded_md()
                             .hover(|style| style.bg(cx.theme().list_active))
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, _, window, cx| {
-                                    this.start_path_editing(window, cx);
-                                }),
-                            )
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w(px(0.))
-                                    .overflow_hidden()
-                                    .text_ellipsis()
-                                    .text_xs()
-                                    .whitespace_nowrap()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(self.current_path.clone()),
-                            )
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.start_path_editing(window, cx);
+                            }))
+                            .child(breadcrumb.flex_1().min_w(px(0.)).overflow_hidden())
                             .tooltip(move |window, cx| {
                                 Tooltip::new(t!("FileManager.edit_path").to_string())
                                     .build(window, cx)
