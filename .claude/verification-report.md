@@ -1,6 +1,37 @@
 ## 审查报告
 生成时间：2026-03-10 00:00:00 +0800
 
+---
+
+## 审查报告（libudev-linux-gnu-build）
+生成时间：2026-03-20 15:03:18 +0800
+
+### 需求完整性检查
+- 目标明确：修复 GitHub Actions Linux GNU 构建中 `libudev-sys` 因缺失 `libudev.pc` 失败的问题
+- 范围明确：仅涉及 Linux 系统依赖安装脚本与 `.claude/` 留痕文档
+- 交付物明确：脚本修复、上下文摘要、操作日志、审查报告
+- 风险与依赖明确：依赖现有 `script/bootstrap` 调用链；Ubuntu 构建闭环需在 Linux 环境完成
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：82/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：92/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 根因定位准确：`cargo tree -i libudev-sys --target x86_64-unknown-linux-gnu -p main` 已证实依赖链为 `libudev-sys -> libudev -> serialport -> terminal/terminal_view -> main`，而 [`script/install-linux.sh`](/Users/hufei/RustroverProjects/onetcli/script/install-linux.sh#L1) 之前没有安装 `libudev-dev`。
+- 修复点正确且最小：在 [`script/install-linux.sh`](/Users/hufei/RustroverProjects/onetcli/script/install-linux.sh#L5) 的统一 Ubuntu 安装清单中补入 `libudev-dev`，没有破坏现有 workflow 结构。
+- 不采用 `serialport --no-default-features` 的理由充分：[`crates/terminal_view/src/serial_form_window.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/serial_form_window.rs#L226) 直接调用 `serialport::available_ports()`；结合 `serialport-rs` 官方文档，关闭默认 feature 会移除 Linux `libudev` 相关能力，存在功能回归风险。
+- 本地验证有效但有限：已执行 `bash -n` 校验脚本语法，通过；已确认 workflow 仍统一走 `script/bootstrap`。由于当前环境为 macOS，尚未直接执行 Ubuntu GNU 构建，因此最终闭环仍需依赖 GitHub Linux job 或 Ubuntu 本机验证。
+
 ### 技术维度评分
 - 代码质量：93/100
 - 测试覆盖：76/100

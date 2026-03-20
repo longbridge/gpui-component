@@ -1,5 +1,62 @@
 ## 操作日志
 
+## 编码前检查 - libudev-linux-gnu-build
+时间：2026-03-20 15:02:02 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-libudev-linux-gnu-build.md`
+- 已分析相似实现：
+  - `.github/workflows/release.yml`
+  - `.github/workflows/ci.yml`
+  - `script/install-linux.sh`
+  - `crates/terminal_view/src/serial_form_window.rs`
+- 将使用以下可复用组件：
+  - `script/bootstrap`：统一的 Linux/macOS 依赖安装入口
+  - `script/install-linux.sh`：Linux 系统依赖清单集中维护点
+- 将遵循命名约定：沿用现有 shell 脚本与 workflow 命名，不新增自定义脚本
+- 将遵循代码风格：只在现有 `apt install -y` 清单中补包，不改 workflow 调用链
+- 确认不重复造轮子，证明：已检查 `release.yml`、`ci.yml`、`install-linux.sh`，仓库已有统一依赖安装入口，无需在多个 workflow 中重复写 Linux 安装逻辑
+
+## 编码后声明 - libudev-linux-gnu-build
+时间：2026-03-20 15:03:18 +0800
+
+### 1. 复用了以下既有组件
+- `script/bootstrap`：继续作为 Linux/macOS 依赖安装统一入口
+- `script/install-linux.sh`：继续作为 Ubuntu 构建依赖集中清单，只补缺失系统包
+- `.github/workflows/release.yml` / `.github/workflows/ci.yml`：保留现有调用链，不在 workflow 中重复实现 apt 安装
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增脚本或 workflow，沿用现有文件命名
+- 代码风格：保持单一 `apt install -y` 包列表风格
+- 文件组织：代码改动仅限 `script/install-linux.sh`，上下文与审查文档写入项目本地 `.claude/`
+
+### 3. 对比了以下相似实现
+- `release.yml` 与 `ci.yml` 都通过 `script/bootstrap` 进入统一安装链，因此修复应落在脚本层而不是 workflow 层
+- `serial_form_window.rs` 直接使用 `serialport::available_ports()`，因此不能靠关闭 `serialport` 默认 feature 来规避 `libudev`
+- `terminal/Cargo.toml` 与 `terminal_view/Cargo.toml` 都直接依赖 `serialport`，说明这是现有产品能力的一部分，不是偶发的无用依赖
+
+### 4. 未重复造轮子的证明
+- 已检查 `script/bootstrap`、`script/install-linux.sh`、`.github/workflows/release.yml`、`.github/workflows/ci.yml`
+- 结论：仓库已经存在统一 Linux 依赖安装入口，本次仅在该入口补齐 `libudev-dev`
+
+## 实施与验证记录 - libudev-linux-gnu-build
+时间：2026-03-20 15:03:18 +0800
+
+### 已完成修改
+- 在 `script/install-linux.sh` 的 Ubuntu 依赖清单中新增 `libudev-dev`
+- 新增 `.claude/context-summary-libudev-linux-gnu-build.md`，记录依赖链、相似实现、测试策略与风险
+
+### 本地验证
+- `bash -n /Users/hufei/RustroverProjects/onetcli/script/install-linux.sh`
+  - 结果：通过，脚本语法有效
+- `cargo tree -i libudev-sys --target x86_64-unknown-linux-gnu -p main`
+  - 结果：确认依赖链为 `libudev-sys -> libudev -> serialport -> terminal/terminal_view -> main`
+- workflow 静态检查
+  - 结果：已确认 `.github/workflows/release.yml` 与 `.github/workflows/ci.yml` 的 Linux job 仍统一走 `script/bootstrap`
+
+### 当前限制
+- 当前主机为 macOS，无法本地直接执行 Ubuntu GNU release/CI 构建
+- 最终闭环验证需在 GitHub Actions Linux job 或 Ubuntu 本机执行 `script/bootstrap && cargo build --release -p main --target x86_64-unknown-linux-gnu`
+
 - 时间：2026-03-09
 - 任务：分析 `terminal_view/src/view.rs` 中滚动方向与 macOS “自然滚动”配置相反的原因。
 - 当前阶段：上下文检索与原因分析。
