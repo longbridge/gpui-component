@@ -32,6 +32,9 @@ sed "s/\${ONETCLI_VERSION}/${VERSION}/g" \
     "${PROJECT_DIR}/resources/macos/Info.plist" \
     > "$APP_DIR/Contents/Info.plist"
 
+# Regenerate macOS icon from logo.svg before bundling to avoid stale .icns assets.
+bash "${PROJECT_DIR}/script/generate-macos-icon.sh"
+
 # Copy icon
 ICNS_PATH="${PROJECT_DIR}/resources/macos/OnetCli.icns"
 if [ -f "$ICNS_PATH" ]; then

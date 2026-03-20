@@ -18,7 +18,7 @@ use gpui_component::tooltip::Tooltip;
 use gpui_component::{ActiveTheme, WindowExt, h_flex};
 use one_core::storage::DatabaseType;
 use one_ui::edit_table::{
-    CellEditor, Column, EditTableDelegate, EditTableEvent, EditTableState,
+    CellEditor, Column, ColumnSort, EditTableDelegate, EditTableEvent, EditTableState,
     filter_panel::FilterValue,
 };
 use rust_i18n::t;
@@ -116,6 +116,63 @@ pub struct EditorTableDelegate {
     primary_key_indices: Vec<usize>,
     /// Data grid handle for context menu actions
     data_grid: Option<WeakEntity<DataGrid>>,
+}
+
+fn parse_primary_order_by_clause(order_by_clause: &str) -> Option<(String, ColumnSort)> {
+    let primary_clause = order_by_clause.split(',').next()?.trim();
+    if primary_clause.is_empty() {
+        return None;
+    }
+
+    let tokens: Vec<&str> = primary_clause.split_whitespace().collect();
+    let Some(last_token) = tokens.last() else {
+        return None;
+    };
+
+    let upper = last_token.to_ascii_uppercase();
+    if matches!(upper.as_str(), "ASC" | "DESC") {
+        let identifier = primary_clause[..primary_clause.rfind(last_token)?].trim_end();
+        if identifier.is_empty() {
+            return None;
+        }
+
+        return Some((
+            identifier.to_string(),
+            if upper == "DESC" {
+                ColumnSort::Descending
+            } else {
+                ColumnSort::Ascending
+            },
+        ));
+    }
+
+    Some((primary_clause.to_string(), ColumnSort::Ascending))
+}
+
+fn normalize_sort_identifier(identifier: &str) -> String {
+    let identifier = identifier.trim();
+    let identifier = identifier.rsplit('.').next().unwrap_or(identifier).trim();
+
+    let unquoted = if let Some(inner) = identifier
+        .strip_prefix('`')
+        .and_then(|value| value.strip_suffix('`'))
+    {
+        inner.replace("``", "`")
+    } else if let Some(inner) = identifier
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+    {
+        inner.replace("\"\"", "\"")
+    } else if let Some(inner) = identifier
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+    {
+        inner.replace("]]", "]")
+    } else {
+        identifier.to_string()
+    };
+
+    unquoted.to_ascii_lowercase()
 }
 
 impl Clone for EditorTableDelegate {
@@ -395,6 +452,26 @@ impl EditorTableDelegate {
 
         // Clear all change tracking
         self.clear_changes();
+    }
+
+    pub fn apply_order_by_clause(&mut self, order_by_clause: &str) {
+        for column in &mut self.columns {
+            if column.sort.is_some() {
+                column.sort = Some(ColumnSort::Default);
+            }
+        }
+
+        let Some((column_name, sort)) = parse_primary_order_by_clause(order_by_clause) else {
+            return;
+        };
+
+        let target = normalize_sort_identifier(&column_name);
+        if let Some(column) = self.columns.iter_mut().find(|column| {
+            normalize_sort_identifier(column.key.as_ref()) == target
+                || normalize_sort_identifier(column.name.as_ref()) == target
+        }) {
+            column.sort = Some(sort);
+        }
     }
 
     fn calculate_column_width(
@@ -713,6 +790,36 @@ impl EditTableDelegate for EditorTableDelegate {
 
     fn column(&self, col_ix: usize, _cx: &App) -> Column {
         self.columns[col_ix].clone()
+    }
+
+    fn perform_sort(
+        &mut self,
+        col_ix: usize,
+        sort: ColumnSort,
+        window: &mut Window,
+        cx: &mut Context<EditTableState<Self>>,
+    ) {
+        let Some(column_name) = self
+            .columns
+            .get(col_ix)
+            .map(|column| column.name.to_string())
+        else {
+            return;
+        };
+        let Some(data_grid) = self.data_grid.clone() else {
+            return;
+        };
+
+        // `EditTableState::perform_sort` 会在当前表格实体的 update 闭包中调用 delegate。
+        // 如果这里同步触发 `DataGrid::apply_column_sort`，后者会再次更新同一个表格实体，
+        // 从而命中 GPUI 的重入更新保护并 panic。
+        window.defer(cx, move |window, cx| {
+            if let Err(error) = data_grid.update(cx, |grid, cx| {
+                grid.apply_column_sort(&column_name, sort, window, cx);
+            }) {
+                tracing::error!("Failed to apply column sort: {}", error);
+            }
+        });
     }
 
     fn render_th(
@@ -1599,7 +1706,7 @@ impl EditTableDelegate for EditorTableDelegate {
                         FieldType::Integer | FieldType::Decimal => {
                             InputState::new(window, cx).mask_pattern(MaskPattern::number(None))
                         }
-                        _ => InputState::new(window, cx).multi_line(true).rows(1),
+                        _ => InputState::new(window, cx),
                     };
                     state.set_value(edit_value, window, cx);
                     state.focus(window, cx);
@@ -1612,6 +1719,9 @@ impl EditTableDelegate for EditorTableDelegate {
                     move |table, _, evt: &InputEvent, window, cx| match evt {
                         InputEvent::Blur => {
                             tracing::debug!("Input blur event received, committing cell edit");
+                            table.commit_cell_edit(window, cx);
+                        }
+                        InputEvent::PressEnter { .. } => {
                             table.commit_cell_edit(window, cx);
                         }
                         _ => {}
@@ -2135,5 +2245,39 @@ impl EditorTableDelegate {
     /// 获取数据库类型
     pub fn database_type(&self) -> DatabaseType {
         self.database_type
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_sort_identifier, parse_primary_order_by_clause};
+    use one_ui::edit_table::ColumnSort;
+
+    #[test]
+    fn parse_primary_order_by_clause_uses_first_segment() {
+        let parsed = parse_primary_order_by_clause("`order` DESC, `id` ASC");
+
+        assert_eq!(
+            parsed,
+            Some(("`order`".to_string(), ColumnSort::Descending))
+        );
+    }
+
+    #[test]
+    fn parse_primary_order_by_clause_defaults_to_ascending() {
+        let parsed = parse_primary_order_by_clause("\"created_at\"");
+
+        assert_eq!(
+            parsed,
+            Some(("\"created_at\"".to_string(), ColumnSort::Ascending))
+        );
+    }
+
+    #[test]
+    fn normalize_sort_identifier_handles_common_quote_styles() {
+        assert_eq!(normalize_sort_identifier("`order`"), "order");
+        assert_eq!(normalize_sort_identifier("\"created_at\""), "created_at");
+        assert_eq!(normalize_sort_identifier("[Order Detail]"), "order detail");
+        assert_eq!(normalize_sort_identifier("t.\"user_id\""), "user_id");
     }
 }

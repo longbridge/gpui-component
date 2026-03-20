@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use mysql_async::{prelude::*, Conn, Opts, OptsBuilder, Value};
@@ -6,6 +6,7 @@ use one_core::storage::DbConnectionConfig;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tokio::time::timeout;
 use tracing::{debug, error, info};
 
 use crate::connection::{DbConnection, DbError, StreamingProgress};
@@ -258,22 +259,33 @@ impl DbConnection for MysqlDbConnection {
             debug!("[MySQL] Using database: {}", db);
         }
 
-        // Apply extra params
-        if let Some(timeout) = config.get_param_as::<u64>("connect_timeout") {
-            opts_builder = opts_builder.conn_ttl(Some(std::time::Duration::from_secs(timeout)));
-            debug!("[MySQL] Connect timeout: {}s", timeout);
-        }
-        if let Some(wait_timeout) = config.get_param_as::<usize>("read_timeout") {
-            opts_builder = opts_builder.wait_timeout(Some(wait_timeout));
-            debug!("[MySQL] Read timeout: {}s", wait_timeout);
-        }
+        // 获取连接超时，默认 30 秒
+        let connect_timeout_secs = config.get_param_as::<u64>("connect_timeout").unwrap_or(30);
 
-        debug!("[MySQL] Establishing connection...");
+        debug!("[MySQL] Establishing connection with timeout {}s...", connect_timeout_secs);
         let opts = Opts::from(opts_builder);
-        let conn = Conn::new(opts).await.map_err(|e| {
-            error!("[MySQL] Connection failed: {}", e);
-            DbError::connection_with_source("failed to connect", e)
-        })?;
+
+        // 使用 tokio::timeout 包装连接操作
+        let conn_result = timeout(
+            Duration::from_secs(connect_timeout_secs),
+            Conn::new(opts),
+        )
+        .await;
+
+        let conn = match conn_result {
+            Ok(Ok(conn)) => conn,
+            Ok(Err(e)) => {
+                error!("[MySQL] Connection failed: {}", e);
+                return Err(DbError::connection_with_source("failed to connect", e));
+            }
+            Err(_) => {
+                error!("[MySQL] Connection timed out after {}s", connect_timeout_secs);
+                return Err(DbError::connection(format!(
+                    "connection timed out after {}s",
+                    connect_timeout_secs
+                )));
+            }
+        };
 
         {
             let mut guard = self.conn.lock().await;

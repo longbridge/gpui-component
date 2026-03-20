@@ -715,6 +715,10 @@ Settings:
       en: Window Management
       zh-CN: 窗口管理
       zh-HK: 視窗管理
+    quit_app:
+      en: Quit Application
+      zh-CN: 退出应用
+      zh-HK: 結束應用程式
     tabs:
       en: Tabs
       zh-CN: 标签页

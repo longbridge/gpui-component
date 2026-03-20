@@ -16,6 +16,7 @@ use gpui_component::list::{List, ListState};
 use gpui_component::scroll::ScrollbarHandle;
 use gpui_component::{
     ActiveTheme, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle, h_flex,
+    input::{IndentInline, OutdentInline},
     menu::{ContextMenuExt, PopupMenu},
     scroll::{ScrollableMask, Scrollbar},
     v_flex,
@@ -26,7 +27,17 @@ const SCROLLBAR_WIDTH: Pixels = px(16.);
 gpui::actions!(
     edit_table_internal,
     [
-        Cancel, Confirm, SelectDown, SelectUp, Copy, Paste, SelectAll
+        Cancel,
+        Confirm,
+        SelectDown,
+        SelectUp,
+        SelectFirst,
+        SelectLast,
+        SelectPageUp,
+        SelectPageDown,
+        Copy,
+        Paste,
+        SelectAll
     ]
 );
 
@@ -226,10 +237,7 @@ where
     }
 
     pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
-        let col_ix = col_ix.saturating_sub(self.fixed_left_cols_count());
-
-        self.horizontal_scroll_handle
-            .scroll_to_item(col_ix, ScrollStrategy::Top);
+        self.ensure_col_visible(col_ix, cx);
         cx.notify();
     }
 
@@ -337,9 +345,176 @@ where
         self.selected_cell = Some((row_ix, col_ix));
         self.selected_col = None;
         self.selected_row = None;
-        self.scroll_to_col(col_ix, cx);
+        self.queue_cell_scroll(row_ix, col_ix, ScrollStrategy::Center, cx);
         cx.emit(EditTableEvent::SelectCell(row_ix, col_ix));
         cx.notify();
+    }
+
+    fn has_cell_selection(&self) -> bool {
+        self.selection_state == SelectionState::Cell
+    }
+
+    fn current_cell_for_navigation(&self) -> Option<(usize, usize)> {
+        self.selection.active.or(self.selected_cell)
+    }
+
+    fn first_data_col_ix(&self, cx: &App) -> usize {
+        if self.delegate.row_number_enabled(cx) {
+            1
+        } else {
+            0
+        }
+    }
+
+    fn last_data_col_ix(&self, cx: &App) -> Option<usize> {
+        let first_col_ix = self.first_data_col_ix(cx);
+        (self.col_groups.len() > first_col_ix).then_some(self.col_groups.len() - 1)
+    }
+
+    fn queue_cell_scroll(
+        &mut self,
+        row_ix: usize,
+        col_ix: usize,
+        row_strategy: ScrollStrategy,
+        cx: &mut Context<Self>,
+    ) {
+        self.vertical_scroll_handle
+            .scroll_to_item(row_ix, row_strategy);
+        self.ensure_col_visible(col_ix, cx);
+    }
+
+    fn select_cell_for_navigation(&mut self, row_ix: usize, col_ix: usize, cx: &mut Context<Self>) {
+        self.select_cell(row_ix, col_ix, cx);
+        self.queue_cell_scroll(row_ix, col_ix, ScrollStrategy::Center, cx);
+        cx.notify();
+    }
+
+    fn ensure_col_visible(&mut self, col_ix: usize, cx: &mut Context<Self>) {
+        let fixed_left = self.fixed_left_cols_count();
+        if col_ix < fixed_left {
+            return;
+        }
+
+        let Some(col_group) = self.col_groups.get(col_ix) else {
+            return;
+        };
+
+        if self.bounds.size.width.is_zero() || col_group.bounds.size.width.is_zero() {
+            let scroll_col_ix = col_ix - fixed_left;
+            self.horizontal_scroll_handle
+                .base_handle()
+                .scroll_to_item(scroll_col_ix);
+            return;
+        }
+
+        let mut viewport_left = self.bounds.left();
+        let mut viewport_right = self.bounds.right();
+
+        if fixed_left > 0 {
+            if !self.fixed_head_cols_bounds.size.width.is_zero() {
+                viewport_left = self.fixed_head_cols_bounds.right();
+            } else {
+                let fixed_width = self
+                    .col_groups
+                    .iter()
+                    .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
+                    .fold(px(0.), |acc, col| acc + col.width);
+                viewport_left += fixed_width;
+            }
+        }
+
+        if self.options.scrollbar_visible.right && self.delegate.rows_count(cx) > 0 {
+            viewport_right -= SCROLLBAR_WIDTH;
+        }
+
+        if viewport_right <= viewport_left {
+            return;
+        }
+
+        let col_bounds = col_group.bounds;
+        let mut offset = self.horizontal_scroll_handle.offset();
+
+        if col_bounds.left() < viewport_left {
+            offset.x += viewport_left - col_bounds.left();
+        } else if col_bounds.right() > viewport_right {
+            offset.x += viewport_right - col_bounds.right();
+        } else {
+            return;
+        }
+
+        self.horizontal_scroll_handle.set_offset(offset);
+    }
+
+    fn move_to_prev_cell(&mut self, cx: &mut Context<Self>) {
+        let rows_count = self.delegate.rows_count(cx);
+        let Some(last_col_ix) = self.last_data_col_ix(cx) else {
+            return;
+        };
+        if rows_count == 0 {
+            return;
+        }
+
+        let first_col_ix = self.first_data_col_ix(cx);
+        if let Some((row_ix, col_ix)) = self.current_cell_for_navigation() {
+            let current_col_ix = col_ix.clamp(first_col_ix, last_col_ix);
+            let new_col_ix = if current_col_ix > first_col_ix {
+                current_col_ix.saturating_sub(1)
+            } else if self.loop_selection {
+                last_col_ix
+            } else {
+                current_col_ix
+            };
+            self.select_cell_for_navigation(row_ix, new_col_ix, cx);
+        } else {
+            self.select_cell_for_navigation(0, first_col_ix, cx);
+        }
+    }
+
+    fn move_to_next_cell(&mut self, cx: &mut Context<Self>) {
+        let rows_count = self.delegate.rows_count(cx);
+        let Some(last_col_ix) = self.last_data_col_ix(cx) else {
+            return;
+        };
+        if rows_count == 0 {
+            return;
+        }
+
+        let first_col_ix = self.first_data_col_ix(cx);
+        if let Some((row_ix, col_ix)) = self.current_cell_for_navigation() {
+            let current_col_ix = col_ix.clamp(first_col_ix, last_col_ix);
+            let new_col_ix = if current_col_ix < last_col_ix {
+                current_col_ix + 1
+            } else if self.loop_selection {
+                first_col_ix
+            } else {
+                current_col_ix
+            };
+            self.select_cell_for_navigation(row_ix, new_col_ix, cx);
+        } else {
+            self.select_cell_for_navigation(0, first_col_ix, cx);
+        }
+    }
+
+    fn commit_and_move_to_prev_cell(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing_cell.is_none() {
+            cx.propagate();
+            return;
+        }
+
+        self.commit_cell_edit(window, cx);
+        self.focus_handle.focus(window, cx);
+        self.move_to_prev_cell(cx);
+    }
+
+    fn commit_and_move_to_next_cell(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing_cell.is_none() {
+            cx.propagate();
+            return;
+        }
+
+        self.commit_cell_edit(window, cx);
+        self.focus_handle.focus(window, cx);
+        self.move_to_next_cell(cx);
     }
 
     // ==================== 多选区方法 ====================
@@ -809,6 +984,13 @@ where
             .count()
     }
 
+    fn page_item_count(&self) -> usize {
+        let row_height = self.options.size.table_row_height();
+        let height = self.bounds.size.height;
+        let count = (height / row_height).floor() as usize;
+        count.saturating_sub(1).max(1)
+    }
+
     fn on_row_right_click(
         &mut self,
         _: &MouseDownEvent,
@@ -1056,6 +1238,23 @@ where
             return;
         }
 
+        if self.has_cell_selection() {
+            let first_col_ix = self.first_data_col_ix(cx);
+            if let Some((row_ix, col_ix)) = self.current_cell_for_navigation() {
+                let new_row_ix = if row_ix > 0 {
+                    row_ix.saturating_sub(1)
+                } else if self.loop_selection {
+                    rows_count.saturating_sub(1)
+                } else {
+                    row_ix
+                };
+                self.select_cell_for_navigation(new_row_ix, col_ix.max(first_col_ix), cx);
+            } else {
+                self.select_cell_for_navigation(0, first_col_ix, cx);
+            }
+            return;
+        }
+
         let mut selected_row = self.selected_row.unwrap_or(0);
         if selected_row > 0 {
             selected_row = selected_row.saturating_sub(1);
@@ -1079,6 +1278,23 @@ where
             return;
         }
 
+        if self.has_cell_selection() {
+            let first_col_ix = self.first_data_col_ix(cx);
+            if let Some((row_ix, col_ix)) = self.current_cell_for_navigation() {
+                let new_row_ix = if row_ix < rows_count.saturating_sub(1) {
+                    row_ix + 1
+                } else if self.loop_selection {
+                    0
+                } else {
+                    row_ix
+                };
+                self.select_cell_for_navigation(new_row_ix, col_ix.max(first_col_ix), cx);
+            } else {
+                self.select_cell_for_navigation(0, first_col_ix, cx);
+            }
+            return;
+        }
+
         let selected_row = match self.selected_row {
             Some(selected_row) if selected_row < rows_count.saturating_sub(1) => selected_row + 1,
             Some(selected_row) => {
@@ -1094,22 +1310,144 @@ where
         self.set_selected_row(selected_row, cx);
     }
 
+    pub(super) fn action_select_first_column(
+        &mut self,
+        _: &SelectFirst,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.last_data_col_ix(cx).is_none() {
+            return;
+        }
+        let first_col_ix = self.first_data_col_ix(cx);
+        let rows_count = self.delegate.rows_count(cx);
+
+        if self.has_cell_selection() {
+            if rows_count == 0 {
+                return;
+            }
+
+            if let Some((row_ix, _)) = self.current_cell_for_navigation() {
+                self.select_cell_for_navigation(row_ix, first_col_ix, cx);
+            } else {
+                self.select_cell_for_navigation(0, first_col_ix, cx);
+            }
+            return;
+        }
+
+        self.set_selected_col(first_col_ix, cx);
+    }
+
+    pub(super) fn action_select_last_column(
+        &mut self,
+        _: &SelectLast,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(last_col_ix) = self.last_data_col_ix(cx) else {
+            return;
+        };
+        let rows_count = self.delegate.rows_count(cx);
+
+        if self.has_cell_selection() {
+            if rows_count == 0 {
+                return;
+            }
+
+            if let Some((row_ix, _)) = self.current_cell_for_navigation() {
+                self.select_cell_for_navigation(row_ix, last_col_ix, cx);
+            } else {
+                self.select_cell_for_navigation(0, last_col_ix, cx);
+            }
+            return;
+        }
+
+        self.set_selected_col(last_col_ix, cx);
+    }
+
+    pub(super) fn action_select_page_up(
+        &mut self,
+        _: &SelectPageUp,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let rows_count = self.delegate.rows_count(cx);
+        if rows_count < 1 {
+            return;
+        }
+
+        let step = self.page_item_count();
+        if self.has_cell_selection() {
+            let first_col_ix = self.first_data_col_ix(cx);
+            if let Some((row_ix, col_ix)) = self.current_cell_for_navigation() {
+                let target_row_ix = row_ix.saturating_sub(step);
+                self.select_cell_for_navigation(target_row_ix, col_ix.max(first_col_ix), cx);
+            } else {
+                self.select_cell_for_navigation(0, first_col_ix, cx);
+            }
+            return;
+        }
+
+        let current_row_ix = self.selected_row.unwrap_or(0);
+        let target_row_ix = current_row_ix.saturating_sub(step);
+        self.set_selected_row(target_row_ix, cx);
+    }
+
+    pub(super) fn action_select_page_down(
+        &mut self,
+        _: &SelectPageDown,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let rows_count = self.delegate.rows_count(cx);
+        if rows_count < 1 {
+            return;
+        }
+
+        let step = self.page_item_count();
+        if self.has_cell_selection() {
+            let first_col_ix = self.first_data_col_ix(cx);
+            if let Some((row_ix, col_ix)) = self.current_cell_for_navigation() {
+                let max_row_ix = rows_count.saturating_sub(1);
+                let target_row_ix = (row_ix + step).min(max_row_ix);
+                self.select_cell_for_navigation(target_row_ix, col_ix.max(first_col_ix), cx);
+            } else {
+                self.select_cell_for_navigation(0, first_col_ix, cx);
+            }
+            return;
+        }
+
+        let current_row_ix = self.selected_row.unwrap_or(0);
+        let max_row_ix = rows_count.saturating_sub(1);
+        let target_row_ix = (current_row_ix + step).min(max_row_ix);
+        self.set_selected_row(target_row_ix, cx);
+    }
+
     pub(super) fn action_select_prev_col(
         &mut self,
         _: &SelectPrevColumn,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut selected_col = self.selected_col.unwrap_or(0);
-        let columns_count = self.delegate.columns_count(cx);
-        if selected_col > 0 {
-            selected_col = selected_col.saturating_sub(1);
-        } else {
-            if self.loop_selection {
-                selected_col = columns_count.saturating_sub(1);
-            }
+        if self.has_cell_selection() {
+            self.move_to_prev_cell(cx);
+            return;
         }
-        self.set_selected_col(selected_col, cx);
+
+        let Some(last_col_ix) = self.last_data_col_ix(cx) else {
+            return;
+        };
+        let first_col_ix = self.first_data_col_ix(cx);
+        let mut selected_col_ix = self
+            .selected_col
+            .unwrap_or(first_col_ix)
+            .clamp(first_col_ix, last_col_ix);
+        if selected_col_ix > first_col_ix {
+            selected_col_ix = selected_col_ix.saturating_sub(1);
+        } else if self.loop_selection {
+            selected_col_ix = last_col_ix;
+        }
+        self.set_selected_col(selected_col_ix, cx);
     }
 
     pub(super) fn action_select_next_col(
@@ -1118,16 +1456,44 @@ where
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mut selected_col = self.selected_col.unwrap_or(0);
-        if selected_col < self.delegate.columns_count(cx).saturating_sub(1) {
-            selected_col += 1;
-        } else {
-            if self.loop_selection {
-                selected_col = 0;
-            }
+        if self.has_cell_selection() {
+            self.move_to_next_cell(cx);
+            return;
         }
 
-        self.set_selected_col(selected_col, cx);
+        let Some(last_col_ix) = self.last_data_col_ix(cx) else {
+            return;
+        };
+        let first_col_ix = self.first_data_col_ix(cx);
+        let mut selected_col_ix = self
+            .selected_col
+            .unwrap_or(first_col_ix)
+            .clamp(first_col_ix, last_col_ix);
+        if selected_col_ix < last_col_ix {
+            selected_col_ix += 1;
+        } else if self.loop_selection {
+            selected_col_ix = first_col_ix;
+        }
+
+        self.set_selected_col(selected_col_ix, cx);
+    }
+
+    pub(super) fn action_editing_select_prev_col(
+        &mut self,
+        _: &OutdentInline,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.commit_and_move_to_prev_cell(window, cx);
+    }
+
+    pub(super) fn action_editing_select_next_col(
+        &mut self,
+        _: &IndentInline,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.commit_and_move_to_next_cell(window, cx);
     }
 
     // ==================== 复制/粘贴/全选 Actions ====================
@@ -2522,6 +2888,12 @@ where
             .on_action(cx.listener(Self::action_select_next))
             .on_action(cx.listener(Self::action_select_prev_col))
             .on_action(cx.listener(Self::action_select_next_col))
+            .on_action(cx.listener(Self::action_select_first_column))
+            .on_action(cx.listener(Self::action_select_last_column))
+            .on_action(cx.listener(Self::action_select_page_up))
+            .on_action(cx.listener(Self::action_select_page_down))
+            .on_action(cx.listener(Self::action_editing_select_prev_col))
+            .on_action(cx.listener(Self::action_editing_select_next_col))
             .size_full()
             .overflow_hidden()
             .child(self.render_table_header(left_columns_count, window, cx))

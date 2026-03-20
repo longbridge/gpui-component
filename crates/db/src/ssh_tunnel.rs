@@ -1,5 +1,8 @@
+use std::time::Duration;
+
 use one_core::storage::DbConnectionConfig;
 use ssh::{start_local_port_forward, LocalPortForwardTunnel, SshAuth, SshConnectConfig};
+use tokio::time::timeout;
 
 use crate::connection::DbError;
 
@@ -13,6 +16,10 @@ const SSH_PRIVATE_KEY_PATH: &str = "ssh_private_key_path";
 const SSH_PRIVATE_KEY_PASSPHRASE: &str = "ssh_private_key_passphrase";
 const SSH_TARGET_HOST: &str = "ssh_target_host";
 const SSH_TARGET_PORT: &str = "ssh_target_port";
+const SSH_TIMEOUT: &str = "ssh_timeout";
+
+/// 默认 SSH 连接超时（秒）
+const DEFAULT_SSH_TIMEOUT_SECS: u64 = 30;
 
 pub struct ResolvedConnectionTarget {
     pub host: String,
@@ -42,21 +49,43 @@ pub async fn resolve_connection_target(
         .unwrap_or_else(|| config.host.clone());
     let target_port = optional_u16_param(config, SSH_TARGET_PORT).unwrap_or(config.port);
 
+    // 获取 SSH 连接超时
+    let ssh_timeout_secs = config
+        .get_param_as::<u64>(SSH_TIMEOUT)
+        .unwrap_or(DEFAULT_SSH_TIMEOUT_SECS);
+
     let ssh_config = SshConnectConfig {
         host: ssh_host,
         port: ssh_port,
         username: ssh_username,
         auth,
-        timeout: None,
+        timeout: Some(Duration::from_secs(ssh_timeout_secs)),
         keepalive_interval: None,
         keepalive_max: None,
         jump_server: None,
         proxy: None,
     };
 
-    let tunnel = start_local_port_forward(ssh_config, target_host, target_port)
-        .await
-        .map_err(|err| DbError::connection(format!("failed to establish ssh tunnel: {err}")))?;
+    // 使用 tokio::timeout 包装 SSH 隧道建立
+    let tunnel_result = timeout(
+        Duration::from_secs(ssh_timeout_secs),
+        start_local_port_forward(ssh_config, target_host, target_port),
+    )
+    .await;
+
+    let tunnel = match tunnel_result {
+        Ok(Ok(tunnel)) => tunnel,
+        Ok(Err(e)) => {
+            return Err(DbError::connection(format!("failed to establish ssh tunnel: {e}")));
+        }
+        Err(_) => {
+            return Err(DbError::connection(format!(
+                "ssh tunnel connection timed out after {}s",
+                ssh_timeout_secs
+            )));
+        }
+    };
+
     let local_addr = tunnel.local_addr();
 
     Ok(ResolvedConnectionTarget {

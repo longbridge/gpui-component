@@ -2518,8 +2518,7 @@ impl DbTreeView {
     ) -> PopupMenu {
         // 判断节点是否处于可操作状态：
         // - 连接必须激活
-        // - Database 节点还需要 children_loaded（即节点已展开加载过）
-        // - 其余节点（Table、TablesFolder 等）只需连接激活即可
+        // - 非 Connection 节点还需要 children_loaded（即节点已展开加载过）
         let conn_active = node
             .connection_id
             .parse::<i64>()
@@ -2528,6 +2527,7 @@ impl DbTreeView {
             .unwrap_or(false);
         let is_active =
             conn_active && (node.node_type != DbNodeType::Database || node.children_loaded);
+
 
         // 尝试从 plugin 获取菜单
         let registry = cx.global::<DatabaseViewPluginRegistry>();

@@ -19,6 +19,7 @@ actions!(
         ToggleFullscreen,
         MinimizeWindow,
         DuplicateTab,
+        QuitApp,
     ]
 );
 
@@ -125,6 +126,10 @@ fn duplicate_tab(cx: &mut App) {
     });
 }
 
+fn quit_app(cx: &mut App) {
+    cx.quit();
+}
+
 pub fn init(cx: &mut App) {
     // 从 RUST_LOG 环境变量读取日志级别，默认 info
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -208,6 +213,10 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-shift-t", DuplicateTab, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-shift-t", DuplicateTab, None),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-q", QuitApp, None),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("alt-f4", QuitApp, None),
     ]);
 
     cx.on_action(|_: &ActivateTab1, cx| activate_tab_by_number(1, cx));
@@ -222,6 +231,7 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &ToggleFullscreen, cx| toggle_fullscreen(cx));
     cx.on_action(|_: &MinimizeWindow, cx| minimize_window(cx));
     cx.on_action(|_: &DuplicateTab, cx| duplicate_tab(cx));
+    cx.on_action(|_: &QuitApp, cx| quit_app(cx));
     cx.on_action(|_: &OpenConnectionQuickOpen, cx| {
         let Some(active_window) = cx.active_window() else {
             return;
@@ -335,6 +345,12 @@ impl OnetCliApp {
                 }
             },
         )
+        .detach();
+
+        cx.on_release(|_, cx| {
+            tracing::info!("主窗口已释放，开始退出应用");
+            cx.quit();
+        })
         .detach();
 
         cx.on_app_quit({

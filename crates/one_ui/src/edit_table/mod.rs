@@ -15,9 +15,11 @@ pub use delegate::{CellEditor, EditTableDelegate};
 pub use filter_panel::FilterValue;
 pub use filter_state::FilterState;
 pub use selection::{CellCoord, CellRange, TableSelection};
+use state::{
+    Cancel, Copy, Paste, SelectAll, SelectDown, SelectFirst, SelectLast, SelectPageDown,
+    SelectPageUp, SelectUp,
+};
 pub use state::{EditTableEvent, EditTableState, TableVisibleRange};
-
-use state::{Copy, Paste, SelectAll};
 
 const CONTEXT: &str = "EditTable";
 
@@ -26,6 +28,15 @@ gpui::actions!(edit_table, [SelectPrevColumn, SelectNextColumn]);
 /// 初始化 EditTable 的键盘绑定
 pub fn init(cx: &mut App) {
     cx.bind_keys([
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
+        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
+        KeyBinding::new("left", SelectPrevColumn, Some(CONTEXT)),
+        KeyBinding::new("right", SelectNextColumn, Some(CONTEXT)),
+        KeyBinding::new("home", SelectFirst, Some(CONTEXT)),
+        KeyBinding::new("end", SelectLast, Some(CONTEXT)),
+        KeyBinding::new("pageup", SelectPageUp, Some(CONTEXT)),
+        KeyBinding::new("pagedown", SelectPageDown, Some(CONTEXT)),
         // 复制 (Ctrl+C / Cmd+C)
         #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-c", Copy, Some(CONTEXT)),
@@ -41,6 +52,9 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-a", SelectAll, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-a", SelectAll, Some(CONTEXT)),
+        // 单元格导航
+        KeyBinding::new("tab", SelectNextColumn, Some(CONTEXT)),
+        KeyBinding::new("shift-tab", SelectPrevColumn, Some(CONTEXT)),
     ]);
 }
 

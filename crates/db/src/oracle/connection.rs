@@ -1,10 +1,11 @@
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use one_core::storage::DbConnectionConfig;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tokio::time::timeout;
 use tracing::{debug, error, info};
 
 use crate::connection::{DbConnection, DbError, StreamingProgress};
@@ -214,17 +215,37 @@ impl DbConnection for OracleDbConnection {
         let username = config.username.clone();
         let password = config.password.clone();
 
-        let conn = tokio::task::spawn_blocking(move || {
-            oracle::Connection::connect(&username, &password, &connect_string).map_err(|e| {
-                error!("[Oracle] Connection failed: {}", e);
-                DbError::connection_with_source("failed to connect", e)
-            })
-        })
-        .await
-        .map_err(|e| {
-            error!("[Oracle] Task error: {}", e);
-            DbError::Internal(format!("task error: {}", e))
-        })??;
+        // 获取连接超时，默认 30 秒
+        let connect_timeout_secs = config.get_param_as::<u64>("connect_timeout").unwrap_or(30);
+        debug!("[Oracle] Connecting with timeout {}s...", connect_timeout_secs);
+
+        // 使用 tokio::timeout 包装 spawn_blocking
+        let conn_result = timeout(
+            Duration::from_secs(connect_timeout_secs),
+            tokio::task::spawn_blocking(move || {
+                oracle::Connection::connect(&username, &password, &connect_string).map_err(|e| {
+                    error!("[Oracle] Connection failed: {}", e);
+                    DbError::connection_with_source("failed to connect", e)
+                })
+            }),
+        )
+        .await;
+
+        let conn = match conn_result {
+            Ok(Ok(Ok(conn))) => conn,
+            Ok(Ok(Err(e))) => return Err(e),
+            Ok(Err(e)) => {
+                error!("[Oracle] Task error: {}", e);
+                return Err(DbError::Internal(format!("task error: {}", e)));
+            }
+            Err(_) => {
+                error!("[Oracle] Connection timed out after {}s", connect_timeout_secs);
+                return Err(DbError::connection(format!(
+                    "connection timed out after {}s",
+                    connect_timeout_secs
+                )));
+            }
+        };
 
         {
             let mut guard = self.conn.lock().await;
