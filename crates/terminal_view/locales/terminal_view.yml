@@ -49,6 +49,10 @@ Common:
     en: OK
     zh-CN: 确定
     zh-HK: 確定
+  create:
+    en: Create
+    zh-CN: 创建
+    zh-HK: 建立
   cancel:
     en: Cancel
     zh-CN: 取消
@@ -660,6 +664,14 @@ FileManager:
     en: Current Path
     zh-CN: 当前路径
     zh-HK: 當前路徑
+  edit_path:
+    en: Click to edit path
+    zh-CN: 点击编辑路径
+    zh-HK: 點擊編輯路徑
+  path_placeholder:
+    en: Enter remote path
+    zh-CN: 输入远程路径
+    zh-HK: 輸入遠程路徑
   sync_terminal_dir:
     en: Sync Terminal Directory
     zh-CN: 同步终端目录
@@ -672,10 +684,18 @@ FileManager:
     en: Upload File
     zh-CN: 上传文件
     zh-HK: 上傳文件
+  new_folder:
+    en: New Folder
+    zh-CN: 新建文件夹
+    zh-HK: 新建文件夾
   upload_folder:
     en: Upload Folder
     zh-CN: 上传文件夹
     zh-HK: 上傳文件夾
+  new_folder_placeholder:
+    en: Enter folder name
+    zh-CN: 输入文件夹名称
+    zh-HK: 輸入文件夾名稱
   select_upload_files:
     en: Select files to upload
     zh-CN: 选择要上传的文件
@@ -716,6 +736,14 @@ FileManager:
     en: "Failed to read directory: %{error}"
     zh-CN: "读取目录失败: %{error}"
     zh-HK: "讀取目錄失敗: %{error}"
+  invalid_name:
+    en: Invalid file or folder name
+    zh-CN: 文件或文件夹名称无效
+    zh-HK: 文件或文件夾名稱無效
+  create_folder_failed:
+    en: "Failed to create folder: %{error}"
+    zh-CN: "创建文件夹失败: %{error}"
+    zh-HK: "建立文件夾失敗: %{error}"
 
 Dialog:
   file_conflict:

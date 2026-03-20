@@ -1,14 +1,14 @@
 use gpui::{
-    App, Context, Entity, FocusHandle, Focusable, IntoElement, ListSizingBehavior, MouseButton,
-    MouseDownEvent, ParentElement, Render, SharedString, Styled, UniformListScrollHandle, Window,
-    div, prelude::*, px, uniform_list,
+    div, prelude::*, px, uniform_list, App, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ListSizingBehavior, MouseButton, MouseDownEvent, ParentElement, Render, SharedString, Styled,
+    UniformListScrollHandle, Window,
 };
 use gpui_component::{
-    ActiveTheme, Icon, IconName, InteractiveElementExt, Sizable, Size, h_flex,
+    h_flex,
     input::{Input, InputEvent, InputState},
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
     tooltip::Tooltip,
-    v_flex,
+    v_flex, ActiveTheme, Icon, IconName, InteractiveElementExt, Sizable, Size,
 };
 use rust_i18n::t;
 use std::collections::HashSet;
@@ -617,7 +617,7 @@ impl FileListPanel {
                 )
                 .item(
                     PopupMenuItem::new(t!("File.new_folder").to_string())
-                        .icon(IconName::Folder)
+                        .icon(IconName::NewFolder)
                         .on_click(
                             window.listener_for(&view_new_folder, move |_this, _, _, cx| {
                                 cx.emit(FileListPanelEvent::NewFolder);
@@ -660,7 +660,7 @@ impl FileListPanel {
             let view_upload = view_ref.clone();
             menu = menu.item(
                 PopupMenuItem::new(t!("Common.upload").to_string())
-                    .icon(IconName::ArrowUp)
+                    .icon(IconName::Upload)
                     .on_click(window.listener_for(&view_upload, move |_this, _, _, cx| {
                         cx.emit(FileListPanelEvent::UploadFile);
                     })),
@@ -762,7 +762,7 @@ impl FileListPanel {
                 .separator()
                 .item(
                     PopupMenuItem::new(t!("File.upload_file").to_string())
-                        .icon(IconName::ArrowUp)
+                        .icon(IconName::Upload)
                         .on_click(window.listener_for(
                             &view_upload_file,
                             move |_this, _, _, cx| {
@@ -772,7 +772,7 @@ impl FileListPanel {
                 )
                 .item(
                     PopupMenuItem::new(t!("File.upload_folder").to_string())
-                        .icon(IconName::FolderOpen)
+                        .icon(IconName::Upload)
                         .on_click(window.listener_for(
                             &view_upload_folder,
                             move |_this, _, _, cx| {

@@ -3,7 +3,7 @@ use crate::setting_tab::{AppSettings, DatabaseOpenMode, SettingsPanel};
 use db_view::chatdb::chat_panel::ChatPanel;
 use db_view::database_tab::DatabaseTabView;
 use gpui::AppContext;
-use gpui::{BorrowAppContext, Context, Entity, Window};
+use gpui::{App, BorrowAppContext, Context, Entity, Window};
 use mongodb_view::MongoTabView;
 use one_core::storage::{ConnectionType, StoredConnection, Workspace};
 use one_core::tab_container::TabItem;
@@ -13,6 +13,14 @@ use terminal::LocalConfig;
 use terminal_view::{TerminalConnectionKind, TerminalTheme, TerminalView, TerminalViewEvent};
 
 impl HomePage {
+    fn terminal_sync_path_enabled(cx: &App) -> bool {
+        if cx.has_global::<AppSettings>() {
+            AppSettings::global(cx).terminal_sync_path_with_terminal
+        } else {
+            true
+        }
+    }
+
     fn register_terminal_view(&mut self, terminal_view: &Entity<TerminalView>) {
         self.terminal_views.retain(|view| view.upgrade().is_some());
         self.terminal_views.push(terminal_view.downgrade());
@@ -36,13 +44,21 @@ impl HomePage {
             let font_size = settings.terminal_font_size as f32;
             let auto_copy = settings.terminal_auto_copy;
             let middle_click_paste = settings.terminal_middle_click_paste;
+            let sync_path = settings.terminal_sync_path_with_terminal;
             let cursor_blink = settings.terminal_cursor_blink;
             let confirm_multiline = settings.terminal_confirm_multiline_paste;
             let confirm_high_risk = settings.terminal_confirm_high_risk_command;
             let theme = TerminalTheme::find_by_name(&settings.terminal_theme);
 
             terminal_view.update(cx, |view, cx| {
-                view.apply_terminal_settings(font_size, auto_copy, middle_click_paste, window, cx);
+                view.apply_terminal_settings(
+                    font_size,
+                    auto_copy,
+                    middle_click_paste,
+                    sync_path,
+                    window,
+                    cx,
+                );
                 view.apply_cursor_blink(cursor_blink, window, cx);
                 view.apply_confirm_multiline_paste(confirm_multiline, cx);
                 view.apply_confirm_high_risk_command(confirm_high_risk, cx);
@@ -80,6 +96,14 @@ impl HomePage {
                     TerminalViewEvent::MiddleClickPasteChanged { enabled } => {
                         cx.update_global::<AppSettings, _>(|s, _| {
                             s.terminal_middle_click_paste = *enabled;
+                            s.save();
+                        });
+                        let settings = AppSettings::global(cx).clone();
+                        this.apply_terminal_settings_to_all(&settings, window, cx);
+                    }
+                    TerminalViewEvent::SyncPathChanged { enabled } => {
+                        cx.update_global::<AppSettings, _>(|s, _| {
+                            s.terminal_sync_path_with_terminal = *enabled;
                             s.save();
                         });
                         let settings = AppSettings::global(cx).clone();
@@ -143,6 +167,7 @@ impl HomePage {
         let font_size = settings.terminal_font_size as f32;
         let auto_copy = settings.terminal_auto_copy;
         let middle_click_paste = settings.terminal_middle_click_paste;
+        let sync_path = settings.terminal_sync_path_with_terminal;
         self.terminal_views.retain(|weak| {
             if let Some(view) = weak.upgrade() {
                 view.update(cx, |view, cx| {
@@ -150,6 +175,7 @@ impl HomePage {
                         font_size,
                         auto_copy,
                         middle_click_paste,
+                        sync_path,
                         window,
                         cx,
                     );
@@ -208,9 +234,11 @@ impl HomePage {
         } else {
             None
         };
+        let sync_path = Self::terminal_sync_path_enabled(cx);
 
-        let terminal_view =
-            cx.new(|cx| TerminalView::new_ssh_with_index(conn, tab_index, window, cx, None));
+        let terminal_view = cx.new(|cx| {
+            TerminalView::new_ssh_with_index(conn, tab_index, window, cx, None, sync_path)
+        });
         self.setup_terminal_view(&terminal_view, window, cx);
         self.tab_container.update(cx, |tc, cx| {
             let tab = TabItem::new(tab_id, "ssh", terminal_view);
@@ -353,6 +381,7 @@ impl HomePage {
                         } else {
                             None
                         };
+                        let sync_path = HomePage::terminal_sync_path_enabled(cx);
                         let terminal_view = cx.new(|cx| {
                             TerminalView::new_ssh_with_index(
                                 conn,
@@ -360,6 +389,7 @@ impl HomePage {
                                 window,
                                 cx,
                                 Some(working_dir),
+                                sync_path,
                             )
                         });
                         this.setup_terminal_view(&terminal_view, window, cx);

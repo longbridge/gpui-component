@@ -1057,3 +1057,53 @@
 - `cargo check -p terminal_view`
 - 结果：通过
 - 备注：仍存在既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关
+
+## 编码前检查 - file-manager-toolbar-path-edit
+时间：2026-03-20 18:11:31 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-file-manager-toolbar-path-edit.md`
+□ 将使用以下可复用组件：
+- `crates/sftp_view/src/lib.rs`：路径编辑状态与输入订阅模式
+- `crates/sftp_view/src/lib.rs`：`show_new_folder_dialog` 对话框实现模式
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs`：既有 `select_and_upload_files`、`navigate_to`、`refresh_dir`
+□ 将遵循命名约定：新增字段和方法使用 Rust 现有 `snake_case`
+□ 将遵循代码风格：继续使用 `InputState`、`Notification`、`open_dialog`、紧凑工具栏布局
+□ 确认不重复造轮子，证明：上传按钮仅复用既有上传入口，路径编辑与新建文件夹直接沿用 `sftp_view` 交互模式
+
+## 编码后声明 - file-manager-toolbar-path-edit
+时间：2026-03-20 18:11:31 +0800
+
+### 1. 复用了以下既有组件
+- `crates/sftp_view/src/lib.rs` 的 `path_editing + path_input + PressEnter/Blur` 输入交互模式
+- `crates/sftp_view/src/lib.rs` 的 `show_new_folder_dialog` 对话框结构
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs` 既有的 `select_and_upload_files`、`navigate_to`、`refresh_dir`
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `path_input`、`path_editing`、`start_path_editing`、`confirm_path` 等字段与方法，风格与仓库一致
+- 代码风格：继续使用 `InputState` 订阅事件、`Notification` 异步反馈、工具栏 `Button`/图标混合布局
+- 文件组织：仅修改 `file_manager_panel.rs` 与 `terminal_view.yml`，并新增本轮 `.claude` 摘要文件
+
+### 3. 对比了以下相似实现
+- `crates/sftp_view/src/lib.rs`：路径点击进入编辑态、Enter 确认、Blur 取消
+- `crates/sftp_view/src/lib.rs`：新建文件夹对话框与远程 `mkdir` 调度
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs`：上传入口与远程目录刷新逻辑
+
+### 4. 未重复造轮子的证明
+- 没有新增新的上传流程，头部上传按钮直接复用 `select_and_upload_files`
+- 没有抽离新的 dialog/helper 模块，而是在现有面板内按 `sftp_view` 模式最小接入
+
+## 实施与验证记录 - file-manager-toolbar-path-edit
+时间：2026-03-20 18:11:31 +0800
+
+### 已完成修改
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs`
+  - 新增路径编辑状态和输入框订阅，支持点击路径后输入、Enter 导航、Blur 取消
+  - 在工具栏新增“上传文件”“新建文件夹”按钮
+  - 新增新建文件夹对话框，调用远程 `mkdir` 成功后刷新目录，失败通过通知提示
+- `crates/terminal_view/locales/terminal_view.yml`
+  - 新增路径编辑、新建文件夹、非法名称、创建失败等文案
+
+### 本地验证
+- `cargo check -p terminal_view`
+- 结果：通过
+- 备注：仍存在既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关

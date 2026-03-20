@@ -12,8 +12,8 @@ use gpui::{
     UniformListScrollHandle, Window,
 };
 use gpui_component::{
-    WindowExt,
     button::{Button, ButtonVariants},
+    dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputEvent, InputState},
     menu::{ContextMenuExt, PopupMenu, PopupMenuItem},
@@ -21,7 +21,7 @@ use gpui_component::{
     progress::Progress,
     spinner::Spinner,
     tooltip::Tooltip,
-    v_flex, ActiveTheme, Icon, IconName, InteractiveElementExt, Sizable, Size,
+    v_flex, ActiveTheme, Icon, IconName, InteractiveElementExt, Sizable, Size, WindowExt,
 };
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{ProxyType as StorageProxyType, SshAuthMethod, StoredConnection};
@@ -283,6 +283,15 @@ fn join_remote_path(base: &str, name: &str) -> String {
     }
 }
 
+fn is_valid_entry_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains('\0')
+}
+
 /// 判断传输错误是否为取消
 fn is_transfer_cancelled(error: &anyhow::Error) -> bool {
     error.downcast_ref::<TransferCancelled>().is_some()
@@ -437,8 +446,12 @@ pub struct FileManagerPanel {
     show_hidden: bool,
     /// 搜索输入框
     search_input: Entity<InputState>,
+    /// 路径输入框
+    path_input: Entity<InputState>,
     /// 搜索关键词
     search_query: String,
+    /// 是否正在编辑路径
+    path_editing: bool,
     /// 导航历史
     history: Vec<String>,
     /// 当前历史位置
@@ -477,16 +490,34 @@ impl FileManagerPanel {
         let search_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder(t!("FileManager.search_placeholder"))
         });
+        let path_input = cx
+            .new(|cx| InputState::new(window, cx).placeholder(t!("FileManager.path_placeholder")));
 
-        let sub = cx.subscribe(&search_input, |this, input, event: &InputEvent, cx| {
-            if let InputEvent::Change = event {
-                let text = input.read(cx).text().to_string();
-                this.search_query = text;
-                this.apply_filter();
-                this.selected_indices.clear();
-                cx.notify();
-            }
-        });
+        let mut subscriptions = Vec::new();
+        subscriptions.push(
+            cx.subscribe(&search_input, |this, input, event: &InputEvent, cx| {
+                if let InputEvent::Change = event {
+                    let text = input.read(cx).text().to_string();
+                    this.search_query = text;
+                    this.apply_filter();
+                    this.selected_indices.clear();
+                    cx.notify();
+                }
+            }),
+        );
+        subscriptions.push(cx.subscribe_in(
+            &path_input,
+            window,
+            |this, _, event: &InputEvent, window, cx| match event {
+                InputEvent::PressEnter { .. } => {
+                    this.confirm_path(window, cx);
+                }
+                InputEvent::Blur => {
+                    this.cancel_path_editing(cx);
+                }
+                _ => {}
+            },
+        ));
 
         Self {
             stored_connection,
@@ -500,13 +531,15 @@ impl FileManagerPanel {
             sort_order: SortOrder::Ascending,
             show_hidden: false,
             search_input,
+            path_input,
             search_query: String::new(),
+            path_editing: false,
             history: vec!["/".to_string()],
             history_index: 0,
             scroll_handle: UniformListScrollHandle::new(),
             focus_handle,
             loading: false,
-            _subscriptions: vec![sub],
+            _subscriptions: subscriptions,
             transfer_client: None,
             transfer_queue: TransferQueue::new(),
             next_task_id: 0,
@@ -614,6 +647,35 @@ impl FileManagerPanel {
             return;
         }
         self.navigate_to(path, cx);
+    }
+
+    fn start_path_editing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.path_editing = true;
+        let path = self.current_path.clone();
+        self.path_input.update(cx, |state, cx| {
+            state.set_value(&path, window, cx);
+            state.focus(window, cx);
+        });
+        cx.notify();
+    }
+
+    fn confirm_path(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let new_path = self.path_input.read(cx).text().to_string();
+        let new_path = new_path.trim().to_string();
+        self.path_editing = false;
+
+        if !new_path.is_empty() && new_path != self.current_path {
+            self.navigate_to(new_path, cx);
+        } else {
+            cx.notify();
+        }
+    }
+
+    fn cancel_path_editing(&mut self, cx: &mut Context<Self>) {
+        if self.path_editing {
+            self.path_editing = false;
+            cx.notify();
+        }
     }
 
     // ── 目录浏览 ──────────────────────────────────────────────
@@ -1413,8 +1475,10 @@ impl FileManagerPanel {
                                 let existing = existing_names_keep.clone();
                                 move |_, window, cx| {
                                     window.close_dialog(cx);
-                                    let uploads =
-                                        rename_conflicting_uploads(uploads.clone(), existing.clone());
+                                    let uploads = rename_conflicting_uploads(
+                                        uploads.clone(),
+                                        existing.clone(),
+                                    );
                                     view.update(cx, |this, cx| {
                                         this.enqueue_pending_uploads(uploads, cx);
                                     });
@@ -1548,6 +1612,96 @@ impl FileManagerPanel {
             .detach();
     }
 
+    fn show_new_folder_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let input = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(t!("FileManager.new_folder_placeholder"))
+        });
+        let view = cx.entity().downgrade();
+
+        input.update(cx, |state, cx| {
+            state.focus(window, cx);
+        });
+
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let view_clone = view.clone();
+            let input_for_callback = input.clone();
+
+            dialog
+                .title(t!("FileManager.new_folder").to_string())
+                .w(px(360.))
+                .child(Input::new(&input))
+                .confirm()
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text(t!("Common.create").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
+                )
+                .on_ok(move |_, window, cx| {
+                    let folder_name = input_for_callback.read(cx).text().to_string();
+                    let folder_name = folder_name.trim().to_string();
+                    if folder_name.is_empty() {
+                        return false;
+                    }
+                    if !is_valid_entry_name(&folder_name) {
+                        window.push_notification(
+                            Notification::error(t!("FileManager.invalid_name")),
+                            cx,
+                        );
+                        return false;
+                    }
+
+                    let _ = view_clone.update(cx, |this, cx| {
+                        let Some(client) = this.sftp_client.clone() else {
+                            return;
+                        };
+
+                        let remote_path = join_remote_path(&this.current_path, &folder_name);
+                        let task = Tokio::spawn(cx, async move {
+                            let mut client = client.lock().await;
+                            client.mkdir(&remote_path).await
+                        });
+
+                        let view = cx.entity().clone();
+                        window
+                            .spawn(cx, async move |cx| match task.await {
+                                Ok(Ok(_)) => {
+                                    let _ = view.update_in(cx, |this, window, cx| {
+                                        window.close_dialog(cx);
+                                        this.refresh_dir(cx);
+                                    });
+                                }
+                                Ok(Err(e)) => {
+                                    tracing::error!("创建远程文件夹失败: {}", e);
+                                    let error_msg =
+                                        t!("FileManager.create_folder_failed", error = e)
+                                            .to_string();
+                                    let _ = view.update_in(cx, |_this, window, cx| {
+                                        window.push_notification(
+                                            Notification::error(error_msg.clone()),
+                                            cx,
+                                        );
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::error!("远程创建文件夹任务失败: {}", e);
+                                    let error_msg =
+                                        t!("FileManager.create_folder_failed", error = e)
+                                            .to_string();
+                                    let _ = view.update_in(cx, |_this, window, cx| {
+                                        window.push_notification(
+                                            Notification::error(error_msg.clone()),
+                                            cx,
+                                        );
+                                    });
+                                }
+                            })
+                            .detach();
+                    });
+                    false
+                })
+        });
+    }
+
     /// 通过保存目录选择器下载远程文件/文件夹
     fn download_item(
         &mut self,
@@ -1589,186 +1743,257 @@ impl FileManagerPanel {
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let can_go_back = self.history_index > 0;
 
-        h_flex()
-            .h_8()
-            .px_2()
-            .gap_1()
-            .items_center()
+        v_flex()
             .border_b_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().title_bar)
-            // 后退按钮
             .child(
-                div()
-                    .id("fm-back")
-                    .cursor_pointer()
-                    .rounded_md()
-                    .p(px(4.))
-                    .when(!can_go_back, |el| el.opacity(0.4))
-                    .when(can_go_back, |el| el.hover(|s| s.bg(cx.theme().list_active)))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _, _window, cx| {
-                            this.go_back(cx);
-                        }),
+                h_flex()
+                    .h_8()
+                    .px_2()
+                    .gap_1()
+                    .items_center()
+                    // 后退按钮
+                    .child(
+                        div()
+                            .id("fm-back")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .p(px(4.))
+                            .when(!can_go_back, |el| el.opacity(0.4))
+                            .when(can_go_back, |el| el.hover(|s| s.bg(cx.theme().list_active)))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, _window, cx| {
+                                    this.go_back(cx);
+                                }),
+                            )
+                            .child(
+                                Icon::new(IconName::ArrowLeft)
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
+                            ),
+                    )
+                    // Home 按钮
+                    .child(
+                        div()
+                            .id("fm-home")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .p(px(4.))
+                            .hover(|s| s.bg(cx.theme().list_active))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, _window, cx| {
+                                    this.go_home(cx);
+                                }),
+                            )
+                            .child(
+                                Icon::new(IconName::Home)
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
+                            ),
+                    )
+                    // 上级目录按钮
+                    .child(
+                        div()
+                            .id("fm-parent")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .p(px(4.))
+                            .when(self.is_at_root(), |el| el.opacity(0.4))
+                            .when(!self.is_at_root(), |el| {
+                                el.hover(|s| s.bg(cx.theme().list_active))
+                            })
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, _window, cx| {
+                                    this.go_parent(cx);
+                                }),
+                            )
+                            .child(
+                                Icon::new(IconName::ArrowUp)
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
+                            ),
                     )
                     .child(
-                        Icon::new(IconName::ArrowLeft)
-                            .xsmall()
-                            .text_color(cx.theme().muted_foreground),
-                    ),
-            )
-            // Home 按钮
-            .child(
-                div()
-                    .id("fm-home")
-                    .cursor_pointer()
-                    .rounded_md()
-                    .p(px(4.))
-                    .hover(|s| s.bg(cx.theme().list_active))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _, _window, cx| {
-                            this.go_home(cx);
-                        }),
+                        Button::new("fm-upload-file")
+                            .ghost()
+                            .small()
+                            .icon(IconName::Upload)
+                            .tooltip(t!("FileManager.upload_file"))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.select_and_upload_files(window, cx);
+                            })),
                     )
                     .child(
-                        Icon::new(IconName::Home)
-                            .xsmall()
-                            .text_color(cx.theme().muted_foreground),
-                    ),
-            )
-            // 上级目录按钮
-            .child(
-                div()
-                    .id("fm-parent")
-                    .cursor_pointer()
-                    .rounded_md()
-                    .p(px(4.))
-                    .when(self.is_at_root(), |el| el.opacity(0.4))
-                    .when(!self.is_at_root(), |el| {
-                        el.hover(|s| s.bg(cx.theme().list_active))
-                    })
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _, _window, cx| {
-                            this.go_parent(cx);
-                        }),
+                        Button::new("fm-new-folder")
+                            .ghost()
+                            .small()
+                            .icon(IconName::NewFolder)
+                            .tooltip(t!("FileManager.new_folder"))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.show_new_folder_dialog(window, cx);
+                            })),
                     )
+                    .child(div().flex_1())
+                    // 同步终端工作目录按钮
                     .child(
-                        Icon::new(IconName::ArrowUp)
-                            .xsmall()
-                            .text_color(cx.theme().muted_foreground),
+                        div()
+                            .id("fm-sync-terminal")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .p(px(4.))
+                            .hover(|s| s.bg(cx.theme().list_active))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |_this, _, _window, cx| {
+                                    cx.emit(FileManagerPanelEvent::SyncWorkingDir);
+                                }),
+                            )
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(t!("FileManager.sync_terminal_dir").to_string())
+                                    .build(window, cx)
+                            })
+                            .child(
+                                Icon::new(IconName::Sync)
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
+                            ),
+                    )
+                    // 刷新按钮
+                    .child(
+                        div()
+                            .id("fm-refresh")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .p(px(4.))
+                            .hover(|s| s.bg(cx.theme().list_active))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, _window, cx| {
+                                    this.refresh_dir(cx);
+                                }),
+                            )
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(t!("FileManager.refresh").to_string())
+                                    .build(window, cx)
+                            })
+                            .child(
+                                Icon::new(IconName::Refresh)
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
+                            ),
+                    )
+                    // 隐藏文件开关
+                    .child(
+                        div()
+                            .id("fm-hidden")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .p(px(4.))
+                            .hover(|s| s.bg(cx.theme().list_active))
+                            .when(self.show_hidden, |el| el.bg(cx.theme().list_active))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, _window, cx| {
+                                    this.show_hidden = !this.show_hidden;
+                                    this.apply_filter();
+                                    this.selected_indices.clear();
+                                    cx.notify();
+                                }),
+                            )
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(t!("FileManager.toggle_hidden").to_string())
+                                    .build(window, cx)
+                            })
+                            .child(
+                                Icon::new(IconName::Eye)
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
+                            ),
+                    )
+                    // 关闭按钮
+                    .child(
+                        div()
+                            .id("fm-close")
+                            .cursor_pointer()
+                            .rounded_md()
+                            .p(px(4.))
+                            .hover(|s| s.bg(cx.theme().list_active))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |_this, _, _window, cx| {
+                                    cx.emit(FileManagerPanelEvent::Close);
+                                }),
+                            )
+                            .child(
+                                Icon::new(IconName::Close)
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground),
+                            ),
                     ),
             )
-            // 当前路径（flex_1 填充剩余空间）
             .child(
-                div()
-                    .id("fm-path")
-                    .flex_1()
-                    .overflow_hidden()
-                    .text_ellipsis()
-                    .text_xs()
-                    .whitespace_nowrap()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(self.current_path.clone())
-                    .tooltip(move |window, cx| {
-                        Tooltip::new(t!("FileManager.current_path").to_string()).build(window, cx)
+                h_flex()
+                    .h_8()
+                    .px_2()
+                    .pb_2()
+                    .items_center()
+                    .child(if self.path_editing {
+                        h_flex()
+                            .id("fm-path-editor")
+                            .flex_1()
+                            .min_w(px(0.))
+                            .h_7()
+                            .px_2()
+                            .items_center()
+                            .bg(cx.theme().secondary)
+                            .rounded_md()
+                            .child(
+                                Input::new(&self.path_input)
+                                    .small()
+                                    .appearance(false)
+                                    .cleanable(false)
+                                    .w_full(),
+                            )
+                            .into_any_element()
+                    } else {
+                        h_flex()
+                            .id("fm-path")
+                            .flex_1()
+                            .min_w(px(0.))
+                            .h_7()
+                            .px_2()
+                            .items_center()
+                            .bg(cx.theme().secondary)
+                            .cursor_text()
+                            .rounded_md()
+                            .hover(|style| style.bg(cx.theme().list_active))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, window, cx| {
+                                    this.start_path_editing(window, cx);
+                                }),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.))
+                                    .overflow_hidden()
+                                    .text_ellipsis()
+                                    .text_xs()
+                                    .whitespace_nowrap()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(self.current_path.clone()),
+                            )
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(t!("FileManager.edit_path").to_string())
+                                    .build(window, cx)
+                            })
+                            .into_any_element()
                     }),
-            )
-            // 同步终端工作目录按钮
-            .child(
-                div()
-                    .id("fm-sync-terminal")
-                    .cursor_pointer()
-                    .rounded_md()
-                    .p(px(4.))
-                    .hover(|s| s.bg(cx.theme().list_active))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |_this, _, _window, cx| {
-                            cx.emit(FileManagerPanelEvent::SyncWorkingDir);
-                        }),
-                    )
-                    .tooltip(move |window, cx| {
-                        Tooltip::new(t!("FileManager.sync_terminal_dir").to_string())
-                            .build(window, cx)
-                    })
-                    .child(
-                        Icon::new(IconName::Terminal)
-                            .xsmall()
-                            .text_color(cx.theme().muted_foreground),
-                    ),
-            )
-            // 刷新按钮
-            .child(
-                div()
-                    .id("fm-refresh")
-                    .cursor_pointer()
-                    .rounded_md()
-                    .p(px(4.))
-                    .hover(|s| s.bg(cx.theme().list_active))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _, _window, cx| {
-                            this.refresh_dir(cx);
-                        }),
-                    )
-                    .tooltip(move |window, cx| {
-                        Tooltip::new(t!("FileManager.refresh").to_string()).build(window, cx)
-                    })
-                    .child(
-                        Icon::new(IconName::Refresh)
-                            .xsmall()
-                            .text_color(cx.theme().muted_foreground),
-                    ),
-            )
-            // 隐藏文件开关
-            .child(
-                div()
-                    .id("fm-hidden")
-                    .cursor_pointer()
-                    .rounded_md()
-                    .p(px(4.))
-                    .hover(|s| s.bg(cx.theme().list_active))
-                    .when(self.show_hidden, |el| el.bg(cx.theme().list_active))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _, _window, cx| {
-                            this.show_hidden = !this.show_hidden;
-                            this.apply_filter();
-                            this.selected_indices.clear();
-                            cx.notify();
-                        }),
-                    )
-                    .tooltip(move |window, cx| {
-                        Tooltip::new(t!("FileManager.toggle_hidden").to_string()).build(window, cx)
-                    })
-                    .child(
-                        Icon::new(IconName::Eye)
-                            .xsmall()
-                            .text_color(cx.theme().muted_foreground),
-                    ),
-            )
-            // 关闭按钮
-            .child(
-                div()
-                    .id("fm-close")
-                    .cursor_pointer()
-                    .rounded_md()
-                    .p(px(4.))
-                    .hover(|s| s.bg(cx.theme().list_active))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |_this, _, _window, cx| {
-                            cx.emit(FileManagerPanelEvent::Close);
-                        }),
-                    )
-                    .child(
-                        Icon::new(IconName::Close)
-                            .xsmall()
-                            .text_color(cx.theme().muted_foreground),
-                    ),
             )
     }
 
@@ -2046,7 +2271,7 @@ impl FileManagerPanel {
             .separator()
             .item(
                 PopupMenuItem::new(t!("FileManager.upload_file"))
-                    .icon(IconName::ArrowUp)
+                    .icon(IconName::Upload)
                     .on_click(window.listener_for(
                         &view_upload_files,
                         move |this, _, window, cx| {
@@ -2056,7 +2281,7 @@ impl FileManagerPanel {
             )
             .item(
                 PopupMenuItem::new(t!("FileManager.upload_folder"))
-                    .icon(IconName::ArrowUp)
+                    .icon(IconName::Upload)
                     .on_click(window.listener_for(
                         &view_upload_folder,
                         move |this, _, window, cx| {

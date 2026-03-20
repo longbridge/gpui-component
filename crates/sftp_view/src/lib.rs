@@ -9,12 +9,11 @@ pub use file_list_panel::{
 };
 
 use gpui::{
-    App, AsyncApp, Context, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable,
-    FontWeight, Hsla, IntoElement, ParentElement, Render, SharedString, Styled, WeakEntity, Window,
-    actions, div, prelude::*, px,
+    actions, div, prelude::*, px, App, AsyncApp, Context, Entity, EventEmitter, ExternalPaths,
+    FocusHandle, Focusable, FontWeight, Hsla, IntoElement, ParentElement, Render, SharedString,
+    Styled, WeakEntity, Window,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, WindowExt,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     button::{Button, ButtonVariants},
     dialog::DialogButtonProps,
@@ -24,7 +23,7 @@ use gpui_component::{
     progress::Progress,
     spinner::Spinner,
     tooltip::Tooltip,
-    v_flex,
+    v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable, Size, WindowExt,
 };
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{
@@ -36,8 +35,8 @@ use sftp::{RusshSftpClient, SftpClient, TransferCancelled, TransferProgress};
 use ssh::{JumpServerConnectConfig, ProxyConnectConfig, ProxyType, SshAuth, SshConnectConfig};
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::Mutex;
 
@@ -3549,7 +3548,7 @@ impl SftpView {
                             )
                             .child(
                                 Button::new("local_upload")
-                                    .icon(IconName::ArrowUp)
+                                    .icon(IconName::Upload)
                                     .ghost()
                                     .small()
                                     .disabled(!has_selection)
@@ -3559,7 +3558,7 @@ impl SftpView {
                             )
                             .child(
                                 Button::new("local_new_folder")
-                                    .icon(IconName::FolderOpen)
+                                    .icon(IconName::NewFolder)
                                     .ghost()
                                     .small()
                                     .on_click(cx.listener(|this, _, window, cx| {
@@ -3709,7 +3708,7 @@ impl SftpView {
                             )
                             .child(
                                 Button::new("remote_new_folder")
-                                    .icon(IconName::FolderOpen)
+                                    .icon(IconName::NewFolder)
                                     .ghost()
                                     .small()
                                     .tooltip(t!("File.new_folder"))

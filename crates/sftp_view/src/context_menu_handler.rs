@@ -2,14 +2,13 @@
 //!
 //! 本模块实现 FileListPanel 右键菜单的所有功能
 
-use crate::{FileListPanelEvent, PanelSide, SftpView, SftpViewEvent, join_remote_path};
+use crate::{join_remote_path, FileListPanelEvent, PanelSide, SftpView, SftpViewEvent};
 use gpui::{AppContext, ClipboardItem, Context, ParentElement, PathPromptOptions, Styled, Window};
 use gpui_component::{
-    WindowExt,
     dialog::DialogButtonProps,
     input::{Input, InputState},
     notification::Notification,
-    v_flex,
+    v_flex, WindowExt,
 };
 use one_core::gpui_tokio::Tokio;
 use rust_i18n::t;

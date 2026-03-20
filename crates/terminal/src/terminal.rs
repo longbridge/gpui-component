@@ -97,6 +97,35 @@ fn build_cd_command(dir: &str) -> String {
     format!("cd -- {}", shell_escape_arg(dir))
 }
 
+const OSC7_PROMPT_COMMAND: &str =
+    r#"export PROMPT_COMMAND='printf "\033]7;file://%s%s\007" "$HOSTNAME" "$PWD"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}"#;
+
+fn build_ssh_init_commands(
+    working_dir: Option<&str>,
+    default_directory: Option<&str>,
+    init_script: Option<&str>,
+    sync_path_with_terminal: bool,
+) -> Option<String> {
+    let mut commands = Vec::new();
+
+    if let Some(work_dir) = working_dir {
+        commands.push(build_cd_command(work_dir));
+    } else {
+        if let Some(dir) = default_directory.filter(|dir| !dir.is_empty()) {
+            commands.push(build_cd_command(dir));
+        }
+        if let Some(script) = init_script.filter(|script| !script.is_empty()) {
+            commands.push(script.to_string());
+        }
+    }
+
+    if sync_path_with_terminal {
+        commands.push(OSC7_PROMPT_COMMAND.to_string());
+    }
+
+    (!commands.is_empty()).then(|| commands.join("\n"))
+}
+
 /// 终端模型 Entity
 ///
 /// 负责管理终端的核心状态，包括：
@@ -248,6 +277,7 @@ impl Terminal {
         conn: StoredConnection,
         cx: &mut Context<Self>,
         working_dir: Option<&str>,
+        sync_path_with_terminal: bool,
     ) -> Self {
         let ssh_params = conn
             .to_ssh_params()
@@ -266,31 +296,12 @@ impl Terminal {
         };
 
         // 构建初始化命令
-        let init_commands = {
-            let mut commands = Vec::new();
-            if let Some(work_dir) = working_dir {
-                commands.push(build_cd_command(work_dir));
-            } else {
-                // 切换到默认目录
-                if let Some(ref dir) = ssh_params.default_directory {
-                    if !dir.is_empty() {
-                        commands.push(build_cd_command(dir));
-                    }
-                }
-                if let Some(ref script) = ssh_params.init_script {
-                    if !script.is_empty() {
-                        commands.push(script.clone());
-                    }
-                }
-            }
-            // 注入 PROMPT_COMMAND，让 bash 每次命令后发送 OSC 7 序列
-            // 保留用户已有的 PROMPT_COMMAND
-            commands.push(
-                r#"export PROMPT_COMMAND='printf "\033]7;file://%s%s\007" "$HOSTNAME" "$PWD"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}"#
-                    .to_string(),
-            );
-            Some(commands.join("\n"))
-        };
+        let init_commands = build_ssh_init_commands(
+            working_dir,
+            ssh_params.default_directory.as_deref(),
+            ssh_params.init_script.as_deref(),
+            sync_path_with_terminal,
+        );
 
         let ssh_config = SshConnectConfig {
             host: ssh_params.host,
@@ -936,7 +947,7 @@ impl EventEmitter<TerminalModelEvent> for Terminal {}
 
 #[cfg(test)]
 mod tests {
-    use super::{build_cd_command, shell_escape_arg};
+    use super::{build_cd_command, build_ssh_init_commands, shell_escape_arg, OSC7_PROMPT_COMMAND};
 
     #[test]
     fn shell_escape_arg_handles_single_quote() {
@@ -954,6 +965,18 @@ mod tests {
     fn build_cd_command_escapes_newline() {
         let cmd = build_cd_command("a\nb");
         assert_eq!(cmd, "cd -- 'a\nb'");
+    }
+
+    #[test]
+    fn build_ssh_init_commands_respects_sync_path_switch() {
+        let enabled = build_ssh_init_commands(None, Some("/tmp"), Some("echo ready"), true)
+            .expect("启用路径同步时应生成初始化命令");
+        assert!(enabled.contains(OSC7_PROMPT_COMMAND));
+
+        let disabled = build_ssh_init_commands(None, Some("/tmp"), Some("echo ready"), false)
+            .expect("禁用路径同步时仍应保留其它初始化命令");
+        assert!(!disabled.contains(OSC7_PROMPT_COMMAND));
+        assert!(disabled.contains("echo ready"));
     }
 }
 

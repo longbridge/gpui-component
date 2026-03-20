@@ -91,6 +91,7 @@ impl SettingsPanel {
         has_file_manager: bool,
         auto_copy: bool,
         middle_click_paste: bool,
+        sync_path: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -207,7 +208,7 @@ impl SettingsPanel {
             confirm_high_risk_command: true,
             auto_copy,
             middle_click_paste,
-            sync_path: true,
+            sync_path,
             has_file_manager,
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
@@ -246,6 +247,11 @@ impl SettingsPanel {
 
     pub fn set_middle_click_paste(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.middle_click_paste = enabled;
+        cx.notify();
+    }
+
+    pub fn set_sync_path(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.sync_path = enabled;
         cx.notify();
     }
 

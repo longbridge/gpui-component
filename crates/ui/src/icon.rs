@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Sizable, Size};
 use gpui::{
-    AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, ParentElement, Radians,
-    Render, RenderOnce, SharedString, StyleRefinement, Styled, Svg, Transformation, Window, div,
-    img, prelude::FluentBuilder as _, svg,
+    div, img, prelude::FluentBuilder as _, svg, AnyElement, App, AppContext, Context, Entity, Hsla,
+    IntoElement, ParentElement, Radians, Render, RenderOnce, SharedString, StyleRefinement, Styled,
+    Svg, Transformation, Window,
 };
 
 /// Types implementing this trait can automatically be converted to [`Icon`].
@@ -183,6 +183,9 @@ pub enum IconName {
     Edit,
     Filter,
     Refresh,
+    Sync,
+    Upload,
+    NewFolder,
     EditBorder,
     Folder1,
     FolderOpen1,
@@ -365,6 +368,9 @@ impl IconNamed for IconName {
             Self::Edit => "icons/edit.svg",
             Self::Filter => "icons/filter.svg",
             Self::Refresh => "icons/refresh.svg",
+            Self::Sync => "icons/sync.svg",
+            Self::Upload => "icons/upload.svg",
+            Self::NewFolder => "icons/new_folder.svg",
             Self::EditBorder => "icons/edit_border.svg",
             Self::MSSQLLineColor => "icons/mssql_line_color.svg",
             Self::OracleLineColor => "icons/oracle_line_color.svg",

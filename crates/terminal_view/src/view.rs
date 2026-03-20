@@ -56,6 +56,7 @@ pub enum TerminalViewEvent {
     FontSizeChanged { size: f32 },
     AutoCopyChanged { enabled: bool },
     MiddleClickPasteChanged { enabled: bool },
+    SyncPathChanged { enabled: bool },
     ThemeChanged { theme: TerminalTheme },
     CursorBlinkChanged { enabled: bool },
     ConfirmMultilinePasteChanged { enabled: bool },
@@ -354,6 +355,7 @@ impl TerminalView {
             terminal,
             None,
             None,
+            true,
             local_working_dir,
             tab_index,
             window,
@@ -362,7 +364,7 @@ impl TerminalView {
     }
 
     pub fn new_ssh(conn: StoredConnection, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new_ssh_with_index(conn, None, window, cx, None)
+        Self::new_ssh_with_index(conn, None, window, cx, None, true)
     }
 
     pub fn new_ssh_with_index(
@@ -371,15 +373,18 @@ impl TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
         working_dir: Option<&str>,
+        sync_path_with_terminal: bool,
     ) -> Self {
         // 创建 SSH Terminal Entity
         let connection_id = conn.id;
         let stored_conn = conn.clone();
-        let terminal = cx.new(|cx| Terminal::new_ssh(conn, cx, working_dir));
+        let terminal =
+            cx.new(|cx| Terminal::new_ssh(conn, cx, working_dir, sync_path_with_terminal));
         Self::new_with_terminal(
             terminal,
             connection_id,
             Some(stored_conn),
+            sync_path_with_terminal,
             None,
             tab_index,
             window,
@@ -401,14 +406,24 @@ impl TerminalView {
         let connection_id = conn.id;
         let terminal = cx.new(|cx| Terminal::new_serial(conn, cx));
         // 串口不传 stored_connection，避免创建文件管理器面板
-        Self::new_with_terminal(terminal, connection_id, None, None, tab_index, window, cx)
-            .expect("串口终端创建不应失败")
+        Self::new_with_terminal(
+            terminal,
+            connection_id,
+            None,
+            true,
+            None,
+            tab_index,
+            window,
+            cx,
+        )
+        .expect("串口终端创建不应失败")
     }
 
     fn new_with_terminal(
         terminal: Entity<Terminal>,
         connection_id: Option<i64>,
         stored_connection: Option<StoredConnection>,
+        sync_path_enabled: bool,
         local_working_dir: Option<PathBuf>,
         tab_index: Option<usize>,
         window: &mut Window,
@@ -426,7 +441,14 @@ impl TerminalView {
 
         // 创建侧边栏（传递 StoredConnection 用于文件管理器）
         let sidebar = cx.new(|cx| {
-            TerminalSidebar::new(connection_id, stored_connection, &default_theme, window, cx)
+            TerminalSidebar::new(
+                connection_id,
+                stored_connection,
+                &default_theme,
+                sync_path_enabled,
+                window,
+                cx,
+            )
         });
 
         // 订阅侧边栏事件（需要 window 以便弹确认对话框）
@@ -576,6 +598,9 @@ impl TerminalView {
             TerminalSidebarEvent::MiddleClickPasteChanged(enabled) => {
                 self.set_middle_click_paste(*enabled, cx);
             }
+            TerminalSidebarEvent::SyncPathChanged(enabled) => {
+                cx.emit(TerminalViewEvent::SyncPathChanged { enabled: *enabled });
+            }
             TerminalSidebarEvent::CdToTerminal(path) => {
                 // 向终端发送 cd 命令并回车
                 let cmd = format!("cd {}\n", shell_escape(path));
@@ -706,6 +731,7 @@ impl TerminalView {
         font_size: f32,
         auto_copy: bool,
         middle_click_paste: bool,
+        sync_path: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -726,6 +752,7 @@ impl TerminalView {
             sidebar.update_current_theme(&theme, window, cx);
             sidebar.set_auto_copy(auto_copy, cx);
             sidebar.set_middle_click_paste(middle_click_paste, cx);
+            sidebar.set_sync_path_enabled(sync_path, cx);
         });
 
         cx.notify();

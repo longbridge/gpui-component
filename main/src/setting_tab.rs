@@ -115,6 +115,8 @@ pub struct AppSettings {
     pub terminal_auto_copy: bool,
     #[serde(default = "default_true")]
     pub terminal_middle_click_paste: bool,
+    #[serde(default = "default_true")]
+    pub terminal_sync_path_with_terminal: bool,
     #[serde(default = "default_terminal_theme")]
     pub terminal_theme: String,
     #[serde(default)]
@@ -170,6 +172,7 @@ impl Default for AppSettings {
             terminal_font_size: default_terminal_font_size(),
             terminal_auto_copy: default_true(),
             terminal_middle_click_paste: default_true(),
+            terminal_sync_path_with_terminal: default_true(),
             terminal_theme: default_terminal_theme(),
             terminal_cursor_blink: false,
             terminal_confirm_multiline_paste: default_true(),
