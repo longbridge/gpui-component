@@ -747,6 +747,10 @@ impl TerminalView {
         self.auto_copy_on_select = auto_copy;
         self.middle_click_paste = middle_click_paste;
 
+        self.terminal.update(cx, |terminal, _cx| {
+            terminal.set_sync_path_with_terminal(sync_path);
+        });
+
         let theme = self.current_theme.clone();
         self.sidebar.update(cx, |sidebar, cx| {
             sidebar.update_current_theme(&theme, window, cx);

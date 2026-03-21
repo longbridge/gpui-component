@@ -1,54 +1,55 @@
-生成时间：2026-03-20 18:34:00 +0800
+## 项目上下文摘要（terminal-sidebar-sync-path）
+生成时间：2026-03-20 18:36:00 +0800
 
 ### 1. 相似实现分析
-- **实现1**: `main/src/setting_tab.rs:113`
-  - 模式：终端布尔配置通过 `AppSettings` 持久化，使用 `#[serde(default = "default_true")]` 和 `Default` 保证升级兼容。
-  - 可复用：`terminal_auto_copy`、`terminal_middle_click_paste`、`terminal_confirm_*` 字段定义方式。
-  - 需注意：新增字段必须同时补 `Default`，否则旧配置文件加载后不会稳定落到预期值。
+- **实现1**: `main/src/setting_tab.rs`
+  - 模式：终端布尔配置通过 `AppSettings` 持久化，`terminal_sync_path_with_terminal` 默认值为 `true`，并通过 `save()` 写回配置文件。
+  - 可复用：`terminal_auto_copy`、`terminal_middle_click_paste`、`terminal_confirm_*` 的字段定义与保存方式。
+  - 需注意：布尔配置要同时维护 `serde default` 和 `Default`，否则旧配置升级时值不稳定。
 
-- **实现2**: `main/src/home/home_tabs.rs:33`
-  - 模式：`setup_terminal_view` 在视图创建后读取 `AppSettings`，再通过 `TerminalViewEvent` 持久化并调用 `apply_terminal_settings_to_all` 广播到全部终端。
-  - 可复用：`AutoCopyChanged`、`MiddleClickPasteChanged` 的事件同步链路。
-  - 需注意：仅改 sidebar 本地状态不会进入全局设置，也不会影响新开的终端。
+- **实现2**: `main/src/home/home_tabs.rs`
+  - 模式：`setup_terminal_view` 在终端视图创建后统一读取 `AppSettings`，再通过 `apply_terminal_settings_to_all` 广播到全部终端视图。
+  - 可复用：`FontSizeChanged`、`AutoCopyChanged`、`MiddleClickPasteChanged`、`SyncPathChanged` 的全局持久化与同步链路。
+  - 需注意：新建 SSH 终端和从 SFTP 打开 SSH 终端两个入口都会读取全局 `sync_path` 再传给 `TerminalView::new_ssh_with_index`。
 
-- **实现3**: `crates/terminal_view/src/sidebar/mod.rs:177`
-  - 模式：`SettingsPanelEvent` 先进入 `TerminalSidebarEvent`，再由 `TerminalView` 决定是否上抛到更高层。
-  - 可复用：`AutoCopyChanged`、`MiddleClickPasteChanged` 的转发方式和 setter 设计。
-  - 需注意：当前 `SyncPathChanged` 只更新 `sync_path_enabled`，没有向外 emit，是这次不同步的直接原因。
+- **实现3**: `crates/terminal_view/src/view.rs`
+  - 模式：`TerminalSidebarEvent` 先由 `TerminalView` 处理，再上抛 `TerminalViewEvent` 给 `HomePage` 做全局持久化。
+  - 可复用：`apply_terminal_settings` 作为跨 tab 同步设置的统一入口。
+  - 需注意：当前 `apply_terminal_settings` 只更新 sidebar 和视图层状态，没有修改 `Terminal` 内部 SSH 初始化命令。
 
-- **实现4**: `crates/terminal/src/terminal.rs:276`
-  - 模式：SSH 终端在启动时拼接初始化命令，并无条件注入 `export PROMPT_COMMAND=...` 以发送 OSC 7。
-  - 可复用：初始化命令列表拼接方式。
-  - 需注意：这段逻辑发生在 SSH 会话创建前，配置若不提前传入，就无法影响是否注入。
+- **实现4**: `crates/terminal/src/terminal.rs`
+  - 模式：SSH 终端在 `new_ssh` 时通过 `build_ssh_init_commands` 一次性拼好 `init_commands`，连接成功后在 `handle_ssh_result` 中通过 `self.write(...)` 写入交互式 shell。
+  - 可复用：基础初始化命令拼接方式、`reconnect` 复用 `ssh_config` 的重连模式。
+  - 需注意：`reconnect` 不会重建 `init_commands`，因此已有终端在设置切换后仍可能沿用旧值。
 
 ### 2. 项目约定
 - **命名约定**: Rust 字段与方法使用 `snake_case`，终端全局设置统一用 `terminal_*` 前缀。
-- **文件组织**: `main/src/setting_tab.rs` 负责应用设置；`main/src/home/home_tabs.rs` 负责全局同步；`crates/terminal_view/src/` 负责单终端 UI/事件；`crates/terminal/src/` 负责底层终端构造。
-- **代码风格**: 新逻辑优先复用既有事件枚举和 setter，不新增独立配置抽象。
+- **文件组织**: `main/src/setting_tab.rs` 负责设置持久化；`main/src/home/home_tabs.rs` 负责跨 tab 同步；`crates/terminal_view/src/` 负责单终端 UI/事件；`crates/terminal/src/` 负责底层终端状态与连接。
+- **代码风格**: 优先复用既有事件链路与 setter，不新增旁路配置系统。
 
 ### 3. 可复用组件清单
-- `main/src/setting_tab.rs`：`AppSettings` 与 `default_true`
+- `main/src/setting_tab.rs`：`AppSettings`
 - `main/src/home/home_tabs.rs`：`setup_terminal_view`、`apply_terminal_settings_to_all`
 - `crates/terminal_view/src/view.rs`：`apply_terminal_settings`
-- `crates/terminal_view/src/sidebar/mod.rs`：`TerminalSidebarEvent` 转发
-- `crates/terminal_view/src/sidebar/settings_panel.rs`：switch 渲染与本地 setter
+- `crates/terminal_view/src/sidebar/mod.rs`：`TerminalSidebarEvent::SyncPathChanged` 转发
+- `crates/terminal/src/terminal.rs`：`build_ssh_init_commands`、`reconnect`
 
 ### 4. 测试策略
 - **测试框架**: Rust 内置单元测试 + `cargo check`
-- **参考文件**: `crates/terminal/src/terminal.rs:937` 已有 `build_cd_command` 单元测试
-- **本次策略**: 在 `terminal.rs` 增加初始化命令构建测试，验证 `PROMPT_COMMAND` 只在启用时注入；再对相关 crate 做编译检查。
+- **参考实现**: `crates/terminal/src/terminal.rs` 已有 `build_cd_command` 单元测试，可沿用同文件测试风格。
+- **本次策略**: 为 SSH 初始化命令构造补单元测试，验证启用/关闭同步路径时 `OSC7_PROMPT_COMMAND` 的注入行为，再做 `terminal` 与 `terminal_view` 的编译检查。
 
 ### 5. 依赖和集成点
-- **外部依赖**: 无新增外部库。
-- **内部依赖**: `AppSettings` -> `HomePage::setup_terminal_view` -> `TerminalView` -> `TerminalSidebar/SettingsPanel`；SSH 构造入口还会进入 `Terminal::new_ssh`。
-- **集成方式**: 沿用现有终端设置同步模式，不新增旁路逻辑。
+- **内部依赖链路**: `AppSettings` -> `HomePage::setup_terminal_view` -> `TerminalView::apply_terminal_settings` -> `Terminal`
+- **SSH 创建入口**: `open_ssh_terminal` 与 `open_sftp_view` 中的 `OpenSshTerminal` 分支
+- **关键集成点**: `Terminal::new_ssh` 构造初始化命令，`Terminal::handle_ssh_result` 执行初始化命令，`Terminal::reconnect` 复用既有 SSH 配置重新连接
 
 ### 6. 技术选型理由
-- **为什么用这个方案**: 现有 `auto_copy`/`middle_click_paste` 已经证明这条同步链能覆盖“单终端变更 -> 全局持久化 -> 广播到全部终端”。
-- **优势**: 修改面集中、风险低，且能保证新开的 SSH 终端读取到统一配置。
-- **劣势和风险**: 已经建立的 SSH 会话不会因为切换开关自动重写远端 `PROMPT_COMMAND`，该行为只能对新会话生效。
+- **为什么用这个方案**: 现有设置同步链路已经覆盖“局部变更 -> 全局保存 -> 广播到全部终端”，只需补齐 `Terminal` 内部状态刷新，不必新增事件协议。
+- **优势**: 改动范围集中，能同时修复旧 tab 后续重连和跨 tab 设置同步的一致性问题。
+- **劣势和风险**: 已经建立完成的远端 shell 环境不会因为本地切换开关立即改写，需要新建连接或重连后才体现新配置。
 
 ### 7. 关键风险点
-- **边界条件**: 需要同时覆盖普通 SSH 打开和从 SFTP 打开 SSH 两个入口。
-- **一致性风险**: 如果 `TerminalSidebarEvent` 或 `TerminalViewEvent` 漏掉 `SyncPathChanged`，界面状态仍会局部生效但不会持久化。
-- **验证缺口**: 本地只能验证编译和单元测试，真实远端 SSH 会话行为仍需 UI 场景手测。
+- **行为边界**: 本次只能修复“未来连接使用的初始化命令”，不能无痕改写当前远端 shell 已设置的 `PROMPT_COMMAND`。
+- **兼容性风险**: 当前注入命令使用 bash 风格 `PROMPT_COMMAND`，仓库内未见 zsh/fish 分支逻辑。
+- **验证缺口**: 本地可验证编译与单元测试，真实 SSH 会话仍需手工确认路径同步行为。

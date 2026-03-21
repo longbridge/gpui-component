@@ -319,6 +319,18 @@ Settings:
     en: Sync path with terminal
     zh-CN: 路径与终端同步
     zh-HK: 路徑與終端同步
+  sync_path_confirm_title:
+    en: Enable Path Sync
+    zh-CN: 开启路径同步
+    zh-HK: 開啟路徑同步
+  sync_path_confirm_message:
+    en: "Enabling this will inject an OSC 7 sequence (PROMPT_COMMAND) into the shell at connection startup to sync the working directory with the file manager. The command will be visible in the terminal. This setting will take effect on the next reconnection."
+    zh-CN: 开启后将在连接启动时向 Shell 注入 OSC 7 序列（PROMPT_COMMAND），用于将工作目录同步到文件管理器。该命令会在终端中可见。此设置将在下次重新连接后生效。
+    zh-HK: 開啟後將在連接啟動時向 Shell 注入 OSC 7 序列（PROMPT_COMMAND），用於將工作目錄同步到文件管理器。該命令會在終端中可見。此設置將在下次重新連接後生效。
+  sync_path_confirm_ok:
+    en: Enable
+    zh-CN: 开启
+    zh-HK: 開啟
 
 # 右键菜单
 ContextMenu:

@@ -75,7 +75,7 @@ const DEFAULT_COLS: usize = 80;
 const DEFAULT_ROWS: usize = 24;
 
 /// 将路径安全地转为 POSIX shell 单参数，避免命令注入。
-fn shell_escape_arg(arg: &str) -> String {
+pub(crate) fn shell_escape_arg(arg: &str) -> String {
     if arg.is_empty() {
         return "''".to_string();
     }
@@ -99,11 +99,10 @@ fn build_cd_command(dir: &str) -> String {
 
 const OSC7_PROMPT_COMMAND: &str = r#"export PROMPT_COMMAND='printf "\033]7;file://%s%s\007" "$HOSTNAME" "$PWD"'${PROMPT_COMMAND:+";$PROMPT_COMMAND"}"#;
 
-fn build_ssh_init_commands(
+fn build_ssh_base_init_commands(
     working_dir: Option<&str>,
     default_directory: Option<&str>,
     init_script: Option<&str>,
-    sync_path_with_terminal: bool,
 ) -> Option<String> {
     let mut commands = Vec::new();
 
@@ -118,11 +117,35 @@ fn build_ssh_init_commands(
         }
     }
 
+    (!commands.is_empty()).then(|| commands.join("\n"))
+}
+
+fn compose_ssh_init_commands(
+    base_init_commands: Option<&str>,
+    sync_path_with_terminal: bool,
+) -> Option<String> {
+    let mut commands = Vec::new();
+
+    if let Some(base_commands) = base_init_commands.filter(|commands| !commands.is_empty()) {
+        commands.push(base_commands.to_string());
+    }
+
     if sync_path_with_terminal {
         commands.push(OSC7_PROMPT_COMMAND.to_string());
     }
 
     (!commands.is_empty()).then(|| commands.join("\n"))
+}
+
+fn build_ssh_init_commands(
+    working_dir: Option<&str>,
+    default_directory: Option<&str>,
+    init_script: Option<&str>,
+    sync_path_with_terminal: bool,
+) -> Option<String> {
+    let base_init_commands =
+        build_ssh_base_init_commands(working_dir, default_directory, init_script);
+    compose_ssh_init_commands(base_init_commands.as_deref(), sync_path_with_terminal)
 }
 
 /// 终端模型 Entity
@@ -163,6 +186,8 @@ pub struct Terminal {
     connection_id: Option<i64>,
     /// 连接名称
     connection_name: Option<String>,
+    /// SSH 基础初始化命令（不含 OSC7，用于运行时重建）
+    ssh_base_init_commands: Option<String>,
     /// 初始化命令（连接成功后执行）
     init_commands: Option<String>,
 
@@ -266,6 +291,7 @@ impl Terminal {
             event_proxy: None, // 本地终端的 event_proxy 已在 LocalPtyBackend 中设置
             connection_id: None,
             connection_name: None,
+            ssh_base_init_commands: None,
             init_commands: None,
             connection_kind: TerminalConnectionKind::Local,
         })
@@ -295,6 +321,11 @@ impl Terminal {
         };
 
         // 构建初始化命令
+        let ssh_base_init_commands = build_ssh_base_init_commands(
+            working_dir,
+            ssh_params.default_directory.as_deref(),
+            ssh_params.init_script.as_deref(),
+        );
         let init_commands = build_ssh_init_commands(
             working_dir,
             ssh_params.default_directory.as_deref(),
@@ -365,6 +396,7 @@ impl Terminal {
             event_proxy.clone(),
             event_tx.clone(),
             Some(disconnect_tx),
+            init_commands.clone(),
             cx,
         );
 
@@ -383,6 +415,7 @@ impl Terminal {
             event_proxy: Some(event_proxy),
             connection_id: conn.id,
             connection_name: Some(conn.name),
+            ssh_base_init_commands,
             init_commands,
             connection_kind: TerminalConnectionKind::Ssh,
         }
@@ -424,6 +457,7 @@ impl Terminal {
             event_proxy: None,
             connection_id: conn.id,
             connection_name: Some(conn.name),
+            ssh_base_init_commands: None,
             init_commands: None,
             connection_kind: TerminalConnectionKind::Serial,
         }
@@ -534,6 +568,7 @@ impl Terminal {
         event_proxy: GpuiEventProxy,
         event_tx: UnboundedSender<TerminalEvent>,
         on_disconnect: Option<tokio::sync::oneshot::Sender<()>>,
+        init_commands: Option<String>,
         cx: &mut Context<Self>,
     ) {
         // 创建 SSH 后端需要的通知通道（UnboundedSender<()>）
@@ -565,6 +600,7 @@ impl Terminal {
                 event_tx,
                 notify_tx,
                 disconnect_tx,
+                init_commands,
             )
             .await
         });
@@ -607,12 +643,6 @@ impl Terminal {
                     pixel_height: 0,
                 });
                 self.backend = Some(Box::new(backend));
-
-                // 执行初始化命令
-                if let Some(ref commands) = self.init_commands {
-                    let data = format!("{}\n", commands);
-                    self.write(data.as_bytes());
-                }
             }
             Ok(Err(e)) => {
                 self.connection_state = ConnectionState::Disconnected {
@@ -827,6 +857,7 @@ impl Terminal {
                 event_proxy,
                 event_tx,
                 Some(disconnect_tx),
+                self.init_commands.clone(),
                 cx,
             );
         } else if let Some(params) = self.serial_params.clone() {
@@ -850,6 +881,18 @@ impl Terminal {
         }
 
         cx.emit(TerminalModelEvent::Wakeup);
+    }
+
+    /// 更新 SSH 终端的路径同步设置。
+    ///
+    /// 更新 `init_commands` 以影响后续新建连接或重连。
+    pub fn set_sync_path_with_terminal(&mut self, enabled: bool) {
+        if self.connection_kind != TerminalConnectionKind::Ssh {
+            return;
+        }
+
+        self.init_commands =
+            compose_ssh_init_commands(self.ssh_base_init_commands.as_deref(), enabled);
     }
 
     /// 关闭终端
@@ -946,7 +989,10 @@ impl EventEmitter<TerminalModelEvent> for Terminal {}
 
 #[cfg(test)]
 mod tests {
-    use super::{build_cd_command, build_ssh_init_commands, shell_escape_arg, OSC7_PROMPT_COMMAND};
+    use super::{
+        build_cd_command, build_ssh_base_init_commands, build_ssh_init_commands,
+        compose_ssh_init_commands, shell_escape_arg, OSC7_PROMPT_COMMAND,
+    };
 
     #[test]
     fn shell_escape_arg_handles_single_quote() {
@@ -976,6 +1022,28 @@ mod tests {
             .expect("禁用路径同步时仍应保留其它初始化命令");
         assert!(!disabled.contains(OSC7_PROMPT_COMMAND));
         assert!(disabled.contains("echo ready"));
+    }
+
+    #[test]
+    fn build_ssh_base_init_commands_prioritizes_explicit_working_dir() {
+        let commands =
+            build_ssh_base_init_commands(Some("/workspace"), Some("/default"), Some("echo ready"))
+                .expect("显式工作目录应生成初始化命令");
+
+        assert!(commands.contains("cd -- '/workspace'"));
+        assert!(!commands.contains("/default"));
+        assert!(!commands.contains("echo ready"));
+    }
+
+    #[test]
+    fn compose_ssh_init_commands_supports_sync_only_mode() {
+        let commands = compose_ssh_init_commands(None, true).expect("启用同步时应仅注入 OSC7");
+        assert_eq!(commands, OSC7_PROMPT_COMMAND);
+
+        assert!(
+            compose_ssh_init_commands(None, false).is_none(),
+            "无基础命令且关闭同步时不应生成初始化命令"
+        );
     }
 }
 

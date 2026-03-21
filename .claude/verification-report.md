@@ -577,3 +577,34 @@
 - 方案与现有架构一致：直接复用 `sftp_view` 的状态机和对话框模式，没有新增重复抽象，也未改动既有上传/刷新链路。
 - 本地验证已执行：`cargo check -p terminal_view` 通过。
 - 残余风险：尚未在真实远端环境手测路径输入错误路径和新建目录失败提示，建议在 UI 中补一次交互验证。
+
+---
+
+## 审查报告（terminal-sidebar-sync-path）
+生成时间：2026-03-20 18:45:00 +0800
+
+### 需求完整性检查
+- 目标明确：修复 SSH 终端“同步文件目录”开关切换后对已有终端后续连接不生效的问题，并说明 `OSC7_PROMPT_COMMAND` 回显原因。
+- 范围明确：仅修改 `terminal` 与 `terminal_view` 的设置传播和 SSH 初始化命令重建逻辑，不重构 shell 集成方案。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地验证、审查报告。
+- 风险与依赖明确：依赖既有 `AppSettings -> HomePage -> TerminalView -> Terminal` 链路；当前 shell 集成仍是 bash 风格 `PROMPT_COMMAND`。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：88/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：92/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 根因确认准确：新建 SSH 终端会读取最新全局设置，但已有 `Terminal` 对象中的 `init_commands` 不会随设置切换刷新，因此后续 `reconnect` 会沿用旧值。
+- 修复方案与现有架构一致：没有新增新的配置同步层，而是在 `apply_terminal_settings` 中继续沿用既有设置同步入口，同时补齐 `Terminal` 内部状态刷新。
+- 本地验证已闭环：格式化、单元测试、`cargo check -p terminal`、`cargo check -p terminal_view` 全部通过。
+- 残余限制明确：`OSC7_PROMPT_COMMAND` 的回显来自当前通过 `self.write()` 向交互 shell 注入命令的实现方式；要彻底消除回显，需要后续改为 shell 启动阶段集成，并按 bash/zsh/fish 分流处理。

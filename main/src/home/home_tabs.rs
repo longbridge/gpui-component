@@ -17,7 +17,7 @@ impl HomePage {
         if cx.has_global::<AppSettings>() {
             AppSettings::global(cx).terminal_sync_path_with_terminal
         } else {
-            true
+            false
         }
     }
 

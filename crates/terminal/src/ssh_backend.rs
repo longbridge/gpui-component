@@ -105,18 +105,24 @@ impl SshBackend {
         event_tx: UnboundedSender<TerminalEvent>,
         notify_tx: UnboundedSender<()>,
         on_disconnect: Option<UnboundedSender<()>>,
+        init_commands: Option<String>,
     ) -> anyhow::Result<Self> {
         let mut client = RusshClient::connect(config).await?;
         let mut channel = client.open_channel().await?;
 
-        // // 通过 SSH env 请求注入 UTF-8 locale（在 PTY/shell 启动前，完全不可见）
-        // // want_reply=false：避免服务端不回复时阻塞连接
-        // for (name, value) in [("LANG", "en_US.UTF-8"), ("LC_ALL", "en_US.UTF-8")] {
-        //     let _ = channel.set_env(name, value).await;
-        // }
-
         channel.request_pty(&pty_config).await?;
         channel.request_shell().await?;
+
+        // 有初始化命令时直接写入 shell
+        if let Some(ref commands) = init_commands {
+            for line in commands.lines() {
+                if !line.trim().is_empty() {
+                    let mut data = line.as_bytes().to_vec();
+                    data.push(b'\n');
+                    channel.send_data(&data).await?;
+                }
+            }
+        }
 
         let (command_tx, mut command_rx) = unbounded_channel::<SshCommand>();
 

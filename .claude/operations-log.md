@@ -1107,3 +1107,63 @@
 - `cargo check -p terminal_view`
 - 结果：通过
 - 备注：仍存在既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关
+
+## 编码前检查 - terminal-sidebar-sync-path
+时间：2026-03-20 18:36:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-terminal-sidebar-sync-path.md`
+□ 将使用以下可复用组件：
+- `main/src/home/home_tabs.rs`：终端设置持久化与广播同步
+- `crates/terminal_view/src/view.rs`：`apply_terminal_settings` 统一应用入口
+- `crates/terminal/src/terminal.rs`：SSH 初始化命令构造与重连逻辑
+□ 将遵循命名约定：新增字段与方法继续使用 Rust `snake_case`
+□ 将遵循代码风格：沿用 `HomePage -> TerminalView -> Terminal` 的单向设置传播，不新增旁路同步逻辑
+□ 确认不重复造轮子，证明：仅补齐现有设置同步链路到 `Terminal` 内部状态，不新增独立配置系统
+
+## 实施计划 - terminal-sidebar-sync-path
+时间：2026-03-20 18:36:00 +0800
+
+1. 在 `crates/terminal/src/terminal.rs` 拆分 SSH 基础初始化命令与 OSC7 注入逻辑，提供运行时刷新方法。
+2. 在 `crates/terminal_view/src/view.rs` 的 `apply_terminal_settings` 中同步调用该刷新方法。
+3. 为 SSH 初始化命令构造补单元测试，并执行 `cargo check -p terminal`、`cargo check -p terminal_view`。
+
+## 编码后声明 - terminal-sidebar-sync-path
+时间：2026-03-20 18:45:00 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/home/home_tabs.rs` 的终端设置持久化与广播同步链路
+- `crates/terminal_view/src/view.rs` 的 `apply_terminal_settings` 统一入口
+- `crates/terminal/src/terminal.rs` 既有 SSH 初始化命令构造与 `reconnect` 机制
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `ssh_base_init_commands`、`build_ssh_base_init_commands`、`compose_ssh_init_commands`、`set_sync_path_with_terminal`，保持 Rust `snake_case`
+- 代码风格：继续沿用 `HomePage -> TerminalView -> Terminal` 的单向设置传播，不新增跨层旁路
+- 文件组织：仅修改 `crates/terminal/src/terminal.rs` 与 `crates/terminal_view/src/view.rs`，并补充 `.claude` 记录
+
+### 3. 对比了以下相似实现
+- `main/src/home/home_tabs.rs`：`SyncPathChanged` 与其它终端设置事件的持久化/广播模式
+- `crates/terminal_view/src/view.rs`：`apply_terminal_settings` 处理 `auto_copy`、`middle_click_paste` 的现有同步模式
+- `crates/terminal/src/terminal.rs`：`new_ssh` 与 `reconnect` 的连接生命周期管理模式
+
+### 4. 未重复造轮子的证明
+- 没有新增新的终端设置对象或同步总线
+- 没有改写 SSH 连接流程，只是在现有 `Terminal` 内部补齐未来连接所需的初始化命令重建逻辑
+
+## 实施与验证记录 - terminal-sidebar-sync-path
+时间：2026-03-20 18:45:00 +0800
+
+### 已完成修改
+- `crates/terminal/src/terminal.rs`
+  - 拆分 SSH 基础初始化命令与 OSC7 注入逻辑
+  - 为 `Terminal` 新增 `ssh_base_init_commands` 和 `set_sync_path_with_terminal`
+  - 补充初始化命令构造单元测试
+- `crates/terminal_view/src/view.rs`
+  - 在 `apply_terminal_settings` 中同步刷新底层 `Terminal` 的路径同步配置
+
+### 本地验证
+- `cargo fmt --package terminal --package terminal_view`
+- `cargo test -p terminal build_ssh_init_commands -- --nocapture`
+- `cargo check -p terminal`
+- `cargo check -p terminal_view`
+- 结果：全部通过
+- 备注：仍存在既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关

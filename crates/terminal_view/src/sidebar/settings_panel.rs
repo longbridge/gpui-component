@@ -10,13 +10,14 @@ use gpui::{
     StatefulInteractiveElement, Styled, Subscription, Window,
 };
 use gpui_component::{
-    button::{Button, ButtonVariants},
+    button::{Button, ButtonVariant, ButtonVariants},
+    dialog::DialogButtonProps,
     h_flex,
     input::{Input, InputEvent, InputState, NumberInput, NumberInputEvent, StepAction},
     scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectState},
     switch::Switch,
-    v_flex, ActiveTheme, Icon, IconName, Sizable, Size,
+    v_flex, ActiveTheme, Icon, IconName, Sizable, Size, WindowExt,
 };
 use rust_i18n::t;
 
@@ -664,9 +665,37 @@ impl SettingsPanel {
                                 Switch::new("sync-path-switch")
                                     .checked(sync_path)
                                     .small()
-                                    .on_click(cx.listener(|this, checked: &bool, _window, cx| {
-                                        this.sync_path = *checked;
-                                        cx.emit(SettingsPanelEvent::SyncPathChanged(*checked));
+                                    .on_click(cx.listener(|this, checked: &bool, window, cx| {
+                                        if *checked {
+                                            let entity = cx.entity().clone();
+                                            window.open_dialog(cx, move |dialog, _window, _cx| {
+                                                let entity = entity.clone();
+                                                dialog
+                                                    .confirm()
+                                                    .title(t!("Settings.sync_path_confirm_title").to_string())
+                                                    .child(
+                                                        div()
+                                                            .text_sm()
+                                                            .child(t!("Settings.sync_path_confirm_message")),
+                                                    )
+                                                    .button_props(
+                                                        DialogButtonProps::default()
+                                                            .ok_text(t!("Settings.sync_path_confirm_ok").to_string())
+                                                            .ok_variant(ButtonVariant::Primary)
+                                                            .cancel_text(t!("Common.cancel").to_string()),
+                                                    )
+                                                    .on_ok(move |_, _window, cx| {
+                                                        entity.update(cx, |this, cx| {
+                                                            this.sync_path = true;
+                                                            cx.emit(SettingsPanelEvent::SyncPathChanged(true));
+                                                        });
+                                                        true
+                                                    })
+                                            });
+                                        } else {
+                                            this.sync_path = false;
+                                            cx.emit(SettingsPanelEvent::SyncPathChanged(false));
+                                        }
                                     })),
                             ),
                     ),
