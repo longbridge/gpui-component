@@ -142,27 +142,51 @@ impl AuthService {
 
         if needs_refresh {
             info!("访问令牌需要刷新: now={} expires_at={}", now, expires_at);
-            // 令牌已过期或即将过期，必须刷新
-            match self.client.refresh_token(&refresh_token).await {
-                Ok(auth_resp) => {
-                    // refresh_token 内部已调用 set_auth_with_expiry 更新内存状态
-                    save_auth_data(
-                        &auth_resp.access_token,
-                        &auth_resp.refresh_token,
-                        &auth_resp.user_id,
-                        auth_resp.expires_at,
-                    );
-                    info!(
-                        "令牌刷新成功: user_id={} new_expires_at={}",
-                        auth_resp.user_id, auth_resp.expires_at
-                    );
+            // 令牌已过期或即将过期，必须刷新（网络错误时重试最多 3 次）
+            const MAX_RETRIES: u32 = 3;
+            let mut last_error = None;
+            for attempt in 1..=MAX_RETRIES {
+                match self.client.refresh_token(&refresh_token).await {
+                    Ok(auth_resp) => {
+                        // refresh_token 内部已调用 set_auth_with_expiry 更新内存状态
+                        save_auth_data(
+                            &auth_resp.access_token,
+                            &auth_resp.refresh_token,
+                            &auth_resp.user_id,
+                            auth_resp.expires_at,
+                        );
+                        info!(
+                            "令牌刷新成功: user_id={} new_expires_at={}",
+                            auth_resp.user_id, auth_resp.expires_at
+                        );
+                        last_error = None;
+                        break;
+                    }
+                    Err(e) => {
+                        if e.is_auth_error() {
+                            // 认证错误，清除本地数据，不再重试
+                            warn!("令牌刷新认证失败，清除本地认证数据: {}", e);
+                            clear_auth_data();
+                            return None;
+                        }
+                        // 网络等临时性错误，重试
+                        warn!(
+                            "令牌刷新失败（第 {}/{} 次），稍后重试: {}",
+                            attempt, MAX_RETRIES, e
+                        );
+                        last_error = Some(e);
+                        if attempt < MAX_RETRIES {
+                            // 指数退避：1s, 2s
+                            smol::Timer::after(std::time::Duration::from_secs(attempt as u64))
+                                .await;
+                        }
+                    }
                 }
-                Err(e) => {
-                    // 刷新失败，清除本地数据
-                    warn!("令牌刷新失败，清除本地认证数据: {}", e);
-                    clear_auth_data();
-                    return None;
-                }
+            }
+            if let Some(e) = last_error {
+                // 重试耗尽但非认证错误，保留本地数据，下次启动再尝试
+                warn!("令牌刷新重试耗尽，保留本地认证数据，本次跳过恢复会话: {}", e);
+                return None;
             }
         } else {
             // 令牌未过期，先设置 auth state（含 expires_at）
@@ -187,9 +211,14 @@ impl AuthService {
                 None
             }
             Err(e) => {
-                // 获取用户信息失败，清除本地数据
-                warn!("恢复会话失败: 获取用户信息错误: {}", e);
-                clear_auth_data();
+                if e.is_auth_error() {
+                    // 认证错误，清除本地数据
+                    warn!("恢复会话失败: 认证错误，清除本地认证数据: {}", e);
+                    clear_auth_data();
+                } else {
+                    // 网络等临时性错误，保留本地数据
+                    warn!("恢复会话失败: 获取用户信息错误（保留本地数据）: {}", e);
+                }
                 None
             }
         }
