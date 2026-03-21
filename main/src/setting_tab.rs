@@ -2,12 +2,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use gpui::{
-    div, App, AppContext, AsyncApp, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    FontWeight, InteractiveElement, IntoElement, Keystroke, ParentElement, PathPromptOptions,
-    Render, SharedString, Styled, Window,
+    div, App, AppContext, AsyncApp, ClickEvent, Context, Entity, EventEmitter, FocusHandle,
+    Focusable, FontWeight, InteractiveElement, IntoElement, Keystroke, ParentElement,
+    PathPromptOptions, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
     button::{Button, ButtonVariants as _},
+    clipboard::Clipboard,
     group_box::GroupBoxVariant,
     h_flex,
     kbd::Kbd,
@@ -990,9 +991,29 @@ fn render_shortcuts_section(cx: &App) -> gpui::AnyElement {
     container.into_any_element()
 }
 
+/// GitHub 开源地址
+const GITHUB_URL: &str = "https://github.com/feigeCode/onetcli";
+
 /// 渲染关于页面
 fn render_about_section(cx: &App) -> gpui::AnyElement {
     let version = env!("CARGO_PKG_VERSION");
+    let muted = cx.theme().muted_foreground;
+
+    let disclaimer_items: Vec<String> = (1..=5)
+        .map(|i| {
+            let key = format!("Settings.About.disclaimer_item_{}", i);
+            let text = t!(&key).to_string();
+            format!("{}. {}", i, text)
+        })
+        .collect();
+
+    let data_safety_items: Vec<String> = (1..=3)
+        .map(|i| {
+            let key = format!("Settings.About.data_safety_item_{}", i);
+            let text = t!(&key).to_string();
+            format!("• {}", text)
+        })
+        .collect();
 
     v_flex()
         .gap_4()
@@ -1008,6 +1029,33 @@ fn render_about_section(cx: &App) -> gpui::AnyElement {
                     version
                 ))),
         )
+        // GitHub 开源地址
+        .child(
+            h_flex()
+                .gap_2()
+                .items_center()
+                .child(
+                    div()
+                        .text_sm()
+                        .child(format!("{}: ", t!("Settings.About.opensource_label"))),
+                )
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().link)
+                        .child(GITHUB_URL),
+                )
+                .child(Clipboard::new("about-copy-github-url").value(GITHUB_URL))
+                .child(
+                    Button::new("about-open-github")
+                        .icon(IconName::ExternalLink)
+                        .xsmall()
+                        .ghost()
+                        .on_click(|_: &ClickEvent, _, cx| {
+                            cx.open_url(GITHUB_URL);
+                        }),
+                ),
+        )
         // 免责声明
         .child(
             v_flex()
@@ -1021,43 +1069,15 @@ fn render_about_section(cx: &App) -> gpui::AnyElement {
                 .child(
                     div()
                         .text_sm()
-                        .text_color(cx.theme().muted_foreground)
+                        .text_color(muted)
                         .child(t!("Settings.About.disclaimer_status").to_string()),
                 )
                 .child(
-                    v_flex()
-                        .gap_1()
-                        .pl_2()
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("1. {}", t!("Settings.About.disclaimer_item_1"))),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("2. {}", t!("Settings.About.disclaimer_item_2"))),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("3. {}", t!("Settings.About.disclaimer_item_3"))),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("4. {}", t!("Settings.About.disclaimer_item_4"))),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("5. {}", t!("Settings.About.disclaimer_item_5"))),
-                        ),
+                    v_flex().gap_1().pl_2().children(
+                        disclaimer_items
+                            .into_iter()
+                            .map(|item| div().text_sm().text_color(muted).child(item)),
+                    ),
                 ),
         )
         // 数据与安全提示
@@ -1071,27 +1091,11 @@ fn render_about_section(cx: &App) -> gpui::AnyElement {
                         .child(t!("Settings.About.data_safety_title").to_string()),
                 )
                 .child(
-                    v_flex()
-                        .gap_1()
-                        .pl_2()
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("• {}", t!("Settings.About.data_safety_item_1"))),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("• {}", t!("Settings.About.data_safety_item_2"))),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .text_color(cx.theme().muted_foreground)
-                                .child(format!("• {}", t!("Settings.About.data_safety_item_3"))),
-                        ),
+                    v_flex().gap_1().pl_2().children(
+                        data_safety_items
+                            .into_iter()
+                            .map(|item| div().text_sm().text_color(muted).child(item)),
+                    ),
                 ),
         )
         .into_any_element()

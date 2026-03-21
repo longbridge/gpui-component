@@ -572,9 +572,9 @@ RedisTree:
 
 RedisCli:
   welcome:
-    en: "Welcome to the Redis CLI console in ONetCli"
-    zh-CN: "欢迎使用 ONetCli 的 Redis 命令行控制台"
-    zh-HK: "歡迎使用 ONetCli 的 Redis 命令列控制台"
+    en: "Welcome to the Redis CLI console in OnetCli"
+    zh-CN: "欢迎使用 OnetCli 的 Redis 命令行控制台"
+    zh-HK: "歡迎使用 OnetCli 的 Redis 命令列控制台"
   connection_missing:
     en: "Connection not found."
     zh-CN: "连接不存在。"

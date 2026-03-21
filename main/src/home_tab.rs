@@ -1660,13 +1660,13 @@ impl HomePage {
                                 .child(
                                     div()
                                         .text_sm()
-                                        .text_color(cx.theme().success)
-                                        .child(t!("Encryption.remember_password_desc").to_string()),
+                                        .child(t!("Encryption.remember_password_detail_local").to_string()),
                                 )
                                 .child(
                                     div()
                                         .text_sm()
-                                        .child(t!("Encryption.e2e_encryption_desc").to_string()),
+                                        .text_color(cx.theme().warning)
+                                        .child(t!("Encryption.remember_password_detail_cloud").to_string()),
                                 ),
                         )
                         .when_some(error_msg_for_render.read(cx).clone(), |this, msg| {

@@ -184,9 +184,9 @@ Encourage:
     zh-CN: 支持作者
     zh-HK: 支持作者
   intro_line1:
-    en: ONetCli is maintained by one person.
-    zh-CN: ONetCli 由个人长期维护。
-    zh-HK: ONetCli 由個人長期維護。
+    en: OnetCli is maintained by one person.
+    zh-CN: OnetCli 由个人长期维护。
+    zh-HK: OnetCli 由個人長期維護。
   intro_line2:
     en: If it saved you time, feel free to support in a way you are comfortable with ❤️
     zh-CN: 如果它帮你节省了时间，欢迎用你觉得舒服的方式支持我 ❤️
@@ -414,14 +414,14 @@ Encryption:
     en: "Please remember your master key"
     zh-CN: "请牢记你的主密钥"
     zh-HK: "請牢記你的主密鑰"
-  remember_password_desc:
-    en: "The master key is the only credential to decrypt your cloud data, stored locally only"
-    zh-CN: "主密钥是解密云端数据的唯一凭证，仅存在本地"
-    zh-HK: "主密鑰是解密雲端數據的唯一憑證，僅存在本地"
-  e2e_encryption_desc:
-    en: "Sensitive information is encrypted end-to-end using the master key to ensure it is not leaked"
-    zh-CN: "使用主密钥对敏感信息使用端对端加密，确保敏感信息不被泄露"
-    zh-HK: "使用主密鑰對敏感信息使用端對端加密，確保敏感信息不被洩露"
+  remember_password_detail_local:
+    en: "The master key encrypts all locally stored sensitive data such as database passwords, SSH keys, etc., preventing data leakage even if local files are compromised."
+    zh-CN: "主密钥会对本地存储的所有敏感数据（如数据库密码、SSH 密钥等）进行加密，即使本地文件被窃取也无法获取明文信息。"
+    zh-HK: "主密鑰會對本地存儲的所有敏感數據（如數據庫密碼、SSH 密鑰等）進行加密，即使本地文件被竊取也無法獲取明文信息。"
+  remember_password_detail_cloud:
+    en: "All data is encrypted locally before being pushed to the cloud. The cloud server only stores encrypted strings and cannot decrypt the content. If the master key is forgotten, the cloud data cannot be recovered."
+    zh-CN: "所有数据在本地加密后才会推送到云端，云端服务器仅存储密文，无法解密内容。主密钥一旦遗忘，云端数据将无法恢复。"
+    zh-HK: "所有數據在本地加密後才會推送到雲端，雲端服務器僅存儲密文，無法解密內容。主密鑰一旦遺忘，雲端數據將無法恢復。"
   key_empty:
     en: "Master key cannot be empty"
     zh-CN: "主密钥不能为空"
@@ -846,6 +846,10 @@ Settings:
       en: "Please evaluate storage risks for sensitive information (passwords, keys) on your own."
       zh-CN: "敏感信息（密码、密钥）请自行评估存储风险。"
       zh-HK: "敏感信息（密碼、密鑰）請自行評估存儲風險。"
+    opensource_label:
+      en: "Open Source"
+      zh-CN: "开源地址"
+      zh-HK: "開源地址"
 
   # 账户设置
   Account:

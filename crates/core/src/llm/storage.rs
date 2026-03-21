@@ -119,7 +119,7 @@ impl ProviderRepository {
 
         let mut config = ProviderConfig {
             id: now,
-            name: "ONetCli AI".to_string(),
+            name: "OnetCli AI".to_string(),
             provider_type: ProviderType::OnetCli,
             api_key: None,
             api_base: None,

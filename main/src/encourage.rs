@@ -3,10 +3,13 @@
 // ============================================================================
 
 use gpui::{
-    AnyElement, App, Context, FocusHandle, Focusable, FontWeight, Image, ImageFormat, IntoElement,
-    ParentElement, Render, SharedString, Styled, StyledImage, Window, div, img, px,
+    AnyElement, App, ClickEvent, Context, FocusHandle, Focusable, FontWeight, Image, ImageFormat,
+    IntoElement, ParentElement, Render, SharedString, Styled, StyledImage,
+    Window, div, img, px,
 };
-use gpui_component::{ActiveTheme, h_flex, v_flex};
+use gpui_component::button::{Button, ButtonVariants as _};
+use gpui_component::clipboard::Clipboard;
+use gpui_component::{ActiveTheme, IconName, Sizable, h_flex, v_flex};
 use rust_i18n::t;
 use std::sync::Arc;
 
@@ -23,6 +26,8 @@ const PAYPAL_QR_BUILD: Option<&str> = option_env!("ONETCLI_PAYPAL_QR_URL");
 const WECHAT_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/wechat.png");
 const ALIPAY_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/alipay.png");
 const PAYPAL_QR_OFFLINE: &[u8] = include_bytes!("../assets/encourage/paypal.png");
+
+const GITHUB_URL: &str = "https://github.com/feigeCode/onetcli";
 
 pub struct EncourageDialog {
     focus_handle: FocusHandle,
@@ -218,6 +223,28 @@ impl Render for EncourageDialog {
                                 .text_color(cx.theme().muted_foreground)
                                 .child(format!("• {}", item))
                         }),
+                    )
+                    .child(
+                        h_flex()
+                            .mt_1()
+                            .gap_1()
+                            .items_center()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().link)
+                                    .child(GITHUB_URL),
+                            )
+                            .child(Clipboard::new("encourage-copy-github-url").value(GITHUB_URL))
+                            .child(
+                                Button::new("encourage-open-github")
+                                    .icon(IconName::ExternalLink)
+                                    .xsmall()
+                                    .ghost()
+                                    .on_click(|_: &ClickEvent, _, cx| {
+                                        cx.open_url(GITHUB_URL);
+                                    }),
+                            ),
                     ),
             )
             .child(
