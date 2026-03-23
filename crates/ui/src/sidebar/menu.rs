@@ -226,14 +226,20 @@ impl SidebarItem for SidebarMenuItem {
         let click_to_open = self.click_to_open;
         let default_open = self.default_open;
         let id = id.into();
-        let open_state = window.use_keyed_state(id.clone(), cx, |_, _| default_open);
+        let is_submenu = self.is_submenu();
+        let open_state = if is_submenu {
+            Some(window.use_keyed_state(id.clone(), cx, |_, _| default_open))
+        } else {
+            None
+        };
         let handler = self.handler.clone();
         let is_collapsed = self.collapsed;
         let is_active = self.active;
         let is_hoverable = !is_active && !self.disabled;
         let is_disabled = self.disabled;
-        let is_submenu = self.is_submenu();
-        let is_open = is_submenu && !is_collapsed && *open_state.read(cx);
+        let is_open = open_state
+            .as_ref()
+            .map_or(false, |s| !is_collapsed && *s.read(cx));
 
         div()
             .id(id.clone())
@@ -284,7 +290,7 @@ impl SidebarItem for SidebarMenuItem {
                                         this.child(suffix(window, cx).into_any_element())
                                     }),
                             )
-                            .when(is_submenu, |this| {
+                            .when_some(open_state.clone(), |this, open_state| {
                                 this.child(
                                     Button::new("caret")
                                         .xsmall()
@@ -297,7 +303,6 @@ impl SidebarItem for SidebarMenuItem {
                                                 }),
                                         )
                                         .on_click({
-                                            let open_state = open_state.clone();
                                             move |_, _, cx| {
                                                 // Avoid trigger item click, just expand/collapse submenu
                                                 cx.stop_propagation();
@@ -318,10 +323,12 @@ impl SidebarItem for SidebarMenuItem {
                             let open_state = open_state.clone();
                             move |ev, window, cx| {
                                 if click_to_open {
-                                    open_state.update(cx, |is_open, cx| {
-                                        *is_open = true;
-                                        cx.notify();
-                                    });
+                                    if let Some(ref s) = open_state {
+                                        s.update(cx, |is_open: &mut bool, cx| {
+                                            *is_open = true;
+                                            cx.notify();
+                                        });
+                                    }
                                 }
 
                                 handler(ev, window, cx)
