@@ -964,21 +964,17 @@ impl BlockNode {
 
                                 // Continuation paragraph — stack vertically below
                                 // the previous row, indented to align with the text
-                                // column (past bullet/number prefix). pl(rems(1.0))
-                                // matches the visual left edge of the first paragraph.
-                                // (Extending h_flex caused a 50/50 horizontal split.)
+                                // column (past bullet/number prefix).
                                 if last_not_list {
                                     if let Some(preceding_row) = items.pop() {
                                         items.push(
-                                            v_flex()
-                                                .child(preceding_row)
-                                                .child(
-                                                    div()
-                                                        .w_full()
-                                                        .pl(rems(1.0))
-                                                        .overflow_hidden()
-                                                        .child(text),
-                                                ),
+                                            v_flex().child(preceding_row).child(
+                                                div()
+                                                    .w_full()
+                                                    .pl(rems(0.75))
+                                                    .overflow_hidden()
+                                                    .child(text),
+                                            ),
                                         );
                                         continue;
                                     }
@@ -1023,11 +1019,7 @@ impl BlockNode {
                                             )
                                         })
                                         .child(
-                                            div()
-                                                .flex_1()
-                                                .min_w_0()
-                                                .overflow_hidden()
-                                                .child(text),
+                                            div().flex_1().min_w_0().overflow_hidden().child(text),
                                         ),
                                 );
                             }
