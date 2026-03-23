@@ -42,6 +42,7 @@ pub struct SelectStory {
     simple_select1: Entity<SelectState<Vec<&'static str>>>,
     simple_select2: Entity<SelectState<SearchableVec<&'static str>>>,
     simple_select3: Entity<SelectState<Vec<SharedString>>>,
+    menu_max_h_select: Entity<SelectState<Vec<&'static str>>>,
     disabled_select: Entity<SelectState<Vec<SharedString>>>,
     appearance_select: Entity<SelectState<Vec<SharedString>>>,
     input_state: Entity<InputState>,
@@ -147,6 +148,17 @@ impl SelectStory {
                 }),
                 simple_select3: cx
                     .new(|cx| SelectState::new(Vec::<SharedString>::new(), None, window, cx)),
+                menu_max_h_select: cx.new(|cx| {
+                    SelectState::new(
+                        vec![
+                            "GPUI", "Iced", "egui", "Makepad", "Slint", "QT", "ImGui", "Cocoa",
+                            "WinUI",
+                        ],
+                        Some(IndexPath::default()),
+                        window,
+                        cx,
+                    )
+                }),
                 disabled_select: cx
                     .new(|cx| SelectState::new(Vec::<SharedString>::new(), None, window, cx)),
                 appearance_select,
@@ -219,6 +231,16 @@ impl Render for SelectStory {
                         .small()
                         .placeholder("UI")
                         .title_prefix("UI: "),
+                ),
+            )
+            .child(
+                section("Custom Menu Max Height").max_w_128().child(
+                    Select::new(&self.menu_max_h_select)
+                        .disabled(self.disabled)
+                        .small()
+                        .placeholder("UI")
+                        .title_prefix("UI: ")
+                        .menu_max_h(rems(6.)),
                 ),
             )
             .child(
