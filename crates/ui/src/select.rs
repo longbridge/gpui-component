@@ -1,9 +1,9 @@
 use gpui::{
     AnyElement, App, AppContext, Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId,
     Entity, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    Length, ParentElement, Pixels, Render, RenderOnce, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Subscription, Task, WeakEntity, Window, anchored, deferred, div,
-    prelude::FluentBuilder, px, rems,
+    Length, ParentElement, Pixels, Render, RenderOnce, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Styled, Subscription, Task, WeakEntity, Window,
+    anchored, deferred, div, prelude::FluentBuilder, px, rems,
 };
 use rust_i18n::t;
 
@@ -317,6 +317,7 @@ struct SelectOptions {
     search_placeholder: Option<SharedString>,
     empty: Option<AnyElement>,
     menu_width: Length,
+    menu_max_h: Length,
     disabled: bool,
     appearance: bool,
 }
@@ -332,6 +333,7 @@ impl Default for SelectOptions {
             title_prefix: None,
             empty: None,
             menu_width: Length::Auto,
+            menu_max_h: rems(20.).into(),
             disabled: false,
             appearance: true,
             search_placeholder: None,
@@ -902,7 +904,7 @@ where
                                                     },
                                                 )
                                                 .with_size(self.options.size)
-                                                .max_h(rems(20.))
+                                                .max_h(self.options.menu_max_h)
                                                 .paddings(Edges::all(px(4.))),
                                         ),
                                 )
@@ -932,6 +934,12 @@ where
     /// Set the width of the dropdown menu, default: Length::Auto
     pub fn menu_width(mut self, width: impl Into<Length>) -> Self {
         self.options.menu_width = width.into();
+        self
+    }
+
+    /// Set the max height of the dropdown menu, default: 20rem
+    pub fn menu_max_h(mut self, max_h: impl Into<Length>) -> Self {
+        self.options.menu_max_h = max_h.into();
         self
     }
 
