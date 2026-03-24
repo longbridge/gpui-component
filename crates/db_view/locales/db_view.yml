@@ -283,6 +283,10 @@ ConnectionForm:
     en: Private Key
     zh-CN: 私钥
     zh-HK: 私鑰
+  ssh_auth_agent:
+    en: SSH Agent
+    zh-CN: SSH Agent
+    zh-HK: SSH Agent
   ssh_private_key_path:
     en: Private Key Path
     zh-CN: 私钥路径

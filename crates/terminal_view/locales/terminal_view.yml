@@ -123,6 +123,10 @@ SSH:
     en: Private Key
     zh-CN: 私钥
     zh-HK: 私鑰
+  agent:
+    en: SSH Agent
+    zh-CN: SSH Agent
+    zh-HK: SSH Agent
   key_path:
     en: Key Path
     zh-CN: 密钥路径

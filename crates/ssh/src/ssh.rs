@@ -60,6 +60,17 @@ pub enum SshAuth {
         passphrase: Option<String>,
         certificate_path: Option<String>,
     },
+    Agent,
+}
+
+#[derive(Clone)]
+pub struct AuthFailureMessages {
+    pub password_failed: String,
+    pub certificate_failed: String,
+    pub public_key_failed: String,
+    pub agent_connect_failed: String,
+    pub agent_no_identities: String,
+    pub agent_auth_failed: String,
 }
 
 #[derive(Clone)]
@@ -180,17 +191,22 @@ impl Drop for LocalPortForwardTunnel {
     }
 }
 
-/// 执行SSH认证
-async fn authenticate(
-    session: &mut client::Handle<RusshHandler>,
+pub async fn authenticate_session<H>(
+    session: &mut client::Handle<H>,
     username: &str,
     auth: &SshAuth,
-) -> Result<()> {
+    messages: AuthFailureMessages,
+) -> Result<()>
+where
+    H: client::Handler,
+{
+    let hash_alg = session.best_supported_rsa_hash().await?.flatten();
+
     match auth {
         SshAuth::Password(password) => {
             let auth_result = session.authenticate_password(username, password).await?;
             if !auth_result.success() {
-                anyhow::bail!(t!("Ssh.auth_password_failed"));
+                anyhow::bail!(messages.password_failed.clone());
             }
         }
         SshAuth::PrivateKey {
@@ -206,25 +222,189 @@ async fn authenticate(
                     .authenticate_openssh_cert(username, Arc::new(key_pair), cert)
                     .await?;
                 if !auth_result.success() {
-                    anyhow::bail!(t!("Ssh.auth_certificate_failed"));
+                    anyhow::bail!(messages.certificate_failed.clone());
                 }
             } else {
                 let auth_result = session
                     .authenticate_publickey(
                         username,
-                        PrivateKeyWithHashAlg::new(
-                            Arc::new(key_pair),
-                            session.best_supported_rsa_hash().await?.flatten(),
-                        ),
+                        PrivateKeyWithHashAlg::new(Arc::new(key_pair), hash_alg.clone()),
                     )
                     .await?;
                 if !auth_result.success() {
-                    anyhow::bail!(t!("Ssh.auth_public_key_failed"));
+                    anyhow::bail!(messages.public_key_failed.clone());
                 }
             }
         }
+        SshAuth::Agent => authenticate_with_agent(session, username, hash_alg, &messages).await?,
     }
     Ok(())
+}
+
+fn default_auth_failure_messages() -> AuthFailureMessages {
+    AuthFailureMessages {
+        password_failed: t!("Ssh.auth_password_failed").to_string(),
+        certificate_failed: t!("Ssh.auth_certificate_failed").to_string(),
+        public_key_failed: t!("Ssh.auth_public_key_failed").to_string(),
+        agent_connect_failed: t!("Ssh.auth_agent_connect_failed").to_string(),
+        agent_no_identities: t!("Ssh.auth_agent_no_identities").to_string(),
+        agent_auth_failed: t!("Ssh.auth_agent_failed").to_string(),
+    }
+}
+
+#[cfg(unix)]
+async fn authenticate_with_agent<H>(
+    session: &mut client::Handle<H>,
+    username: &str,
+    hash_alg: Option<HashAlg>,
+    messages: &AuthFailureMessages,
+) -> Result<()>
+where
+    H: client::Handler,
+{
+    let mut agent = connect_agent_client(messages).await?;
+
+    let identities = agent
+        .request_identities()
+        .await
+        .map_err(|e| anyhow::anyhow!("{}: {}", messages.agent_connect_failed, e))?;
+    if identities.is_empty() {
+        anyhow::bail!(messages.agent_no_identities.clone());
+    }
+
+    let mut last_error = None;
+    for identity in identities {
+        match session
+            .authenticate_publickey_with(username, identity, hash_alg, &mut agent)
+            .await
+        {
+            Ok(result) if result.success() => return Ok(()),
+            Ok(_) => continue,
+            Err(err) => {
+                last_error = Some(err.to_string());
+            }
+        }
+    }
+
+    if let Some(err) = last_error {
+        anyhow::bail!("{}: {}", messages.agent_auth_failed, err);
+    }
+    anyhow::bail!(messages.agent_auth_failed.clone());
+}
+
+#[cfg(unix)]
+async fn connect_agent_client(
+    messages: &AuthFailureMessages,
+) -> Result<russh::keys::agent::client::AgentClient<tokio::net::UnixStream>> {
+    russh::keys::agent::client::AgentClient::connect_env()
+        .await
+        .map_err(|e| anyhow::anyhow!("{}: {}", messages.agent_connect_failed, e))
+}
+
+#[cfg(windows)]
+async fn authenticate_with_agent<H>(
+    session: &mut client::Handle<H>,
+    username: &str,
+    hash_alg: Option<HashAlg>,
+    messages: &AuthFailureMessages,
+) -> Result<()>
+where
+    H: client::Handler,
+{
+    let mut agent =
+        russh::keys::agent::client::AgentClient::connect_named_pipe(r"\\.\pipe\openssh-ssh-agent")
+            .await
+            .map_err(|e| anyhow::anyhow!("{}: {}", messages.agent_connect_failed, e))?;
+
+    let identities = agent
+        .request_identities()
+        .await
+        .map_err(|e| anyhow::anyhow!("{}: {}", messages.agent_connect_failed, e))?;
+    if identities.is_empty() {
+        anyhow::bail!(messages.agent_no_identities.clone());
+    }
+
+    let mut last_error = None;
+    for identity in identities {
+        match session
+            .authenticate_publickey_with(username, identity, hash_alg, &mut agent)
+            .await
+        {
+            Ok(result) if result.success() => return Ok(()),
+            Ok(_) => continue,
+            Err(err) => {
+                last_error = Some(err.to_string());
+            }
+        }
+    }
+
+    if let Some(err) = last_error {
+        anyhow::bail!("{}: {}", messages.agent_auth_failed, err);
+    }
+    anyhow::bail!(messages.agent_auth_failed.clone());
+}
+
+#[cfg(not(any(unix, windows)))]
+async fn authenticate_with_agent<H>(
+    _session: &mut client::Handle<H>,
+    _username: &str,
+    _hash_alg: Option<HashAlg>,
+    messages: &AuthFailureMessages,
+) -> Result<()>
+where
+    H: client::Handler,
+{
+    anyhow::bail!(messages.agent_connect_failed.clone());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn test_auth_failure_messages() -> AuthFailureMessages {
+        AuthFailureMessages {
+            password_failed: "password".to_string(),
+            certificate_failed: "certificate".to_string(),
+            public_key_failed: "public_key".to_string(),
+            agent_connect_failed: "agent_connect".to_string(),
+            agent_no_identities: "agent_no_identities".to_string(),
+            agent_auth_failed: "agent_auth_failed".to_string(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn agent_connect_without_env_returns_readable_error() {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let env_lock = ENV_LOCK.get_or_init(|| Mutex::new(()));
+        let _guard = env_lock.lock().expect("环境锁不应中毒");
+
+        let previous = std::env::var("SSH_AUTH_SOCK").ok();
+        unsafe {
+            std::env::remove_var("SSH_AUTH_SOCK");
+        }
+
+        let result = connect_agent_client(&test_auth_failure_messages()).await;
+
+        match previous {
+            Some(value) => unsafe {
+                std::env::set_var("SSH_AUTH_SOCK", value);
+            },
+            None => unsafe {
+                std::env::remove_var("SSH_AUTH_SOCK");
+            },
+        }
+
+        let err = match result {
+            Ok(_) => panic!("缺少 SSH_AUTH_SOCK 时应返回错误"),
+            Err(err) => err,
+        };
+        assert!(
+            err.to_string().contains("agent_connect"),
+            "错误信息应包含 agent 连接失败上下文"
+        );
+    }
 }
 
 /// 通过代理建立TCP连接
@@ -481,7 +661,13 @@ impl SshClient for RusshClient {
 
             // 认证跳板机
             let mut jump_session = jump_session;
-            authenticate(&mut jump_session, &jump.username, &jump.auth).await?;
+            authenticate_session(
+                &mut jump_session,
+                &jump.username,
+                &jump.auth,
+                default_auth_failure_messages(),
+            )
+            .await?;
 
             // 通过跳板机建立到目标服务器的端口转发
             tracing::info!("通过跳板机转发到目标服务器 {}:{}", config.host, config.port);
@@ -496,7 +682,13 @@ impl SshClient for RusshClient {
                     .await?;
 
             // 认证目标服务器
-            authenticate(&mut session, &config.username, &config.auth).await?;
+            authenticate_session(
+                &mut session,
+                &config.username,
+                &config.auth,
+                default_auth_failure_messages(),
+            )
+            .await?;
 
             Ok(Self {
                 session,
@@ -516,7 +708,13 @@ impl SshClient for RusshClient {
             let handler = RusshHandler;
             let mut session = client::connect_stream(russh_config, stream, handler).await?;
 
-            authenticate(&mut session, &config.username, &config.auth).await?;
+            authenticate_session(
+                &mut session,
+                &config.username,
+                &config.auth,
+                default_auth_failure_messages(),
+            )
+            .await?;
 
             Ok(Self {
                 session,
@@ -529,7 +727,13 @@ impl SshClient for RusshClient {
             let handler = RusshHandler;
             let mut session = client::connect(russh_config, addrs, handler).await?;
 
-            authenticate(&mut session, &config.username, &config.auth).await?;
+            authenticate_session(
+                &mut session,
+                &config.username,
+                &config.auth,
+                default_auth_failure_messages(),
+            )
+            .await?;
 
             Ok(Self {
                 session,

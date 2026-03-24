@@ -13,6 +13,18 @@ Ssh:
     en: Public key authentication failed
     zh-CN: 公钥认证失败
     zh-HK: 公鑰認證失敗
+  auth_agent_connect_failed:
+    en: SSH agent connection failed
+    zh-CN: SSH Agent 连接失败
+    zh-HK: SSH Agent 連線失敗
+  auth_agent_no_identities:
+    en: SSH agent has no available identities
+    zh-CN: SSH Agent 中没有可用身份
+    zh-HK: SSH Agent 中沒有可用身份
+  auth_agent_failed:
+    en: SSH agent authentication failed
+    zh-CN: SSH Agent 认证失败
+    zh-HK: SSH Agent 認證失敗
   socks5_proxy_connect_failed:
     en: "SOCKS5 proxy connection failed: %{error}"
     zh-CN: "SOCKS5代理连接失败: %{error}"

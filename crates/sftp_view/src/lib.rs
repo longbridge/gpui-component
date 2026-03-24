@@ -9,11 +9,12 @@ pub use file_list_panel::{
 };
 
 use gpui::{
-    actions, div, prelude::*, px, App, AsyncApp, Context, Entity, EventEmitter, ExternalPaths,
-    FocusHandle, Focusable, FontWeight, Hsla, IntoElement, ParentElement, Render, SharedString,
-    Styled, WeakEntity, Window,
+    App, AsyncApp, Context, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable,
+    FontWeight, Hsla, IntoElement, ParentElement, Render, SharedString, Styled, WeakEntity, Window,
+    actions, div, prelude::*, px,
 };
 use gpui_component::{
+    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, WindowExt,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     button::{Button, ButtonVariants},
     dialog::DialogButtonProps,
@@ -23,7 +24,7 @@ use gpui_component::{
     progress::Progress,
     spinner::Spinner,
     tooltip::Tooltip,
-    v_flex, ActiveTheme, Disableable, Icon, IconName, Sizable, Size, WindowExt,
+    v_flex,
 };
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{
@@ -35,8 +36,8 @@ use sftp::{RusshSftpClient, SftpClient, TransferCancelled, TransferProgress};
 use ssh::{JumpServerConnectConfig, ProxyConnectConfig, ProxyType, SshAuth, SshConnectConfig};
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
 use tokio::sync::Mutex;
 
@@ -472,6 +473,7 @@ impl SftpView {
                 passphrase,
                 certificate_path: None,
             },
+            SshAuthMethod::Agent => SshAuth::Agent,
         };
 
         let config = SshConnectConfig {
@@ -493,6 +495,7 @@ impl SftpView {
                         passphrase,
                         certificate_path: None,
                     },
+                    SshAuthMethod::Agent => SshAuth::Agent,
                 };
                 JumpServerConnectConfig {
                     host: jump.host,

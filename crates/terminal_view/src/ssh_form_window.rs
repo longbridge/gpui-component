@@ -1,10 +1,11 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, px, App, AppContext, AsyncApp, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, WeakEntity, Window,
+    App, AppContext, AsyncApp, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
+    WeakEntity, Window, div, px,
 };
 use gpui_component::{
+    ActiveTheme, Disableable, Sizable, Size, TitleBar,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     h_flex,
@@ -12,10 +13,10 @@ use gpui_component::{
     radio::Radio,
     select::{Select, SelectItem, SelectState},
     tab::{Tab, TabBar},
-    v_flex, ActiveTheme, Disableable, Sizable, Size, TitleBar,
+    v_flex,
 };
 use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
-use one_core::connection_notifier::{get_notifier, ConnectionDataEvent};
+use one_core::connection_notifier::{ConnectionDataEvent, get_notifier};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
 use one_core::storage::{
@@ -166,6 +167,7 @@ pub enum AuthMethodSelection {
     #[default]
     Password,
     PrivateKey,
+    Agent,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -335,6 +337,9 @@ impl SshFormWindow {
                             passphrase_input.update(cx, |s, cx| s.set_value(pass, window, cx));
                         }
                     }
+                    SshAuthMethod::Agent => {
+                        auth_method = AuthMethodSelection::Agent;
+                    }
                 }
 
                 // 加载高级设置
@@ -491,17 +496,14 @@ impl SshFormWindow {
                 let key_path = self.key_path_input.read(cx).text().to_string();
                 let passphrase = {
                     let p = self.passphrase_input.read(cx).text().to_string();
-                    if p.is_empty() {
-                        None
-                    } else {
-                        Some(p)
-                    }
+                    if p.is_empty() { None } else { Some(p) }
                 };
                 SshAuthMethod::PrivateKey {
                     key_path,
                     passphrase,
                 }
             }
+            AuthMethodSelection::Agent => SshAuthMethod::Agent,
         };
 
         // 高级设置
@@ -530,19 +532,11 @@ impl SshFormWindow {
         // 初始化设置
         let default_directory = {
             let d = self.default_directory_input.read(cx).text().to_string();
-            if d.is_empty() {
-                None
-            } else {
-                Some(d)
-            }
+            if d.is_empty() { None } else { Some(d) }
         };
         let init_script = {
             let s = self.init_script_input.read(cx).text().to_string();
-            if s.is_empty() {
-                None
-            } else {
-                Some(s)
-            }
+            if s.is_empty() { None } else { Some(s) }
         };
 
         // 跳板机配置
@@ -586,19 +580,11 @@ impl SshFormWindow {
                     .unwrap_or(1080);
                 let proxy_username = {
                     let u = self.proxy_username_input.read(cx).text().to_string();
-                    if u.is_empty() {
-                        None
-                    } else {
-                        Some(u)
-                    }
+                    if u.is_empty() { None } else { Some(u) }
                 };
                 let proxy_password = {
                     let p = self.proxy_password_input.read(cx).text().to_string();
-                    if p.is_empty() {
-                        None
-                    } else {
-                        Some(p)
-                    }
+                    if p.is_empty() { None } else { Some(p) }
                 };
                 let proxy_type = match self.proxy_type {
                     ProxyTypeSelection::Socks5 => StorageProxyType::Socks5,
@@ -644,6 +630,7 @@ impl SshFormWindow {
                 passphrase: passphrase.clone(),
                 certificate_path: None,
             },
+            SshAuthMethod::Agent => SshAuth::Agent,
         };
 
         // 构建跳板机配置
@@ -658,6 +645,7 @@ impl SshFormWindow {
                     passphrase: passphrase.clone(),
                     certificate_path: None,
                 },
+                SshAuthMethod::Agent => SshAuth::Agent,
             };
             JumpServerConnectConfig {
                 host: jump.host.clone(),
@@ -860,6 +848,15 @@ impl SshFormWindow {
                                 .checked(auth_method == AuthMethodSelection::PrivateKey)
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.auth_method = AuthMethodSelection::PrivateKey;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Radio::new("agent")
+                                .label(t!("SSH.agent").to_string())
+                                .checked(auth_method == AuthMethodSelection::Agent)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.auth_method = AuthMethodSelection::Agent;
                                     cx.notify();
                                 })),
                         ),

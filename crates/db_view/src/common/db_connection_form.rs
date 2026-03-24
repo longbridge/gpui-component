@@ -279,6 +279,10 @@ impl DbFormConfig {
                     "private_key".to_string(),
                     t!("ConnectionForm.ssh_auth_private_key").to_string(),
                 ),
+                (
+                    "agent".to_string(),
+                    t!("ConnectionForm.ssh_auth_agent").to_string(),
+                ),
             ]),
             FormField::new(
                 "ssh_password",

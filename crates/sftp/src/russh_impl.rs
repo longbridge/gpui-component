@@ -2,14 +2,16 @@ use crate::{FileEntry, ProgressCallback, SftpClient, TransferCancelled, Transfer
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use russh::client::{self, Handle};
-use russh::keys::*;
+use russh::keys::PublicKey;
 use russh_sftp::client::RawSftpSession;
 use russh_sftp::client::SftpSession;
 use russh_sftp::client::error::Error as SftpError;
 use russh_sftp::client::rawsession::Limits;
 use russh_sftp::protocol::{FileAttributes, OpenFlags, StatusCode};
 use rust_i18n::t;
-use ssh::{ProxyConnectConfig, ProxyType, SshConnectConfig};
+use ssh::{
+    AuthFailureMessages, ProxyConnectConfig, ProxyType, SshConnectConfig, authenticate_session,
+};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,51 +46,15 @@ impl client::Handler for SftpHandler {
     }
 }
 
-/// 执行SSH认证
-async fn sftp_authenticate(
-    session: &mut Handle<SftpHandler>,
-    username: &str,
-    auth: &ssh::SshAuth,
-) -> Result<()> {
-    match auth {
-        ssh::SshAuth::Password(password) => {
-            let auth_result = session.authenticate_password(username, password).await?;
-            if !auth_result.success() {
-                anyhow::bail!(t!("Sftp.auth_password_failed"));
-            }
-        }
-        ssh::SshAuth::PrivateKey {
-            key_path,
-            passphrase,
-            certificate_path,
-        } => {
-            let key_pair = load_secret_key(key_path, passphrase.as_deref())?;
-
-            if let Some(cert_path) = certificate_path {
-                let cert = load_openssh_certificate(cert_path)?;
-                let auth_result = session
-                    .authenticate_openssh_cert(username, Arc::new(key_pair), cert)
-                    .await?;
-                if !auth_result.success() {
-                    anyhow::bail!(t!("Sftp.auth_certificate_failed"));
-                }
-            } else {
-                let auth_result = session
-                    .authenticate_publickey(
-                        username,
-                        PrivateKeyWithHashAlg::new(
-                            Arc::new(key_pair),
-                            session.best_supported_rsa_hash().await?.flatten(),
-                        ),
-                    )
-                    .await?;
-                if !auth_result.success() {
-                    anyhow::bail!(t!("Sftp.auth_public_key_failed"));
-                }
-            }
-        }
+fn sftp_auth_failure_messages() -> AuthFailureMessages {
+    AuthFailureMessages {
+        password_failed: t!("Sftp.auth_password_failed").to_string(),
+        certificate_failed: t!("Sftp.auth_certificate_failed").to_string(),
+        public_key_failed: t!("Sftp.auth_public_key_failed").to_string(),
+        agent_connect_failed: t!("Sftp.auth_agent_connect_failed").to_string(),
+        agent_no_identities: t!("Sftp.auth_agent_no_identities").to_string(),
+        agent_auth_failed: t!("Sftp.auth_agent_failed").to_string(),
     }
-    Ok(())
 }
 
 /// 通过代理建立TCP连接
@@ -649,7 +615,13 @@ impl SftpClient for RusshSftpClient {
             };
 
             // 认证跳板机
-            sftp_authenticate(&mut jump_session, &jump.username, &jump.auth).await?;
+            authenticate_session(
+                &mut jump_session,
+                &jump.username,
+                &jump.auth,
+                sftp_auth_failure_messages(),
+            )
+            .await?;
 
             // 通过跳板机转发到目标服务器
             let forwarded_channel = jump_session
@@ -676,7 +648,13 @@ impl SftpClient for RusshSftpClient {
         };
 
         // 认证目标服务器
-        sftp_authenticate(&mut session, &ssh_config.username, &ssh_config.auth).await?;
+        authenticate_session(
+            &mut session,
+            &ssh_config.username,
+            &ssh_config.auth,
+            sftp_auth_failure_messages(),
+        )
+        .await?;
 
         let channel = session.channel_open_session().await?;
         channel.request_subsystem(true, "sftp").await?;

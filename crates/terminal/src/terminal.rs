@@ -21,7 +21,7 @@ use one_core::storage::models::{
 };
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::interval;
 
 use crate::pty_backend::{GpuiEventProxy, LocalPtyBackend};
@@ -318,6 +318,7 @@ impl Terminal {
                 passphrase,
                 certificate_path: None,
             },
+            SshAuthMethod::Agent => SshAuth::Agent,
         };
 
         // 构建初始化命令
@@ -352,6 +353,7 @@ impl Terminal {
                         passphrase,
                         certificate_path: None,
                     },
+                    SshAuthMethod::Agent => SshAuth::Agent,
                 };
                 JumpServerConnectConfig {
                     host: jump.host,
@@ -990,8 +992,8 @@ impl EventEmitter<TerminalModelEvent> for Terminal {}
 #[cfg(test)]
 mod tests {
     use super::{
-        build_cd_command, build_ssh_base_init_commands, build_ssh_init_commands,
-        compose_ssh_init_commands, shell_escape_arg, OSC7_PROMPT_COMMAND,
+        OSC7_PROMPT_COMMAND, build_cd_command, build_ssh_base_init_commands,
+        build_ssh_init_commands, compose_ssh_init_commands, shell_escape_arg,
     };
 
     #[test]
