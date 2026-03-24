@@ -1167,3 +1167,146 @@
 - `cargo check -p terminal_view`
 - 结果：全部通过
 - 备注：仍存在既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次改动无关
+
+## 检索记录 - db-tree-csv-import-target
+时间：2026-03-24 18:20:00 +0800
+
+- 已阅读 `/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_event.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/import_export/table_import_view.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/db/src/manager.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/db/src/plugin.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/db/src/import_export/formats/csv.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/db/src/import_export/formats/json.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/db/src/import_export/formats/txt.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/db/src/import_export/formats/sql.rs`。
+- 已确认 `db_tree_event::handle_import_data` 会把树节点的 `database/schema/table` 传到 `TableImportView`。
+- 已确认 `TableImportView::start_import` 会把 `database/schema/table` 写入 `ImportConfig`。
+- 已确认 `manager::import_data_with_progress_sync` 不重写导入 SQL，只负责会话创建和插件分发。
+- 已确认 `plugin::query_table_data`、`plugin::export_table_data_sql` 以及 `csv/json/txt/xml` 导出路径统一使用 `format_table_reference`。
+- 已确认 `csv/json/txt/sql` 导入路径仍在直接使用裸 `quote_identifier(table)`，这是当前落错库的根因。
+
+## 编码前检查 - db-tree-csv-import-target
+时间：2026-03-24 18:20:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-tree-csv-import-target.md`
+- 将使用以下可复用组件：
+  - `DatabasePlugin::format_table_reference`：`crates/db/src/plugin.rs`，作为唯一目标表定位入口。
+  - `ImportConfig`：`crates/db/src/import_export/mod.rs`，继续复用既有 `database/schema/table` 字段。
+  - `MySqlPlugin::new` / `MsSqlPlugin::new`：用于最小范围单元测试。
+- 将遵循命名约定：新增 helper 使用 `snake_case`，测试沿用模块内 `#[cfg(test)] mod tests`。
+- 将遵循代码风格：仅在 `import_export/formats` 内修复，保持 `anyhow` 错误风格和现有导入顺序。
+- 确认不重复造轮子：已检查 `plugin.rs` 和导出路径，项目内已经存在统一的表引用格式化接口，不新增第二套规则。
+
+## 检索记录 - db-tree-filter-persist
+时间：2026-03-24 18:33:00 +0800
+
+- 已阅读 `/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/database_tab.rs`、`/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/core/src/connection_notifier.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/core/src/storage/models.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/core/src/storage/repository.rs`、`/Users/hufei/RustroverProjects/onetcli/crates/mongodb_view/src/mongo_form_window.rs`。
+- 已确认 `save_database_filter` 会写入 `ConnectionRepository.selected_databases`，存储层本身支持持久化。
+- 已确认 `DatabaseTabView::new_with_active_conn` 使用外部传入的 `connections` 列表来创建 `DbTreeView`。
+- 已确认 `HomePage` 只有在收到 `ConnectionDataEvent::ConnectionUpdated` 时才会立即更新这份内存 `connections` 列表。
+- 已确认 `save_database_filter` 当前没有发 `ConnectionUpdated`，因此重新进入数据库页时可能继续使用旧连接对象。
+- 已确认 `DbTreeView::update_connection_info` 当前也没有把传入连接的 `selected_databases` 回写到树视图本地状态。
+
+## 编码前检查 - db-tree-filter-persist
+时间：2026-03-24 18:33:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-tree-filter-persist.md`
+- 将使用以下可复用组件：
+  - `emit_connection_event` / `ConnectionDataEvent::ConnectionUpdated`：沿用现有连接保存成功后的刷新链路。
+  - `StoredConnection::set_selected_databases`：继续复用仓库存储字段，不新增 schema。
+  - `DbTreeView` 现有测试模块：补纯逻辑测试验证连接筛选状态同步。
+- 将遵循命名约定：新增纯函数使用 `snake_case`，测试仍放在模块内 `#[cfg(test)] mod tests`。
+- 将遵循代码风格：保持 `cx.spawn` + `Tokio::spawn_result` 异步持久化模式，不新增第二套状态同步机制。
+- 确认不重复造轮子：已检查 `HomePage`、Mongo 连接表单和连接通知器，项目已有完整的连接更新事件链路，本次只复用它。
+
+## 编码后声明 - db-tree-csv-import-target
+时间：2026-03-24 18:40:00 +0800
+
+### 1. 复用了以下既有组件
+- `DatabasePlugin::format_table_reference`：继续作为导入目标表定位的唯一入口。
+- `ImportConfig`：继续复用已有 `database/schema/table` 作为完整上下文来源。
+- `MySqlPlugin::new` / `MsSqlPlugin::new`：用于最小范围单元测试。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `format_import_table_reference` 使用 `snake_case`。
+- 代码风格：只在 `import_export/formats` 内补共享 helper，不改 UI 或 manager 接口。
+- 文件组织：导入修复集中在 `crates/db/src/import_export/formats/*`，与既有按格式拆分结构保持一致。
+
+### 3. 对比了以下相似实现
+- `crates/db/src/plugin.rs` 的 `query_table_data`：查询路径统一使用完整表引用。
+- `crates/db/src/plugin.rs` 的 `export_table_data_sql`：导出路径同样依赖完整表引用。
+- `crates/db/src/import_export/formats/csv.rs` / `json.rs` / `txt.rs` / `xml.rs` 的导出路径：都已使用 `format_table_reference`。
+
+### 4. 未重复造轮子的证明
+- 没有新增数据库类型分支拼接逻辑。
+- 所有导入格式处理器都转而复用同一个 helper，而不是各自手写库名/模式名拼接。
+
+## 验证记录 - db-tree-csv-import-target
+- `cargo test -p db format_import_table_reference --lib`
+  - 结果：通过（2 个新增测试通过）
+- `cargo check -p db`
+  - 结果：通过
+  - 备注：存在既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次修改无关
+
+## 编码后声明 - db-tree-filter-persist
+时间：2026-03-24 18:46:00 +0800
+
+### 1. 复用了以下既有组件
+- `ConnectionDataEvent::ConnectionUpdated` / `get_notifier`：复用现有连接更新广播链路。
+- `StoredConnection::set_selected_databases`：继续使用现有 JSON 字段存储数据库筛选状态。
+- `HomePage` 对连接更新事件的订阅逻辑：继续作为主页连接内存列表的刷新入口。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `sync_selected_databases_for_connection` 使用 `snake_case`。
+- 代码风格：保持 `cx.spawn` + `Tokio::spawn_result` 异步写库模式，成功后回主线程发事件。
+- 文件组织：修改集中在 `crates/db_view/src/db_tree_view.rs`，测试继续放在原文件 `#[cfg(test)]` 模块内。
+
+### 3. 对比了以下相似实现
+- `main/src/home_tab.rs`：主页依赖 `ConnectionUpdated` 来同步内存连接列表。
+- `crates/mongodb_view/src/mongo_form_window.rs`：连接保存成功后使用 notifier 发连接更新事件。
+- `crates/db_view/src/database_tab.rs`：重新进入数据库页时使用传入的 `connections` 列表重建 `DbTreeView`。
+
+### 4. 未重复造轮子的证明
+- 没有新增新的筛选刷新事件或强制整页 reload 逻辑。
+- 修复完全复用已有的连接通知器和现有 `StoredConnection` 字段。
+
+## 验证记录 - db-tree-filter-persist
+- `cargo test -p db_view sync_selected_databases_from_connection --lib`
+  - 结果：通过（2 个新增测试通过）
+- `cargo check -p db_view`
+  - 结果：通过
+  - 备注：存在既有 `num-bigint-dig v0.8.4` future-incompat 警告，与本次修改无关
+
+## 编码前检查 - ollama-thinking-fallback
+时间：2026-03-24 13:33:30 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-ollama-thinking-fallback.md`
+- 将使用以下可复用组件：
+  - `llm_connector::types::Delta::reasoning_any()`：第三方库已提供的 reasoning 聚合接口。
+  - `crates/core/src/llm/mod.rs`：共享 helper 的放置位置。
+  - `ChatStreamProcessor` 与 `GeneralChatAgent`：两条需要统一修复的流式消费链路。
+- 将遵循命名约定：新增 helper 使用 `snake_case`，测试函数采用行为式命名。
+- 将遵循代码风格：正文优先、最小侵入、共享逻辑抽取一次后双处复用。
+- 确认不重复造轮子：已检查 `llm`、`ai_chat`、`agent` 链路，不存在现成的“正文为空时回退 reasoning”项目内 helper。
+
+## 编码后声明 - ollama-thinking-fallback
+时间：2026-03-24 13:33:30 +0800
+
+### 1. 复用了以下既有组件
+- `Delta::reasoning_any()`：直接复用第三方库已做好的 reasoning 聚合，不重复解析字段名。
+- `crates/core/src/llm/mod.rs`：作为共享 helper 出口，避免在两个流式入口复制同样逻辑。
+- `ChatStreamProcessor` / `GeneralChatAgent`：仅替换文本提取点，其余节流、完成态和持久化保持不变。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `extract_stream_text` 与测试函数都使用 `snake_case` 风格。
+- 代码风格：保持正文优先逻辑，仅在正文为空时回退 reasoning，不改变既有消息事件结构。
+- 文件组织：共享能力放在 `llm` 模块，消费方只做调用侧替换，未扩散到 UI 层。
+
+### 3. 对比了以下相似实现
+- `crates/core/src/ai_chat/stream.rs`：原先会在 `Completed` 前累计空正文，本次改为复用共享 helper。
+- `crates/core/src/agent/builtin/general_chat.rs`：与聊天面板有同样的问题，本次同步收敛为同一实现。
+- `crates/core/src/ai_chat/panel.rs`：确认 UI 完成态仅消费上游 `full_content`，因此修复点必须在更上游的流式消费处。
+
+### 4. 未重复造轮子的证明
+- 未修改 `llm-connector` 第三方 crate。
+- 未新增第二套 streaming response 解析逻辑，只是复用现有 `reasoning_any()` 并补上项目侧消费缺口。
+
+## 验证记录 - ollama-thinking-fallback
+- `rustfmt --edition 2024 crates/core/src/llm/mod.rs crates/core/src/ai_chat/stream.rs crates/core/src/agent/builtin/general_chat.rs`：通过。
+- `cargo check -p one-core`：通过。
+- `cargo test -p one-core extract_stream_text --lib`：通过，2 个新增单测全部通过。
+- 提权 `ollama list`：确认本机存在 `qwen3:14b`，不存在 `qwen3.5`。
+- 提权 `curl http://127.0.0.1:11434/api/chat ...`：确认 `qwen3:14b` 仍返回 `message.content = ""` 且 `message.thinking` 有值，和本次修复目标一致。

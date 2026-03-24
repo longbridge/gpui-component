@@ -5,7 +5,7 @@ use futures::StreamExt;
 use tokio::sync::mpsc;
 
 use crate::agent::types::{Agent, AgentContext, AgentDescriptor, AgentEvent, AgentResult};
-use crate::llm::{ChatRequest, Message, Role};
+use crate::llm::{ChatRequest, Message, Role, extract_stream_text};
 
 static DESCRIPTOR: AgentDescriptor = AgentDescriptor {
     id: "general_chat",
@@ -87,7 +87,7 @@ impl GeneralChatAgent {
                 chunk = stream.next() => {
                     match chunk {
                         Some(Ok(response)) => {
-                            if let Some(content) = response.get_content() {
+                            if let Some(content) = extract_stream_text(&response) {
                                 full_content.push_str(content);
                                 pending_delta.push_str(content);
 

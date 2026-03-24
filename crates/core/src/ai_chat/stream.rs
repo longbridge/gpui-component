@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::llm::manager::GlobalProviderState;
 use crate::llm::storage::ProviderRepository;
-use crate::llm::{ChatRequest, Message};
+use crate::llm::{ChatRequest, Message, extract_stream_text};
 use crate::storage::StorageManager;
 use crate::storage::traits::Repository;
 
@@ -233,9 +233,9 @@ impl ChatStreamProcessor {
                 result = stream.next() => {
                     match result {
                         Some(Ok(response)) => {
-                            if let Some(content) = response.get_content() {
-                                full_content.push_str(&content);
-                                pending_delta.push_str(&content);
+                            if let Some(content) = extract_stream_text(&response) {
+                                full_content.push_str(content);
+                                pending_delta.push_str(content);
 
                                 if last_emit.elapsed() >= throttle_duration {
                                     let delta = std::mem::take(&mut pending_delta);

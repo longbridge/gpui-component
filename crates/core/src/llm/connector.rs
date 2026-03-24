@@ -10,6 +10,16 @@ use super::types::{ProviderConfig, ProviderType};
 
 pub type ChatStream = Pin<Box<dyn Stream<Item = Result<StreamingResponse>> + Send>>;
 
+const OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
+const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com";
+const ALIYUN_BASE_URL: &str = "https://dashscope.aliyuncs.com";
+const ZHIPU_BASE_URL: &str = "https://open.bigmodel.cn";
+const OLLAMA_BASE_URL: &str = "http://localhost:11434";
+const VOLCENGINE_BASE_URL: &str = "https://ark.cn-beijing.volces.com/api/v3";
+const MOONSHOT_BASE_URL: &str = "https://api.moonshot.cn/v1";
+const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
+const GOOGLE_BASE_URL: &str = "https://generativelanguage.googleapis.com/v1beta";
+
 pub use llm_connector::types::{
     ChatRequest as LlmChatRequest, Message as LlmMessage, Role as LlmRole,
 };
@@ -36,18 +46,14 @@ impl LlmConnector {
                     .api_key
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("API key required for OpenAI"))?;
-                if let Some(base_url) = &config.api_base {
-                    LlmClient::openai_with_base_url(api_key, base_url)?
-                } else {
-                    LlmClient::openai(api_key)?
-                }
+                LlmClient::openai(api_key, provider_base_url(config, OPENAI_BASE_URL))?
             }
             ProviderType::Anthropic => {
                 let api_key = config
                     .api_key
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("API key required for Anthropic"))?;
-                LlmClient::anthropic(api_key)?
+                LlmClient::anthropic(api_key, provider_base_url(config, ANTHROPIC_BASE_URL))?
             }
             ProviderType::Aliyun => {
                 let api_key = config
@@ -57,7 +63,7 @@ impl LlmConnector {
                 if let Some(base_url) = &config.api_base {
                     LlmClient::aliyun_private(api_key, base_url)?
                 } else {
-                    LlmClient::aliyun(api_key)?
+                    LlmClient::aliyun(api_key, ALIYUN_BASE_URL)?
                 }
             }
             ProviderType::Zhipu => {
@@ -65,42 +71,36 @@ impl LlmConnector {
                     .api_key
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("API key required for Zhipu"))?;
-                LlmClient::zhipu(api_key)?
+                LlmClient::zhipu(api_key, provider_base_url(config, ZHIPU_BASE_URL))?
             }
-            ProviderType::Ollama => {
-                if let Some(base_url) = &config.api_base {
-                    LlmClient::ollama_with_base_url(base_url)?
-                } else {
-                    LlmClient::ollama()?
-                }
-            }
+            ProviderType::Ollama => LlmClient::ollama(provider_base_url(config, OLLAMA_BASE_URL))?,
             ProviderType::Volcengine => {
                 let api_key = config
                     .api_key
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("API key required for Volcengine"))?;
-                LlmClient::volcengine(api_key)?
+                LlmClient::volcengine(api_key, provider_base_url(config, VOLCENGINE_BASE_URL))?
             }
             ProviderType::Moonshot => {
                 let api_key = config
                     .api_key
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("API key required for Moonshot"))?;
-                LlmClient::moonshot(api_key)?
+                LlmClient::moonshot(api_key, provider_base_url(config, MOONSHOT_BASE_URL))?
             }
             ProviderType::DeepSeek => {
                 let api_key = config
                     .api_key
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("API key required for DeepSeek"))?;
-                LlmClient::deepseek(api_key)?
+                LlmClient::deepseek(api_key, provider_base_url(config, DEEPSEEK_BASE_URL))?
             }
             ProviderType::Google => {
                 let api_key = config
                     .api_key
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("API key required for Google"))?;
-                LlmClient::google(api_key)?
+                LlmClient::google(api_key, provider_base_url(config, GOOGLE_BASE_URL))?
             }
             ProviderType::AzureOpenAI => {
                 let api_key = config
@@ -161,6 +161,10 @@ impl LlmConnector {
     }
 }
 
+fn provider_base_url<'a>(config: &'a ProviderConfig, default_base_url: &'static str) -> &'a str {
+    config.api_base.as_deref().unwrap_or(default_base_url)
+}
+
 #[async_trait]
 impl LlmProvider for LlmConnector {
     async fn chat(&self, request: &ChatRequest) -> Result<String> {
@@ -200,4 +204,29 @@ pub fn assistant_message(content: impl Into<String>) -> Message {
 
 pub fn system_message(content: impl Into<String>) -> Message {
     create_message(Role::System, content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_base_url_prefers_configured_value() {
+        let config = ProviderConfig {
+            api_base: Some("https://custom.example.com".to_string()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            provider_base_url(&config, OPENAI_BASE_URL),
+            "https://custom.example.com"
+        );
+    }
+
+    #[test]
+    fn provider_base_url_uses_default_when_config_missing() {
+        let config = ProviderConfig::default();
+
+        assert_eq!(provider_base_url(&config, OLLAMA_BASE_URL), OLLAMA_BASE_URL);
+    }
 }
