@@ -3,6 +3,7 @@ use std::time::Instant;
 use anyhow::Result;
 use async_trait::async_trait;
 
+use super::format_import_table_reference;
 use crate::connection::DbConnection;
 use crate::executor::{ExecOptions, SqlResult};
 use crate::import_export::{
@@ -51,7 +52,8 @@ impl FormatHandler for SqlFormatHandler {
 
         if config.truncate_before_import {
             if let Some(table) = &config.table {
-                let truncate_sql = format!("TRUNCATE TABLE {}", plugin.quote_identifier(table));
+                let table_ref = format_import_table_reference(plugin, config, table);
+                let truncate_sql = format!("TRUNCATE TABLE {}", table_ref);
                 send_progress(ImportProgressEvent::ExecutingStatement {
                     file: file_name.to_string(),
                     statement_index: 0,

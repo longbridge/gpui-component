@@ -37,7 +37,7 @@ use gpui_component::menu::PopupMenu;
 use one_core::storage::DatabaseType;
 use one_core::utils::debouncer::Debouncer;
 use one_core::{
-    connection_notifier::{ConnectionDataEvent, GlobalConnectionNotifier},
+    connection_notifier::{ConnectionDataEvent, GlobalConnectionNotifier, get_notifier},
     gpui_tokio::Tokio,
     storage::{ActiveConnections, GlobalStorageState, StoredConnection},
 };
@@ -72,6 +72,17 @@ fn resolve_refresh_metadata_scope(node: &DbNode) -> RefreshMetadataScope {
             .map(RefreshMetadataScope::Database)
             .unwrap_or(RefreshMetadataScope::None),
     }
+}
+
+fn sync_selected_databases_for_connection(
+    selected_databases: &mut HashMap<String, Option<HashSet<String>>>,
+    connection: &StoredConnection,
+) {
+    let connection_id = connection.id.unwrap_or(0).to_string();
+    let selected = connection
+        .get_selected_databases()
+        .map(|selected_dbs| selected_dbs.into_iter().collect());
+    selected_databases.insert(connection_id, selected);
 }
 
 // ============================================================================
@@ -497,11 +508,7 @@ impl DbTreeView {
                     }
                 };
 
-                // 读取已选中的数据库列表
-                if let Some(selected_dbs) = conn.get_selected_databases() {
-                    let selected: HashSet<String> = selected_dbs.into_iter().collect();
-                    unselected_databases_map.insert(id.clone(), Some(selected));
-                }
+                sync_selected_databases_for_connection(&mut unselected_databases_map, conn);
 
                 let node = DbNode::new(
                     id.clone(),
@@ -718,6 +725,7 @@ impl DbTreeView {
         if let Ok(config) = connection.to_db_connection() {
             let id = connection.id.unwrap_or(0).to_string();
             info!("Updating connection info: {}", id);
+            sync_selected_databases_for_connection(&mut self.selected_databases, connection);
 
             if let Some(node) = self.db_nodes.get_mut(&id) {
                 node.name = config.name.to_string();
@@ -761,11 +769,7 @@ impl DbTreeView {
                 }
             }
 
-            // 读取已选中的数据库列表
-            if let Some(selected_dbs) = connection.get_selected_databases() {
-                let selected: HashSet<String> = selected_dbs.into_iter().collect();
-                self.selected_databases.insert(id.clone(), Some(selected));
-            }
+            sync_selected_databases_for_connection(&mut self.selected_databases, connection);
 
             let node = DbNode::new(
                 id.clone(),
@@ -996,14 +1000,23 @@ impl DbTreeView {
                 if let Some(repo) = storage.get::<ConnectionRepository>() {
                     if let Ok(Some(mut conn)) = repo.get(conn_id) {
                         conn.set_selected_databases(selected_dbs);
-                        let _ = repo.update(&mut conn);
+                        repo.update(&conn)?;
+                        return Ok(Some(conn));
                     }
                 }
-                Ok(())
+                Ok(None)
             })
             .await;
 
-            let _ = result;
+            if let Ok(Some(connection)) = result {
+                let _ = cx.update(|cx| {
+                    if let Some(notifier) = get_notifier(cx) {
+                        notifier.update(cx, |_, cx| {
+                            cx.emit(ConnectionDataEvent::ConnectionUpdated { connection });
+                        });
+                    }
+                });
+            }
             Ok(())
         })
         .detach();
@@ -2528,7 +2541,6 @@ impl DbTreeView {
         let is_active =
             conn_active && (node.node_type != DbNodeType::Database || node.children_loaded);
 
-
         // 尝试从 plugin 获取菜单
         let registry = cx.global::<DatabaseViewPluginRegistry>();
         if let Some(plugin) = registry.get(&node.database_type) {
@@ -2566,6 +2578,7 @@ impl Focusable for DbTreeView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use one_core::storage::ConnectionType;
 
     fn build_node(node_type: DbNodeType, name: &str, metadata: &[(&str, &str)]) -> DbNode {
         let metadata = metadata
@@ -2581,6 +2594,32 @@ mod tests {
             DatabaseType::MySQL,
         )
         .with_metadata(metadata)
+    }
+
+    fn build_connection(id: i64, selected_databases: Option<Vec<&str>>) -> StoredConnection {
+        StoredConnection {
+            id: Some(id),
+            name: "conn".to_string(),
+            connection_type: ConnectionType::Database,
+            params: "{}".to_string(),
+            workspace_id: None,
+            selected_databases: selected_databases.map(|dbs| {
+                serde_json::to_string(
+                    &dbs.into_iter()
+                        .map(|db| db.to_string())
+                        .collect::<Vec<String>>(),
+                )
+                .expect("测试数据库列表序列化不应失败")
+            }),
+            remark: None,
+            sync_enabled: true,
+            cloud_id: None,
+            last_synced_at: None,
+            created_at: None,
+            updated_at: None,
+            team_id: None,
+            owner_id: None,
+        }
     }
 
     #[test]
@@ -2629,5 +2668,32 @@ mod tests {
             resolve_refresh_metadata_scope(&node),
             RefreshMetadataScope::None
         );
+    }
+
+    #[test]
+    fn sync_selected_databases_from_connection_preserves_saved_filter() {
+        let connection = build_connection(7, Some(vec!["analytics", "warehouse"]));
+        let mut selected_databases = HashMap::new();
+
+        sync_selected_databases_for_connection(&mut selected_databases, &connection);
+
+        assert_eq!(
+            selected_databases.get("7"),
+            Some(&Some(HashSet::from([
+                "analytics".to_string(),
+                "warehouse".to_string()
+            ])))
+        );
+    }
+
+    #[test]
+    fn sync_selected_databases_from_connection_restores_all_selected_state() {
+        let connection = build_connection(9, None);
+        let mut selected_databases =
+            HashMap::from([("9".to_string(), Some(HashSet::from(["legacy".to_string()])))]);
+
+        sync_selected_databases_for_connection(&mut selected_databases, &connection);
+
+        assert_eq!(selected_databases.get("9"), Some(&None));
     }
 }

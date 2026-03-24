@@ -1,16 +1,17 @@
 use std::time::Instant;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use serde_json::Value;
 
+use super::format_import_table_reference;
+use crate::DatabasePlugin;
 use crate::connection::DbConnection;
 use crate::executor::{ExecOptions, SqlResult};
 use crate::import_export::{
     ExportConfig, ExportProgressEvent, ExportProgressSender, ExportResult, FormatHandler,
     ImportConfig, ImportResult,
 };
-use crate::DatabasePlugin;
 
 pub struct JsonFormatHandler;
 
@@ -31,6 +32,7 @@ impl FormatHandler for JsonFormatHandler {
             .table
             .as_ref()
             .ok_or_else(|| anyhow!("Table name required for JSON import"))?;
+        let table_ref = format_import_table_reference(plugin, config, table);
 
         // 解析JSON
         let json_value: Value = serde_json::from_str(data)?;
@@ -51,7 +53,7 @@ impl FormatHandler for JsonFormatHandler {
 
         // TRUNCATE表
         if config.truncate_before_import {
-            let truncate_sql = format!("TRUNCATE TABLE {}", plugin.quote_identifier(table));
+            let truncate_sql = format!("TRUNCATE TABLE {}", table_ref);
             let results = connection
                 .execute(plugin, &truncate_sql, ExecOptions::default())
                 .await
@@ -91,7 +93,7 @@ impl FormatHandler for JsonFormatHandler {
                 }
             };
 
-            let mut insert_sql = format!("INSERT INTO {} (", plugin.quote_identifier(table));
+            let mut insert_sql = format!("INSERT INTO {} (", table_ref);
             for (i, col) in columns.iter().enumerate() {
                 if i > 0 {
                     insert_sql.push_str(", ");
