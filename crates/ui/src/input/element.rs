@@ -1259,28 +1259,24 @@ impl Element for TextElement {
         let is_empty = text.len() == 0;
         let placeholder = self.placeholder.clone();
 
-        let mut bounds = bounds;
-
+        let text_style = window.text_style();
+        let fg = text_style.color;
         let (display_text, text_color) = if is_empty {
             (
                 &Rope::from(placeholder.as_str()),
                 cx.theme().muted_foreground,
             )
         } else if state.masked {
-            (
-                &Rope::from("*".repeat(text.chars().count())),
-                cx.theme().foreground,
-            )
+            (&Rope::from("*".repeat(text.chars().count())), fg)
         } else {
-            (&text, cx.theme().foreground)
+            (&text, fg)
         };
-
-        let text_style = window.text_style();
 
         // Calculate the width of the line numbers
         let (line_number_width, line_number_len) =
             Self::layout_line_numbers(&state, &text, text_size, &text_style, window);
 
+        let mut bounds = bounds;
         let wrap_width = if multi_line && state.soft_wrap {
             Some(bounds.size.width - line_number_width - RIGHT_MARGIN)
         } else {
