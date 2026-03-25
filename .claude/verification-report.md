@@ -433,3 +433,99 @@
 ### 剩余风险
 - 当前 shell 结构检测是启发式规则，不覆盖所有复杂复合语法；但已覆盖用户报告的 heredoc 主故障路径和两类常见续行结构。
 - `main/locales/main.yml` 中补入了当前代码已在使用但仓库缺失的 `TerminalView` / `TerminalSidebar` 文案键，若后续有专门的本地化整理任务，可再统一清理同类缺口。
+
+---
+
+## 审查报告（home-encourage-tab 实现）
+生成时间：2026-03-25 19:39:55 +0800
+
+### 需求完整性检查
+- 目标明确：将首页“支持作者”从弹框改为在 `tab_container` 中打开页签，并改善赞赏码展示空间。
+- 范围明确：限定在首页按钮入口、赞赏视图自身和 `HomePage` 页签打开辅助方法。
+- 交付物明确：代码修改、上下文摘要、操作日志、验证报告。
+- 风险与依赖明确：整仓编译当前被既有 `db_connection_form.rs` 错误阻塞，因此只能做局部无新增错误验证。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：78/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：86/100
+
+### 综合评分
+- 90/100
+- 建议：通过
+
+### 结论
+- 赞赏视图已转为页签内容：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 中的 `EncouragePanel` 现在实现了 `EventEmitter<TabContentEvent>` 和 `TabContent`，可以直接挂入 `TabContainer`。
+- 首页入口已切换为单实例页签：[`home_tabs.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home/home_tabs.rs) 新增 `add_encourage_tab`，复用 `activate_or_add_tab_lazy`，重复点击只会激活已有页签。
+- 原弹框路径已移除：[`home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs) 的“支持作者”按钮已改为调用 `add_encourage_tab`，不再走 `window.open_dialog`。
+- 展示尺寸已放大：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 将二维码尺寸从 `180` 调整到 `220`，更适合主内容区域。
+
+### 剩余风险
+- 当前无法给出“整仓编译通过”结论，因为 `crates/db_view/src/common/db_connection_form.rs` 已存在与本次无关的编译错误。
+- 如果后续项目启用统一的 `TabContentRegistry` 恢复注册，建议再补 `EncouragePanel` 的恢复逻辑；本次未做这部分扩展。
+
+---
+
+## 审查报告（db-connection-form-ssh-ssl-fixed 实现）
+生成时间：2026-03-25 21:57:00 +0800
+
+### 需求完整性检查
+- 目标明确：将数据库连接表单中的 `ssl` 与 `ssh` 页签改成固定代码渲染，并用复选框控制整块启用。
+- 范围明确：改动限定在 `crates/db_view/src/common/db_connection_form.rs` 的渲染、辅助逻辑和单元测试，不触碰存储结构。
+- 交付物明确：代码修改、上下文摘要、操作日志、本地测试和审查报告均已落地。
+- 风险与依赖明确：依赖既有 `extra_params` 键名和 `ssh_form_window.rs` 交互模式；ClickHouse `ssl` 页签本次保持通用渲染，属于刻意收敛范围。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：89/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：95/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- `ssh` 页签已改为固定代码渲染：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L2115) 新增 `render_ssh_tab_content`，使用复选框控制整块启用，并用单选控制密码、私钥、agent 三种认证输入联动。
+- `ssl` 页签已改为固定代码渲染：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L2222) 新增 `render_ssl_tab_content`，对 MySQL/PostgreSQL/MSSQL 分别按既有字段语义做启用控制。
+- 通用状态链路保持不变：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L1819) 继续保留标准页签渲染和字段状态容器，专用页签仍通过原 `set_field_value/get_field_value/build_connection/load_connection` 工作。
+- SSH agent 校验已对齐后端语义：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L924) 与 [`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L1390) 通过纯函数统一必填判断，agent 模式不再错误要求密码。
+- 本地验证有效：`CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p db_view --lib db_connection_form` 与 `cargo check -p db_view` 均已通过。
+
+### 剩余风险
+- 目前覆盖的是纯函数和字段定义层测试，未做 UI 交互快照或人工点击回归，布局细节仍建议你本地实际点一下表单确认观感。
+- ClickHouse 的 `ssl` 页签仍沿用原通用渲染，因为本次需求和参考模式主要针对 MySQL/PostgreSQL/MSSQL 的 SSL 语义与 SSH 联动场景。
+
+---
+
+## 审查补充（home-encourage-tab 二次视觉调整）
+生成时间：2026-03-25 23:33:00 +0800
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：80/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：97/100
+- 风险评估：88/100
+
+### 综合评分
+- 92/100
+- 建议：通过
+
+### 结论
+- 支持页签布局已重构为居中分区卡片：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 现在按“顶部说明卡片 + 中部支付卡片区 + 底部辅助支持卡片”三段展示，不再像截图那样散在左上角。
+- 支付卡片层级已增强：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 为每个赞赏方式增加外层容器、统一间距和标题行图标，二维码区域更集中。
+- 图标风格已统一：页签图标改为星标，[`home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs) 中首页入口图标也同步从心形改成了星标，辅助支持区补了 `CircleCheck`、`GitHub`、`ExternalLink` 图标。
+- 局部编译筛查有效：`cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab)\\.rs|error\\['` 无输出，说明这次视觉调整未给目标文件引入新报错。

@@ -1643,3 +1643,87 @@
 - `cargo test -p terminal_view --lib`：首次失败，原因是 `gpui` 的 Metal shader 编译尝试写入 `~/.cache/clang/ModuleCache`，被沙箱拒绝。
 - `env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p terminal_view --lib`：在沙箱内重试仍失败，`gpui` 构建脚本继续写默认 clang 缓存路径。
 - `env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p terminal_view --lib`（沙箱外）：通过，13 个测试全部通过。
+
+## 编码前检查 - db-connection-form-ssh-ssl-fixed
+时间：2026-03-25 21:40:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-connection-form-ssh-ssl-fixed.md`
+- 将使用以下可复用组件：
+  - `crates/db_view/src/common/db_connection_form.rs`：现有字段状态容器、回填与保存链路。
+  - `crates/terminal_view/src/ssh_form_window.rs`：`Checkbox/Radio/.when` 的固定代码渲染模式。
+  - `crates/db/src/ssh_tunnel.rs`：SSH 隧道字段键名与 `agent/private_key/password` 语义。
+  - `crates/core/src/storage/models.rs`：`DbConnectionConfig.extra_params` 与 `get_param_bool`。
+- 将遵循命名约定：新增 helper 和测试使用 `snake_case`，继续复用原有字段键名，不新增存储字段。
+- 将遵循代码风格：只在 `db_connection_form.rs` 内增加专用渲染分支和小型 helper，不改持久化结构。
+- 确认不重复造轮子：已检查仓库内现有表单联动模式，直接复用 `ssh_form_window.rs` 的交互结构，而不是再造新的表单框架。
+
+## 编码后声明 - db-connection-form-ssh-ssl-fixed
+时间：2026-03-25 21:57:00 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db_view/src/common/db_connection_form.rs`：继续复用 `field_values`、`field_inputs`、`field_selects`、`set_field_value`、`get_field_value`、`build_connection`、`load_connection`。
+- `crates/terminal_view/src/ssh_form_window.rs`：复用 `Checkbox + Radio + .when(...)` 的固定代码渲染组织方式。
+- `crates/db/src/ssh_tunnel.rs`：继续复用 `ssh_tunnel_enabled`、`ssh_auth_type`、`ssh_password`、`ssh_private_key_path` 等既有存储键和语义。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增纯函数与 helper 使用 `snake_case`，未改动既有连接参数键名。
+- 代码风格：通用字段初始化/回填机制保留，仅在 `render()` 中为 `ssl/ssh` 标签页增加专用渲染分支。
+- 文件组织：功能改动和测试都收敛在 `crates/db_view/src/common/db_connection_form.rs`，未扩散到存储层。
+
+### 3. 对比了以下相似实现
+- `ssh_form_window.rs` 的跳板机/代理页签：本次直接借用其“复选框控制整块显示”的模式，差异是数据库表单继续写回 `extra_params`。
+- 原 `db_connection_form.rs` 的通用配置式渲染：本次未删除状态容器，只替换 `ssl/ssh` 的展示层，避免破坏回填和保存。
+- `db/src/ssh_tunnel.rs` 的认证解析：既有逻辑已支持 `agent`，因此本次把 UI 和校验对齐到同一语义。
+
+### 4. 未重复造轮子的证明
+- 未新增新的表单状态结构或第二套持久化模型。
+- 未为 `ssl/ssh` 另起一套保存/回填链路，仍走 `DbConnectionConfig.extra_params`。
+- 未复制 `ssh_form_window.rs` 的整段实现，只复用了交互模式并映射到数据库表单字段。
+
+## 验证记录 - db-connection-form-ssh-ssl-fixed
+- `rustfmt --edition 2021 crates/db_view/src/common/db_connection_form.rs`：通过。
+- `CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p db_view --lib db_connection_form`：通过，6 个相关测试全部通过。
+- `cargo check -p db_view`：通过。
+
+## 编码前检查 - home-encourage-tab
+时间：2026-03-25 19:39:55 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-home-encourage-tab.md`
+- 将使用以下可复用组件：
+  - `main/src/home/home_tabs.rs`：`add_settings_tab` 的单实例页签打开模式。
+  - `main/src/encourage.rs`：现有赞赏内容渲染逻辑和二维码资源加载。
+  - `main/src/setting_tab.rs`：`TabContent` 实现约定。
+  - `crates/core/src/tab_container.rs`：`TabContent` / `TabItem` 接口约束。
+- 将遵循命名约定：新增方法使用 `snake_case`，面板类型使用 `PascalCase`。
+- 将遵循代码风格：尽量复用现有视图和 `activate_or_add_tab_lazy`，不新增重复 UI 组件。
+- 确认不重复造轮子：已检查首页底部入口、设置页签和赞赏视图，确定直接复用而非新建第二套支持作者页面。
+
+## 编码后声明 - home-encourage-tab
+时间：2026-03-25 19:39:55 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/encourage.rs`：继续复用原有赞赏内容、二维码图片加载和 GitHub 链接区域，只补页签接口。
+- `main/src/home/home_tabs.rs`：复用 `add_settings_tab` 的单实例页签打开模式，新加 `add_encourage_tab`。
+- `crates/core/src/tab_container.rs`：严格按 `TabContent` 和 `TabItem` 约定接入页签容器。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `add_encourage_tab`，新类型命名为 `EncouragePanel`，与 `SettingsPanel` 保持一致。
+- 代码风格：入口逻辑仍由 `HomePage` 驱动，具体页签内容继续放在独立文件 `encourage.rs`。
+- 文件组织：只改 `main/src/encourage.rs`、`main/src/home/home_tabs.rs`、`main/src/home_tab.rs`，未扩散到其他模块。
+
+### 3. 对比了以下相似实现
+- `show_encourage_dialog`：原本通过 `window.open_dialog` 弹框展示；本次改为页签打开，原因是用户需要更大的展示空间和与设置一致的交互。
+- `add_settings_tab`：本次直接沿用其单实例模式，差异仅是页签类型和标题不同。
+- `open_ssh_terminal` / `open_sftp_view`：这些是多实例页签模式；本次不采用，因为“支持作者”不需要重复多开。
+
+### 4. 未重复造轮子的证明
+- 未新增第二套赞赏 UI，而是直接把现有 `encourage.rs` 升级为 `TabContent`。
+- 未自建新的页签管理逻辑，而是完全复用 `tab_container` 现有 API。
+- 未引入额外持久化恢复实现；当前仓库未发现实际 registry 注册入口，本次保持最小改动。
+
+## 验证记录 - home-encourage-tab
+- `rustfmt --edition 2024 main/src/encourage.rs main/src/home/home_tabs.rs main/src/home_tab.rs`：通过。
+- `cargo check -p main`：失败，失败原因来自既有文件 `crates/db_view/src/common/db_connection_form.rs`，出现多处 `Field: From<AnyElement>` 相关编译错误，与本次改动无关。
+- `cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab|home/home_tabs)\\.rs|error\\['`：通过过滤确认，本次改动文件未出现新的编译错误输出。
+- `rustfmt --edition 2024 main/src/encourage.rs main/src/home_tab.rs`（布局与图标二次调整后）：通过。
+- `cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab)\\.rs|error\\['`（布局与图标二次调整后）：无输出，说明 `encourage.rs` / `home_tab.rs` 本次调整未引入新错误。
