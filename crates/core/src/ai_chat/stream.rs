@@ -199,8 +199,12 @@ impl ChatStreamProcessor {
                 .ok_or(StreamError::ProviderNotFound)?
         };
 
+        let model = selected_model.unwrap_or_else(|| config.model.clone());
+        let mut provider_config = config.clone();
+        provider_config.model = model.clone();
+
         let request = ChatRequest {
-            model: selected_model.unwrap_or_else(|| config.model.clone()),
+            model,
             messages,
             max_tokens: Some(max_tokens),
             temperature: Some(temperature),
@@ -210,7 +214,7 @@ impl ChatStreamProcessor {
 
         let provider = global_provider_state
             .manager()
-            .get_provider(&config)
+            .get_provider(&provider_config)
             .await
             .map_err(|e| StreamError::ApiError(e.to_string()))?;
 

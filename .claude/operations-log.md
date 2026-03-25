@@ -1310,3 +1310,120 @@
 - `cargo test -p one-core extract_stream_text --lib`：通过，2 个新增单测全部通过。
 - 提权 `ollama list`：确认本机存在 `qwen3:14b`，不存在 `qwen3.5`。
 - 提权 `curl http://127.0.0.1:11434/api/chat ...`：确认 `qwen3:14b` 仍返回 `message.content = ""` 且 `message.thinking` 有值，和本次修复目标一致。
+
+## 编码前检查 - aliyun-qwen35-url
+时间：2026-03-25 10:32:13 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-aliyun-qwen35-url.md`
+- 将使用以下可复用组件：
+  - `crates/core/src/llm/connector.rs`：provider URL 路由的唯一入口。
+  - `LlmClient::openai_compatible`：现有 OpenAI 兼容客户端能力。
+  - `LlmClient::aliyun` / `LlmClient::aliyun_private`：继续保留普通 DashScope 路径。
+- 将遵循命名约定：新增 helper 使用 `snake_case`，常量使用全大写下划线命名。
+- 将遵循代码风格：仅在 `connector.rs` 做条件分流，不改 manager、UI 和第三方库。
+- 确认不重复造轮子：已检查第三方 `llm-connector`，项目侧只需选择合适 client，无需重写 Aliyun 协议。
+
+## 编码后声明 - aliyun-qwen35-url
+时间：2026-03-25 10:32:13 +0800
+
+### 1. 复用了以下既有组件
+- `LlmClient::openai_compatible`：用于阿里云 `qwen3.5-*` 默认切到官方 compatible-mode。
+- `LlmClient::aliyun` / `aliyun_private`：普通阿里云模型和已有私有地址仍沿用旧路径。
+- `ProviderConfig.model/api_base`：作为模型路由和显式 compatible-mode 判断依据。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `aliyun_base_url`、`aliyun_prefers_compatible_mode`，保持 Rust `snake_case`。
+- 代码风格：继续沿用 `match ProviderType` 的最小条件分流结构。
+- 文件组织：只修改 `crates/core/src/llm/connector.rs`，未扩散到其他模块。
+
+### 3. 对比了以下相似实现
+- `connector.rs` 既有 provider 常量和 `provider_base_url`：本次沿相同模式补阿里云专属 helper。
+- 第三方 `AliyunProtocol::chat_endpoint`：确认原生协议固定命中文本生成 URL，是当前问题根因。
+- 第三方 `openai_compatible` 客户端：确认可直接复用以对接阿里云官方 compatible-mode。
+
+### 4. 未重复造轮子的证明
+- 未修改 `llm-connector` 第三方 crate。
+- 未新增新的协议解析器，只是根据模型选择现有 client 构造路径。
+
+## 验证记录 - aliyun-qwen35-url
+- `rustfmt --edition 2024 crates/core/src/llm/connector.rs`：通过。
+- `cargo test -p one-core aliyun_prefers_compatible_mode --lib`：通过。
+- `cargo check -p one-core`：通过。
+
+## 编码前检查 - aliyun-provider-cache
+时间：2026-03-25 10:38:33 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-aliyun-provider-cache.md`
+- 将使用以下可复用组件：
+  - `ProviderManager::get_provider`：provider 缓存和重建的唯一入口。
+  - `ChatStreamProcessor::run_stream`：ai_chat 链路创建 provider 的实际位置。
+  - `ProviderConfig`：作为缓存签名和运行时选中模型覆盖的承载对象。
+- 将遵循命名约定：缓存 helper 使用 `snake_case`，内部结构体使用简单职责命名。
+- 将遵循代码风格：不重构 provider 层，只增强缓存命中条件并补齐 ai_chat 的模型覆盖。
+- 确认不重复造轮子：db_view 侧已有“构造 provider 用当前选中模型”的模式，ai_chat 侧应对齐而非另起新方案。
+
+## 编码后声明 - aliyun-provider-cache
+时间：2026-03-25 10:38:33 +0800
+
+### 1. 复用了以下既有组件
+- `ProviderManager`：继续作为 provider 缓存唯一入口，只增强缓存签名判断。
+- `ProviderConfig`：复用现有字段构造缓存签名，不新增额外配置对象。
+- `ChatStreamProcessor`：只在创建 provider 前把 `selected_model` 回写到临时 config。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `ProviderCacheEntry` 和 `provider_cache_signature`，保持 Rust 风格。
+- 代码风格：继续沿用集中式 manager 缓存，未把 provider 选择逻辑散落到 UI。
+- 文件组织：只修改 `llm/manager.rs` 与 `ai_chat/stream.rs`。
+
+### 3. 对比了以下相似实现
+- `db_view/src/chatdb/chat_panel.rs`：这里构造 `ProviderConfig` 时已经会写入当前选中模型，本次让 ai_chat 路径对齐。
+- `llm/manager.rs` 原缓存逻辑：确认只按 `id` 复用，是本次真实根因之一。
+- `llm/connector.rs` 的阿里云模型路由补丁：确认需要与缓存修复同时存在才会在运行时生效。
+
+### 4. 未重复造轮子的证明
+- 没有新增第二套 provider 缓存层。
+- 没有在多个调用方分别绕过缓存，而是在 manager 内统一修正缓存命中规则。
+
+## 验证记录 - aliyun-provider-cache
+- `rustfmt --edition 2024 crates/core/src/llm/manager.rs crates/core/src/ai_chat/stream.rs`：通过。
+- `cargo test -p one-core provider_cache_signature_changes_with_model --lib`：通过。
+- `cargo check -p one-core`：通过。
+
+## 编码前检查 - db-tree-refresh-tokio-runtime
+时间：2026-03-25 10:45:01 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-tree-refresh-tokio-runtime.md`
+- 将使用以下可复用组件：
+  - `one_core::gpui_tokio::Tokio`：项目统一 Tokio runtime 包装。
+  - `GlobalNodeCache`：现有缓存失效入口，不改接口。
+  - `db_tree_view` 里已有 `Tokio::spawn_result` 持久化模式：作为刷新逻辑的对齐参考。
+- 将遵循命名约定：继续使用现有 `snake_case` 和中文日志。
+- 将遵循代码风格：只改 `refresh_tree` 的任务调度方式，不扩散到缓存实现层。
+- 确认不重复造轮子：已检查 `gpui_tokio.rs`、`db_connection_form.rs`、`db_tree_view.rs` 既有模式，无需自建 runtime 或新增 helper。
+
+## 编码后声明 - db-tree-refresh-tokio-runtime
+时间：2026-03-25 10:45:01 +0800
+
+### 1. 复用了以下既有组件
+- `one_core::gpui_tokio::Tokio`：用于把缓存失效 future 切到 Tokio runtime。
+- `GlobalNodeCache`：继续作为节点缓存和元数据失效的唯一入口。
+- `cx.spawn` + `this.update`：继续沿用 GPUI 侧后台任务结束后更新树的模式。
+
+### 2. 遵循了以下项目约定
+- 命名约定：沿用现有局部变量命名，没有新增额外抽象。
+- 代码风格：只调整 `refresh_tree` 中的后台执行边界，未修改 `NodeCache` 接口和行为。
+- 文件组织：改动集中在 `crates/db_view/src/db_tree_view.rs`。
+
+### 3. 对比了以下相似实现
+- `db_tree_view.rs` 的 `save_database_filter`：这里已经通过 `Tokio::spawn_result` 处理存储后台任务，本次刷新逻辑向它对齐。
+- `db_connection_form.rs` 的连接测试：同样在 `cx.spawn` 内使用 `Tokio::spawn_result` 执行依赖 Tokio 的异步工作。
+- `gpui_tokio.rs`：确认项目官方做法就是通过共享 runtime handle 调度 Tokio future。
+
+### 4. 未重复造轮子的证明
+- 没有在 `cache.rs` 中新增运行时判断或自建 runtime。
+- 没有引入第二套缓存失效接口，只是把原有调用放到正确的执行器上。
+
+## 验证记录 - db-tree-refresh-tokio-runtime
+- `rustfmt --edition 2024 crates/db_view/src/db_tree_view.rs`：通过。
+- `cargo check -p db_view`：通过。
+- `cargo test -p db_view sync_selected_databases_from_connection --lib`：通过。

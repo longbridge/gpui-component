@@ -13,6 +13,7 @@ pub type ChatStream = Pin<Box<dyn Stream<Item = Result<StreamingResponse>> + Sen
 const OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com";
 const ALIYUN_BASE_URL: &str = "https://dashscope.aliyuncs.com";
+const ALIYUN_COMPATIBLE_BASE_URL: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const ZHIPU_BASE_URL: &str = "https://open.bigmodel.cn";
 const OLLAMA_BASE_URL: &str = "http://localhost:11434";
 const VOLCENGINE_BASE_URL: &str = "https://ark.cn-beijing.volces.com/api/v3";
@@ -60,7 +61,10 @@ impl LlmConnector {
                     .api_key
                     .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("API key required for Aliyun"))?;
-                if let Some(base_url) = &config.api_base {
+                if aliyun_prefers_compatible_mode(config) {
+                    let base_url = aliyun_base_url(config);
+                    LlmClient::openai_compatible(api_key, base_url, &config.name)?
+                } else if let Some(base_url) = &config.api_base {
                     LlmClient::aliyun_private(api_key, base_url)?
                 } else {
                     LlmClient::aliyun(api_key, ALIYUN_BASE_URL)?
@@ -165,6 +169,22 @@ fn provider_base_url<'a>(config: &'a ProviderConfig, default_base_url: &'static 
     config.api_base.as_deref().unwrap_or(default_base_url)
 }
 
+fn aliyun_base_url(config: &ProviderConfig) -> &str {
+    config
+        .api_base
+        .as_deref()
+        .unwrap_or(ALIYUN_COMPATIBLE_BASE_URL)
+}
+
+fn aliyun_prefers_compatible_mode(config: &ProviderConfig) -> bool {
+    config.model.starts_with("qwen3.5-")
+        || config
+            .api_base
+            .as_deref()
+            .map(|base_url| base_url.contains("/compatible-mode/"))
+            .unwrap_or(false)
+}
+
 #[async_trait]
 impl LlmProvider for LlmConnector {
     async fn chat(&self, request: &ChatRequest) -> Result<String> {
@@ -228,5 +248,45 @@ mod tests {
         let config = ProviderConfig::default();
 
         assert_eq!(provider_base_url(&config, OLLAMA_BASE_URL), OLLAMA_BASE_URL);
+    }
+
+    #[test]
+    fn aliyun_prefers_compatible_mode_for_qwen35_models() {
+        let config = ProviderConfig {
+            provider_type: ProviderType::Aliyun,
+            model: "qwen3.5-plus".to_string(),
+            ..Default::default()
+        };
+
+        assert!(aliyun_prefers_compatible_mode(&config));
+        assert_eq!(aliyun_base_url(&config), ALIYUN_COMPATIBLE_BASE_URL);
+    }
+
+    #[test]
+    fn aliyun_prefers_compatible_mode_for_explicit_compatible_base_url() {
+        let config = ProviderConfig {
+            provider_type: ProviderType::Aliyun,
+            api_base: Some("https://dashscope.aliyuncs.com/compatible-mode/v1".to_string()),
+            model: "qwen-plus".to_string(),
+            ..Default::default()
+        };
+
+        assert!(aliyun_prefers_compatible_mode(&config));
+        assert_eq!(
+            aliyun_base_url(&config),
+            "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        );
+    }
+
+    #[test]
+    fn aliyun_keeps_private_protocol_for_non_compatible_models() {
+        let config = ProviderConfig {
+            provider_type: ProviderType::Aliyun,
+            api_base: Some("https://dashscope.aliyuncs.com".to_string()),
+            model: "qwen-plus".to_string(),
+            ..Default::default()
+        };
+
+        assert!(!aliyun_prefers_compatible_mode(&config));
     }
 }

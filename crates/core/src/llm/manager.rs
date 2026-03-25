@@ -10,8 +10,13 @@ use super::onet_cli_provider::OnetCliLLMProvider;
 use super::types::{ProviderConfig, ProviderType};
 use crate::cloud_sync::client::CloudApiClient;
 
+struct ProviderCacheEntry {
+    signature: String,
+    provider: Arc<dyn LlmProvider>,
+}
+
 pub struct ProviderManager {
-    providers: Arc<DashMap<i64, Arc<dyn LlmProvider>>>,
+    providers: Arc<DashMap<i64, ProviderCacheEntry>>,
     cloud_client: RwLock<Option<Arc<dyn CloudApiClient>>>,
 }
 
@@ -30,9 +35,12 @@ impl ProviderManager {
 
     pub async fn get_provider(&self, config: &ProviderConfig) -> Result<Arc<dyn LlmProvider>> {
         let id = config.id;
+        let signature = provider_cache_signature(config);
 
-        if let Some(provider) = self.providers.get(&id) {
-            return Ok(Arc::clone(&*provider));
+        if let Some(entry) = self.providers.get(&id)
+            && entry.signature == signature
+        {
+            return Ok(Arc::clone(&entry.provider));
         }
 
         if !config.enabled {
@@ -55,7 +63,13 @@ impl ProviderManager {
             }
         };
 
-        self.providers.insert(id, Arc::clone(&provider));
+        self.providers.insert(
+            id,
+            ProviderCacheEntry {
+                signature,
+                provider: Arc::clone(&provider),
+            },
+        );
 
         Ok(provider)
     }
@@ -73,6 +87,19 @@ impl Default for ProviderManager {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn provider_cache_signature(config: &ProviderConfig) -> String {
+    format!(
+        "{}|{}|{}|{}|{}|{}|{}",
+        config.provider_type.as_str(),
+        config.model,
+        config.api_base.as_deref().unwrap_or_default(),
+        config.api_version.as_deref().unwrap_or_default(),
+        config.api_key.as_deref().unwrap_or_default(),
+        config.enabled,
+        config.name
+    )
 }
 
 pub struct GlobalProviderState {
@@ -111,3 +138,27 @@ impl Default for GlobalProviderState {
 }
 
 impl Global for GlobalProviderState {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_cache_signature_changes_with_model() {
+        let base = ProviderConfig {
+            id: 1,
+            provider_type: ProviderType::Aliyun,
+            name: "aliyun".to_string(),
+            api_key: Some("sk-test".to_string()),
+            model: "qwen-plus".to_string(),
+            ..Default::default()
+        };
+        let mut changed = base.clone();
+        changed.model = "qwen3.5-plus".to_string();
+
+        assert_ne!(
+            provider_cache_signature(&base),
+            provider_cache_signature(&changed)
+        );
+    }
+}

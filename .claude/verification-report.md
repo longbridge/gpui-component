@@ -110,6 +110,66 @@
 
 ---
 
+## 审查报告（aliyun-qwen35-url 实现）
+生成时间：2026-03-25 10:32:13 +0800
+
+### 需求完整性检查
+- 目标明确：修复阿里云官方 `qwen3.5-plus` 在 onecli 中因 URL 路径错误导致的 parse error。
+- 范围明确：只调整 `one-core` 的 Aliyun client 路由，不修改第三方 `llm-connector`。
+- 交付物明确：`connector.rs` 最小补丁、单元测试、本地验证、上下文与日志留痕。
+- 风险与依赖明确：仅对 `qwen3.5-*` 或显式 `compatible-mode` 地址切换为 OpenAI 兼容路径，降低对现有普通模型的影响。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：89/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：95/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 根因已修正：[`connector.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/llm/connector.rs#L15) 新增阿里云 compatible-mode 默认地址，并在 [`connector.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/llm/connector.rs#L59) 为 `qwen3.5-*` 与显式 `compatible-mode` 地址改走 `openai_compatible`。
+- 兼容边界清晰：[`connector.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/llm/connector.rs#L145) 的 `aliyun_prefers_compatible_mode` 只匹配明确场景，其余阿里云模型仍保留原生 `aliyun/aliyun_private` 路径。
+- 本地验证有效：`cargo test -p one-core aliyun_prefers_compatible_mode --lib` 与 `cargo check -p one-core` 均已通过。
+
+---
+
+## 审查报告（aliyun-provider-cache 实现）
+生成时间：2026-03-25 10:38:33 +0800
+
+### 需求完整性检查
+- 目标明确：修复阿里云 qwen3.5-plus 在运行时仍复用旧 provider 导致 URL 错误继续存在的问题。
+- 范围明确：仅增强 `ai_chat` provider 创建配置与 `ProviderManager` 缓存命中条件。
+- 交付物明确：缓存签名补丁、模型覆盖补丁、本地验证、上下文与操作留痕。
+- 风险与依赖明确：补丁不会修改第三方库，只影响配置变化时的 provider 重建。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：88/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：98/100
+- 架构一致：96/100
+- 风险评估：91/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 运行时根因已闭环：[`stream.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/ai_chat/stream.rs#L205) 在创建 provider 前把当前 `selected_model` 写回临时 `provider_config.model`。
+- 缓存误复用已修正：[`manager.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/llm/manager.rs#L13) 新增 `ProviderCacheEntry`，[`manager.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/src/llm/manager.rs#L31) 开始按配置签名而非仅按 id 命中缓存。
+- 本地验证有效：`cargo test -p one-core provider_cache_signature_changes_with_model --lib` 与 `cargo check -p one-core` 均已通过。
+
+---
+
 ## 审查报告（db-tree-csv-import-target 实现）
 生成时间：2026-03-24 18:40:00 +0800
 
