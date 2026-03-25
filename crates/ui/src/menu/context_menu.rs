@@ -10,13 +10,13 @@ use gpui::{
 use crate::menu::PopupMenu;
 
 /// A extension trait for adding a context menu to an element.
-pub trait ContextMenuExt: ParentElement + Styled {
+pub trait ContextMenuExt: InteractiveElement + ParentElement + Styled {
     /// Add a context menu to the element.
     ///
     /// This will changed the element to be `relative` positioned, and add a child `ContextMenu` element.
     /// Because the `ContextMenu` element is positioned `absolute`, it will not affect the layout of the parent element.
     fn context_menu(
-        self,
+        mut self,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> ContextMenu<Self>
     where
@@ -24,12 +24,17 @@ pub trait ContextMenuExt: ParentElement + Styled {
     {
         // Generate a unique ID based on the element's memory address to ensure
         // each context menu has its own state and doesn't share with others
-        let id = format!("context-menu-{:p}", &self as *const _);
+        let id = self
+            .interactivity()
+            .element_id
+            .clone()
+            .map(|id| format!("context-menu-{:?}", id))
+            .unwrap_or_else(|| format!("context-menu-{:p}", &self as *const _));
         ContextMenu::new(id, self).menu(f)
     }
 }
 
-impl<E: ParentElement + Styled> ContextMenuExt for E {}
+impl<E: InteractiveElement + ParentElement + Styled> ContextMenuExt for E {}
 
 /// A context menu that can be shown on right-click.
 pub struct ContextMenu<E: ParentElement + Styled + Sized> {
