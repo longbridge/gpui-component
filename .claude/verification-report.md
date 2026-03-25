@@ -228,3 +228,34 @@
 - 打开的树视图也会同步筛选状态：[`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L725) 现在会从传入的 `StoredConnection` 刷新 `selected_databases`。
 - 纯逻辑测试已覆盖“保留筛选”和“恢复全选”：[`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L2669)。
 - 本地验证有效：`cargo test -p db_view sync_selected_databases_from_connection --lib` 与 `cargo check -p db_view` 均已通过。
+
+---
+
+## 审查报告（db-tree-refresh-tokio-runtime 实现）
+生成时间：2026-03-25 10:45:01 +0800
+
+### 需求完整性检查
+- 目标明确：修复数据库树刷新时因 `tokio::fs` 在非 Tokio runtime 中执行而触发 panic 的问题。
+- 范围明确：限定在 `db_tree_view` 的刷新任务调度，不改缓存模块公开接口。
+- 交付物明确：运行时切换修复、本地编译验证、现有测试回归、上下文与操作留痕。
+- 风险与依赖明确：依赖项目已有 `Tokio` 包装，风险主要是后台任务调度边界调整。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：86/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：98/100
+- 风险评估：92/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 根因已闭环：[`cache.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/cache.rs#L277) 的缓存失效逻辑使用 `tokio::fs`，而 [`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L1128) 之前在 GPUI task 中直接 await，运行时上下文不匹配。
+- 修复符合项目既有模式：[`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L1128) 现在通过 `Tokio::spawn` 把缓存和元数据失效切到共享 Tokio runtime，再回 UI 线程重建树。
+- 失败可见性更好：[`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L1147) 新增 Tokio 任务失败日志，避免异常被静默吞掉。
+- 本地验证有效：`cargo check -p db_view` 与 `cargo test -p db_view sync_selected_databases_from_connection --lib` 均已通过。

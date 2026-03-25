@@ -1120,20 +1120,31 @@ impl DbTreeView {
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             if let Some(cache) = cache {
-                if let Some(cache_ctx) = cache_ctx.as_ref() {
-                    cache
-                        .invalidate_node_recursive(cache_ctx, &refresh_node_id_for_task)
-                        .await;
-                }
+                let cache_ctx = cache_ctx.clone();
+                let connection_id = connection_id.clone();
+                let refresh_scope = refresh_scope.clone();
+                let refresh_node_id = refresh_node_id_for_task.clone();
 
-                match refresh_scope {
-                    RefreshMetadataScope::None => {}
-                    RefreshMetadataScope::Connection => {
-                        cache.invalidate_connection_metadata(&connection_id).await;
+                if let Err(err) = Tokio::spawn(cx, async move {
+                    if let Some(cache_ctx) = cache_ctx.as_ref() {
+                        cache
+                            .invalidate_node_recursive(cache_ctx, &refresh_node_id)
+                            .await;
                     }
-                    RefreshMetadataScope::Database(database) => {
-                        cache.invalidate_database(&connection_id, &database).await;
+
+                    match refresh_scope {
+                        RefreshMetadataScope::None => {}
+                        RefreshMetadataScope::Connection => {
+                            cache.invalidate_connection_metadata(&connection_id).await;
+                        }
+                        RefreshMetadataScope::Database(database) => {
+                            cache.invalidate_database(&connection_id, &database).await;
+                        }
                     }
+                })
+                .await
+                {
+                    error!("刷新数据库树缓存时 Tokio 任务失败: {}", err);
                 }
             }
 
