@@ -28,6 +28,7 @@ pub struct InputStory {
     currency_input: Entity<InputState>,
     custom_input: Entity<InputState>,
     code_input: Entity<InputState>,
+    color_input: Entity<InputState>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -94,6 +95,12 @@ impl InputStory {
             InputState::new(window, cx).placeholder("Custom Input use monospace, 0123456789.")
         });
 
+        let color_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Type something...")
+                .default_value("Custom text color input")
+        });
+
         let code_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("json")
@@ -141,6 +148,7 @@ impl InputStory {
             currency_input,
             custom_input,
             code_input,
+            color_input,
             input_text_centered,
             input_text_right,
             _subscriptions,
@@ -296,6 +304,11 @@ impl Render for InputStory {
                         .w_full()
                         .child(Input::new(&self.custom_input).appearance(false)),
                 ),
+            )
+            .child(
+                section("Custom Text Color")
+                    .max_w_md()
+                    .child(Input::new(&self.color_input).text_color(cx.theme().info)),
             )
             .child(
                 section("Single line code editor").max_w_md().child(
