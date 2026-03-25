@@ -8,29 +8,29 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
 use gpui_component::scroll::{Scrollbar, ScrollbarHandle, ScrollbarShow};
-use gpui_component::{kbd::Kbd, BlinkCursor, Icon, IconName, Sizable, WindowExt};
+use gpui_component::{BlinkCursor, Icon, IconName, Sizable, WindowExt, kbd::Kbd};
 use std::borrow::Cow;
 use std::cell::{Cell as StdCell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::addon::{
-    register_default_addons, AddonManager, SearchAddon, TerminalAddonFrameContext,
-    TerminalAddonMouseContext,
+    AddonManager, SearchAddon, TerminalAddonFrameContext, TerminalAddonMouseContext,
+    register_default_addons,
 };
 use crate::sidebar::{SidebarPanel, TerminalSidebar, TerminalSidebarEvent};
 use crate::terminal_element::{RenderCache, TerminalElement};
-use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
+use crate::theme::{DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE, TerminalTheme};
 use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH};
 use one_core::storage::models::{ActiveConnections, StoredConnection};
 use one_core::tab_container::{TabContent, TabContentEvent};
-use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
+use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
 use rust_i18n::t;
 use std::ops::Deref;
+use terminal::LocalConfig;
 use terminal::terminal::{
     ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent, TerminalScrollProxy,
 };
-use terminal::LocalConfig;
 
 actions!(
     terminal_view,
@@ -108,6 +108,85 @@ fn alt_screen_scroll_arrow(lines: i32, app_cursor: bool) -> Option<&'static str>
         (false, true) => "\x1bOB",  // Down, application mode
         (false, false) => "\x1b[B", // Down, normal mode
     })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UnbracketedPasteHazard {
+    HereDoc,
+    UnterminatedQuote,
+    LineContinuation,
+}
+
+fn multiline_non_empty_line_count(text: &str) -> usize {
+    text.lines().filter(|line| !line.trim().is_empty()).count()
+}
+
+fn contains_heredoc_operator(text: &str) -> bool {
+    text.lines().any(|line| {
+        let line = line.trim_start();
+        !line.is_empty() && !line.starts_with('#') && line.contains("<<")
+    })
+}
+
+fn has_trailing_line_continuation(text: &str) -> bool {
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
+        if lines.peek().is_none() {
+            break;
+        }
+
+        let trimmed = line.trim_end();
+        if !trimmed.is_empty() && trimmed.ends_with('\\') {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn has_unterminated_shell_quote(text: &str) -> bool {
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    let mut escaped = false;
+
+    for ch in text.chars() {
+        if in_single_quote {
+            if ch == '\'' {
+                in_single_quote = false;
+            }
+            continue;
+        }
+
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => escaped = true,
+            '\'' => in_single_quote = true,
+            '"' => in_double_quote = !in_double_quote,
+            _ => {}
+        }
+    }
+
+    in_single_quote || in_double_quote
+}
+
+fn detect_unbracketed_paste_hazard(text: &str) -> Option<UnbracketedPasteHazard> {
+    if contains_heredoc_operator(text) {
+        return Some(UnbracketedPasteHazard::HereDoc);
+    }
+
+    if has_trailing_line_continuation(text) {
+        return Some(UnbracketedPasteHazard::LineContinuation);
+    }
+
+    if has_unterminated_shell_quote(text) {
+        return Some(UnbracketedPasteHazard::UnterminatedQuote);
+    }
+
+    None
 }
 
 fn terminal_shortcut_label(shortcut: &str) -> SharedString {
@@ -1179,9 +1258,17 @@ impl TerminalView {
             return;
         }
 
-        let is_multiline = text.lines().filter(|line| !line.trim().is_empty()).count() > 1;
-        if self.confirm_multiline_paste && is_multiline && !mode.contains(TermMode::BRACKETED_PASTE)
-        {
+        let is_bracketed_paste = mode.contains(TermMode::BRACKETED_PASTE);
+
+        if !is_bracketed_paste {
+            if let Some(hazard) = detect_unbracketed_paste_hazard(text) {
+                self.show_unbracketed_paste_block_dialog(text, hazard, window, cx);
+                return;
+            }
+        }
+
+        let is_multiline = multiline_non_empty_line_count(text) > 1;
+        if self.confirm_multiline_paste && is_multiline && !is_bracketed_paste {
             self.show_paste_confirm_dialog(
                 text.to_string(),
                 t!("TerminalView.multiline_paste_title").to_string(),
@@ -1214,6 +1301,15 @@ impl TerminalView {
         self.paste_text(code, window, cx);
     }
 
+    fn paste_preview_text(text: &str) -> String {
+        let preview = text.lines().take(6).collect::<Vec<_>>().join("\n");
+        if text.lines().count() > 6 {
+            format!("{preview}\n...")
+        } else {
+            preview
+        }
+    }
+
     fn show_paste_confirm_dialog(
         &mut self,
         text: String,
@@ -1222,18 +1318,12 @@ impl TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let preview = text.lines().take(6).collect::<Vec<_>>().join("\n");
-        let has_more = text.lines().count() > 6;
+        let preview_text = Self::paste_preview_text(&text);
         let view = cx.entity().clone();
 
         window.open_dialog(cx, move |dialog, _window, _cx| {
             let view_ok = view.clone();
             let text_ok = text.clone();
-            let preview_text = if has_more {
-                format!("{}\n...", preview)
-            } else {
-                preview.clone()
-            };
 
             dialog
                 .title(title.clone())
@@ -1250,7 +1340,7 @@ impl TerminalView {
                                 .max_h(px(180.0))
                                 .overflow_hidden()
                                 .text_xs()
-                                .child(preview_text),
+                                .child(preview_text.clone()),
                         )
                         .into_any_element(),
                 )
@@ -1265,6 +1355,51 @@ impl TerminalView {
                     });
                     true
                 })
+        });
+    }
+
+    fn show_unbracketed_paste_block_dialog(
+        &mut self,
+        text: &str,
+        hazard: UnbracketedPasteHazard,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let title = t!("TerminalView.unbracketed_paste_block_title").to_string();
+        let message = match hazard {
+            UnbracketedPasteHazard::HereDoc => {
+                t!("TerminalView.unbracketed_paste_heredoc_message").to_string()
+            }
+            UnbracketedPasteHazard::UnterminatedQuote => {
+                t!("TerminalView.unbracketed_paste_quote_message").to_string()
+            }
+            UnbracketedPasteHazard::LineContinuation => {
+                t!("TerminalView.unbracketed_paste_continuation_message").to_string()
+            }
+        };
+        let preview_text = Self::paste_preview_text(text);
+
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            dialog
+                .title(title.clone())
+                .alert()
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_2()
+                        .child(div().text_sm().child(message.clone()))
+                        .child(div().text_xs().child(t!("TerminalView.paste_preview")))
+                        .child(
+                            div()
+                                .max_h(px(180.0))
+                                .overflow_hidden()
+                                .text_xs()
+                                .child(preview_text.clone()),
+                        )
+                        .into_any_element(),
+                )
+                .button_props(DialogButtonProps::default().ok_text(t!("Common.close")))
         });
     }
 
@@ -2475,7 +2610,11 @@ impl Element for ResizeEventHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::{alt_screen_scroll_arrow, take_whole_scroll_lines};
+    use super::{
+        UnbracketedPasteHazard, alt_screen_scroll_arrow, detect_unbracketed_paste_hazard,
+        has_trailing_line_continuation, has_unterminated_shell_quote,
+        multiline_non_empty_line_count, take_whole_scroll_lines,
+    };
 
     #[test]
     fn take_whole_scroll_lines_preserves_fractional_remainder() {
@@ -2510,5 +2649,48 @@ mod tests {
         assert_eq!(alt_screen_scroll_arrow(-1, false), Some("\x1b[B"));
         assert_eq!(alt_screen_scroll_arrow(-1, true), Some("\x1bOB"));
         assert_eq!(alt_screen_scroll_arrow(0, false), None);
+    }
+
+    #[test]
+    fn multiline_non_empty_line_count_ignores_blank_lines() {
+        assert_eq!(multiline_non_empty_line_count("echo 1\n\n echo 2\n"), 2);
+        assert_eq!(multiline_non_empty_line_count("echo 1"), 1);
+    }
+
+    #[test]
+    fn detect_unbracketed_paste_hazard_matches_heredoc() {
+        let text = "cat <<EOF\nhello\nEOF";
+        assert_eq!(
+            detect_unbracketed_paste_hazard(text),
+            Some(UnbracketedPasteHazard::HereDoc)
+        );
+    }
+
+    #[test]
+    fn detect_unbracketed_paste_hazard_matches_line_continuation() {
+        assert!(has_trailing_line_continuation("echo hello \\\nworld"));
+        assert_eq!(
+            detect_unbracketed_paste_hazard("echo hello \\\nworld"),
+            Some(UnbracketedPasteHazard::LineContinuation)
+        );
+    }
+
+    #[test]
+    fn detect_unbracketed_paste_hazard_matches_unterminated_quote() {
+        assert!(has_unterminated_shell_quote("printf 'hello\nworld"));
+        assert_eq!(
+            detect_unbracketed_paste_hazard("printf 'hello\nworld"),
+            Some(UnbracketedPasteHazard::UnterminatedQuote)
+        );
+    }
+
+    #[test]
+    fn detect_unbracketed_paste_hazard_ignores_plain_text() {
+        assert_eq!(
+            detect_unbracketed_paste_hazard("printf '%s\\n' hello"),
+            None
+        );
+        assert!(!has_unterminated_shell_quote("printf '%s\\n' hello"));
+        assert!(!has_trailing_line_continuation("echo hello\necho world"));
     }
 }
