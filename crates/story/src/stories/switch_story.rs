@@ -14,6 +14,8 @@ pub struct SwitchStory {
     switch1: bool,
     switch2: bool,
     switch3: bool,
+    switch4: bool,
+    switch5: bool,
 }
 
 impl super::Story for SwitchStory {
@@ -41,6 +43,8 @@ impl SwitchStory {
             switch1: true,
             switch2: false,
             switch3: true,
+            switch4: true,
+            switch5: false,
         }
     }
 }
@@ -127,6 +131,39 @@ impl Render for SwitchStory {
                                 println!("Switch value changed: {:?}", ev);
                             }),
                     ),
+            )
+            .child(
+                section("Custom Color").child(
+                    h_flex()
+                        .gap_4()
+                        .child(
+                            Switch::new("switch4")
+                                .checked(self.switch4)
+                                .label("Success")
+                                .color(theme.success)
+                                .on_click(cx.listener(|view, checked, _, cx| {
+                                    view.switch4 = *checked;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Switch::new("switch5")
+                                .checked(self.switch5)
+                                .label("Destructive")
+                                .color(theme.danger)
+                                .on_click(cx.listener(|view, checked, _, cx| {
+                                    view.switch5 = *checked;
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Switch::new("switch4_disabled")
+                                .checked(true)
+                                .label("Disabled")
+                                .color(theme.success)
+                                .disabled(true),
+                        ),
+                ),
             )
             .child(
                 section("Small Size").child(
