@@ -272,7 +272,7 @@ impl RenderOnce for Input {
             _ => px(6.),
         };
 
-        let (bg, fg) = input_style(state.disabled, cx);
+        let (bg, _) = input_style(state.disabled, cx);
         let bg = if state.mode.is_code_editor() {
             cx.theme().editor_background()
         } else {
@@ -387,7 +387,6 @@ impl RenderOnce for Input {
             })
             .when(self.appearance, |this| {
                 this.bg(bg)
-                    .text_color(fg)
                     .when(self.disabled, |this| this.opacity(0.5))
                     .rounded(cx.theme().radius)
                     .when(self.bordered, |this| {
