@@ -146,20 +146,22 @@ impl TextElement {
             if let Some(line) = line_layout {
                 if cursor_pos.is_none() {
                     let offset = cursor.saturating_sub(prev_lines_offset);
-                    if let Some(pos) = line.position_for_index(offset, last_layout) {
+                    if let Some(pos) =
+                        line.position_for_index(offset, last_layout, state.cursor_line_end_affinity)
+                    {
                         current_row = Some(row);
                         cursor_pos = Some(line_origin + pos);
                     }
                 }
                 if cursor_start.is_none() {
                     let offset = selected_range.start.saturating_sub(prev_lines_offset);
-                    if let Some(pos) = line.position_for_index(offset, last_layout) {
+                    if let Some(pos) = line.position_for_index(offset, last_layout, false) {
                         cursor_start = Some(line_origin + pos);
                     }
                 }
                 if cursor_end.is_none() {
                     let offset = selected_range.end.saturating_sub(prev_lines_offset);
-                    if let Some(pos) = line.position_for_index(offset, last_layout) {
+                    if let Some(pos) = line.position_for_index(offset, last_layout, false) {
                         cursor_end = Some(line_origin + pos);
                     }
                 }
@@ -315,17 +317,25 @@ impl TextElement {
 
             let line_origin = point(px(0.), offset_y);
 
-            let line_cursor_start =
-                line.position_for_index(start_ix.saturating_sub(prev_lines_offset), last_layout);
-            let line_cursor_end =
-                line.position_for_index(end_ix.saturating_sub(prev_lines_offset), last_layout);
+            let line_cursor_start = line.position_for_index(
+                start_ix.saturating_sub(prev_lines_offset),
+                last_layout,
+                false,
+            );
+            let line_cursor_end = line.position_for_index(
+                end_ix.saturating_sub(prev_lines_offset),
+                last_layout,
+                false,
+            );
 
             if line_cursor_start.is_some() || line_cursor_end.is_some() {
                 let start = line_cursor_start
-                    .unwrap_or_else(|| line.position_for_index(0, last_layout).unwrap());
+                    .unwrap_or_else(|| line.position_for_index(0, last_layout, false).unwrap());
 
-                let end = line_cursor_end
-                    .unwrap_or_else(|| line.position_for_index(line.len(), last_layout).unwrap());
+                let end = line_cursor_end.unwrap_or_else(|| {
+                    line.position_for_index(line.len(), last_layout, false)
+                        .unwrap()
+                });
 
                 // Split the selection into multiple items
                 let wrapped_lines =
