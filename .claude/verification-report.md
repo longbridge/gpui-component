@@ -259,3 +259,177 @@
 - 修复符合项目既有模式：[`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L1128) 现在通过 `Tokio::spawn` 把缓存和元数据失效切到共享 Tokio runtime，再回 UI 线程重建树。
 - 失败可见性更好：[`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L1147) 新增 Tokio 任务失败日志，避免异常被静默吞掉。
 - 本地验证有效：`cargo check -p db_view` 与 `cargo test -p db_view sync_selected_databases_from_connection --lib` 均已通过。
+
+---
+
+## 审查报告（db-connection-form-ssl 实现）
+生成时间：2026-03-25 13:35:05 +0800
+
+### 需求完整性检查
+- 目标明确：为 `db_connection_form` 实现可用的 SSL 配置，并让保存的参数真正影响建连逻辑。
+- 范围明确：UI 字段、i18n 文案、MySQL/PostgreSQL 驱动建连、ClickHouse TLS feature、MSSQL 分组调整。
+- 交付物明确：SSL 标签页字段、驱动层参数接入、依赖特性启用、纯逻辑测试、本地验证、上下文与操作留痕。
+- 风险与依赖明确：PostgreSQL 需要外部 TLS connector，MySQL/ClickHouse 需要启用 TLS feature。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：88/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：91/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 表单层已补齐 SSL 配置：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L333) 开始为 MySQL/PostgreSQL/MSSQL/ClickHouse 提供非空 SSL 分组；Oracle 的空白 SSL 标签页已移除。
+- MySQL SSL 已接入：[`mysql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/mysql/connection.rs#L31) 新增 `build_ssl_opts`，根据 `require_ssl/verify_ca/verify_identity/ssl_root_cert_path/tls_hostname_override` 构造 `mysql_async::SslOpts`。
+- PostgreSQL TLS 已接入：[`postgresql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L39) 新增 `ssl_mode` 与 TLS connector 构建逻辑，不再固定 `NoTls`。
+- 依赖特性已对齐：[`Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/Cargo.toml#L94) 为 `mysql_async`、`clickhouse` 开启 TLS feature，并新增 `postgres-native-tls` / `native-tls`。
+- 本地验证有效：`cargo check -p db_view`、`cargo test -p db ssl_ --lib`、`cargo test -p db_view ssl_tab --lib` 全部通过。
+
+---
+
+## 审查报告（db-ssl-rustls-migration 实现）
+生成时间：2026-03-25 14:30:01 +0800
+
+### 需求完整性检查
+- 目标明确：将数据库 SSL 实现从 `native-tls` 迁移到 `rustls`，同时保持 `db_connection_form` 的字段和 `extra_params` 契约不变。
+- 范围明确：工作区依赖、`db` crate 依赖、PostgreSQL connector、MySQL/ClickHouse/MSSQL 的 TLS feature。
+- 交付物明确：依赖迁移、PostgreSQL rustls connector、补充测试、本地验证、上下文与操作留痕。
+- 风险与依赖明确：PostgreSQL 是唯一需要替换 connector 的驱动，其余驱动主要依赖 feature 切换。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：91/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：96/100
+- 风险评估：93/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 依赖已切换到 rustls：[`Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/Cargo.toml#L97) 现改用 `mysql_async` 的 `rustls-tls`、`clickhouse` 的 `rustls-tls-native-roots`、`tokio-postgres-rustls`，并移除了工作区对 `native-tls/postgres-native-tls` 的直接依赖。
+- PostgreSQL connector 已替换：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L209) 通过 `MakeRustlsConnect` 建连，不再依赖 `native_tls::TlsConnector`。
+- 现有参数语义被保留：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L31) 的包装 verifier 仅针对 `ssl_accept_invalid_certs` / `ssl_accept_invalid_hostnames` 放宽对应证书错误，不影响其它 TLS 校验路径。
+- 自定义 CA 仍可用：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L146) 同时支持从 `ssl_root_cert_path` 读取 PEM/DER 证书并叠加到系统根证书。
+- 本地验证有效：`cargo check -p db_view`、`cargo test -p db ssl_ --lib`、`cargo test -p db_view ssl_tab --lib` 全部通过。
+
+---
+
+## 审查补充（mysql-ssh-tls-lab 镜像复用调整）
+生成时间：2026-03-25 15:09:17 +0800
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：78/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：84/100
+
+### 综合评分
+- 89/100
+- 建议：需讨论
+
+### 结论
+- 需求已落实：[`docker-compose.yml`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/docker-compose.yml#L3) 已默认复用 `mysql:8.4.5`，[`verify.sh`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/verify.sh#L10) 与之保持一致。
+- 文档已对齐：[`README.md`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/README.md#L13) 说明了默认镜像与 `MYSQL_IMAGE` 覆盖方式。
+- 当前唯一未闭环项不是 MySQL 镜像，而是 bastion 首次构建依赖的 `ubuntu:24.04` 拉取/构建仍在进行，因此整套 SSH+TLS 自动验证尚未最终通过。
+
+---
+
+## 审查补充（本地 Docker MySQL TLS + 远程 sshd 联调准备）
+生成时间：2026-03-25 16:27:27 +0800
+
+### 技术维度评分
+- 代码质量：92/100
+- 测试覆盖：90/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：97/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 本地 TLS MySQL 已可用：[`docker-compose.yml`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/docker-compose.yml#L2) 的 `mysql` 服务已成功启动，健康检查通过。
+- 容器内 TLS 校验通过：使用 `VERIFY_IDENTITY` 和 CA 文件查询 [`01-init.sql`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/mysql/init/01-init.sql#L1) 初始化的 `smoke_test` 表，结果为 `2`。
+- 宿主机路径也通过：使用本机 `mysql` 客户端连接 `127.0.0.1:33306` 并携带 [`ca.pem`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/mysql/certs/ca.pem#L1) 做 `VERIFY_IDENTITY` 校验成功，说明后续经远程 sshd 反向转发到本地 Docker MySQL 的链路具备基础条件。
+- `host.docker.internal` 校验失败不影响本次方案：证书 SAN 针对的是 `127.0.0.1`/`localhost`/`mysql`，而 onetcli 通过 SSH 隧道建立本地转发后实际连接主机同样是 `127.0.0.1`。 
+
+---
+
+## 审查补充（MySQL rustls provider panic 修复）
+生成时间：2026-03-25 18:40:56 +0800
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：86/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：98/100
+- 架构一致：97/100
+- 风险评估：92/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 根因已闭环：[`mysql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/mysql/connection.rs#L37) 之前在启用 TLS 时直接进入 `mysql_async` 的 rustls connector，但进程级默认 `CryptoProvider` 未安装，导致运行时 panic。
+- 修复方式与仓库既有模式一致：新增 [`rustls_provider.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/rustls_provider.rs#L1) 统一封装 `aws_lc_rs::default_provider().install_default().ok()`，并用 `Once` 保证只初始化一次。
+- 驱动复用已收口：[`mysql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/mysql/connection.rs#L37) 和 [`postgresql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L210) 现在都复用同一个 helper，避免 TLS 初始化逻辑继续分叉。
+- 本地编译验证有效：`cargo check -p db` 已通过。
+
+---
+
+## 审查报告（bracketed-paste-fallback 实现）
+生成时间：2026-03-25 16:12:44 +0800
+
+### 需求完整性检查
+- 目标明确：修复远端未开启 bracketed paste 时，多行粘贴尤其 heredoc 被 shell 错误续行解析的问题。
+- 范围明确：限定在 `TerminalView` 的粘贴入口、相关文案和本地单元测试，不改 `Terminal`/`PTY` 透明传输层。
+- 交付物明确：高风险粘贴拦截、上下文摘要、操作日志、本地测试与审查报告。
+- 风险与依赖明确：shell 结构识别是启发式；依赖 `alacritty_terminal::TermMode` 提供 `ALT_SCREEN` 与 `BRACKETED_PASTE` 状态。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：90/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：98/100
+- 风险评估：92/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 高风险结构已在视图层统一拦截：[`view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/view.rs#L113) 新增 `UnbracketedPasteHazard` 和相关纯函数，覆盖 heredoc、未闭合引号与反斜杠续行。
+- 粘贴决策已从“只确认”升级为“必要时阻断”：[`view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/view.rs#L1231) 在无 `BRACKETED_PASTE` 时先检查高风险块，再决定是否允许进入原有多行确认流程。
+- 协议语义保持正确：[`view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/view.rs#L1252) 的 `paste_text_unchecked` 仍只在远端程序已开启 `BRACKETED_PASTE` 时发送 `\x1b[200~...\x1b[201~`，没有伪造远端能力。
+- 用户提示已补齐：[`main.yml`](/Users/hufei/RustroverProjects/onetcli/main/locales/main.yml#L1169) 新增 `TerminalView` / `TerminalSidebar` 相关文案，避免新对话框显示原始 key。
+- 本地验证有效：`env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p terminal_view --lib` 在沙箱外通过，13 个测试全部通过。
+
+### 剩余风险
+- 当前 shell 结构检测是启发式规则，不覆盖所有复杂复合语法；但已覆盖用户报告的 heredoc 主故障路径和两类常见续行结构。
+- `main/locales/main.yml` 中补入了当前代码已在使用但仓库缺失的 `TerminalView` / `TerminalSidebar` 文案键，若后续有专门的本地化整理任务，可再统一清理同类缺口。

@@ -1427,3 +1427,219 @@
 - `rustfmt --edition 2024 crates/db_view/src/db_tree_view.rs`：通过。
 - `cargo check -p db_view`：通过。
 - `cargo test -p db_view sync_selected_databases_from_connection --lib`：通过。
+
+## 编码前检查 - db-connection-form-ssl
+时间：2026-03-25 13:35:05 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-connection-form-ssl.md`
+- 将使用以下可复用组件：
+  - `DbConnectionConfig.extra_params`：统一承载 SSL 扩展参数。
+  - `DbConnectionForm::build_connection/load_connection`：现有字段保存与回填链路。
+  - `DbConnectionConfig::get_param/get_param_as/get_param_bool`：驱动层读取扩展参数的统一入口。
+  - MSSQL 现有 `encrypt/trust_cert` 实现：作为驱动层 SSL 参数接入模式参考。
+- 将遵循命名约定：字段名和 extra_params key 均使用 `snake_case`。
+- 将遵循代码风格：UI 继续使用 `TabGroup/FormField` 配置式声明；驱动层只在建连阶段读取 SSL 参数，不改抽象边界。
+- 确认不重复造轮子：已检查存储模型和表单序列化逻辑，无需新增 SSL 专用持久化结构。
+
+## 编码后声明 - db-connection-form-ssl
+时间：2026-03-25 13:35:05 +0800
+
+### 1. 复用了以下既有组件
+- `DbConnectionConfig.extra_params`：直接保存 `require_ssl`、`ssl_mode` 等新增字段。
+- `DbConnectionForm::load_connection`：自动回填新增 SSL 字段，无需额外分支。
+- `MSSQL` 驱动已有 `encrypt/trust_cert`：继续沿用原行为，仅调整 UI 分组。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增字段和参数使用 `require_ssl`、`verify_ca`、`ssl_root_cert_path` 等 `snake_case` 名称。
+- 代码风格：保持“表单配置声明 + 驱动层解析参数”的现有架构，不引入新的状态对象。
+- 文件组织：UI 改动集中在 `db_connection_form.rs` 与 `db_view.yml`，驱动改动集中在 `mysql/connection.rs`、`postgresql/connection.rs` 和 Cargo 依赖配置。
+
+### 3. 对比了以下相似实现
+- `db_connection_form.rs` 原空白 `ssl` 标签页：本次用 helper 替换空白配置，并移除 Oracle 的误导性空页。
+- `mssql/connection.rs`：复用了通过 `extra_params` 控制建连行为的方式。
+- 本地依赖源码 `mysql_async` / `tokio-postgres` / `native-tls`：据当前锁定版本 API 接入，不依赖记忆猜测。
+
+### 4. 未重复造轮子的证明
+- 未新增新的连接配置结构或 SSL 专用存储表。
+- 未绕过现有 `DbConnectionConfig`，所有新增能力都通过既有 `extra_params` 和驱动扩展点落地。
+
+## 验证记录 - db-connection-form-ssl
+- `rustfmt --edition 2024 crates/db_view/src/common/db_connection_form.rs crates/db/src/mysql/connection.rs crates/db/src/postgresql/connection.rs`：通过。
+- `cargo check -p db_view`：通过。
+- `cargo test -p db ssl_ --lib`：通过。
+- `cargo test -p db_view ssl_tab --lib`：通过。
+
+## 编码前检查 - db-ssl-rustls-migration
+时间：2026-03-25 14:30:01 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-ssl-rustls-migration.md`
+- 将使用以下可复用组件：
+  - `ReqwestClient` 的 rustls provider 初始化模式：作为仓库内 `rustls 0.23` 既有参考。
+  - `DbConnectionConfig::get_param/get_param_bool`：继续承接 PostgreSQL/MySQL 的 SSL 参数读取。
+  - `MysqlDbConnection::build_ssl_opts`：确认 MySQL 只需 feature 切换，不扩散逻辑改动。
+  - 现有 `PostgresDbConnection::ssl_mode` 与 `Disable/非 Disable` 分支：保留连接流程结构。
+- 将遵循命名约定：继续使用现有 `snake_case` 参数键和中文日志。
+- 将遵循代码风格：依赖调整收敛在 `Cargo.toml`，驱动逻辑集中在 `postgresql/connection.rs`，不新增跨模块抽象。
+- 确认不重复造轮子：已检查仓库内 rustls 初始化模式、现有 SSL 参数契约与驱动 feature 能力，无需自建新的连接配置层。
+
+## 编码后声明 - db-ssl-rustls-migration
+时间：2026-03-25 14:30:01 +0800
+
+### 1. 复用了以下既有组件
+- `DbConnectionConfig.extra_params`：继续承载 `ssl_mode`、`ssl_root_cert_path`、`ssl_accept_invalid_certs`、`ssl_accept_invalid_hostnames`。
+- `PostgresDbConnection::ssl_mode`：保留原参数解析语义。
+- `MysqlDbConnection::build_ssl_opts`：未重写 MySQL TLS 逻辑，只把后端 feature 切到 rustls。
+- `ReqwestClient` 的 rustls provider 初始化模式：PostgreSQL TLS 构造时同样安装默认 provider。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未更改任何已发布的 SSL 参数键，仍使用 `snake_case`。
+- 代码风格：PostgreSQL 继续在建连前集中构造 TLS connector；MySQL/ClickHouse/MSSQL 以依赖 feature 迁移为主。
+- 文件组织：改动集中在根 `Cargo.toml`、`crates/db/Cargo.toml` 与 `crates/db/src/postgresql/connection.rs`。
+
+### 3. 对比了以下相似实现
+- `reqwest_client/src/http_client_tls.rs`：证明仓库已有 `rustls 0.23` 的 provider 初始化方式，本次沿用这一习惯。
+- `mysql/connection.rs`：证明现有 SSL 参数契约已经稳定，迁移时不应改动表单和 `extra_params`。
+- 前一版 `postgresql/connection.rs`：证明连接流程和参数语义已存在，本次只替换 connector 与证书验证实现。
+
+### 4. 未重复造轮子的证明
+- 未新增新的数据库 SSL 配置结构或 UI 字段。
+- 未自行实现 PostgreSQL 的完整 TLS 连接器，而是复用 `tokio-postgres-rustls`。
+- 未把 feature 切换扩散到无关模块，MSSQL/ClickHouse 仍沿用原连接逻辑。
+
+## 验证记录 - db-ssl-rustls-migration
+- `cargo check -p db_view`：通过。
+- `cargo test -p db ssl_ --lib`：通过，7 个匹配测试全部通过。
+- `cargo test -p db_view ssl_tab --lib`：通过。
+
+## 编码前检查 - mysql-ssh-tls-lab-image-reuse
+时间：2026-03-25 15:09:17 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-mysql-ssh-tls-lab.md`
+- 将使用以下可复用组件：
+  - `.claude/mysql-ssh-tls-lab/docker-compose.yml`：当前方案B的服务编排入口。
+  - `.claude/mysql-ssh-tls-lab/verify.sh`：当前方案B的自动验证入口。
+  - `.claude/mysql-ssh-tls-lab/README.md`：当前方案B的参数与步骤说明。
+- 将遵循命名约定：Shell 与 Compose 变量使用全大写 `MYSQL_IMAGE`。
+- 将遵循代码风格：仅调整 `.claude` 下测试辅助文件，不改产品代码模块。
+- 确认不重复造轮子：沿用现有方案B目录结构，只消除内部镜像硬编码。
+
+## 编码后声明 - mysql-ssh-tls-lab-image-reuse
+时间：2026-03-25 15:09:17 +0800
+
+### 1. 复用了以下既有组件
+- `.claude/mysql-ssh-tls-lab/docker-compose.yml`：继续作为 MySQL 与 bastion 的统一编排入口。
+- `.claude/mysql-ssh-tls-lab/verify.sh`：继续作为三段式验证脚本，仅参数化镜像名。
+- `.claude/mysql-ssh-tls-lab/README.md`：继续承载 onetcli 表单填写与运行说明。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增变量名使用 `MYSQL_IMAGE`，符合 shell/compose 环境变量习惯。
+- 代码风格：只在测试辅助层做参数化，不引入新的脚本或目录。
+- 文件组织：改动全部收敛在项目本地 `.claude/mysql-ssh-tls-lab/`。
+
+### 3. 对比了以下相似实现
+- `docker-compose.yml` 原先把 MySQL 服务镜像写死为 `mysql:8.0`：本次改为 `${MYSQL_IMAGE:-mysql:8.4.5}`，保持 compose 语义不变。
+- `verify.sh` 原先只在 `docker run` 阶段写死 `mysql:8.0`：本次与 compose 共用同一个 `MYSQL_IMAGE` 默认值。
+- `README.md` 原先未说明镜像版本来源：本次补充默认值与覆盖方式，保证文档和脚本一致。
+
+### 4. 未重复造轮子的证明
+- 未新增新的测试脚本或第二套 compose 文件。
+- 未改动产品侧 MySQL/SSH/SSL 代码，仅复用现有方案B测试环境并做参数化。
+
+## 验证记录 - mysql-ssh-tls-lab-image-reuse
+- `zsh ./.claude/mysql-ssh-tls-lab/verify.sh`：已重新执行，当前确认默认走 `mysql:8.4.5`；剩余阻塞点是 bastion 首次构建依赖的 `ubuntu:24.04` 拉取/构建尚未完成。
+
+## 执行记录 - mysql-local-ssl-with-remote-sshd
+时间：2026-03-25 16:27:27 +0800
+
+- 复用 `.claude/mysql-ssh-tls-lab` 现有证书和 compose，只启动 `mysql` 服务，不再启动本地 bastion。
+- `docker compose -f ./.claude/mysql-ssh-tls-lab/docker-compose.yml up -d mysql`：通过。
+- `docker compose -f ./.claude/mysql-ssh-tls-lab/docker-compose.yml exec -T mysql mysqladmin ping -h 127.0.0.1 -uroot -prootpass`：通过，服务存活。
+- `docker compose -f ./.claude/mysql-ssh-tls-lab/docker-compose.yml exec -T mysql mysql -h 127.0.0.1 -P 3306 -uappuser -papppass appdb --ssl-mode=VERIFY_IDENTITY --ssl-ca=/etc/mysql/ssl/ca.pem -e "SELECT COUNT(*) AS direct_ssl_rows FROM smoke_test;"`：通过，结果为 `2`。
+- `mysql -h 127.0.0.1 -P 33306 -uappuser -papppass appdb --ssl-mode=VERIFY_IDENTITY --ssl-ca=/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/mysql/certs/ca.pem -e "SELECT COUNT(*) AS host_ssl_rows FROM smoke_test;"`：通过，结果为 `2`。
+- 说明：`docker run ... host.docker.internal:33306` 的证书校验失败是预期现象，因为服务端证书 SAN 不包含 `host.docker.internal`，实际 onetcli 经 SSH 隧道连库时使用的是 `127.0.0.1`，与现有证书 SAN 匹配。
+
+## 编码前检查 - mysql-rustls-provider-fix
+时间：2026-03-25 18:40:56 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-ssl-rustls-migration.md` 与 `.claude/context-summary-mysql-ssh-tls-lab.md`
+- 将使用以下可复用组件：
+  - `crates/reqwest_client/src/http_client_tls.rs`：仓库内既有的 `aws_lc_rs::default_provider().install_default().ok()` 模式。
+  - `crates/db/src/postgresql/connection.rs`：数据库层已存在的 rustls provider 安装逻辑。
+  - `crates/db/src/mysql/connection.rs`：当前 MySQL TLS 入口 `build_ssl_opts`。
+- 将遵循命名约定：公共 helper 使用 `ensure_rustls_crypto_provider`，与现有 `ensure_*` 风格一致。
+- 将遵循代码风格：把 provider 安装收敛成 db crate 公共 helper，避免在多个驱动里继续复制。
+- 确认不重复造轮子：已检查仓库已有 provider 安装实现，只做复用与统一，不引入第二套 TLS 初始化逻辑。
+
+## 编码后声明 - mysql-rustls-provider-fix
+时间：2026-03-25 18:40:56 +0800
+
+### 1. 复用了以下既有组件
+- `reqwest_client::http_client_tls`：沿用仓库既有的 `aws_lc_rs` provider 安装方式。
+- `PostgresDbConnection::build_tls_connector`：改为复用公共 helper，而不是保留重复安装代码。
+- `MysqlDbConnection::build_ssl_opts`：在进入 `mysql_async` rustls connector 前统一安装 provider。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增公共函数名使用 `snake_case`，模块名为 `rustls_provider`。
+- 代码风格：公共逻辑抽到 `crates/db/src/rustls_provider.rs`，驱动层只保留调用。
+- 文件组织：改动集中在 `db` crate 内，不扩散到 UI 或其它业务模块。
+
+### 3. 对比了以下相似实现
+- `crates/reqwest_client/src/http_client_tls.rs`：证明仓库已有安装默认 rustls provider 的成熟写法。
+- `crates/db/src/postgresql/connection.rs`：证明 PostgreSQL 已因 rustls 需要手动安装 provider。
+- `crates/db/src/mysql/connection.rs`：之前缺少同等安装步骤，因此在 `mysql_async` 首次构造 TLS connector 时 panic。
+
+### 4. 未重复造轮子的证明
+- 未在 MySQL 和 PostgreSQL 中各自新增一份相同初始化代码。
+- 新增的 `rustls_provider.rs` 仅封装现有仓库已采用的安装模式，并用 `Once` 保证进程级只初始化一次。
+
+## 验证记录 - mysql-rustls-provider-fix
+- `rustfmt --edition 2021 crates/db/src/rustls_provider.rs crates/db/src/lib.rs crates/db/src/mysql/connection.rs crates/db/src/postgresql/connection.rs`：通过。
+- `cargo check -p db`：通过。
+
+## 编码前检查 - bracketed-paste-fallback
+时间：2026-03-25 15:50:55 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-bracketed-paste-fallback.md`
+- 将使用以下可复用组件：
+  - `TerminalView::paste_text`：统一粘贴入口，继续作为唯一策略决策点。
+  - `TerminalView::show_paste_confirm_dialog`：复用现有确认对话样式。
+  - `TerminalView::contains_high_risk_command`：保留现有高危命令识别逻辑。
+  - `TerminalView::write_to_pty`：统一下发字节流，不新增旁路发送路径。
+- 将遵循命名约定：新增助手函数与测试使用 `snake_case`，中文注释只解释意图和约束。
+- 将遵循代码风格：改动收敛在 `crates/terminal_view/src/view.rs`，保持 `TerminalView -> Terminal -> Backend` 分层不变。
+- 确认不重复造轮子：已检查 `terminal_view`、`terminal`、`pty_backend` 与 sidebar 事件链路，仓库内不存在现成的无 bracketed paste 降级实现。
+- 外部依据：
+  - Context7 `/alacritty/alacritty`：确认 `CSI ? 2004 h/l` 为 bracketed paste 开关。
+  - `alacritty/alacritty`：核对终端仅在应用请求时按 paste 语义处理。
+  - `wezterm/wezterm`：核对“原始写入”和“发送 paste”是分离能力。
+- 本次决策：不在未开启 `BRACKETED_PASTE` 时伪造 `\x1b[200~...\x1b[201~`，而是在 `TerminalView` 层拦截 heredoc 等必须依赖原子块输入的高风险结构。
+
+## 编码后声明 - bracketed-paste-fallback
+时间：2026-03-25 16:12:44 +0800
+
+### 1. 复用了以下既有组件
+- `TerminalView::paste_text`：继续作为快捷键、右键菜单、快捷命令和 AI 代码块的统一粘贴入口。
+- `TerminalView::show_paste_confirm_dialog`：保留原有高危命令确认和普通多行确认的 UI 风格。
+- `TerminalView::write_to_pty`：所有最终发送仍复用既有 PTY 写入入口。
+- `main/locales/main.yml`：补齐 `TerminalView` / `TerminalSidebar` 缺失文案，避免新增提示显示原始 key。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `detect_unbracketed_paste_hazard`、`has_unterminated_shell_quote` 等函数均使用 `snake_case`。
+- 代码风格：把高风险判定拆成纯函数，并在 `view.rs` 底部沿用现有 `#[cfg(test)]` 单测模式。
+- 文件组织：产品逻辑只改 `crates/terminal_view/src/view.rs`，文案只改 `main/locales/main.yml`，未改 `terminal` / `pty_backend`。
+
+### 3. 对比了以下相似实现
+- `paste_text_unchecked` 原本在无 `BRACKETED_PASTE` 时直接原样写入：本次保留其职责，但在进入该函数前新增高风险拦截。
+- `show_paste_confirm_dialog` 原本用于“确认后仍发送”：本次新增 `show_unbracketed_paste_block_dialog`，用于必须阻断的 heredoc / 未闭合结构。
+- `Terminal::write` 与 `PtyWriteBack::write`：继续保持透明字节传输，不把粘贴语义下沉到后端。
+
+### 4. 未重复造轮子的证明
+- 未新增第二条粘贴事件链路，所有入口仍汇聚到 `TerminalView::paste_text`。
+- 未在 SSH、PTY 或 `Terminal` 层实现重复的风险检测逻辑。
+- 未伪造 bracketed paste 协议，而是复用终端现有 mode 判断并补充 view 层降级策略。
+
+## 验证记录 - bracketed-paste-fallback
+- `rustfmt --edition 2024 crates/terminal_view/src/view.rs`：通过。
+- `cargo test -p terminal_view --lib`：首次失败，原因是 `gpui` 的 Metal shader 编译尝试写入 `~/.cache/clang/ModuleCache`，被沙箱拒绝。
+- `env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p terminal_view --lib`：在沙箱内重试仍失败，`gpui` 构建脚本继续写默认 clang 缓存路径。
+- `env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p terminal_view --lib`（沙箱外）：通过，13 个测试全部通过。

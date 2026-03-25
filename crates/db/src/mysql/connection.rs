@@ -1,8 +1,9 @@
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use mysql_async::{prelude::*, Conn, Opts, OptsBuilder, Value};
+use mysql_async::{prelude::*, Conn, Opts, OptsBuilder, SslOpts, Value};
 use one_core::storage::DbConnectionConfig;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
@@ -13,6 +14,7 @@ use crate::connection::{DbConnection, DbError, StreamingProgress};
 use crate::executor::{
     ExecOptions, ExecResult, QueryColumnMeta, QueryResult, SqlErrorInfo, SqlResult, SqlSource,
 };
+use crate::rustls_provider::ensure_rustls_crypto_provider;
 use crate::ssh_tunnel::resolve_connection_target;
 use crate::{format_message, truncate_str, DatabasePlugin};
 use ssh::LocalPortForwardTunnel;
@@ -30,6 +32,49 @@ impl MysqlDbConnection {
             conn: Arc::new(Mutex::new(None)),
             tunnel: None,
         }
+    }
+
+    fn build_ssl_opts(config: &DbConnectionConfig) -> Option<SslOpts> {
+        ensure_rustls_crypto_provider();
+
+        let require_ssl = config.get_param_bool("require_ssl");
+        let verify_ca = config
+            .get_param("verify_ca")
+            .map(|value| value != "false")
+            .unwrap_or(true);
+        let verify_identity = config
+            .get_param("verify_identity")
+            .map(|value| value != "false")
+            .unwrap_or(true);
+        let root_cert_path = config
+            .get_param("ssl_root_cert_path")
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty());
+        let hostname_override = config
+            .get_param("tls_hostname_override")
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty());
+
+        if !require_ssl && verify_ca && verify_identity && root_cert_path.is_none() {
+            return None;
+        }
+
+        let mut ssl_opts = SslOpts::default();
+        if let Some(root_cert_path) = root_cert_path {
+            ssl_opts = ssl_opts.with_root_certs(vec![PathBuf::from(root_cert_path).into()]);
+        }
+        if !verify_ca {
+            ssl_opts = ssl_opts.with_danger_accept_invalid_certs(true);
+        }
+        if !verify_identity {
+            ssl_opts = ssl_opts.with_danger_skip_domain_validation(true);
+        }
+        if let Some(hostname_override) = hostname_override {
+            ssl_opts =
+                ssl_opts.with_danger_tls_hostname_override(Some(hostname_override.to_string()));
+        }
+
+        Some(ssl_opts)
     }
 
     /// Extract value from mysql_async::Value
@@ -259,18 +304,22 @@ impl DbConnection for MysqlDbConnection {
             debug!("[MySQL] Using database: {}", db);
         }
 
+        if let Some(ssl_opts) = Self::build_ssl_opts(config) {
+            opts_builder = opts_builder.ssl_opts(ssl_opts);
+            debug!("[MySQL] SSL/TLS enabled");
+        }
+
         // 获取连接超时，默认 30 秒
         let connect_timeout_secs = config.get_param_as::<u64>("connect_timeout").unwrap_or(30);
 
-        debug!("[MySQL] Establishing connection with timeout {}s...", connect_timeout_secs);
+        debug!(
+            "[MySQL] Establishing connection with timeout {}s...",
+            connect_timeout_secs
+        );
         let opts = Opts::from(opts_builder);
 
         // 使用 tokio::timeout 包装连接操作
-        let conn_result = timeout(
-            Duration::from_secs(connect_timeout_secs),
-            Conn::new(opts),
-        )
-        .await;
+        let conn_result = timeout(Duration::from_secs(connect_timeout_secs), Conn::new(opts)).await;
 
         let conn = match conn_result {
             Ok(Ok(conn)) => conn,
@@ -279,7 +328,10 @@ impl DbConnection for MysqlDbConnection {
                 return Err(DbError::connection_with_source("failed to connect", e));
             }
             Err(_) => {
-                error!("[MySQL] Connection timed out after {}s", connect_timeout_secs);
+                error!(
+                    "[MySQL] Connection timed out after {}s",
+                    connect_timeout_secs
+                );
                 return Err(DbError::connection(format!(
                     "connection timed out after {}s",
                     connect_timeout_secs
@@ -578,7 +630,10 @@ impl DbConnection for MysqlDbConnection {
                             {
                                 Ok(result) => result,
                                 Err(e) => {
-                                    error!("[MySQL] Streaming TX failed to process result: {}, SQL: {}", e, sql_preview);
+                                    error!(
+                                        "[MySQL] Streaming TX failed to process result: {}, SQL: {}",
+                                        e, sql_preview
+                                    );
                                     SqlResult::Error(SqlErrorInfo {
                                         sql: sql.clone(),
                                         message: e.to_string(),
@@ -723,7 +778,10 @@ impl DbConnection for MysqlDbConnection {
                             {
                                 Ok(result) => result,
                                 Err(e) => {
-                                    error!("[MySQL] Streaming TX failed to process result: {}, SQL: {}", e, sql_preview);
+                                    error!(
+                                        "[MySQL] Streaming TX failed to process result: {}, SQL: {}",
+                                        e, sql_preview
+                                    );
                                     SqlResult::Error(SqlErrorInfo {
                                         sql: sql.clone(),
                                         message: e.to_string(),
@@ -802,5 +860,56 @@ impl DbConnection for MysqlDbConnection {
 
         debug!("[MySQL] execute_streaming() completed");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use one_core::storage::DatabaseType;
+
+    fn build_config(extra_params: &[(&str, &str)]) -> DbConnectionConfig {
+        DbConnectionConfig {
+            id: String::new(),
+            database_type: DatabaseType::MySQL,
+            name: "mysql".to_string(),
+            host: "localhost".to_string(),
+            port: 3306,
+            username: "root".to_string(),
+            password: String::new(),
+            database: None,
+            service_name: None,
+            sid: None,
+            workspace_id: None,
+            extra_params: extra_params
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn build_ssl_opts_returns_none_when_ssl_not_requested() {
+        let config = build_config(&[]);
+
+        assert!(MysqlDbConnection::build_ssl_opts(&config).is_none());
+    }
+
+    #[test]
+    fn build_ssl_opts_enables_tls_for_custom_settings() {
+        let config = build_config(&[
+            ("require_ssl", "true"),
+            ("verify_ca", "false"),
+            ("verify_identity", "false"),
+            ("ssl_root_cert_path", "/tmp/ca.pem"),
+            ("tls_hostname_override", "db.internal"),
+        ]);
+
+        let ssl_opts = MysqlDbConnection::build_ssl_opts(&config).expect("SSL 配置应被构造出来");
+
+        assert!(ssl_opts.accept_invalid_certs());
+        assert!(ssl_opts.skip_domain_validation());
+        assert_eq!(ssl_opts.root_certs().len(), 1);
+        assert_eq!(ssl_opts.tls_hostname_override(), Some("db.internal"));
     }
 }

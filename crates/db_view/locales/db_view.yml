@@ -343,6 +343,58 @@ ConnectionForm:
     en: Trust Certificate
     zh-CN: 信任证书
     zh-HK: 信任憑證
+  require_ssl:
+    en: Require SSL
+    zh-CN: 启用 SSL
+    zh-HK: 啟用 SSL
+  verify_ca:
+    en: Verify CA
+    zh-CN: 校验证书链
+    zh-HK: 校驗憑證鏈
+  verify_identity:
+    en: Verify Hostname
+    zh-CN: 校验主机名
+    zh-HK: 校驗主機名稱
+  ssl_root_cert_path:
+    en: Root Certificate
+    zh-CN: 根证书路径
+    zh-HK: 根憑證路徑
+  ssl_root_cert_path_placeholder:
+    en: /path/to/ca.pem
+    zh-CN: /path/to/ca.pem
+    zh-HK: /path/to/ca.pem
+  tls_hostname_override:
+    en: TLS Hostname Override
+    zh-CN: TLS 主机名覆盖
+    zh-HK: TLS 主機名稱覆寫
+  tls_hostname_override_placeholder:
+    en: db.internal.example.com
+    zh-CN: db.internal.example.com
+    zh-HK: db.internal.example.com
+  ssl_mode:
+    en: SSL Mode
+    zh-CN: SSL 模式
+    zh-HK: SSL 模式
+  ssl_mode_disable:
+    en: Disable
+    zh-CN: 禁用
+    zh-HK: 停用
+  ssl_mode_prefer:
+    en: Prefer
+    zh-CN: 优先
+    zh-HK: 優先
+  ssl_mode_require:
+    en: Require
+    zh-CN: 强制
+    zh-HK: 強制
+  ssl_accept_invalid_certs:
+    en: Accept Invalid Certificates
+    zh-CN: 接受无效证书
+    zh-HK: 接受無效憑證
+  ssl_accept_invalid_hostnames:
+    en: Accept Invalid Hostnames
+    zh-CN: 接受主机名不匹配
+    zh-HK: 接受主機名稱不匹配
 
   # Oracle 特定
   username_schema:

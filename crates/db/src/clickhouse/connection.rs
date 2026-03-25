@@ -12,8 +12,8 @@ use serde::Deserialize;
 use ssh::LocalPortForwardTunnel;
 use std::time::{Duration, Instant};
 
-use tokio::time::timeout;
 use tokio::sync::mpsc;
+use tokio::time::timeout;
 use tracing::{debug, error, info};
 
 pub struct ClickHouseDbConnection {
@@ -233,7 +233,10 @@ impl DbConnection for ClickHouseDbConnection {
 
         // 获取连接超时，默认 30 秒
         let connect_timeout_secs = config.get_param_as::<u64>("connect_timeout").unwrap_or(30);
-        debug!("[ClickHouse] Testing connection with timeout {}s...", connect_timeout_secs);
+        debug!(
+            "[ClickHouse] Testing connection with timeout {}s...",
+            connect_timeout_secs
+        );
 
         // 使用 tokio::timeout 包装连接测试
         let test_result = timeout(
@@ -249,7 +252,10 @@ impl DbConnection for ClickHouseDbConnection {
                 return Err(DbError::connection_with_source("failed to connect", e));
             }
             Err(_) => {
-                error!("[ClickHouse] Connection timed out after {}s", connect_timeout_secs);
+                error!(
+                    "[ClickHouse] Connection timed out after {}s",
+                    connect_timeout_secs
+                );
                 return Err(DbError::connection(format!(
                     "connection timed out after {}s",
                     connect_timeout_secs

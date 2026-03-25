@@ -1,20 +1,118 @@
+use std::fs;
+use std::io::BufReader;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
 use one_core::storage::DbConnectionConfig;
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{
+    CertificateError, ClientConfig as RustlsClientConfig, DigitallySignedStruct,
+    Error as RustlsError, RootCertStore, SignatureScheme,
+};
 use tokio::sync::Mutex;
-use tokio_postgres::{types::Type, Client, Config, NoTls, Row, Statement};
-use tracing::{debug, error, info};
+use tokio_postgres::{config::SslMode, types::Type, Client, Config, NoTls, Row, Statement};
+use tokio_postgres_rustls::MakeRustlsConnect;
+use tracing::{debug, error, info, warn};
 
 use crate::connection::{DbConnection, DbError, StreamingProgress};
 use crate::executor::{
     ExecOptions, ExecResult, QueryColumnMeta, QueryResult, SqlErrorInfo, SqlResult, SqlSource,
 };
+use crate::rustls_provider::ensure_rustls_crypto_provider;
 use crate::ssh_tunnel::resolve_connection_target;
 use crate::{format_message, truncate_str, DatabasePlugin};
 use ssh::LocalPortForwardTunnel;
 use tokio::sync::mpsc;
+
+#[derive(Debug)]
+struct PostgresServerCertVerifier {
+    inner: Arc<dyn ServerCertVerifier>,
+    accept_invalid_certs: bool,
+    accept_invalid_hostnames: bool,
+}
+
+impl PostgresServerCertVerifier {
+    fn new(
+        inner: Arc<dyn ServerCertVerifier>,
+        accept_invalid_certs: bool,
+        accept_invalid_hostnames: bool,
+    ) -> Self {
+        Self {
+            inner,
+            accept_invalid_certs,
+            accept_invalid_hostnames,
+        }
+    }
+
+    fn should_ignore_certificate_error(&self, error: &CertificateError) -> bool {
+        if self.accept_invalid_certs {
+            return self.accept_invalid_hostnames
+                || !matches!(
+                    error,
+                    CertificateError::NotValidForName
+                        | CertificateError::NotValidForNameContext { .. }
+                );
+        }
+
+        self.accept_invalid_hostnames
+            && matches!(
+                error,
+                CertificateError::NotValidForName | CertificateError::NotValidForNameContext { .. }
+            )
+    }
+}
+
+impl ServerCertVerifier for PostgresServerCertVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        server_name: &ServerName<'_>,
+        ocsp_response: &[u8],
+        now: UnixTime,
+    ) -> Result<ServerCertVerified, RustlsError> {
+        match self.inner.verify_server_cert(
+            end_entity,
+            intermediates,
+            server_name,
+            ocsp_response,
+            now,
+        ) {
+            Ok(verified) => Ok(verified),
+            Err(RustlsError::InvalidCertificate(error))
+                if self.should_ignore_certificate_error(&error) =>
+            {
+                Ok(ServerCertVerified::assertion())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, RustlsError> {
+        self.inner.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, RustlsError> {
+        self.inner.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.inner.supported_verify_schemes()
+    }
+}
 
 pub struct PostgresDbConnection {
     config: DbConnectionConfig,
@@ -29,6 +127,118 @@ impl PostgresDbConnection {
             client: Arc::new(Mutex::new(None)),
             tunnel: None,
         }
+    }
+
+    fn ssl_mode(config: &DbConnectionConfig) -> SslMode {
+        match config
+            .get_param("ssl_mode")
+            .map(|value| value.trim().to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("disable") => SslMode::Disable,
+            Some("require") => SslMode::Require,
+            _ => SslMode::Prefer,
+        }
+    }
+
+    fn load_root_certificates(path: &Path) -> Result<Vec<CertificateDer<'static>>, DbError> {
+        let cert_bytes = fs::read(path).map_err(|error| {
+            DbError::connection(format!(
+                "failed to read PostgreSQL root certificate: {}",
+                error
+            ))
+        })?;
+
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some("der") => Ok(vec![CertificateDer::from(cert_bytes)]),
+            _ => {
+                let mut reader = BufReader::new(cert_bytes.as_slice());
+                let certificates = rustls_pemfile::certs(&mut reader)
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| {
+                        DbError::connection_with_source("invalid PEM certificate", error)
+                    })?;
+
+                if certificates.is_empty() {
+                    return Err(DbError::connection(
+                        "PostgreSQL root certificate file does not contain any certificates",
+                    ));
+                }
+
+                Ok(certificates)
+            }
+        }
+    }
+
+    fn build_root_cert_store(config: &DbConnectionConfig) -> Result<RootCertStore, DbError> {
+        let mut root_store = RootCertStore::empty();
+        let native_certificates = rustls_native_certs::load_native_certs();
+
+        for error in native_certificates.errors {
+            warn!(
+                "[PostgreSQL] Failed to load native root certificate: {}",
+                error
+            );
+        }
+        for certificate in native_certificates.certs {
+            root_store.add(certificate).map_err(|error| {
+                DbError::connection_with_source(
+                    "failed to add native PostgreSQL root certificate",
+                    error,
+                )
+            })?;
+        }
+
+        if let Some(path) = config
+            .get_param("ssl_root_cert_path")
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+        {
+            for certificate in Self::load_root_certificates(Path::new(path))? {
+                root_store.add(certificate).map_err(|error| {
+                    DbError::connection_with_source(
+                        "failed to add PostgreSQL root certificate",
+                        error,
+                    )
+                })?;
+            }
+        }
+
+        Ok(root_store)
+    }
+
+    fn build_tls_connector(config: &DbConnectionConfig) -> Result<MakeRustlsConnect, DbError> {
+        ensure_rustls_crypto_provider();
+
+        let accept_invalid_certs = config.get_param_bool("ssl_accept_invalid_certs");
+        let accept_invalid_hostnames = config.get_param_bool("ssl_accept_invalid_hostnames");
+        let root_store = Self::build_root_cert_store(config)?;
+        let base_verifier: Arc<dyn ServerCertVerifier> =
+            rustls::client::WebPkiServerVerifier::builder(root_store.into())
+                .build()
+                .map_err(|error| {
+                    DbError::connection(format!(
+                        "failed to build PostgreSQL certificate verifier: {}",
+                        error
+                    ))
+                })?;
+        let verifier: Arc<dyn ServerCertVerifier> =
+            if accept_invalid_certs || accept_invalid_hostnames {
+                Arc::new(PostgresServerCertVerifier::new(
+                    base_verifier,
+                    accept_invalid_certs,
+                    accept_invalid_hostnames,
+                ))
+            } else {
+                base_verifier
+            };
+
+        let client_config = RustlsClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(verifier)
+            .with_no_client_auth();
+
+        Ok(MakeRustlsConnect::new(client_config))
     }
 
     /// Extract value from PostgreSQL row
@@ -249,19 +459,38 @@ impl DbConnection for PostgresDbConnection {
             debug!("[PostgreSQL] Application name: {}", app_name);
         }
 
+        let ssl_mode = Self::ssl_mode(config);
+        pg_config.ssl_mode(ssl_mode);
+
         // Connect to PostgreSQL
         debug!("[PostgreSQL] Establishing connection...");
-        let (client, connection) = pg_config.connect(NoTls).await.map_err(|e| {
-            error!("[PostgreSQL] Connection failed: {}", e);
-            DbError::connection_with_source("failed to connect", e)
-        })?;
-
-        // Spawn the connection task in background - it handles communication with the server
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                error!("[PostgreSQL] Connection error: {}", e);
+        let client = match ssl_mode {
+            SslMode::Disable => {
+                let (client, connection) = pg_config.connect(NoTls).await.map_err(|e| {
+                    error!("[PostgreSQL] Connection failed: {}", e);
+                    DbError::connection_with_source("failed to connect", e)
+                })?;
+                tokio::spawn(async move {
+                    if let Err(e) = connection.await {
+                        error!("[PostgreSQL] Connection error: {}", e);
+                    }
+                });
+                client
             }
-        });
+            _ => {
+                let tls_connector = Self::build_tls_connector(config)?;
+                let (client, connection) = pg_config.connect(tls_connector).await.map_err(|e| {
+                    error!("[PostgreSQL] Connection failed: {}", e);
+                    DbError::connection_with_source("failed to connect", e)
+                })?;
+                tokio::spawn(async move {
+                    if let Err(e) = connection.await {
+                        error!("[PostgreSQL] Connection error: {}", e);
+                    }
+                });
+                client
+            }
+        };
 
         {
             let mut guard = self.client.lock().await;
@@ -468,7 +697,9 @@ impl DbConnection for PostgresDbConnection {
                             }));
 
                             if options.stop_on_error {
-                                debug!("[PostgreSQL] Stopping execution due to error (stop_on_error=true)");
+                                debug!(
+                                    "[PostgreSQL] Stopping execution due to error (stop_on_error=true)"
+                                );
                                 break;
                             }
                         }
@@ -510,7 +741,9 @@ impl DbConnection for PostgresDbConnection {
                                     }));
 
                                     if options.stop_on_error {
-                                        debug!("[PostgreSQL] Stopping execution due to error (stop_on_error=true)");
+                                        debug!(
+                                            "[PostgreSQL] Stopping execution due to error (stop_on_error=true)"
+                                        );
                                         break;
                                     }
                                     continue;
@@ -543,7 +776,9 @@ impl DbConnection for PostgresDbConnection {
                                     }));
 
                                     if options.stop_on_error {
-                                        debug!("[PostgreSQL] Stopping execution due to error (stop_on_error=true)");
+                                        debug!(
+                                            "[PostgreSQL] Stopping execution due to error (stop_on_error=true)"
+                                        );
                                         break;
                                     }
                                     continue;
@@ -1137,5 +1372,120 @@ impl DbConnection for PostgresDbConnection {
 
         debug!("[PostgreSQL] execute_streaming() completed");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use one_core::storage::DatabaseType;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[derive(Debug)]
+    struct DummyVerifier;
+
+    impl ServerCertVerifier for DummyVerifier {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, RustlsError> {
+            Ok(ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, RustlsError> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, RustlsError> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            vec![SignatureScheme::ECDSA_NISTP256_SHA256]
+        }
+    }
+
+    fn build_config(extra_params: &[(&str, &str)]) -> DbConnectionConfig {
+        DbConnectionConfig {
+            id: String::new(),
+            database_type: DatabaseType::PostgreSQL,
+            name: "postgres".to_string(),
+            host: "localhost".to_string(),
+            port: 5432,
+            username: "postgres".to_string(),
+            password: String::new(),
+            database: None,
+            service_name: None,
+            sid: None,
+            workspace_id: None,
+            extra_params: extra_params
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn ssl_mode_defaults_to_prefer() {
+        let config = build_config(&[]);
+
+        assert_eq!(PostgresDbConnection::ssl_mode(&config), SslMode::Prefer);
+    }
+
+    #[test]
+    fn ssl_mode_honors_disable_and_require() {
+        let disable = build_config(&[("ssl_mode", "disable")]);
+        let require = build_config(&[("ssl_mode", "require")]);
+
+        assert_eq!(PostgresDbConnection::ssl_mode(&disable), SslMode::Disable);
+        assert_eq!(PostgresDbConnection::ssl_mode(&require), SslMode::Require);
+    }
+
+    #[test]
+    fn ssl_hostname_override_only_ignores_name_errors() {
+        let verifier = PostgresServerCertVerifier::new(Arc::new(DummyVerifier), false, true);
+
+        assert!(verifier.should_ignore_certificate_error(&CertificateError::NotValidForName));
+        assert!(!verifier.should_ignore_certificate_error(&CertificateError::UnknownIssuer));
+    }
+
+    #[test]
+    fn ssl_invalid_certs_keep_hostname_validation_by_default() {
+        let verifier = PostgresServerCertVerifier::new(Arc::new(DummyVerifier), true, false);
+
+        assert!(verifier.should_ignore_certificate_error(&CertificateError::UnknownIssuer));
+        assert!(!verifier.should_ignore_certificate_error(&CertificateError::NotValidForName));
+    }
+
+    #[test]
+    fn ssl_load_root_certificates_rejects_empty_pem_file() {
+        let mut temp_file = NamedTempFile::new().expect("应创建临时文件");
+        writeln!(temp_file, "not a certificate").expect("应写入测试内容");
+
+        let error = PostgresDbConnection::load_root_certificates(temp_file.path())
+            .expect_err("空 PEM 文件应返回错误");
+
+        assert!(
+            error
+                .to_string()
+                .contains("does not contain any certificates"),
+            "错误信息应指出证书文件为空: {}",
+            error
+        );
     }
 }

@@ -322,6 +322,168 @@ impl DbFormConfig {
         ])
     }
 
+    fn mysql_ssl_tab_group() -> TabGroup {
+        TabGroup::new("ssl", t!("ConnectionForm.ssl")).fields(vec![
+            FormField::new(
+                "require_ssl",
+                t!("ConnectionForm.require_ssl"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("false")
+            .options(vec![
+                ("false".to_string(), t!("Common.no").to_string()),
+                ("true".to_string(), t!("Common.yes").to_string()),
+            ]),
+            FormField::new(
+                "verify_ca",
+                t!("ConnectionForm.verify_ca"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("true")
+            .options(vec![
+                ("true".to_string(), t!("Common.yes").to_string()),
+                ("false".to_string(), t!("Common.no").to_string()),
+            ]),
+            FormField::new(
+                "verify_identity",
+                t!("ConnectionForm.verify_identity"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("true")
+            .options(vec![
+                ("true".to_string(), t!("Common.yes").to_string()),
+                ("false".to_string(), t!("Common.no").to_string()),
+            ]),
+            FormField::new(
+                "ssl_root_cert_path",
+                t!("ConnectionForm.ssl_root_cert_path"),
+                FormFieldType::Text,
+            )
+            .optional()
+            .placeholder(t!("ConnectionForm.ssl_root_cert_path_placeholder")),
+            FormField::new(
+                "tls_hostname_override",
+                t!("ConnectionForm.tls_hostname_override"),
+                FormFieldType::Text,
+            )
+            .optional()
+            .placeholder(t!("ConnectionForm.tls_hostname_override_placeholder")),
+        ])
+    }
+
+    fn postgres_ssl_tab_group() -> TabGroup {
+        TabGroup::new("ssl", t!("ConnectionForm.ssl")).fields(vec![
+            FormField::new(
+                "ssl_mode",
+                t!("ConnectionForm.ssl_mode"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("prefer")
+            .options(vec![
+                (
+                    "disable".to_string(),
+                    t!("ConnectionForm.ssl_mode_disable").to_string(),
+                ),
+                (
+                    "prefer".to_string(),
+                    t!("ConnectionForm.ssl_mode_prefer").to_string(),
+                ),
+                (
+                    "require".to_string(),
+                    t!("ConnectionForm.ssl_mode_require").to_string(),
+                ),
+            ]),
+            FormField::new(
+                "ssl_root_cert_path",
+                t!("ConnectionForm.ssl_root_cert_path"),
+                FormFieldType::Text,
+            )
+            .optional()
+            .placeholder(t!("ConnectionForm.ssl_root_cert_path_placeholder")),
+            FormField::new(
+                "ssl_accept_invalid_certs",
+                t!("ConnectionForm.ssl_accept_invalid_certs"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("false")
+            .options(vec![
+                ("false".to_string(), t!("Common.no").to_string()),
+                ("true".to_string(), t!("Common.yes").to_string()),
+            ]),
+            FormField::new(
+                "ssl_accept_invalid_hostnames",
+                t!("ConnectionForm.ssl_accept_invalid_hostnames"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("false")
+            .options(vec![
+                ("false".to_string(), t!("Common.no").to_string()),
+                ("true".to_string(), t!("Common.yes").to_string()),
+            ]),
+        ])
+    }
+
+    fn mssql_ssl_tab_group() -> TabGroup {
+        TabGroup::new("ssl", t!("ConnectionForm.ssl")).fields(vec![
+            FormField::new(
+                "encrypt",
+                t!("ConnectionForm.encrypt"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("off")
+            .options(vec![
+                (
+                    "off".to_string(),
+                    t!("ConnectionForm.encrypt_off").to_string(),
+                ),
+                (
+                    "on".to_string(),
+                    t!("ConnectionForm.encrypt_on").to_string(),
+                ),
+                (
+                    "required".to_string(),
+                    t!("ConnectionForm.encrypt_strict").to_string(),
+                ),
+            ]),
+            FormField::new(
+                "trust_cert",
+                t!("ConnectionForm.trust_certificate"),
+                FormFieldType::Select,
+            )
+            .optional()
+            .default("true")
+            .options(vec![
+                ("true".to_string(), t!("Common.yes").to_string()),
+                ("false".to_string(), t!("Common.no").to_string()),
+            ]),
+        ])
+    }
+
+    fn clickhouse_ssl_tab_group() -> TabGroup {
+        TabGroup::new("ssl", t!("ConnectionForm.ssl")).fields(vec![
+            FormField::new("schema", t!("ConnectionForm.schema"), FormFieldType::Select)
+                .optional()
+                .default("http")
+                .options(vec![
+                    (
+                        "http".to_string(),
+                        t!("ConnectionForm.schema_http").to_string(),
+                    ),
+                    (
+                        "https".to_string(),
+                        t!("ConnectionForm.schema_https").to_string(),
+                    ),
+                ]),
+        ])
+    }
+
     /// MySQL form configuration
     pub fn mysql() -> Self {
         Self {
@@ -381,7 +543,7 @@ impl DbFormConfig {
                     .optional()
                     .placeholder("28800"),
                 ]),
-                TabGroup::new("ssl", t!("ConnectionForm.ssl")),
+                Self::mysql_ssl_tab_group(),
                 Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
@@ -456,7 +618,7 @@ impl DbFormConfig {
                     .optional()
                     .placeholder("Application Name"),
                 ]),
-                TabGroup::new("ssl", t!("ConnectionForm.ssl")),
+                Self::postgres_ssl_tab_group(),
                 Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
@@ -524,38 +686,6 @@ impl DbFormConfig {
                     .placeholder("30")
                     .default("30"),
                     FormField::new(
-                        "encrypt",
-                        t!("ConnectionForm.encrypt"),
-                        FormFieldType::Select,
-                    )
-                    .optional()
-                    .default("off")
-                    .options(vec![
-                        (
-                            "off".to_string(),
-                            t!("ConnectionForm.encrypt_off").to_string(),
-                        ),
-                        (
-                            "on".to_string(),
-                            t!("ConnectionForm.encrypt_on").to_string(),
-                        ),
-                        (
-                            "required".to_string(),
-                            t!("ConnectionForm.encrypt_strict").to_string(),
-                        ),
-                    ]),
-                    FormField::new(
-                        "trust_cert",
-                        t!("ConnectionForm.trust_certificate"),
-                        FormFieldType::Select,
-                    )
-                    .optional()
-                    .default("true")
-                    .options(vec![
-                        ("true".to_string(), t!("Common.yes").to_string()),
-                        ("false".to_string(), t!("Common.no").to_string()),
-                    ]),
-                    FormField::new(
                         "application_name",
                         t!("ConnectionForm.application_name"),
                         FormFieldType::Text,
@@ -563,7 +693,7 @@ impl DbFormConfig {
                     .optional()
                     .placeholder("Application Name"),
                 ]),
-                TabGroup::new("ssl", t!("ConnectionForm.ssl")),
+                Self::mssql_ssl_tab_group(),
                 Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
@@ -630,7 +760,6 @@ impl DbFormConfig {
                     .placeholder("30")
                     .default("30"),
                 ]),
-                TabGroup::new("ssl", t!("ConnectionForm.ssl")),
                 Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
@@ -689,19 +818,6 @@ impl DbFormConfig {
                     .placeholder("database name (optional)"),
                 ]),
                 TabGroup::new("advanced", t!("ConnectionForm.advanced")).fields(vec![
-                    FormField::new("schema", t!("ConnectionForm.schema"), FormFieldType::Select)
-                        .optional()
-                        .default("http")
-                        .options(vec![
-                            (
-                                "http".to_string(),
-                                t!("ConnectionForm.schema_http").to_string(),
-                            ),
-                            (
-                                "https".to_string(),
-                                t!("ConnectionForm.schema_https").to_string(),
-                            ),
-                        ]),
                     FormField::new(
                         "connect_timeout",
                         t!("ConnectionForm.connect_timeout"),
@@ -722,7 +838,7 @@ impl DbFormConfig {
                         ("lz4".to_string(), "LZ4".to_string()),
                     ]),
                 ]),
-                TabGroup::new("ssl", t!("ConnectionForm.ssl")),
+                Self::clickhouse_ssl_tab_group(),
                 Self::ssh_tab_group(),
                 TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
                     FormField::new(
@@ -1932,5 +2048,46 @@ impl Render for DbConnectionForm {
                         )
                     }),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn field_names(tab_group: &TabGroup) -> Vec<&str> {
+        tab_group
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn mysql_ssl_tab_exposes_expected_fields() {
+        let config = DbFormConfig::mysql();
+        let ssl_tab = config
+            .tab_groups
+            .iter()
+            .find(|group| group.name == "ssl")
+            .expect("MySQL 应包含 SSL 标签页");
+
+        assert_eq!(
+            field_names(ssl_tab),
+            vec![
+                "require_ssl",
+                "verify_ca",
+                "verify_identity",
+                "ssl_root_cert_path",
+                "tls_hostname_override"
+            ]
+        );
+    }
+
+    #[test]
+    fn oracle_form_omits_empty_ssl_tab() {
+        let config = DbFormConfig::oracle();
+
+        assert!(config.tab_groups.iter().all(|group| group.name != "ssl"));
     }
 }

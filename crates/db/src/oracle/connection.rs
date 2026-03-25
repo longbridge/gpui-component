@@ -217,7 +217,10 @@ impl DbConnection for OracleDbConnection {
 
         // 获取连接超时，默认 30 秒
         let connect_timeout_secs = config.get_param_as::<u64>("connect_timeout").unwrap_or(30);
-        debug!("[Oracle] Connecting with timeout {}s...", connect_timeout_secs);
+        debug!(
+            "[Oracle] Connecting with timeout {}s...",
+            connect_timeout_secs
+        );
 
         // 使用 tokio::timeout 包装 spawn_blocking
         let conn_result = timeout(
@@ -239,7 +242,10 @@ impl DbConnection for OracleDbConnection {
                 return Err(DbError::Internal(format!("task error: {}", e)));
             }
             Err(_) => {
-                error!("[Oracle] Connection timed out after {}s", connect_timeout_secs);
+                error!(
+                    "[Oracle] Connection timed out after {}s",
+                    connect_timeout_secs
+                );
                 return Err(DbError::connection(format!(
                     "connection timed out after {}s",
                     connect_timeout_secs
