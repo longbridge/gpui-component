@@ -19,6 +19,7 @@ use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
 pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
+const MAX_HIGHLIGHT_LINE_LENGTH: usize = 10_000;
 
 pub(super) struct TextElement {
     pub(crate) state: Entity<InputState>,
@@ -834,26 +835,49 @@ impl TextElement {
         };
         let highlighter = highlighter.as_mut()?;
 
-        let mut offset = visible_byte_range.start;
         let mut styles = vec![];
+        let visible_buffer_lines: Vec<usize> = (visible_range.start..visible_range.end).collect();
 
-        for line in text
-            .iter_lines()
-            .skip(visible_range.start)
-            .take(visible_range.len())
-        {
-            let line_len = if is_multi_line {
-                // +1 for `\n`
-                line.len() + 1
+        let flush_range = |start_line: usize, end_line: usize, skip: bool, styles: &mut Vec<_>| {
+            let byte_start = text.line_start_offset(start_line);
+            let byte_end = if is_multi_line {
+                text.line_start_offset(end_line + 1)
             } else {
-                line.len()
+                text.line_end_offset(end_line)
+            };
+            let range_styles = if skip {
+                vec![(byte_start..byte_end, HighlightStyle::default())]
+            } else {
+                highlighter.styles(&(byte_start..byte_end), &cx.theme().highlight_theme)
             };
 
-            let range = offset..offset + line_len;
-            let line_styles = highlighter.styles(&range, &cx.theme().highlight_theme);
-            styles = gpui::combine_highlights(styles, line_styles).collect();
+            *styles = gpui::combine_highlights(styles.clone(), range_styles).collect();
+        };
 
-            offset = range.end;
+        let mut visible_iter = visible_buffer_lines.iter().peekable();
+        let mut range_start: Option<usize> = None;
+
+        while let Some(&line) = visible_iter.next() {
+            let line_len = text.slice_line(line).len();
+            if line_len > MAX_HIGHLIGHT_LINE_LENGTH {
+                if let Some(start) = range_start.take() {
+                    flush_range(start, line - 1, false, &mut styles);
+                }
+                flush_range(line, line, true, &mut styles);
+                continue;
+            }
+
+            range_start.get_or_insert(line);
+            if visible_iter
+                .peek()
+                .map(|&&next| next == line + 1)
+                .unwrap_or(false)
+            {
+                continue;
+            }
+
+            let start_line = range_start.take().unwrap();
+            flush_range(start_line, line, false, &mut styles);
         }
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);

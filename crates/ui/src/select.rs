@@ -12,7 +12,7 @@ use crate::{
     Size, StyleSized, StyledExt,
     actions::{Cancel, Confirm, SelectDown, SelectUp},
     h_flex,
-    input::clear_button,
+    input::{clear_button, input_style},
     list::{List, ListDelegate, ListState},
     v_flex,
 };
@@ -783,6 +783,7 @@ where
         let allow_open = !(self.open || self.options.disabled);
         let outline_visible = self.open || is_focused && !self.options.disabled;
         let popup_radius = cx.theme().radius.min(px(8.));
+        let (bg, fg) = input_style(self.options.disabled, cx);
 
         self.list
             .update(cx, |list, cx| list.set_searchable(searchable, cx));
@@ -800,10 +801,12 @@ where
                     .border_1()
                     .border_color(cx.theme().transparent)
                     .when(self.options.appearance, |this| {
-                        this.bg(cx.theme().background)
+                        this.bg(bg)
+                            .text_color(fg)
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
                             .when(cx.theme().shadow, |this| this.shadow_xs())
+                            .when(self.options.disabled, |this| this.opacity(0.5))
                     })
                     .map(|this| {
                         if self.options.disabled {
@@ -851,10 +854,7 @@ where
                                     None => Icon::new(IconName::ChevronDown),
                                 };
 
-                                this.child(icon.xsmall().text_color(match self.options.disabled {
-                                    true => cx.theme().muted_foreground.opacity(0.5),
-                                    false => cx.theme().muted_foreground,
-                                }))
+                                this.child(icon.xsmall().text_color(cx.theme().muted_foreground))
                             }),
                     )
                     .on_prepaint({

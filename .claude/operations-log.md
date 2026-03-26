@@ -1996,3 +1996,93 @@
 ## 验证记录 - window-not-found-fix
 - `cargo check -p main`：通过，确认 `QuitMode::LastWindowClosed` 接入后 `main` crate 可正常编译。
 - 图形界面人工冒烟：未在当前终端环境自动执行；仍需在 macOS 上手动关闭主窗口一次，确认日志不再输出 `window not found`，且标签状态保存行为保持正常。
+
+## 编码前检查 - ui-main-safe-merge
+时间：2026-03-26 12:10:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-ui-main-merge-safe.md`
+- 将使用以下可复用组件：
+  - `crates/ui/src/root.rs`：作为 `sheet` 与窗口阴影修复的核心集成点。
+  - `crates/ui/src/window_border.rs`：作为 Linux resize hitbox 修复目标。
+  - `crates/ui/src/tree.rs`：作为 tree 聚焦能力的独立修复目标。
+  - `crates/ui/src/button/button.rs` 与 `crates/ui/src/notification.rs`：作为可独立回迁的局部行为修复。
+- 将遵循命名约定：直接回迁上游提交，不改现有业务命名。
+- 将遵循代码风格：优先 cherry-pick 已验证通过的上游提交，不做额外手工重构。
+- 确认不重复造轮子，证明：本次只回迁上游已存在实现，跳过 `table/time picker/dialog/WASM` 等高风险改动。
+
+## 编码后声明 - ui-main-safe-merge
+时间：2026-03-26 12:12:00 +0800
+
+### 1. 复用了以下既有组件
+- `crates/ui/src/tree.rs`：回迁 tree 聚焦能力。
+- `crates/ui/src/root.rs`：回迁窗口阴影尺寸与 sheet 焦点恢复修复。
+- `crates/ui/src/window_border.rs`：回迁 Linux 最大化窗口 resize 区域修复。
+- `crates/ui/src/sheet.rs`：回迁抽屉拖动与重复打开焦点恢复修复。
+- `crates/ui/src/notification.rs`：回迁中键关闭通知行为。
+- `crates/ui/src/button/button.rs`：回迁按钮标签容器适配。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增业务标识符，只引入上游现成实现。
+- 代码风格：使用 `git cherry-pick` 保留上游补丁结构，没有手写重构。
+- 文件组织：改动严格收敛在 `crates/ui` 内部低风险文件。
+
+### 3. 对比了以下相似实现
+- `main` UI 提交序列：`dialog/table/input/text/theme` 相关提交在临时 worktree 中要么直接冲突，要么会破坏现有接口，因此未纳入本次回迁。
+- `crates/one_ui/src/edit_table/delegate.rs` 与 `crates/db_view/src/table_data/results_delegate.rs`：仍依赖 `datetime_picker/time_picker`，说明对应 main 改动不能直接引入。
+- 临时 worktree `/tmp/onetcli-ui-merge-check`：已验证本次回迁的 7 个提交均可无冲突应用。
+
+### 4. 未重复造轮子的证明
+- 未手工复制 main 代码片段，全部通过原始提交回迁。
+- 未尝试修改 `table`、`dialog`、`time picker` 消费方以适配高风险提交，严格遵守“不能的就不管”。
+
+## 编码前检查 - ui-main-conflict-merge
+时间：2026-03-26 13:38:12 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-ui-main-conflict-merge.md`
+- 已分析相似实现：
+  - `crates/ui/src/input/input.rs`
+  - `crates/ui/src/input/state.rs`
+  - `crates/ui/src/highlighter/highlighter.rs`
+  - `crates/ui/src/select.rs`
+  - `crates/ui/src/time/date_picker.rs`
+  - `crates/ui/src/input/otp_input.rs`
+- 将使用以下可复用组件：
+  - `input_style(disabled, cx)`：统一输入类组件背景和前景色。
+  - `Theme::input_background()`：统一输入背景回退策略。
+  - `InputState::dispatch_background_parse`：复用现有后台任务调度。
+  - `SyntaxHighlighter::apply_background_tree`：复用后台解析结果回填。
+- 将遵循命名约定：继续沿用 `input_style`、`input_background`、`dispatch_background_parse` 等现有命名。
+- 将遵循代码风格：以最小手工补丁迁移 main 的两个指定提交，不额外重构调用方。
+- 确认不重复造轮子，证明：当前仓库已经存在统一输入组件样式入口和高亮器调度能力，只补齐上游优化缺口。
+
+## 编码后声明 - ui-main-conflict-merge
+时间：2026-03-26 13:38:12 +0800
+
+### 1. 复用了以下既有组件
+- `crates/ui/src/input/input.rs`：把 `select`、`date_picker`、`otp_input` 统一切到 `input_style`。
+- `crates/ui/src/theme/mod.rs`：复用新增的 `input_background()`，并让 `editor_background()` 回退到该颜色。
+- `crates/ui/src/input/state.rs`：复用 `Task` 和 `background_executor` 派发后台语法解析。
+- `crates/ui/src/highlighter/highlighter.rs`：复用 `compute_injection_layers` 与 `apply_background_tree` 承接后台解析结果。
+
+### 2. 遵循了以下项目约定
+- 命名约定：没有引入新的业务命名，沿用当前仓库的 `InputMode`、`SyntaxHighlighter`、`input_style` 命名体系。
+- 代码风格：高亮器优化采用最小 API 迁移；主题优化优先复用已有输入样式工具，不给每个组件单独写颜色逻辑。
+- 文件组织：改动严格收敛在 `crates/ui/src/highlighter`、`crates/ui/src/input`、`crates/ui/src/theme` 相关文件。
+
+### 3. 对比了以下相似实现
+- `crates/ui/src/input/input.rs`：已经承担统一输入外观职责，因此 `#2135` 其余输入组件全部复用这一路径，而不是各自复制颜色逻辑。
+- `crates/ui/src/input/state.rs`：现有输入更新路径集中，适合在 `replace_text_in_range`、IME 和 `_pending_update` 分支统一接入后台解析派发。
+- `crates/ui/src/highlighter/highlighter.rs`：当前分支没有上游 `wasm_stub`，因此只迁入 native 可用的性能优化，不扩展缺失模块。
+
+### 4. 未重复造轮子的证明
+- 没有新增新的输入背景工具函数，而是让 `select`、`date_picker`、`otp_input` 直接复用 `input_style`。
+- 没有为后台高亮解析新造线程池或执行器，而是继续使用 `cx.spawn_in` 和 `background_executor()`。
+- 没有强行引入当前分支不存在的 `wasm_stub` 文件与模块链路。
+
+## 验证记录 - ui-main-conflict-merge
+- `env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo check -p main`：通过，确认 `#2128` 与 `#2135` 手工冲突迁移后主 crate 及其依赖链可编译。
+- 编译期修正记录：
+  - `crates/ui/src/input/mode.rs`：修复手工迁移时的变量遮蔽问题，后台解析上下文改为持有 `Rc<RefCell<Option<SyntaxHighlighter>>>`，而不是错误地克隆高亮器实例。
+  - `crates/ui/src/theme/mod.rs`：由于当前分支缺少 `mix_oklab`，将上游实现兼容替换为现有 `mix`。
+- 当前限制：
+  - 未执行图形界面冒烟验证，因此深色主题输入背景与 main 的视觉细微差异仍建议在 GUI 环境人工确认一次。

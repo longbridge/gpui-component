@@ -5,7 +5,7 @@ use gpui::{
     prelude::FluentBuilder, px,
 };
 
-use super::{InputEvent, blink_cursor::BlinkCursor};
+use super::{InputEvent, blink_cursor::BlinkCursor, input::input_style};
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 
 pub struct OtpState {
@@ -239,6 +239,7 @@ impl RenderOnce for OtpInput {
         let mut groups: Vec<Vec<AnyElement>> = Vec::with_capacity(self.number_of_groups);
         let mut group_ix = 0;
         let group_items_count = state.length / self.number_of_groups;
+        let (bg, fg) = input_style(self.disabled, cx);
         for _ in 0..self.number_of_groups {
             groups.push(vec![]);
         }
@@ -256,11 +257,9 @@ impl RenderOnce for OtpInput {
                     .id(ix)
                     .border_1()
                     .border_color(cx.theme().input)
-                    .bg(cx.theme().background)
-                    .when(self.disabled, |this| {
-                        this.bg(cx.theme().muted)
-                            .text_color(cx.theme().muted_foreground)
-                    })
+                    .bg(bg)
+                    .text_color(fg)
+                    .when(self.disabled, |this| this.opacity(0.5))
                     .when(is_input_focused, |this| this.border_color(cx.theme().ring))
                     .when(cx.theme().shadow, |this| this.shadow_xs())
                     .items_center()

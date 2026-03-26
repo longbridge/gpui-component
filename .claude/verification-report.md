@@ -736,3 +736,73 @@
 ### 剩余风险
 - 当前没有自动化 GUI 测试覆盖“关闭主窗口”这一交互，仍需在 macOS 图形环境人工确认一次日志是否消失。
 - 如果修复后仍在关闭窗口瞬间看到同样日志，则问题可能残留在 `gpui` 上游对平台尾随事件的处理，需要进一步向框架层收敛。
+
+---
+
+## 审查报告（ui-main-safe-merge 实现）
+生成时间：2026-03-26 12:13:00 +0800
+
+### 需求完整性检查
+- 目标明确：仅回迁 main 中可直接合并的 UI crates 提交，不能直接合并的忽略。
+- 范围明确：本次仅涉及 `crates/ui` 内部低风险补丁，不扩展到 `table`、`dialog`、`time picker`、`WASM` 等高风险链路。
+- 交付物明确：已完成提交筛选、临时 worktree 演练、当前分支回迁和本地编译验证。
+- 风险与依赖明确：高风险提交已明确跳过，验证依赖 `CLANG_MODULE_CACHE_PATH=/tmp/clang-cache`。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：88/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：95/100
+- 风险评估：95/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 已成功回迁 7 个低风险 UI 提交：tree 聚焦、窗口阴影尺寸、Linux 最大化 resize 修复、sheet 拖动修复、通知中键关闭、按钮标签容器适配、sheet 重复打开焦点恢复。
+- 临时 worktree 演练已证明这 7 个提交可以直接 `cherry-pick`，当前 `dev` 上也已成功应用，无冲突残留。
+- 本地验证已通过：`env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo check -p main` 成功完成。
+- 高风险提交已按要求忽略：`table` 重构、`dialog/alert_dialog`、`input/text/highlighter` 大改、`time picker` 移除、`WASM/gpui_platform` 链路均未引入。
+
+### 剩余风险
+- 仍有大量 main 的 UI 优化未回迁，后续若继续同步，需要按主题分批处理。
+- 本次没有做 GUI 交互级自动化验证，涉及视觉和交互的细节仍建议后续图形环境冒烟一次。
+
+---
+
+## 审查报告（ui-main-conflict-merge 实现）
+生成时间：2026-03-26 13:38:12 +0800
+
+### 需求完整性检查
+- 目标明确：把 main 的 `editor: Improve highlighting performance (#2128)` 与 `theme: Update input background to match Shadcn style. (#2135)` 迁入当前 `dev`，并处理真实冲突。
+- 范围明确：仅修改 `crates/ui` 内与高亮器、输入样式相关的文件，不扩展到 `table`、`dialog`、`time picker` 消费方接口。
+- 交付物明确：代码迁移、上下文摘要、操作日志、验证报告和本地编译验证结果均已落地。
+- 风险与依赖明确：`mix_oklab` 与 `wasm_stub` 在当前分支缺失，已做兼容替换或显式不引入。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：86/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：94/100
+- 风险评估：91/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- `#2128` 已完成手工冲突迁移：[`highlighter.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/highlighter/highlighter.rs) 现在支持同步解析超时、注入层预计算与后台解析结果回填；[`mode.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/input/mode.rs) 与 [`state.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/input/state.rs) 已接入后台解析派发；[`element.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/input/element.rs) 已按可见连续段批量刷新高亮并跳过超长行。
+- `#2135` 已完成手工冲突迁移：[`theme/mod.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/theme/mod.rs) 新增 `input_background()` 并作为编辑器背景回退；[`input.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/input/input.rs)、[`select.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/select.rs)、[`date_picker.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/time/date_picker.rs)、[`otp_input.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/input/otp_input.rs) 等输入类组件已统一改走 `input_style`。
+- 本地集成验证已通过：`env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo check -p main` 成功完成，说明当前 `dev` 对这两笔优化的迁移在编译层面成立。
+- 兼容性处理已收敛：由于当前分支没有 `mix_oklab`，[`theme/mod.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ui/src/theme/mod.rs) 使用现有 `mix` 近似替代；由于当前分支没有 `wasm_stub` 链路，本次仅迁入 native 可用的高亮性能优化。
+
+### 剩余风险
+- 当前没有 GUI 自动化或人工冒烟结果，深色模式输入背景与上游 main 的视觉细节可能仍有轻微偏差。
+- 后台解析优化只验证了编译通过，超大文件编辑场景仍建议后续在图形环境实际输入一次确认卡顿改善是否符合预期。

@@ -25,6 +25,8 @@ use super::{
 use crate::Icon;
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+#[cfg(not(target_family = "wasm"))]
+use crate::highlighter::LanguageRegistry;
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
@@ -684,10 +686,12 @@ impl InputState {
             InputMode::CodeEditor {
                 language,
                 highlighter,
+                parse_task,
                 ..
             } => {
                 *language = new_language.into();
                 *highlighter.borrow_mut() = None;
+                parse_task.borrow_mut().take();
             }
             _ => {}
         }
@@ -696,8 +700,13 @@ impl InputState {
 
     fn reset_highlighter(&mut self, cx: &mut Context<Self>) {
         match &mut self.mode {
-            InputMode::CodeEditor { highlighter, .. } => {
+            InputMode::CodeEditor {
+                highlighter,
+                parse_task,
+                ..
+            } => {
                 *highlighter.borrow_mut() = None;
+                parse_task.borrow_mut().take();
             }
             _ => {}
         }
@@ -2213,6 +2222,88 @@ impl InputState {
             None => (new_text.to_string(), 0, false),
         }
     }
+
+    /// 当同步高亮解析超时时，切到后台线程补完解析，避免阻塞输入。
+    #[cfg(not(target_family = "wasm"))]
+    fn dispatch_background_parse(
+        pending: super::mode::PendingBackgroundParse,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let highlighter_rc = pending.highlighter;
+        let parse_task_rc = pending.parse_task;
+        let language = pending.language;
+        let text = pending.text;
+
+        let old_tree = highlighter_rc
+            .borrow()
+            .as_ref()
+            .and_then(|h| h.tree().cloned());
+        let injection_data = highlighter_rc
+            .borrow()
+            .as_ref()
+            .and_then(|h| h.injection_parse_data());
+
+        let text_for_apply = text.clone();
+        let task = cx.spawn_in(window, async move |entity, cx| {
+            let result = cx
+                .background_executor()
+                .spawn(async move {
+                    let Some(config) = LanguageRegistry::singleton().language(&language) else {
+                        return None;
+                    };
+
+                    let mut parser = tree_sitter::Parser::new();
+                    if parser.set_language(&config.language).is_err() {
+                        return None;
+                    }
+
+                    let new_tree = parser.parse_with_options(
+                        &mut |offset, _| {
+                            if offset >= text.len() {
+                                ""
+                            } else {
+                                let (chunk, chunk_byte_ix) = text.chunk(offset);
+                                &chunk[offset - chunk_byte_ix..]
+                            }
+                        },
+                        old_tree.as_ref(),
+                        None,
+                    )?;
+
+                    let injection_layers = if let Some(data) = injection_data {
+                        crate::highlighter::SyntaxHighlighter::compute_injection_layers(
+                            data, &new_tree, &text,
+                        )
+                    } else {
+                        Default::default()
+                    };
+
+                    Some((new_tree, injection_layers))
+                })
+                .await;
+
+            if let Some((new_tree, injection_layers)) = result {
+                if let Some(highlighter) = highlighter_rc.borrow_mut().as_mut() {
+                    highlighter.apply_background_tree(new_tree, &text_for_apply, injection_layers);
+                }
+
+                _ = entity.update(cx, |_, cx| {
+                    cx.notify();
+                });
+            }
+        });
+
+        parse_task_rc.borrow_mut().replace(task);
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn dispatch_background_parse(
+        _pending: super::mode::PendingBackgroundParse,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
 }
 
 impl EntityInputHandler for InputState {
@@ -2323,8 +2414,12 @@ impl EntityInputHandler for InputState {
         }
         self.text_wrapper
             .update(&self.text, &range, &Rope::from(&*actual_text), cx);
-        self.mode
+        let bg = self
+            .mode
             .update_highlighter(&range, &self.text, &actual_text, true, cx);
+        if let Some(bg) = bg {
+            Self::dispatch_background_parse(bg, window, cx);
+        }
         self.lsp.update(&self.text, window, cx);
         self.selected_range = (new_offset..new_offset).into();
         self.ime_marked_range.take();
@@ -2378,8 +2473,12 @@ impl EntityInputHandler for InputState {
         }
         self.text_wrapper
             .update(&self.text, &range, &Rope::from(new_text), cx);
-        self.mode
+        let bg = self
+            .mode
             .update_highlighter(&range, &self.text, &new_text, true, cx);
+        if let Some(bg) = bg {
+            Self::dispatch_background_parse(bg, window, cx);
+        }
         self.lsp.update(&self.text, window, cx);
         if new_text.is_empty() {
             // Cancel selection, when cancel IME input.
@@ -2485,8 +2584,12 @@ impl Focusable for InputState {
 impl Render for InputState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self._pending_update {
-            self.mode
+            let bg = self
+                .mode
                 .update_highlighter(&(0..0), &self.text, "", false, cx);
+            if let Some(bg) = bg {
+                Self::dispatch_background_parse(bg, window, cx);
+            }
             self.lsp.update(&self.text, window, cx);
             self._pending_update = false;
         }

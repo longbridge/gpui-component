@@ -178,13 +178,23 @@ impl Theme {
         }
     }
 
-    /// Get the editor background color, if not set, use the theme background color.
+    /// Get the input background color.
+    #[inline]
+    pub fn input_background(&self) -> Hsla {
+        if self.is_dark() {
+            self.input.mix(self.transparent, 0.1)
+        } else {
+            self.background
+        }
+    }
+
+    /// Get the editor background color, if not set, use the input background color.
     #[inline]
     pub(crate) fn editor_background(&self) -> Hsla {
         self.highlight_theme
             .style
             .editor_background
-            .unwrap_or(self.background)
+            .unwrap_or_else(|| self.input_background())
     }
 }
 

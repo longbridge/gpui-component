@@ -4,12 +4,19 @@ use anyhow::{Context, Result, anyhow};
 use gpui::{HighlightStyle, SharedString};
 
 use ropey::{ChunkCursor, Rope};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use std::{
     collections::{BTreeSet, HashMap},
     ops::Range,
     usize,
 };
-use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, Tree};
+use tree_sitter::{
+    InputEdit, ParseOptions, Parser, Point, Query, QueryCursor, StreamingIterator, Tree,
+};
+
+/// 当节点跨度远大于查询范围时，递归到子节点，避免 QueryCursor 扫描过大子树。
+const LARGE_NODE_THRESHOLD: usize = 8 * 1024;
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
@@ -18,7 +25,7 @@ pub struct SyntaxHighlighter {
     language: SharedString,
     query: Option<Query>,
     /// A separate query for injection patterns that have `#set! injection.combined`.
-    combined_injections_query: Option<Query>,
+    combined_injections_query: Option<Arc<Query>>,
     injection_queries: HashMap<SharedString, Query>,
 
     locals_pattern_index: usize,
@@ -46,8 +53,15 @@ pub struct SyntaxHighlighter {
 
 /// A parsed injection layer.
 /// Stores the parsed tree and the ranges it covers.
-struct InjectionLayer {
-    tree: Tree,
+pub(crate) struct InjectionLayer {
+    pub(crate) tree: Tree,
+}
+
+/// 后台构建 combined injections 所需的上下文。
+pub(crate) struct InjectionParseData {
+    pub(crate) query: Arc<Query>,
+    pub(crate) content_capture_index: Option<u32>,
+    pub(crate) old_layers: HashMap<SharedString, Tree>,
 }
 
 struct TextProvider<'a>(&'a Rope);
@@ -256,7 +270,11 @@ impl SyntaxHighlighter {
                         ciq.disable_pattern(pattern_index);
                     }
                 }
-                if has_combined_query { Some(ciq) } else { None }
+                if has_combined_query {
+                    Some(Arc::new(ciq))
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -350,12 +368,34 @@ impl SyntaxHighlighter {
         self.text.len() == 0
     }
 
+    /// 获取当前语言名。
+    pub fn language(&self) -> &SharedString {
+        &self.language
+    }
+
+    /// 获取当前文本快照。
+    pub fn text(&self) -> &Rope {
+        &self.text
+    }
+
+    /// 获取当前解析树。
+    pub fn tree(&self) -> Option<&Tree> {
+        self.tree.as_ref()
+    }
+
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
     ///
     /// Uses incremental parsing by `edit` to efficiently update the highlighter's state.
-    pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope) {
+    ///
+    /// 当 `timeout` 非空时，若解析超时则返回 `false`，并保留旧树以维持旧高亮。
+    pub fn update(
+        &mut self,
+        edit: Option<InputEdit>,
+        text: &Rope,
+        timeout: Option<Duration>,
+    ) -> bool {
         if self.text.eq(text) {
-            return;
+            return true;
         }
 
         let edit = edit.unwrap_or(InputEdit {
@@ -373,6 +413,22 @@ impl SyntaxHighlighter {
             .unwrap_or(self.parser.parse("", None).unwrap());
         old_tree.edit(&edit);
 
+        let mut timed_out = false;
+        let start = Instant::now();
+        let mut progress = |_: &tree_sitter::ParseState| -> bool {
+            let Some(budget) = timeout else {
+                return false;
+            };
+
+            if start.elapsed() > budget {
+                timed_out = true;
+                return true;
+            }
+
+            false
+        };
+        let options = ParseOptions::new().progress_callback(&mut progress);
+
         let new_tree = self.parser.parse_with_options(
             &mut move |offset, _| {
                 if offset >= text.len() {
@@ -383,37 +439,51 @@ impl SyntaxHighlighter {
                 }
             },
             Some(&old_tree),
-            None,
+            Some(options),
         );
 
-        let Some(new_tree) = new_tree else {
-            return;
-        };
+        if timed_out || new_tree.is_none() {
+            self.tree = Some(old_tree);
+            self.text = text.clone();
+            return false;
+        }
 
+        let new_tree = new_tree.unwrap();
         self.tree = Some(new_tree.clone());
         self.text = text.clone();
         self.parse_combined_injections(&new_tree);
+        true
     }
 
-    /// Parse all combined injections after main tree is updated.
-    /// pattern: parse once in update, query many times in render.
-    fn parse_combined_injections(&mut self, tree: &Tree) {
-        let Some(combined_query) = &self.combined_injections_query else {
-            return;
-        };
+    /// 返回后台构建 combined injections 所需的数据。
+    pub(crate) fn injection_parse_data(&self) -> Option<InjectionParseData> {
+        let query = self.combined_injections_query.clone()?;
+        Some(InjectionParseData {
+            query,
+            content_capture_index: self.combined_injection_content_capture_index,
+            old_layers: self
+                .injection_layers
+                .iter()
+                .map(|(k, v)| (k.clone(), v.tree.clone()))
+                .collect(),
+        })
+    }
 
-        // Note: Tree edit history is handled in update() via parser.parse_with_options(old_tree)
-
+    /// 根据主树和文本计算 combined injections。
+    pub(crate) fn compute_injection_layers(
+        data: InjectionParseData,
+        tree: &Tree,
+        text: &Rope,
+    ) -> HashMap<SharedString, InjectionLayer> {
         let root_node = tree.root_node();
         let mut cursor = QueryCursor::new();
-        let mut matches = cursor.matches(combined_query, root_node, TextProvider(&self.text));
+        let mut matches = cursor.matches(&data.query, root_node, TextProvider(text));
 
-        // Group ranges by injection language
         let mut combined_ranges: HashMap<SharedString, Vec<tree_sitter::Range>> = HashMap::new();
         while let Some(query_match) = matches.next() {
             let mut language_name: Option<SharedString> = None;
-
-            if let Some(prop) = combined_query
+            if let Some(prop) = data
+                .query
                 .property_settings(query_match.pattern_index)
                 .iter()
                 .find(|prop| prop.key.as_ref() == "injection.language")
@@ -431,7 +501,7 @@ impl SyntaxHighlighter {
             for capture in query_match
                 .captures
                 .iter()
-                .filter(|cap| Some(cap.index) == self.combined_injection_content_capture_index)
+                .filter(|cap| Some(cap.index) == data.content_capture_index)
             {
                 combined_ranges
                     .entry(language_name.clone())
@@ -440,7 +510,7 @@ impl SyntaxHighlighter {
             }
         }
 
-        // Parse each combined language group with incremental parsing
+        let mut new_layers = HashMap::new();
         for (language_name, ranges) in combined_ranges {
             if ranges.is_empty() {
                 continue;
@@ -458,18 +528,13 @@ impl SyntaxHighlighter {
                 continue;
             }
 
-            // Try to reuse old tree for incremental parsing
-            let old_tree = self
-                .injection_layers
-                .get(&language_name)
-                .map(|layer| &layer.tree);
-
+            let old_tree = data.old_layers.get(&language_name);
             let Some(new_tree) = parser.parse_with_options(
                 &mut |offset, _| {
-                    if offset >= self.text.len() {
+                    if offset >= text.len() {
                         ""
                     } else {
-                        let (chunk, chunk_byte_ix) = self.text.chunk(offset);
+                        let (chunk, chunk_byte_ix) = text.chunk(offset);
                         &chunk[offset - chunk_byte_ix..]
                     }
                 },
@@ -479,10 +544,35 @@ impl SyntaxHighlighter {
                 continue;
             };
 
-            // Store the parsed layer
-            self.injection_layers
-                .insert(language_name, InjectionLayer { tree: new_tree });
+            new_layers.insert(language_name, InjectionLayer { tree: new_tree });
         }
+
+        new_layers
+    }
+
+    /// 应用后台解析完成的主树和 injection 层。
+    pub(crate) fn apply_background_tree(
+        &mut self,
+        tree: Tree,
+        text: &Rope,
+        injection_layers: HashMap<SharedString, InjectionLayer>,
+    ) {
+        if !self.text.eq(text) {
+            return;
+        }
+
+        self.tree = Some(tree);
+        self.injection_layers = injection_layers;
+    }
+
+    /// Parse all combined injections after main tree is updated.
+    /// pattern: parse once in update, query many times in render.
+    fn parse_combined_injections(&mut self, tree: &Tree) {
+        let Some(data) = self.injection_parse_data() else {
+            return;
+        };
+
+        self.injection_layers = Self::compute_injection_layers(data, tree, &self.text.clone());
     }
 
     /// Match the visible ranges of nodes in the Tree for highlighting.
@@ -531,36 +621,36 @@ impl SyntaxHighlighter {
             }
         }
 
-        let mut cursor = QueryCursor::new();
-        cursor.set_byte_range(range);
-        let mut matches = cursor.matches(&query, root_node, TextProvider(&source));
+        let query_nodes = collect_query_nodes(root_node, &range);
 
-        while let Some(query_match) = matches.next() {
-            for cap in query_match.captures {
-                let node = cap.node;
+        for query_node in &query_nodes {
+            let mut query_cursor = QueryCursor::new();
+            query_cursor.set_byte_range(range.clone());
+            let mut matches = query_cursor.matches(&query, *query_node, TextProvider(&source));
 
-                let Some(highlight_name) = query.capture_names().get(cap.index as usize) else {
-                    continue;
-                };
+            while let Some(query_match) = matches.next() {
+                for cap in query_match.captures {
+                    let node = cap.node;
 
-                let node_range: Range<usize> = node.start_byte()..node.end_byte();
-                let highlight_name = SharedString::from(highlight_name.to_string());
+                    let Some(highlight_name) = query.capture_names().get(cap.index as usize) else {
+                        continue;
+                    };
 
-                // Merge near range and same highlight name
-                let last_item = highlights.last();
-                let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
-                let last_highlight_name = last_item.map(|item| item.name.clone());
+                    let node_range: Range<usize> = node.start_byte()..node.end_byte();
+                    let highlight_name = SharedString::from(highlight_name.to_string());
 
-                if last_range == &node_range {
-                    // case:
-                    // last_range: 213..220, last_highlight_name: Some("property")
-                    // last_range: 213..220, last_highlight_name: Some("string")
-                    highlights.push(HighlightItem::new(
-                        node_range,
-                        last_highlight_name.unwrap_or(highlight_name),
-                    ));
-                } else {
-                    highlights.push(HighlightItem::new(node_range, highlight_name.clone()));
+                    let last_item = highlights.last();
+                    let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
+                    let last_highlight_name = last_item.map(|item| item.name.clone());
+
+                    if last_range == &node_range {
+                        highlights.push(HighlightItem::new(
+                            node_range,
+                            last_highlight_name.unwrap_or(highlight_name),
+                        ));
+                    } else {
+                        highlights.push(HighlightItem::new(node_range, highlight_name.clone()));
+                    }
                 }
             }
         }
@@ -590,7 +680,7 @@ impl SyntaxHighlighter {
     /// let code = "fn main() {\n    println!(\"Hello\");\n}";
     /// let rope = Rope::from_str(code);
     /// let mut highlighter = SyntaxHighlighter::new("rust");
-    /// highlighter.update(None, &rope);
+    /// highlighter.update(None, &rope, None);
     ///
     /// let theme = HighlightTheme::default_dark();
     /// let range = 0..code.len();
@@ -727,6 +817,51 @@ pub(crate) fn unique_styles(
     merged
 }
 
+/// 收集适合执行 query 的节点，避免 QueryCursor 扫描完整大子树。
+fn collect_query_nodes<'a>(
+    root: tree_sitter::Node<'a>,
+    range: &Range<usize>,
+) -> Vec<tree_sitter::Node<'a>> {
+    let mut nodes = Vec::new();
+    collect_query_nodes_inner(root, range, &mut nodes);
+    if nodes.is_empty() {
+        nodes.push(root);
+    }
+    nodes
+}
+
+fn collect_query_nodes_inner<'a>(
+    node: tree_sitter::Node<'a>,
+    range: &Range<usize>,
+    out: &mut Vec<tree_sitter::Node<'a>>,
+) {
+    if node.end_byte() <= range.start || node.start_byte() >= range.end {
+        return;
+    }
+
+    let node_span = node.end_byte() - node.start_byte();
+    let range_span = range.end - range.start;
+
+    if node_span > range_span + LARGE_NODE_THRESHOLD && node.child_count() > 0 {
+        let mut cursor = node.walk();
+        if cursor.goto_first_child_for_byte(range.start).is_some() {
+            loop {
+                let child = cursor.node();
+                if child.start_byte() >= range.end {
+                    break;
+                }
+                collect_query_nodes_inner(child, range, out);
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+        return;
+    }
+
+    out.push(node);
+}
+
 /// Merge other style (Other on top)
 fn merge_highlight_style(style: &mut HighlightStyle, other: &HighlightStyle) {
     if let Some(color) = other.color {
@@ -830,7 +965,7 @@ $x = 1;
 
         let rope = Rope::from_str(php_code);
         let mut highlighter = SyntaxHighlighter::new("php");
-        highlighter.update(None, &rope);
+        highlighter.update(None, &rope, None);
 
         assert!(
             highlighter.combined_injections_query.is_some(),
