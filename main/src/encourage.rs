@@ -2,11 +2,13 @@
 // 支持作者页签面板
 // ============================================================================
 
-use gpui::{AnyElement, App, ClickEvent, FontWeight, Image, ImageFormat, InteractiveElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, div, img, px, IntoElement, StyledImage};
+use gpui::{
+    AnyElement, App, ClickEvent, FontWeight, Image, ImageFormat, IntoElement, ParentElement,
+    SharedString, Styled, StyledImage, div, img, px,
+};
 use gpui_component::button::{Button, ButtonVariants as _};
 use gpui_component::clipboard::Clipboard;
 use gpui_component::{ActiveTheme, Icon, IconName, Sizable, h_flex, v_flex};
-use one_core::tab_container::{TabContent, TabContentEvent};
 use rust_i18n::t;
 use std::sync::Arc;
 

@@ -1769,3 +1769,91 @@
 - `rustfmt --edition 2021 crates/db/src/oracle/connection.rs`：通过。
 - `cargo check -p db`：通过。
 - 限制：当前未连接真实 Oracle 实例，无法做运行时集成验证；本次仅确认编译正确和类型映射路径完整。
+
+## 编码前检查 - typos-ci-fix
+时间：2026-03-26 10:09:42 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-typos-ci-fix.md`
+- 将使用以下可复用组件：
+  - `Cargo.toml`：现有 `workspace.metadata.typos` 配置入口。
+  - `.github/workflows/ci.yml`：当前 CI 的 `typos` 执行方式。
+  - `crates/db/src/mssql/plugin.rs` 与 `crates/db/src/sqlite/plugin.rs`：`IIF(...)` 合法 SQL 函数字面量。
+  - `crates/db_view/src/sql_inline_completion.rs`：补全前缀/后缀字面量及断言模式。
+- 将遵循命名约定：继续使用 TOML 分段配置，不引入新的文件或命名体系。
+- 将遵循代码风格：优先集中配置修复，避免修改业务逻辑与测试语义。
+- 确认不重复造轮子：已检查根 `Cargo.toml`、CI workflow、数据库插件和补全测试，确认直接扩展现有 typos 配置即可，无需新建 `_typos.toml` 或重构补全实现。
+
+## 需求变更记录 - typos-ci-fix
+时间：2026-03-26 10:11:45 +0800
+
+- 用户将需求从“修复 `typos` 误报”改为“去掉这个检查”。
+- 因此实施方案从扩展白名单切换为删除 `typos` 检查链路。
+- 受影响范围重新确认如下：
+  - `.github/workflows/ci.yml`：删除 `Typo check` 步骤。
+  - `Cargo.toml`：删除 `workspace.metadata.typos` 配置段。
+  - `README.md`、`README_CN.md`、`CLAUDE.md`：删除开发命令中的 `typos` 说明。
+
+## 编码后声明 - typos-ci-fix
+时间：2026-03-26 10:12:34 +0800
+
+### 1. 复用了以下既有组件
+- `.github/workflows/ci.yml`：沿用现有 CI 结构，仅删除 `Typo check` 单一步骤，不改其余 job 顺序。
+- `Cargo.toml`：直接清理原有 `workspace.metadata.typos` 配置入口，不新增替代配置文件。
+- `README.md`、`README_CN.md`、`CLAUDE.md`：沿用现有开发命令展示结构，仅删除 `typos` 一项。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增任何代码标识符，保持现有文件命名和配置分段方式不变。
+- 代码风格：采用最小改动策略，只移除检查链路本身，不碰数据库插件与 SQL 补全逻辑。
+- 文件组织：变更集中在 CI、根配置和开发文档，没有扩散到业务 crate。
+
+### 3. 对比了以下相似实现
+- `.github/workflows/ci.yml`：原先的 `Typo check` 与 `Lint`/`Test` 同级串联；本次只移除 `Typo check`，保留其它检查链路。
+- `Cargo.toml`：原先工具配置直接挂在 `workspace.metadata`；本次按同一入口直接删除，不改用 `_typos.toml` 等替代方案。
+- `README.md` / `README_CN.md` / `CLAUDE.md`：原先都把 `typos` 列为开发命令；本次同步删除，保证文档与 CI 一致。
+
+### 4. 未重复造轮子的证明
+- 未继续维护刚才尝试过的白名单方案，避免在检查被整体移除后留下无用途配置。
+- 未新建额外脚本或条件开关，直接删除原有入口，符合“去掉这个检查”的用户意图。
+- 未修改 `crates/db` 与 `crates/db_view` 中的 SQL 字符串和测试字面量，避免无关变更。
+
+## 验证记录 - typos-ci-fix
+- `cargo metadata --format-version 1 --no-deps >/dev/null`：通过，确认移除 `workspace.metadata.typos` 后根 `Cargo.toml` 仍然有效。
+- 使用搜索验证 `Cargo.toml|README.md|README_CN.md|CLAUDE.md|*.yml` 中的 `typos`：无匹配，说明 CI、根配置和开发文档中的 `typos` 入口已全部移除。
+- `git diff -- .github/workflows/ci.yml Cargo.toml README.md README_CN.md CLAUDE.md`：确认差异仅包含删除 `typos` 检查步骤、配置和文档说明。
+
+## 编码前检查 - encourage-unused-imports
+时间：2026-03-26 10:18:25 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-encourage-unused-imports.md`
+- 将使用以下可复用组件：
+  - `main/src/encourage.rs`：当前纯渲染实现，作为直接修复目标。
+  - `main/src/setting_tab.rs`：`SettingsPanel` 的 `TabContent` / `TabContentEvent` 正常使用模式。
+  - `main/src/home_tab.rs`：`HomePage` 的 `TabContent` / 交互 trait 正常使用模式。
+- 将遵循命名约定：不新增命名，只清理实际未使用导入。
+- 将遵循代码风格：采用最小修改原则，不调整渲染逻辑和页签行为。
+- 确认不重复造轮子：这是现有文件的遗留导入问题，只需对齐当前职责并删除无用项，无需引入额外封装。
+
+## 编码后声明 - encourage-unused-imports
+时间：2026-03-26 10:19:36 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/encourage.rs`：保留现有支持内容渲染结构，只调整文件顶部导入列表。
+- `main/src/setting_tab.rs`：作为真正实现 `TabContent`/`TabContentEvent` 的参考，确认当前文件不再需要这些导入。
+- `main/src/home_tab.rs`：作为真正依赖 `InteractiveElement`/`StatefulInteractiveElement`/`Window` 的参考，确认当前文件导入应与职责一致。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未引入新标识符，仅清理导入。
+- 代码风格：保持 Rust 导入分组和多行格式，与仓库现有写法一致。
+- 文件组织：改动收敛在 `main/src/encourage.rs` 和 `.claude` 留痕文件，没有扩散到其他模块。
+
+### 3. 对比了以下相似实现
+- `setting_tab.rs`：该文件确实实现了 `impl EventEmitter<TabContentEvent>` 和 `impl TabContent`，因此保留相关导入；`encourage.rs` 没有这些实现，所以不应照搬。
+- `home_tab.rs`：该文件的交互 trait 导入服务于真实方法调用和页签实体实现；`encourage.rs` 已退化为纯渲染模块，不再需要这些 trait。
+- `encourage.rs` 当前正文：全文只有渲染辅助函数和数据加载结构，没有使用 `Window` 或 `TabContentEvent` 的签名或类型位点。
+
+### 4. 未重复造轮子的证明
+- 未为 unused import 问题增加 `#[allow(unused_imports)]` 之类的规避性属性。
+- 未修改任何 UI 结构、页签注册或渲染逻辑，只做真正必要的导入清理。
+
+## 验证记录 - encourage-unused-imports
+- `cargo check -p main --all-targets`：通过，确认 `main/src/encourage.rs` 的 unused imports 已消失，且 `main` crate 全 targets 仍可编译。

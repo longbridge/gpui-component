@@ -120,9 +120,6 @@ cargo clippy -- --deny warnings
 
 # 格式检查
 cargo fmt --check
-
-# 拼写检查
-typos
 ```
 
 详细开发指南请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。

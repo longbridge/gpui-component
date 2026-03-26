@@ -507,6 +507,74 @@
 
 ---
 
+## 审查报告（typos-ci-fix 实现）
+生成时间：2026-03-26 10:12:34 +0800
+
+### 需求完整性检查
+- 目标明确：移除仓库中的 `typos` 检查链路，消除 GitHub 流程中的相关失败。
+- 范围明确：包含 CI workflow、根 `Cargo.toml` 工具配置，以及 README / README_CN / CLAUDE 的开发命令说明。
+- 交付物明确：代码修改、上下文摘要、操作日志、本地验证和审查报告均已落地。
+- 风险与依赖明确：`.claude` 历史记录仍会保留 `typos` 字样，但它们不属于生效检查入口。
+
+### 技术维度评分
+- 代码质量：97/100
+- 测试覆盖：88/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：98/100
+- 架构一致：96/100
+- 风险评估：93/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- CI 已移除 `typos` 检查：[`ci.yml`](/Users/hufei/RustroverProjects/onetcli/.github/workflows/ci.yml) 删除了 `Typo check` 步骤，GitHub workflow 不再安装或执行 `typos-cli`。
+- 根配置已清理：[`Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/Cargo.toml) 删除了整个 `workspace.metadata.typos` 配置段，仓库不再维护 `typos` 白名单或标识符例外。
+- 开发文档已同步：[`README.md`](/Users/hufei/RustroverProjects/onetcli/README.md)、[`README_CN.md`](/Users/hufei/RustroverProjects/onetcli/README_CN.md)、[`CLAUDE.md`](/Users/hufei/RustroverProjects/onetcli/CLAUDE.md) 均已删除 `typos` 开发命令，避免文档与 CI 不一致。
+- 本地验证有效：`cargo metadata --format-version 1 --no-deps >/dev/null` 通过，且针对核心入口文件的 `typos` 搜索结果为 0。
+
+### 剩余风险
+- 如果后续仍希望保留拼写检查能力，需要重新选择替代工具或恢复新的检查链路；当前仓库已完全不再依赖 `typos`。
+
+---
+
+## 审查报告（encourage-unused-imports 实现）
+生成时间：2026-03-26 10:19:36 +0800
+
+### 需求完整性检查
+- 目标明确：修复 Linux / Windows CI 在 `main/src/encourage.rs` 上的 unused imports 失败。
+- 范围明确：只清理 `encourage.rs` 顶部的遗留导入，不改渲染行为。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地验证和审查报告均已补齐。
+- 风险与依赖明确：`gpui` 某些链式方法依赖 trait 导入，因此必须以编译结果校验是否误删必要 trait。
+
+### 技术维度评分
+- 代码质量：97/100
+- 测试覆盖：90/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：98/100
+- 架构一致：97/100
+- 风险评估：94/100
+
+### 综合评分
+- 96/100
+- 建议：通过
+
+### 结论
+- 遗留导入已清理：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 删除了未使用的 `InteractiveElement`、`StatefulInteractiveElement`、`Window`、`TabContent`、`TabContentEvent`。
+- 必要 trait 仍保留：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 继续保留 `ParentElement`、`Styled`、`IntoElement`、`StyledImage` 等当前渲染链真实依赖的导入。
+- 修复方式符合现有模式：对比 [`setting_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/setting_tab.rs) 与 [`home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs) 后，本次仅让 `encourage.rs` 的导入与其“纯渲染 helper”职责重新一致。
+- 本地验证有效：`cargo check -p main --all-targets` 已通过。
+
+### 剩余风险
+- 当前只验证了本地 `main` crate 的全 target 编译；如果远端 CI 还存在缓存或其他分支差异，需要以最新提交重新跑一次流程确认。
+
+---
+
 ## 审查报告（db-connection-form-ssh-ssl-fixed 实现）
 生成时间：2026-03-25 21:57:00 +0800
 

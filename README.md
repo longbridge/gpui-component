@@ -120,9 +120,6 @@ cargo clippy -- --deny warnings
 
 # Format check
 cargo fmt --check
-
-# Spell check
-typos
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
