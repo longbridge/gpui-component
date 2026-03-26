@@ -678,8 +678,16 @@ impl PopupMenu {
                     name,
                     action,
                     checked,
+                    disabled,
                     ..
-                } => self = self.menu_with_check(name, checked, action.boxed_clone()),
+                } => {
+                    self = self.menu_with_check_and_disabled(
+                        name,
+                        checked,
+                        action.boxed_clone(),
+                        disabled,
+                    )
+                }
                 OwnedMenuItem::Separator => {
                     self = self.separator();
                 }
