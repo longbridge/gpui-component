@@ -59,6 +59,25 @@ fn build_header_order_by_clause(
     )))
 }
 
+fn collect_delete_row_indices<I>(selected_rows: I, fallback_row: Option<usize>) -> Vec<usize>
+where
+    I: IntoIterator<Item = usize>,
+{
+    let mut row_indices: Vec<usize> = selected_rows.into_iter().collect();
+
+    if row_indices.is_empty() {
+        if let Some(row_ix) = fallback_row {
+            row_indices.push(row_ix);
+        }
+    } else {
+        row_indices.sort_unstable();
+        row_indices.dedup();
+    }
+
+    row_indices.sort_unstable_by(|left, right| right.cmp(left));
+    row_indices
+}
+
 /// 数据表格使用场景
 #[derive(Clone, Debug, PartialEq)]
 pub enum DataGridUsage {
@@ -1057,12 +1076,19 @@ impl DataGrid {
 
     fn handle_delete_row(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |state, cx| {
-            // 优先使用选中的行，如果没有则使用选中单元格所在的行
-            let row_ix = state
-                .selected_row()
-                .or_else(|| state.selected_cell().map(|(row, _)| row));
+            // 优先使用多选区对应的行；没有多选时回退到旧的单选兼容状态。
+            let row_indices = collect_delete_row_indices(
+                state
+                    .selection()
+                    .all_cells()
+                    .into_iter()
+                    .map(|(row_ix, _)| row_ix),
+                state
+                    .selected_row()
+                    .or_else(|| state.selected_cell().map(|(row_ix, _)| row_ix)),
+            );
 
-            if let Some(row_ix) = row_ix {
+            for row_ix in row_indices {
                 state.delete_row(row_ix, window, cx);
             }
         });
@@ -2491,7 +2517,7 @@ pub fn notification(cx: &mut App, error: String) {
 
 #[cfg(test)]
 mod tests {
-    use super::build_header_order_by_clause;
+    use super::{build_header_order_by_clause, collect_delete_row_indices};
     use db::DbManager;
     use one_core::storage::DatabaseType;
     use one_ui::edit_table::ColumnSort;
@@ -2533,5 +2559,26 @@ mod tests {
         .expect("default sort should not require a clause");
 
         assert!(clause.is_none());
+    }
+
+    #[test]
+    fn collect_delete_row_indices_dedups_and_sorts_descending() {
+        let rows = collect_delete_row_indices(vec![2, 4, 2, 1, 4], None);
+
+        assert_eq!(rows, vec![4, 2, 1]);
+    }
+
+    #[test]
+    fn collect_delete_row_indices_uses_fallback_when_selection_is_empty() {
+        let rows = collect_delete_row_indices(Vec::<usize>::new(), Some(3));
+
+        assert_eq!(rows, vec![3]);
+    }
+
+    #[test]
+    fn collect_delete_row_indices_prefers_selection_over_fallback() {
+        let rows = collect_delete_row_indices(vec![1, 0], Some(5));
+
+        assert_eq!(rows, vec![1, 0]);
     }
 }

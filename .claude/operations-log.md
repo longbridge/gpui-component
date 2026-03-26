@@ -2086,3 +2086,95 @@
   - `crates/ui/src/theme/mod.rs`：由于当前分支缺少 `mix_oklab`，将上游实现兼容替换为现有 `mix`。
 - 当前限制：
   - 未执行图形界面冒烟验证，因此深色主题输入背景与 main 的视觉细微差异仍建议在 GUI 环境人工确认一次。
+
+## 编码前检查 - terminal-command-scroll-bottom
+时间：2026-03-26 16:41:37 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-terminal-command-scroll-bottom.md`
+- 已分析相似实现：
+  - `crates/terminal_view/src/view.rs:383`
+  - `crates/terminal_view/src/view.rs:982`
+  - `crates/terminal_view/src/view.rs:2226`
+  - `crates/core/src/ai_chat/engine.rs:232`
+  - `crates/core/src/ai_chat/panel.rs:862`
+- 将使用以下可复用组件：
+  - `TerminalScrollbarHandle.future_display_offset`：复用现有待提交滚动状态。
+  - `write_to_pty`：复用现有用户输入统一入口。
+  - `#[cfg(test)] mod tests`：复用当前文件已有的轻量单元测试组织方式。
+- 将遵循命名约定：Rust 私有辅助函数使用 `snake_case`，测试名描述具体行为。
+- 将遵循代码风格：在 `view.rs` 内做最小补丁，不跨模块抽象。
+- 确认不重复造轮子，证明：当前仓库已有到底部滚动语义和延迟滚动提交机制，只需要修正两者在用户输入路径下的协调。
+
+## 编码后声明 - terminal-command-scroll-bottom
+时间：2026-03-26 17:17:11 +0800
+
+### 1. 复用了以下既有组件
+- `crates/terminal_view/src/view.rs`：继续使用 `write_to_pty` 作为用户输入统一入口。
+- `crates/terminal_view/src/view.rs`：继续使用 `TerminalScrollbarHandle.future_display_offset` 作为待提交滚动状态。
+- `crates/terminal_view/src/view.rs`：继续使用文件尾部 `#[cfg(test)] mod tests` 组织纯单元测试。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增辅助函数 `should_scroll_to_bottom_on_user_input`，保持 `snake_case`。
+- 代码风格：改动收敛在 `view.rs`，没有扩散模块接口或引入跨模块抽象。
+- 文件组织：行为修复和回归测试都放在现有终端视图文件内部，与既有测试布局一致。
+
+### 3. 对比了以下相似实现
+- `crates/terminal_view/src/view.rs:383`：沿用滚动条延迟提交偏移的既有机制，只补上用户输入时的取消逻辑。
+- `crates/terminal_view/src/view.rs:2226`：保留 render 阶段消费 `future_display_offset` 的既有路径，不改渲染层职责。
+- `crates/core/src/ai_chat/engine.rs:232` 与 `crates/core/src/ai_chat/panel.rs:862`：参考项目内“内容更新后立刻滚到底部”的模式，保持用户输入优先级高于旧滚动状态。
+
+### 4. 未重复造轮子的证明
+- 没有新增新的滚动状态容器，直接复用现有 `future_display_offset`。
+- 没有新增新的终端输入入口，而是在 `write_to_pty` 内完成协调。
+- 没有新增集成测试框架，直接复用当前文件已有的纯函数单元测试模式。
+
+## 验证记录 - terminal-command-scroll-bottom
+- `cargo test -p terminal_view user_input_scroll --lib`：先失败后通过，验证新增回归测试能抓到“待提交偏移未清理”的问题。
+- `cargo test -p terminal_view --lib`：通过，`terminal_view` 现有 16 个单元测试全部成功。
+- `rustfmt crates/terminal_view/src/view.rs`：通过，确认文件格式符合 Rust 风格。
+
+## 编码前检查 - db-view-data-grid-multi-delete
+时间：2026-03-26 19:47:33 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-view-data-grid-multi-delete.md`
+- 已分析相似实现：
+  - `crates/db_view/src/table_data/data_grid.rs:1077`
+  - `crates/one_ui/src/edit_table/state.rs:532`
+  - `crates/one_ui/src/edit_table/selection.rs:94`
+  - `crates/db_view/src/table_data/results_delegate.rs:1955`
+  - `crates/db_view/src/database_objects_tab.rs:601`
+- 将使用以下可复用组件：
+  - `EditTableState::selection().all_cells()`：复用现有多选真实状态。
+  - `EditTableState::delete_row()`：复用既有删除入口和事件流。
+  - `EditorTableDelegate::on_row_deleted()`：复用新行真实删除与旧行标记删除语义。
+- 将遵循命名约定：新增私有辅助函数使用 `snake_case`，测试名直接描述删除集合行为。
+- 将遵循代码风格：只在 `data_grid.rs` 做最小补丁，不扩散到 `one_ui` 公共接口。
+- 确认不重复造轮子，证明：现有表格状态层已暴露多选区和删除 API，缺陷只在业务入口没有正确消费这些能力。
+
+## 编码后声明 - db-view-data-grid-multi-delete
+时间：2026-03-26 19:47:33 +0800
+
+### 1. 复用了以下既有组件
+- `crates/one_ui/src/edit_table/state.rs`：继续通过 `selection()` 读取多选真实状态，并复用 `delete_row()` 执行删除。
+- `crates/one_ui/src/edit_table/selection.rs`：继续通过 `all_cells()` 展开多选区，不新增新的选区结构。
+- `crates/db_view/src/table_data/results_delegate.rs`：继续复用现有 `on_row_deleted`，保留新行和旧行的不同删除语义。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增辅助函数命名为 `collect_delete_row_indices`，保持 `snake_case`。
+- 代码风格：逻辑修复和回归测试都收敛在 `crates/db_view/src/table_data/data_grid.rs`，没有引入额外抽象层。
+- 文件组织：删除入口仍留在 `DataGrid`，选区模型和删除语义仍归属现有 `one_ui` / `results_delegate` 模块。
+
+### 3. 对比了以下相似实现
+- `crates/db_view/src/database_objects_tab.rs:601`：沿用“先收集全部选中项，再排序批量处理”的仓库模式。
+- `crates/one_ui/src/edit_table/state.rs:605`：确认旧单选字段只保留活动单元格，因此不能直接作为批量删除依据。
+- `crates/db_view/src/table_data/results_delegate.rs:1955`：根据新行真实删除会重建索引这一语义，删除顺序改为降序执行。
+
+### 4. 未重复造轮子的证明
+- 没有为多选删除新造一套选区状态，而是直接消费 `selection().all_cells()`。
+- 没有新增批量删除 API，而是通过已有 `delete_row()` 循环调用进入原有删除链路。
+- 没有修改 `EditorTableDelegate` 或 `EditTableState` 公共接口，避免把业务修复扩散成框架改造。
+
+## 验证记录 - db-view-data-grid-multi-delete
+- `rustfmt /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_data/data_grid.rs`：失败，原因是直接单文件格式化默认按旧 edition 解析；问题与本次补丁无关。
+- `rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_data/data_grid.rs`：通过。
+- `cargo test -p db_view --lib`：通过，`db_view` 200 个单元测试全部成功，新增 3 个 `collect_delete_row_indices` 测试通过。

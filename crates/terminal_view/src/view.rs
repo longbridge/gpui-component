@@ -8,29 +8,29 @@ use gpui_component::button::{Button, ButtonVariants};
 use gpui_component::dialog::DialogButtonProps;
 use gpui_component::menu::{ContextMenuExt, PopupMenu, PopupMenuItem};
 use gpui_component::scroll::{Scrollbar, ScrollbarHandle, ScrollbarShow};
-use gpui_component::{BlinkCursor, Icon, IconName, Sizable, WindowExt, kbd::Kbd};
+use gpui_component::{kbd::Kbd, BlinkCursor, Icon, IconName, Sizable, WindowExt};
 use std::borrow::Cow;
 use std::cell::{Cell as StdCell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::addon::{
-    AddonManager, SearchAddon, TerminalAddonFrameContext, TerminalAddonMouseContext,
-    register_default_addons,
+    register_default_addons, AddonManager, SearchAddon, TerminalAddonFrameContext,
+    TerminalAddonMouseContext,
 };
 use crate::sidebar::{SidebarPanel, TerminalSidebar, TerminalSidebarEvent};
 use crate::terminal_element::{RenderCache, TerminalElement};
-use crate::theme::{DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE, TerminalTheme};
+use crate::theme::{TerminalTheme, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
 use one_core::layout::{SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH};
 use one_core::storage::models::{ActiveConnections, StoredConnection};
 use one_core::tab_container::{TabContent, TabContentEvent};
-use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
+use one_ui::resize_handle::{resize_handle, HandlePlacement, ResizePanel};
 use rust_i18n::t;
 use std::ops::Deref;
-use terminal::LocalConfig;
 use terminal::terminal::{
     ConnectionState, Terminal, TerminalConnectionKind, TerminalModelEvent, TerminalScrollProxy,
 };
+use terminal::LocalConfig;
 
 actions!(
     terminal_view,
@@ -108,6 +108,14 @@ fn alt_screen_scroll_arrow(lines: i32, app_cursor: bool) -> Option<&'static str>
         (false, true) => "\x1bOB",  // Down, application mode
         (false, false) => "\x1b[B", // Down, normal mode
     })
+}
+
+fn should_scroll_to_bottom_on_user_input(
+    display_offset: usize,
+    pending_display_offset: &StdCell<Option<usize>>,
+) -> bool {
+    pending_display_offset.take();
+    display_offset > 0
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -982,7 +990,10 @@ impl TerminalView {
     fn write_to_pty(&mut self, data: Vec<u8>, cx: &mut Context<Self>) {
         // 用户输入时自动滚动到底部
         let display_offset = self.terminal.read(cx).term().lock().grid().display_offset();
-        if display_offset > 0 {
+        if should_scroll_to_bottom_on_user_input(
+            display_offset,
+            &self.scrollbar_handle.future_display_offset,
+        ) {
             self.terminal.update(cx, |terminal, _| {
                 terminal
                     .term()
@@ -2611,10 +2622,11 @@ impl Element for ResizeEventHandler {
 #[cfg(test)]
 mod tests {
     use super::{
-        UnbracketedPasteHazard, alt_screen_scroll_arrow, detect_unbracketed_paste_hazard,
-        has_trailing_line_continuation, has_unterminated_shell_quote,
-        multiline_non_empty_line_count, take_whole_scroll_lines,
+        alt_screen_scroll_arrow, detect_unbracketed_paste_hazard, has_trailing_line_continuation,
+        has_unterminated_shell_quote, multiline_non_empty_line_count,
+        should_scroll_to_bottom_on_user_input, take_whole_scroll_lines, UnbracketedPasteHazard,
     };
+    use std::cell::Cell as StdCell;
 
     #[test]
     fn take_whole_scroll_lines_preserves_fractional_remainder() {
@@ -2692,5 +2704,27 @@ mod tests {
         );
         assert!(!has_unterminated_shell_quote("printf '%s\\n' hello"));
         assert!(!has_trailing_line_continuation("echo hello\necho world"));
+    }
+
+    #[test]
+    fn user_input_scroll_clears_pending_offset_even_when_already_at_bottom() {
+        let pending_display_offset = StdCell::new(Some(12));
+
+        assert!(!should_scroll_to_bottom_on_user_input(
+            0,
+            &pending_display_offset
+        ));
+        assert_eq!(pending_display_offset.take(), None);
+    }
+
+    #[test]
+    fn user_input_scroll_requests_bottom_when_terminal_is_scrolled_up() {
+        let pending_display_offset = StdCell::new(Some(12));
+
+        assert!(should_scroll_to_bottom_on_user_input(
+            5,
+            &pending_display_offset
+        ));
+        assert_eq!(pending_display_offset.take(), None);
     }
 }

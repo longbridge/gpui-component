@@ -806,3 +806,74 @@
 ### 剩余风险
 - 当前没有 GUI 自动化或人工冒烟结果，深色模式输入背景与上游 main 的视觉细节可能仍有轻微偏差。
 - 后台解析优化只验证了编译通过，超大文件编辑场景仍建议后续在图形环境实际输入一次确认卡顿改善是否符合预期。
+
+
+---
+
+## 审查报告（terminal-command-scroll-bottom 实现）
+生成时间：2026-03-26 17:17:11 +0800
+
+### 需求完整性检查
+- 目标明确：修复 `view.rs` 中输入命令后应滚动到底部的行为。
+- 范围明确：仅修改 `crates/terminal_view/src/view.rs` 的输入滚动协调逻辑和文件内测试。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地测试结果均已落地。
+- 风险与依赖明确：核心风险是误影响其它滚动路径，本次通过最小改动避免扩散。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：92/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：95/100
+- 风险评估：93/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- `crates/terminal_view/src/view.rs` 新增了 `should_scroll_to_bottom_on_user_input`，在用户输入前统一清理陈旧的 `future_display_offset`。
+- `write_to_pty` 现在会先取消待提交滚动，再在当前视图确实离开底部时调用既有的 `scroll_display(Bottom)`，保证输入命令后稳定停留在底部。
+- 新增两条文件内回归测试，覆盖“当前已在底部但存在待提交偏移”和“当前离底部且存在待提交偏移”两个场景。
+- 本地验证已完成：`cargo test -p terminal_view user_input_scroll --lib` 先失败后通过，`cargo test -p terminal_view --lib` 最终全部通过。
+
+### 剩余风险
+- 当前仍缺少图形界面层面的自动化冒烟，真实拖动滚动条后立刻输入命令的交互建议后续在 GUI 环境再确认一次。
+- 现有验证集中在单元测试层，尚未覆盖鼠标拖动、滚轮和 ALT_SCREEN 混合操作的端到端路径。
+
+---
+
+## 审查报告（db-view-data-grid-multi-delete 实现）
+生成时间：2026-03-26 19:47:33 +0800
+
+### 需求完整性检查
+- 目标明确：修复 `db_view` 数据编辑 `data_grid` 中多选多行后点击删除只处理最后活动行的问题。
+- 范围明确：仅修改 `crates/db_view/src/table_data/data_grid.rs` 的删除入口和文件内测试，不扩散到 `one_ui` 公共接口。
+- 交付物明确：代码修复、上下文摘要、操作日志和本地测试结果均已落地。
+- 风险与依赖明确：核心风险是新行真实删除引发索引漂移，本次通过降序删除规避。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：93/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：96/100
+- 风险评估：94/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- [`data_grid.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_data/data_grid.rs#L62) 新增 `collect_delete_row_indices`，负责把多选区映射为唯一行集合，并确保删除顺序为降序。
+- [`data_grid.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_data/data_grid.rs#L1077) 的删除按钮入口现在优先读取 `state.selection().all_cells()`，不再只依赖最后活动单元格；没有多选区时仍回退到既有单选逻辑。
+- [`data_grid.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_data/data_grid.rs#L2564) 新增 3 个回归测试，覆盖去重降序、空选区 fallback、显式选区优先级。
+- 本地验证已完成：`cargo test -p db_view --lib` 通过，`db_view` 全量 200 个单元测试成功。
+
+### 剩余风险
+- 目前没有 GUI 层自动化用例直接覆盖“鼠标框选多行后点击删除”的交互路径，建议后续在图形环境补一次冒烟验证。
+- 当前策略基于 `all_cells()` 展开矩形选区；在极大面积多列多行框选场景下会先遍历单元格再压缩到行，但作为点击删除前的低频动作，当前开销可接受。
