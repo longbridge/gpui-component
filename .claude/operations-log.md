@@ -1427,3 +1427,471 @@
 - `rustfmt --edition 2024 crates/db_view/src/db_tree_view.rs`：通过。
 - `cargo check -p db_view`：通过。
 - `cargo test -p db_view sync_selected_databases_from_connection --lib`：通过。
+
+## 编码前检查 - db-connection-form-ssl
+时间：2026-03-25 13:35:05 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-connection-form-ssl.md`
+- 将使用以下可复用组件：
+  - `DbConnectionConfig.extra_params`：统一承载 SSL 扩展参数。
+  - `DbConnectionForm::build_connection/load_connection`：现有字段保存与回填链路。
+  - `DbConnectionConfig::get_param/get_param_as/get_param_bool`：驱动层读取扩展参数的统一入口。
+  - MSSQL 现有 `encrypt/trust_cert` 实现：作为驱动层 SSL 参数接入模式参考。
+- 将遵循命名约定：字段名和 extra_params key 均使用 `snake_case`。
+- 将遵循代码风格：UI 继续使用 `TabGroup/FormField` 配置式声明；驱动层只在建连阶段读取 SSL 参数，不改抽象边界。
+- 确认不重复造轮子：已检查存储模型和表单序列化逻辑，无需新增 SSL 专用持久化结构。
+
+## 编码后声明 - db-connection-form-ssl
+时间：2026-03-25 13:35:05 +0800
+
+### 1. 复用了以下既有组件
+- `DbConnectionConfig.extra_params`：直接保存 `require_ssl`、`ssl_mode` 等新增字段。
+- `DbConnectionForm::load_connection`：自动回填新增 SSL 字段，无需额外分支。
+- `MSSQL` 驱动已有 `encrypt/trust_cert`：继续沿用原行为，仅调整 UI 分组。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增字段和参数使用 `require_ssl`、`verify_ca`、`ssl_root_cert_path` 等 `snake_case` 名称。
+- 代码风格：保持“表单配置声明 + 驱动层解析参数”的现有架构，不引入新的状态对象。
+- 文件组织：UI 改动集中在 `db_connection_form.rs` 与 `db_view.yml`，驱动改动集中在 `mysql/connection.rs`、`postgresql/connection.rs` 和 Cargo 依赖配置。
+
+### 3. 对比了以下相似实现
+- `db_connection_form.rs` 原空白 `ssl` 标签页：本次用 helper 替换空白配置，并移除 Oracle 的误导性空页。
+- `mssql/connection.rs`：复用了通过 `extra_params` 控制建连行为的方式。
+- 本地依赖源码 `mysql_async` / `tokio-postgres` / `native-tls`：据当前锁定版本 API 接入，不依赖记忆猜测。
+
+### 4. 未重复造轮子的证明
+- 未新增新的连接配置结构或 SSL 专用存储表。
+- 未绕过现有 `DbConnectionConfig`，所有新增能力都通过既有 `extra_params` 和驱动扩展点落地。
+
+## 验证记录 - db-connection-form-ssl
+- `rustfmt --edition 2024 crates/db_view/src/common/db_connection_form.rs crates/db/src/mysql/connection.rs crates/db/src/postgresql/connection.rs`：通过。
+- `cargo check -p db_view`：通过。
+- `cargo test -p db ssl_ --lib`：通过。
+- `cargo test -p db_view ssl_tab --lib`：通过。
+
+## 编码前检查 - db-ssl-rustls-migration
+时间：2026-03-25 14:30:01 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-ssl-rustls-migration.md`
+- 将使用以下可复用组件：
+  - `ReqwestClient` 的 rustls provider 初始化模式：作为仓库内 `rustls 0.23` 既有参考。
+  - `DbConnectionConfig::get_param/get_param_bool`：继续承接 PostgreSQL/MySQL 的 SSL 参数读取。
+  - `MysqlDbConnection::build_ssl_opts`：确认 MySQL 只需 feature 切换，不扩散逻辑改动。
+  - 现有 `PostgresDbConnection::ssl_mode` 与 `Disable/非 Disable` 分支：保留连接流程结构。
+- 将遵循命名约定：继续使用现有 `snake_case` 参数键和中文日志。
+- 将遵循代码风格：依赖调整收敛在 `Cargo.toml`，驱动逻辑集中在 `postgresql/connection.rs`，不新增跨模块抽象。
+- 确认不重复造轮子：已检查仓库内 rustls 初始化模式、现有 SSL 参数契约与驱动 feature 能力，无需自建新的连接配置层。
+
+## 编码后声明 - db-ssl-rustls-migration
+时间：2026-03-25 14:30:01 +0800
+
+### 1. 复用了以下既有组件
+- `DbConnectionConfig.extra_params`：继续承载 `ssl_mode`、`ssl_root_cert_path`、`ssl_accept_invalid_certs`、`ssl_accept_invalid_hostnames`。
+- `PostgresDbConnection::ssl_mode`：保留原参数解析语义。
+- `MysqlDbConnection::build_ssl_opts`：未重写 MySQL TLS 逻辑，只把后端 feature 切到 rustls。
+- `ReqwestClient` 的 rustls provider 初始化模式：PostgreSQL TLS 构造时同样安装默认 provider。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未更改任何已发布的 SSL 参数键，仍使用 `snake_case`。
+- 代码风格：PostgreSQL 继续在建连前集中构造 TLS connector；MySQL/ClickHouse/MSSQL 以依赖 feature 迁移为主。
+- 文件组织：改动集中在根 `Cargo.toml`、`crates/db/Cargo.toml` 与 `crates/db/src/postgresql/connection.rs`。
+
+### 3. 对比了以下相似实现
+- `reqwest_client/src/http_client_tls.rs`：证明仓库已有 `rustls 0.23` 的 provider 初始化方式，本次沿用这一习惯。
+- `mysql/connection.rs`：证明现有 SSL 参数契约已经稳定，迁移时不应改动表单和 `extra_params`。
+- 前一版 `postgresql/connection.rs`：证明连接流程和参数语义已存在，本次只替换 connector 与证书验证实现。
+
+### 4. 未重复造轮子的证明
+- 未新增新的数据库 SSL 配置结构或 UI 字段。
+- 未自行实现 PostgreSQL 的完整 TLS 连接器，而是复用 `tokio-postgres-rustls`。
+- 未把 feature 切换扩散到无关模块，MSSQL/ClickHouse 仍沿用原连接逻辑。
+
+## 验证记录 - db-ssl-rustls-migration
+- `cargo check -p db_view`：通过。
+- `cargo test -p db ssl_ --lib`：通过，7 个匹配测试全部通过。
+- `cargo test -p db_view ssl_tab --lib`：通过。
+
+## 编码前检查 - mysql-ssh-tls-lab-image-reuse
+时间：2026-03-25 15:09:17 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-mysql-ssh-tls-lab.md`
+- 将使用以下可复用组件：
+  - `.claude/mysql-ssh-tls-lab/docker-compose.yml`：当前方案B的服务编排入口。
+  - `.claude/mysql-ssh-tls-lab/verify.sh`：当前方案B的自动验证入口。
+  - `.claude/mysql-ssh-tls-lab/README.md`：当前方案B的参数与步骤说明。
+- 将遵循命名约定：Shell 与 Compose 变量使用全大写 `MYSQL_IMAGE`。
+- 将遵循代码风格：仅调整 `.claude` 下测试辅助文件，不改产品代码模块。
+- 确认不重复造轮子：沿用现有方案B目录结构，只消除内部镜像硬编码。
+
+## 编码后声明 - mysql-ssh-tls-lab-image-reuse
+时间：2026-03-25 15:09:17 +0800
+
+### 1. 复用了以下既有组件
+- `.claude/mysql-ssh-tls-lab/docker-compose.yml`：继续作为 MySQL 与 bastion 的统一编排入口。
+- `.claude/mysql-ssh-tls-lab/verify.sh`：继续作为三段式验证脚本，仅参数化镜像名。
+- `.claude/mysql-ssh-tls-lab/README.md`：继续承载 onetcli 表单填写与运行说明。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增变量名使用 `MYSQL_IMAGE`，符合 shell/compose 环境变量习惯。
+- 代码风格：只在测试辅助层做参数化，不引入新的脚本或目录。
+- 文件组织：改动全部收敛在项目本地 `.claude/mysql-ssh-tls-lab/`。
+
+### 3. 对比了以下相似实现
+- `docker-compose.yml` 原先把 MySQL 服务镜像写死为 `mysql:8.0`：本次改为 `${MYSQL_IMAGE:-mysql:8.4.5}`，保持 compose 语义不变。
+- `verify.sh` 原先只在 `docker run` 阶段写死 `mysql:8.0`：本次与 compose 共用同一个 `MYSQL_IMAGE` 默认值。
+- `README.md` 原先未说明镜像版本来源：本次补充默认值与覆盖方式，保证文档和脚本一致。
+
+### 4. 未重复造轮子的证明
+- 未新增新的测试脚本或第二套 compose 文件。
+- 未改动产品侧 MySQL/SSH/SSL 代码，仅复用现有方案B测试环境并做参数化。
+
+## 验证记录 - mysql-ssh-tls-lab-image-reuse
+- `zsh ./.claude/mysql-ssh-tls-lab/verify.sh`：已重新执行，当前确认默认走 `mysql:8.4.5`；剩余阻塞点是 bastion 首次构建依赖的 `ubuntu:24.04` 拉取/构建尚未完成。
+
+## 执行记录 - mysql-local-ssl-with-remote-sshd
+时间：2026-03-25 16:27:27 +0800
+
+- 复用 `.claude/mysql-ssh-tls-lab` 现有证书和 compose，只启动 `mysql` 服务，不再启动本地 bastion。
+- `docker compose -f ./.claude/mysql-ssh-tls-lab/docker-compose.yml up -d mysql`：通过。
+- `docker compose -f ./.claude/mysql-ssh-tls-lab/docker-compose.yml exec -T mysql mysqladmin ping -h 127.0.0.1 -uroot -prootpass`：通过，服务存活。
+- `docker compose -f ./.claude/mysql-ssh-tls-lab/docker-compose.yml exec -T mysql mysql -h 127.0.0.1 -P 3306 -uappuser -papppass appdb --ssl-mode=VERIFY_IDENTITY --ssl-ca=/etc/mysql/ssl/ca.pem -e "SELECT COUNT(*) AS direct_ssl_rows FROM smoke_test;"`：通过，结果为 `2`。
+- `mysql -h 127.0.0.1 -P 33306 -uappuser -papppass appdb --ssl-mode=VERIFY_IDENTITY --ssl-ca=/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/mysql/certs/ca.pem -e "SELECT COUNT(*) AS host_ssl_rows FROM smoke_test;"`：通过，结果为 `2`。
+- 说明：`docker run ... host.docker.internal:33306` 的证书校验失败是预期现象，因为服务端证书 SAN 不包含 `host.docker.internal`，实际 onetcli 经 SSH 隧道连库时使用的是 `127.0.0.1`，与现有证书 SAN 匹配。
+
+## 编码前检查 - mysql-rustls-provider-fix
+时间：2026-03-25 18:40:56 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-ssl-rustls-migration.md` 与 `.claude/context-summary-mysql-ssh-tls-lab.md`
+- 将使用以下可复用组件：
+  - `crates/reqwest_client/src/http_client_tls.rs`：仓库内既有的 `aws_lc_rs::default_provider().install_default().ok()` 模式。
+  - `crates/db/src/postgresql/connection.rs`：数据库层已存在的 rustls provider 安装逻辑。
+  - `crates/db/src/mysql/connection.rs`：当前 MySQL TLS 入口 `build_ssl_opts`。
+- 将遵循命名约定：公共 helper 使用 `ensure_rustls_crypto_provider`，与现有 `ensure_*` 风格一致。
+- 将遵循代码风格：把 provider 安装收敛成 db crate 公共 helper，避免在多个驱动里继续复制。
+- 确认不重复造轮子：已检查仓库已有 provider 安装实现，只做复用与统一，不引入第二套 TLS 初始化逻辑。
+
+## 编码后声明 - mysql-rustls-provider-fix
+时间：2026-03-25 18:40:56 +0800
+
+### 1. 复用了以下既有组件
+- `reqwest_client::http_client_tls`：沿用仓库既有的 `aws_lc_rs` provider 安装方式。
+- `PostgresDbConnection::build_tls_connector`：改为复用公共 helper，而不是保留重复安装代码。
+- `MysqlDbConnection::build_ssl_opts`：在进入 `mysql_async` rustls connector 前统一安装 provider。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增公共函数名使用 `snake_case`，模块名为 `rustls_provider`。
+- 代码风格：公共逻辑抽到 `crates/db/src/rustls_provider.rs`，驱动层只保留调用。
+- 文件组织：改动集中在 `db` crate 内，不扩散到 UI 或其它业务模块。
+
+### 3. 对比了以下相似实现
+- `crates/reqwest_client/src/http_client_tls.rs`：证明仓库已有安装默认 rustls provider 的成熟写法。
+- `crates/db/src/postgresql/connection.rs`：证明 PostgreSQL 已因 rustls 需要手动安装 provider。
+- `crates/db/src/mysql/connection.rs`：之前缺少同等安装步骤，因此在 `mysql_async` 首次构造 TLS connector 时 panic。
+
+### 4. 未重复造轮子的证明
+- 未在 MySQL 和 PostgreSQL 中各自新增一份相同初始化代码。
+- 新增的 `rustls_provider.rs` 仅封装现有仓库已采用的安装模式，并用 `Once` 保证进程级只初始化一次。
+
+## 验证记录 - mysql-rustls-provider-fix
+- `rustfmt --edition 2021 crates/db/src/rustls_provider.rs crates/db/src/lib.rs crates/db/src/mysql/connection.rs crates/db/src/postgresql/connection.rs`：通过。
+- `cargo check -p db`：通过。
+
+## 编码前检查 - bracketed-paste-fallback
+时间：2026-03-25 15:50:55 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-bracketed-paste-fallback.md`
+- 将使用以下可复用组件：
+  - `TerminalView::paste_text`：统一粘贴入口，继续作为唯一策略决策点。
+  - `TerminalView::show_paste_confirm_dialog`：复用现有确认对话样式。
+  - `TerminalView::contains_high_risk_command`：保留现有高危命令识别逻辑。
+  - `TerminalView::write_to_pty`：统一下发字节流，不新增旁路发送路径。
+- 将遵循命名约定：新增助手函数与测试使用 `snake_case`，中文注释只解释意图和约束。
+- 将遵循代码风格：改动收敛在 `crates/terminal_view/src/view.rs`，保持 `TerminalView -> Terminal -> Backend` 分层不变。
+- 确认不重复造轮子：已检查 `terminal_view`、`terminal`、`pty_backend` 与 sidebar 事件链路，仓库内不存在现成的无 bracketed paste 降级实现。
+- 外部依据：
+  - Context7 `/alacritty/alacritty`：确认 `CSI ? 2004 h/l` 为 bracketed paste 开关。
+  - `alacritty/alacritty`：核对终端仅在应用请求时按 paste 语义处理。
+  - `wezterm/wezterm`：核对“原始写入”和“发送 paste”是分离能力。
+- 本次决策：不在未开启 `BRACKETED_PASTE` 时伪造 `\x1b[200~...\x1b[201~`，而是在 `TerminalView` 层拦截 heredoc 等必须依赖原子块输入的高风险结构。
+
+## 编码后声明 - bracketed-paste-fallback
+时间：2026-03-25 16:12:44 +0800
+
+### 1. 复用了以下既有组件
+- `TerminalView::paste_text`：继续作为快捷键、右键菜单、快捷命令和 AI 代码块的统一粘贴入口。
+- `TerminalView::show_paste_confirm_dialog`：保留原有高危命令确认和普通多行确认的 UI 风格。
+- `TerminalView::write_to_pty`：所有最终发送仍复用既有 PTY 写入入口。
+- `main/locales/main.yml`：补齐 `TerminalView` / `TerminalSidebar` 缺失文案，避免新增提示显示原始 key。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `detect_unbracketed_paste_hazard`、`has_unterminated_shell_quote` 等函数均使用 `snake_case`。
+- 代码风格：把高风险判定拆成纯函数，并在 `view.rs` 底部沿用现有 `#[cfg(test)]` 单测模式。
+- 文件组织：产品逻辑只改 `crates/terminal_view/src/view.rs`，文案只改 `main/locales/main.yml`，未改 `terminal` / `pty_backend`。
+
+### 3. 对比了以下相似实现
+- `paste_text_unchecked` 原本在无 `BRACKETED_PASTE` 时直接原样写入：本次保留其职责，但在进入该函数前新增高风险拦截。
+- `show_paste_confirm_dialog` 原本用于“确认后仍发送”：本次新增 `show_unbracketed_paste_block_dialog`，用于必须阻断的 heredoc / 未闭合结构。
+- `Terminal::write` 与 `PtyWriteBack::write`：继续保持透明字节传输，不把粘贴语义下沉到后端。
+
+### 4. 未重复造轮子的证明
+- 未新增第二条粘贴事件链路，所有入口仍汇聚到 `TerminalView::paste_text`。
+- 未在 SSH、PTY 或 `Terminal` 层实现重复的风险检测逻辑。
+- 未伪造 bracketed paste 协议，而是复用终端现有 mode 判断并补充 view 层降级策略。
+
+## 验证记录 - bracketed-paste-fallback
+- `rustfmt --edition 2024 crates/terminal_view/src/view.rs`：通过。
+- `cargo test -p terminal_view --lib`：首次失败，原因是 `gpui` 的 Metal shader 编译尝试写入 `~/.cache/clang/ModuleCache`，被沙箱拒绝。
+- `env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p terminal_view --lib`：在沙箱内重试仍失败，`gpui` 构建脚本继续写默认 clang 缓存路径。
+- `env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p terminal_view --lib`（沙箱外）：通过，13 个测试全部通过。
+
+## 编码前检查 - db-connection-form-ssh-ssl-fixed
+时间：2026-03-25 21:40:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-db-connection-form-ssh-ssl-fixed.md`
+- 将使用以下可复用组件：
+  - `crates/db_view/src/common/db_connection_form.rs`：现有字段状态容器、回填与保存链路。
+  - `crates/terminal_view/src/ssh_form_window.rs`：`Checkbox/Radio/.when` 的固定代码渲染模式。
+  - `crates/db/src/ssh_tunnel.rs`：SSH 隧道字段键名与 `agent/private_key/password` 语义。
+  - `crates/core/src/storage/models.rs`：`DbConnectionConfig.extra_params` 与 `get_param_bool`。
+- 将遵循命名约定：新增 helper 和测试使用 `snake_case`，继续复用原有字段键名，不新增存储字段。
+- 将遵循代码风格：只在 `db_connection_form.rs` 内增加专用渲染分支和小型 helper，不改持久化结构。
+- 确认不重复造轮子：已检查仓库内现有表单联动模式，直接复用 `ssh_form_window.rs` 的交互结构，而不是再造新的表单框架。
+
+## 编码后声明 - db-connection-form-ssh-ssl-fixed
+时间：2026-03-25 21:57:00 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db_view/src/common/db_connection_form.rs`：继续复用 `field_values`、`field_inputs`、`field_selects`、`set_field_value`、`get_field_value`、`build_connection`、`load_connection`。
+- `crates/terminal_view/src/ssh_form_window.rs`：复用 `Checkbox + Radio + .when(...)` 的固定代码渲染组织方式。
+- `crates/db/src/ssh_tunnel.rs`：继续复用 `ssh_tunnel_enabled`、`ssh_auth_type`、`ssh_password`、`ssh_private_key_path` 等既有存储键和语义。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增纯函数与 helper 使用 `snake_case`，未改动既有连接参数键名。
+- 代码风格：通用字段初始化/回填机制保留，仅在 `render()` 中为 `ssl/ssh` 标签页增加专用渲染分支。
+- 文件组织：功能改动和测试都收敛在 `crates/db_view/src/common/db_connection_form.rs`，未扩散到存储层。
+
+### 3. 对比了以下相似实现
+- `ssh_form_window.rs` 的跳板机/代理页签：本次直接借用其“复选框控制整块显示”的模式，差异是数据库表单继续写回 `extra_params`。
+- 原 `db_connection_form.rs` 的通用配置式渲染：本次未删除状态容器，只替换 `ssl/ssh` 的展示层，避免破坏回填和保存。
+- `db/src/ssh_tunnel.rs` 的认证解析：既有逻辑已支持 `agent`，因此本次把 UI 和校验对齐到同一语义。
+
+### 4. 未重复造轮子的证明
+- 未新增新的表单状态结构或第二套持久化模型。
+- 未为 `ssl/ssh` 另起一套保存/回填链路，仍走 `DbConnectionConfig.extra_params`。
+- 未复制 `ssh_form_window.rs` 的整段实现，只复用了交互模式并映射到数据库表单字段。
+
+## 验证记录 - db-connection-form-ssh-ssl-fixed
+- `rustfmt --edition 2021 crates/db_view/src/common/db_connection_form.rs`：通过。
+- `CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p db_view --lib db_connection_form`：通过，6 个相关测试全部通过。
+- `cargo check -p db_view`：通过。
+
+## 编码前检查 - home-encourage-tab
+时间：2026-03-25 19:39:55 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-home-encourage-tab.md`
+- 将使用以下可复用组件：
+  - `main/src/home/home_tabs.rs`：`add_settings_tab` 的单实例页签打开模式。
+  - `main/src/encourage.rs`：现有赞赏内容渲染逻辑和二维码资源加载。
+  - `main/src/setting_tab.rs`：`TabContent` 实现约定。
+  - `crates/core/src/tab_container.rs`：`TabContent` / `TabItem` 接口约束。
+- 将遵循命名约定：新增方法使用 `snake_case`，面板类型使用 `PascalCase`。
+- 将遵循代码风格：尽量复用现有视图和 `activate_or_add_tab_lazy`，不新增重复 UI 组件。
+- 确认不重复造轮子：已检查首页底部入口、设置页签和赞赏视图，确定直接复用而非新建第二套支持作者页面。
+
+## 编码后声明 - home-encourage-tab
+时间：2026-03-25 19:39:55 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/encourage.rs`：继续复用原有赞赏内容、二维码图片加载和 GitHub 链接区域，只补页签接口。
+- `main/src/home/home_tabs.rs`：复用 `add_settings_tab` 的单实例页签打开模式，新加 `add_encourage_tab`。
+- `crates/core/src/tab_container.rs`：严格按 `TabContent` 和 `TabItem` 约定接入页签容器。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `add_encourage_tab`，新类型命名为 `EncouragePanel`，与 `SettingsPanel` 保持一致。
+- 代码风格：入口逻辑仍由 `HomePage` 驱动，具体页签内容继续放在独立文件 `encourage.rs`。
+- 文件组织：只改 `main/src/encourage.rs`、`main/src/home/home_tabs.rs`、`main/src/home_tab.rs`，未扩散到其他模块。
+
+### 3. 对比了以下相似实现
+- `show_encourage_dialog`：原本通过 `window.open_dialog` 弹框展示；本次改为页签打开，原因是用户需要更大的展示空间和与设置一致的交互。
+- `add_settings_tab`：本次直接沿用其单实例模式，差异仅是页签类型和标题不同。
+- `open_ssh_terminal` / `open_sftp_view`：这些是多实例页签模式；本次不采用，因为“支持作者”不需要重复多开。
+
+### 4. 未重复造轮子的证明
+- 未新增第二套赞赏 UI，而是直接把现有 `encourage.rs` 升级为 `TabContent`。
+- 未自建新的页签管理逻辑，而是完全复用 `tab_container` 现有 API。
+- 未引入额外持久化恢复实现；当前仓库未发现实际 registry 注册入口，本次保持最小改动。
+
+## 验证记录 - home-encourage-tab
+- `rustfmt --edition 2024 main/src/encourage.rs main/src/home/home_tabs.rs main/src/home_tab.rs`：通过。
+- `cargo check -p main`：失败，失败原因来自既有文件 `crates/db_view/src/common/db_connection_form.rs`，出现多处 `Field: From<AnyElement>` 相关编译错误，与本次改动无关。
+- `cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab|home/home_tabs)\\.rs|error\\['`：通过过滤确认，本次改动文件未出现新的编译错误输出。
+- `rustfmt --edition 2024 main/src/encourage.rs main/src/home_tab.rs`（布局与图标二次调整后）：通过。
+- `cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab)\\.rs|error\\['`（布局与图标二次调整后）：无输出，说明 `encourage.rs` / `home_tab.rs` 本次调整未引入新错误。
+
+## 编码前检查 - oracle-connection
+时间：2026-03-26 09:12:31 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-oracle-connection.md`
+- 将使用以下可复用组件：
+  - `crates/db/src/oracle/connection.rs`：现有 Oracle 连接、执行、流式执行和 `SqlResult` 组装逻辑。
+  - `crates/db/src/postgresql/connection.rs`：按列类型分支读取值、格式化日期时间的模式。
+  - `crates/db/src/mssql/connection.rs`：有序降级的 `extract_value` 组织方式。
+  - `crates/db/src/sqlite/connection.rs`：二进制转十六进制字符串的展示方式。
+- 将遵循命名约定：新增 helper 使用 `snake_case`，维持 `OracleDbConnection` 现有结构和方法命名。
+- 将遵循代码风格：只修改 Oracle 取值层与列类型显示，不重构连接/执行主干。
+- 确认不重复造轮子：已检查 PostgreSQL、MSSQL、SQLite 的现有取值模式，直接复用“按数据库类型分支”的既有思路，而不是新造一套结果映射框架。
+
+## 编码后声明 - oracle-connection
+时间：2026-03-26 09:12:31 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db/src/oracle/connection.rs`：保留 `connect/disconnect/execute/query/execute_streaming` 的既有流程，只调整结果值提取。
+- `crates/db/src/postgresql/connection.rs`：复用日期时间按类型格式化输出的策略。
+- `crates/db/src/mssql/connection.rs`：复用“优先精确类型，失败再降级”的提取模式。
+- `crates/db/src/sqlite/connection.rs`：复用二进制值以 `0x...` 字符串展示的约定。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `format_binary`、`format_naive_date_time`、`extract_scalar_value` 等 helper，全部使用 `snake_case`。
+- 代码风格：取值结果仍统一归一到 `Option<String>`，未改 `SqlResult::Query` 的结构与调用方契约。
+- 文件组织：所有代码改动收敛在 `crates/db/src/oracle/connection.rs`，留痕文件写入项目本地 `.claude/`。
+
+### 3. 对比了以下相似实现
+- `postgresql/connection.rs`：该实现按列类型显式分支处理 `TIMESTAMP/TIMESTAMPTZ/DATE/TIME/BYTEA`；本次 Oracle 改为按 `OracleType` 分支，理由是同类数据库驱动也需要类型驱动。
+- `mssql/connection.rs`：该实现对文本、数值、布尔和 chrono 类型做顺序尝试；本次 Oracle 保留了顺序降级，但先由 `OracleType` 缩小范围。
+- `sqlite/connection.rs`：该实现把二进制转成 `0x...`；本次 Oracle 的 `RAW/BLOB/BFILE` 采用相同展示策略，避免 UI 层看到不可显示字节。
+
+### 4. 未重复造轮子的证明
+- 未新增新的查询结果模型或通用适配层，继续复用 `QueryResult` / `QueryColumnMeta`。
+- 未修改 Oracle 连接和执行流程，只替换原本过于粗糙的 `extract_value` 实现。
+- 未新增数据库公共抽象，因为当前仓库对不同数据库仍采用各自 `extract_value` 的本地实现模式。
+
+## 验证记录 - oracle-connection
+- `rustfmt --edition 2021 crates/db/src/oracle/connection.rs`：通过。
+- `cargo check -p db`：通过。
+- 限制：当前未连接真实 Oracle 实例，无法做运行时集成验证；本次仅确认编译正确和类型映射路径完整。
+
+## 编码前检查 - typos-ci-fix
+时间：2026-03-26 10:09:42 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-typos-ci-fix.md`
+- 将使用以下可复用组件：
+  - `Cargo.toml`：现有 `workspace.metadata.typos` 配置入口。
+  - `.github/workflows/ci.yml`：当前 CI 的 `typos` 执行方式。
+  - `crates/db/src/mssql/plugin.rs` 与 `crates/db/src/sqlite/plugin.rs`：`IIF(...)` 合法 SQL 函数字面量。
+  - `crates/db_view/src/sql_inline_completion.rs`：补全前缀/后缀字面量及断言模式。
+- 将遵循命名约定：继续使用 TOML 分段配置，不引入新的文件或命名体系。
+- 将遵循代码风格：优先集中配置修复，避免修改业务逻辑与测试语义。
+- 确认不重复造轮子：已检查根 `Cargo.toml`、CI workflow、数据库插件和补全测试，确认直接扩展现有 typos 配置即可，无需新建 `_typos.toml` 或重构补全实现。
+
+## 需求变更记录 - typos-ci-fix
+时间：2026-03-26 10:11:45 +0800
+
+- 用户将需求从“修复 `typos` 误报”改为“去掉这个检查”。
+- 因此实施方案从扩展白名单切换为删除 `typos` 检查链路。
+- 受影响范围重新确认如下：
+  - `.github/workflows/ci.yml`：删除 `Typo check` 步骤。
+  - `Cargo.toml`：删除 `workspace.metadata.typos` 配置段。
+  - `README.md`、`README_CN.md`、`CLAUDE.md`：删除开发命令中的 `typos` 说明。
+
+## 编码后声明 - typos-ci-fix
+时间：2026-03-26 10:12:34 +0800
+
+### 1. 复用了以下既有组件
+- `.github/workflows/ci.yml`：沿用现有 CI 结构，仅删除 `Typo check` 单一步骤，不改其余 job 顺序。
+- `Cargo.toml`：直接清理原有 `workspace.metadata.typos` 配置入口，不新增替代配置文件。
+- `README.md`、`README_CN.md`、`CLAUDE.md`：沿用现有开发命令展示结构，仅删除 `typos` 一项。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增任何代码标识符，保持现有文件命名和配置分段方式不变。
+- 代码风格：采用最小改动策略，只移除检查链路本身，不碰数据库插件与 SQL 补全逻辑。
+- 文件组织：变更集中在 CI、根配置和开发文档，没有扩散到业务 crate。
+
+### 3. 对比了以下相似实现
+- `.github/workflows/ci.yml`：原先的 `Typo check` 与 `Lint`/`Test` 同级串联；本次只移除 `Typo check`，保留其它检查链路。
+- `Cargo.toml`：原先工具配置直接挂在 `workspace.metadata`；本次按同一入口直接删除，不改用 `_typos.toml` 等替代方案。
+- `README.md` / `README_CN.md` / `CLAUDE.md`：原先都把 `typos` 列为开发命令；本次同步删除，保证文档与 CI 一致。
+
+### 4. 未重复造轮子的证明
+- 未继续维护刚才尝试过的白名单方案，避免在检查被整体移除后留下无用途配置。
+- 未新建额外脚本或条件开关，直接删除原有入口，符合“去掉这个检查”的用户意图。
+- 未修改 `crates/db` 与 `crates/db_view` 中的 SQL 字符串和测试字面量，避免无关变更。
+
+## 验证记录 - typos-ci-fix
+- `cargo metadata --format-version 1 --no-deps >/dev/null`：通过，确认移除 `workspace.metadata.typos` 后根 `Cargo.toml` 仍然有效。
+- 使用搜索验证 `Cargo.toml|README.md|README_CN.md|CLAUDE.md|*.yml` 中的 `typos`：无匹配，说明 CI、根配置和开发文档中的 `typos` 入口已全部移除。
+- `git diff -- .github/workflows/ci.yml Cargo.toml README.md README_CN.md CLAUDE.md`：确认差异仅包含删除 `typos` 检查步骤、配置和文档说明。
+
+## 编码前检查 - encourage-unused-imports
+时间：2026-03-26 10:18:25 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-encourage-unused-imports.md`
+- 将使用以下可复用组件：
+  - `main/src/encourage.rs`：当前纯渲染实现，作为直接修复目标。
+  - `main/src/setting_tab.rs`：`SettingsPanel` 的 `TabContent` / `TabContentEvent` 正常使用模式。
+  - `main/src/home_tab.rs`：`HomePage` 的 `TabContent` / 交互 trait 正常使用模式。
+- 将遵循命名约定：不新增命名，只清理实际未使用导入。
+- 将遵循代码风格：采用最小修改原则，不调整渲染逻辑和页签行为。
+- 确认不重复造轮子：这是现有文件的遗留导入问题，只需对齐当前职责并删除无用项，无需引入额外封装。
+
+## 编码后声明 - encourage-unused-imports
+时间：2026-03-26 10:19:36 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/encourage.rs`：保留现有支持内容渲染结构，只调整文件顶部导入列表。
+- `main/src/setting_tab.rs`：作为真正实现 `TabContent`/`TabContentEvent` 的参考，确认当前文件不再需要这些导入。
+- `main/src/home_tab.rs`：作为真正依赖 `InteractiveElement`/`StatefulInteractiveElement`/`Window` 的参考，确认当前文件导入应与职责一致。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未引入新标识符，仅清理导入。
+- 代码风格：保持 Rust 导入分组和多行格式，与仓库现有写法一致。
+- 文件组织：改动收敛在 `main/src/encourage.rs` 和 `.claude` 留痕文件，没有扩散到其他模块。
+
+### 3. 对比了以下相似实现
+- `setting_tab.rs`：该文件确实实现了 `impl EventEmitter<TabContentEvent>` 和 `impl TabContent`，因此保留相关导入；`encourage.rs` 没有这些实现，所以不应照搬。
+- `home_tab.rs`：该文件的交互 trait 导入服务于真实方法调用和页签实体实现；`encourage.rs` 已退化为纯渲染模块，不再需要这些 trait。
+- `encourage.rs` 当前正文：全文只有渲染辅助函数和数据加载结构，没有使用 `Window` 或 `TabContentEvent` 的签名或类型位点。
+
+### 4. 未重复造轮子的证明
+- 未为 unused import 问题增加 `#[allow(unused_imports)]` 之类的规避性属性。
+- 未修改任何 UI 结构、页签注册或渲染逻辑，只做真正必要的导入清理。
+
+## 验证记录 - encourage-unused-imports
+- `cargo check -p main --all-targets`：通过，确认 `main/src/encourage.rs` 的 unused imports 已消失，且 `main` crate 全 targets 仍可编译。
+
+## 编码前检查 - ci-followup-build-ssh
+时间：2026-03-26 10:36:52 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-ci-followup-build-ssh.md`
+- 将使用以下可复用组件：
+  - `crates/core/build.rs`：当前触发 `collapsible_if` 的 build script。
+  - `main/build.rs`：相同环境变量导出模式，适合一并统一。
+  - `crates/ssh/src/ssh.rs`：Windows 测试下出现 unused/dead code 的测试模块。
+- 将遵循命名约定：不新增业务命名，只做条件编译和 let-chain 收敛。
+- 将遵循代码风格：优先语义等价修复，不使用 `#[allow(...)]` 绕过。
+- 确认不重复造轮子：这是现有实现的 lint/条件编译收尾问题，只需直接修正原代码。
+
+## 编码后声明 - ci-followup-build-ssh
+时间：2026-03-26 10:40:21 +0800
+
+### 1. 复用了以下既有组件
+- `crates/core/build.rs`：沿用现有环境变量导出逻辑，仅把嵌套 `if` 改成 let-chain。
+- `main/build.rs`：对齐同样的 build script 写法，避免同类 Clippy 问题后续继续冒出。
+- `crates/ssh/src/ssh.rs`：保留现有测试逻辑，仅把 Unix 专用 helper 与同步原语导入收紧到 `#[cfg(unix)]`。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增业务标识符，只调整条件编译和局部参数传递。
+- 代码风格：不用 `allow` 压警告，直接按 Clippy 建议修正源码。
+- 文件组织：改动收敛在两个 build script 和一个 ssh 测试模块。
+
+### 3. 对比了以下相似实现
+- `crates/core/build.rs` 与 `main/build.rs`：两者本来就是同一模式，本次统一为 let-chain，避免只修一处。
+- `ssh.rs` 测试模块：`test_auth_failure_messages` 与 `Mutex/OnceLock` 只被 `#[cfg(unix)]` 测试使用，因此改为同样受 `#[cfg(unix)]` 约束。
+- `ssh.rs` 公钥认证逻辑：`hash_alg` 是 `Option<HashAlg>`，属于 `Copy`，直接传值即可，不需要 `clone()`。
+
+### 4. 未重复造轮子的证明
+- 未引入新的测试辅助结构，只收紧现有 helper 的平台作用域。
+- 未改动任何认证行为、错误消息内容或 build script 的环境变量清单。
+
+## 验证记录 - ci-followup-build-ssh
+- `cargo test -p ssh --lib`：通过，当前平台下 ssh 单元测试通过。
+- `cargo clippy -p one-core -p main --all-targets -- -D warnings`：本次修复的 `crates/core/build.rs`、`main/build.rs` 与 `crates/ssh/src/ssh.rs` 问题已不再出现；但命令继续暴露出 `crates/one_ui` 与 `crates/core` 中大量既有 Clippy 报错，暂未完成全量清理。

@@ -149,7 +149,7 @@ impl client::Handler for RusshHandler {
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &ssh_key::PublicKey,
+        _server_public_key: &PublicKey,
     ) -> Result<bool, Self::Error> {
         Ok(true)
     }
@@ -233,7 +233,7 @@ where
                 let auth_result = session
                     .authenticate_publickey(
                         username,
-                        PrivateKeyWithHashAlg::new(Arc::new(key_pair), hash_alg.clone()),
+                        PrivateKeyWithHashAlg::new(Arc::new(key_pair), hash_alg),
                     )
                     .await?;
                 if !auth_result.success() {
@@ -405,7 +405,7 @@ where
 #[cfg(unix)]
 async fn connect_agent_client(
     messages: &AuthFailureMessages,
-) -> Result<russh::keys::agent::client::AgentClient<tokio::net::UnixStream>> {
+) -> Result<agent::client::AgentClient<tokio::net::UnixStream>> {
     russh::keys::agent::client::AgentClient::connect_env()
         .await
         .map_err(|e| anyhow::anyhow!("{}: {}", messages.agent_connect_failed, e))
@@ -470,8 +470,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::sync::{Mutex, OnceLock};
 
+    #[cfg(unix)]
     fn test_auth_failure_messages() -> AuthFailureMessages {
         AuthFailureMessages {
             password_failed: "password".to_string(),

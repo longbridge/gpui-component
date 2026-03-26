@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
+use chrono::{DateTime, FixedOffset, Local, NaiveDate, NaiveDateTime, Utc};
 use one_core::storage::DbConnectionConfig;
+use oracle::sql_type::OracleType;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
@@ -44,7 +46,43 @@ impl OracleDbConnection {
         }
     }
 
-    fn extract_value(row: &oracle::Row, index: usize) -> Option<String> {
+    fn format_binary(bytes: &[u8]) -> String {
+        if bytes.is_empty() {
+            return String::new();
+        }
+
+        let hex: String = bytes.iter().map(|byte| format!("{:02X}", byte)).collect();
+        format!("0x{}", hex)
+    }
+
+    fn format_naive_date(value: NaiveDate) -> String {
+        value.format("%Y-%m-%d").to_string()
+    }
+
+    fn format_naive_date_time(value: NaiveDateTime) -> String {
+        let micros = value.and_utc().timestamp_subsec_micros();
+        if micros == 0 {
+            value.format("%Y-%m-%d %H:%M:%S").to_string()
+        } else {
+            format!("{}.{:06}", value.format("%Y-%m-%d %H:%M:%S"), micros)
+        }
+    }
+
+    fn format_offset_date_time(value: DateTime<FixedOffset>) -> String {
+        let micros = value.timestamp_subsec_micros();
+        if micros == 0 {
+            value.format("%Y-%m-%d %H:%M:%S %:z").to_string()
+        } else {
+            format!(
+                "{}.{:06} {}",
+                value.format("%Y-%m-%d %H:%M:%S"),
+                micros,
+                value.format("%:z")
+            )
+        }
+    }
+
+    fn extract_scalar_value(row: &oracle::Row, index: usize) -> Option<String> {
         row.get::<usize, Option<String>>(index)
             .ok()
             .flatten()
@@ -60,6 +98,111 @@ impl OracleDbConnection {
                     .flatten()
                     .map(|v| v.to_string())
             })
+            .or_else(|| {
+                row.get::<usize, Option<bool>>(index)
+                    .ok()
+                    .flatten()
+                    .map(|v| v.to_string())
+            })
+            .or_else(|| {
+                row.get::<usize, Option<u64>>(index)
+                    .ok()
+                    .flatten()
+                    .map(|v| v.to_string())
+            })
+    }
+
+    fn extract_value(row: &oracle::Row, index: usize, oracle_type: &OracleType) -> Option<String> {
+        match oracle_type {
+            OracleType::Date | OracleType::Timestamp(_) => row
+                .get::<usize, Option<NaiveDateTime>>(index)
+                .ok()
+                .flatten()
+                .map(Self::format_naive_date_time)
+                .or_else(|| {
+                    row.get::<usize, Option<NaiveDate>>(index)
+                        .ok()
+                        .flatten()
+                        .map(Self::format_naive_date)
+                })
+                .or_else(|| Self::extract_scalar_value(row, index)),
+            OracleType::TimestampTZ(_) | OracleType::TimestampLTZ(_) => row
+                .get::<usize, Option<DateTime<FixedOffset>>>(index)
+                .ok()
+                .flatten()
+                .map(Self::format_offset_date_time)
+                .or_else(|| {
+                    row.get::<usize, Option<DateTime<Utc>>>(index)
+                        .ok()
+                        .flatten()
+                        .map(|value| Self::format_offset_date_time(value.fixed_offset()))
+                })
+                .or_else(|| {
+                    row.get::<usize, Option<DateTime<Local>>>(index)
+                        .ok()
+                        .flatten()
+                        .map(|value| Self::format_offset_date_time(value.fixed_offset()))
+                })
+                .or_else(|| {
+                    row.get::<usize, Option<NaiveDateTime>>(index)
+                        .ok()
+                        .flatten()
+                        .map(Self::format_naive_date_time)
+                })
+                .or_else(|| Self::extract_scalar_value(row, index)),
+            OracleType::Raw(_) | OracleType::LongRaw | OracleType::BLOB | OracleType::BFILE => row
+                .get::<usize, Option<Vec<u8>>>(index)
+                .ok()
+                .flatten()
+                .map(|bytes| Self::format_binary(&bytes))
+                .or_else(|| Self::extract_scalar_value(row, index)),
+            OracleType::BinaryFloat => row
+                .get::<usize, Option<f32>>(index)
+                .ok()
+                .flatten()
+                .map(|v| v.to_string())
+                .or_else(|| Self::extract_scalar_value(row, index)),
+            OracleType::BinaryDouble => row
+                .get::<usize, Option<f64>>(index)
+                .ok()
+                .flatten()
+                .map(|v| v.to_string())
+                .or_else(|| Self::extract_scalar_value(row, index)),
+            OracleType::Boolean => row
+                .get::<usize, Option<bool>>(index)
+                .ok()
+                .flatten()
+                .map(|v| v.to_string())
+                .or_else(|| Self::extract_scalar_value(row, index)),
+            OracleType::Int64 => row
+                .get::<usize, Option<i64>>(index)
+                .ok()
+                .flatten()
+                .map(|v| v.to_string())
+                .or_else(|| Self::extract_scalar_value(row, index)),
+            OracleType::UInt64 => row
+                .get::<usize, Option<u64>>(index)
+                .ok()
+                .flatten()
+                .map(|v| v.to_string())
+                .or_else(|| Self::extract_scalar_value(row, index)),
+            OracleType::Number(_, _)
+            | OracleType::Float(_)
+            | OracleType::Varchar2(_)
+            | OracleType::NVarchar2(_)
+            | OracleType::Char(_)
+            | OracleType::NChar(_)
+            | OracleType::Rowid
+            | OracleType::CLOB
+            | OracleType::NCLOB
+            | OracleType::IntervalDS(_, _)
+            | OracleType::IntervalYM(_)
+            | OracleType::Object(_)
+            | OracleType::Long
+            | OracleType::Json
+            | OracleType::Xml
+            | OracleType::RefCursor => Self::extract_scalar_value(row, index),
+        }
     }
 
     fn build_query_result(
@@ -115,9 +258,13 @@ impl OracleDbConnection {
                                 .map(|col| {
                                     QueryColumnMeta::new(
                                         col.name().to_string(),
-                                        format!("{:?}", col.oracle_type()),
+                                        col.oracle_type().to_string(),
                                     )
                                 })
+                                .collect();
+                            let column_types: Vec<OracleType> = column_info
+                                .iter()
+                                .map(|col| col.oracle_type().clone())
                                 .collect();
 
                             let mut data_rows = Vec::new();
@@ -125,7 +272,14 @@ impl OracleDbConnection {
                                 match row_result {
                                     Ok(row) => {
                                         let row_data: Vec<Option<String>> = (0..columns.len())
-                                            .map(|i| Self::extract_value(&row, i))
+                                            .map(|i| {
+                                                column_types
+                                                    .get(i)
+                                                    .and_then(|oracle_type| {
+                                                        Self::extract_value(&row, i, oracle_type)
+                                                    })
+                                                    .or_else(|| Self::extract_scalar_value(&row, i))
+                                            })
                                             .collect();
                                         data_rows.push(row_data);
                                     }
@@ -217,7 +371,10 @@ impl DbConnection for OracleDbConnection {
 
         // 获取连接超时，默认 30 秒
         let connect_timeout_secs = config.get_param_as::<u64>("connect_timeout").unwrap_or(30);
-        debug!("[Oracle] Connecting with timeout {}s...", connect_timeout_secs);
+        debug!(
+            "[Oracle] Connecting with timeout {}s...",
+            connect_timeout_secs
+        );
 
         // 使用 tokio::timeout 包装 spawn_blocking
         let conn_result = timeout(
@@ -239,7 +396,10 @@ impl DbConnection for OracleDbConnection {
                 return Err(DbError::Internal(format!("task error: {}", e)));
             }
             Err(_) => {
-                error!("[Oracle] Connection timed out after {}s", connect_timeout_secs);
+                error!(
+                    "[Oracle] Connection timed out after {}s",
+                    connect_timeout_secs
+                );
                 return Err(DbError::connection(format!(
                     "connection timed out after {}s",
                     connect_timeout_secs

@@ -46,11 +46,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: test-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Typo check
-        if: ${{ matrix.run_on == 'macos-latest' }}
-        run: |
-          cargo install typos-cli || echo "typos-cli already installed"
-          typos
       - name: Lint
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |

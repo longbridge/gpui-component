@@ -40,9 +40,6 @@ cargo clippy -- --deny warnings
 # Format check
 cargo fmt --check
 
-# Spell check
-typos
-
 # Unused dependency check
 cargo machete
 

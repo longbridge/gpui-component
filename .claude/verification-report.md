@@ -259,3 +259,411 @@
 - 修复符合项目既有模式：[`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L1128) 现在通过 `Tokio::spawn` 把缓存和元数据失效切到共享 Tokio runtime，再回 UI 线程重建树。
 - 失败可见性更好：[`db_tree_view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs#L1147) 新增 Tokio 任务失败日志，避免异常被静默吞掉。
 - 本地验证有效：`cargo check -p db_view` 与 `cargo test -p db_view sync_selected_databases_from_connection --lib` 均已通过。
+
+---
+
+## 审查报告（db-connection-form-ssl 实现）
+生成时间：2026-03-25 13:35:05 +0800
+
+### 需求完整性检查
+- 目标明确：为 `db_connection_form` 实现可用的 SSL 配置，并让保存的参数真正影响建连逻辑。
+- 范围明确：UI 字段、i18n 文案、MySQL/PostgreSQL 驱动建连、ClickHouse TLS feature、MSSQL 分组调整。
+- 交付物明确：SSL 标签页字段、驱动层参数接入、依赖特性启用、纯逻辑测试、本地验证、上下文与操作留痕。
+- 风险与依赖明确：PostgreSQL 需要外部 TLS connector，MySQL/ClickHouse 需要启用 TLS feature。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：88/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：91/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 表单层已补齐 SSL 配置：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L333) 开始为 MySQL/PostgreSQL/MSSQL/ClickHouse 提供非空 SSL 分组；Oracle 的空白 SSL 标签页已移除。
+- MySQL SSL 已接入：[`mysql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/mysql/connection.rs#L31) 新增 `build_ssl_opts`，根据 `require_ssl/verify_ca/verify_identity/ssl_root_cert_path/tls_hostname_override` 构造 `mysql_async::SslOpts`。
+- PostgreSQL TLS 已接入：[`postgresql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L39) 新增 `ssl_mode` 与 TLS connector 构建逻辑，不再固定 `NoTls`。
+- 依赖特性已对齐：[`Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/Cargo.toml#L94) 为 `mysql_async`、`clickhouse` 开启 TLS feature，并新增 `postgres-native-tls` / `native-tls`。
+- 本地验证有效：`cargo check -p db_view`、`cargo test -p db ssl_ --lib`、`cargo test -p db_view ssl_tab --lib` 全部通过。
+
+---
+
+## 审查报告（db-ssl-rustls-migration 实现）
+生成时间：2026-03-25 14:30:01 +0800
+
+### 需求完整性检查
+- 目标明确：将数据库 SSL 实现从 `native-tls` 迁移到 `rustls`，同时保持 `db_connection_form` 的字段和 `extra_params` 契约不变。
+- 范围明确：工作区依赖、`db` crate 依赖、PostgreSQL connector、MySQL/ClickHouse/MSSQL 的 TLS feature。
+- 交付物明确：依赖迁移、PostgreSQL rustls connector、补充测试、本地验证、上下文与操作留痕。
+- 风险与依赖明确：PostgreSQL 是唯一需要替换 connector 的驱动，其余驱动主要依赖 feature 切换。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：91/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：96/100
+- 风险评估：93/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 依赖已切换到 rustls：[`Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/Cargo.toml#L97) 现改用 `mysql_async` 的 `rustls-tls`、`clickhouse` 的 `rustls-tls-native-roots`、`tokio-postgres-rustls`，并移除了工作区对 `native-tls/postgres-native-tls` 的直接依赖。
+- PostgreSQL connector 已替换：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L209) 通过 `MakeRustlsConnect` 建连，不再依赖 `native_tls::TlsConnector`。
+- 现有参数语义被保留：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L31) 的包装 verifier 仅针对 `ssl_accept_invalid_certs` / `ssl_accept_invalid_hostnames` 放宽对应证书错误，不影响其它 TLS 校验路径。
+- 自定义 CA 仍可用：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L146) 同时支持从 `ssl_root_cert_path` 读取 PEM/DER 证书并叠加到系统根证书。
+- 本地验证有效：`cargo check -p db_view`、`cargo test -p db ssl_ --lib`、`cargo test -p db_view ssl_tab --lib` 全部通过。
+
+---
+
+## 审查补充（mysql-ssh-tls-lab 镜像复用调整）
+生成时间：2026-03-25 15:09:17 +0800
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：78/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：84/100
+
+### 综合评分
+- 89/100
+- 建议：需讨论
+
+### 结论
+- 需求已落实：[`docker-compose.yml`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/docker-compose.yml#L3) 已默认复用 `mysql:8.4.5`，[`verify.sh`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/verify.sh#L10) 与之保持一致。
+- 文档已对齐：[`README.md`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/README.md#L13) 说明了默认镜像与 `MYSQL_IMAGE` 覆盖方式。
+- 当前唯一未闭环项不是 MySQL 镜像，而是 bastion 首次构建依赖的 `ubuntu:24.04` 拉取/构建仍在进行，因此整套 SSH+TLS 自动验证尚未最终通过。
+
+---
+
+## 审查补充（本地 Docker MySQL TLS + 远程 sshd 联调准备）
+生成时间：2026-03-25 16:27:27 +0800
+
+### 技术维度评分
+- 代码质量：92/100
+- 测试覆盖：90/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：97/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 本地 TLS MySQL 已可用：[`docker-compose.yml`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/docker-compose.yml#L2) 的 `mysql` 服务已成功启动，健康检查通过。
+- 容器内 TLS 校验通过：使用 `VERIFY_IDENTITY` 和 CA 文件查询 [`01-init.sql`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/mysql/init/01-init.sql#L1) 初始化的 `smoke_test` 表，结果为 `2`。
+- 宿主机路径也通过：使用本机 `mysql` 客户端连接 `127.0.0.1:33306` 并携带 [`ca.pem`](/Users/hufei/RustroverProjects/onetcli/.claude/mysql-ssh-tls-lab/mysql/certs/ca.pem#L1) 做 `VERIFY_IDENTITY` 校验成功，说明后续经远程 sshd 反向转发到本地 Docker MySQL 的链路具备基础条件。
+- `host.docker.internal` 校验失败不影响本次方案：证书 SAN 针对的是 `127.0.0.1`/`localhost`/`mysql`，而 onetcli 通过 SSH 隧道建立本地转发后实际连接主机同样是 `127.0.0.1`。 
+
+---
+
+## 审查补充（MySQL rustls provider panic 修复）
+生成时间：2026-03-25 18:40:56 +0800
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：86/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：98/100
+- 架构一致：97/100
+- 风险评估：92/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 根因已闭环：[`mysql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/mysql/connection.rs#L37) 之前在启用 TLS 时直接进入 `mysql_async` 的 rustls connector，但进程级默认 `CryptoProvider` 未安装，导致运行时 panic。
+- 修复方式与仓库既有模式一致：新增 [`rustls_provider.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/rustls_provider.rs#L1) 统一封装 `aws_lc_rs::default_provider().install_default().ok()`，并用 `Once` 保证只初始化一次。
+- 驱动复用已收口：[`mysql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/mysql/connection.rs#L37) 和 [`postgresql/connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/connection.rs#L210) 现在都复用同一个 helper，避免 TLS 初始化逻辑继续分叉。
+- 本地编译验证有效：`cargo check -p db` 已通过。
+
+---
+
+## 审查报告（bracketed-paste-fallback 实现）
+生成时间：2026-03-25 16:12:44 +0800
+
+### 需求完整性检查
+- 目标明确：修复远端未开启 bracketed paste 时，多行粘贴尤其 heredoc 被 shell 错误续行解析的问题。
+- 范围明确：限定在 `TerminalView` 的粘贴入口、相关文案和本地单元测试，不改 `Terminal`/`PTY` 透明传输层。
+- 交付物明确：高风险粘贴拦截、上下文摘要、操作日志、本地测试与审查报告。
+- 风险与依赖明确：shell 结构识别是启发式；依赖 `alacritty_terminal::TermMode` 提供 `ALT_SCREEN` 与 `BRACKETED_PASTE` 状态。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：90/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：98/100
+- 风险评估：92/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 高风险结构已在视图层统一拦截：[`view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/view.rs#L113) 新增 `UnbracketedPasteHazard` 和相关纯函数，覆盖 heredoc、未闭合引号与反斜杠续行。
+- 粘贴决策已从“只确认”升级为“必要时阻断”：[`view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/view.rs#L1231) 在无 `BRACKETED_PASTE` 时先检查高风险块，再决定是否允许进入原有多行确认流程。
+- 协议语义保持正确：[`view.rs`](/Users/hufei/RustroverProjects/onetcli/crates/terminal_view/src/view.rs#L1252) 的 `paste_text_unchecked` 仍只在远端程序已开启 `BRACKETED_PASTE` 时发送 `\x1b[200~...\x1b[201~`，没有伪造远端能力。
+- 用户提示已补齐：[`main.yml`](/Users/hufei/RustroverProjects/onetcli/main/locales/main.yml#L1169) 新增 `TerminalView` / `TerminalSidebar` 相关文案，避免新对话框显示原始 key。
+- 本地验证有效：`env CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p terminal_view --lib` 在沙箱外通过，13 个测试全部通过。
+
+### 剩余风险
+- 当前 shell 结构检测是启发式规则，不覆盖所有复杂复合语法；但已覆盖用户报告的 heredoc 主故障路径和两类常见续行结构。
+- `main/locales/main.yml` 中补入了当前代码已在使用但仓库缺失的 `TerminalView` / `TerminalSidebar` 文案键，若后续有专门的本地化整理任务，可再统一清理同类缺口。
+
+---
+
+## 审查报告（home-encourage-tab 实现）
+生成时间：2026-03-25 19:39:55 +0800
+
+### 需求完整性检查
+- 目标明确：将首页“支持作者”从弹框改为在 `tab_container` 中打开页签，并改善赞赏码展示空间。
+- 范围明确：限定在首页按钮入口、赞赏视图自身和 `HomePage` 页签打开辅助方法。
+- 交付物明确：代码修改、上下文摘要、操作日志、验证报告。
+- 风险与依赖明确：整仓编译当前被既有 `db_connection_form.rs` 错误阻塞，因此只能做局部无新增错误验证。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：78/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：97/100
+- 风险评估：86/100
+
+### 综合评分
+- 90/100
+- 建议：通过
+
+### 结论
+- 赞赏视图已转为页签内容：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 中的 `EncouragePanel` 现在实现了 `EventEmitter<TabContentEvent>` 和 `TabContent`，可以直接挂入 `TabContainer`。
+- 首页入口已切换为单实例页签：[`home_tabs.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home/home_tabs.rs) 新增 `add_encourage_tab`，复用 `activate_or_add_tab_lazy`，重复点击只会激活已有页签。
+- 原弹框路径已移除：[`home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs) 的“支持作者”按钮已改为调用 `add_encourage_tab`，不再走 `window.open_dialog`。
+- 展示尺寸已放大：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 将二维码尺寸从 `180` 调整到 `220`，更适合主内容区域。
+
+### 剩余风险
+- 当前无法给出“整仓编译通过”结论，因为 `crates/db_view/src/common/db_connection_form.rs` 已存在与本次无关的编译错误。
+- 如果后续项目启用统一的 `TabContentRegistry` 恢复注册，建议再补 `EncouragePanel` 的恢复逻辑；本次未做这部分扩展。
+
+---
+
+## 审查报告（oracle-connection 实现）
+生成时间：2026-03-26 09:12:31 +0800
+
+### 需求完整性检查
+- 目标明确：修正 `crates/db/src/oracle/connection.rs` 的 Oracle 查询取值逻辑，使其能稳定处理 `chrono` 日期时间与常见 Oracle 类型。
+- 范围明确：改动限定在 Oracle 连接层值提取与列类型显示，不触碰连接配置、插件接口和上层查询结果结构。
+- 交付物明确：代码修改、上下文摘要、操作日志、本地编译验证和审查报告均已落地。
+- 风险与依赖明确：依赖 `oracle 0.6.3` 的 `chrono` 特性和 `OracleType` 枚举；当前缺少真实 Oracle 集成环境。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：78/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：97/100
+- 风险评估：84/100
+
+### 综合评分
+- 91/100
+- 建议：通过
+
+### 结论
+- Oracle 结果提取已改为类型驱动：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/connection.rs) 现在基于 `OracleType` 分支读取 `Date/Timestamp/TimestampTZ/TimestampLTZ/Raw/BLOB/BFILE/Boolean/Number` 等类型，不再只依赖 `String/i64/f64` 的宽泛尝试。
+- `chrono` 类型已真正接入：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/connection.rs) 新增 `NaiveDateTime` 与 `DateTime<FixedOffset>` 的格式化 helper，日期时间输出风格与 PostgreSQL/MSSQL 当前实现保持一致。
+- 二进制结果展示已统一：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/connection.rs) 对 `RAW/BLOB/BFILE` 使用 `0x...` 文本输出，避免表格层出现不可读字节。
+- 列元数据显示更稳定：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/connection.rs) 将 Oracle 列类型元数据从 `Debug` 输出改为 `Display` 字符串，便于前端展示。
+- 本地验证有效：`rustfmt --edition 2021 crates/db/src/oracle/connection.rs` 与 `cargo check -p db` 均已通过。
+
+### 剩余风险
+- 当前没有真实 Oracle 数据库的本地自动化测试，无法确认所有 Oracle 会话设置和特殊列类型在运行时都能命中预期分支。
+- `CLOB/NCLOB/REF CURSOR/Object` 仍保留字符串兜底路径；如果后续出现具体运行时样例，可能需要继续细化映射。
+
+---
+
+## 审查报告（typos-ci-fix 实现）
+生成时间：2026-03-26 10:12:34 +0800
+
+### 需求完整性检查
+- 目标明确：移除仓库中的 `typos` 检查链路，消除 GitHub 流程中的相关失败。
+- 范围明确：包含 CI workflow、根 `Cargo.toml` 工具配置，以及 README / README_CN / CLAUDE 的开发命令说明。
+- 交付物明确：代码修改、上下文摘要、操作日志、本地验证和审查报告均已落地。
+- 风险与依赖明确：`.claude` 历史记录仍会保留 `typos` 字样，但它们不属于生效检查入口。
+
+### 技术维度评分
+- 代码质量：97/100
+- 测试覆盖：88/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：98/100
+- 架构一致：96/100
+- 风险评估：93/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- CI 已移除 `typos` 检查：[`ci.yml`](/Users/hufei/RustroverProjects/onetcli/.github/workflows/ci.yml) 删除了 `Typo check` 步骤，GitHub workflow 不再安装或执行 `typos-cli`。
+- 根配置已清理：[`Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/Cargo.toml) 删除了整个 `workspace.metadata.typos` 配置段，仓库不再维护 `typos` 白名单或标识符例外。
+- 开发文档已同步：[`README.md`](/Users/hufei/RustroverProjects/onetcli/README.md)、[`README_CN.md`](/Users/hufei/RustroverProjects/onetcli/README_CN.md)、[`CLAUDE.md`](/Users/hufei/RustroverProjects/onetcli/CLAUDE.md) 均已删除 `typos` 开发命令，避免文档与 CI 不一致。
+- 本地验证有效：`cargo metadata --format-version 1 --no-deps >/dev/null` 通过，且针对核心入口文件的 `typos` 搜索结果为 0。
+
+### 剩余风险
+- 如果后续仍希望保留拼写检查能力，需要重新选择替代工具或恢复新的检查链路；当前仓库已完全不再依赖 `typos`。
+
+---
+
+## 审查报告（encourage-unused-imports 实现）
+生成时间：2026-03-26 10:19:36 +0800
+
+### 需求完整性检查
+- 目标明确：修复 Linux / Windows CI 在 `main/src/encourage.rs` 上的 unused imports 失败。
+- 范围明确：只清理 `encourage.rs` 顶部的遗留导入，不改渲染行为。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地验证和审查报告均已补齐。
+- 风险与依赖明确：`gpui` 某些链式方法依赖 trait 导入，因此必须以编译结果校验是否误删必要 trait。
+
+### 技术维度评分
+- 代码质量：97/100
+- 测试覆盖：90/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：98/100
+- 架构一致：97/100
+- 风险评估：94/100
+
+### 综合评分
+- 96/100
+- 建议：通过
+
+### 结论
+- 遗留导入已清理：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 删除了未使用的 `InteractiveElement`、`StatefulInteractiveElement`、`Window`、`TabContent`、`TabContentEvent`。
+- 必要 trait 仍保留：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 继续保留 `ParentElement`、`Styled`、`IntoElement`、`StyledImage` 等当前渲染链真实依赖的导入。
+- 修复方式符合现有模式：对比 [`setting_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/setting_tab.rs) 与 [`home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs) 后，本次仅让 `encourage.rs` 的导入与其“纯渲染 helper”职责重新一致。
+- 本地验证有效：`cargo check -p main --all-targets` 已通过。
+
+### 剩余风险
+- 当前只验证了本地 `main` crate 的全 target 编译；如果远端 CI 还存在缓存或其他分支差异，需要以最新提交重新跑一次流程确认。
+
+---
+
+## 审查报告（ci-followup-build-ssh 实现）
+生成时间：2026-03-26 10:40:21 +0800
+
+### 需求完整性检查
+- 目标明确：修复后续 CI 暴露的 `build.rs` Clippy 问题和 `ssh.rs` Windows 测试告警。
+- 范围明确：只处理 `crates/core/build.rs`、`main/build.rs`、`crates/ssh/src/ssh.rs` 这三处。
+- 交付物明确：代码修复、上下文摘要、操作日志、本地验证和审查报告均已更新。
+- 风险与依赖明确：完整 Clippy 流程继续暴露出更多历史问题，因此本次不能宣称全量 lint 已清零。
+
+### 技术维度评分
+- 代码质量：96/100
+- 测试覆盖：87/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：96/100
+- 风险评估：89/100
+
+### 综合评分
+- 92/100
+- 建议：通过
+
+### 结论
+- build script Clippy 问题已修复：[`crates/core/build.rs`](/Users/hufei/RustroverProjects/onetcli/crates/core/build.rs) 与 [`main/build.rs`](/Users/hufei/RustroverProjects/onetcli/main/build.rs) 已把嵌套 `if` 改为 let-chain，不再触发 `collapsible_if`。
+- Windows 测试下的 unused/dead code 已修复：[`crates/ssh/src/ssh.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ssh/src/ssh.rs) 将 `Mutex`、`OnceLock` 和 `test_auth_failure_messages` 收紧到 `#[cfg(unix)]`，避免在 Windows test target 下变成未使用。
+- 同文件额外 Clippy 问题已顺手修复：[`crates/ssh/src/ssh.rs`](/Users/hufei/RustroverProjects/onetcli/crates/ssh/src/ssh.rs) 的 `hash_alg.clone()` 已移除，消除 `clone_on_copy`。
+- 本地验证有效：`cargo test -p ssh --lib` 已通过。
+
+### 剩余风险
+- `cargo clippy -p one-core -p main --all-targets -- -D warnings` 继续报出 `crates/one_ui` 与 `crates/core` 中 100+ 个既有 Clippy 问题，例如 `derivable_impls`、`unnecessary_unwrap`、`needless_lifetimes`、`unnecessary_to_owned`、`redundant_closure`、`manual_contains`、`too_many_arguments` 等。当前 release/tag 若重新触发，仍会被这些后续问题挡住。
+
+---
+
+## 审查报告（db-connection-form-ssh-ssl-fixed 实现）
+生成时间：2026-03-25 21:57:00 +0800
+
+### 需求完整性检查
+- 目标明确：将数据库连接表单中的 `ssl` 与 `ssh` 页签改成固定代码渲染，并用复选框控制整块启用。
+- 范围明确：改动限定在 `crates/db_view/src/common/db_connection_form.rs` 的渲染、辅助逻辑和单元测试，不触碰存储结构。
+- 交付物明确：代码修改、上下文摘要、操作日志、本地测试和审查报告均已落地。
+- 风险与依赖明确：依赖既有 `extra_params` 键名和 `ssh_form_window.rs` 交互模式；ClickHouse `ssl` 页签本次保持通用渲染，属于刻意收敛范围。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：89/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：95/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- `ssh` 页签已改为固定代码渲染：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L2115) 新增 `render_ssh_tab_content`，使用复选框控制整块启用，并用单选控制密码、私钥、agent 三种认证输入联动。
+- `ssl` 页签已改为固定代码渲染：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L2222) 新增 `render_ssl_tab_content`，对 MySQL/PostgreSQL/MSSQL 分别按既有字段语义做启用控制。
+- 通用状态链路保持不变：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L1819) 继续保留标准页签渲染和字段状态容器，专用页签仍通过原 `set_field_value/get_field_value/build_connection/load_connection` 工作。
+- SSH agent 校验已对齐后端语义：[`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L924) 与 [`db_connection_form.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db_view/src/common/db_connection_form.rs#L1390) 通过纯函数统一必填判断，agent 模式不再错误要求密码。
+- 本地验证有效：`CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p db_view --lib db_connection_form` 与 `cargo check -p db_view` 均已通过。
+
+### 剩余风险
+- 目前覆盖的是纯函数和字段定义层测试，未做 UI 交互快照或人工点击回归，布局细节仍建议你本地实际点一下表单确认观感。
+- ClickHouse 的 `ssl` 页签仍沿用原通用渲染，因为本次需求和参考模式主要针对 MySQL/PostgreSQL/MSSQL 的 SSL 语义与 SSH 联动场景。
+
+---
+
+## 审查补充（home-encourage-tab 二次视觉调整）
+生成时间：2026-03-25 23:33:00 +0800
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：80/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：97/100
+- 风险评估：88/100
+
+### 综合评分
+- 92/100
+- 建议：通过
+
+### 结论
+- 支持页签布局已重构为居中分区卡片：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 现在按“顶部说明卡片 + 中部支付卡片区 + 底部辅助支持卡片”三段展示，不再像截图那样散在左上角。
+- 支付卡片层级已增强：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 为每个赞赏方式增加外层容器、统一间距和标题行图标，二维码区域更集中。
+- 图标风格已统一：页签图标改为星标，[`home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs) 中首页入口图标也同步从心形改成了星标，辅助支持区补了 `CircleCheck`、`GitHub`、`ExternalLink` 图标。
+- 局部编译筛查有效：`cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab)\\.rs|error\\['` 无输出，说明这次视觉调整未给目标文件引入新报错。

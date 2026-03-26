@@ -61,6 +61,10 @@ Common:
     en: None
     zh-CN: 无
     zh-HK: 無
+  close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
 
 # 连接
 Connection:
@@ -463,6 +467,22 @@ TerminalView:
     en: Potentially destructive command detected. Please confirm before pasting.
     zh-CN: 检测到可能破坏系统的命令，请确认后再粘贴。
     zh-HK: 檢測到可能破壞系統的命令，請確認後再貼上。
+  unbracketed_paste_block_title:
+    en: Blocked Unsafe Multiline Paste
+    zh-CN: 已拦截不安全的多行粘贴
+    zh-HK: 已攔截不安全的多行貼上
+  unbracketed_paste_heredoc_message:
+    en: The pasted content contains a heredoc block. Without bracketed paste, the remote shell may treat subsequent lines as continuation input and parse the command incorrectly.
+    zh-CN: 粘贴内容包含 heredoc 结构。当前远端未开启 bracketed paste，后续行可能被 shell 当作续行输入，导致命令边界识别错误。
+    zh-HK: 貼上內容包含 heredoc 結構。當前遠端未開啟 bracketed paste，後續行可能被 shell 當作續行輸入，導致命令邊界識別錯誤。
+  unbracketed_paste_quote_message:
+    en: The pasted content contains an unterminated quoted string. Without bracketed paste, the remote shell may continue waiting for more input and merge later commands into the same block.
+    zh-CN: 粘贴内容包含未闭合的引号结构。当前远端未开启 bracketed paste，shell 可能继续等待补全输入，并把后续命令并入同一块内容。
+    zh-HK: 貼上內容包含未閉合的引號結構。當前遠端未開啟 bracketed paste，shell 可能繼續等待補全輸入，並把後續命令併入同一塊內容。
+  unbracketed_paste_continuation_message:
+    en: The pasted content uses trailing backslash line continuation. Without bracketed paste, the remote shell may continue consuming later input and break the pasted block.
+    zh-CN: 粘贴内容包含行尾反斜杠续行。当前远端未开启 bracketed paste，shell 可能继续吞入后续输入，导致整块粘贴被拆乱。
+    zh-HK: 貼上內容包含行尾反斜杠續行。當前遠端未開啟 bracketed paste，shell 可能繼續吞入後續輸入，導致整塊貼上被拆亂。
   paste_preview:
     en: Paste preview
     zh-CN: 粘贴预览

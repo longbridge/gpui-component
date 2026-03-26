@@ -46,7 +46,6 @@ use terminal_view::{SerialFormWindow, SerialFormWindowConfig};
 use terminal_view::{SshFormWindow, SshFormWindowConfig};
 
 use crate::auth::{AuthService, show_auth_dialog};
-use crate::encourage::EncourageDialog;
 use crate::home::home_connection_quick_open::ConnectionQuickOpenDelegate;
 use crate::home::home_new_connection::NewConnectionDelegate;
 use crate::home::home_strategy::build_connection_open_strategy;
@@ -804,21 +803,6 @@ impl HomePage {
         let view = cx.entity();
         show_auth_dialog(window, cx, view, |this, email, otp, cx| {
             this.verify_otp(email, otp, cx);
-        });
-    }
-
-    fn show_encourage_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let dialog_view = cx.new(|cx| EncourageDialog::new(cx));
-        window.open_dialog(cx, move |dialog, _window, _cx| {
-            dialog
-                .title(t!("Encourage.title").to_string())
-                .w(px(760.0))
-                .child(dialog_view.clone())
-                .alert()
-                .button_props(
-                    gpui_component::dialog::DialogButtonProps::default()
-                        .ok_text(t!("Common.close")),
-                )
         });
     }
 
@@ -1657,17 +1641,12 @@ impl HomePage {
                                         t!("Encryption.remember_password_title").to_string(),
                                     ),
                                 )
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .child(t!("Encryption.remember_password_detail_local").to_string()),
-                                )
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(cx.theme().warning)
-                                        .child(t!("Encryption.remember_password_detail_cloud").to_string()),
-                                ),
+                                .child(div().text_sm().child(
+                                    t!("Encryption.remember_password_detail_local").to_string(),
+                                ))
+                                .child(div().text_sm().text_color(cx.theme().warning).child(
+                                    t!("Encryption.remember_password_detail_cloud").to_string(),
+                                )),
                         )
                         .when_some(error_msg_for_render.read(cx).clone(), |this, msg| {
                             this.child(div().text_sm().text_color(cx.theme().danger).child(msg))
@@ -2144,16 +2123,6 @@ impl HomePage {
                     .gap_3()
                     .border_t_1()
                     .border_color(cx.theme().border)
-                    .child(
-                        Button::new("open_encourage_dialog")
-                            .icon(IconName::Heart)
-                            .label(t!("Encourage.button_label"))
-                            .w_full()
-                            .justify_start()
-                            .on_click(cx.listener(|this: &mut HomePage, _, window, cx| {
-                                this.show_encourage_dialog(window, cx);
-                            })),
-                    )
                     .child(
                         Button::new("open_settings")
                             .icon(IconName::Settings)

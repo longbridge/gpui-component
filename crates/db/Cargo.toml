@@ -17,6 +17,10 @@ gpui-component.workspace = true
 chrono.workspace = true
 mysql_async.workspace = true
 tokio-postgres.workspace = true
+tokio-postgres-rustls.workspace = true
+rustls.workspace = true
+rustls-native-certs.workspace = true
+rustls-pemfile.workspace = true
 tiberius.workspace = true
 tokio-util = { workspace = true, features = ["compat"] }
 oracle.workspace = true
