@@ -95,7 +95,7 @@ chrono = {version = "0.4.23", features = ["serde"]}
 rust_decimal = { version = "1.19.0" }
 hex = "0.4"
 tiberius = { version = "0.12.3", default-features = false, features = ["chrono", "rustls", "tds73", "winauth"] }
-oracle = "0.6.3"
+oracle = {version = "0.6.3", features = ["chrono"]}
 once_cell = "1.21"
 proptest = "1.4"
 mysql_async = { version = "0.36.1", features = ["rustls-tls"] }

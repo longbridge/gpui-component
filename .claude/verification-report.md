@@ -471,6 +471,42 @@
 
 ---
 
+## 审查报告（oracle-connection 实现）
+生成时间：2026-03-26 09:12:31 +0800
+
+### 需求完整性检查
+- 目标明确：修正 `crates/db/src/oracle/connection.rs` 的 Oracle 查询取值逻辑，使其能稳定处理 `chrono` 日期时间与常见 Oracle 类型。
+- 范围明确：改动限定在 Oracle 连接层值提取与列类型显示，不触碰连接配置、插件接口和上层查询结果结构。
+- 交付物明确：代码修改、上下文摘要、操作日志、本地编译验证和审查报告均已落地。
+- 风险与依赖明确：依赖 `oracle 0.6.3` 的 `chrono` 特性和 `OracleType` 枚举；当前缺少真实 Oracle 集成环境。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：78/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：97/100
+- 风险评估：84/100
+
+### 综合评分
+- 91/100
+- 建议：通过
+
+### 结论
+- Oracle 结果提取已改为类型驱动：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/connection.rs) 现在基于 `OracleType` 分支读取 `Date/Timestamp/TimestampTZ/TimestampLTZ/Raw/BLOB/BFILE/Boolean/Number` 等类型，不再只依赖 `String/i64/f64` 的宽泛尝试。
+- `chrono` 类型已真正接入：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/connection.rs) 新增 `NaiveDateTime` 与 `DateTime<FixedOffset>` 的格式化 helper，日期时间输出风格与 PostgreSQL/MSSQL 当前实现保持一致。
+- 二进制结果展示已统一：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/connection.rs) 对 `RAW/BLOB/BFILE` 使用 `0x...` 文本输出，避免表格层出现不可读字节。
+- 列元数据显示更稳定：[`connection.rs`](/Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/connection.rs) 将 Oracle 列类型元数据从 `Debug` 输出改为 `Display` 字符串，便于前端展示。
+- 本地验证有效：`rustfmt --edition 2021 crates/db/src/oracle/connection.rs` 与 `cargo check -p db` 均已通过。
+
+### 剩余风险
+- 当前没有真实 Oracle 数据库的本地自动化测试，无法确认所有 Oracle 会话设置和特殊列类型在运行时都能命中预期分支。
+- `CLOB/NCLOB/REF CURSOR/Object` 仍保留字符串兜底路径；如果后续出现具体运行时样例，可能需要继续细化映射。
+
+---
+
 ## 审查报告（db-connection-form-ssh-ssl-fixed 实现）
 生成时间：2026-03-25 21:57:00 +0800
 

@@ -1727,3 +1727,45 @@
 - `cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab|home/home_tabs)\\.rs|error\\['`：通过过滤确认，本次改动文件未出现新的编译错误输出。
 - `rustfmt --edition 2024 main/src/encourage.rs main/src/home_tab.rs`（布局与图标二次调整后）：通过。
 - `cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab)\\.rs|error\\['`（布局与图标二次调整后）：无输出，说明 `encourage.rs` / `home_tab.rs` 本次调整未引入新错误。
+
+## 编码前检查 - oracle-connection
+时间：2026-03-26 09:12:31 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-oracle-connection.md`
+- 将使用以下可复用组件：
+  - `crates/db/src/oracle/connection.rs`：现有 Oracle 连接、执行、流式执行和 `SqlResult` 组装逻辑。
+  - `crates/db/src/postgresql/connection.rs`：按列类型分支读取值、格式化日期时间的模式。
+  - `crates/db/src/mssql/connection.rs`：有序降级的 `extract_value` 组织方式。
+  - `crates/db/src/sqlite/connection.rs`：二进制转十六进制字符串的展示方式。
+- 将遵循命名约定：新增 helper 使用 `snake_case`，维持 `OracleDbConnection` 现有结构和方法命名。
+- 将遵循代码风格：只修改 Oracle 取值层与列类型显示，不重构连接/执行主干。
+- 确认不重复造轮子：已检查 PostgreSQL、MSSQL、SQLite 的现有取值模式，直接复用“按数据库类型分支”的既有思路，而不是新造一套结果映射框架。
+
+## 编码后声明 - oracle-connection
+时间：2026-03-26 09:12:31 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db/src/oracle/connection.rs`：保留 `connect/disconnect/execute/query/execute_streaming` 的既有流程，只调整结果值提取。
+- `crates/db/src/postgresql/connection.rs`：复用日期时间按类型格式化输出的策略。
+- `crates/db/src/mssql/connection.rs`：复用“优先精确类型，失败再降级”的提取模式。
+- `crates/db/src/sqlite/connection.rs`：复用二进制值以 `0x...` 字符串展示的约定。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `format_binary`、`format_naive_date_time`、`extract_scalar_value` 等 helper，全部使用 `snake_case`。
+- 代码风格：取值结果仍统一归一到 `Option<String>`，未改 `SqlResult::Query` 的结构与调用方契约。
+- 文件组织：所有代码改动收敛在 `crates/db/src/oracle/connection.rs`，留痕文件写入项目本地 `.claude/`。
+
+### 3. 对比了以下相似实现
+- `postgresql/connection.rs`：该实现按列类型显式分支处理 `TIMESTAMP/TIMESTAMPTZ/DATE/TIME/BYTEA`；本次 Oracle 改为按 `OracleType` 分支，理由是同类数据库驱动也需要类型驱动。
+- `mssql/connection.rs`：该实现对文本、数值、布尔和 chrono 类型做顺序尝试；本次 Oracle 保留了顺序降级，但先由 `OracleType` 缩小范围。
+- `sqlite/connection.rs`：该实现把二进制转成 `0x...`；本次 Oracle 的 `RAW/BLOB/BFILE` 采用相同展示策略，避免 UI 层看到不可显示字节。
+
+### 4. 未重复造轮子的证明
+- 未新增新的查询结果模型或通用适配层，继续复用 `QueryResult` / `QueryColumnMeta`。
+- 未修改 Oracle 连接和执行流程，只替换原本过于粗糙的 `extract_value` 实现。
+- 未新增数据库公共抽象，因为当前仓库对不同数据库仍采用各自 `extract_value` 的本地实现模式。
+
+## 验证记录 - oracle-connection
+- `rustfmt --edition 2021 crates/db/src/oracle/connection.rs`：通过。
+- `cargo check -p db`：通过。
+- 限制：当前未连接真实 Oracle 实例，无法做运行时集成验证；本次仅确认编译正确和类型映射路径完整。
