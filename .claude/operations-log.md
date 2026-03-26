@@ -1857,3 +1857,41 @@
 
 ## 验证记录 - encourage-unused-imports
 - `cargo check -p main --all-targets`：通过，确认 `main/src/encourage.rs` 的 unused imports 已消失，且 `main` crate 全 targets 仍可编译。
+
+## 编码前检查 - ci-followup-build-ssh
+时间：2026-03-26 10:36:52 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-ci-followup-build-ssh.md`
+- 将使用以下可复用组件：
+  - `crates/core/build.rs`：当前触发 `collapsible_if` 的 build script。
+  - `main/build.rs`：相同环境变量导出模式，适合一并统一。
+  - `crates/ssh/src/ssh.rs`：Windows 测试下出现 unused/dead code 的测试模块。
+- 将遵循命名约定：不新增业务命名，只做条件编译和 let-chain 收敛。
+- 将遵循代码风格：优先语义等价修复，不使用 `#[allow(...)]` 绕过。
+- 确认不重复造轮子：这是现有实现的 lint/条件编译收尾问题，只需直接修正原代码。
+
+## 编码后声明 - ci-followup-build-ssh
+时间：2026-03-26 10:40:21 +0800
+
+### 1. 复用了以下既有组件
+- `crates/core/build.rs`：沿用现有环境变量导出逻辑，仅把嵌套 `if` 改成 let-chain。
+- `main/build.rs`：对齐同样的 build script 写法，避免同类 Clippy 问题后续继续冒出。
+- `crates/ssh/src/ssh.rs`：保留现有测试逻辑，仅把 Unix 专用 helper 与同步原语导入收紧到 `#[cfg(unix)]`。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增业务标识符，只调整条件编译和局部参数传递。
+- 代码风格：不用 `allow` 压警告，直接按 Clippy 建议修正源码。
+- 文件组织：改动收敛在两个 build script 和一个 ssh 测试模块。
+
+### 3. 对比了以下相似实现
+- `crates/core/build.rs` 与 `main/build.rs`：两者本来就是同一模式，本次统一为 let-chain，避免只修一处。
+- `ssh.rs` 测试模块：`test_auth_failure_messages` 与 `Mutex/OnceLock` 只被 `#[cfg(unix)]` 测试使用，因此改为同样受 `#[cfg(unix)]` 约束。
+- `ssh.rs` 公钥认证逻辑：`hash_alg` 是 `Option<HashAlg>`，属于 `Copy`，直接传值即可，不需要 `clone()`。
+
+### 4. 未重复造轮子的证明
+- 未引入新的测试辅助结构，只收紧现有 helper 的平台作用域。
+- 未改动任何认证行为、错误消息内容或 build script 的环境变量清单。
+
+## 验证记录 - ci-followup-build-ssh
+- `cargo test -p ssh --lib`：通过，当前平台下 ssh 单元测试通过。
+- `cargo clippy -p one-core -p main --all-targets -- -D warnings`：本次修复的 `crates/core/build.rs`、`main/build.rs` 与 `crates/ssh/src/ssh.rs` 问题已不再出现；但命令继续暴露出 `crates/one_ui` 与 `crates/core` 中大量既有 Clippy 报错，暂未完成全量清理。

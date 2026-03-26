@@ -228,7 +228,7 @@ where
                 let auth_result = session
                     .authenticate_publickey(
                         username,
-                        PrivateKeyWithHashAlg::new(Arc::new(key_pair), hash_alg.clone()),
+                        PrivateKeyWithHashAlg::new(Arc::new(key_pair), hash_alg),
                     )
                     .await?;
                 if !auth_result.success() {
@@ -360,8 +360,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::sync::{Mutex, OnceLock};
 
+    #[cfg(unix)]
     fn test_auth_failure_messages() -> AuthFailureMessages {
         AuthFailureMessages {
             password_failed: "password".to_string(),
