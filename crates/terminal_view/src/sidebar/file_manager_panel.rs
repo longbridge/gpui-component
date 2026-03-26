@@ -389,6 +389,7 @@ fn build_ssh_config(conn: &StoredConnection) -> anyhow::Result<SshConnectConfig>
             certificate_path: None,
         },
         SshAuthMethod::Agent => SshAuth::Agent,
+        SshAuthMethod::AutoPublicKey => SshAuth::AutoPublicKey,
     };
 
     Ok(SshConnectConfig {
@@ -411,6 +412,7 @@ fn build_ssh_config(conn: &StoredConnection) -> anyhow::Result<SshConnectConfig>
                     certificate_path: None,
                 },
                 SshAuthMethod::Agent => SshAuth::Agent,
+                SshAuthMethod::AutoPublicKey => SshAuth::AutoPublicKey,
             };
             JumpServerConnectConfig {
                 host: jump.host,

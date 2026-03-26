@@ -251,6 +251,7 @@ pub enum SshAuthMethod {
         passphrase: Option<String>,
     },
     Agent,
+    AutoPublicKey,
 }
 
 /// Redis 连接模式
@@ -1051,5 +1052,14 @@ mod serial_tests {
         let parsed: SshAuthMethod =
             serde_json::from_str(&json).expect("Agent 认证方式应可反序列化");
         assert!(matches!(parsed, SshAuthMethod::Agent));
+    }
+
+    #[test]
+    fn ssh_auth_method_auto_publickey_serialize_deserialize() {
+        let auth = SshAuthMethod::AutoPublicKey;
+        let json = serde_json::to_string(&auth).expect("自动公钥认证方式应可序列化");
+        let parsed: SshAuthMethod =
+            serde_json::from_str(&json).expect("自动公钥认证方式应可反序列化");
+        assert!(matches!(parsed, SshAuthMethod::AutoPublicKey));
     }
 }

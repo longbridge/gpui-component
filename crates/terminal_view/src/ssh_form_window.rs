@@ -155,6 +155,8 @@ pub struct SshFormWindow {
     // 其他设置
     remark_input: Entity<InputState>,
 
+    last_tested_signature: Option<String>,
+
     // 云同步开关
     sync_enabled: bool,
 
@@ -168,6 +170,11 @@ pub enum AuthMethodSelection {
     Password,
     PrivateKey,
     Agent,
+    AutoPublicKey,
+}
+
+fn build_connection_test_signature(params: &SshParams) -> String {
+    format!("{:?}", params)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -340,6 +347,9 @@ impl SshFormWindow {
                     SshAuthMethod::Agent => {
                         auth_method = AuthMethodSelection::Agent;
                     }
+                    SshAuthMethod::AutoPublicKey => {
+                        auth_method = AuthMethodSelection::AutoPublicKey;
+                    }
                 }
 
                 // 加载高级设置
@@ -450,6 +460,7 @@ impl SshFormWindow {
             init_script_input,
             default_directory_input,
             remark_input,
+            last_tested_signature: None,
             sync_enabled,
             is_testing: false,
             test_result: None,
@@ -504,6 +515,7 @@ impl SshFormWindow {
                 }
             }
             AuthMethodSelection::Agent => SshAuthMethod::Agent,
+            AuthMethodSelection::AutoPublicKey => SshAuthMethod::AutoPublicKey,
         };
 
         // 高级设置
@@ -631,6 +643,7 @@ impl SshFormWindow {
                 certificate_path: None,
             },
             SshAuthMethod::Agent => SshAuth::Agent,
+            SshAuthMethod::AutoPublicKey => SshAuth::AutoPublicKey,
         };
 
         // 构建跳板机配置
@@ -646,6 +659,7 @@ impl SshFormWindow {
                     certificate_path: None,
                 },
                 SshAuthMethod::Agent => SshAuth::Agent,
+                SshAuthMethod::AutoPublicKey => SshAuth::AutoPublicKey,
             };
             JumpServerConnectConfig {
                 host: jump.host.clone(),
@@ -685,15 +699,18 @@ impl SshFormWindow {
 
     fn on_test(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(params) = self.build_ssh_params(cx) else {
+            self.last_tested_signature = None;
             self.test_result = Some(Err(t!("SSH.validation_error").to_string()));
             cx.notify();
             return;
         };
 
         self.is_testing = true;
+        self.last_tested_signature = None;
         self.test_result = None;
         cx.notify();
 
+        let signature = build_connection_test_signature(&params);
         let config = self.build_ssh_connect_config(&params);
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
@@ -711,6 +728,7 @@ impl SshFormWindow {
 
             let _ = this.update(cx, |this, cx| {
                 this.is_testing = false;
+                this.last_tested_signature = test_result.as_ref().ok().map(|_| signature.clone());
                 this.test_result = Some(test_result);
                 cx.notify();
             });
@@ -719,11 +737,31 @@ impl SshFormWindow {
     }
 
     fn on_save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_testing {
+            self.test_result = Some(Err(t!("SSH.save_while_testing").to_string()));
+            cx.notify();
+            return;
+        }
+
         let Some(params) = self.build_ssh_params(cx) else {
+            self.last_tested_signature = None;
             self.test_result = Some(Err(t!("SSH.validation_error").to_string()));
             cx.notify();
             return;
         };
+
+        let current_signature = build_connection_test_signature(&params);
+        if !matches!(self.test_result.as_ref(), Some(Ok(()))) {
+            self.test_result = Some(Err(t!("SSH.test_required_before_save").to_string()));
+            cx.notify();
+            return;
+        }
+
+        if self.last_tested_signature.as_deref() != Some(current_signature.as_str()) {
+            self.test_result = Some(Err(t!("SSH.retest_after_change").to_string()));
+            cx.notify();
+            return;
+        }
 
         let name = self.name_input.read(cx).text().to_string();
         let name = if name.is_empty() {
@@ -757,47 +795,44 @@ impl SshFormWindow {
             .clone();
         let is_editing = self.is_editing;
 
-        cx.spawn(async move |_this, cx| {
-            let result: Result<StoredConnection, anyhow::Error> = (|| {
-                let repo = storage
-                    .get::<one_core::storage::ConnectionRepository>()
-                    .ok_or_else(|| anyhow::anyhow!("ConnectionRepository not found"))?;
+        let result: Result<StoredConnection, anyhow::Error> = (|| {
+            let repo = storage
+                .get::<one_core::storage::ConnectionRepository>()
+                .ok_or_else(|| anyhow::anyhow!("ConnectionRepository not found"))?;
 
-                if is_editing {
-                    repo.update(&mut conn)?;
-                } else {
-                    repo.insert(&mut conn)?;
-                }
-                Ok(conn)
-            })();
+            if is_editing {
+                repo.update(&mut conn)?;
+            } else {
+                repo.insert(&mut conn)?;
+            }
+            Ok(conn)
+        })();
 
-            match result {
-                Ok(saved_conn) => {
-                    let _ = cx.update(|cx| {
-                        if let Some(notifier) = get_notifier(cx) {
-                            let event = if is_editing {
-                                ConnectionDataEvent::ConnectionUpdated {
-                                    connection: saved_conn,
-                                }
-                            } else {
-                                ConnectionDataEvent::ConnectionCreated {
-                                    connection: saved_conn,
-                                }
-                            };
-                            notifier.update(cx, |_, cx| {
-                                cx.emit(event);
-                            });
+        match result {
+            Ok(saved_conn) => {
+                if let Some(notifier) = get_notifier(cx) {
+                    let event = if is_editing {
+                        ConnectionDataEvent::ConnectionUpdated {
+                            connection: saved_conn,
                         }
+                    } else {
+                        ConnectionDataEvent::ConnectionCreated {
+                            connection: saved_conn,
+                        }
+                    };
+                    notifier.update(cx, |_, cx| {
+                        cx.emit(event);
                     });
                 }
-                Err(e) => {
-                    tracing::error!("Failed to save SSH connection: {}", e);
-                }
+                window.remove_window();
             }
-        })
-        .detach();
-
-        window.remove_window();
+            Err(e) => {
+                let error_msg = t!("SSH.save_failed", error = e).to_string();
+                tracing::error!("{}", error_msg);
+                self.test_result = Some(Err(error_msg));
+                cx.notify();
+            }
+        }
     }
 
     fn on_cancel(&mut self, window: &mut Window, _cx: &mut Context<Self>) {
@@ -859,6 +894,15 @@ impl SshFormWindow {
                                     this.auth_method = AuthMethodSelection::Agent;
                                     cx.notify();
                                 })),
+                        )
+                        .child(
+                            Radio::new("auto-publickey")
+                                .label(t!("SSH.auto_publickey").to_string())
+                                .checked(auth_method == AuthMethodSelection::AutoPublicKey)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.auth_method = AuthMethodSelection::AutoPublicKey;
+                                    cx.notify();
+                                })),
                         ),
                 ),
             )
@@ -876,6 +920,16 @@ impl SshFormWindow {
                     &t!("SSH.passphrase"),
                     Input::new(&self.passphrase_input).mask_toggle(),
                 ))
+            })
+            .when(auth_method == AuthMethodSelection::AutoPublicKey, |this| {
+                this.child(
+                    h_flex().justify_center().child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(t!("SSH.auto_publickey_hint").to_string()),
+                    ),
+                )
             })
             .child(self.render_form_row(
                 &t!("SSH.workspace"),
@@ -1162,10 +1216,47 @@ impl Render for SshFormWindow {
                             .small()
                             .primary()
                             .label(t!("Common.ok").to_string())
+                            .disabled(is_testing)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.on_save(window, cx);
                             })),
                     ),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_connection_test_signature;
+    use one_core::storage::{SshAuthMethod, SshParams};
+
+    fn sample_params() -> SshParams {
+        SshParams {
+            host: "127.0.0.1".to_string(),
+            port: 22,
+            username: "root".to_string(),
+            auth_method: SshAuthMethod::Agent,
+            connect_timeout: Some(30),
+            keepalive_interval: Some(60),
+            keepalive_max: Some(3),
+            default_directory: Some("/tmp".to_string()),
+            init_script: Some("pwd".to_string()),
+            jump_server: None,
+            proxy: None,
+        }
+    }
+
+    #[test]
+    fn connection_test_signature_changes_when_auth_related_fields_change() {
+        let params = sample_params();
+        let original = build_connection_test_signature(&params);
+
+        let mut changed = sample_params();
+        changed.auth_method = SshAuthMethod::AutoPublicKey;
+        assert_ne!(original, build_connection_test_signature(&changed));
+
+        let mut changed_host = sample_params();
+        changed_host.host = "example.com".to_string();
+        assert_ne!(original, build_connection_test_signature(&changed_host));
     }
 }
