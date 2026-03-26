@@ -11,6 +11,7 @@ async-trait = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 rust-i18n = { workspace = true }
+dirs.workspace = true
 # SSH and SFTP
 russh.workspace = true
 # Proxy support

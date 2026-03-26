@@ -25,6 +25,18 @@ Sftp:
     en: SSH agent authentication failed
     zh-CN: SSH Agent 认证失败
     zh-HK: SSH Agent 認證失敗
+  auth_auto_publickey_failed:
+    en: Automatic public key authentication failed
+    zh-CN: 自动公钥认证失败
+    zh-HK: 自動公鑰認證失敗
+  auth_no_local_identity:
+    en: No available local SSH identity was detected
+    zh-CN: 未检测到可用的本地 SSH 身份
+    zh-HK: 未檢測到可用的本地 SSH 身份
+  auth_auto_publickey_next_step:
+    en: Please load SSH Agent or switch to "Private Key" mode to specify a key file manually
+    zh-CN: 请加载 SSH Agent，或切换为「私钥文件」模式手动指定私钥
+    zh-HK: 請加載 SSH Agent，或切換為「私鑰文件」模式手動指定私鑰
   socks5_proxy_connect_failed:
     en: "SOCKS5 proxy connection failed: %{error}"
     zh-CN: "SOCKS5代理连接失败: %{error}"

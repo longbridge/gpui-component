@@ -131,6 +131,10 @@ SSH:
     en: SSH Agent
     zh-CN: SSH Agent
     zh-HK: SSH Agent
+  auto_publickey:
+    en: Auto Public Key
+    zh-CN: 自动公钥认证
+    zh-HK: 自動公鑰認證
   key_path:
     en: Key Path
     zh-CN: 密钥路径
@@ -151,6 +155,30 @@ SSH:
     en: Authentication Method
     zh-CN: 认证方式
     zh-HK: 認證方式
+  auto_publickey_hint:
+    en: Try SSH Agent first, then default private keys under ~/.ssh.
+    zh-CN: 将优先尝试 SSH Agent，若不可用则尝试 ~/.ssh 下的默认私钥。
+    zh-HK: 將優先嘗試 SSH Agent，若不可用則嘗試 ~/.ssh 下的預設私鑰。
+  auto_publickey_next_step:
+    en: Please load SSH Agent or switch to "Private Key" mode to specify a key file manually
+    zh-CN: 请加载 SSH Agent，或切换为「私钥文件」模式手动指定私钥
+    zh-HK: 請加載 SSH Agent，或切換為「私鑰文件」模式手動指定私鑰
+  test_required_before_save:
+    en: Please test the current SSH configuration before saving.
+    zh-CN: 保存前请先测试当前 SSH 配置。
+    zh-HK: 儲存前請先測試當前 SSH 配置。
+  retest_after_change:
+    en: SSH configuration changed. Please test again before saving.
+    zh-CN: SSH 配置已变更，请重新测试后再保存。
+    zh-HK: SSH 配置已變更，請重新測試後再儲存。
+  save_failed:
+    en: "Failed to save SSH connection: %{error}"
+    zh-CN: "保存 SSH 连接失败：%{error}"
+    zh-HK: "儲存 SSH 連線失敗：%{error}"
+  save_while_testing:
+    en: Please wait for connection testing to complete.
+    zh-CN: 请等待连接测试完成后再保存。
+    zh-HK: 請等待連線測試完成後再儲存。
   workspace:
     en: Workspace
     zh-CN: 工作区

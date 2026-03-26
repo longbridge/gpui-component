@@ -319,6 +319,7 @@ impl Terminal {
                 certificate_path: None,
             },
             SshAuthMethod::Agent => SshAuth::Agent,
+            SshAuthMethod::AutoPublicKey => SshAuth::AutoPublicKey,
         };
 
         // 构建初始化命令
@@ -354,6 +355,7 @@ impl Terminal {
                         certificate_path: None,
                     },
                     SshAuthMethod::Agent => SshAuth::Agent,
+                    SshAuthMethod::AutoPublicKey => SshAuth::AutoPublicKey,
                 };
                 JumpServerConnectConfig {
                     host: jump.host,

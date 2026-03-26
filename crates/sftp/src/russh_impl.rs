@@ -10,7 +10,8 @@ use russh_sftp::client::rawsession::Limits;
 use russh_sftp::protocol::{FileAttributes, OpenFlags, StatusCode};
 use rust_i18n::t;
 use ssh::{
-    AuthFailureMessages, ProxyConnectConfig, ProxyType, SshConnectConfig, authenticate_session,
+    AuthFailureMessages, ProxyConnectConfig, ProxyType, SshConnectConfig,
+    authenticate_with_strategy,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -54,6 +55,9 @@ fn sftp_auth_failure_messages() -> AuthFailureMessages {
         agent_connect_failed: t!("Sftp.auth_agent_connect_failed").to_string(),
         agent_no_identities: t!("Sftp.auth_agent_no_identities").to_string(),
         agent_auth_failed: t!("Sftp.auth_agent_failed").to_string(),
+        auto_publickey_failed: t!("Sftp.auth_auto_publickey_failed").to_string(),
+        no_local_identity: t!("Sftp.auth_no_local_identity").to_string(),
+        auto_publickey_next_step: t!("Sftp.auth_auto_publickey_next_step").to_string(),
     }
 }
 
@@ -615,7 +619,7 @@ impl SftpClient for RusshSftpClient {
             };
 
             // 认证跳板机
-            authenticate_session(
+            authenticate_with_strategy(
                 &mut jump_session,
                 &jump.username,
                 &jump.auth,
@@ -648,7 +652,7 @@ impl SftpClient for RusshSftpClient {
         };
 
         // 认证目标服务器
-        authenticate_session(
+        authenticate_with_strategy(
             &mut session,
             &ssh_config.username,
             &ssh_config.auth,
