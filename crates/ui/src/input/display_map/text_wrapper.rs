@@ -7,9 +7,7 @@ use gpui::{
 use ropey::Rope;
 use smallvec::SmallVec;
 
-use crate::input::{
-    LastLayout, Point as TreeSitterPoint, RopeExt, WhitespaceIndicators,
-};
+use crate::input::{LastLayout, Point as TreeSitterPoint, RopeExt, WhitespaceIndicators};
 
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
@@ -34,7 +32,6 @@ impl LineItem {
     pub(crate) fn lines_len(&self) -> usize {
         self.wrapped_lines.len()
     }
-
 }
 
 #[derive(Debug, Default)]
@@ -419,11 +416,14 @@ impl LineLayout {
     /// Get the position (x, y) for the given index in this line layout.
     ///
     /// - The `offset` is a local byte index in this line layout.
+    /// - When `line_end_affinity` is true, an offset at a soft wrap boundary is placed at
+    ///   the end of the current visual line rather than the start of the next one.
     /// - The return value is relative to the top-left corner of this line layout, start from (0, 0)
     pub(crate) fn position_for_index(
         &self,
         offset: usize,
         last_layout: &LastLayout,
+        line_end_affinity: bool,
     ) -> Option<Point<Pixels>> {
         let mut acc_len = 0;
         let mut offset_y = px(0.);
@@ -432,14 +432,23 @@ impl LineLayout {
 
         for (i, line) in self.wrapped_lines.iter().enumerate() {
             let is_last = i + 1 == self.wrapped_lines.len();
-            let line_len = if is_last { line.len + 1 } else { line.len };
 
-            let range = acc_len..(acc_len + line_len);
-            if range.contains(&offset) {
+            let matches = if is_last || line_end_affinity {
+                // Inclusive: cursor can sit at end of this visual line.
+                offset >= acc_len && offset <= acc_len + line.len
+            } else {
+                // Exclusive: boundary offset belongs to the next visual line.
+                offset >= acc_len && offset < acc_len + line.len
+            };
+
+            if matches {
                 let x = line.x_for_index(offset.saturating_sub(acc_len)) + x_offset;
                 return Some(point(x, offset_y));
             }
-            acc_len += line_len;
+
+            // Always advance by actual line length. The last line gets +1 so the
+            // cursor can be placed after the final character.
+            acc_len += if is_last { line.len + 1 } else { line.len };
             offset_y += last_layout.line_height;
         }
 

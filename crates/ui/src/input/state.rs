@@ -325,6 +325,8 @@ pub struct InputState {
     pub(super) clean_on_escape: bool,
     pub(super) soft_wrap: bool,
     pub(super) show_whitespaces: bool,
+    /// This flag tells the renderer to prefer the end of the current visual line.
+    pub(crate) cursor_line_end_affinity: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -448,6 +450,7 @@ impl InputState {
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
             inline_completion: InlineCompletion::default(),
+            cursor_line_end_affinity: false,
         }
     }
 
@@ -649,7 +652,7 @@ impl InputState {
         for (vi, line) in last_layout.lines.iter().enumerate() {
             let prev_lines_offset = last_layout.visible_line_byte_offsets[vi];
             let local_offset = offset.saturating_sub(prev_lines_offset);
-            if let Some(pos) = line.position_for_index(local_offset, last_layout) {
+            if let Some(pos) = line.position_for_index(local_offset, last_layout, false) {
                 let sub_line_index = (pos.y / line_height) as usize;
                 let adjusted_pos = point(pos.x + last_layout.line_number_width, pos.y + y_offset);
                 return (vi, sub_line_index, Some(adjusted_pos));
@@ -1034,24 +1037,59 @@ impl InputState {
             .unwrap_or(self.text.len())
     }
 
-    /// Get start of line byte offset of cursor
+    /// Get start of line byte offset of cursor.
+    ///
+    /// When soft wrap is active, first press goes to visual line start,
+    /// second press (already at visual start) goes to logical line start.
     pub(super) fn start_of_line(&self) -> usize {
         if self.mode.is_single_line() {
             return 0;
         }
 
         let row = self.text.offset_to_point(self.cursor()).row;
-        self.text.line_start_offset(row)
+        let logical_start = self.text.line_start_offset(row);
+
+        if self.soft_wrap && self.mode.is_code_editor() {
+            let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
+            if let Some(line) = self.display_map.lines().get(row)
+                && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
+            {
+                let visual_start = logical_start + range.start;
+                if self.cursor() != visual_start {
+                    return visual_start;
+                }
+            }
+        }
+
+        logical_start
     }
 
-    /// Get end of line byte offset of cursor
+    /// Get end of line byte offset of cursor.
+    ///
+    /// When soft wrap is active, first press goes to visual line end,
+    /// second press (already at visual end) goes to logical line end.
     pub(super) fn end_of_line(&self) -> usize {
         if self.mode.is_single_line() {
             return self.text.len();
         }
 
         let row = self.text.offset_to_point(self.cursor()).row;
-        self.text.line_end_offset(row)
+        let logical_start = self.text.line_start_offset(row);
+        let logical_end = self.text.line_end_offset(row);
+
+        if self.soft_wrap && self.mode.is_code_editor() {
+            let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
+            if let Some(line) = self.display_map.lines().get(row)
+                && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
+            {
+                let visual_end = logical_start + range.end;
+                if self.cursor() != visual_end {
+                    return visual_end;
+                }
+            }
+        }
+
+        logical_end
     }
 
     /// Get start line of selection start or end (The min value).
@@ -1488,7 +1526,7 @@ impl InputState {
             .get(row.saturating_sub(last_layout.visible_range.start))
         {
             // Check to scroll horizontally and soft wrap lines
-            if let Some(pos) = line.position_for_index(point.column, last_layout) {
+            if let Some(pos) = line.position_for_index(point.column, last_layout, false) {
                 let bounds_width = bounds.size.width - last_layout.line_number_width;
                 let col_offset_x = pos.x;
                 row_offset_y += pos.y;
@@ -2373,17 +2411,21 @@ impl EntityInputHandler for InputState {
             let index_offset = last_layout.visible_line_byte_offsets[vi];
 
             if start_origin.is_none() {
-                if let Some(p) =
-                    line.position_for_index(range.start.saturating_sub(index_offset), last_layout)
-                {
+                if let Some(p) = line.position_for_index(
+                    range.start.saturating_sub(index_offset),
+                    last_layout,
+                    false,
+                ) {
                     start_origin = Some(p + point(px(0.), y_offset));
                 }
             }
 
             if end_origin.is_none() {
-                if let Some(p) =
-                    line.position_for_index(range.end.saturating_sub(index_offset), last_layout)
-                {
+                if let Some(p) = line.position_for_index(
+                    range.end.saturating_sub(index_offset),
+                    last_layout,
+                    false,
+                ) {
                     end_origin = Some(p + point(px(0.), y_offset));
                 }
             }
