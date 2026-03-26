@@ -667,3 +667,72 @@
 - 支付卡片层级已增强：[`encourage.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/encourage.rs) 为每个赞赏方式增加外层容器、统一间距和标题行图标，二维码区域更集中。
 - 图标风格已统一：页签图标改为星标，[`home_tab.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/home_tab.rs) 中首页入口图标也同步从心形改成了星标，辅助支持区补了 `CircleCheck`、`GitHub`、`ExternalLink` 图标。
 - 局部编译筛查有效：`cargo check -p main --keep-going --message-format short 2>&1 | rg 'main/src/(encourage|home_tab)\\.rs|error\\['` 无输出，说明这次视觉调整未给目标文件引入新报错。
+
+---
+
+## 审查报告（superpowers-install 实现）
+生成时间：2026-03-26 11:05:28 +0800
+
+### 需求完整性检查
+- 目标明确：按 `obra/superpowers` 官方 `.codex/INSTALL.md` 在本机启用 Codex 原生技能发现。
+- 范围明确：仅涉及用户主目录下的 clone、目录创建、软链接创建和旧 bootstrap 检查，不修改 onetcli 业务代码。
+- 交付物明确：上下文摘要、操作日志、验证报告和本地安装结果均已落地。
+- 风险与依赖明确：依赖 `git` 和用户主目录写权限；技能发现最终还需要重启 Codex。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：88/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：98/100
+- 架构一致：95/100
+- 风险评估：92/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 结论
+- 官方安装步骤已完整执行：`/Users/hufei/.codex/superpowers` 已成功克隆 superpowers 仓库，`/Users/hufei/.agents/skills/superpowers` 已建立为指向 `/Users/hufei/.codex/superpowers/skills` 的软链接。
+- 迁移检查已完成：`/Users/hufei/.codex/AGENTS.md` 当前为空文件，不存在文档中提到的 `superpowers-codex bootstrap` 旧块，因此无需清理。
+- 本地验证有效：`ls -la /Users/hufei/.agents/skills/superpowers` 已确认软链接存在且目标正确，`ls -la /Users/hufei/.codex/superpowers/skills` 已确认技能目录实际存在。
+- 剩余人工步骤明确：仍需退出并重新启动 Codex CLI，才能让当前会话发现新安装的 superpowers 技能。
+
+### 剩余风险
+- 当前会话无法替代一次真正的 Codex 重启，因此“技能已被新会话识别”这一步只能在你重启 CLI 后做最终确认。
+
+---
+
+## 审查报告（window-not-found-fix 实现）
+生成时间：2026-03-26 11:36:00 +0800
+
+### 需求完整性检查
+- 目标明确：修复关闭主窗口时出现的 `gpui::window: window not found` 生命周期竞态。
+- 范围明确：仅调整应用退出策略，不改业务页签、更新逻辑或数据结构。
+- 交付物明确：代码修复、上下文摘要、操作日志和本地验证结果均已落地。
+- 风险与依赖明确：依赖 `gpui::QuitMode::LastWindowClosed`；图形界面层面的最终效果仍需人工冒烟确认。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：82/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：97/100
+- 风险评估：90/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 结论
+- 应用退出策略已切换到官方 quit mode：[`main.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/main.rs#L29) 现在通过 `Application::with_quit_mode(QuitMode::LastWindowClosed)` 声明“最后一个窗口关闭时自动退出”。
+- 手写 release 退出监听已移除：[`onetcli_app.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/onetcli_app.rs#L350) 不再在主窗口释放阶段调用 `cx.quit()`，减少窗口释放后与平台尾随事件交错的竞态面。
+- 既有退出收尾链路仍保留：[`onetcli_app.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/onetcli_app.rs#L350) 后续的 `on_app_quit` 逻辑未变，标签状态保存行为仍由原实现负责。
+- 本地编译验证有效：`cargo check -p main` 已通过。
+
+### 剩余风险
+- 当前没有自动化 GUI 测试覆盖“关闭主窗口”这一交互，仍需在 macOS 图形环境人工确认一次日志是否消失。
+- 如果修复后仍在关闭窗口瞬间看到同样日志，则问题可能残留在 `gpui` 上游对平台尾随事件的处理，需要进一步向框架层收敛。

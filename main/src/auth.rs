@@ -185,7 +185,10 @@ impl AuthService {
             }
             if let Some(e) = last_error {
                 // 重试耗尽但非认证错误，保留本地数据，下次启动再尝试
-                warn!("令牌刷新重试耗尽，保留本地认证数据，本次跳过恢复会话: {}", e);
+                warn!(
+                    "令牌刷新重试耗尽，保留本地认证数据，本次跳过恢复会话: {}",
+                    e
+                );
                 return None;
             }
         } else {

@@ -1895,3 +1895,104 @@
 ## 验证记录 - ci-followup-build-ssh
 - `cargo test -p ssh --lib`：通过，当前平台下 ssh 单元测试通过。
 - `cargo clippy -p one-core -p main --all-targets -- -D warnings`：本次修复的 `crates/core/build.rs`、`main/build.rs` 与 `crates/ssh/src/ssh.rs` 问题已不再出现；但命令继续暴露出 `crates/one_ui` 与 `crates/core` 中大量既有 Clippy 报错，暂未完成全量清理。
+
+## 编码前检查 - superpowers-install
+时间：2026-03-26 11:00:09 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-superpowers-install.md`
+- 已分析相似实现：
+  - `.claude/context-summary-terminal-scroll.md`
+  - `.claude/context-summary-release-workflow-migration.md`
+  - `.claude/context-summary-ssh-agent-auth.md`
+- 将使用以下可复用组件：
+  - `obra/superpowers` 的 `.codex/INSTALL.md`：作为安装、迁移与验证步骤的唯一外部依据。
+  - `.claude/operations-log.md`：沿用“编码前检查 / 编码后声明 / 验证记录”写法。
+  - `.claude/verification-report.md`：沿用本地审查报告结构。
+- 将遵循命名约定：任务名使用 `superpowers-install`，文档和日志文件继续使用项目既有命名。
+- 将遵循代码风格：只记录事实，不引入与安装无关的仓库代码改动；所有说明保持简体中文。
+- 确认不重复造轮子，证明：官方文档已给出标准安装路径和验证方式，本次只按文档落地并复用仓库现有留痕模板，不新增自定义脚本或额外安装机制。
+
+## 编码后声明 - superpowers-install
+时间：2026-03-26 11:05:28 +0800
+
+### 1. 复用了以下既有组件
+- `obra/superpowers` 的 `.codex/INSTALL.md`：直接复用官方“clone + symlink + restart + verify”流程。
+- `.claude/context-summary-superpowers-install.md`：作为本次环境安装的事实与风险基线。
+- `.claude/verification-report.md`：沿用既有评分和结论格式，记录本地验证结果。
+
+### 2. 遵循了以下项目约定
+- 命名约定：文档继续使用 `superpowers-install` 任务名，实际安装路径完全遵循官方命名。
+- 代码风格：未修改 onetcli 源码，只在 `.claude/` 目录追加留痕文档。
+- 文件组织：安装资产放在用户主目录 `/Users/hufei/.codex` 与 `/Users/hufei/.agents`，项目内只保留上下文、日志和审查报告。
+
+### 3. 对比了以下相似实现
+- `.claude/context-summary-terminal-scroll.md`：复用了固定七段结构的上下文摘要写法。
+- `.claude/context-summary-release-workflow-migration.md`：参考了“环境/流程类任务也要落本地验证与风险说明”的模式。
+- `.claude/context-summary-ssh-agent-auth.md`：复用了“外部来源 + 本地核验”双证据链写法。
+
+### 4. 未重复造轮子的证明
+- 没有新增安装脚本、复制技能目录或修改 Codex 全局配置，而是直接使用官方建议的仓库 clone 与软链接机制。
+- 已检查 `/Users/hufei/.codex/AGENTS.md`，文件为空，不存在 `superpowers-codex bootstrap` 旧块，因此无需额外迁移操作。
+
+## 实施与验证记录 - superpowers-install
+时间：2026-03-26 11:05:28 +0800
+
+### 已完成修改
+- 执行 `git clone https://github.com/obra/superpowers.git /Users/hufei/.codex/superpowers`，完成官方仓库克隆。
+- 执行 `mkdir -p /Users/hufei/.agents/skills && ln -s /Users/hufei/.codex/superpowers/skills /Users/hufei/.agents/skills/superpowers`，完成原生技能发现软链接创建。
+- 检查 `/Users/hufei/.codex/AGENTS.md`，确认为空文件，无旧 bootstrap 配置需要删除。
+
+### 本地验证
+- `ls -la /Users/hufei/.agents/skills/superpowers`
+  - 结果：通过，输出为 `lrwxr-xr-x ... /Users/hufei/.agents/skills/superpowers -> /Users/hufei/.codex/superpowers/skills`，说明软链接存在且目标正确。
+- `ls -la /Users/hufei/.codex/superpowers/skills`
+  - 结果：通过，目录存在，已包含 `brainstorming`、`using-superpowers`、`writing-plans` 等技能子目录。
+- `read_file /Users/hufei/.codex/AGENTS.md`
+  - 结果：通过，文件共 0 行，不存在 `superpowers-codex bootstrap` 迁移残留。
+
+### 当前限制
+- 按官方文档要求，仍需重启 Codex CLI 才会在当前环境中发现新技能；这一步无法在本会话内自动验证。
+
+## 编码前检查 - window-not-found-fix
+时间：2026-03-26 11:31:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-window-not-found-fix.md`
+- 已分析相似实现：
+  - `main/src/main.rs`
+  - `main/src/onetcli_app.rs`
+  - `crates/story/examples/dock.rs`
+  - `gpui/src/app.rs`
+  - `crates/zed/src/main.rs`
+- 将使用以下可复用组件：
+  - `gpui::Application::with_quit_mode`：官方应用退出策略入口。
+  - `gpui::QuitMode::LastWindowClosed`：最后一个窗口关闭时自动退出。
+  - `OnetCliApp::on_app_quit`：保留现有标签状态保存收尾逻辑。
+- 将遵循命名约定：仅复用现有 `QuitMode` 枚举和 `with_quit_mode` API，不引入自定义命名。
+- 将遵循代码风格：优先删除手写生命周期逻辑，改用框架内置退出模式。
+- 确认不重复造轮子，证明：`gpui` 已内建 `QuitMode`，无需继续维护 `on_release -> cx.quit()` 这种项目级重复实现。
+
+## 编码后声明 - window-not-found-fix
+时间：2026-03-26 11:35:00 +0800
+
+### 1. 复用了以下既有组件
+- `gpui::Application::with_quit_mode`：在应用入口复用官方退出模式配置能力。
+- `gpui::QuitMode::LastWindowClosed`：复用框架定义的“最后一个窗口关闭即退出”语义。
+- `OnetCliApp::on_app_quit`：继续保留既有标签状态保存逻辑，不新增自定义退出收尾链路。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增业务标识符，只复用 `QuitMode` 枚举成员。
+- 代码风格：删除手写 lifecycle 监听，优先使用框架官方 API。
+- 文件组织：应用级改动仅落在 `main/src/main.rs` 与 `main/src/onetcli_app.rs`。
+
+### 3. 对比了以下相似实现
+- `main/src/onetcli_app.rs` 旧实现：原来在 `on_release` 阶段手动 `cx.quit()`，退出时机偏晚，容易与窗口释放后的平台尾随事件交错。
+- `crates/story/examples/dock.rs`：仓库示例也使用 `on_release -> quit`，但这是示例模式，不是必须沿用的生产实现。
+- `crates/zed/src/main.rs` 与 `gpui/src/app.rs`：上游入口和框架都支持 `with_quit_mode(...)`，说明入口统一声明退出模式才是官方路径。
+
+### 4. 未重复造轮子的证明
+- 没有新增任何自定义窗口状态或关闭标记。
+- 没有改动 `update.rs`、`setting_tab.rs` 等业务异步链路，只把退出策略交还给 `gpui`。
+
+## 验证记录 - window-not-found-fix
+- `cargo check -p main`：通过，确认 `QuitMode::LastWindowClosed` 接入后 `main` crate 可正常编译。
+- 图形界面人工冒烟：未在当前终端环境自动执行；仍需在 macOS 上手动关闭主窗口一次，确认日志不再输出 `window not found`，且标签状态保存行为保持正常。

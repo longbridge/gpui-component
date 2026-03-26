@@ -26,7 +26,9 @@ fn main() {
         return;
     }
 
-    let app = Application::new().with_assets(Assets);
+    let app = Application::new()
+        .with_assets(Assets)
+        .with_quit_mode(QuitMode::LastWindowClosed);
 
     app.run(move |cx| {
         onetcli_app::init(cx);
