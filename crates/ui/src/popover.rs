@@ -280,7 +280,9 @@ impl PopoverState {
             self._dismiss_subscription = None;
             // Restore focus to the element that was focused before the popover opened.
             if let Some(prev) = self.previous_focus_handle.take() {
-                prev.focus(window, cx);
+                if self.focus_handle.contains_focused(window, cx) {
+                    prev.focus(window, cx);
+                }
             }
         }
 
