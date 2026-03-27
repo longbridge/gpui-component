@@ -770,6 +770,22 @@ Table:
     en: Execution failed
     zh-CN: 执行失败
     zh-HK: 執行失敗
+  destructive_sql_confirm_title:
+    en: Destructive SQL Detected
+    zh-CN: 检测到可能导致数据丢失的 SQL
+    zh-HK: 檢測到可能導致資料遺失的 SQL
+  destructive_sql_confirm_message:
+    en: The generated SQL contains DROP statements and may delete columns, indexes, constraints, or tables.
+    zh-CN: 当前生成的 SQL 包含 DROP 语句，可能会删除字段、索引、约束或整张表。
+    zh-HK: 當前產生的 SQL 包含 DROP 語句，可能會刪除欄位、索引、約束或整張表。
+  destructive_sql_confirm_desc:
+    en: The system has switched to SQL Preview. Please review the SQL carefully before continuing.
+    zh-CN: 系统已切换到 SQL 预览页，请先确认 SQL 内容再决定是否继续执行。
+    zh-HK: 系統已切換到 SQL 預覽頁，請先確認 SQL 內容再決定是否繼續執行。
+  destructive_sql_confirm_execute:
+    en: Execute Anyway
+    zh-CN: 继续执行
+    zh-HK: 繼續執行
 
   # 表设计器标签
   columns:

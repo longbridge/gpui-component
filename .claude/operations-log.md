@@ -2362,3 +2362,45 @@
 - `cargo test -p db --lib`：通过，`337 passed`。
 - `cargo test -p db_view --lib`：通过，`200 passed`。
 - 已观察：未来兼容告警 `num-bigint-dig v0.8.4`，为仓库既有依赖问题，非本次改动引入。
+
+## 编码前检查 - table_designer drop 确认
+时间：2026-03-27 17:02:24 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-table-designer-drop-confirm.md`
+□ 将使用以下可复用组件：
+- `crates/db_view/src/table_designer_tab.rs`：复用 diff SQL 生成、页签状态和保存事件。
+- `crates/db_view/src/common/schema_editor_view.rs`：复用 SQL 预览页签切换模式。
+- `crates/db_view/src/db_tree_event.rs`：复用破坏性确认弹窗模式。
+  □ 将遵循命名约定：Rust `snake_case` / `PascalCase`
+  □ 将遵循代码风格：把执行逻辑收口到 helper，避免 `handle_execute` 与 `save_and_close` 各自维护一套异步链路
+  □ 确认不重复造轮子，证明：已检查 `table_designer_tab.rs`、`schema_editor_view.rs`、`db_tree_event.rs` 与 `db_view.yml`
+
+## 编码后声明 - table_designer drop 确认
+时间：2026-03-27 17:02:24 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db_view/src/table_designer_tab.rs`：沿用 `build_diff_preview_sql` 作为执行 SQL 唯一来源，并保留 `TableDesignerEvent::Saved` 刷新链路。
+- `crates/db_view/src/common/schema_editor_view.rs`：沿用通过 tab 状态切换到 SQL 预览页的交互方式。
+- `crates/db_view/src/db_tree_event.rs`：沿用 `.confirm()` + `DialogButtonProps` + `Common.irreversible` 的破坏性提示结构。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `sql_has_changes`、`contains_destructive_sql`、`execute_request`、`maybe_confirm_and_execute`，保持 `snake_case`。
+- 代码风格：把重复的 `execute_script` 成功/失败处理收口到 `execute_request`，减少双入口漂移风险。
+- 文件组织：业务逻辑仅修改 `table_designer_tab.rs` 与 `db_view.yml`，未扩大到数据库插件层。
+### 3. 对比了以下相似实现
+- `crates/db_view/src/table_designer_tab.rs`：我的方案差异是新增危险 SQL 检测和确认前置，但 SQL 生成仍走原 helper。
+- `crates/db_view/src/common/schema_editor_view.rs`：我的方案差异是 `TableDesigner` 使用 `TabBar` 而不是按钮页签，但切换仍只改本地状态。
+- `crates/db_view/src/db_tree_event.rs`：我的方案差异是确认后继续执行表设计器原逻辑，而不是在弹窗里直接执行业务。
+
+### 4. 未重复造轮子的证明
+- 没有新增数据库插件 trait 或方言检测接口，而是直接复用已生成的 diff SQL 文本做危险判断。
+- 没有新造弹窗组件，而是复用现有 confirm 对话框模板。
+- 没有为 `save_and_close` 再写一套执行代码，而是共享同一个执行 helper。
+
+## 验证记录 - table_designer drop 确认
+- `rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_designer_tab.rs`：通过。
+- `rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db_view/locales/db_view.yml`：失败；原因是 `rustfmt` 不支持 YAML，属于工具选择不适配，不影响代码有效性。
+- `cargo check -p db_view`：通过。
+- `cargo test -p db_view contains_destructive_sql --lib`：通过，6 个新增检测单测全部成功。
+- `cargo test -p db_view table_designer_tab --lib`：通过，55 个 table_designer 相关单测全部成功。
+- 已观察：未来兼容告警 `num-bigint-dig v0.8.4`，为仓库既有依赖问题，非本次改动引入。

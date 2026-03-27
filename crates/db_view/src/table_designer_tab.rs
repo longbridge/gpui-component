@@ -11,6 +11,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     clipboard::Clipboard,
+    dialog::DialogButtonProps,
     form::{field, h_form},
     h_flex,
     highlighter::Language,
@@ -232,6 +233,29 @@ pub struct TableDesigner {
     ddl_preview_input: Entity<InputState>,
     original_design: Option<TableDesign>,
     _subscriptions: Vec<Subscription>,
+}
+
+#[derive(Clone)]
+enum ExecuteSuccessBehavior {
+    StayOpen {
+        tab_id: Option<String>,
+    },
+    CloseTab {
+        tab_container: Entity<TabContainer>,
+        tab_id: String,
+        emitted_tab_id: Option<String>,
+    },
+}
+
+#[derive(Clone)]
+struct TableDesignerExecutionRequest {
+    connection_id: String,
+    database_name: String,
+    schema_name: Option<String>,
+    sql: String,
+    table_name: String,
+    is_new_table: bool,
+    success_behavior: ExecuteSuccessBehavior,
 }
 
 impl TableDesigner {
@@ -620,8 +644,7 @@ impl TableDesigner {
         cx.notify();
     }
 
-    pub fn has_unsaved_changes(&self, cx: &App) -> bool {
-        let sql = self.sql_preview_input.read(cx).text().to_string();
+    fn sql_has_changes(sql: &str) -> bool {
         let trimmed = sql.trim();
         let no_changes_localized = t!("SqlEditor.no_changes").to_string();
         !trimmed.is_empty()
@@ -629,86 +652,35 @@ impl TableDesigner {
             && !trimmed.starts_with(no_changes_localized.as_str())
     }
 
-    pub fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.handle_execute(&gpui::ClickEvent::default(), window, cx);
+    fn contains_destructive_sql(sql: &str) -> bool {
+        if !Self::sql_has_changes(sql) {
+            return false;
+        }
+
+        let normalized_sql = sql
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with("--"))
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_uppercase();
+
+        ["DROP COLUMN", "DROP INDEX", "DROP CONSTRAINT", "DROP TABLE"]
+            .iter()
+            .any(|keyword| normalized_sql.contains(keyword))
     }
 
-    pub fn save_and_close(
-        &mut self,
-        tab_container: Entity<TabContainer>,
-        tab_id: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let design = self.collect_design(cx);
-        if design.table_name.is_empty() {
-            window.push_notification(t!("Table.please_enter_table_name").to_string(), cx);
-            return;
-        }
-        if design.columns.is_empty() {
-            window.push_notification(t!("Table.please_add_column").to_string(), cx);
-            return;
-        }
-
+    fn execute_request(&mut self, request: TableDesignerExecutionRequest, cx: &mut Context<Self>) {
         let global_state = cx.global::<GlobalDbState>().clone();
-        let connection_id = self.config.connection_id.clone();
-        let database_name = self.config.database_name.clone();
-        let database_type = self.config.database_type;
-        let schema = self.config.schema_name.clone();
-        let original_design = self.original_design.clone();
-        let column_renames = self.collect_column_renames(cx);
-        let is_new_table = original_design.is_none();
-        let table_name = design.table_name.clone();
-        let config_tab_id = self.config.tab_id.clone();
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let sql = {
-                let plugin_result = cx.update(|cx: &mut App| {
-                    let global_state = cx.global::<GlobalDbState>().clone();
-                    global_state.db_manager.get_plugin(&database_type)
-                });
-                match plugin_result {
-                    Ok(plugin) => {
-                        if let Some(original) = &original_design {
-                            let normalized =
-                                Self::normalize_column_renames(original, &design, &column_renames);
-                            plugin.build_alter_table_sql_with_renames(
-                                original,
-                                &design,
-                                &normalized,
-                            )
-                        } else {
-                            plugin.build_create_table_sql(&design)
-                        }
-                    }
-                    _ => return,
-                }
-            };
-
-            let no_changes_localized = t!("SqlEditor.no_changes").to_string();
-            if sql.trim().is_empty()
-                || sql.starts_with("-- No changes")
-                || sql.starts_with(no_changes_localized.as_str())
-            {
-                let _ = cx.update(|cx: &mut App| {
-                    if let Some(window_id) = cx.active_window() {
-                        let _ = cx.update_window(window_id, |_, _window, cx| {
-                            tab_container.update(cx, |container: &mut TabContainer, cx| {
-                                container.force_close_tab_by_id(&tab_id, cx);
-                            });
-                        });
-                    }
-                });
-                return;
-            }
-
             let result = global_state
                 .execute_script(
                     cx,
-                    connection_id.clone(),
-                    sql,
-                    Some(database_name.clone()),
-                    schema.clone(),
+                    request.connection_id.clone(),
+                    request.sql.clone(),
+                    Some(request.database_name.clone()),
+                    request.schema_name.clone(),
                     None,
                 )
                 .await;
@@ -739,29 +711,55 @@ impl TableDesigner {
                                     cx,
                                 );
                             } else {
-                                let msg = if is_new_table {
+                                let msg = if request.is_new_table {
                                     t!("Table.create_success").to_string()
                                 } else {
                                     t!("Table.modify_success").to_string()
                                 };
                                 window.push_notification(msg, cx);
-                                let _ = this.update(cx, |_designer, cx| {
-                                    cx.emit(TableDesignerEvent::Saved {
-                                        connection_id: connection_id.clone(),
-                                        database_name: database_name.clone(),
-                                        schema_name: schema.clone(),
-                                        table_name: table_name.clone(),
-                                        is_new_table,
-                                        tab_id: config_tab_id.clone(),
-                                    });
-                                });
-                                tab_container.update(cx, |container: &mut TabContainer, cx| {
-                                    container.force_close_tab_by_id(&tab_id, cx);
+                                let _ = this.update(cx, |designer, cx| {
+                                    match &request.success_behavior {
+                                        ExecuteSuccessBehavior::StayOpen { tab_id } => {
+                                            cx.emit(TableDesignerEvent::Saved {
+                                                connection_id: request.connection_id.clone(),
+                                                database_name: request.database_name.clone(),
+                                                schema_name: request.schema_name.clone(),
+                                                table_name: request.table_name.clone(),
+                                                is_new_table: request.is_new_table,
+                                                tab_id: tab_id.clone(),
+                                            });
+                                            if request.is_new_table {
+                                                designer.config.table_name =
+                                                    Some(request.table_name.clone());
+                                            }
+                                            designer.load_table_structure(cx);
+                                        }
+                                        ExecuteSuccessBehavior::CloseTab {
+                                            tab_container,
+                                            tab_id,
+                                            emitted_tab_id,
+                                        } => {
+                                            cx.emit(TableDesignerEvent::Saved {
+                                                connection_id: request.connection_id.clone(),
+                                                database_name: request.database_name.clone(),
+                                                schema_name: request.schema_name.clone(),
+                                                table_name: request.table_name.clone(),
+                                                is_new_table: request.is_new_table,
+                                                tab_id: emitted_tab_id.clone(),
+                                            });
+                                            tab_container.update(
+                                                cx,
+                                                |container: &mut TabContainer, cx| {
+                                                    container.force_close_tab_by_id(tab_id, cx);
+                                                },
+                                            );
+                                        }
+                                    }
                                 });
                             }
                         }
                         Err(e) => {
-                            let msg = if is_new_table {
+                            let msg = if request.is_new_table {
                                 t!("Table.create_failed").to_string()
                             } else {
                                 t!("Table.modify_failed").to_string()
@@ -773,6 +771,104 @@ impl TableDesigner {
             });
         })
         .detach();
+    }
+
+    fn maybe_confirm_and_execute(
+        &mut self,
+        request: TableDesignerExecutionRequest,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !Self::contains_destructive_sql(&request.sql) {
+            self.execute_request(request, cx);
+            return;
+        }
+
+        self.active_tab = DesignerTab::SqlPreview;
+        self.update_previews(window, cx);
+
+        let designer_entity = cx.entity().clone();
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let request_for_ok = request.clone();
+            let designer_entity = designer_entity.clone();
+
+            dialog
+                .title(t!("Table.destructive_sql_confirm_title").to_string())
+                .confirm()
+                .overlay(false)
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text(t!("Table.destructive_sql_confirm_execute").to_string())
+                        .cancel_text(t!("Common.cancel").to_string()),
+                )
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(t!("Table.destructive_sql_confirm_message").to_string())
+                        .child(t!("Table.destructive_sql_confirm_desc").to_string())
+                        .child(t!("Common.irreversible").to_string()),
+                )
+                .on_ok(move |_, _, cx| {
+                    let request = request_for_ok.clone();
+                    designer_entity.update(cx, |designer, cx| {
+                        designer.execute_request(request, cx);
+                    });
+                    true
+                })
+        });
+    }
+
+    pub fn has_unsaved_changes(&self, cx: &App) -> bool {
+        let sql = self.sql_preview_input.read(cx).text().to_string();
+        Self::sql_has_changes(&sql)
+    }
+
+    pub fn save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.handle_execute(&gpui::ClickEvent::default(), window, cx);
+    }
+
+    pub fn save_and_close(
+        &mut self,
+        tab_container: Entity<TabContainer>,
+        tab_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let design = self.collect_design(cx);
+        if design.table_name.is_empty() {
+            window.push_notification(t!("Table.please_enter_table_name").to_string(), cx);
+            return;
+        }
+        if design.columns.is_empty() {
+            window.push_notification(t!("Table.please_add_column").to_string(), cx);
+            return;
+        }
+
+        let column_renames = self.collect_column_renames(cx);
+        let sql = self.build_diff_preview_sql(&design, &column_renames, cx);
+
+        if !Self::sql_has_changes(&sql) {
+            tab_container.update(cx, |container: &mut TabContainer, cx| {
+                container.force_close_tab_by_id(&tab_id, cx);
+            });
+            return;
+        }
+
+        let request = TableDesignerExecutionRequest {
+            connection_id: self.config.connection_id.clone(),
+            database_name: self.config.database_name.clone(),
+            schema_name: self.config.schema_name.clone(),
+            sql,
+            table_name: design.table_name.clone(),
+            is_new_table: self.original_design.is_none(),
+            success_behavior: ExecuteSuccessBehavior::CloseTab {
+                tab_container,
+                tab_id,
+                emitted_tab_id: self.config.tab_id.clone(),
+            },
+        };
+
+        self.maybe_confirm_and_execute(request, window, cx);
     }
 
     pub fn load_table_structure(&mut self, cx: &mut Context<Self>) {
@@ -881,128 +977,27 @@ impl TableDesigner {
             return;
         }
 
-        let global_state = cx.global::<GlobalDbState>().clone();
-        let connection_id = self.config.connection_id.clone();
-        let database_name = self.config.database_name.clone();
-        let database_type = self.config.database_type;
-        let schema = self.config.schema_name.clone();
-        let original_design = self.original_design.clone();
         let column_renames = self.collect_column_renames(cx);
-        let is_new_table = original_design.is_none();
-        let table_name = design.table_name.clone();
-        let tab_id = self.config.tab_id.clone();
+        let sql = self.build_diff_preview_sql(&design, &column_renames, cx);
 
-        cx.spawn(async move |this, cx: &mut AsyncApp| {
-            let sql = {
-                let plugin_result = cx.update(|cx: &mut App| {
-                    let global_state = cx.global::<GlobalDbState>().clone();
-                    global_state.db_manager.get_plugin(&database_type)
-                });
-                match plugin_result {
-                    Ok(plugin) => {
-                        if let Some(original) = &original_design {
-                            let normalized =
-                                Self::normalize_column_renames(original, &design, &column_renames);
-                            plugin.build_alter_table_sql_with_renames(
-                                original,
-                                &design,
-                                &normalized,
-                            )
-                        } else {
-                            plugin.build_create_table_sql(&design)
-                        }
-                    }
-                    _ => return,
-                }
-            };
+        if !Self::sql_has_changes(&sql) {
+            window.push_notification(t!("Table.no_changes").to_string(), cx);
+            return;
+        }
 
-            let no_changes_localized = t!("SqlEditor.no_changes").to_string();
-            if sql.trim().is_empty()
-                || sql.starts_with("-- No changes")
-                || sql.starts_with(no_changes_localized.as_str())
-            {
-                let _ = cx.update(|cx: &mut App| {
-                    if let Some(window_id) = cx.active_window() {
-                        let _ = cx.update_window(window_id, |_, window, cx| {
-                            window.push_notification(t!("Table.no_changes").to_string(), cx);
-                        });
-                    }
-                });
-                return;
-            }
+        let request = TableDesignerExecutionRequest {
+            connection_id: self.config.connection_id.clone(),
+            database_name: self.config.database_name.clone(),
+            schema_name: self.config.schema_name.clone(),
+            sql,
+            table_name: design.table_name.clone(),
+            is_new_table: self.original_design.is_none(),
+            success_behavior: ExecuteSuccessBehavior::StayOpen {
+                tab_id: self.config.tab_id.clone(),
+            },
+        };
 
-            let result = global_state
-                .execute_script(
-                    cx,
-                    connection_id.clone(),
-                    sql,
-                    Some(database_name.clone()),
-                    schema.clone(),
-                    None,
-                )
-                .await;
-
-            let _ = cx.update(|cx: &mut App| {
-                if let Some(window_id) = cx.active_window() {
-                    let _ = cx.update_window(window_id, |_, window, cx| match &result {
-                        Ok(results) => {
-                            let has_error = results.iter().any(|r| r.is_error());
-                            if has_error {
-                                let error_msg = results
-                                    .iter()
-                                    .filter_map(|r| {
-                                        if let db::executor::SqlResult::Error(err) = r {
-                                            Some(err.message.clone())
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join("; ");
-                                window.push_notification(
-                                    format!(
-                                        "{}: {}",
-                                        &t!("Table.execute_failed").to_string(),
-                                        error_msg
-                                    ),
-                                    cx,
-                                );
-                            } else {
-                                let msg = if is_new_table {
-                                    t!("Table.create_success").to_string()
-                                } else {
-                                    t!("Table.modify_success").to_string()
-                                };
-                                window.push_notification(msg, cx);
-                                let _ = this.update(cx, |designer, cx| {
-                                    cx.emit(TableDesignerEvent::Saved {
-                                        connection_id: connection_id.clone(),
-                                        database_name: database_name.clone(),
-                                        schema_name: schema.clone(),
-                                        table_name: table_name.clone(),
-                                        is_new_table,
-                                        tab_id: tab_id.clone(),
-                                    });
-                                    if is_new_table {
-                                        designer.config.table_name = Some(table_name.clone());
-                                    }
-                                    designer.load_table_structure(cx);
-                                });
-                            }
-                        }
-                        Err(e) => {
-                            let msg = if is_new_table {
-                                t!("Table.create_failed").to_string()
-                            } else {
-                                t!("Table.modify_failed").to_string()
-                            };
-                            window.push_notification(format!("{}: {}", msg, e), cx);
-                        }
-                    });
-                }
-            });
-        })
-        .detach();
+        self.maybe_confirm_and_execute(request, window, cx);
     }
 
     fn render_toolbar(&self, cx: &Context<Self>) -> AnyElement {
@@ -3231,6 +3226,51 @@ mod tests {
             !sql.contains(&drop_source),
             "重命名来源列 b 不应被误删，出现 SQL: {drop_source} in {sql}"
         );
+    }
+
+    #[test]
+    fn test_contains_destructive_sql_detects_drop_column() {
+        let sql = "ALTER TABLE users DROP COLUMN age;";
+        assert!(TableDesigner::contains_destructive_sql(sql));
+    }
+
+    #[test]
+    fn test_contains_destructive_sql_detects_drop_index() {
+        let sql = "ALTER TABLE users DROP INDEX idx_users_name;";
+        assert!(TableDesigner::contains_destructive_sql(sql));
+    }
+
+    #[test]
+    fn test_contains_destructive_sql_detects_drop_constraint_and_table() {
+        assert!(TableDesigner::contains_destructive_sql(
+            "ALTER TABLE users DROP CONSTRAINT users_pk;"
+        ));
+        assert!(TableDesigner::contains_destructive_sql(
+            "DROP TABLE users_backup;"
+        ));
+    }
+
+    #[test]
+    fn test_contains_destructive_sql_ignores_comment_only_drop_keyword() {
+        let sql = "-- DROP COLUMN age\nALTER TABLE users ADD COLUMN age INT;";
+        assert!(!TableDesigner::contains_destructive_sql(sql));
+    }
+
+    #[test]
+    fn test_contains_destructive_sql_ignores_non_drop_changes() {
+        assert!(!TableDesigner::contains_destructive_sql(
+            "ALTER TABLE users ADD COLUMN age INT;"
+        ));
+        assert!(!TableDesigner::contains_destructive_sql(
+            "ALTER TABLE users MODIFY COLUMN age BIGINT;"
+        ));
+    }
+
+    #[test]
+    fn test_contains_destructive_sql_ignores_no_changes_output() {
+        assert!(!TableDesigner::contains_destructive_sql(
+            "-- No changes detected"
+        ));
     }
 
     #[test]

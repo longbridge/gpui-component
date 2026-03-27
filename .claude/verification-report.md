@@ -1063,3 +1063,50 @@
 ### 风险说明
 - 不同数据库原生备份语法对索引、约束、默认值的保留程度不同，这属于数据库本身语义差异，不是本次实现缺陷。
 - 当前未连真实实例做交互式验证，若要进一步收敛风险，下一步应补一轮多数据库手工冒烟。
+
+---
+
+## 审查报告（table_designer DROP SQL 确认）
+生成时间：2026-03-27 17:02:24 +0800
+
+### 需求完整性检查
+- 目标明确：当字段修改生成包含显式 `DROP` 的差异 SQL 时，执行前必须强制跳转到 SQL 预览并弹出确认框。
+- 范围明确：变更集中在 `crates/db_view/src/table_designer_tab.rs` 与 `crates/db_view/locales/db_view.yml`。
+- 交付物明确：代码补丁、本地化文案、上下文摘要、操作日志、本地验证结果均已落地。
+- 风险与依赖明确：依赖现有 `GlobalDbState.execute_script`、`TableDesignerEvent::Saved`、`TabContainer` 和 gpui confirm dialog。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：90/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：94/100
+- 风险评估：90/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo check -p db_view`
+  - 结果：通过
+- 已执行：`cargo test -p db_view contains_destructive_sql --lib`
+  - 结果：通过（6 passed）
+- 已执行：`cargo test -p db_view table_designer_tab --lib`
+  - 结果：通过（55 passed）
+- 已执行：`rustfmt --edition 2024 crates/db_view/src/table_designer_tab.rs`
+  - 结果：通过
+- 已执行：`rustfmt --edition 2024 crates/db_view/locales/db_view.yml`
+  - 结果：失败，原因是 `rustfmt` 不支持 YAML；该失败已记录，未影响 Rust 代码验证结论
+- 已观察：未来兼容告警 `num-bigint-dig v0.8.4`
+  - 说明：仓库既有依赖告警，非本次改动引入
+
+### 结论
+- `handle_execute` 与 `save_and_close` 现在共享同一条危险 SQL 检测和执行路径，不会再出现一个入口确认、另一个入口直执行的行为分叉。
+- 当 diff SQL 包含 `DROP COLUMN`、`DROP INDEX`、`DROP CONSTRAINT` 或 `DROP TABLE` 时，界面会先切到 SQL 预览页，再弹出确认框提示数据丢失风险。
+- 确认后仍沿用原有执行、通知、刷新和关页逻辑，避免破坏已有保存行为。
+
+### 剩余风险
+- 当前没有 UI 自动化测试直接断言“已切到 SQL 预览页并显示确认框”，该部分仍建议后续补一条视图层或人工冒烟验证。
