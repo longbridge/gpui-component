@@ -877,3 +877,74 @@
 ### 剩余风险
 - 目前没有 GUI 层自动化用例直接覆盖“鼠标框选多行后点击删除”的交互路径，建议后续在图形环境补一次冒烟验证。
 - 当前策略基于 `all_cells()` 展开矩形选区；在极大面积多列多行框选场景下会先遍历单元格再压缩到行，但作为点击删除前的低频动作，当前开销可接受。
+
+---
+
+## 审查报告（table_designer 字段排序 SQL 生成）
+生成时间：2026-03-27 00:05:00 +0800
+
+### 需求完整性检查
+- 目标明确：排序字段后应生成 ALTER TABLE 语句
+- 范围明确：限定 MySQL 插件 SQL 生成逻辑
+- 交付物明确：最小补丁、单元测试、验证输出与日志
+- 风险与依赖明确：其他数据库不处理列排序
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：92/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：95/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p db mysql::plugin::tests::`
+  - 结果：通过（32 passed）
+- LSP 诊断：未执行
+  - 原因：rust-analyzer 在当前工具链不可用
+
+### 结论
+- MySQL `build_alter_table_sql` 已补齐列顺序差异处理，生成 `MODIFY COLUMN ... FIRST/AFTER`。
+- 新增测试 `test_build_alter_table_sql_reorder_columns` 已通过，覆盖仅排序变化场景。
+
+### 追加说明（修复排序与新增列冗余修改）
+- 新增测试：`test_build_alter_table_sql_add_column_no_reorder`
+- 已执行：`cargo test -p db mysql::plugin::tests::`
+  - 结果：通过（33 passed）
+- 行为更新：仅当“既有列相对顺序变化”时才生成排序 MODIFY，避免新增列导致的冗余修改
+
+### 追加说明（扩展 SQL 生成测试集）
+- 新增测试：`test_build_alter_table_sql_reorder_with_modify_column`
+- 已执行：`cargo test -p db mysql::plugin::tests::`
+  - 结果：通过（34 passed）
+
+---
+
+## 审查报告（全数据库 SQL 生成测试集扩展）
+生成时间：2026-03-27 00:45:00 +0800
+
+### 需求完整性检查
+- 目标明确：覆盖所有数据库插件的 SQL 生成场景
+- 范围明确：仅新增各插件测试用例
+- 交付物明确：测试用例 + 本地验证记录
+
+### 验证结果
+- 已执行：`cargo test -p db postgresql::plugin::tests::`（31 passed）
+- 已执行：`cargo test -p db mssql::plugin::tests::`（26 passed）
+- 已执行：`cargo test -p db oracle::plugin::tests::`（26 passed）
+- 已执行：`cargo test -p db sqlite::plugin::tests::`（21 passed）
+- 已执行：`cargo test -p db clickhouse::plugin::tests::`（20 passed）
+- LSP 诊断：未执行（rust-analyzer 不可用）
+
+### 结论
+- PostgreSQL：新增顺序变化无差异与默认/非空变更测试
+- MSSQL：新增 ALTER COLUMN 与 UNIQUE INDEX 测试
+- Oracle：新增 MODIFY 默认值/非空与 UNIQUE INDEX 测试
+- SQLite：新增结构变更重建与顺序变化无差异测试
+- ClickHouse：新增 MODIFY 类型与 ADD INDEX 测试

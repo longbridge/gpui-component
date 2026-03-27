@@ -1589,6 +1589,29 @@ impl DatabasePlugin for MySqlPlugin {
             .collect();
         let new_cols: HashMap<&str, &ColumnDefinition> =
             new.columns.iter().map(|c| (c.name.as_str(), c)).collect();
+        let original_order: HashMap<&str, usize> = original
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(idx, col)| (col.name.as_str(), idx))
+            .collect();
+        let original_existing: Vec<&str> = original
+            .columns
+            .iter()
+            .map(|col| col.name.as_str())
+            .collect();
+        let new_existing: Vec<&str> = new
+            .columns
+            .iter()
+            .filter(|col| original_cols.contains_key(col.name.as_str()))
+            .map(|col| col.name.as_str())
+            .collect();
+        let order_changed = original_existing != new_existing;
+        let new_existing_positions: HashMap<&str, usize> = new_existing
+            .iter()
+            .enumerate()
+            .map(|(idx, name)| (*name, idx))
+            .collect();
 
         for name in original_cols.keys() {
             if !new_cols.contains_key(name) {
@@ -1604,10 +1627,38 @@ impl DatabasePlugin for MySqlPlugin {
             if let Some(orig_col) = original_cols.get(col.name.as_str()) {
                 if self.column_changed(orig_col, col) {
                     let col_def = self.build_column_def(col);
+                    let position = if idx == 0 {
+                        " FIRST".to_string()
+                    } else {
+                        format!(
+                            " AFTER {}",
+                            self.quote_identifier(&new.columns[idx - 1].name)
+                        )
+                    };
                     statements.push(format!(
-                        "ALTER TABLE {} MODIFY COLUMN {};",
-                        table_name, col_def
+                        "ALTER TABLE {} MODIFY COLUMN {}{};",
+                        table_name, col_def, position
                     ));
+                } else if order_changed {
+                    let original_idx = original_order.get(col.name.as_str());
+                    let new_idx = new_existing_positions.get(col.name.as_str());
+                    if let (Some(original_idx), Some(new_idx)) = (original_idx, new_idx) {
+                        if original_idx != new_idx {
+                            let col_def = self.build_column_def(col);
+                            let position = if idx == 0 {
+                                " FIRST".to_string()
+                            } else {
+                                format!(
+                                    " AFTER {}",
+                                    self.quote_identifier(&new.columns[idx - 1].name)
+                                )
+                            };
+                            statements.push(format!(
+                                "ALTER TABLE {} MODIFY COLUMN {}{};",
+                                table_name, col_def, position
+                            ));
+                        }
+                    }
                 }
             } else {
                 let col_def = self.build_column_def(col);
@@ -2124,6 +2175,47 @@ mod tests {
     }
 
     #[test]
+    fn test_build_alter_table_sql_add_column_no_reorder() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("INT"),
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(50),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("INT"),
+                ColumnDefinition::new("email")
+                    .data_type("VARCHAR")
+                    .length(100),
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(50),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("ADD COLUMN"));
+        assert!(sql.contains("`email`"));
+        assert!(!sql.contains("MODIFY COLUMN `name`"));
+    }
+
+    #[test]
     fn test_build_alter_table_sql_drop_column() {
         let plugin = create_plugin();
 
@@ -2185,6 +2277,87 @@ mod tests {
         assert!(sql.contains("MODIFY COLUMN"));
         assert!(sql.contains("`name`"));
         assert!(sql.contains("VARCHAR(100)"));
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_reorder_columns() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("INT"),
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(50),
+                ColumnDefinition::new("age").data_type("INT"),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(50),
+                ColumnDefinition::new("id").data_type("INT"),
+                ColumnDefinition::new("age").data_type("INT"),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("MODIFY COLUMN"));
+        assert!(sql.contains("`name`"));
+        assert!(sql.contains(" AFTER `id`") || sql.contains(" FIRST"));
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_reorder_with_modify_column() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("INT"),
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(50),
+                ColumnDefinition::new("age").data_type("INT"),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("age").data_type("INT"),
+                ColumnDefinition::new("id").data_type("INT"),
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(120),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        let modify_count = sql.matches("MODIFY COLUMN `name`").count();
+        assert_eq!(modify_count, 1);
+        assert!(sql.contains("VARCHAR(120)"));
+        assert!(sql.contains(" AFTER `id`") || sql.contains(" FIRST"));
     }
 
     #[test]

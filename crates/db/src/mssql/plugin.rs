@@ -2318,6 +2318,79 @@ mod tests {
         assert!(sql.contains("[old_column]"));
     }
 
+    #[test]
+    fn test_build_alter_table_sql_modify_column() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("NVARCHAR")
+                .length(50)],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("NVARCHAR")
+                .length(100)
+                .nullable(false)],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("ALTER COLUMN"));
+        assert!(sql.contains("[name] NVARCHAR(100)"));
+        assert!(sql.contains("NOT NULL"));
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_add_unique_index() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("INT"),
+                ColumnDefinition::new("name")
+                    .data_type("NVARCHAR")
+                    .length(50),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("INT"),
+                ColumnDefinition::new("name")
+                    .data_type("NVARCHAR")
+                    .length(50),
+            ],
+            indexes: vec![IndexDefinition::new("idx_name")
+                .columns(vec!["name".to_string()])
+                .unique(true)],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("CREATE UNIQUE INDEX"));
+        assert!(sql.contains("[idx_name]"));
+        assert!(sql.contains("[name]"));
+    }
+
     // ==================== Completion Info Tests ====================
 
     #[test]

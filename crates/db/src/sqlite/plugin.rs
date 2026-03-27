@@ -1372,6 +1372,69 @@ mod tests {
         assert!(sql.contains("rename to"));
     }
 
+    #[test]
+    fn test_build_alter_table_sql_modify_column_recreate() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "main".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("TEXT")
+                .length(50)],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "main".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("TEXT")
+                .length(100)],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("create table"));
+        assert!(sql.contains("_dg_tmp"));
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_reorder_columns_no_changes() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "main".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("INTEGER"),
+                ColumnDefinition::new("name").data_type("TEXT"),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "main".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("name").data_type("TEXT"),
+                ColumnDefinition::new("id").data_type("INTEGER"),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert_eq!(sql, "-- No changes detected");
+    }
+
     // ==================== Data Types Tests ====================
 
     #[test]

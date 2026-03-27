@@ -2029,6 +2029,80 @@ mod tests {
         assert!(sql.contains("\"old_column\""));
     }
 
+    #[test]
+    fn test_build_alter_table_sql_modify_column_default_and_null() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_schema".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![ColumnDefinition::new("status")
+                .data_type("VARCHAR2")
+                .length(20)
+                .default_value("'A'")],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_schema".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![ColumnDefinition::new("status")
+                .data_type("VARCHAR2")
+                .length(20)
+                .nullable(false)],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("MODIFY"));
+        assert!(sql.contains("DEFAULT NULL"));
+        assert!(sql.contains("NOT NULL"));
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_add_unique_index() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_schema".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("NUMBER"),
+                ColumnDefinition::new("email")
+                    .data_type("VARCHAR2")
+                    .length(100),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_schema".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("NUMBER"),
+                ColumnDefinition::new("email")
+                    .data_type("VARCHAR2")
+                    .length(100),
+            ],
+            indexes: vec![IndexDefinition::new("idx_email")
+                .columns(vec!["email".to_string()])
+                .unique(true)],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("CREATE UNIQUE INDEX"));
+        assert!(sql.contains("\"idx_email\""));
+        assert!(sql.contains("\"email\""));
+    }
+
     // ==================== Completion Info Tests ====================
 
     #[test]

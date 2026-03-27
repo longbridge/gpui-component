@@ -2178,3 +2178,86 @@
 - `rustfmt /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_data/data_grid.rs`：失败，原因是直接单文件格式化默认按旧 edition 解析；问题与本次补丁无关。
 - `rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_data/data_grid.rs`：通过。
 - `cargo test -p db_view --lib`：通过，`db_view` 200 个单元测试全部成功，新增 3 个 `collect_delete_row_indices` 测试通过。
+
+## 编码前检查 - table_designer 字段排序不生成语句
+时间：2026-03-27 00:00:00
+
+□ 已查阅上下文摘要文件：.claude/context-summary-table-designer-column-reorder.md
+□ 将使用以下可复用组件：
+- build_alter_table_sql（crates/db/src/mysql/plugin.rs）- 复用列差异生成逻辑并扩展排序变更
+- build_alter_table_sql_with_renames（crates/db/src/plugin.rs）- 复用整体 SQL 合并策略
+  □ 将遵循命名约定：Rust snake_case / CamelCase
+  □ 将遵循代码风格：显式逻辑、最小改动
+  □ 确认不重复造轮子，证明：已检查 db 插件与 table_designer_tab 的现有实现
+
+## 编码后声明 - table_designer 字段排序不生成语句
+时间：2026-03-27 00:06:00
+
+### 1. 复用了以下既有组件
+- build_alter_table_sql（crates/db/src/mysql/plugin.rs）：沿用列差异生成逻辑并扩展排序变更
+- build_column_def（crates/db/src/mysql/plugin.rs）：复用列定义拼接
+
+### 2. 遵循了以下项目约定
+- 命名约定：延续 MySQL 插件内部命名与 HashMap 用法
+- 代码风格：保持局部最小改动、无额外抽象
+- 文件组织：仅修改 crates/db/src/mysql/plugin.rs
+
+### 3. 对比了以下相似实现
+- MySQL build_alter_table_sql（同文件）：新增顺序差异分支，保持原有 ADD/MODIFY 结构
+- MSSQL/PostgreSQL 插件：未支持列排序，本次限定在 MySQL
+
+### 4. 未重复造轮子的证明
+- 已检查 db_view table_designer_tab 与各数据库插件实现，未发现现成排序差异逻辑
+
+### 5. 本地验证记录
+- 已执行：cargo test -p db mysql::plugin::tests::
+  - 结果：通过
+- LSP 诊断未执行：rust-analyzer 在当前工具链不可用
+
+## 追加修正记录 - 排序逻辑去冗余
+时间：2026-03-27 00:10:00
+
+- 新增测试：test_build_alter_table_sql_add_column_no_reorder（新增列不触发多余 MODIFY）
+- 逻辑调整：仅当既有列相对顺序变化时生成排序 MODIFY
+- 验证：cargo test -p db mysql::plugin::tests:: 通过（33 passed）
+
+## 追加测试集记录 - SQL 生成覆盖
+时间：2026-03-27 00:20:00
+
+- 新增测试：test_build_alter_table_sql_reorder_with_modify_column
+- 验证：cargo test -p db mysql::plugin::tests:: 通过（34 passed）
+
+## 编码前检查 - 全数据库 SQL 生成测试集
+时间：2026-03-27 00:31:00
+
+□ 已查阅上下文摘要文件：.claude/context-summary-all-db-sql-tests.md
+□ 将使用以下可复用组件：
+- 各插件 build_alter_table_sql 测试区（mysql/postgresql/mssql/oracle/sqlite/clickhouse）
+  □ 将遵循命名约定：Rust snake_case / CamelCase
+  □ 将遵循代码风格：断言关键SQL片段
+  □ 确认不重复造轮子，证明：已检查各插件现有测试
+
+## 编码后声明 - 全数据库 SQL 生成测试集
+时间：2026-03-27 00:46:00
+
+### 1. 复用了以下既有组件
+- 各数据库插件的 ALTER TABLE 测试区与 SQL 生成行为
+
+### 2. 遵循了以下项目约定
+- 命名约定：测试函数 snake_case
+- 代码风格：断言关键 SQL 片段，避免过度严格匹配
+- 文件组织：仅修改插件测试模块
+
+### 3. 对比了以下相似实现
+- MySQL/PostgreSQL/MSSQL/Oracle/SQLite/ClickHouse 插件测试区
+
+### 4. 未重复造轮子的证明
+- 已检查各插件现有测试后在原测试区追加用例
+
+### 5. 本地验证记录
+- cargo test -p db postgresql::plugin::tests::（31 passed）
+- cargo test -p db mssql::plugin::tests::（26 passed）
+- cargo test -p db oracle::plugin::tests::（26 passed）
+- cargo test -p db sqlite::plugin::tests::（21 passed）
+- cargo test -p db clickhouse::plugin::tests::（20 passed）
+- LSP 诊断未执行：rust-analyzer 不可用

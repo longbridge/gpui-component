@@ -2008,6 +2008,75 @@ mod tests {
         assert!(sql.contains("VARCHAR(100)"));
     }
 
+    #[test]
+    fn test_build_alter_table_sql_reorder_columns_no_changes() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("id").data_type("INTEGER"),
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(50),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(50),
+                ColumnDefinition::new("id").data_type("INTEGER"),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert_eq!(sql, "-- No changes detected");
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_set_default_and_not_null() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("VARCHAR")
+                .length(50)],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "users".to_string(),
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("VARCHAR")
+                .length(50)
+                .nullable(false)
+                .default_value("'guest'")],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("SET NOT NULL"));
+        assert!(sql.contains("SET DEFAULT 'guest'"));
+    }
+
     // ==================== Data Types Tests ====================
 
     #[test]

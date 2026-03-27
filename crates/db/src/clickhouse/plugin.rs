@@ -1356,6 +1356,63 @@ mod tests {
         assert!(sql.contains("`old_column`"));
     }
 
+    #[test]
+    fn test_build_alter_table_sql_modify_column_type() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "events".to_string(),
+            columns: vec![ColumnDefinition::new("value").data_type("UInt32")],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "events".to_string(),
+            columns: vec![ColumnDefinition::new("value").data_type("UInt64")],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("MODIFY COLUMN"));
+        assert!(sql.contains("`value`"));
+        assert!(sql.contains("UInt64"));
+    }
+
+    #[test]
+    fn test_build_alter_table_sql_add_index() {
+        let plugin = create_plugin();
+
+        let original = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "events".to_string(),
+            columns: vec![ColumnDefinition::new("value").data_type("UInt64")],
+            indexes: vec![],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let new = TableDesign {
+            database_name: "test_db".to_string(),
+            table_name: "events".to_string(),
+            columns: vec![ColumnDefinition::new("value").data_type("UInt64")],
+            indexes: vec![IndexDefinition::new("idx_value")
+                .columns(vec!["value".to_string()])],
+            foreign_keys: vec![],
+            options: TableOptions::default(),
+        };
+
+        let sql = plugin.build_alter_table_sql(&original, &new);
+        assert!(sql.contains("ADD INDEX"));
+        assert!(sql.contains("`idx_value`"));
+        assert!(sql.contains("`value`"));
+    }
+
     // ==================== Completion Info Tests ====================
 
     #[test]
