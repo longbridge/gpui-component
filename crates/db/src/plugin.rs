@@ -1,16 +1,16 @@
+use crate::QueryResult;
 use crate::connection::{DbConnection, DbError};
 use crate::executor::{SqlResult, SqlSource, StatementType};
 use crate::import_export::{
+    DataFormat, ExportConfig, ExportProgressSender, ExportResult, FormatHandler, ImportConfig,
+    ImportProgressSender, ImportResult,
     formats::{
         CsvFormatHandler, JsonFormatHandler, SqlFormatHandler, TxtFormatHandler, XmlFormatHandler,
     },
-    DataFormat, ExportConfig, ExportProgressSender, ExportResult, FormatHandler, ImportConfig,
-    ImportProgressSender, ImportResult,
 };
 use crate::streaming_parser::StreamingSqlParser;
 use crate::types::*;
-use crate::QueryResult;
-use anyhow::{anyhow, bail, Error, Result};
+use anyhow::{Error, Result, anyhow, bail};
 use async_trait::async_trait;
 use one_core::storage::manager::get_queries_dir;
 use one_core::storage::{DatabaseType, DbConnectionConfig};
@@ -2132,6 +2132,22 @@ pub trait DatabasePlugin: Send + Sync {
 
     /// Rename table
     fn rename_table(&self, database: &str, old_name: &str, new_name: &str) -> String;
+
+    /// Build native backup-table SQL.
+    /// 默认实现使用 `CREATE TABLE ... AS SELECT ...`，数据库插件可按方言覆盖。
+    fn build_backup_table_sql(
+        &self,
+        _database: &str,
+        _schema: Option<&str>,
+        source_table: &str,
+        target_table: &str,
+    ) -> String {
+        format!(
+            "CREATE TABLE {} AS SELECT * FROM {};",
+            self.quote_identifier(target_table),
+            self.quote_identifier(source_table)
+        )
+    }
 
     /// Drop view
     fn drop_view(&self, _database: &str, view: &str) -> String {

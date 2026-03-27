@@ -178,6 +178,12 @@ impl DatabaseViewPlugin for ClickHouseDatabaseViewPlugin {
                         },
                     ),
                     ContextMenuItem::item(
+                        t!("Table.copy_table").to_string(),
+                        DbTreeViewEvent::CopyTable {
+                            node_id: node_id.to_string(),
+                        },
+                    ),
+                    ContextMenuItem::item(
                         t!("Table.truncate_table").to_string(),
                         DbTreeViewEvent::TruncateTable {
                             node_id: node_id.to_string(),

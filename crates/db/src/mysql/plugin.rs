@@ -1449,6 +1449,29 @@ impl DatabasePlugin for MySqlPlugin {
         )
     }
 
+    fn build_backup_table_sql(
+        &self,
+        database: &str,
+        _schema: Option<&str>,
+        source_table: &str,
+        target_table: &str,
+    ) -> String {
+        let source = format!(
+            "{}.{}",
+            self.quote_identifier(database),
+            self.quote_identifier(source_table)
+        );
+        let target = format!(
+            "{}.{}",
+            self.quote_identifier(database),
+            self.quote_identifier(target_table)
+        );
+        format!(
+            "CREATE TABLE {} LIKE {};\nINSERT INTO {} SELECT * FROM {};",
+            target, source, target, source
+        )
+    }
+
     fn build_column_def(&self, col: &ColumnDefinition) -> String {
         let mut def = String::new();
         def.push_str(&self.quote_identifier(&col.name));
@@ -1889,6 +1912,16 @@ mod tests {
     }
 
     #[test]
+    fn test_build_backup_table_sql() {
+        let plugin = create_plugin();
+        let sql = plugin.build_backup_table_sql("test_db", None, "orders", "orders_bak");
+        assert!(sql.contains("CREATE TABLE `test_db`.`orders_bak` LIKE `test_db`.`orders`;"));
+        assert!(
+            sql.contains("INSERT INTO `test_db`.`orders_bak` SELECT * FROM `test_db`.`orders`;")
+        );
+    }
+
+    #[test]
     fn test_drop_view() {
         let plugin = create_plugin();
         let sql = plugin.drop_view("test_db", "my_view");
@@ -2083,10 +2116,12 @@ mod tests {
         let design = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "products".to_string(),
-            columns: vec![ColumnDefinition::new("id")
-                .data_type("INT")
-                .nullable(false)
-                .primary_key(true)],
+            columns: vec![
+                ColumnDefinition::new("id")
+                    .data_type("INT")
+                    .nullable(false)
+                    .primary_key(true),
+            ],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions {
@@ -2254,9 +2289,11 @@ mod tests {
         let original = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![ColumnDefinition::new("name")
-                .data_type("VARCHAR")
-                .length(50)],
+            columns: vec![
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(50),
+            ],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2265,9 +2302,11 @@ mod tests {
         let new = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![ColumnDefinition::new("name")
-                .data_type("VARCHAR")
-                .length(100)],
+            columns: vec![
+                ColumnDefinition::new("name")
+                    .data_type("VARCHAR")
+                    .length(100),
+            ],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2464,10 +2503,11 @@ mod tests {
         assert!(!info.snippets.is_empty());
 
         assert!(info.keywords.iter().any(|(k, _)| *k == "AUTO_INCREMENT"));
-        assert!(info
-            .functions
-            .iter()
-            .any(|(f, _)| f.starts_with("GROUP_CONCAT")));
+        assert!(
+            info.functions
+                .iter()
+                .any(|(f, _)| f.starts_with("GROUP_CONCAT"))
+        );
         assert!(info.operators.iter().any(|(o, _)| *o == "REGEXP"));
     }
 }

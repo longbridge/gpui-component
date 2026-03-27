@@ -905,6 +905,29 @@ impl DatabasePlugin for ClickHousePlugin {
         )
     }
 
+    fn build_backup_table_sql(
+        &self,
+        database: &str,
+        _schema: Option<&str>,
+        source_table: &str,
+        target_table: &str,
+    ) -> String {
+        let source = format!(
+            "{}.{}",
+            self.quote_identifier(database),
+            self.quote_identifier(source_table)
+        );
+        let target = format!(
+            "{}.{}",
+            self.quote_identifier(database),
+            self.quote_identifier(target_table)
+        );
+        format!(
+            "CREATE TABLE {} AS {};\nINSERT INTO {} SELECT * FROM {};",
+            target, source, target, source
+        )
+    }
+
     fn build_column_def(&self, col: &ColumnDefinition) -> String {
         let mut def = String::new();
         def.push_str(&self.quote_identifier(&col.name));
@@ -1146,6 +1169,16 @@ mod tests {
     }
 
     #[test]
+    fn test_build_backup_table_sql() {
+        let plugin = create_plugin();
+        let sql = plugin.build_backup_table_sql("test_db", None, "orders", "orders_bak");
+        assert!(sql.contains("CREATE TABLE `test_db`.`orders_bak` AS `test_db`.`orders`;"));
+        assert!(
+            sql.contains("INSERT INTO `test_db`.`orders_bak` SELECT * FROM `test_db`.`orders`;")
+        );
+    }
+
+    #[test]
     fn test_drop_view() {
         let plugin = create_plugin();
         let sql = plugin.drop_view("test_db", "my_view");
@@ -1281,9 +1314,11 @@ mod tests {
                     .data_type("UInt32")
                     .nullable(false),
             ],
-            indexes: vec![IndexDefinition::new("idx_user_id")
-                .columns(vec!["user_id".to_string()])
-                .unique(false)],
+            indexes: vec![
+                IndexDefinition::new("idx_user_id")
+                    .columns(vec!["user_id".to_string()])
+                    .unique(false),
+            ],
             foreign_keys: vec![],
             options: TableOptions::default(),
         };
@@ -1401,8 +1436,7 @@ mod tests {
             database_name: "test_db".to_string(),
             table_name: "events".to_string(),
             columns: vec![ColumnDefinition::new("value").data_type("UInt64")],
-            indexes: vec![IndexDefinition::new("idx_value")
-                .columns(vec!["value".to_string()])],
+            indexes: vec![IndexDefinition::new("idx_value").columns(vec!["value".to_string()])],
             foreign_keys: vec![],
             options: TableOptions::default(),
         };

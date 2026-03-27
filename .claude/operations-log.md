@@ -2308,3 +2308,57 @@
 - `rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_designer_tab.rs`：通过。
 - `cargo check -p db_view`：通过；`db_view` 编译完成。附带未来兼容告警：`num-bigint-dig v0.8.4` 将在未来 Rust 版本被拒绝，非本次改动引入。
 - `cargo test -p db build_create_table_sql --lib`：通过，14 个建表 SQL 相关单测全部成功，覆盖 MySQL、PostgreSQL、MSSQL、Oracle、SQLite、ClickHouse。
+
+## 编码前检查 - db_tree 复制表
+时间：2026-03-27 16:08:04 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-db-tree-copy-table.md`
+□ 将使用以下可复用组件：
+- `crates/db_view/src/db_tree_event.rs`：复用重命名表的输入对话框模式、通知与树刷新链路。
+- `crates/db_view/src/table_designer_tab.rs`：复用列/索引到 `TableDesign` 的转换逻辑。
+- `crates/db/src/manager.rs`：复用 `list_columns`、`list_indexes`、`execute_script`。
+  □ 将遵循命名约定：Rust `snake_case` / `PascalCase`
+  □ 将遵循代码风格：局部最小补丁，菜单入口仍放在各数据库插件内
+  □ 确认不重复造轮子，证明：已检查 `db_tree_event`、`table_designer_tab`、六个 `*_view_plugin.rs` 与 `db::manager`
+
+## 编码后声明 - db_tree 复制表
+时间：2026-03-27 16:08:04 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db_view/src/db_tree_event.rs`：沿用对话框交互和刷新 objects panel 的现有模式。
+- `crates/db_view/src/table_designer_tab.rs`：抽出 `build_table_design_from_metadata` 供事件层和设计器共同复用。
+- `crates/db/src/plugin.rs`：继续通过数据库插件的 `parse_column_type` / `build_create_table_sql` 生成目标表 DDL。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `CopyTable` 事件和 `handle_copy_table`，保持与 `RenameTable` / `TruncateTable` 一致。
+- 代码风格：表菜单仍在各数据库 `*_view_plugin.rs` 中分别声明，不改现有抽象边界。
+- 文件组织：事件、菜单、本地化文案各自落在既有职责文件中。
+
+### 3. 对比了以下相似实现
+- `crates/db_view/src/db_tree_event.rs` 中的 `handle_rename_table`：本次差异是复制表需额外读取元数据并执行建表 SQL。
+- `crates/db_view/src/table_designer_tab.rs` 中的 `build_original_design`：本次差异是把转换逻辑提升为模块级 helper 以便复用。
+- 六个数据库 `*_view_plugin.rs` 的 `DbNodeType::Table` 菜单：统一在“重命名表”和“清空表”之间插入“复制表”。
+
+### 4. 未重复造轮子的证明
+- 没有新增 `CopyTableRequest` 或数据库插件新接口，而是直接复用已存在的元数据查询和 DDL 生成能力。
+- 没有改造 `TableDesigner` 为复制模式，避免复制和编辑两条语义链路混杂。
+- 没有把菜单逻辑硬塞进 `db_tree_view.rs`，继续遵守各数据库插件各自构建上下文菜单的现有模式。
+
+## 验证记录 - db_tree 复制表
+- `rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_designer_tab.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_view.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_event.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/mysql/mysql_view_plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/mssql/mssql_view_plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/postgresql/postgresql_view_plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/oracle/oracle_view_plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/sqlite/sqlite_view_plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/clickhouse/clickhouse_view_plugin.rs`：通过。
+- `cargo check -p db_view`：通过。
+- `cargo test -p db_view --lib`：通过，`200 passed`。
+- 已观察：未来兼容告警 `num-bigint-dig v0.8.4`，为仓库既有依赖问题，非本次改动引入。
+
+## 修正记录 - db_tree 复制表语义纠偏
+时间：2026-03-27 16:08:04 +0800
+
+- 用户澄清“复制表”目标是“创建备份表”，不是仅复制结构。
+- 已放弃事件层“读取列/索引元数据后重建 DDL”的实现路径。
+- 已改为在 `crates/db/src/plugin.rs` 新增 `build_backup_table_sql`，由各数据库插件生成原生备份 SQL。
+
+## 验证记录 - db_tree 备份表语义
+- `rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db/src/plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db/src/mysql/plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db/src/postgresql/plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db/src/mssql/plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db/src/oracle/plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db/src/sqlite/plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db/src/clickhouse/plugin.rs /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/db_tree_event.rs`：通过。
+- `cargo test -p db --lib`：通过，`337 passed`。
+- `cargo test -p db_view --lib`：通过，`200 passed`。
+- 已观察：未来兼容告警 `num-bigint-dig v0.8.4`，为仓库既有依赖问题，非本次改动引入。

@@ -247,6 +247,18 @@ impl DatabaseEventHandler {
                             );
                         }
                     }
+                    DbTreeViewEvent::CopyTable { node_id } => {
+                        if let Some(node) = get_node(&node_id, cx) {
+                            Self::handle_copy_table(
+                                node,
+                                global_state,
+                                tree_view.clone(),
+                                objects_panel.clone(),
+                                window,
+                                cx,
+                            );
+                        }
+                    }
                     DbTreeViewEvent::TruncateTable { node_id } => {
                         if let Some(node) = get_node(&node_id, cx) {
                             Self::handle_truncate_table(
@@ -2809,6 +2821,196 @@ impl DatabaseEventHandler {
                     })
                     .detach();
                     true
+                })
+        });
+    }
+
+    /// 处理复制表事件
+    fn handle_copy_table(
+        node: DbNode,
+        global_state: GlobalDbState,
+        tree_view: Entity<DbTreeView>,
+        objects_panel: Entity<DatabaseObjectsPanel>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        use gpui_component::{
+            WindowExt,
+            input::{Input, InputState},
+        };
+
+        let connection_id = node.connection_id.clone();
+        let database_name = node.get_database_name().unwrap_or_default();
+        let schema_name = node.get_schema_name();
+        let source_table_name = node.name.clone();
+        let database_type = node.database_type;
+
+        let input_state = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(t!("DbTreeEvent.copy_table_placeholder").to_string())
+        });
+
+        window.open_dialog(cx, move |dialog, _window, _cx| {
+            let conn_id = connection_id.clone();
+            let db_name = database_name.clone();
+            let schema = schema_name.clone();
+            let source_name = source_table_name.clone();
+            let state = global_state.clone();
+            let tree = tree_view.clone();
+            let panel = objects_panel.clone();
+            let input = input_state.clone();
+
+            dialog
+                .overlay(false)
+                .title(t!("DbTreeEvent.copy_table_title").to_string())
+                .confirm()
+                .child(
+                    v_flex()
+                        .gap_4()
+                        .p_4()
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .items_center()
+                                .child(
+                                    div().w(px(80.)).child(
+                                        t!("DbTreeEvent.copy_table_source_label").to_string(),
+                                    ),
+                                )
+                                .child(div().flex_1().child(source_name.clone())),
+                        )
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .items_center()
+                                .child(
+                                    div().w(px(80.)).child(
+                                        t!("DbTreeEvent.copy_table_target_label").to_string(),
+                                    ),
+                                )
+                                .child(div().flex_1().child(Input::new(&input))),
+                        ),
+                )
+                .on_ok(move |_, _, cx| {
+                    let target_name = input.read(cx).text().to_string().trim().to_string();
+                    if target_name.is_empty() || target_name == source_name {
+                        return false;
+                    }
+
+                    let conn_id = conn_id.clone();
+                    let db_name = db_name.clone();
+                    let schema = schema.clone();
+                    let source_name = source_name.clone();
+                    let state = state.clone();
+                    let tree = tree.clone();
+                    let panel = panel.clone();
+                    let window_id = cx.active_window();
+
+                    cx.spawn(async move |cx: &mut AsyncApp| {
+                        let plugin = match state.get_plugin(&database_type) {
+                            Ok(plugin) => plugin,
+                            Err(err) => {
+                                let _ = cx.update(|cx| {
+                                    Self::show_error_async(
+                                        cx,
+                                        t!("DbTreeEvent.copy_table_failed", error = err)
+                                            .to_string(),
+                                    );
+                                });
+                                return;
+                            }
+                        };
+
+                        let sql = plugin.build_backup_table_sql(
+                            &db_name,
+                            schema.as_deref(),
+                            &source_name,
+                            &target_name,
+                        );
+
+                        let result = state
+                            .execute_script(
+                                cx,
+                                conn_id.clone(),
+                                sql,
+                                Some(db_name.clone()),
+                                schema.clone(),
+                                None,
+                            )
+                            .await;
+
+                        let Some(window_id) = window_id else { return };
+                        let state_for_refresh = state.clone();
+                        let refresh_node_id = if let Some(schema_name) = schema.clone() {
+                            format!("{}:{}:{}", conn_id, db_name, schema_name)
+                        } else {
+                            format!("{}:{}", conn_id, db_name)
+                        };
+                        let source_name_for_message = source_name.clone();
+                        let target_name_for_message = target_name.clone();
+
+                        let _ = cx.update_window(window_id, |_entity, window, cx| match &result {
+                            Ok(results) => {
+                                let has_error = results.iter().any(|result| result.is_error());
+                                if has_error {
+                                    let error_message = results
+                                        .iter()
+                                        .filter_map(|result| {
+                                            if let SqlResult::Error(err) = result {
+                                                Some(err.message.clone())
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join("; ");
+                                    window.push_notification(
+                                        Notification::error(
+                                            t!(
+                                                "DbTreeEvent.copy_table_failed",
+                                                error = error_message
+                                            )
+                                            .to_string(),
+                                        )
+                                        .autohide(true),
+                                        cx,
+                                    );
+                                } else {
+                                    window.close_dialog(cx);
+                                    tree.update(cx, |tree, cx| {
+                                        tree.refresh_tree(refresh_node_id.clone(), cx);
+                                    });
+                                    panel.update(cx, |panel, cx| {
+                                        panel.refresh(state_for_refresh.clone(), cx);
+                                    });
+                                    window.push_notification(
+                                        Notification::success(
+                                            t!(
+                                                "DbTreeEvent.copy_table_success",
+                                                source = source_name_for_message,
+                                                target = target_name_for_message
+                                            )
+                                            .to_string(),
+                                        )
+                                        .autohide(true),
+                                        cx,
+                                    );
+                                }
+                            }
+                            Err(err) => {
+                                window.push_notification(
+                                    Notification::error(
+                                        t!("DbTreeEvent.copy_table_failed", error = err)
+                                            .to_string(),
+                                    )
+                                    .autohide(true),
+                                    cx,
+                                );
+                            }
+                        });
+                    })
+                    .detach();
+                    false
                 })
         });
     }

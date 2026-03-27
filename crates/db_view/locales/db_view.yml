@@ -708,6 +708,10 @@ Table:
     en: Rename Table
     zh-CN: 重命名表
     zh-HK: 重新命名表
+  copy_table:
+    en: Backup Table
+    zh-CN: 创建备份表
+    zh-HK: 建立備份表
   truncate_table:
     en: Truncate Table
     zh-CN: 清空表
@@ -1766,6 +1770,30 @@ DbTreeEvent:
     en: "Failed to rename table: %{error}"
     zh-CN: "重命名表失败: %{error}"
     zh-HK: "重新命名表失敗: %{error}"
+  copy_table_placeholder:
+    en: Enter backup table name
+    zh-CN: 输入备份表名
+    zh-HK: 輸入備份表名
+  copy_table_title:
+    en: Backup Table
+    zh-CN: 创建备份表
+    zh-HK: 建立備份表
+  copy_table_source_label:
+    en: "Source:"
+    zh-CN: "原表:"
+    zh-HK: "原表:"
+  copy_table_target_label:
+    en: "Backup:"
+    zh-CN: "备份表:"
+    zh-HK: "備份表:"
+  copy_table_success:
+    en: "Backup table created: %{source} -> %{target}"
+    zh-CN: "备份表已创建: %{source} -> %{target}"
+    zh-HK: "備份表已建立: %{source} -> %{target}"
+  copy_table_failed:
+    en: "Failed to create backup table: %{error}"
+    zh-CN: "创建备份表失败: %{error}"
+    zh-HK: "建立備份表失敗: %{error}"
   confirm_truncate_table_message:
     en: "Are you sure you want to truncate table \"%{name}\"?"
     zh-CN: "确定要清空表 \"%{name}\" 吗？"

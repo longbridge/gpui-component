@@ -960,6 +960,20 @@ impl DatabasePlugin for SqlitePlugin {
         )
     }
 
+    fn build_backup_table_sql(
+        &self,
+        _database: &str,
+        _schema: Option<&str>,
+        source_table: &str,
+        target_table: &str,
+    ) -> String {
+        format!(
+            "CREATE TABLE {} AS SELECT * FROM {};",
+            self.quote_identifier(target_table),
+            self.quote_identifier(source_table)
+        )
+    }
+
     fn drop_view(&self, _database: &str, view: &str) -> String {
         format!("DROP VIEW IF EXISTS {}", self.quote_identifier(view))
     }
@@ -1159,6 +1173,16 @@ mod tests {
         assert!(sql.contains("RENAME TO"));
         assert!(sql.contains("\"old_name\""));
         assert!(sql.contains("\"new_name\""));
+    }
+
+    #[test]
+    fn test_build_backup_table_sql() {
+        let plugin = create_plugin();
+        let sql = plugin.build_backup_table_sql("main", None, "orders", "orders_bak");
+        assert_eq!(
+            sql,
+            "CREATE TABLE \"orders_bak\" AS SELECT * FROM \"orders\";"
+        );
     }
 
     #[test]
@@ -1379,9 +1403,7 @@ mod tests {
         let original = TableDesign {
             database_name: "main".to_string(),
             table_name: "users".to_string(),
-            columns: vec![ColumnDefinition::new("name")
-                .data_type("TEXT")
-                .length(50)],
+            columns: vec![ColumnDefinition::new("name").data_type("TEXT").length(50)],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -1390,9 +1412,7 @@ mod tests {
         let new = TableDesign {
             database_name: "main".to_string(),
             table_name: "users".to_string(),
-            columns: vec![ColumnDefinition::new("name")
-                .data_type("TEXT")
-                .length(100)],
+            columns: vec![ColumnDefinition::new("name").data_type("TEXT").length(100)],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),

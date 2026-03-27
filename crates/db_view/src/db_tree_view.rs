@@ -319,6 +319,8 @@ pub enum DbTreeViewEvent {
     DeleteTable { node_id: String },
     /// 重命名表
     RenameTable { node_id: String },
+    /// 复制表
+    CopyTable { node_id: String },
     /// 清空表
     TruncateTable { node_id: String },
     /// 删除视图

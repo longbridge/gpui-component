@@ -26,6 +26,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::database_view_plugin::{ColumnEditorCapabilities, DatabaseViewPluginRegistry};
 use db::GlobalDbState;
+use db::plugin::DatabasePlugin;
 use db::types::{
     CharsetInfo, CollationInfo, ColumnDefinition, ColumnInfo, IndexDefinition, IndexInfo,
     ParsedColumnType, TableDesign, TableOptions,
@@ -96,6 +97,121 @@ impl TableDesignerConfig {
         self.tab_id = Some(id.into());
         self
     }
+}
+
+pub(crate) fn build_table_design_from_metadata(
+    database_type: DatabaseType,
+    database_name: String,
+    table_name: String,
+    columns: &[ColumnInfo],
+    indexes: &[IndexInfo],
+    plugin: Option<&dyn DatabasePlugin>,
+) -> TableDesign {
+    let column_defs: Vec<ColumnDefinition> = columns
+        .iter()
+        .map(|col| {
+            let parsed = plugin
+                .map(|plugin| plugin.parse_column_type(&col.data_type))
+                .unwrap_or_else(|| fallback_parse_column_type(&col.data_type));
+            column_info_to_definition(database_type, col, parsed)
+        })
+        .collect();
+
+    let index_defs: Vec<IndexDefinition> = indexes
+        .iter()
+        .filter(|idx| idx.name.to_uppercase() != "PRIMARY")
+        .map(|idx| IndexDefinition {
+            name: idx.name.clone(),
+            columns: idx.columns.clone(),
+            is_unique: idx.is_unique,
+            is_primary: false,
+            index_type: idx.index_type.clone(),
+            comment: String::new(),
+        })
+        .collect();
+
+    TableDesign {
+        database_name,
+        table_name,
+        columns: column_defs,
+        indexes: index_defs,
+        foreign_keys: vec![],
+        options: TableOptions::default(),
+    }
+}
+
+fn column_info_to_definition(
+    database_type: DatabaseType,
+    col: &ColumnInfo,
+    parsed: ParsedColumnType,
+) -> ColumnDefinition {
+    let base_type = parsed.base_type;
+    let data_type = if let Some(enum_values) = parsed.enum_values {
+        format!("{}({})", base_type, enum_values)
+    } else {
+        base_type.clone()
+    };
+    let is_auto_increment = if database_type == DatabaseType::SQLite {
+        col.is_primary_key && base_type.eq_ignore_ascii_case("INTEGER")
+    } else {
+        parsed.is_auto_increment
+    };
+
+    ColumnDefinition {
+        name: col.name.clone(),
+        data_type,
+        length: parsed.length,
+        precision: None,
+        scale: parsed.scale,
+        is_nullable: col.is_nullable,
+        is_primary_key: col.is_primary_key,
+        is_auto_increment,
+        is_unsigned: parsed.is_unsigned,
+        default_value: col.default_value.clone(),
+        comment: col.comment.clone().unwrap_or_default(),
+        charset: col.charset.clone(),
+        collation: col.collation.clone(),
+    }
+}
+
+fn fallback_parse_column_type(data_type: &str) -> ParsedColumnType {
+    let (base_type, length) = parse_data_type(data_type);
+    ParsedColumnType {
+        base_type,
+        length,
+        scale: extract_scale_from_type_str(data_type),
+        enum_values: None,
+        is_unsigned: data_type.to_uppercase().contains("UNSIGNED"),
+        is_auto_increment: data_type.to_uppercase().contains("AUTO_INCREMENT"),
+    }
+}
+
+fn parse_data_type(data_type: &str) -> (String, Option<u32>) {
+    if let Some(start) = data_type.find('(') {
+        if let Some(end) = data_type.find(')') {
+            let base_type = data_type[..start].trim().to_string();
+            let len_str = &data_type[start + 1..end];
+            if let Some(comma) = len_str.find(',') {
+                let length = len_str[..comma].trim().parse().ok();
+                return (base_type, length);
+            }
+            let length = len_str.trim().parse().ok();
+            return (base_type, length);
+        }
+    }
+    (data_type.to_string(), None)
+}
+
+fn extract_scale_from_type_str(data_type: &str) -> Option<u32> {
+    if let Some(start) = data_type.find('(') {
+        if let Some(end) = data_type.find(')') {
+            let len_str = &data_type[start + 1..end];
+            if let Some(comma) = len_str.find(',') {
+                return len_str[comma + 1..].trim().parse().ok();
+            }
+        }
+    }
+    None
 }
 
 pub struct TableDesigner {
@@ -739,112 +855,14 @@ impl TableDesigner {
             .db_manager
             .get_plugin(&self.config.database_type)
             .ok();
-        let column_defs: Vec<ColumnDefinition> = columns
-            .iter()
-            .map(|col| {
-                let parsed = plugin
-                    .as_deref()
-                    .map(|plugin| plugin.parse_column_type(&col.data_type))
-                    .unwrap_or_else(|| Self::fallback_parse_column_type(&col.data_type));
-                Self::column_info_to_definition(self.config.database_type, col, parsed)
-            })
-            .collect();
-
-        let index_defs: Vec<IndexDefinition> = indexes
-            .iter()
-            .filter(|idx| idx.name.to_uppercase() != "PRIMARY")
-            .map(|idx| IndexDefinition {
-                name: idx.name.clone(),
-                columns: idx.columns.clone(),
-                is_unique: idx.is_unique,
-                is_primary: false,
-                index_type: idx.index_type.clone(),
-                comment: String::new(),
-            })
-            .collect();
-
-        TableDesign {
-            database_name: self.config.database_name.clone(),
-            table_name: self.config.table_name.clone().unwrap_or_default(),
-            columns: column_defs,
-            indexes: index_defs,
-            foreign_keys: vec![],
-            options: TableOptions::default(),
-        }
-    }
-
-    fn column_info_to_definition(
-        database_type: DatabaseType,
-        col: &ColumnInfo,
-        parsed: ParsedColumnType,
-    ) -> ColumnDefinition {
-        let base_type = parsed.base_type;
-        let data_type = if let Some(enum_values) = parsed.enum_values {
-            format!("{}({})", base_type, enum_values)
-        } else {
-            base_type.clone()
-        };
-        let is_auto_increment = if database_type == DatabaseType::SQLite {
-            col.is_primary_key && base_type.eq_ignore_ascii_case("INTEGER")
-        } else {
-            parsed.is_auto_increment
-        };
-
-        ColumnDefinition {
-            name: col.name.clone(),
-            data_type,
-            length: parsed.length,
-            precision: None,
-            scale: parsed.scale,
-            is_nullable: col.is_nullable,
-            is_primary_key: col.is_primary_key,
-            is_auto_increment,
-            is_unsigned: parsed.is_unsigned,
-            default_value: col.default_value.clone(),
-            comment: col.comment.clone().unwrap_or_default(),
-            charset: col.charset.clone(),
-            collation: col.collation.clone(),
-        }
-    }
-
-    fn fallback_parse_column_type(data_type: &str) -> ParsedColumnType {
-        let (base_type, length) = Self::parse_data_type(data_type);
-        ParsedColumnType {
-            base_type,
-            length,
-            scale: Self::extract_scale_from_type_str(data_type),
-            enum_values: None,
-            is_unsigned: data_type.to_uppercase().contains("UNSIGNED"),
-            is_auto_increment: data_type.to_uppercase().contains("AUTO_INCREMENT"),
-        }
-    }
-
-    fn parse_data_type(data_type: &str) -> (String, Option<u32>) {
-        if let Some(start) = data_type.find('(') {
-            if let Some(end) = data_type.find(')') {
-                let base_type = data_type[..start].trim().to_string();
-                let len_str = &data_type[start + 1..end];
-                if let Some(comma) = len_str.find(',') {
-                    let length = len_str[..comma].trim().parse().ok();
-                    return (base_type, length);
-                }
-                let length = len_str.trim().parse().ok();
-                return (base_type, length);
-            }
-        }
-        (data_type.to_string(), None)
-    }
-
-    fn extract_scale_from_type_str(data_type: &str) -> Option<u32> {
-        if let Some(start) = data_type.find('(') {
-            if let Some(end) = data_type.find(')') {
-                let len_str = &data_type[start + 1..end];
-                if let Some(comma) = len_str.find(',') {
-                    return len_str[comma + 1..].trim().parse().ok();
-                }
-            }
-        }
-        None
+        build_table_design_from_metadata(
+            self.config.database_type,
+            self.config.database_name.clone(),
+            self.config.table_name.clone().unwrap_or_default(),
+            &columns,
+            &indexes,
+            plugin.as_deref(),
+        )
     }
 
     fn handle_execute(
@@ -1850,7 +1868,7 @@ impl ColumnsEditor {
             let parsed_type = plugin
                 .as_ref()
                 .map(|p| p.parse_column_type(&col.data_type))
-                .unwrap_or_else(|| TableDesigner::fallback_parse_column_type(&col.data_type));
+                .unwrap_or_else(|| fallback_parse_column_type(&col.data_type));
             let base_type = parsed_type.base_type.clone();
             let type_idx = self
                 .data_types
@@ -4153,8 +4171,7 @@ mod tests {
         };
         let parsed = MySqlPlugin::new().parse_column_type(&column.data_type);
 
-        let definition =
-            TableDesigner::column_info_to_definition(DatabaseType::MySQL, &column, parsed);
+        let definition = column_info_to_definition(DatabaseType::MySQL, &column, parsed);
 
         assert_eq!(definition.data_type, "varchar");
         assert_eq!(definition.length, Some(255));
@@ -4186,12 +4203,12 @@ mod tests {
             collation: Some("utf8mb4_bin".to_string()),
         };
 
-        let numeric_definition = TableDesigner::column_info_to_definition(
+        let numeric_definition = column_info_to_definition(
             DatabaseType::MySQL,
             &numeric,
             MySqlPlugin::new().parse_column_type(&numeric.data_type),
         );
-        let enum_definition = TableDesigner::column_info_to_definition(
+        let enum_definition = column_info_to_definition(
             DatabaseType::MySQL,
             &enum_col,
             MySqlPlugin::new().parse_column_type(&enum_col.data_type),

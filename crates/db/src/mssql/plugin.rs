@@ -1733,6 +1733,28 @@ impl DatabasePlugin for MsSqlPlugin {
         )
     }
 
+    fn build_backup_table_sql(
+        &self,
+        _database: &str,
+        schema: Option<&str>,
+        source_table: &str,
+        target_table: &str,
+    ) -> String {
+        let qualify = |table: &str| match schema {
+            Some(schema) => format!(
+                "{}.{}",
+                self.quote_identifier(schema),
+                self.quote_identifier(table)
+            ),
+            None => self.quote_identifier(table),
+        };
+        format!(
+            "SELECT * INTO {} FROM {};",
+            qualify(target_table),
+            qualify(source_table)
+        )
+    }
+
     fn build_column_def(&self, col: &ColumnDefinition) -> String {
         let mut def = String::new();
         def.push_str(&format!("[{}]", col.name.replace("]", "]]")));
@@ -2057,6 +2079,13 @@ mod tests {
     }
 
     #[test]
+    fn test_build_backup_table_sql() {
+        let plugin = create_plugin();
+        let sql = plugin.build_backup_table_sql("test_db", Some("dbo"), "orders", "orders_bak");
+        assert_eq!(sql, "SELECT * INTO [dbo].[orders_bak] FROM [dbo].[orders];");
+    }
+
+    #[test]
     fn test_drop_view() {
         let plugin = create_plugin();
         let sql = plugin.drop_view("test_db", "my_view");
@@ -2325,9 +2354,11 @@ mod tests {
         let original = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![ColumnDefinition::new("name")
-                .data_type("NVARCHAR")
-                .length(50)],
+            columns: vec![
+                ColumnDefinition::new("name")
+                    .data_type("NVARCHAR")
+                    .length(50),
+            ],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2336,10 +2367,12 @@ mod tests {
         let new = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![ColumnDefinition::new("name")
-                .data_type("NVARCHAR")
-                .length(100)
-                .nullable(false)],
+            columns: vec![
+                ColumnDefinition::new("name")
+                    .data_type("NVARCHAR")
+                    .length(100)
+                    .nullable(false),
+            ],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2378,9 +2411,11 @@ mod tests {
                     .data_type("NVARCHAR")
                     .length(50),
             ],
-            indexes: vec![IndexDefinition::new("idx_name")
-                .columns(vec!["name".to_string()])
-                .unique(true)],
+            indexes: vec![
+                IndexDefinition::new("idx_name")
+                    .columns(vec!["name".to_string()])
+                    .unique(true),
+            ],
             foreign_keys: vec![],
             options: TableOptions::default(),
         };
