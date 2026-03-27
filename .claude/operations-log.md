@@ -2280,3 +2280,31 @@
   □ 将遵循命名约定：Rust `snake_case` / `PascalCase`
   □ 将遵循代码风格：局部最小补丁，不修改插件 trait
   □ 确认不重复造轮子，证明：已检查 `table_designer_tab`、`gpui_component` 页签示例、`Clipboard` 用法和数据库插件 DDL 生成入口
+
+## 编码后声明 - table_designer DDL 页签
+时间：2026-03-27 15:02:06 +0800
+
+### 1. 复用了以下既有组件
+- `crates/db_view/src/table_designer_tab.rs`：延续现有 `DesignerTab`、`TabBar`、`render_sql_preview` 和事件订阅刷新链路。
+- `crates/db/src/plugin.rs`：继续通过 `build_create_table_sql(&TableDesign)` 生成完整表级 DDL。
+- `main/src/encourage.rs`：沿用 `Clipboard::new(...).value(...)` 的复制交互。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `build_diff_preview_sql`、`build_ddl_preview_sql`、`update_previews`，保持 `snake_case`。
+- 代码风格：把 DDL 新能力收敛在 `table_designer_tab.rs` 与 i18n 文案中，不改数据库插件 trait。
+- 文件组织：UI 只负责展示和复制，完整 DDL 生成仍归数据库插件。
+
+### 3. 对比了以下相似实现
+- `crates/db_view/src/table_designer_tab.rs`：沿用现有 SQL 预览页签结构，差异是新增独立 `ddl_preview_input` 而非覆写原状态。
+- `crates/story/src/stories/tabs_story.rs`：沿用 `TabBar` 索引映射和点击切换模式。
+- `main/src/encourage.rs`：沿用 `Clipboard` 直接绑定复制值的模式。
+
+### 4. 未重复造轮子的证明
+- 没有新造 DDL 生成接口，而是直接复用 `build_create_table_sql`。
+- 没有新造复制按钮组件，而是复用 `Clipboard`。
+- 没有把现有差异 SQL 预览改造成混合语义，而是新增独立状态，避免污染已有保存逻辑。
+
+## 验证记录 - table_designer DDL 页签
+- `rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_designer_tab.rs`：通过。
+- `cargo check -p db_view`：通过；`db_view` 编译完成。附带未来兼容告警：`num-bigint-dig v0.8.4` 将在未来 Rust 版本被拒绝，非本次改动引入。
+- `cargo test -p db build_create_table_sql --lib`：通过，14 个建表 SQL 相关单测全部成功，覆盖 MySQL、PostgreSQL、MSSQL、Oracle、SQLite、ClickHouse。

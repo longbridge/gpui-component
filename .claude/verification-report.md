@@ -948,3 +948,48 @@
 - Oracle：新增 MODIFY 默认值/非空与 UNIQUE INDEX 测试
 - SQLite：新增结构变更重建与顺序变化无差异测试
 - ClickHouse：新增 MODIFY 类型与 ADD INDEX 测试
+
+---
+
+## 审查报告（table_designer DDL 页签）
+生成时间：2026-03-27 15:02:06 +0800
+
+### 需求完整性检查
+- 目标明确：在 `table_designer` 中新增 DDL 页签，显示当前设计器状态下的完整表级 SQL。
+- 范围明确：仅修改 `crates/db_view/src/table_designer_tab.rs`、`crates/db_view/locales/db_view.yml` 和本地 `.claude` 文档。
+- 交付物明确：代码补丁、上下文摘要、操作日志、本地验证和审查结论均已落地。
+- 风险与依赖明确：完整 DDL 正确性依赖数据库插件现有 `build_create_table_sql` 实现，GUI 层暂无自动化点击验证。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：90/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：95/100
+- 风险评估：92/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`rustfmt --edition 2024 /Users/hufei/RustroverProjects/onetcli/crates/db_view/src/table_designer_tab.rs`
+  - 结果：通过
+- 已执行：`cargo check -p db_view`
+  - 结果：通过
+- 已执行：`cargo test -p db build_create_table_sql --lib`
+  - 结果：通过（14 passed）
+- 已观察：未来兼容告警 `num-bigint-dig v0.8.4`
+  - 说明：仓库既有依赖告警，非本次改动引入
+
+### 结论
+- `TableDesigner` 新增了独立的 `DDL` 页签和 `ddl_preview_input`，完整 DDL 与差异 SQL 不再共用同一份文本状态。
+- 现有所有预览刷新入口统一收口到 `update_previews`，保证表名、列、索引和选项变化会同时刷新两个页签。
+- `SQL 预览` 页签仍保持原语义，`has_unsaved_changes`、`save` 和 `save_and_close` 继续只依赖差异 SQL 路径。
+- DDL 页签右上角接入 `Clipboard`，可以直接复制完整 SQL。
+
+### 剩余风险
+- 当前没有 `db_view` 侧专门的 UI 单测直接断言页签索引和复制按钮渲染，仍建议后续补一条视图层验证。
+- DDL 空态采用空字符串策略，符合复制纯净内容的目标，但在极端空设计场景下需要依赖人工确认其是否符合产品预期。
