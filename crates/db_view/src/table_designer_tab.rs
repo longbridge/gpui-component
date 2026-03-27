@@ -10,6 +10,7 @@ use gpui_component::{
     ActiveTheme, Icon, IconName, IndexPath, Sizable, Size, WindowExt,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
+    clipboard::Clipboard,
     form::{field, h_form},
     h_flex,
     highlighter::Language,
@@ -40,6 +41,7 @@ pub enum DesignerTab {
     Indexes,
     Options,
     SqlPreview,
+    Ddl,
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +113,7 @@ pub struct TableDesigner {
     indexes_editor: Entity<IndexesEditor>,
     _charsets: Vec<CharsetInfo>,
     sql_preview_input: Entity<InputState>,
+    ddl_preview_input: Entity<InputState>,
     original_design: Option<TableDesign>,
     _subscriptions: Vec<Subscription>,
 }
@@ -217,13 +220,19 @@ impl TableDesigner {
                 .line_number(false)
                 .multi_line(true)
         });
+        let ddl_preview_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .code_editor(Language::from_str("sql"))
+                .line_number(false)
+                .multi_line(true)
+        });
 
         let name_sub = cx.subscribe_in(
             &table_name_input,
             window,
             |this, _, event: &InputEvent, window, cx| {
                 if let InputEvent::Change = event {
-                    this.update_sql_preview(window, cx);
+                    this.update_previews(window, cx);
                 }
             },
         );
@@ -233,7 +242,7 @@ impl TableDesigner {
             window,
             |this, _, event: &InputEvent, window, cx| {
                 if let InputEvent::Change = event {
-                    this.update_sql_preview(window, cx);
+                    this.update_previews(window, cx);
                 }
             },
         );
@@ -243,30 +252,30 @@ impl TableDesigner {
             window,
             |this, _, event: &InputEvent, window, cx| {
                 if let InputEvent::Change = event {
-                    this.update_sql_preview(window, cx);
+                    this.update_previews(window, cx);
                 }
             },
         );
 
         let engine_sub = cx.observe_in(&engine_select, window, |this, _, window, cx| {
-            this.update_sql_preview(window, cx);
+            this.update_previews(window, cx);
         });
 
         let charset_select_clone = charset_select.clone();
         let charset_sub = cx.observe_in(&charset_select, window, move |this, _, window, cx| {
-            this.update_sql_preview(window, cx);
+            this.update_previews(window, cx);
             this.update_collations_for_charset(&charset_select_clone, window, cx);
         });
 
         let collation_sub = cx.observe_in(&collation_select, window, |this, _, window, cx| {
-            this.update_sql_preview(window, cx);
+            this.update_previews(window, cx);
         });
 
         let cols_sub = cx.subscribe_in(
             &columns_editor,
             window,
             |this, _, _: &ColumnsEditorEvent, window, cx| {
-                this.update_sql_preview(window, cx);
+                this.update_previews(window, cx);
             },
         );
 
@@ -274,7 +283,7 @@ impl TableDesigner {
             &indexes_editor,
             window,
             |this, _, _: &IndexesEditorEvent, window, cx| {
-                this.update_sql_preview(window, cx);
+                this.update_previews(window, cx);
             },
         );
 
@@ -293,6 +302,7 @@ impl TableDesigner {
             indexes_editor,
             _charsets: charsets,
             sql_preview_input,
+            ddl_preview_input,
             original_design: None,
             _subscriptions: vec![
                 name_sub,
@@ -306,7 +316,7 @@ impl TableDesigner {
             ],
         };
 
-        designer.update_sql_preview(window, cx);
+        designer.update_previews(window, cx);
 
         if designer.config.table_name.is_some() {
             designer.load_table_structure(cx);
@@ -440,27 +450,56 @@ impl TableDesigner {
             .collect()
     }
 
-    fn update_sql_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let design = self.collect_design(cx);
-        let column_renames = self.collect_column_renames(cx);
+    fn build_diff_preview_sql(
+        &self,
+        design: &TableDesign,
+        column_renames: &[(String, String)],
+        cx: &App,
+    ) -> String {
         let global_state = cx.global::<GlobalDbState>().clone();
 
-        let sql = if let Ok(plugin) = global_state
+        if let Ok(plugin) = global_state
             .db_manager
             .get_plugin(&self.config.database_type)
         {
             if let Some(original) = &self.original_design {
-                let normalized = Self::normalize_column_renames(original, &design, &column_renames);
-                plugin.build_alter_table_sql_with_renames(original, &design, &normalized)
+                let normalized = Self::normalize_column_renames(original, design, column_renames);
+                plugin.build_alter_table_sql_with_renames(original, design, &normalized)
             } else {
-                plugin.build_create_table_sql(&design)
+                plugin.build_create_table_sql(design)
             }
         } else {
             String::new()
-        };
+        }
+    }
+
+    fn build_ddl_preview_sql(&self, design: &TableDesign, cx: &App) -> String {
+        if design.table_name.trim().is_empty() || design.columns.is_empty() {
+            return String::new();
+        }
+
+        let global_state = cx.global::<GlobalDbState>().clone();
+        if let Ok(plugin) = global_state
+            .db_manager
+            .get_plugin(&self.config.database_type)
+        {
+            plugin.build_create_table_sql(design)
+        } else {
+            String::new()
+        }
+    }
+
+    fn update_previews(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let design = self.collect_design(cx);
+        let column_renames = self.collect_column_renames(cx);
+        let sql = self.build_diff_preview_sql(&design, &column_renames, cx);
+        let ddl = self.build_ddl_preview_sql(&design, cx);
 
         self.sql_preview_input.update(cx, |state, cx| {
             state.set_value(sql, window, cx);
+        });
+        self.ddl_preview_input.update(cx, |state, cx| {
+            state.set_value(ddl, window, cx);
         });
         cx.notify();
     }
@@ -631,8 +670,6 @@ impl TableDesigner {
         let schema_name = self.config.schema_name.clone();
         let columns_editor = self.columns_editor.clone();
         let indexes_editor = self.indexes_editor.clone();
-        let sql_preview_input = self.sql_preview_input.clone();
-        let database_type = self.config.database_type;
 
         cx.spawn(async move |this, cx: &mut AsyncApp| {
             let columns_result = global_state
@@ -673,44 +710,14 @@ impl TableDesigner {
                             });
                         }
 
-                        let sql = this
-                            .update(cx, |designer, cx| {
-                                let original_design = designer.build_original_design(
-                                    columns.unwrap_or_default(),
-                                    indexes.unwrap_or_default(),
-                                    cx,
-                                );
-                                designer.original_design = Some(original_design);
-
-                                let design = designer.collect_design(cx);
-                                let column_renames = designer.collect_column_renames(cx);
-                                let global_state = cx.global::<GlobalDbState>().clone();
-                                if let Ok(plugin) =
-                                    global_state.db_manager.get_plugin(&database_type)
-                                {
-                                    if let Some(original) = &designer.original_design {
-                                        let normalized = Self::normalize_column_renames(
-                                            original,
-                                            &design,
-                                            &column_renames,
-                                        );
-                                        plugin.build_alter_table_sql_with_renames(
-                                            original,
-                                            &design,
-                                            &normalized,
-                                        )
-                                    } else {
-                                        plugin.build_create_table_sql(&design)
-                                    }
-                                } else {
-                                    String::new()
-                                }
-                            })
-                            .ok()
-                            .unwrap_or_default();
-
-                        sql_preview_input.update(cx, |state, cx| {
-                            state.set_value(sql, window, cx);
+                        let _ = this.update(cx, |designer, cx| {
+                            let original_design = designer.build_original_design(
+                                columns.unwrap_or_default(),
+                                indexes.unwrap_or_default(),
+                                cx,
+                            );
+                            designer.original_design = Some(original_design);
+                            designer.update_previews(window, cx);
                         });
                     })
                 } else {
@@ -1030,6 +1037,7 @@ impl TableDesigner {
             DesignerTab::Indexes => 1,
             DesignerTab::Options => 2,
             DesignerTab::SqlPreview => 3,
+            DesignerTab::Ddl => 4,
         };
 
         h_flex()
@@ -1048,6 +1056,7 @@ impl TableDesigner {
                             1 => DesignerTab::Indexes,
                             2 => DesignerTab::Options,
                             3 => DesignerTab::SqlPreview,
+                            4 => DesignerTab::Ddl,
                             _ => DesignerTab::Columns,
                         };
                         cx.notify();
@@ -1055,7 +1064,8 @@ impl TableDesigner {
                     .child(Tab::new().label(t!("Table.columns").to_string()))
                     .child(Tab::new().label(t!("Table.indexes").to_string()))
                     .child(Tab::new().label(t!("Table.options").to_string()))
-                    .child(Tab::new().label(t!("Table.sql_preview").to_string())),
+                    .child(Tab::new().label(t!("Table.sql_preview").to_string()))
+                    .child(Tab::new().label(t!("Table.ddl").to_string())),
             )
             .into_any_element()
     }
@@ -1066,6 +1076,7 @@ impl TableDesigner {
             DesignerTab::Indexes => self.indexes_editor.clone().into_any_element(),
             DesignerTab::Options => self.render_options(cx),
             DesignerTab::SqlPreview => self.render_sql_preview(cx),
+            DesignerTab::Ddl => self.render_ddl_preview(cx),
         }
     }
 
@@ -1149,6 +1160,27 @@ impl TableDesigner {
             .p_4()
             .child(
                 Input::new(&self.sql_preview_input)
+                    .size_full()
+                    .disabled(true),
+            )
+            .into_any_element()
+    }
+
+    fn render_ddl_preview(&self, cx: &Context<Self>) -> AnyElement {
+        let ddl_sql = self.ddl_preview_input.read(cx).text().to_string();
+
+        v_flex()
+            .size_full()
+            .p_4()
+            .gap_3()
+            .child(
+                h_flex()
+                    .w_full()
+                    .justify_end()
+                    .child(Clipboard::new("table-designer-copy-ddl").value(ddl_sql)),
+            )
+            .child(
+                Input::new(&self.ddl_preview_input)
                     .size_full()
                     .disabled(true),
             )

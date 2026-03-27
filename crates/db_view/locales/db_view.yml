@@ -784,6 +784,10 @@ Table:
     en: SQL Preview
     zh-CN: SQL 预览
     zh-HK: SQL 預覽
+  ddl:
+    en: DDL
+    zh-CN: DDL
+    zh-HK: DDL
 
   # 表选项
   engine:

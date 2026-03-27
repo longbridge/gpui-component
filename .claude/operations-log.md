@@ -2261,3 +2261,22 @@
 - cargo test -p db sqlite::plugin::tests::（21 passed）
 - cargo test -p db clickhouse::plugin::tests::（20 passed）
 - LSP 诊断未执行：rust-analyzer 不可用
+
+## 设计文档记录 - DDL 页签
+时间：2026-03-27 00:52:00
+
+- 已生成设计文档：docs/superpowers/specs/2026-03-27-table-designer-ddl-tab-design.md
+- 已完成自检：未发现占位符或歧义
+- 未执行提交：用户未要求提交
+
+## 编码前检查 - table_designer DDL 页签
+时间：2026-03-27 15:02:06 +0800
+
+□ 已查阅上下文摘要文件：.claude/context-summary-table-designer-ddl-tab.md
+□ 将使用以下可复用组件：
+- `crates/db_view/src/table_designer_tab.rs`：复用现有 `DesignerTab`、`TabBar`、`render_sql_preview` 与事件订阅刷新路径。
+- `crates/db/src/plugin.rs`：复用 `build_create_table_sql(&TableDesign)` 生成完整 DDL。
+- `main/src/encourage.rs`：复用 `Clipboard::new(...).value(...)` 复制按钮模式。
+  □ 将遵循命名约定：Rust `snake_case` / `PascalCase`
+  □ 将遵循代码风格：局部最小补丁，不修改插件 trait
+  □ 确认不重复造轮子，证明：已检查 `table_designer_tab`、`gpui_component` 页签示例、`Clipboard` 用法和数据库插件 DDL 生成入口
