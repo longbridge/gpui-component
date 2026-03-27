@@ -201,6 +201,7 @@ impl Styled for Popover {
 pub struct PopoverState {
     focus_handle: FocusHandle,
     pub(crate) tracked_focus_handle: Option<FocusHandle>,
+    previous_focus_handle: Option<FocusHandle>,
     trigger_bounds: Bounds<Pixels>,
     open: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
@@ -213,6 +214,7 @@ impl PopoverState {
         Self {
             focus_handle: cx.focus_handle(),
             tracked_focus_handle: None,
+            previous_focus_handle: None,
             trigger_bounds: Bounds::default(),
             open: default_open,
             on_open_change: None,
@@ -249,7 +251,12 @@ impl PopoverState {
     }
 
     fn toggle_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_open(!self.open, cx);
+        let opening = !self.open;
+        if opening {
+            // Save the focused element before opening, so we can restore it on close.
+            self.previous_focus_handle = window.focused(cx);
+        }
+        self.set_open(opening, cx);
         if self.open {
             let state = cx.entity();
             let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
@@ -271,6 +278,10 @@ impl PopoverState {
                 );
         } else {
             self._dismiss_subscription = None;
+            // Restore focus to the element that was focused before the popover opened.
+            if let Some(prev) = self.previous_focus_handle.take() {
+                prev.focus(window, cx);
+            }
         }
 
         if let Some(callback) = self.on_open_change.as_ref() {
