@@ -2734,3 +2734,140 @@
 - `cargo test -p main onetcli_app::tests -- --nocapture`：通过，4 条测试全部成功。
 - `cargo check -p main`：通过。
 - `git diff --check -- main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`：通过。
+
+## 编码前检查 - issue #5 第 3 条 macOS Dock 重开恢复
+时间：2026-03-28 17:35:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-issue5-macos-window-restore.md`
+- 已分析相似实现：
+  - `main/src/onetcli_app.rs`
+  - `main/src/main.rs`
+  - `gpui/src/app.rs`
+  - `gpui/src/window.rs`
+- 将使用以下可复用组件：
+  - `WindowTogglePlan` 与 `restore_window(...)`
+  - `gpui::App::on_reopen(...)`
+  - `Window::window_handle()` 的 AppKit 句柄访问能力
+- 将遵循命名约定：新增 helper 使用 `snake_case`，继续复用既有 `WindowToggle*` 类型。
+- 将遵循代码风格：入口注册放在 `main/src/main.rs`，窗口动作执行仍留在 `main/src/onetcli_app.rs`。
+- 确认不重复造轮子，证明：已确认 `gpui` 原生存在 `on_reopen`，无需自造全局热键监听器。
+
+## 诊断结论 - issue #5 第 3 条 macOS 恢复失败根因修正
+时间：2026-03-28 17:36:00 +0800
+
+- 重新核对后，当前更接近真实根因的是“窗口最小化后接收不到快捷键”，而不是仅仅“恢复 API 选错”。
+- 证据 1：`gpui::Window::activate_window()` 在 macOS 下只是 `makeKeyAndOrderFront:`，不负责 `deminiaturize`。
+- 证据 2：`cmd-m` 绑定仍通过 `cx.on_action(...)` 进入窗口动作链；窗口最小化后不再是 key window，这条链路可能根本不触发。
+- 证据 3：`gpui::App::on_reopen(...)` 明确就是 macOS Dock/重复打开应用时的应用级回调，更符合“恢复被最小化窗口”的平台语义。
+
+## 编码后声明 - issue #5 第 3 条 macOS Dock 重开恢复
+时间：2026-03-28 17:38:00 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/onetcli_app.rs`：继续复用 `WindowTogglePlan` 和既有 `restore_window(...)`。
+- `main/src/main.rs`：沿用应用入口统一注册全局事件的模式。
+- `gpui::App::on_reopen(...)`：直接复用 GPUI 已提供的 Dock 重开事件，不自造平台监听器。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `build_window_reopen_plan` 与 `reopen_last_window`，保持 `snake_case`。
+- 代码风格：窗口动作继续在 `onetcli_app.rs` 中通过 `cx.defer + window.update(...)` 执行。
+- 文件组织：入口事件注册在 `main/src/main.rs`，窗口恢复实现留在 `main/src/onetcli_app.rs`。
+
+### 3. 对比了以下相似实现
+- 对比 `minimize_window(...)`：仍通过窗口句柄回退到已打开窗口，不引入第二套窗口索引结构。
+- 对比 `main.rs` 主窗口启动链路：Dock reopen 时只恢复现有窗口，不新增窗口实例。
+- 对比 `gpui::App::on_reopen(...)` 文档：本次修复从快捷键路径切换到平台级重开事件，语义更准确。
+
+### 4. 未重复造轮子的证明
+- 没有引入新的全局热键库。
+- 没有自定义 macOS delegate，而是使用 GPUI 现成 `on_reopen`。
+- 没有把恢复逻辑散落到业务 tab 或主页模块，仍集中在应用级入口。
+
+## 验证记录 - issue #5 第 3 条 macOS Dock 重开恢复
+- `cargo test -p main build_window_reopen_plan -- --nocapture`：先失败后通过；红灯阶段因 `build_window_reopen_plan` 未实现，补上 helper 和 `Application::on_reopen(...)` 注册后转绿。
+- `cargo test -p main onetcli_app::tests -- --nocapture`：通过，6 条测试全部成功。
+- `cargo check -p main`：通过。
+- `git diff --check -- main/src/onetcli_app.rs main/src/main.rs main/Cargo.toml .claude/context-summary-issue5-macos-window-restore.md .claude/operations-log.md .claude/verification-report.md`：通过。
+- 已观察：当前仍缺真实 macOS Dock 点击或重新打开应用的桌面级冒烟验证；另外 `objc` 宏会产生 3 条 `unexpected cfgs` warning，但不影响当前编译结果。
+
+## 编码前检查 - 表设计器 SQL 预览滞后一拍修复
+时间：2026-03-28 16:49:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-table-designer-preview-lag.md`
+□ 将使用以下可复用组件：
+- `TableDesigner::collect_design`：`crates/db_view/src/table_designer_tab.rs`，用于统一回收界面状态
+- `TableDesigner::update_previews`：`crates/db_view/src/table_designer_tab.rs`，作为最终真实刷新入口
+- `cx.defer` 既有模式：`main/src/onetcli_app.rs`，作为延后执行风格参考
+- `Context::defer_in`：GPUI 官方文档确认的当前 effect cycle 末调度能力
+□ 将遵循命名约定：新增 helper 与状态字段使用 `snake_case`，测试函数命名继续使用 `snake_case`
+□ 将遵循代码风格：保持事件驱动刷新结构，优先局部补丁，不扩散数据库插件接口
+□ 确认不重复造轮子，证明：已检查 `database_editor_view.rs`、`schema_editor_view.rs`、`table_designer_tab.rs`，不存在现成的表设计器预览调度层；本次只在现有 `TableDesigner` 内补齐
+
+## 编码后声明 - 表设计器 SQL 预览滞后一拍修复
+时间：2026-03-28 17:00:00 +0800
+
+### 1. 复用了以下既有组件
+- `TableDesigner::collect_design`：继续作为统一界面态聚合入口，没有改 SQL 生成链路。
+- `TableDesigner::update_previews`：保留为唯一真实预览刷新函数，本次只新增调度层，不复制刷新逻辑。
+- `main/src/onetcli_app.rs` 中的 `cx.defer` 使用模式：作为项目内已有的延后执行参考，本次对应采用 GPUI 官方 `Context::defer_in`。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `PreviewRefreshScheduleState` 使用 `PascalCase`，新增 `schedule_preview_refresh`、`request_refresh`、`finish_refresh` 使用 `snake_case`。
+- 代码风格：保持 `TableDesigner` 事件驱动结构，订阅回调只做最小调度，不改 `build_*_preview_sql` 和保存执行路径。
+- 文件组织：所有代码改动收敛在 `crates/db_view/src/table_designer_tab.rs`，文档落在项目本地 `.claude/` 目录。
+
+### 3. 对比了以下相似实现
+- 对比 `crates/db_view/src/common/database_editor_view.rs`：该模块用事件载荷直接刷新 SQL 预览，本次虽然没有重构表设计器为相同接口，但通过延后调度降低了“跨层回读聚合状态”的时序风险。
+- 对比 `crates/db_view/src/common/schema_editor_view.rs`：同样保持单入口刷新预览的风格，本次让 `schedule_preview_refresh -> update_previews` 成为表设计器中的集中入口。
+- 对比 `main/src/onetcli_app.rs`：沿用项目既有延后执行思路，不引入新的异步或消息总线模式。
+
+### 4. 未重复造轮子的证明
+- 没有新增新的 SQL 生成器或插件接口，只在现有 `TableDesigner` 内补一层调度状态。
+- 没有改 `InputState`、`ColumnsEditor` 或 `IndexesEditor` 的公共事件定义，避免把本地修复扩大成通用组件重构。
+- 没有改保存时重新 `collect_design` 的真实执行路径，因此没有产生第二套“预览专用”数据模型。
+
+## 验证记录 - 表设计器 SQL 预览滞后一拍修复
+- `cargo test -p db_view preview_refresh_schedule_state -- --nocapture`：先失败后通过；红灯阶段因 `PreviewRefreshScheduleState` 未实现而编译失败，补实现后转绿。
+- `cargo test -p db_view table_designer_tab::tests -- --nocapture`：通过（57 passed），表设计器现有测试与新增调度测试全部成功。
+- `cargo check -p db_view`：通过。
+- `git diff --check -- crates/db_view/src/table_designer_tab.rs .claude/context-summary-table-designer-preview-lag.md .claude/operations-log.md .claude/verification-report.md`：通过。
+- 已观察：当前工作区还存在与本次任务无关的既有改动 `Cargo.lock`、`main/Cargo.toml`、`main/src/onetcli_app.rs`，本次未修改其内容。
+
+## 诊断补充 - 表设计器类型下拉预览仍滞后一拍
+时间：2026-03-28 17:08:59 +0800
+
+- 根据用户补充“主要下拉选类型有这个问题”，继续沿 `ColumnsEditor -> Select -> collect_design -> update_previews` 链路复核。
+- 确认第一轮 `schedule_preview_refresh` 只解决了父层聚合读取过早的问题，但列类型下拉还有第二层时序差异。
+- 证据 1：`crates/ui/src/select.rs` 中 `Select::confirm()` 通过 `cx.defer_in(window, ...)` 延后提交最终选中值。
+- 证据 2：`Select::confirm()` 在同一个延后闭包里才会发出 `SelectEvent::Confirm(...)` 并写入 `selected_value`。
+- 证据 3：`crates/db_view/src/table_designer_tab.rs` 里列类型下拉此前使用 `cx.observe_in(&type_select, ...)`，会在 `selected_value` 真正更新前触发 `ColumnsEditorEvent::Changed`。
+- 根因结论：类型下拉的“滞后一拍”不是 SQL 生成慢，而是 `observe_in` 监听过早，导致预览刷新时仍读到上一拍的 `selected_value`。
+
+## 编码后声明 - 表设计器类型下拉预览补充修复
+时间：2026-03-28 17:08:59 +0800
+
+### 1. 复用了以下既有组件
+- `TableDesigner::schedule_preview_refresh`：继续作为预览真正刷新前的统一调度层，没有新增第二套预览逻辑。
+- `SelectEvent<SearchableVec<String>>`：直接复用 `Select` 组件确认选中后的正式事件，而不是自造列类型同步回调。
+- `ColumnsEditorEvent::Changed`：保持列编辑器对外事件协议不变，只调整触发时机。
+
+### 2. 遵循了以下项目约定
+- 命名约定：未新增额外状态或接口，继续沿用现有 `type_sub`、`ColumnsEditorEvent::Changed` 命名。
+- 代码风格：仍保持事件驱动更新路径，只把两处列类型监听从 `observe_in` 切换为 `subscribe_in`。
+- 文件组织：补丁仍收敛在 `crates/db_view/src/table_designer_tab.rs`，没有扩散到通用 UI 组件实现。
+
+### 3. 对比了以下相似实现
+- 对比同文件里的字符集、排序规则下拉：这些路径本来就是基于 `SelectEvent` 订阅，因此不会在确认前读取旧值。
+- 对比文本输入监听：文本输入使用 `InputEvent::Change`，值已经在事件发出前落到 `InputState`，与 `Select` 的 defer 提交模型不同。
+- 对比 `crates/ui/src/select.rs`：正式选中值以 `confirm()` 为准，因此业务层必须等待 `SelectEvent`，不能只观察实体变化。
+
+### 4. 未重复造轮子的证明
+- 没有修改 `Select` 通用组件的提交机制。
+- 没有新增类型下拉专用缓存字段。
+- 没有改 `collect_design` 或 SQL 生成器，只修正事件订阅时机。
+
+## 验证记录 - 表设计器类型下拉预览补充修复
+- `git diff --check -- crates/db_view/src/table_designer_tab.rs`：通过。
+- `CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo check -p db_view`：通过。
+- `CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p db_view table_designer_tab::tests -- --nocapture`：在沙箱内因 `gpui` Metal shader 编译缓存写入 `~/.cache/clang/ModuleCache` 被拒而失败；提权后重跑通过（57 passed）。
+- 已观察：当前自动化验证仍主要覆盖模块逻辑与编译链路，缺少真实桌面 UI 交互对“快速切换列类型后立即看 SQL 预览”的冒烟验证。

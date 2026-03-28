@@ -231,6 +231,7 @@ pub struct TableDesigner {
     _charsets: Vec<CharsetInfo>,
     sql_preview_input: Entity<InputState>,
     ddl_preview_input: Entity<InputState>,
+    preview_refresh_state: PreviewRefreshScheduleState,
     original_design: Option<TableDesign>,
     _subscriptions: Vec<Subscription>,
 }
@@ -256,6 +257,25 @@ struct TableDesignerExecutionRequest {
     table_name: String,
     is_new_table: bool,
     success_behavior: ExecuteSuccessBehavior,
+}
+
+#[derive(Default)]
+struct PreviewRefreshScheduleState {
+    refresh_pending: bool,
+}
+
+impl PreviewRefreshScheduleState {
+    fn request_refresh(&mut self) -> bool {
+        if self.refresh_pending {
+            return false;
+        }
+        self.refresh_pending = true;
+        true
+    }
+
+    fn finish_refresh(&mut self) {
+        self.refresh_pending = false;
+    }
 }
 
 impl TableDesigner {
@@ -372,7 +392,7 @@ impl TableDesigner {
             window,
             |this, _, event: &InputEvent, window, cx| {
                 if let InputEvent::Change = event {
-                    this.update_previews(window, cx);
+                    this.schedule_preview_refresh(window, cx);
                 }
             },
         );
@@ -382,7 +402,7 @@ impl TableDesigner {
             window,
             |this, _, event: &InputEvent, window, cx| {
                 if let InputEvent::Change = event {
-                    this.update_previews(window, cx);
+                    this.schedule_preview_refresh(window, cx);
                 }
             },
         );
@@ -392,30 +412,30 @@ impl TableDesigner {
             window,
             |this, _, event: &InputEvent, window, cx| {
                 if let InputEvent::Change = event {
-                    this.update_previews(window, cx);
+                    this.schedule_preview_refresh(window, cx);
                 }
             },
         );
 
         let engine_sub = cx.observe_in(&engine_select, window, |this, _, window, cx| {
-            this.update_previews(window, cx);
+            this.schedule_preview_refresh(window, cx);
         });
 
         let charset_select_clone = charset_select.clone();
         let charset_sub = cx.observe_in(&charset_select, window, move |this, _, window, cx| {
-            this.update_previews(window, cx);
+            this.schedule_preview_refresh(window, cx);
             this.update_collations_for_charset(&charset_select_clone, window, cx);
         });
 
         let collation_sub = cx.observe_in(&collation_select, window, |this, _, window, cx| {
-            this.update_previews(window, cx);
+            this.schedule_preview_refresh(window, cx);
         });
 
         let cols_sub = cx.subscribe_in(
             &columns_editor,
             window,
             |this, _, _: &ColumnsEditorEvent, window, cx| {
-                this.update_previews(window, cx);
+                this.schedule_preview_refresh(window, cx);
             },
         );
 
@@ -423,7 +443,7 @@ impl TableDesigner {
             &indexes_editor,
             window,
             |this, _, _: &IndexesEditorEvent, window, cx| {
-                this.update_previews(window, cx);
+                this.schedule_preview_refresh(window, cx);
             },
         );
 
@@ -443,6 +463,7 @@ impl TableDesigner {
             _charsets: charsets,
             sql_preview_input,
             ddl_preview_input,
+            preview_refresh_state: PreviewRefreshScheduleState::default(),
             original_design: None,
             _subscriptions: vec![
                 name_sub,
@@ -642,6 +663,19 @@ impl TableDesigner {
             state.set_value(ddl, window, cx);
         });
         cx.notify();
+    }
+
+    fn schedule_preview_refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // 子编辑器事件会在同一个 effect cycle 内级联触发，延后到周期末再统一回读状态，
+        // 避免预览读取到上一拍的聚合结果。
+        if !self.preview_refresh_state.request_refresh() {
+            return;
+        }
+
+        cx.defer_in(window, |this, window, cx| {
+            this.preview_refresh_state.finish_refresh();
+            this.update_previews(window, cx);
+        });
     }
 
     fn sql_has_changes(sql: &str) -> bool {
@@ -1617,9 +1651,13 @@ impl ColumnsEditor {
                 }
             },
         );
-        let type_sub = cx.observe_in(&type_select, window, |_this, _, _window, cx| {
-            cx.emit(ColumnsEditorEvent::Changed);
-        });
+        let type_sub = cx.subscribe_in(
+            &type_select,
+            window,
+            |_this, _, _event: &SelectEvent<SearchableVec<String>>, _window, cx| {
+                cx.emit(ColumnsEditorEvent::Changed);
+            },
+        );
         let charset_select_clone = charset_select.clone();
         let collation_select_clone = collation_select.clone();
         let charset_sub = cx.subscribe_in(
@@ -2025,9 +2063,13 @@ impl ColumnsEditor {
                     }
                 },
             );
-            let type_sub = cx.observe_in(&type_select, window, |_this, _, _window, cx| {
-                cx.emit(ColumnsEditorEvent::Changed);
-            });
+            let type_sub = cx.subscribe_in(
+                &type_select,
+                window,
+                |_this, _, _event: &SelectEvent<SearchableVec<String>>, _window, cx| {
+                    cx.emit(ColumnsEditorEvent::Changed);
+                },
+            );
             let charset_select_clone = charset_select.clone();
             let collation_select_clone = collation_select.clone();
             let charset_sub = cx.subscribe_in(
@@ -3225,6 +3267,32 @@ mod tests {
         assert!(
             !sql.contains(&drop_source),
             "重命名来源列 b 不应被误删，出现 SQL: {drop_source} in {sql}"
+        );
+    }
+
+    #[test]
+    fn test_preview_refresh_schedule_state_coalesces_requests_in_same_cycle() {
+        let mut state = PreviewRefreshScheduleState::default();
+
+        assert!(
+            state.request_refresh(),
+            "第一次请求应当安排一次预览刷新"
+        );
+        assert!(
+            !state.request_refresh(),
+            "同一事件周期内的第二次请求不应重复安排刷新"
+        );
+    }
+
+    #[test]
+    fn test_preview_refresh_schedule_state_allows_reschedule_after_finish() {
+        let mut state = PreviewRefreshScheduleState::default();
+
+        assert!(state.request_refresh(), "第一次请求应当成功安排刷新");
+        state.finish_refresh();
+        assert!(
+            state.request_refresh(),
+            "完成一次刷新后，后续请求应当可以再次安排刷新"
         );
     }
 

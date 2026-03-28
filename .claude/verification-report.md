@@ -1415,3 +1415,132 @@
 - macOS 现已恢复为仅支持 `cmd-m` 触发最小化/恢复。
 - 非 macOS 平台仍保持 `ctrl-space` 绑定，没有被这次回退误伤。
 - 上一轮为窗口恢复补的应用级回退逻辑仍保留，因此只是修正平台绑定，不是回退功能修复。
+
+---
+
+## 审查报告（表设计器 SQL 预览滞后一拍修复）
+生成时间：2026-03-28 17:00:00 +0800
+
+### 需求完整性检查
+- 目标明确：修复设计表页面中 SQL/DDL 预览滞后一拍的问题，并说明根因。
+- 范围明确：本次只修改表设计器预览刷新时机，不改数据库插件 SQL 生成逻辑，不改保存执行链路。
+- 交付物明确：代码补丁、上下文摘要、操作日志、回归测试和本地验证结果均已落地。
+- 风险与依赖明确：真实桌面 UI 冒烟尚未执行，当前结论主要依赖调度单测、表设计器模块测试和编译验证。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：88/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：93/100
+- 架构一致：95/100
+- 风险评估：89/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p db_view preview_refresh_schedule_state -- --nocapture`
+  - 结果：先失败后通过，符合 TDD 红绿流程；红灯阶段因缺少 `PreviewRefreshScheduleState` 实现而失败。
+- 已执行：`cargo test -p db_view table_designer_tab::tests -- --nocapture`
+  - 结果：通过（57 passed）
+- 已执行：`cargo check -p db_view`
+  - 结果：通过
+- 已执行：`git diff --check -- crates/db_view/src/table_designer_tab.rs .claude/context-summary-table-designer-preview-lag.md .claude/operations-log.md .claude/verification-report.md`
+  - 结果：通过
+
+### 结论
+- 根因不在 SQL 生成，而在 `TableDesigner` 订阅回调里同步聚合读取多个子实体状态，导致预览偶发读取到上一拍状态。
+- 修复通过 `Context::defer_in` 把预览刷新延后到当前 effect cycle 末，并使用 `PreviewRefreshScheduleState` 合并同周期重复请求。
+- `update_previews`、保存执行、数据库插件接口均保持不变，影响面被控制在表设计器单文件内。
+
+### 剩余风险
+- 当前没有真实窗口级自动化测试直接验证用户手动连续编辑时的 UI 表现，因此仍建议后续补一轮桌面冒烟验证。
+- 如果未来还有其他依赖“同步立刻回读子实体聚合状态”的复杂编辑器，可能需要复用同样的调度策略。
+
+---
+
+## 审查报告（issue #5 第 3 条 macOS Dock 重开恢复）
+生成时间：2026-03-28 18:00:00 +0800
+
+### 需求完整性检查
+- 目标明确：修复 macOS 下窗口最小化后无法恢复的问题，并确认是否是“隐藏窗口收不到快捷键”导致。
+- 范围明确：本次只调整 `main` 包的应用级恢复路径，不改业务 tab、不改窗口创建模型。
+- 交付物明确：上下文摘要、应用入口注册、窗口恢复 helper、纯逻辑测试、本地编译验证均已落地。
+- 风险与依赖明确：恢复动作依赖 macOS `on_reopen` 事件和 AppKit `deminiaturize`，真实 Dock 点击冒烟仍需桌面环境补充。
+
+### 技术维度评分
+- 代码质量：94/100
+- 测试覆盖：90/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：95/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p main build_window_reopen_plan -- --nocapture`
+  - 结果：先失败后通过；红灯阶段因 `build_window_reopen_plan` 未实现，补上 helper 与 `Application::on_reopen(...)` 注册后转绿。
+- 已执行：`cargo test -p main onetcli_app::tests -- --nocapture`
+  - 结果：通过（6 passed）
+- 已执行：`cargo check -p main`
+  - 结果：通过
+- 已执行：`git diff --check -- main/src/onetcli_app.rs main/src/main.rs main/Cargo.toml .claude/context-summary-issue5-macos-window-restore.md .claude/operations-log.md .claude/verification-report.md`
+  - 结果：通过
+
+### 结论
+- 根因判断已修正：macOS 更大的问题不是“恢复 API 选错”，而是窗口最小化后不再是 key window，继续依赖 `cmd-m` 这类窗口快捷键并不可靠。
+- 修复路径已切到平台级 reopen 语义：`main/src/main.rs` 在 `Application` 层注册 `on_reopen(...)`，用户从 Dock 或重新打开应用时会进入 `reopen_last_window(...)`。
+- 恢复动作已补齐 AppKit 原生语义：`main/src/onetcli_app.rs` 的 `restore_window(...)` 在 macOS 下会显式执行 `deminiaturize` 和 `makeKeyAndOrderFront`，而不是只做 `activate_window()`。
+
+### 剩余风险
+- 当前单测只能证明 helper 和编译链路正确，不能替代真实 macOS Dock 点击或再次激活应用的桌面冒烟。
+- `objc` 宏在当前工具链下会产生 3 条 `unexpected cfgs` warning，但不影响编译和运行结果；如需彻底消除，可后续单独升级/替换相关宏调用方式。
+
+---
+
+## 审查报告（表设计器类型下拉预览补充修复）
+生成时间：2026-03-28 17:08:59 +0800
+
+### 需求完整性检查
+- 目标明确：修复表设计器里“列类型下拉修改后 SQL/DDL 预览仍滞后一拍”的剩余问题，并给出精确根因。
+- 范围明确：本次只调整列类型下拉触发 `ColumnsEditorEvent::Changed` 的时机，不改 SQL 生成逻辑、不改 `Select` 通用组件行为。
+- 交付物明确：代码补丁、本地编译验证、表设计器模块测试结果、补充操作日志和审查报告均已落地。
+- 风险与依赖明确：自动化验证已覆盖编译与 `table_designer_tab` 模块测试，但仍缺真实桌面 UI 连续切换下拉的冒烟验证。
+
+### 技术维度评分
+- 代码质量：95/100
+- 测试覆盖：89/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：96/100
+- 架构一致：96/100
+- 风险评估：90/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`git diff --check -- crates/db_view/src/table_designer_tab.rs`
+  - 结果：通过
+- 已执行：`CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo check -p db_view`
+  - 结果：通过
+- 已执行：`CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p db_view table_designer_tab::tests -- --nocapture`
+  - 结果：沙箱内首次运行因 `gpui` Metal shader 编译缓存写入 `~/.cache/clang/ModuleCache` 被拒而失败；提权后重跑通过（57 passed）
+
+### 结论
+- 剩余问题的根因在列类型下拉仍使用 `observe_in` 监听实体变化，而 `Select` 组件的最终选中值是在 `confirm()` 的 `defer_in` 里才真正提交。
+- 将两处列类型监听切换为订阅 `SelectEvent<SearchableVec<String>>` 后，`ColumnsEditorEvent::Changed` 会在真实选中值落库后再触发，预览读取不再滞后一拍。
+- 第一轮的 `schedule_preview_refresh` 和这次的 `SelectEvent` 订阅一起，分别覆盖了“父层聚合过早”和“下拉确认过早”两段时序问题。
+
+### 剩余风险
+- 目前的自动化测试还没有直接模拟 UI 下拉确认后的预览刷新时序，后续如果要彻底防回归，建议补一条围绕 `ColumnsEditor` 和 `SelectEvent` 的交互测试。
