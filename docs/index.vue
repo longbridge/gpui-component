@@ -15,10 +15,10 @@
                 </div>
                 <div class="hero-actions">
                     <a class="primary-action" href="https://github.com/feigeCode/onetcli/releases" target="_blank" rel="noreferrer">
-                        下载 OnetCli
+                        <span>下载 OnetCli</span>
                     </a>
                     <a class="secondary-action" :href="withBase('/guide')">
-                        查看文档
+                        <span>查看文档</span>
                     </a>
                 </div>
                 <dl class="hero-metrics">
@@ -125,7 +125,7 @@
                     <p>macOS、Windows、Linux</p>
                 </div>
                 <a class="primary-action" href="https://github.com/feigeCode/onetcli/releases" target="_blank" rel="noreferrer">
-                    前往 GitHub Releases
+                    <span>前往 GitHub Releases</span>
                 </a>
             </div>
         </section>
@@ -321,6 +321,12 @@ const structuredData = JSON.stringify(
     @apply inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-medium no-underline transition-all duration-200;
 }
 
+.primary-action span,
+.secondary-action span {
+    position: relative;
+    z-index: 1;
+}
+
 .primary-action {
     @apply bg-[#18212f] shadow-[0_16px_32px_rgba(24,33,47,0.18)] hover:-translate-y-0.5 hover:bg-[#0f1722];
     color: #ffffff;
@@ -330,10 +336,19 @@ const structuredData = JSON.stringify(
     &:active {
         color: #ffffff;
     }
+
+    span {
+        color: #ffffff !important;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.16);
+    }
 }
 
 .secondary-action {
     @apply border border-[#c9d4cb] bg-white/78 text-[#1d4d41] hover:-translate-y-0.5 hover:border-[#9fbaa9] hover:bg-white;
+
+    span {
+        color: #1d4d41;
+    }
 }
 
 .section-block {
