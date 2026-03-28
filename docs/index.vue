@@ -322,7 +322,14 @@ const structuredData = JSON.stringify(
 }
 
 .primary-action {
-    @apply bg-[#18212f] text-white shadow-[0_16px_32px_rgba(24,33,47,0.18)] hover:-translate-y-0.5 hover:bg-[#0f1722];
+    @apply bg-[#18212f] shadow-[0_16px_32px_rgba(24,33,47,0.18)] hover:-translate-y-0.5 hover:bg-[#0f1722];
+    color: #ffffff;
+
+    &:visited,
+    &:hover,
+    &:active {
+        color: #ffffff;
+    }
 }
 
 .secondary-action {
