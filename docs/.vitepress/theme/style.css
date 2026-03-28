@@ -8,24 +8,24 @@
 
 :root {
   --radius: 0.875rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #fbfaf6;
+  --foreground: #18212f;
+  --card: #ffffff;
+  --card-foreground: #18212f;
+  --popover: #ffffff;
+  --popover-foreground: #18212f;
+  --primary: #18212f;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f0e7;
+  --secondary-foreground: #18212f;
+  --muted: #f3f1ea;
+  --muted-foreground: #5d6976;
+  --accent: #edf4ef;
+  --accent-foreground: #1f4f42;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: #e3ddd0;
+  --input: #ddd8cd;
+  --ring: #b7c4bc;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -47,8 +47,16 @@
 
   --vp-c-text-1: var(--foreground);
   --vp-c-brand-1: var(--primary);
+  --vp-c-brand-2: #24493f;
+  --vp-c-brand-3: #315f53;
   --vp-c-default-1: var(--secondary);
   --vp-c-default-2: var(--muted);
+  --vp-c-text-2: #52606d;
+  --vp-c-text-3: #687483;
+  --vp-button-brand-bg: var(--primary);
+  --vp-button-brand-hover-bg: #0f1722;
+  --vp-button-brand-active-bg: #0f1722;
+  --vp-button-brand-text: var(--primary-foreground);
 
   --vp-nav-bg-color: var(--background);
   --vp-custom-block-tip-border: var(--vp-c-default-3);
@@ -112,7 +120,9 @@
   }
 
   .VPNav {
-    @apply bg-(--background) border-b border-(--border);
+    @apply border-b border-(--border);
+    background: color-mix(in srgb, var(--background) 84%, white 16%);
+    backdrop-filter: blur(18px);
 
     .divider {
       @apply hidden;
@@ -125,6 +135,7 @@
 
   .VPFooter {
     @apply border-dashed;
+    background: transparent;
   }
 
   .VPSidebar {

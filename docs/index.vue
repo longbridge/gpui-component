@@ -2,27 +2,32 @@
     <main class="home-page">
         <section class="hero">
             <div class="hero-copy">
-                <p class="eyebrow">数据库 / SSH / 终端 / AI</p>
-                <h1>一个桌面客户端，统一管理数据库、服务器与 AI 工作流</h1>
+                <p class="eyebrow">OnetCli / 桌面工作台</p>
+                <h1>把数据库、服务器和 AI 工作流收进一个真正顺手的桌面客户端</h1>
                 <p class="hero-description">
-                    OnetCli 将数据库连接、SSH 与 SFTP、本地终端和 AI
-                    助手整合到同一个跨平台工作台里，减少工具切换，提升排查、分析与交付效率。
+                    OnetCli 把数据库连接、SSH / SFTP、本地终端和 AI 助手放进同一个跨平台工作台里，
+                    让排查、分析、部署和日常维护不再被一堆零散工具切碎。
                 </p>
+                <div class="hero-note">
+                    <span>支持多数据库</span>
+                    <span>原生 SSH / SFTP</span>
+                    <span>GitHub Releases 下载</span>
+                </div>
                 <div class="hero-actions">
-                    <a class="primary-action" href="https://github.com/hufei/onetcli/releases" target="_blank" rel="noreferrer">
+                    <a class="primary-action" href="https://github.com/feigeCode/onetcli/releases" target="_blank" rel="noreferrer">
                         下载 OnetCli
                     </a>
-                    <a class="secondary-action" :href="withBase('/features')">
-                        查看功能
+                    <a class="secondary-action" :href="withBase('/guide')">
+                        查看文档
                     </a>
                 </div>
                 <dl class="hero-metrics">
                     <div>
-                        <dt>支持能力</dt>
-                        <dd>数据库、SSH / SFTP、终端、AI</dd>
+                        <dt>聚焦任务</dt>
+                        <dd>连接、查询、排查、传输、分析</dd>
                     </div>
                     <div>
-                        <dt>平台</dt>
+                        <dt>适用平台</dt>
                         <dd>macOS、Windows、Linux</dd>
                     </div>
                 </dl>
@@ -37,8 +42,8 @@
                 <p class="section-label">真实界面</p>
                 <h2>直接展示你每天会用到的工作界面</h2>
                 <p>
-                    不是抽象概念图，而是数据库管理、SSH 会话、SFTP 文件传输和 AI
-                    分析的实际桌面界面。
+                    不是一张抽象插画，而是数据库管理、SSH 会话、SFTP 文件传输和 AI
+                    分析的真实桌面界面。
                 </p>
             </div>
             <div class="screenshot-grid">
@@ -68,19 +73,19 @@
             <div class="capability-grid">
                 <article class="capability-card">
                     <h3>数据库</h3>
-                    <p>OnetCli 支持在同一界面管理多种数据库连接，查看数据、执行 SQL、浏览对象结构。</p>
+                    <p>在同一界面管理多种数据库连接，查看数据、执行 SQL、浏览对象结构。</p>
                 </article>
                 <article class="capability-card">
                     <h3>SSH / SFTP</h3>
-                    <p>OnetCli 支持 SSH 远程连接和 SFTP 文件管理，让排查和运维动作不需要切换到其他客户端。</p>
+                    <p>一套连接信息同时覆盖远程终端与文件管理，让排查和运维动作保持连贯。</p>
                 </article>
                 <article class="capability-card">
                     <h3>本地终端</h3>
-                    <p>OnetCli 内置终端支持多标签页工作流，适合数据库调试、脚本执行和部署操作。</p>
+                    <p>内置终端支持多标签页工作流，适合数据库调试、脚本执行和部署操作。</p>
                 </article>
                 <article class="capability-card">
                     <h3>AI 助手</h3>
-                    <p>OnetCli 支持 AI 生成 SQL、解释查询和辅助分析，帮助你更快理解数据与结果。</p>
+                    <p>支持 AI 生成 SQL、解释查询和辅助分析，帮助你更快理解数据与结果。</p>
                 </article>
             </div>
         </section>
@@ -119,7 +124,7 @@
                     <h3>支持平台</h3>
                     <p>macOS、Windows、Linux</p>
                 </div>
-                <a class="primary-action" href="https://github.com/hufei/onetcli/releases" target="_blank" rel="noreferrer">
+                <a class="primary-action" href="https://github.com/feigeCode/onetcli/releases" target="_blank" rel="noreferrer">
                     前往 GitHub Releases
                 </a>
             </div>
@@ -194,7 +199,7 @@ const structuredData = JSON.stringify(
             operatingSystem: "macOS, Windows, Linux",
             description:
                 "OnetCli 是一个统一管理数据库、SSH、终端与 AI 工作流的跨平台桌面客户端。",
-            downloadUrl: "https://github.com/hufei/onetcli/releases",
+            downloadUrl: "https://github.com/feigeCode/onetcli/releases",
         },
         {
             "@context": "https://schema.org",
@@ -237,6 +242,9 @@ const structuredData = JSON.stringify(
 
 .home-page {
     @apply flex flex-col gap-8 pb-16;
+    background:
+        radial-gradient(circle at top left, rgba(39, 130, 103, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(242, 184, 72, 0.12), transparent 24%);
 }
 
 .hero,
@@ -245,11 +253,12 @@ const structuredData = JSON.stringify(
 }
 
 .hero {
-    @apply grid gap-8 px-6 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10 lg:py-12;
+    @apply grid gap-8 px-6 py-8 shadow-[0_20px_60px_rgba(17,24,39,0.08)] lg:grid-cols-[1.02fr_0.98fr] lg:px-10 lg:py-12;
     background:
-        radial-gradient(circle at top right, rgba(122, 92, 255, 0.34), transparent 34%),
-        linear-gradient(135deg, #090314 0%, #140726 48%, #1b0d39 100%);
-    color: white;
+        radial-gradient(circle at top left, rgba(39, 130, 103, 0.22), transparent 30%),
+        radial-gradient(circle at right center, rgba(242, 184, 72, 0.22), transparent 24%),
+        linear-gradient(135deg, #fdfcf8 0%, #f7f5ee 52%, #f4efe4 100%);
+    color: #18212f;
 
     .hero-copy {
         @apply flex flex-col justify-center gap-5;
@@ -257,16 +266,25 @@ const structuredData = JSON.stringify(
 
     .eyebrow,
     .section-label {
-        @apply text-xs tracking-[0.28em] uppercase text-white/60;
+        @apply text-xs tracking-[0.28em] uppercase text-[#4d6b60];
     }
 
     h1 {
-        @apply m-0 text-4xl leading-tight font-semibold lg:text-6xl;
+        @apply m-0 max-w-3xl text-4xl leading-tight font-semibold lg:text-[3.8rem];
         font-family: "Space Grotesk", "PingFang SC", "Microsoft YaHei", sans-serif;
+        letter-spacing: -0.04em;
     }
 
     .hero-description {
-        @apply m-0 max-w-2xl text-base leading-7 text-white/78 lg:text-lg;
+        @apply m-0 max-w-2xl text-base leading-7 text-[#52606d] lg:text-lg;
+    }
+
+    .hero-note {
+        @apply flex flex-wrap gap-2;
+
+        span {
+            @apply inline-flex items-center rounded-full border border-[#d5ddd4] bg-white/70 px-3 py-1 text-sm font-medium text-[#29473e];
+        }
     }
 
     .hero-actions {
@@ -277,15 +295,15 @@ const structuredData = JSON.stringify(
         @apply grid gap-4 pt-3 md:grid-cols-2;
 
         div {
-            @apply rounded-2xl border border-white/10 bg-white/5 px-4 py-4;
+            @apply rounded-2xl border border-[#d9e1d7] bg-white/72 px-4 py-4 backdrop-blur;
         }
 
         dt {
-            @apply text-sm text-white/55;
+            @apply text-sm text-[#6a737d];
         }
 
         dd {
-            @apply mt-2 text-base font-medium text-white;
+            @apply mt-2 text-base font-medium text-[#18212f];
         }
     }
 
@@ -293,26 +311,26 @@ const structuredData = JSON.stringify(
         @apply flex items-center justify-center;
 
         img {
-            @apply w-full rounded-[24px] border border-white/10 shadow-2xl;
+            @apply w-full rounded-[24px] border border-white/80 bg-white p-2 shadow-[0_28px_80px_rgba(17,24,39,0.12)];
         }
     }
 }
 
 .primary-action,
 .secondary-action {
-    @apply inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-medium no-underline transition-transform duration-200;
+    @apply inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-medium no-underline transition-all duration-200;
 }
 
 .primary-action {
-    @apply bg-white text-[#180c35] hover:-translate-y-0.5;
+    @apply bg-[#18212f] text-white shadow-[0_16px_32px_rgba(24,33,47,0.18)] hover:-translate-y-0.5 hover:bg-[#0f1722];
 }
 
 .secondary-action {
-    @apply border border-white/18 text-white hover:bg-white/8;
+    @apply border border-[#c9d4cb] bg-white/78 text-[#1d4d41] hover:-translate-y-0.5 hover:border-[#9fbaa9] hover:bg-white;
 }
 
 .section-block {
-    @apply bg-(--background) px-6 py-8 lg:px-10;
+    @apply bg-(--background) px-6 py-8 shadow-[0_18px_50px_rgba(17,24,39,0.05)] lg:px-10;
 }
 
 .section-heading {
@@ -363,7 +381,7 @@ const structuredData = JSON.stringify(
 .faq-list article,
 .update-list article,
 .download-panel {
-    @apply rounded-[24px] border border-(--border) bg-(--secondary) p-5;
+    @apply rounded-[24px] border border-(--border) bg-(--secondary) p-5 shadow-[0_12px_30px_rgba(17,24,39,0.04)];
 }
 
 .screenshot-card {

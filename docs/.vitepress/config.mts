@@ -61,9 +61,9 @@ const config: UserConfig = {
     footer: {
       message: `OnetCli 是一个面向数据库、服务器和 AI 工作流的一体化桌面客户端。`,
       copyright: `
-        <a href="https://github.com/hufei/onetcli">GitHub</a>
+        <a href="https://github.com/feigeCode/onetcli">GitHub</a>
         |
-        <a href="https://github.com/hufei/onetcli/releases">Releases</a>
+        <a href="https://github.com/feigeCode/onetcli/releases">Releases</a>
         |
         <a href="/onetcli/changelog">更新日志</a>
         |
@@ -78,10 +78,7 @@ const config: UserConfig = {
       { text: "功能", link: "/features" },
       { text: "下载", link: "/download" },
       { text: "更新日志", link: "/changelog" },
-      {
-        text: "文档",
-        link: "https://github.com/hufei/onetcli/blob/main/README_CN.md",
-      },
+      { text: "文档", link: "/guide" },
       {
         component: "GitHubStar",
       },
@@ -91,11 +88,7 @@ const config: UserConfig = {
 
     socialLinks: null,
     editLink: {
-      pattern:
-        "https://github.com/hufei/onetcli/edit/main/docs/:path",
-    },
-    search: {
-      provider: "local",
+      pattern: "https://github.com/feigeCode/onetcli/edit/dev/docs/:path",
     },
   },
   markdown: {

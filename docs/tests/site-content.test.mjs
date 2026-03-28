@@ -21,15 +21,18 @@ test("首页替换为 OnetCli 产品文案并指向 GitHub Releases", async () =
 });
 
 test("官网最小页面集合已经创建", async () => {
-  for (const file of ["features.md", "download.md", "changelog.md"]) {
+  for (const file of ["features.md", "download.md", "changelog.md", "guide.md"]) {
     await access(new URL(file, root), constants.F_OK);
   }
 
   const features = await readText("features.md");
   const download = await readText("download.md");
   const changelog = await readText("changelog.md");
+  const guide = await readText("guide.md");
 
   assert.match(features, /# 功能/);
   assert.match(download, /# 下载/);
   assert.match(changelog, /# 更新日志/);
+  assert.match(guide, /# 文档/);
+  assert.match(guide, /GitHub Releases/);
 });

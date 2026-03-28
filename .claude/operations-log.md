@@ -2526,3 +2526,95 @@
 - 在 `docs/tests/seo-and-deploy.test.mjs` 中同步更新断言，确保 workflow 配置与需求一致。
 - 通过新增断言发现 `docs/index.md` 仍残留旧的 gpui 文档正文，已收敛为纯官网入口文件，避免首页继续混入旧品牌内容。
 - 已重新执行 docs 侧全部测试与 `npm run build`，确认调整后依然可构建。
+
+## 编码前检查 - OnetCli 官网二次修整
+时间：2026-03-28 15:45:04 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-onetcli-website-polish.md`
+□ 将使用以下可复用组件：
+- `docs/.vitepress/config.mts`：统一导航、页脚、编辑链接和搜索配置。
+- `docs/.vitepress/theme/style.css`：调整导航与全局官网观感。
+- `docs/.vitepress/theme/components/GitHubStar.vue`：复用现有 GitHub 导航组件，仅修正链接。
+- `docs/index.vue`：在现有首页结构上优化 hero、CTA 和结构化数据链接。
+- `docs/features.md`、`docs/download.md`、`docs/changelog.md`：复用最小 Markdown 页面模式新增 `guide.md`。
+□ 将遵循命名约定：代码标识符继续使用英文，所有用户可见文案保持简体中文。
+□ 将遵循代码风格：延续现有 VitePress + Vue SFC + Tailwind 原子类 + CSS 变量风格。
+□ 确认不重复造轮子，证明：已检查现有 docs 页面模式、主题样式与导航组件，不新建第二套官网框架，不增加新的主题依赖。
+
+## 编码后声明 - OnetCli 官网二次修整
+时间：2026-03-28 15:45:04 +0800
+
+### 1. 复用了以下既有组件
+- `docs/.vitepress/config.mts`：直接在现有站点配置里修正文档入口、GitHub 链接和编辑链接。
+- `docs/.vitepress/theme/components/GitHubStar.vue`：保留现有顶部 GitHub 入口组件，只替换目标仓库。
+- `docs/index.vue`：保留首页结构与信息架构，只在 hero、CTA 和样式层做精修。
+- `docs/.vitepress/theme/style.css`：复用现有主题变量覆盖入口，统一官网的底色、品牌色和导航观感。
+- `docs/features.md`、`docs/download.md`、`docs/changelog.md`：沿用最小 Markdown 页面模式新增 `docs/guide.md`。
+
+### 2. 遵循了以下项目约定
+- 命名约定：站点配置、Vue 组件和测试中的标识符继续使用英文；用户可见内容全部保持简体中文。
+- 代码风格：保持 `<script setup>`、Tailwind 原子类、局部 `scss` 和主题 CSS 变量的既有组合方式。
+- 文件组织：页面仍然集中在 `docs/` 根目录，全局配置在 `docs/.vitepress/`，测试集中在 `docs/tests/`。
+
+### 3. 对比了以下相似实现
+- 对比 `docs/index.md` + `docs/index.vue`，继续使用 Markdown 路由入口挂载 Vue 官网首页的模式。
+- 对比 `docs/features.md`、`docs/download.md`、`docs/changelog.md`，新增 `guide.md` 时保持纯 Markdown 内容页的组织方式。
+- 对比 `docs/.vitepress/config.mts`、`docs/.vitepress/theme/style.css` 与 `GitHubStar.vue`，所有官网层调整都落在现有主题系统内，没有外扩为第二套样式体系。
+
+### 4. 未重复造轮子的证明
+- 没有再引入新的文档框架或营销页生成器，继续复用现有 VitePress 站点。
+- 没有把文档入口重新做成 Vue 页面，而是沿用现有 Markdown 页面集合。
+- 没有追加新的搜索或导航插件，而是直接去掉当前不适合官网的本地搜索配置。
+
+## 验证记录 - OnetCli 官网二次修整
+- `node --test tests/site-config.test.mjs tests/site-content.test.mjs tests/seo-and-deploy.test.mjs tests/legacy-source.test.mjs`：通过，共 11 条断言全部成功。
+- `npm run build`：通过，VitePress 成功构建并处理 `guide.md`。
+- `git diff --check`：通过，未发现空白错误或补丁格式问题。
+
+## 编码前检查 - issue #5 分析
+时间：2026-03-28 15:42:29 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-issue-5.md`
+□ 将使用以下可复用组件：
+- `crates/core/src/tab_container.rs`：标签栏拖动状态与窗口拖动区域
+- `crates/ui/src/title_bar.rs`：标题栏拖动标准实现
+- `main/src/onetcli_app.rs`：全局快捷键与窗口动作
+- `script/bump-version.sh`：既有版本同步流程
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs`：SSH 终端侧栏文件管理器连接逻辑
+- `crates/terminal_view/src/sidebar/mod.rs`：侧边栏文件管理器激活与路径同步
+- `crates/terminal/src/terminal.rs`：SSH 终端重连链路
+□ 将遵循命名约定：Rust 类型使用 `PascalCase`，函数和字段使用 `snake_case`。
+□ 将遵循代码风格：继续沿用 GPUI 链式 UI、`cx.emit/cx.subscribe` 事件流和现有模块边界。
+□ 确认不重复造轮子，证明：已核对仓库内拖动、版本显示、快捷键、终端侧栏文件管理器和 SSH 重连实现，后续修复应在既有链路上补齐，不新增第二套机制。
+
+## Issue 分析记录 - GitHub issue #5
+时间：2026-03-28 15:42:29 +0800
+
+- 已确认仓库远端：`git@github.com:feigeCode/onetcli.git`
+- 已确认最新 open issue：`feigeCode/onetcli#5`，标题 `bug反馈`，提交时间 `2026-03-28 14:24:10 +0800`
+- 已确认 issue #5 实际包含 4 个独立子问题：
+  - 单首页标签时顶部无法拖动窗口
+  - 关于页版本仍显示 `0.1.3`
+  - `ctrl+space` 只能隐藏不能恢复
+  - SSH 终端重连后右侧文件传输窗空白
+- 已完成上下文检索：
+  - 仓库结构与技术栈：`Cargo.toml`
+  - 标签栏拖动：`crates/core/src/tab_container.rs`、`crates/ui/src/title_bar.rs`
+  - 关于页版本：`main/src/setting_tab.rs`、`main/Cargo.toml`、`script/bump-version.sh`
+  - 快捷键与窗口动作：`main/src/onetcli_app.rs`
+  - SSH 终端重连：`crates/terminal/src/terminal.rs`、`crates/terminal_view/src/view.rs`
+  - 右侧文件传输窗：`crates/terminal_view/src/sidebar/file_manager_panel.rs`、`crates/terminal_view/src/sidebar/mod.rs`
+- 已查询外部参考：
+  - Context7：GPUI `WindowControlArea` / 窗口 API 索引
+  - GitHub 开源实现：`zed-industries/zed/crates/platform_title_bar/src/platform_title_bar.rs`
+- 已形成根因判断：
+  - issue 1：标签栏拖动区域覆盖不足，和标题栏实现不一致
+  - issue 2：About 版本源正确，但 `main` crate 版本未随发布 bump
+  - issue 3：`MinimizeWindow` 依赖活跃窗口，最小化后无法作为恢复入口
+  - issue 4：终端侧栏文件管理器不会跟随 SSH 终端重连，且目录刷新失败只清空列表
+- 已用 shrimp-task-manager 拆分 4 个修复任务：
+  - `f1ad4aec-7074-4d3a-929d-26c5eb510fc2` 修复单首页标签时顶部无法拖动窗口
+  - `0a98f1ce-68f7-4436-8624-d363a38c329b` 修复关于页版本号显示落后
+  - `20708308-460d-43d7-be9b-2074ecff7f40` 修复 `ctrl+space` 只能最小化不能恢复窗口
+  - `83f8be4e-25c5-41e9-b4d7-a7e2c40c605f` 修复 SSH 终端重连后右侧文件传输窗空白
+- 当前结论：如果继续进入修复，建议优先处理第 4 条，再处理第 1 条、第 3 条，最后处理第 2 条。

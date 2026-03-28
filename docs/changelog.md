@@ -16,4 +16,4 @@ description: 查看 OnetCli 最近版本和关键能力更新
 
 ## 更多版本
 
-完整版本记录请查看 [GitHub Releases](https://github.com/hufei/onetcli/releases)。
+完整版本记录请查看 [GitHub Releases](https://github.com/feigeCode/onetcli/releases)。

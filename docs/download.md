@@ -15,7 +15,7 @@ description: 从 GitHub Releases 下载 OnetCli 的最新版本
 
 ## 下载入口
 
-[前往 GitHub Releases](https://github.com/hufei/onetcli/releases)
+[前往 GitHub Releases](https://github.com/feigeCode/onetcli/releases)
 
 ## 说明
 
