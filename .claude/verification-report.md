@@ -1201,3 +1201,217 @@
 ### 剩余风险
 - 目前没有浏览器截图级或 Lighthouse 级验证，因此“更好看”主要基于代码与样式逻辑审阅。
 - `docs/package.json` 中包名仍是历史遗留值 `gpui-component-docs`，不影响发布，但后续若要继续整理品牌一致性可以再清理。
+
+---
+
+## 审查报告（issue #5 第 4 条 SSH 文件管理器重连修复）
+生成时间：2026-03-28 16:12:00 +0800
+
+### 需求完整性检查
+- 目标明确：修复 SSH 终端重连后右侧文件管理器继续持有失效 SFTP client、面板空白的问题。
+- 范围明确：本次仅修改文件管理器状态恢复、侧栏桥接与终端重连入口，不扩展到其余 3 个 issue 子项。
+- 交付物明确：代码补丁、上下文摘要、操作日志、局部单测与本地编译验证均已落地。
+- 风险与依赖明确：真实 SSH 服务端断线重连场景尚未在本地 GUI 冒烟，结论主要基于状态机与单测验证。
+
+### 技术维度评分
+- 代码质量：92/100
+- 测试覆盖：84/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：90/100
+- 架构一致：93/100
+- 风险评估：85/100
+
+### 综合评分
+- 89/100
+- 建议：需讨论
+
+### 验证结果
+- 已执行：`cargo test -p terminal_view build_retry_reset_plan_prefers_explicit_working_dir -- --nocapture`
+  - 结果：通过
+- 已执行：`cargo test -p terminal_view sidebar::file_manager_panel::tests -- --nocapture`
+  - 结果：通过（3 passed）
+- 已执行：`cargo check -p terminal_view -p terminal`
+  - 结果：通过
+
+### 结论
+- 文件管理器刷新失败后不再只是清空列表，而是会进入明确错误态，并释放旧的浏览/传输 SFTP client。
+- 终端点击重连时，会把当前工作目录透传给侧栏文件管理器，让其先重置状态再重建 SFTP 会话。
+- 为避免额外副作用，未曾使用过的文件管理器面板不会因为终端重连而被动建立连接。
+
+### 剩余风险
+- 当前没有真实 SSH 服务端重启后的图形界面冒烟验证，因此“自动恢复或可重连状态是否符合最终交互预期”仍需后续人工确认。
+- 目前新增测试聚焦纯函数与状态计划，没有直接覆盖 GPUI 实体层的异步重连时序。
+
+---
+
+## 审查报告（issue #5 第 1 条单首页标签拖动修复）
+生成时间：2026-03-28 16:17:36 +0800
+
+### 需求完整性检查
+- 目标明确：修复只有 pinned 首页标签时顶部无法拖动窗口的问题。
+- 范围明确：本次只修改标签栏拖动命中条件，不调整普通标签点击、关闭、排序链路。
+- 交付物明确：代码补丁、红绿测试、操作日志与本地编译验证均已落地。
+- 风险与依赖明确：真实 Windows/Linux 客户端装饰模式拖动行为仍缺桌面环境冒烟确认。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：86/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：91/100
+- 架构一致：95/100
+- 风险评估：86/100
+
+### 综合评分
+- 90/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p one-core build_tab_bar_drag_plan_enables_pinned_drag_for_single_home_tab -- --nocapture`
+  - 结果：先失败后通过，符合 TDD 红绿流程
+- 已执行：`cargo test -p one-core build_tab_bar_drag_plan -- --nocapture`
+  - 结果：通过（3 passed）
+- 已执行：`cargo check -p one-core -p main`
+  - 结果：通过
+- 已执行：`git diff --check -- crates/core/src/tab_container.rs .claude/operations-log.md .claude/verification-report.md`
+  - 结果：通过
+
+### 结论
+- 当窗口控件启用且只有 pinned 首页标签时，pinned 标签本身现在也会加入窗口拖动命中区域。
+- 当存在其他滚动标签时，pinned 标签不会额外接管拖动，继续保持现有普通标签交互边界。
+- 现有标签空白区拖动、普通标签点击、关闭和排序逻辑未被扩大修改。
+
+### 剩余风险
+- 当前新增测试只覆盖拖动条件规划函数，没有直接覆盖 GPUI 事件命中与桌面窗口拖动的真实交互。
+- 是否完全满足 Windows/Linux 客户端装饰模式下的最终手感，仍建议后续做一次人工桌面冒烟。
+
+---
+
+## 审查报告（issue #5 第 3 条 ctrl+space 窗口恢复修复）
+生成时间：2026-03-28 16:24:43 +0800
+
+### 需求完整性检查
+- 目标明确：让非 macOS 平台上的 `ctrl+space` 能重复触发窗口最小化/恢复。
+- 范围明确：本次只修改应用级 `MinimizeWindow` 行为，不改其他快捷键和窗口创建主链路。
+- 交付物明确：代码补丁、红绿测试、操作日志与本地编译验证均已落地。
+- 风险与依赖明确：真实桌面环境下的快捷键冒烟仍未执行，当前结论主要基于窗口句柄选择逻辑和编译验证。
+
+### 技术维度评分
+- 代码质量：92/100
+- 测试覆盖：85/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：91/100
+- 架构一致：94/100
+- 风险评估：86/100
+
+### 综合评分
+- 90/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p main build_window_toggle_plan_reactivates_fallback_window_when_no_active_window -- --nocapture`
+  - 结果：先失败后通过，符合 TDD 红绿流程
+- 已执行：`cargo test -p main build_window_toggle_plan -- --nocapture`
+  - 结果：通过（3 passed）
+- 已执行：`cargo check -p main`
+  - 结果：通过
+- 已执行：`git diff --check -- main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`
+  - 结果：通过
+
+### 结论
+- `MinimizeWindow` 不再只依赖 `active_window()`；当窗口最小化后没有活跃窗口时，会回退到应用当前已打开的窗口句柄执行恢复。
+- 保持了应用级统一入口，未把恢复逻辑散落到具体 tab 或 view。
+- 其他快捷键和窗口链路未做额外改动，影响面受控。
+
+### 剩余风险
+- 当前新增测试只覆盖窗口切换计划，没有直接覆盖真实 GPUI 快捷键分发和桌面窗口恢复动作。
+- 如果未来应用出现多个主窗口，`windows().next()` 的回退策略需要重新评估是否应切到更明确的主窗口句柄。
+
+---
+
+## 审查报告（issue #5 第 3 条 macOS ctrl+space 绑定补齐）
+生成时间：2026-03-28 16:35:31 +0800
+
+### 需求完整性检查
+- 目标明确：让 macOS 也支持 `ctrl+space` 触发 `MinimizeWindow`，而不只保留 `cmd-m`。
+- 范围明确：本次只调整快捷键绑定层，窗口恢复逻辑沿用上一轮实现。
+- 交付物明确：代码补丁、红绿测试与本地编译验证均已完成。
+- 风险与依赖明确：macOS 上 `ctrl+space` 可能被输入法或系统快捷键占用，真实触发效果仍需桌面环境确认。
+
+### 技术维度评分
+- 代码质量：91/100
+- 测试覆盖：87/100
+- 规范遵循：96/100
+
+### 战略维度评分
+- 需求匹配：93/100
+- 架构一致：95/100
+- 风险评估：84/100
+
+### 综合评分
+- 91/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p main minimize_window_shortcuts_include_ctrl_space_on_macos -- --nocapture`
+  - 结果：先失败后通过，符合 TDD 红绿流程
+- 已执行：`cargo test -p main onetcli_app::tests -- --nocapture`
+  - 结果：通过（4 passed）
+- 已执行：`cargo check -p main`
+  - 结果：通过
+- 已执行：`git diff --check -- main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`
+  - 结果：通过
+
+### 结论
+- macOS 现在会同时注册 `cmd-m` 和 `ctrl-space` 两个最小化/恢复快捷键。
+- 非 macOS 仍然保持 `ctrl-space` 绑定不变，没有回归为平台分叉混乱状态。
+- 绑定逻辑被收敛到 `minimize_window_shortcuts()` helper，后续再改快捷键不需要散改 `bind_keys` 列表。
+
+### 剩余风险
+- 当前验证只证明绑定配置和编译正确，没有直接覆盖真实 macOS 系统快捷键冲突。
+- 如果用户本机把 `ctrl+space` 留给输入法切换，还需要结合系统设置确认最终可用性。
+
+---
+
+## 审查报告（macOS 最小化快捷键回退为 cmd-m）
+生成时间：2026-03-28 16:38:05 +0800
+
+### 需求完整性检查
+- 目标明确：撤销上一轮对 macOS `ctrl+space` 的绑定，恢复为仅使用 `cmd-m`。
+- 范围明确：本次只回退 macOS 快捷键配置，不改窗口恢复逻辑本身。
+- 交付物明确：测试已按新要求重写并通过，本地编译验证已完成。
+- 风险与依赖明确：当前风险主要剩余在真实桌面环境手工触发确认。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：88/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：96/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p main minimize_window_shortcuts_only_use_cmd_m_on_macos -- --nocapture`
+  - 结果：先失败后通过，符合 TDD 红绿流程
+- 已执行：`cargo test -p main onetcli_app::tests -- --nocapture`
+  - 结果：通过（4 passed）
+- 已执行：`cargo check -p main`
+  - 结果：通过
+- 已执行：`git diff --check -- main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`
+  - 结果：通过
+
+### 结论
+- macOS 现已恢复为仅支持 `cmd-m` 触发最小化/恢复。
+- 非 macOS 平台仍保持 `ctrl-space` 绑定，没有被这次回退误伤。
+- 上一轮为窗口恢复补的应用级回退逻辑仍保留，因此只是修正平台绑定，不是回退功能修复。

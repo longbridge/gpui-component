@@ -2618,3 +2618,119 @@
   - `20708308-460d-43d7-be9b-2074ecff7f40` 修复 `ctrl+space` 只能最小化不能恢复窗口
   - `83f8be4e-25c5-41e9-b4d7-a7e2c40c605f` 修复 SSH 终端重连后右侧文件传输窗空白
 - 当前结论：如果继续进入修复，建议优先处理第 4 条，再处理第 1 条、第 3 条，最后处理第 2 条。
+
+## 编码后声明 - issue #5 第 4 条 SSH 文件管理器重连修复
+时间：2026-03-28 16:12:00 +0800
+
+### 1. 复用了以下既有组件
+- `crates/terminal_view/src/sidebar/file_manager_panel.rs`：沿用现有 `ConnectionState`、`connect()`、`initial_working_dir`、`refresh_dir()` 链路，只补连接重置与错误态恢复。
+- `crates/terminal_view/src/sidebar/mod.rs`：复用侧边栏作为文件管理器桥接入口，不新增跨模块通知通道。
+- `crates/terminal_view/src/view.rs`：复用现有 `TerminalView::reconnect()`，在原有终端重连前补发文件管理器重连指令。
+- `crates/terminal/src/terminal.rs`：复用 `current_working_dir()` 作为重连目标目录来源，不新增终端模型状态字段。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增类型 `RetryResetPlan` 使用 `PascalCase`，新增函数与方法使用 `snake_case`。
+- 代码风格：继续沿用现有 `Context<Self>` 更新方式、`cx.notify()` 刷新模型，以及基于 `ConnectionState` 的界面状态切换。
+- 文件组织：所有改动都收敛在既有文件管理器、侧栏、终端视图三个模块内，没有新增旁路模块。
+
+### 3. 对比了以下相似实现
+- 对比 `file_manager_panel.rs` 中 `connect_if_idle()` 与 `connect()`：保持“`Connecting` 期间幂等保护”的既有策略，只在重连前显式回退到可重连状态。
+- 对比 `view.rs` 中 `WorkingDirChanged` 处理：继续使用 `set_file_manager_initial_dir()` 和 `sync_file_manager_path()` 的目录同步模式，不造第二套目录同步逻辑。
+- 对比 `file_manager_panel.rs` 中其他远程错误处理分支：刷新失败时沿用 `FileManager.read_dir_failed` 文案来源，让错误态与现有通知保持一致。
+
+### 4. 未重复造轮子的证明
+- 没有新增新的 SSH/SFTP 会话管理器，而是在现有 `FileManagerPanel` 内补状态重置。
+- 没有新增新的终端事件类型，而是直接复用现有重连入口和当前工作目录来源。
+- 没有把“右侧文件传输窗”单独重做成新的面板，仍使用现有 SSH 侧栏文件管理器实体。
+
+## 验证记录 - issue #5 第 4 条 SSH 文件管理器重连修复
+- `cargo test -p terminal_view build_retry_reset_plan_prefers_explicit_working_dir -- --nocapture`：通过。
+- `cargo test -p terminal_view sidebar::file_manager_panel::tests -- --nocapture`：通过，3 条新增单测全部成功。
+- `cargo check -p terminal_view -p terminal`：通过。
+- 已观察：当前仅完成纯单测与编译验证，尚未在真实 SSH 服务端重启场景下做图形界面冒烟。
+
+## 编码后声明 - issue #5 第 1 条单首页标签拖动修复
+时间：2026-03-28 16:17:36 +0800
+
+### 1. 复用了以下既有组件
+- `crates/core/src/tab_container.rs`：继续沿用现有 `TabBarDragState` 和 `WindowControlArea::Drag` 组合，不新增第二套拖动状态机。
+- `crates/ui/src/title_bar.rs`：对齐标题栏的 `should_move -> start_window_move()` 模式，补到 pinned 首页标签命中区域。
+- `main/src/onetcli_app.rs`：确认首页确实以 pinned tab 形式挂载，修复聚焦在 pinned 场景，不影响普通标签链路。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `TabBarDragPlan` 使用 `PascalCase`，新增 helper `build_tab_bar_drag_plan` 使用 `snake_case`。
+- 代码风格：保持 `render_tab_bar` 的 GPUI 链式声明写法，并继续使用 `window.listener_for` 绑定拖动状态。
+- 文件组织：改动完全收敛在 `crates/core/src/tab_container.rs`，未扩散到其他 UI 模块。
+
+### 3. 对比了以下相似实现
+- 对比 `crates/ui/src/title_bar.rs`：标题栏是整块拖动区配合 `should_move` 状态机，本次只把同一模式补到单 pinned 首页标签，而不是重写整体标签栏。
+- 对比 `crates/core/src/tab_container.rs` 现有 `#tabs` 滚动区：保留原有空白区拖动逻辑，只新增“无滚动标签时 pinned 标签可拖动”的条件分支。
+- 对比上游 `zed` 的 `platform_title_bar`：继续使用 `WindowControlArea::Drag + start_window_move()` 这条稳定路径，不引入自定义平台分支。
+
+### 4. 未重复造轮子的证明
+- 没有新增新的拖动状态类型，只在 `TabBarDragState` 之上增加一个纯配置 helper。
+- 没有改写普通 tab 的点击、关闭、排序实现，避免把“修一个 pinned 首页问题”扩大成全量标签栏重构。
+- 没有把整个 tab-bar 顶层直接改成统一 `Drag` 区，避免误伤已有交互，只修复缺失命中的 pinned 首页标签。
+
+## 验证记录 - issue #5 第 1 条单首页标签拖动修复
+- `cargo test -p one-core build_tab_bar_drag_plan_enables_pinned_drag_for_single_home_tab -- --nocapture`：先失败后通过；红灯阶段因 `build_tab_bar_drag_plan` 未实现而失败，补实现后转绿。
+- `cargo test -p one-core build_tab_bar_drag_plan -- --nocapture`：通过，3 条新增单测全部成功。
+- `cargo check -p one-core -p main`：通过。
+- `git diff --check -- crates/core/src/tab_container.rs .claude/operations-log.md .claude/verification-report.md`：通过。
+- 已观察：当前仍缺 Windows/Linux 客户端装饰模式下的真实桌面拖动冒烟验证。
+
+## 编码后声明 - issue #5 第 3 条 ctrl+space 窗口恢复修复
+时间：2026-03-28 16:24:43 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/onetcli_app.rs`：继续沿用应用级 `MinimizeWindow` 快捷键入口，不把恢复逻辑散落到各个 view。
+- `main/src/main.rs`：复用现有单主窗口创建链路，修复基于应用级窗口列表回退，不新增第二条窗口创建入口。
+- `gpui` 现有 `active_window()` 与 `windows()` 语义：活跃窗口优先，活跃窗口缺失时回退到已打开窗口句柄。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `WindowToggleAction`、`WindowToggleTarget`、`WindowTogglePlan` 使用 `PascalCase`，helper 使用 `snake_case`。
+- 代码风格：保持应用级动作函数的小粒度实现，仍然通过 `cx.defer` 和窗口句柄 `update` 执行 UI 动作。
+- 文件组织：所有改动都收敛在 `main/src/onetcli_app.rs`，没有侵入各业务 tab。
+
+### 3. 对比了以下相似实现
+- 对比 `activate_tab_by_number()`、`toggle_fullscreen()`、`duplicate_tab()`：这些应用级动作都先取窗口句柄再 `cx.defer`，本次修复保持同一路径。
+- 对比 `main/src/main.rs`：应用当前只在入口创建主窗口，因此“无 active_window 时回退到第一个已打开窗口”与现有窗口生命周期相容。
+- 对比 GPUI 文档：`App::active_window()` 只返回平台级聚焦窗口，`App::windows()` 可返回全部已打开窗口句柄，本次修复正是用后者补齐前者失效场景。
+
+### 4. 未重复造轮子的证明
+- 没有新增新的窗口管理单例或散落式恢复逻辑，只在现有应用级动作上补回退选择。
+- 没有改动 macOS `cmd-m` 绑定和其他快捷键入口，保持现有动作注册结构不变。
+- 没有为每个界面保存独立窗口引用，而是复用 GPUI 已提供的应用级窗口句柄集合。
+
+## 验证记录 - issue #5 第 3 条 ctrl+space 窗口恢复修复
+- `cargo test -p main build_window_toggle_plan_reactivates_fallback_window_when_no_active_window -- --nocapture`：先失败后通过；失败原因是误把 `AnyWindowHandle` 当作支持 `is_active`，已收敛为直接使用 `active_window()` 语义。
+- `cargo test -p main build_window_toggle_plan -- --nocapture`：通过，3 条新增单测全部成功。
+- `cargo check -p main`：通过。
+- `git diff --check -- main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`：通过。
+- 已观察：当前仍缺非 macOS 平台真实按两次 `ctrl+space` 的桌面冒烟验证。
+
+## 追加修正 - issue #5 第 3 条 macOS 也支持 ctrl+space
+时间：2026-03-28 16:35:31 +0800
+
+- 根据用户补充，重新核对 `main/src/onetcli_app.rs` 的快捷键绑定，确认此前 macOS 只绑定了 `cmd-m`，确实没有 `ctrl-space`。
+- 采用最小改动方案：提取 `minimize_window_shortcuts()` helper，让 macOS 返回 `["cmd-m", "ctrl-space"]`，其他平台仍返回 `["ctrl-space"]`。
+- 保持现有窗口恢复逻辑不变，只补绑定层，不扩大修改面。
+
+## 验证记录 - issue #5 第 3 条 macOS ctrl+space 绑定补齐
+- `cargo test -p main minimize_window_shortcuts_include_ctrl_space_on_macos -- --nocapture`：先失败后通过；红灯阶段因 `minimize_window_shortcuts` 未实现而失败，补实现后转绿。
+- `cargo test -p main onetcli_app::tests -- --nocapture`：通过，4 条测试全部成功。
+- `cargo check -p main`：通过。
+- `git diff --check -- main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`：通过。
+- 已观察：当前没有真实 macOS 全局/应用内 `ctrl+space` 触发验证，若系统输入法占用该组合键，还需要在桌面环境中手工确认。
+
+## 追加修正 - macOS 不使用 ctrl+space
+时间：2026-03-28 16:38:05 +0800
+
+- 根据用户进一步澄清，macOS 下不应绑定 `ctrl+space`，应恢复为仅使用 `cmd-m`。
+- 已把 `minimize_window_shortcuts()` 的 macOS 分支回退为只返回 `["cmd-m"]`，非 macOS 分支保持 `["ctrl-space"]` 不变。
+
+## 验证记录 - macOS 最小化快捷键回退为 cmd-m
+- `cargo test -p main minimize_window_shortcuts_only_use_cmd_m_on_macos -- --nocapture`：先失败后通过，证明已移除 macOS 下的 `ctrl-space`。
+- `cargo test -p main onetcli_app::tests -- --nocapture`：通过，4 条测试全部成功。
+- `cargo check -p main`：通过。
+- `git diff --check -- main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`：通过。

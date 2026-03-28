@@ -982,6 +982,14 @@ impl TerminalView {
     }
 
     pub fn reconnect(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let working_dir = self
+            .terminal
+            .read(cx)
+            .current_working_dir()
+            .map(str::to_string);
+        self.sidebar.update(cx, |sidebar, cx| {
+            sidebar.reconnect_file_manager(working_dir, cx);
+        });
         self.terminal.update(cx, |terminal, cx| {
             terminal.reconnect(cx);
         });

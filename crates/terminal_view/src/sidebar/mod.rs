@@ -446,6 +446,19 @@ impl TerminalSidebar {
         }
     }
 
+    /// 在终端重连时同步重建文件管理器连接
+    pub fn reconnect_file_manager(
+        &mut self,
+        working_dir: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(ref fm_panel) = self.file_manager_panel {
+            fm_panel.update(cx, |panel, cx| {
+                panel.reconnect_with_working_dir(working_dir.clone(), cx);
+            });
+        }
+    }
+
     /// 渲染工具栏按钮
     fn render_toolbar_button(
         &self,

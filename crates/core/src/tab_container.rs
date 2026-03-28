@@ -375,6 +375,30 @@ struct TabBarDragState {
     should_move: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TabBarDragPlan {
+    enable_scroll_area_drag: bool,
+    enable_single_pinned_tab_drag: bool,
+}
+
+fn build_tab_bar_drag_plan(
+    show_window_controls: bool,
+    has_pinned_tab: bool,
+    has_scrollable_tabs: bool,
+) -> TabBarDragPlan {
+    if !show_window_controls {
+        return TabBarDragPlan {
+            enable_scroll_area_drag: false,
+            enable_single_pinned_tab_drag: false,
+        };
+    }
+
+    TabBarDragPlan {
+        enable_scroll_area_drag: true,
+        enable_single_pinned_tab_drag: has_pinned_tab && !has_scrollable_tabs,
+    }
+}
+
 impl Render for TabBarDragState {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div()
@@ -1525,6 +1549,11 @@ impl TabContainer {
         let is_client_decorated = matches!(window.window_decorations(), Decorations::Client { .. });
         let show_window_controls = self.show_window_controls;
         let allow_tab_drag = !is_macos;
+        let drag_plan = build_tab_bar_drag_plan(
+            show_window_controls,
+            self.pinned_tab.is_some(),
+            !self.tabs.is_empty(),
+        );
 
         // 使用状态管理窗口拖动
         let drag_state = window.use_state(cx, |_, _| TabBarDragState { should_move: false });
@@ -1605,6 +1634,36 @@ impl TabContainer {
                             el.hover(move |style| style.bg(hover_tab_color))
                                 .bg(inactive_tab_color)
                         })
+                        .when(drag_plan.enable_single_pinned_tab_drag, |el| {
+                            el.window_control_area(WindowControlArea::Drag)
+                                .on_mouse_down_out(window.listener_for(
+                                    &drag_state,
+                                    |state, _, _, _| {
+                                        state.should_move = false;
+                                    },
+                                ))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    window.listener_for(&drag_state, |state, _, _, _| {
+                                        state.should_move = true;
+                                    }),
+                                )
+                                .on_mouse_up(
+                                    MouseButton::Left,
+                                    window.listener_for(&drag_state, |state, _, _, _| {
+                                        state.should_move = false;
+                                    }),
+                                )
+                                .on_mouse_move(window.listener_for(
+                                    &drag_state,
+                                    |state, _, window, _| {
+                                        if state.should_move {
+                                            state.should_move = false;
+                                            window.start_window_move();
+                                        }
+                                    },
+                                ))
+                        })
                         .cursor_pointer()
                         .on_click(move |_, window, cx| {
                             view_for_pinned.update(cx, |this, cx| {
@@ -1640,7 +1699,7 @@ impl TabContainer {
                     .id("tabs")
                     .flex_1()
                     // 仅在启用窗口控件时设置拖动区域（用于 Windows 原生拖动）
-                    .when(show_window_controls, |this| {
+                    .when(drag_plan.enable_scroll_area_drag, |this| {
                         this.window_control_area(WindowControlArea::Drag)
                             .on_mouse_down_out(window.listener_for(
                                 &drag_state,
@@ -2064,5 +2123,49 @@ impl Render for TabContainer {
                     .child(self.render_tab_bar(window, cx))
                     .child(self.render_tab_content(window, cx)),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TabBarDragPlan, build_tab_bar_drag_plan};
+
+    #[test]
+    fn build_tab_bar_drag_plan_enables_pinned_drag_for_single_home_tab() {
+        let plan = build_tab_bar_drag_plan(true, true, false);
+
+        assert_eq!(
+            plan,
+            TabBarDragPlan {
+                enable_scroll_area_drag: true,
+                enable_single_pinned_tab_drag: true,
+            }
+        );
+    }
+
+    #[test]
+    fn build_tab_bar_drag_plan_keeps_pinned_drag_disabled_when_other_tabs_exist() {
+        let plan = build_tab_bar_drag_plan(true, true, true);
+
+        assert_eq!(
+            plan,
+            TabBarDragPlan {
+                enable_scroll_area_drag: true,
+                enable_single_pinned_tab_drag: false,
+            }
+        );
+    }
+
+    #[test]
+    fn build_tab_bar_drag_plan_disables_all_drag_without_window_controls() {
+        let plan = build_tab_bar_drag_plan(false, true, false);
+
+        assert_eq!(
+            plan,
+            TabBarDragPlan {
+                enable_scroll_area_drag: false,
+                enable_single_pinned_tab_drag: false,
+            }
+        );
     }
 }

@@ -196,6 +196,39 @@ enum ConnectionState {
     Error(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RetryResetPlan {
+    next_state: ConnectionState,
+    initial_working_dir: Option<String>,
+    clear_listing: bool,
+}
+
+fn build_retry_reset_plan(current_path: &str, working_dir: Option<String>) -> RetryResetPlan {
+    RetryResetPlan {
+        next_state: ConnectionState::Idle,
+        initial_working_dir: working_dir.or_else(|| Some(current_path.to_string())),
+        clear_listing: true,
+    }
+}
+
+fn build_refresh_error_plan(current_path: &str, message: String) -> RetryResetPlan {
+    RetryResetPlan {
+        next_state: ConnectionState::Error(message),
+        initial_working_dir: Some(current_path.to_string()),
+        clear_listing: true,
+    }
+}
+
+fn clear_remote_listing_state<T>(
+    items: &mut Vec<T>,
+    filtered_indices: &mut Vec<usize>,
+    selected_indices: &mut HashSet<usize>,
+) {
+    items.clear();
+    filtered_indices.clear();
+    selected_indices.clear();
+}
+
 /// 排序列
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum SortColumn {
@@ -644,6 +677,48 @@ impl FileManagerPanel {
         }
     }
 
+    fn apply_retry_reset_plan(&mut self, plan: RetryResetPlan) {
+        self.connection_state = plan.next_state;
+        self.initial_working_dir = plan.initial_working_dir;
+        self.sftp_client = None;
+        self.transfer_client = None;
+        self.loading = false;
+
+        if plan.clear_listing {
+            clear_remote_listing_state(
+                &mut self.items,
+                &mut self.filtered_indices,
+                &mut self.selected_indices,
+            );
+        }
+    }
+
+    fn reset_connection_for_retry(&mut self, working_dir: Option<String>) {
+        let plan = build_retry_reset_plan(&self.current_path, working_dir);
+        self.apply_retry_reset_plan(plan);
+    }
+
+    fn handle_refresh_error(&mut self, message: String) {
+        let plan = build_refresh_error_plan(&self.current_path, message);
+        self.apply_retry_reset_plan(plan);
+    }
+
+    pub fn reconnect_with_working_dir(
+        &mut self,
+        working_dir: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        let should_reconnect = self.connection_state != ConnectionState::Idle
+            || self.sftp_client.is_some()
+            || !self.items.is_empty();
+        if !should_reconnect {
+            return;
+        }
+
+        self.reset_connection_for_retry(working_dir);
+        self.connect(cx);
+    }
+
     /// 设置初始工作目录（连接前由终端 OSC 7 提供）
     ///
     /// 仅在尚未连接时有效，连接后应使用 `sync_navigate_to`。
@@ -807,13 +882,15 @@ impl FileManagerPanel {
                     }
                     Ok(Err(e)) => {
                         tracing::error!("列出目录失败: {}", e);
-                        this.items.clear();
-                        this.filtered_indices.clear();
+                        this.handle_refresh_error(
+                            t!("FileManager.read_dir_failed", error = e).to_string(),
+                        );
                     }
                     Err(e) => {
                         tracing::error!("SFTP 任务失败: {}", e);
-                        this.items.clear();
-                        this.filtered_indices.clear();
+                        this.handle_refresh_error(
+                            t!("FileManager.read_dir_failed", error = e).to_string(),
+                        );
                     }
                 }
                 cx.notify();
@@ -2860,5 +2937,50 @@ impl Render for FileManagerPanel {
                 ConnectionState::Connected => self.render_file_list(cx).into_any_element(),
                 ConnectionState::Error(ref msg) => self.render_error(msg, cx).into_any_element(),
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ConnectionState, RetryResetPlan, build_refresh_error_plan, build_retry_reset_plan,
+        clear_remote_listing_state,
+    };
+    use std::collections::HashSet;
+
+    #[test]
+    fn build_retry_reset_plan_prefers_explicit_working_dir() {
+        let plan = build_retry_reset_plan("/srv/project", Some("/srv/override".to_string()));
+
+        assert_eq!(plan.next_state, ConnectionState::Idle);
+        assert_eq!(plan.initial_working_dir.as_deref(), Some("/srv/override"));
+        assert!(plan.clear_listing);
+    }
+
+    #[test]
+    fn build_refresh_error_plan_preserves_current_path_for_retry() {
+        let plan = build_refresh_error_plan("/srv/project", "连接已断开".to_string());
+
+        assert_eq!(
+            plan,
+            RetryResetPlan {
+                next_state: ConnectionState::Error("连接已断开".to_string()),
+                initial_working_dir: Some("/srv/project".to_string()),
+                clear_listing: true,
+            }
+        );
+    }
+
+    #[test]
+    fn clear_remote_listing_state_clears_items_and_selection() {
+        let mut items = vec![1, 2, 3];
+        let mut filtered_indices = vec![0, 2];
+        let mut selected_indices = HashSet::from([0usize, 1usize]);
+
+        clear_remote_listing_state(&mut items, &mut filtered_indices, &mut selected_indices);
+
+        assert!(items.is_empty());
+        assert!(filtered_indices.is_empty());
+        assert!(selected_indices.is_empty());
     }
 }

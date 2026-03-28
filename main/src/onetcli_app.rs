@@ -23,6 +23,60 @@ actions!(
     ]
 );
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowToggleAction {
+    Minimize,
+    Activate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowToggleTarget {
+    ActiveWindow,
+    FallbackWindow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WindowTogglePlan {
+    target: WindowToggleTarget,
+    action: WindowToggleAction,
+}
+
+fn build_window_toggle_plan(
+    has_active_window: bool,
+    has_any_window: bool,
+    active_window_is_active: bool,
+) -> Option<WindowTogglePlan> {
+    if has_active_window {
+        return Some(WindowTogglePlan {
+            target: WindowToggleTarget::ActiveWindow,
+            action: if active_window_is_active {
+                WindowToggleAction::Minimize
+            } else {
+                WindowToggleAction::Activate
+            },
+        });
+    }
+
+    if has_any_window {
+        return Some(WindowTogglePlan {
+            target: WindowToggleTarget::FallbackWindow,
+            action: WindowToggleAction::Activate,
+        });
+    }
+
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn minimize_window_shortcuts() -> &'static [&'static str] {
+    &["cmd-m"]
+}
+
+#[cfg(not(target_os = "macos"))]
+fn minimize_window_shortcuts() -> &'static [&'static str] {
+    &["ctrl-space"]
+}
+
 #[derive(Clone)]
 pub struct GlobalTabContainer {
     pub tab_container: Entity<TabContainer>,
@@ -94,14 +148,31 @@ fn toggle_fullscreen(cx: &mut App) {
 }
 
 fn minimize_window(cx: &mut App) {
-    let Some(active_window) = cx.active_window() else {
+    let active_window = cx.active_window();
+    let fallback_window = cx.windows().into_iter().next();
+    let plan = build_window_toggle_plan(
+        active_window.is_some(),
+        fallback_window.is_some(),
+        active_window.is_some(),
+    );
+    let Some(plan) = plan else {
         return;
     };
+
+    let target_window = match plan.target {
+        WindowToggleTarget::ActiveWindow => active_window,
+        WindowToggleTarget::FallbackWindow => fallback_window,
+    };
+    let Some(target_window) = target_window else {
+        return;
+    };
+
     cx.defer(move |cx| {
-        _ = active_window.update(cx, |_, window, _| {
-            if window.is_window_active() {
+        _ = target_window.update(cx, |_, window, _| match plan.action {
+            WindowToggleAction::Minimize => {
                 window.minimize_window();
-            } else {
+            }
+            WindowToggleAction::Activate => {
                 window.activate_window();
             }
         });
@@ -162,7 +233,7 @@ pub fn init(cx: &mut App) {
     redis_view::init(cx);
     mongodb_view::init(cx);
     crate::home_tab::init(cx);
-    cx.bind_keys(vec![
+    let mut keybindings = vec![
         KeyBinding::new("shift-escape", ToggleZoom, None),
         KeyBinding::new("ctrl-w", ClosePanel, None),
         #[cfg(target_os = "macos")]
@@ -206,10 +277,6 @@ pub fn init(cx: &mut App) {
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-enter", ToggleFullscreen, None),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-m", MinimizeWindow, None),
-        #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-space", MinimizeWindow, None),
-        #[cfg(target_os = "macos")]
         KeyBinding::new("cmd-shift-t", DuplicateTab, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-shift-t", DuplicateTab, None),
@@ -217,7 +284,14 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("cmd-q", QuitApp, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-f4", QuitApp, None),
-    ]);
+    ];
+    keybindings.extend(
+        minimize_window_shortcuts()
+            .iter()
+            .copied()
+            .map(|shortcut| KeyBinding::new(shortcut, MinimizeWindow, None)),
+    );
+    cx.bind_keys(keybindings);
 
     cx.on_action(|_: &ActivateTab1, cx| activate_tab_by_number(1, cx));
     cx.on_action(|_: &ActivateTab2, cx| activate_tab_by_number(2, cx));
@@ -390,5 +464,50 @@ impl Render for OnetCliApp {
             .children(sheet_layer)
             .children(dialog_layer)
             .children(notification_layer)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        WindowToggleAction, WindowTogglePlan, WindowToggleTarget, build_window_toggle_plan,
+        minimize_window_shortcuts,
+    };
+
+    #[test]
+    fn build_window_toggle_plan_minimizes_active_window() {
+        let plan = build_window_toggle_plan(true, true, true);
+
+        assert_eq!(
+            plan,
+            Some(WindowTogglePlan {
+                target: WindowToggleTarget::ActiveWindow,
+                action: WindowToggleAction::Minimize,
+            })
+        );
+    }
+
+    #[test]
+    fn build_window_toggle_plan_reactivates_fallback_window_when_no_active_window() {
+        let plan = build_window_toggle_plan(false, true, false);
+
+        assert_eq!(
+            plan,
+            Some(WindowTogglePlan {
+                target: WindowToggleTarget::FallbackWindow,
+                action: WindowToggleAction::Activate,
+            })
+        );
+    }
+
+    #[test]
+    fn build_window_toggle_plan_returns_none_without_windows() {
+        assert_eq!(build_window_toggle_plan(false, false, false), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn minimize_window_shortcuts_only_use_cmd_m_on_macos() {
+        assert_eq!(minimize_window_shortcuts(), &["cmd-m"]);
     }
 }
