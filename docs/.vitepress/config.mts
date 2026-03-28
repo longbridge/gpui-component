@@ -1,39 +1,43 @@
 import { defineConfig } from "vitepress";
 import type { UserConfig } from "vitepress";
-import { generateSidebar } from "vitepress-sidebar";
 import llmstxt from "vitepress-plugin-llms";
 import tailwindcss from "@tailwindcss/vite";
 import { lightTheme, darkTheme } from "./language";
 import { ViteToml } from "vite-plugin-toml";
 
-/**
- * https://github.com/jooy2/vitepress-sidebar
- */
-const sidebar = generateSidebar([
-  {
-    scanStartPath: "/docs/",
-    rootGroupText: "Introduction",
-    collapsed: false,
-    useTitleFromFrontmatter: true,
-    useTitleFromFileHeading: true,
-    sortMenusByFrontmatterOrder: true,
-    includeRootIndexFile: false,
-  },
-]);
-
 // https://vitepress.dev/reference/site-config
 const config: UserConfig = {
-  title: "GPUI Component",
-  base: "/gpui-component/",
+  srcExclude: [
+    "README.md",
+    "contributors.md",
+    "skills.md",
+    "docs/**",
+    "design/**",
+    "superpowers/**",
+  ],
+  title: "OnetCli",
+  base: "/onetcli/",
   description:
-    "Rust GUI components for building fantastic cross-platform desktop application by using GPUI.",
+    "OnetCli 是一个统一管理数据库、SSH、终端与 AI 工作流的跨平台桌面客户端。",
   cleanUrls: true,
   head: [
+    ["meta", { name: "theme-color", content: "#12071f" }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:title", content: "OnetCli" }],
+    [
+      "meta",
+      {
+        property: "og:description",
+        content:
+          "OnetCli 是一个统一管理数据库、SSH、终端与 AI 工作流的跨平台桌面客户端。",
+      },
+    ],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
     [
       "link",
       {
         rel: "icon",
-        href: "/gpui-component/logo.svg",
+        href: "/onetcli/logo.svg",
         media: "(prefers-color-scheme: light)",
       },
     ],
@@ -41,7 +45,7 @@ const config: UserConfig = {
       "link",
       {
         rel: "icon",
-        href: "/gpui-component/logo-dark.svg",
+        href: "/onetcli/logo-dark.svg",
         media: "(prefers-color-scheme: dark)",
       },
     ],
@@ -55,63 +59,40 @@ const config: UserConfig = {
       dark: "/logo-dark.svg",
     },
     footer: {
-      message: `GPUI Component is an open source project under the Apache-2.0 License,
-        developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.`,
+      message: `OnetCli 是一个面向数据库、服务器和 AI 工作流的一体化桌面客户端。`,
       copyright: `
-        <a href="https://gpui.rs">GPUI</a>
+        <a href="https://github.com/hufei/onetcli">GitHub</a>
         |
-        <a href="/gpui-component/contributors">Contributors</a>
+        <a href="https://github.com/hufei/onetcli/releases">Releases</a>
         |
-        <a href="/gpui-component/skills" target="_blank">Skills</a>
+        <a href="/onetcli/changelog">更新日志</a>
         |
-        <a href="/gpui-component/llms-full.txt" target="_blank">llms-full.txt</a>
-        |
-        <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">Report Bug</a>
-        |
-        <a href="https://github.com/longbridge/gpui-component/discussions" target="_blank">Discussion</a>
+        <a href="/onetcli/download">下载</a>
         <br />
-        Icon resources are used <a href="https://lucide.dev" target="_blank">Lucide</a>,
-        <a href="https://isocons.app" target="_blank">Isocons</a>.
+        界面图标资源来自 <a href="https://lucide.dev" target="_blank">Lucide</a>。
       `,
     },
     // https://vitepress.dev/reference/default-theme-config
     nav: [
-      { text: "Home", link: "/" },
-      { text: "Getting Started", link: "/docs/getting-started" },
-      { text: "Components", link: "/docs/components" },
-      { text: "API Doc", link: "https://docs.rs/gpui-component" },
+      { text: "首页", link: "/" },
+      { text: "功能", link: "/features" },
+      { text: "下载", link: "/download" },
+      { text: "更新日志", link: "/changelog" },
       {
-        text: "Resources",
-        items: [
-          {
-            text: "Contributors",
-            link: "/contributors",
-          },
-          {
-            text: "Releases",
-            link: "https://github.com/longbridge/gpui-component/releases",
-          },
-          {
-            text: "Issues",
-            link: "https://github.com/longbridge/gpui-component/issues",
-          },
-          {
-            text: "Discussion",
-            link: "https://github.com/longbridge/gpui-component/discussions",
-          },
-        ],
+        text: "文档",
+        link: "https://github.com/hufei/onetcli/blob/main/README_CN.md",
       },
       {
         component: "GitHubStar",
       },
     ],
 
-    sidebar: sidebar as any,
+    sidebar: false,
 
     socialLinks: null,
     editLink: {
       pattern:
-        "https://github.com/longbridge/gpui-component/edit/main/docs/:path",
+        "https://github.com/hufei/onetcli/edit/main/docs/:path",
     },
     search: {
       provider: "local",

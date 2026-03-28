@@ -2404,3 +2404,125 @@
 - `cargo test -p db_view contains_destructive_sql --lib`：通过，6 个新增检测单测全部成功。
 - `cargo test -p db_view table_designer_tab --lib`：通过，55 个 table_designer 相关单测全部成功。
 - 已观察：未来兼容告警 `num-bigint-dig v0.8.4`，为仓库既有依赖问题，非本次改动引入。
+
+## 上下文收集 - v0.1.9 release notes
+时间：2026-03-28 00:00:00 +0800
+
+- 已确认标签存在：`v0.1.8`、`v0.1.9`。
+- 已确认标签时间：
+  - `v0.1.8`：2026-03-26 20:32:19 +0800
+  - `v0.1.9`：2026-03-27 18:27:51 +0800
+- 已确认发布流程：`.github/workflows/release.yml` 通过 `softprops/action-gh-release@v2` 创建 GitHub Release，并开启 `generate_release_notes: true`。
+- 已确认版本区间提交：
+  - `bdd6bb71` MySQL 字段排序差异 SQL
+  - `36dde149` / `66468f89` 表设计器 DDL 页签
+  - `1c7b5879` 数据库树创建备份表
+  - `c2e78e48` DROP 危险 SQL 执行确认
+- 已阅读关键文件：
+  - `crates/db_view/src/table_designer_tab.rs`
+  - `crates/db_view/src/db_tree_event.rs`
+  - `crates/db_view/locales/db_view.yml`
+  - `crates/db/src/mysql/plugin.rs`
+  - `crates/db/src/plugin.rs`
+- 结论：本次 release notes 应聚焦四个用户可见主题，不应照搬 5 条提交原文。
+
+## 编码后声明 - v0.1.9 release notes 生成
+时间：2026-03-28 00:00:00 +0800
+
+### 1. 复用了以下既有组件
+- `git tag`、`git log`、`git diff`：作为版本区间事实来源。
+- `.github/workflows/release.yml`：作为仓库现有发布格式依据。
+- `crates/db_view/locales/db_view.yml`：作为用户可见功能命名依据。
+
+### 2. 遵循了以下项目约定
+- 输出语言：简体中文。
+- 发布语义：使用产品内实际出现的名称，如“创建备份表”“DDL”“SQL 预览”。
+- 归纳方式：按用户功能而不是按内部提交顺序组织。
+
+### 3. 对比了以下相似实现
+- 对比 `git log --oneline --no-merges v0.1.8..v0.1.9` 与最终文件状态，合并了两次 DDL 相关提交，避免重复描述。
+- 对比 `table_designer_tab.rs` 与 `db_view.yml`，确保文案与实际 UI 名称一致。
+- 对比 `db_tree_event.rs` 与各数据库 `*_view_plugin.rs`，确认“创建备份表”不是单库特性。
+
+### 4. 未重复造轮子的证明
+- 没有新写发布脚本或 changelog 生成器。
+- 没有脱离 git 历史自行扩展不存在的功能点。
+- 没有把 `.claude` 工作记录当成正式发布内容，只作为分析依据留痕。
+
+## 验证记录 - v0.1.9 release notes
+- `git tag --list 'v0.1.*' --sort=version:refname`：确认 `v0.1.8` 与 `v0.1.9` 存在。
+- `git for-each-ref --format='%(refname:short) %(creatordate:iso8601)' refs/tags/v0.1.8 refs/tags/v0.1.9`：确认标签时间。
+- `git log --oneline --no-merges v0.1.8..v0.1.9`：确认版本区间共 5 条关键提交。
+- `git diff --stat v0.1.8..v0.1.9`：确认改动集中在 `db` / `db_view` 模块。
+- 已人工核对 `table_designer_tab.rs`、`db_tree_event.rs`、`db_view.yml`、`mysql/plugin.rs` 中的实际行为与文案，确保 release notes 不超出代码事实。
+
+## 编码前检查 - OnetCli 官网
+时间：2026-03-28 14:32:17 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-onetcli-website.md`
+□ 将使用以下可复用组件：
+- `docs/index.md` + `docs/index.vue`：复用首页入口挂载自定义 Vue 页面模式。
+- `docs/contributors.md` + `docs/contributors.vue`：复用独立营销页的 Markdown + Vue 拆分模式。
+- `docs/.vitepress/config.mts`：复用站点级导航、页脚、head、base 配置入口。
+- `.github/workflows/release-docs.yml`：复用 GitHub Pages 部署链路。
+- `.github/workflows/test-docs.yml`：复用 docs PR 构建校验。
+□ 将遵循命名约定：Vue 组件与配置项保持英文标识符，面向用户的文案统一简体中文。
+□ 将遵循代码风格：沿用现有 VitePress + Vue SFC + Tailwind 原子类 + CSS 变量风格。
+□ 确认不重复造轮子，证明：已检查 `docs/` 站点现有页面模式和 GitHub Pages 工作流，不新建第二套官网框架，不额外引入新的静态站工具链。
+
+## 编码后声明 - OnetCli 官网
+时间：2026-03-28 14:49:28 +0800
+
+### 1. 复用了以下既有组件
+- `docs/index.md` + `docs/index.vue`：延续首页入口挂载自定义 Vue 首页的组织方式。
+- `docs/.vitepress/config.mts`：在原站点配置上替换品牌、导航、页脚、`head`、`base` 与 `srcExclude`。
+- `docs/.vitepress/theme/style.css`：保留现有 VitePress 主题变量和 Tailwind 风格，只在首页组件内部扩展官网视觉。
+- `.github/workflows/release-docs.yml` 与 `.github/workflows/test-docs.yml`：继续沿用 docs 构建和 Pages 部署链路，而不是新写第三套发布脚本。
+
+### 2. 遵循了以下项目约定
+- 命名约定：Vue、VitePress、工作流配置中的标识符继续使用英文，面向用户的导航、正文、FAQ 与日志使用简体中文。
+- 代码风格：保持 Vue SFC、`<script setup>`、Tailwind 原子类与 CSS 变量混合写法。
+- 文件组织：站点入口与页面继续放在 `docs/`，全局配置集中在 `docs/.vitepress/`，部署逻辑集中在 `.github/workflows/`。
+
+### 3. 对比了以下相似实现
+- 对比 `docs/index.md` 与 `docs/contributors.md`，继续采用 Markdown 负责路由、Vue 负责视觉结构的页面模式。
+- 对比 `.github/workflows/release-docs.yml` 与 VitePress 官方 GitHub Pages 示例，保留 `configure-pages` / `upload-pages-artifact` / `deploy-pages` 主链路，只修正触发方式与安装命令。
+- 对比 `contributors.data.js`、`repo.data.js` 与本地构建失败堆栈，确认根因是构建期实时请求 GitHub API，而不是新首页改造本身。
+
+### 4. 未重复造轮子的证明
+- 没有新建第二套官网框架，直接复用现有 VitePress 站点。
+- 没有引入新的 SEO 插件，而是用语义化 HTML、FAQ 和 JSON-LD 直接完成基础增强。
+- 没有保留旧的在线抓取逻辑，而是在 `srcExclude` 和静态 GitHub 入口层面消除构建期外网依赖。
+
+## 调试记录 - OnetCli 官网构建失败
+时间：2026-03-28 14:49:28 +0800
+
+- 现象：`npm run build` 首次失败，错误指向 `docs/data/contributors.data.js` 构建期 `fetch` 失败。
+- 复现：在 `docs` 目录执行 `npm run build`，稳定复现。
+- 根因调查：
+  - `docs/contributors.md` 会触发 `contributors.vue`。
+  - `contributors.vue` 依赖 `docs/data/contributors.data.js`，该文件在构建时请求 GitHub API。
+  - `GitHubStar.vue` 同样依赖 `docs/data/repo.data.js`，存在第二处构建期外网依赖。
+- 结论：根因不是新官网页面，而是旧 gpui 站点残留的构建期远程数据获取逻辑。
+- 修复：
+  - 在 `docs/.vitepress/config.mts` 增加 `srcExclude`，排除 `contributors.md`、`skills.md`、`docs/**`、`design/**`、`superpowers/**` 等旧发布源。
+  - 将 `GitHubStar.vue` 改为静态 GitHub 入口，不再读取 `repo.data.js`。
+  - 同步移除主题中对 Cargo TOML 版本注入的无关依赖。
+
+## 验证记录 - OnetCli 官网
+- `node --test tests/site-config.test.mjs`：通过。
+- `node --test tests/site-content.test.mjs`：通过。
+- `node --test tests/seo-and-deploy.test.mjs`：通过。
+- `node --test tests/legacy-source.test.mjs`：通过。
+- `node --test tests/site-config.test.mjs tests/site-content.test.mjs tests/seo-and-deploy.test.mjs tests/legacy-source.test.mjs`：通过，共 10 条断言全部成功。
+- `npm install --no-package-lock`：通过；用于在本地缺少 `bun` 的环境下安装 docs 依赖。
+- `npm run build`：通过；VitePress 成功构建并生成 `docs/.vitepress/dist`。
+- 已观察：当前本地环境未安装 `bun`，因此本地构建使用 `npm` 作为替代执行器；GitHub Pages 工作流仍按 `bun install --frozen-lockfile` 运行。
+
+## 追加调整 - 推送到 dev
+时间：2026-03-28 14:57:44 +0800
+
+- 按用户要求，将 `.github/workflows/release-docs.yml` 的 Pages 发布触发分支从 `main` 调整为 `dev`。
+- 在 `docs/tests/seo-and-deploy.test.mjs` 中同步更新断言，确保 workflow 配置与需求一致。
+- 通过新增断言发现 `docs/index.md` 仍残留旧的 gpui 文档正文，已收敛为纯官网入口文件，避免首页继续混入旧品牌内容。
+- 已重新执行 docs 侧全部测试与 `npm run build`，确认调整后依然可构建。

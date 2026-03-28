@@ -1,170 +1,399 @@
 <template>
-    <div class="banner">
-        <h1>GPUI Component</h1>
-        <div class="banner-description">
-            Rust GUI components for building fantastic cross-platform desktop
-            application by using
-            <a href="https://gpui.rs" target="_blank">GPUI</a>.
-        </div>
-        <div class="actions">
-            <a href="docs/getting-started" class="btn-primary">Get Started</a>
-            <a href="docs/components"><Blocks /> Components</a>
-        </div>
-        <div class="version">
-            Version:
-            <a href="https://crates.io/crates/gpui-component" target="_blank">{{
-                VERSION
-            }}</a>
-        </div>
-    </div>
-    <div class="features">
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-green-500 dark:bg-green-700">
-                    <Blocks />
+    <main class="home-page">
+        <section class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">数据库 / SSH / 终端 / AI</p>
+                <h1>一个桌面客户端，统一管理数据库、服务器与 AI 工作流</h1>
+                <p class="hero-description">
+                    OnetCli 将数据库连接、SSH 与 SFTP、本地终端和 AI
+                    助手整合到同一个跨平台工作台里，减少工具切换，提升排查、分析与交付效率。
+                </p>
+                <div class="hero-actions">
+                    <a class="primary-action" href="https://github.com/hufei/onetcli/releases" target="_blank" rel="noreferrer">
+                        下载 OnetCli
+                    </a>
+                    <a class="secondary-action" :href="withBase('/features')">
+                        查看功能
+                    </a>
                 </div>
-                <div>60+ Components</div>
-            </h3>
-            <div>
-                Comprehensive library of cross-platform desktop UI components
-                for building feature-rich applications.
+                <dl class="hero-metrics">
+                    <div>
+                        <dt>支持能力</dt>
+                        <dd>数据库、SSH / SFTP、终端、AI</dd>
+                    </div>
+                    <div>
+                        <dt>平台</dt>
+                        <dd>macOS、Windows、Linux</dd>
+                    </div>
+                </dl>
             </div>
-        </div>
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-blue-500 dark:bg-blue-700">
-                    <Zap />
-                </div>
-                <div>High Performance</div>
-            </h3>
-            <div>
-                Virtualized Table and List components for smooth rendering of
-                large datasets with minimal memory footprint.
+            <div class="hero-visual">
+                <img :src="heroImage" alt="OnetCli 应用主界面截图" />
             </div>
-        </div>
+        </section>
 
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-red-500 dark:bg-red-700">
-                    <Palette />
-                </div>
-                <div>Themeable</div>
-            </h3>
-            <div>
-                Built-in theme system with with 20+ themes, and dark mode out of
-                the box.
+        <section class="section-block screenshots">
+            <div class="section-heading">
+                <p class="section-label">真实界面</p>
+                <h2>直接展示你每天会用到的工作界面</h2>
+                <p>
+                    不是抽象概念图，而是数据库管理、SSH 会话、SFTP 文件传输和 AI
+                    分析的实际桌面界面。
+                </p>
             </div>
-        </div>
+            <div class="screenshot-grid">
+                <article class="screenshot-card">
+                    <img :src="databaseImage" alt="OnetCli 数据库界面截图" />
+                    <h3>多数据库管理</h3>
+                    <p>在同一个客户端里处理 PostgreSQL、MySQL、SQLite、SQL Server、Oracle、ClickHouse。</p>
+                </article>
+                <article class="screenshot-card">
+                    <img :src="sshImage" alt="OnetCli SSH 与 SFTP 界面截图" />
+                    <h3>SSH 与 SFTP</h3>
+                    <p>从远程终端到文件传输，用一套连接信息覆盖排查、部署和日常维护。</p>
+                </article>
+                <article class="screenshot-card">
+                    <img :src="chatdbImage" alt="OnetCli AI 分析界面截图" />
+                    <h3>AI 助手</h3>
+                    <p>把自然语言 SQL、查询解释和数据分析收进应用内，不再来回切网页。</p>
+                </article>
+            </div>
+        </section>
 
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-yellow-500 dark:bg-yellow-700">
-                    <Layout />
-                </div>
-                <div>Flexible Layouts</div>
-            </h3>
-            <div>
-                Dock layout for panel arrangements, resizable panels, and
-                freeform layouts for any application structure.
+        <section class="section-block capability-section">
+            <div class="section-heading">
+                <p class="section-label">核心能力</p>
+                <h2>把原本分散的工具链收成一个工作台</h2>
             </div>
-        </div>
+            <div class="capability-grid">
+                <article class="capability-card">
+                    <h3>数据库</h3>
+                    <p>OnetCli 支持在同一界面管理多种数据库连接，查看数据、执行 SQL、浏览对象结构。</p>
+                </article>
+                <article class="capability-card">
+                    <h3>SSH / SFTP</h3>
+                    <p>OnetCli 支持 SSH 远程连接和 SFTP 文件管理，让排查和运维动作不需要切换到其他客户端。</p>
+                </article>
+                <article class="capability-card">
+                    <h3>本地终端</h3>
+                    <p>OnetCli 内置终端支持多标签页工作流，适合数据库调试、脚本执行和部署操作。</p>
+                </article>
+                <article class="capability-card">
+                    <h3>AI 助手</h3>
+                    <p>OnetCli 支持 AI 生成 SQL、解释查询和辅助分析，帮助你更快理解数据与结果。</p>
+                </article>
+            </div>
+        </section>
 
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-pink-500 dark:bg-pink-700">
-                    <BarChart3 />
-                </div>
-                <div>Data Visualization</div>
-            </h3>
-            <div>
-                Built-in chart components for visualizing data with Line, Bar,
-                Area, and Pie charts.
+        <section class="section-block value-section">
+            <div class="section-heading">
+                <p class="section-label">为什么选择 OnetCli</p>
+                <h2>更少切换，更快进入真正的工作状态</h2>
             </div>
-        </div>
+            <div class="value-list">
+                <article>
+                    <h3>统一工作流</h3>
+                    <p>数据库、远程连接、终端和 AI 不再分散在多个工具和多个浏览器标签里。</p>
+                </article>
+                <article>
+                    <h3>桌面体验</h3>
+                    <p>作为跨平台桌面应用，OnetCli 更适合重度日常使用，也更贴近工程师的实际工作节奏。</p>
+                </article>
+                <article>
+                    <h3>面向真实任务</h3>
+                    <p>站点展示的每个模块都直接对应开发、运维、数据分析中的高频动作，而不是抽象的技术概念。</p>
+                </article>
+            </div>
+        </section>
 
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-cyan-500 dark:bg-cyan-700">
-                    <SquareCode />
-                </div>
-                <div>Code Editor</div>
-            </h3>
-            <div>
-                High-performance code editor with LSP support, syntax
-                highlighting, powered by Tree-sitter and Rope.
+        <section class="section-block download-section">
+            <div class="section-heading">
+                <p class="section-label">下载</p>
+                <h2>先从 GitHub Releases 获取最新版本</h2>
+                <p>
+                    当前下载入口统一使用 GitHub Releases，便于快速上线和版本管理。
+                </p>
             </div>
-        </div>
-    </div>
+            <div class="download-panel">
+                <div>
+                    <h3>支持平台</h3>
+                    <p>macOS、Windows、Linux</p>
+                </div>
+                <a class="primary-action" href="https://github.com/hufei/onetcli/releases" target="_blank" rel="noreferrer">
+                    前往 GitHub Releases
+                </a>
+            </div>
+        </section>
+
+        <section class="section-block faq-section">
+            <div class="section-heading">
+                <p class="section-label">FAQ</p>
+                <h2>关于 OnetCli 的几个高频问题</h2>
+            </div>
+            <div class="faq-list">
+                <article>
+                    <h3>OnetCli 是什么？</h3>
+                    <p>OnetCli 是一个跨平台桌面客户端，用来统一处理数据库、SSH、终端与 AI 相关工作流。</p>
+                </article>
+                <article>
+                    <h3>OnetCli 支持哪些数据库？</h3>
+                    <p>当前仓库文档中明确提到 PostgreSQL、MySQL、SQLite、SQL Server、Oracle、ClickHouse、Redis 和 MongoDB。</p>
+                </article>
+                <article>
+                    <h3>OnetCli 是否支持 SSH 和 SFTP？</h3>
+                    <p>支持。OnetCli 内置 SSH 终端与 SFTP 文件管理器，适合远程排查与文件操作。</p>
+                </article>
+                <article>
+                    <h3>OnetCli 是否支持 AI 生成 SQL？</h3>
+                    <p>支持。AI 助手可用于自然语言生成 SQL、解释查询以及数据分析辅助。</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section-block updates-section">
+            <div class="section-heading">
+                <p class="section-label">最近更新</p>
+                <h2>保持持续迭代，而不是一次性发布</h2>
+            </div>
+            <div class="update-list">
+                <article>
+                    <h3>数据库体验持续增强</h3>
+                    <p>围绕表设计器、数据库树和数据操作流持续改进，降低日常管理成本。</p>
+                </article>
+                <article>
+                    <h3>终端与远程连接能力迭代</h3>
+                    <p>在终端、SSH、SFTP 等模块持续补齐高频交互细节。</p>
+                </article>
+                <article>
+                    <h3>查看完整版本记录</h3>
+                    <p><a :href="withBase('/changelog')">进入更新日志</a></p>
+                </article>
+            </div>
+        </section>
+
+        <script type="application/ld+json">
+            {{ structuredData }}
+        </script>
+    </main>
 </template>
 
 <script setup>
-import {
-    Blocks,
-    Zap,
-    Palette,
-    Layout,
-    BarChart3,
-    SquareCode,
-    Github,
-} from "lucide-vue-next";
+import { withBase } from "vitepress";
+
+const heroImage = withBase("/screenshots/app.png");
+const databaseImage = withBase("/screenshots/database.png");
+const sshImage = withBase("/screenshots/ssh.png");
+const chatdbImage = withBase("/screenshots/chatdb.png");
+const structuredData = JSON.stringify(
+    [
+        {
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            name: "OnetCli",
+            applicationCategory: "DeveloperApplication",
+            operatingSystem: "macOS, Windows, Linux",
+            description:
+                "OnetCli 是一个统一管理数据库、SSH、终端与 AI 工作流的跨平台桌面客户端。",
+            downloadUrl: "https://github.com/hufei/onetcli/releases",
+        },
+        {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: [
+                {
+                    "@type": "Question",
+                    name: "OnetCli 是什么？",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "OnetCli 是一个跨平台桌面客户端，用来统一处理数据库、SSH、终端与 AI 相关工作流。",
+                    },
+                },
+                {
+                    "@type": "Question",
+                    name: "OnetCli 是否支持 SSH 和 SFTP？",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "支持。OnetCli 内置 SSH 终端与 SFTP 文件管理器，适合远程排查与文件操作。",
+                    },
+                },
+                {
+                    "@type": "Question",
+                    name: "OnetCli 是否支持 AI 生成 SQL？",
+                    acceptedAnswer: {
+                        "@type": "Answer",
+                        text: "支持。AI 助手可用于自然语言生成 SQL、解释查询以及辅助数据分析。",
+                    },
+                },
+            ],
+        },
+    ],
+    null,
+    2,
+);
 </script>
 
 <style lang="scss">
 @reference "./.vitepress/theme/style.css";
 
-.banner {
-    @apply flex flex-col gap-2 lg:gap-4 -mt-20  py-12 xl:py-30 text-center border border-b-0 border-(--border);
+.home-page {
+    @apply flex flex-col gap-8 pb-16;
+}
 
-    background: url("/home.svg") no-repeat;
-    background-position: bottom -90px right -90px;
+.hero,
+.section-block {
+    @apply border border-(--border) rounded-[28px] overflow-hidden;
+}
+
+.hero {
+    @apply grid gap-8 px-6 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:px-10 lg:py-12;
+    background:
+        radial-gradient(circle at top right, rgba(122, 92, 255, 0.34), transparent 34%),
+        linear-gradient(135deg, #090314 0%, #140726 48%, #1b0d39 100%);
+    color: white;
+
+    .hero-copy {
+        @apply flex flex-col justify-center gap-5;
+    }
+
+    .eyebrow,
+    .section-label {
+        @apply text-xs tracking-[0.28em] uppercase text-white/60;
+    }
 
     h1 {
-        @apply mt-20 text-3xl xl:text-5xl font-bold mb-2 text-(--primary);
+        @apply m-0 text-4xl leading-tight font-semibold lg:text-6xl;
+        font-family: "Space Grotesk", "PingFang SC", "Microsoft YaHei", sans-serif;
     }
-    .banner-description {
-        @apply text-lg xl:text-2xl text-(--muted-foreground);
+
+    .hero-description {
+        @apply m-0 max-w-2xl text-base leading-7 text-white/78 lg:text-lg;
     }
-    .actions {
-        @apply gap-4 flex justify-center text-sm;
-        a {
-            @apply flex items-center h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5 no-underline
-            bg-(--secondary) hover:bg-(--secondary)/70 text-(--secondary-foreground);
 
-            &.btn-primary {
-                @apply bg-(--primary) hover:bg-(--primary)/90 text-(--primary-foreground);
-            }
+    .hero-actions {
+        @apply flex flex-wrap gap-3;
+    }
 
-            .lucide {
-                @apply w-4 h-4;
-            }
+    .hero-metrics {
+        @apply grid gap-4 pt-3 md:grid-cols-2;
+
+        div {
+            @apply rounded-2xl border border-white/10 bg-white/5 px-4 py-4;
+        }
+
+        dt {
+            @apply text-sm text-white/55;
+        }
+
+        dd {
+            @apply mt-2 text-base font-medium text-white;
         }
     }
-    .version {
-        @apply text-sm text-(--muted-foreground) pb-10;
-        a {
-            @apply text-(--muted-foreground) no-underline hover:underline;
+
+    .hero-visual {
+        @apply flex items-center justify-center;
+
+        img {
+            @apply w-full rounded-[24px] border border-white/10 shadow-2xl;
         }
     }
 }
 
-.features {
-    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mb-12 border-b border-r  border-(--border);
+.primary-action,
+.secondary-action {
+    @apply inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-medium no-underline transition-transform duration-200;
 }
 
-.feature-card {
-    @apply flex flex-col text-sm gap-2 py-3.5 px-5 border border-b-0 border-(--border);
-    @apply border-r-0 last:border-r-0 md:last:border-b-0 lg:last:border-b-0;
+.primary-action {
+    @apply bg-white text-[#180c35] hover:-translate-y-0.5;
+}
 
-    h3 {
-        @apply m-0 p-0 text-lg text-(--primary) flex gap-3 items-center;
+.secondary-action {
+    @apply border border-white/18 text-white hover:bg-white/8;
+}
 
-        .icon {
-            @apply flex h-9 w-9 items-center justify-center rounded-md text-white;
+.section-block {
+    @apply bg-(--background) px-6 py-8 lg:px-10;
+}
 
-            .lucide {
-                @apply w-5 h-5;
-            }
-        }
+.section-heading {
+    @apply mb-6 flex flex-col gap-3;
+
+    .section-label {
+        @apply text-xs tracking-[0.28em] uppercase text-(--muted-foreground);
+    }
+
+    h2 {
+        @apply m-0 text-3xl font-semibold text-(--foreground);
+        font-family: "Space Grotesk", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    p {
+        @apply m-0 max-w-3xl text-base leading-7 text-(--muted-foreground);
+    }
+}
+
+.screenshot-grid,
+.capability-grid,
+.value-list,
+.faq-list,
+.update-list {
+    @apply grid gap-4;
+}
+
+.screenshot-grid {
+    @apply lg:grid-cols-3;
+}
+
+.capability-grid {
+    @apply md:grid-cols-2;
+}
+
+.value-list {
+    @apply lg:grid-cols-3;
+}
+
+.faq-list,
+.update-list {
+    @apply md:grid-cols-2;
+}
+
+.screenshot-card,
+.capability-card,
+.value-list article,
+.faq-list article,
+.update-list article,
+.download-panel {
+    @apply rounded-[24px] border border-(--border) bg-(--secondary) p-5;
+}
+
+.screenshot-card {
+    @apply flex flex-col gap-4;
+
+    img {
+        @apply aspect-[16/10] w-full rounded-[18px] object-cover;
+    }
+}
+
+.download-panel {
+    @apply flex flex-col gap-4 md:flex-row md:items-center md:justify-between;
+}
+
+.section-block h3 {
+    @apply m-0 text-xl font-semibold text-(--foreground);
+}
+
+.section-block p,
+.section-block li {
+    @apply text-(--muted-foreground);
+}
+
+@media (max-width: 767px) {
+    .hero {
+        @apply rounded-[24px];
+    }
+
+    .section-block {
+        @apply rounded-[24px];
     }
 }
 </style>

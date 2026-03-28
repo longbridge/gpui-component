@@ -1110,3 +1110,51 @@
 
 ### 剩余风险
 - 当前没有 UI 自动化测试直接断言“已切到 SQL 预览页并显示确认框”，该部分仍建议后续补一条视图层或人工冒烟验证。
+
+---
+
+## 审查报告（OnetCli 官网与 GitHub Pages）
+生成时间：2026-03-28 14:49:28 +0800
+
+### 需求完整性检查
+- 目标明确：将现有 `docs/` VitePress 站点改造成 OnetCli 官网，并先打通 GitHub Pages 部署。
+- 范围明确：首页、功能页、下载页、更新日志页、SEO/GEO 基础设施、GitHub Pages 工作流与本地验证均已覆盖。
+- 交付物明确：代码补丁、上下文摘要、设计规格、实施计划、操作日志、验证结果与审查报告均已落地。
+- 风险与依赖明确：本地环境无 `bun`，本次用 `npm` 完成本地构建验证；远程工作流仍依赖 Bun 安装和 GitHub Pages 设置。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：90/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：94/100
+- 风险评估：91/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`node --test tests/site-config.test.mjs tests/site-content.test.mjs tests/seo-and-deploy.test.mjs tests/legacy-source.test.mjs`
+  - 结果：通过（10 passed）
+- 已执行：`npm install --no-package-lock`
+  - 结果：通过
+- 已执行：`npm run build`
+  - 结果：通过
+
+### 结论
+- 站点品牌、导航、页脚、首页、功能页、下载页、更新日志页均已切换为 OnetCli 官网语义。
+- 首页已具备 FAQ、`SoftwareApplication` 与 `FAQPage` 结构化数据，满足基础 SEO/GEO 要求。
+- 旧 gpui 文档与内部规格目录已通过 `srcExclude` 排除出发布源，避免旧内容继续进入 GitHub Pages。
+- GitHub Pages 正式工作流已改为面向 `main` 分支推送部署，并保留 docs 构建与 Pages 上传主链路。
+
+### 剩余风险
+- 当前只做了静态构建与文件级测试，没有跑浏览器级视觉回归或 Lighthouse 指标验证。
+- `docs/` 目录内仍保留部分历史文件作为仓库资料，但已通过 `srcExclude` 避免发布；后续如需进一步清理，可再做整理。
+- 如果后续启用自定义域名，需要把 `base` 从 `/onetcli/` 调整为对应路径或根路径。
+
+### 后续调整
+- 已按最新需求把 GitHub Pages 正式部署工作流切换为监听 `dev` 分支。
+- 已补测首页入口文件，确认不会再混入旧的 gpui Markdown 内容。

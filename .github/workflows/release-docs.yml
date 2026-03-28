@@ -1,28 +1,28 @@
 name: Release Docs
 on:
-  workflow_run:
-    workflows: ["Release Crate"]
-    types:
-      - completed
+  push:
+    branches:
+      - dev
   workflow_dispatch:
 permissions:
   contents: read
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: oven-sh/setup-bun@v1
       - name: Install
         working-directory: docs
-        run: bun install
+        run: bun install --frozen-lockfile
       - name: Build
         working-directory: docs
         run: |
