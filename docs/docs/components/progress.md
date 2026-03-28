@@ -10,139 +10,274 @@ Progress components visually represent the completion percentage of a task. The 
 - **[Progress](#progress)** - A linear horizontal progress bar
 - **[ProgressCircle](#progresscircle)** - A circular progress indicator
 
-Both components feature smooth animations, customizable colors, and automatic styling that adapts to the current theme.
+Both components feature smooth transition animations when the value changes, a loading (indeterminate) animation mode, customizable colors, and automatic styling that adapts to the current theme.
 
 ## Progress
 
 ```rust
-use gpui_component::progress::{Progress, ProgressCircle};
+use gpui_component::progress::Progress;
 ```
 
 ### Usage
 
 ```rust
 Progress::new("my-progress")
-    .value(50.0) // 50% complete
+    .value(75.0) // 75% complete
 ```
 
 ### Different Progress Values
 
 ```rust
-// Starting state (0%)
-Progress::new("progress-0")
-    .value(0.0)
-
-// Partially complete (25%)
-Progress::new("progress-25")
-    .value(25.0)
-
-// Nearly complete (75%)
-Progress::new("progress-75")
-    .value(75.0)
-
-// Complete (100%)
-Progress::new("progress-100")
-    .value(100.0)
+Progress::new("progress-0").value(0.0)
+Progress::new("progress-25").value(25.0)
+Progress::new("progress-75").value(75.0)
+Progress::new("progress-100").value(100.0)
 ```
 
-### Indeterminate State
+### Loading State
+
+Use `.loading(true)` to show an indeterminate animation when the actual progress is unknown. The `value` is ignored while loading is active.
 
 ```rust
-// For unknown progress duration
-Progress::new("indeterminate")
-    .value(-1.0) // Any negative value shows as 0%
+// Indeterminate loading animation
+Progress::new("loading").loading(true)
 
-// Or explicitly set to 0 for starting state
-Progress::new("starting")
-    .value(0.0)
+// Toggle between loading and determinate
+Progress::new("my-progress")
+    .loading(self.is_loading)
+    .value(self.progress)
+```
+
+### Sizes
+
+`Progress` implements the `Sizable` trait:
+
+```rust
+Progress::new("xs").value(50.0).xsmall()  // 4px height
+Progress::new("sm").value(50.0).small()   // 6px height
+Progress::new("md").value(50.0)           // 8px height (default)
+Progress::new("lg").value(50.0).large()   // 10px height
+```
+
+### Custom Style
+
+The component implements the `Styled` trait, allowing custom height, border radius, color, and border:
+
+```rust
+Progress::new("custom")
+    .value(32.0)
+    .h(px(16.))
+    .rounded(px(2.))
+    .color(cx.theme().green_light)
+    .border_2()
+    .border_color(cx.theme().green)
 ```
 
 ### Dynamic Progress Updates
 
 ```rust
-struct MyComponent {
-    progress_value: f32,
+struct MyView {
+    value: f32,
+    is_loading: bool,
 }
 
-impl MyComponent {
-    fn update_progress(&mut self, new_value: f32) {
-        self.progress_value = new_value.clamp(0.0, 100.0);
-    }
-
+impl Render for MyView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_3()
             .child(
                 h_flex()
                     .gap_2()
-                    .child(Button::new("decrease").label("-").on_click(
+                    .child(
+                        Button::new("toggle-loading")
+                            .label("Loading")
+                            .selected(self.is_loading)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.is_loading = !this.is_loading;
+                                cx.notify();
+                            })),
+                    )
+                    .child(Button::new("inc").icon(IconName::Plus).on_click(
                         cx.listener(|this, _, _, _| {
-                            this.update_progress(this.progress_value - 10.0);
-                        })
-                    ))
-                    .child(Button::new("increase").label("+").on_click(
-                        cx.listener(|this, _, _, _| {
-                            this.update_progress(this.progress_value + 10.0);
-                        })
-                    ))
+                            this.value = (this.value + 10.).min(100.);
+                        }),
+                    )),
             )
-            .child(Progress::new("progress").value(self.progress_value))
-            .child(format!("{}%", self.progress_value as i32))
+            .child(
+                Progress::new("progress")
+                    .value(self.value)
+                    .loading(self.is_loading),
+            )
     }
 }
 ```
 
-### File Upload Progress
+### API Reference
+
+| Method | Type | Description |
+|---|---|---|
+| `new(id)` | `ElementId` | Create a new progress bar |
+| `value(v)` | `f32` | Set progress value (0–100), clamped automatically |
+| `loading(v)` | `bool` | Enable indeterminate loading animation; ignores `value` when `true` |
+| `color(c)` | `impl Into<Hsla>` | Override the fill color (defaults to `theme.progress_bar`) |
+| `xsmall()` / `small()` / `large()` | — | Set predefined height via `Sizable` |
+| `Styled` trait methods | — | Custom height, border radius, border, etc. |
+
+## ProgressCircle
+
+A circular progress indicator that displays progress as an arc. Ideal for compact spaces, inline labels, or as a download/upload indicator.
+
+```rust
+use gpui_component::progress::ProgressCircle;
+```
+
+### Usage
+
+```rust
+ProgressCircle::new("circle").value(50.0)
+```
+
+### Loading State
+
+```rust
+// Indeterminate rotating arc animation
+ProgressCircle::new("loading").loading(true)
+
+// Toggle between loading and determinate
+ProgressCircle::new("circle")
+    .loading(self.is_loading)
+    .value(self.progress)
+```
+
+### Sizes
+
+`ProgressCircle` implements the `Sizable` trait. Named sizes map to fixed pixel dimensions; use `.size(px(n))` for custom sizes:
+
+```rust
+ProgressCircle::new("xs").value(50.0).xsmall()    // size_2
+ProgressCircle::new("sm").value(50.0).small()     // size_3
+ProgressCircle::new("md").value(50.0)             // size_4 (default)
+ProgressCircle::new("lg").value(50.0).large()     // size_5
+ProgressCircle::new("xl").value(50.0).size_20()   // 80px
+```
+
+### Custom Color
+
+```rust
+ProgressCircle::new("green").value(75.0).color(cx.theme().green)
+ProgressCircle::new("yellow").value(40.0).color(cx.theme().yellow)
+ProgressCircle::new("primary").value(60.0).color(cx.theme().primary)
+```
+
+### With Inner Content
+
+`ProgressCircle` implements `ParentElement`, so you can place content inside the circle:
+
+```rust
+ProgressCircle::new("circle-with-label")
+    .value(self.value)
+    .size_20()
+    .child(
+        v_flex()
+            .size_full()
+            .items_center()
+            .justify_center()
+            .gap_1()
+            .child(
+                div()
+                    .child(format!("{}%", self.value as i32))
+                    .text_color(cx.theme().progress_bar),
+            )
+            .child(div().child("Loading").text_xs()),
+    )
+```
+
+### Inline with Label
+
+```rust
+h_flex()
+    .gap_2()
+    .items_center()
+    .child(
+        ProgressCircle::new("download")
+            .color(cx.theme().primary)
+            .value(self.progress)
+            .size_4(),
+    )
+    .child("Downloading...")
+```
+
+### API Reference
+
+| Method | Type | Description |
+|---|---|---|
+| `new(id)` | `ElementId` | Create a new circular progress indicator |
+| `value(v)` | `f32` | Set progress value (0–100), clamped automatically |
+| `loading(v)` | `bool` | Enable indeterminate loading animation; ignores `value` when `true` |
+| `color(c)` | `impl Into<Hsla>` | Override the arc color (defaults to `theme.progress_bar`) |
+| `xsmall()` / `small()` / `large()` | — | Set predefined size via `Sizable` |
+| `size(px(n))` | `Pixels` | Set custom size |
+| `ParentElement` | — | Place content inside the circle |
+
+## Examples
+
+### File Upload
 
 ```rust
 struct FileUpload {
-    bytes_uploaded: u64,
-    total_bytes: u64,
+    uploaded: u64,
+    total: u64,
 }
 
 impl FileUpload {
-    fn progress_percentage(&self) -> f32 {
-        if self.total_bytes == 0 {
-            0.0
-        } else {
-            (self.bytes_uploaded as f32 / self.total_bytes as f32) * 100.0
-        }
+    fn progress(&self) -> f32 {
+        if self.total == 0 { return 0.0; }
+        (self.uploaded as f32 / self.total as f32) * 100.0
     }
 
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_2()
-            .child("Uploading file...")
-            .child(Progress::new("upload-progress").value(self.progress_percentage()))
-            .child(format!(
-                "{} / {} bytes",
-                self.bytes_uploaded,
-                self.total_bytes
-            ))
+            .child(
+                h_flex()
+                    .justify_between()
+                    .child("Uploading...")
+                    .child(format!("{:.0}%", self.progress())),
+            )
+            .child(Progress::new("upload").value(self.progress()))
     }
 }
 ```
 
-### Loading States
+### Initialization with Loading State
 
 ```rust
-struct LoadingComponent {
-    is_loading: bool,
+struct AppInit {
+    loading: bool,
     progress: f32,
 }
 
-impl LoadingComponent {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+impl Render for AppInit {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_3()
-            .when(self.is_loading, |this| {
-                this.child("Loading...")
-                    .child(Progress::new("loading-progress").value(self.progress))
-            })
-            .when(!self.is_loading, |this| {
-                this.child("Task completed!")
-                    .child(Progress::new("loading-progress").value(100.0))
-            })
+            .child(
+                h_flex()
+                    .gap_2()
+                    .items_center()
+                    .child(
+                        ProgressCircle::new("init-circle")
+                            .loading(self.loading)
+                            .value(self.progress)
+                            .size_4(),
+                    )
+                    .child(if self.loading { "Initializing..." } else { "Ready" }),
+            )
+            .child(
+                Progress::new("init-bar")
+                    .loading(self.loading)
+                    .value(self.progress),
+            )
     }
 }
 ```
@@ -150,152 +285,16 @@ impl LoadingComponent {
 ### Multi-Step Process
 
 ```rust
-enum ProcessStep {
-    Initializing,
-    Processing,
-    Finalizing,
-    Complete,
-}
-
-struct MultiStepProcess {
-    current_step: ProcessStep,
+struct Install {
+    step: usize,       // current package index
+    total: usize,      // total packages
     step_progress: f32,
 }
 
-impl MultiStepProcess {
-    fn overall_progress(&self) -> f32 {
-        let base_progress = match self.current_step {
-            ProcessStep::Initializing => 0.0,
-            ProcessStep::Processing => 33.33,
-            ProcessStep::Finalizing => 66.66,
-            ProcessStep::Complete => 100.0,
-        };
-
-        if matches!(self.current_step, ProcessStep::Complete) {
-            100.0
-        } else {
-            base_progress + (self.step_progress / 3.0)
-        }
-    }
-
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .child(match self.current_step {
-                ProcessStep::Initializing => "Initializing...",
-                ProcessStep::Processing => "Processing data...",
-                ProcessStep::Finalizing => "Finalizing...",
-                ProcessStep::Complete => "Complete!",
-            })
-            .child(Progress::new("overall-progress").value(self.overall_progress()))
-            .child(format!("{:.1}% complete", self.overall_progress()))
-    }
-}
-```
-
-## ProgressCircle
-
-A circular progress indicator component that displays progress as an arc around a circle. Perfect for compact spaces, button icons, or when you want a more modern, space-efficient progress display.
-
-```rust
-use gpui_component::progress::ProgressCircle;
-```
-
-### Basic ProgressCircle
-
-```rust
-ProgressCircle::new("my-progress-circle")
-    .value(50.0) // 50% complete
-```
-
-### Different Sizes
-
-ProgressCircle supports different sizes through the `Sizable` trait:
-
-```rust
-// Extra small
-ProgressCircle::new("progress-xs")
-    .value(25.0)
-    .xsmall()
-
-// Small
-ProgressCircle::new("progress-sm")
-    .value(50.0)
-    .small()
-
-// Medium (default)
-ProgressCircle::new("progress-md")
-    .value(75.0)
-    .medium()
-
-// Large
-ProgressCircle::new("progress-lg")
-    .value(100.0)
-    .large()
-
-// Custom size
-ProgressCircle::new("progress-custom")
-    .value(60.0)
-    .size(px(80.))
-```
-
-### Custom Colors
-
-```rust
-// Use theme colors (default)
-ProgressCircle::new("progress-default")
-    .value(50.0)
-
-// Custom color
-ProgressCircle::new("progress-green")
-    .value(75.0)
-    .color(cx.theme().green)
-
-// Different color variants
-ProgressCircle::new("progress-blue")
-    .value(60.0)
-    .color(cx.theme().blue)
-
-ProgressCircle::new("progress-yellow")
-    .value(40.0)
-    .color(cx.theme().yellow)
-
-ProgressCircle::new("progress-red")
-    .value(80.0)
-    .color(cx.theme().red)
-```
-
-### With Labels
-
-```rust
-h_flex()
-    .gap_2()
-    .items_center()
-    .child(
-        ProgressCircle::new("download-progress")
-            .value(65.0)
-            .size_4()
-    )
-    .child("Downloading... 65%")
-```
-
-## Examples
-
-### Task Progress with Status
-
-```rust
-struct TaskProgress {
-    completed_tasks: usize,
-    total_tasks: usize,
-}
-
-impl TaskProgress {
-    fn progress_value(&self) -> f32 {
-        if self.total_tasks == 0 {
-            0.0
-        } else {
-            (self.completed_tasks as f32 / self.total_tasks as f32) * 100.0
-        }
+impl Install {
+    fn overall(&self) -> f32 {
+        if self.total == 0 { return 0.0; }
+        (self.step as f32 + self.step_progress / 100.0) / self.total as f32 * 100.0
     }
 
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -304,117 +303,17 @@ impl TaskProgress {
             .child(
                 h_flex()
                     .justify_between()
-                    .child("Task Progress")
-                    .child(format!("{}/{}", self.completed_tasks, self.total_tasks))
+                    .child(format!("Package {}/{}", self.step + 1, self.total))
+                    .child(format!("{:.0}%", self.overall())),
             )
-            .child(Progress::new("task-progress").value(self.progress_value()))
-            .when(self.completed_tasks == self.total_tasks, |this| {
-                this.child("All tasks completed!")
-            })
-    }
-}
-```
-
-### Download Progress with Speed
-
-```rust
-struct DownloadProgress {
-    downloaded: u64,
-    total_size: u64,
-    speed_mbps: f32,
-}
-
-impl DownloadProgress {
-    fn eta_seconds(&self) -> u64 {
-        if self.speed_mbps == 0.0 {
-            0
-        } else {
-            let remaining_mb = (self.total_size - self.downloaded) as f32 / 1_000_000.0;
-            (remaining_mb / self.speed_mbps) as u64
-        }
-    }
-
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let progress = (self.downloaded as f32 / self.total_size as f32) * 100.0;
-
-        v_flex()
-            .gap_2()
+            .child(Progress::new("overall").value(self.overall()))
             .child(
                 h_flex()
-                    .justify_between()
-                    .child("Downloading...")
-                    .child(format!("{:.1}%", progress))
-            )
-            .child(Progress::new("download-progress").value(progress))
-            .child(
-                h_flex()
-                    .justify_between()
-                    .child(format!("{:.1} MB/s", self.speed_mbps))
-                    .child(format!("ETA: {}s", self.eta_seconds()))
-            )
-    }
-}
-```
-
-### Installation Progress
-
-```rust
-struct InstallationProgress {
-    current_package: String,
-    package_index: usize,
-    total_packages: usize,
-    package_progress: f32,
-}
-
-impl InstallationProgress {
-    fn overall_progress(&self) -> f32 {
-        if self.total_packages == 0 {
-            0.0
-        } else {
-            let completed_packages = self.package_index as f32;
-            let current_package_contribution = self.package_progress / 100.0;
-            let total_progress = (completed_packages + current_package_contribution)
-                / self.total_packages as f32;
-            total_progress * 100.0
-        }
-    }
-
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .child("Installing packages...")
-            .child(
-                v_flex()
                     .gap_2()
-                    .child(
-                        h_flex()
-                            .justify_between()
-                            .child(format!("Overall Progress"))
-                            .child(format!("{}/{}", self.package_index + 1, self.total_packages))
-                    )
-                    .child(Progress::new("overall-progress").value(self.overall_progress()))
-            )
-            .child(
-                v_flex()
-                    .gap_2()
-                    .child(format!("Installing: {}", self.current_package))
-                    .child(Progress::new("package-progress").value(self.package_progress))
+                    .items_center()
+                    .child(Progress::new("package").value(self.step_progress).small())
+                    .child("Current package"),
             )
     }
 }
-```
-
-## Styling and Theming
-
-The Progress component automatically adapts to the current theme:
-
-### Theme Colors
-
-```rust
-// The progress bar uses theme colors automatically
-// Background: theme.progress_bar with 20% opacity
-// Fill: theme.progress_bar at full opacity
-
-// These colors adapt to light/dark theme automatically
-Progress::new("themed-progress").value(75.0) // Uses theme colors
 ```

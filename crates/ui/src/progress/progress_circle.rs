@@ -2,12 +2,12 @@ use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas, px,
-    relative,
+    IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas,
+    ease_in_out, px, relative,
 };
 use gpui::{Bounds, div};
-use std::f32::consts::TAU;
 use instant::Duration;
+use std::f32::consts::TAU;
 
 use super::ProgressState;
 use crate::plot::shape::{Arc, ArcData};
@@ -21,6 +21,7 @@ pub struct ProgressCircle {
     value: f32,
     size: Size,
     children: Vec<AnyElement>,
+    loading: bool,
 }
 
 impl ProgressCircle {
@@ -33,7 +34,17 @@ impl ProgressCircle {
             style: StyleRefinement::default(),
             size: Size::default(),
             children: Vec::new(),
+            loading: false,
         }
+    }
+
+    /// Enable indeterminate loading animation.
+    ///
+    /// When `loading` is `true`, the `value` is ignored and an infinite
+    /// rotating arc animation is shown instead.
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.loading = loading;
+        self
     }
 
     /// Set the color of the progress circle.
@@ -50,52 +61,44 @@ impl ProgressCircle {
         self
     }
 
-    fn render_circle(current_value: f32, color: Hsla) -> impl IntoElement {
+    /// Render the arc canvas. `start_value` and `end_value` are in 0.0–100.0 percentage.
+    /// The progress arc is skipped when `end_value <= 0`.
+    fn render_circle(start_value: f32, end_value: f32, color: Hsla) -> impl IntoElement {
         struct PrepaintState {
-            current_value: f32,
+            start_value: f32,
+            end_value: f32,
             actual_inner_radius: f32,
             actual_outer_radius: f32,
             bounds: Bounds<Pixels>,
         }
 
         canvas(
-            {
-                let display_value = current_value;
-                move |bounds: Bounds<Pixels>, _window: &mut Window, _cx: &mut App| {
-                    // Use 15% of width as stroke width, but max 5px
-                    let stroke_width = (bounds.size.width * 0.15).min(px(5.));
-
-                    // Calculate actual size from bounds
-                    let actual_size = bounds.size.width.min(bounds.size.height);
-                    let actual_radius = (actual_size.as_f32() - stroke_width.as_f32()) / 2.;
-                    let actual_inner_radius = actual_radius - stroke_width.as_f32() / 2.;
-                    let actual_outer_radius = actual_radius + stroke_width.as_f32() / 2.;
-
-                    PrepaintState {
-                        current_value: display_value,
-                        actual_inner_radius,
-                        actual_outer_radius,
-                        bounds,
-                    }
+            move |bounds: Bounds<Pixels>, _window: &mut Window, _cx: &mut App| {
+                let stroke_width = (bounds.size.width * 0.15).min(px(5.));
+                let actual_size = bounds.size.width.min(bounds.size.height);
+                let actual_radius = (actual_size.as_f32() - stroke_width.as_f32()) / 2.;
+                PrepaintState {
+                    start_value,
+                    end_value,
+                    actual_inner_radius: actual_radius - stroke_width.as_f32() / 2.,
+                    actual_outer_radius: actual_radius + stroke_width.as_f32() / 2.,
+                    bounds,
                 }
             },
             move |_bounds, prepaint, window: &mut Window, _cx: &mut App| {
-                // Draw background circle
-                let bg_arc_data = ArcData {
-                    data: &(),
-                    index: 0,
-                    value: 100.,
-                    start_angle: 0.,
-                    end_angle: TAU,
-                    pad_angle: 0.,
-                };
-
-                let bg_arc = Arc::new()
+                let arc = Arc::new()
                     .inner_radius(prepaint.actual_inner_radius)
                     .outer_radius(prepaint.actual_outer_radius);
 
-                bg_arc.paint(
-                    &bg_arc_data,
+                arc.paint(
+                    &ArcData {
+                        data: &(),
+                        index: 0,
+                        value: 100.,
+                        start_angle: 0.,
+                        end_angle: TAU,
+                        pad_angle: 0.,
+                    },
                     color.opacity(0.2),
                     None,
                     None,
@@ -103,24 +106,18 @@ impl ProgressCircle {
                     window,
                 );
 
-                // Draw progress arc
-                if prepaint.current_value > 0. {
-                    let progress_angle = (prepaint.current_value / 100.) * TAU;
-                    let progress_arc_data = ArcData {
-                        data: &(),
-                        index: 1,
-                        value: prepaint.current_value,
-                        start_angle: 0.,
-                        end_angle: progress_angle,
-                        pad_angle: 0.,
-                    };
-
-                    let progress_arc = Arc::new()
-                        .inner_radius(prepaint.actual_inner_radius)
-                        .outer_radius(prepaint.actual_outer_radius);
-
-                    progress_arc.paint(
-                        &progress_arc_data,
+                if prepaint.end_value > 0. {
+                    let start_angle = (prepaint.start_value / 100.) * TAU;
+                    let end_angle = (prepaint.end_value / 100.) * TAU;
+                    arc.paint(
+                        &ArcData {
+                            data: &(),
+                            index: 1,
+                            value: prepaint.end_value,
+                            start_angle,
+                            end_angle,
+                            pad_angle: 0.,
+                        },
                         color,
                         None,
                         None,
@@ -157,11 +154,12 @@ impl ParentElement for ProgressCircle {
 impl RenderOnce for ProgressCircle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let value = self.value;
+        let loading = self.loading;
         let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
         let prev_value = state.read(cx).value;
+        let has_changed = prev_value != value;
 
         let color = self.color.unwrap_or(cx.theme().progress_bar);
-        let has_changed = prev_value != value;
 
         div()
             .id(self.id.clone())
@@ -180,17 +178,38 @@ impl RenderOnce for ProgressCircle {
             .children(self.children)
             .map(|this| {
                 if has_changed {
+                    let duration = Duration::from_secs_f64(0.15);
+                    cx.spawn({
+                        let state = state.clone();
+                        async move |cx| {
+                            cx.background_executor().timer(duration).await;
+                            _ = state.update(cx, |this, _| this.value = value);
+                        }
+                    })
+                    .detach();
+
                     this.with_animation(
                         format!("progress-circle-{}", prev_value),
-                        Animation::new(Duration::from_secs_f64(0.15)),
+                        Animation::new(duration),
                         move |this, delta| {
-                            let animated_value = prev_value + (value - prev_value) * delta;
-                            this.child(Self::render_circle(animated_value, color))
+                            let v = prev_value + (value - prev_value) * delta;
+                            this.child(Self::render_circle(0., v, color))
+                        },
+                    )
+                    .into_any_element()
+                } else if loading {
+                    this.with_animation(
+                        "progress-circle-loading",
+                        Animation::new(Duration::from_secs(1)).repeat(),
+                        move |this, delta| {
+                            let end = ease_in_out(delta) * 100.;
+                            let start = ease_in_out(((delta - 0.5) / 0.5).clamp(0., 1.)) * 100.;
+                            this.child(Self::render_circle(start, end, color))
                         },
                     )
                     .into_any_element()
                 } else {
-                    this.child(Self::render_circle(value, color))
+                    this.child(Self::render_circle(0., value, color))
                         .into_any_element()
                 }
             })
