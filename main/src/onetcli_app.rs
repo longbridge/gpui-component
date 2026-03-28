@@ -3,6 +3,13 @@ use gpui::{
     App, AppContext, Context, Entity, IntoElement, KeyBinding, ParentElement, Render, Styled, Task,
     Window, actions, div,
 };
+#[cfg(target_os = "macos")]
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+#[cfg(target_os = "macos")]
+use cocoa::base::{id, nil};
+#[cfg(target_os = "macos")]
+use objc::{msg_send, sel, sel_impl};
 
 actions!(
     onetcli_app,
@@ -26,6 +33,7 @@ actions!(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WindowToggleAction {
     Minimize,
+    Restore,
     Activate,
 }
 
@@ -60,21 +68,65 @@ fn build_window_toggle_plan(
     if has_any_window {
         return Some(WindowTogglePlan {
             target: WindowToggleTarget::FallbackWindow,
-            action: WindowToggleAction::Activate,
+            action: WindowToggleAction::Restore,
         });
     }
 
     None
 }
 
+fn build_window_reopen_plan(
+    has_active_window: bool,
+    has_any_window: bool,
+) -> Option<WindowTogglePlan> {
+    if has_active_window || !has_any_window {
+        return None;
+    }
+
+    Some(WindowTogglePlan {
+        target: WindowToggleTarget::FallbackWindow,
+        action: WindowToggleAction::Restore,
+    })
+}
+
 #[cfg(target_os = "macos")]
 fn minimize_window_shortcuts() -> &'static [&'static str] {
-    &["cmd-m"]
+    &[]
 }
 
 #[cfg(not(target_os = "macos"))]
 fn minimize_window_shortcuts() -> &'static [&'static str] {
     &["ctrl-space"]
+}
+
+#[cfg(target_os = "macos")]
+fn restore_window(window: &mut Window) {
+    let Ok(window_handle) = window.window_handle() else {
+        window.activate_window();
+        return;
+    };
+
+    let RawWindowHandle::AppKit(handle) = window_handle.as_raw() else {
+        window.activate_window();
+        return;
+    };
+
+    unsafe {
+        let ns_view: id = handle.ns_view.as_ptr().cast();
+        let ns_window: id = msg_send![ns_view, window];
+        if ns_window != nil {
+            let _: () = msg_send![ns_window, deminiaturize: nil];
+            let _: () = msg_send![ns_window, makeKeyAndOrderFront: nil];
+            return;
+        }
+    }
+
+    window.activate_window();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn restore_window(window: &mut Window) {
+    window.activate_window();
 }
 
 #[derive(Clone)]
@@ -172,9 +224,36 @@ fn minimize_window(cx: &mut App) {
             WindowToggleAction::Minimize => {
                 window.minimize_window();
             }
+            WindowToggleAction::Restore => {
+                restore_window(window);
+            }
             WindowToggleAction::Activate => {
                 window.activate_window();
             }
+        });
+    });
+}
+
+pub fn reopen_last_window(cx: &mut App) {
+    let active_window = cx.active_window();
+    let fallback_window = cx.windows().into_iter().next();
+    let plan = build_window_reopen_plan(active_window.is_some(), fallback_window.is_some());
+    let Some(plan) = plan else {
+        return;
+    };
+
+    let Some(target_window) = (match plan.target {
+        WindowToggleTarget::ActiveWindow => active_window,
+        WindowToggleTarget::FallbackWindow => fallback_window,
+    }) else {
+        return;
+    };
+
+    cx.defer(move |cx| {
+        _ = target_window.update(cx, |_, window, _| match plan.action {
+            WindowToggleAction::Restore => restore_window(window),
+            WindowToggleAction::Minimize => window.minimize_window(),
+            WindowToggleAction::Activate => window.activate_window(),
         });
     });
 }
@@ -470,8 +549,8 @@ impl Render for OnetCliApp {
 #[cfg(test)]
 mod tests {
     use super::{
-        WindowToggleAction, WindowTogglePlan, WindowToggleTarget, build_window_toggle_plan,
-        minimize_window_shortcuts,
+        WindowToggleAction, WindowTogglePlan, WindowToggleTarget, build_window_reopen_plan,
+        build_window_toggle_plan, minimize_window_shortcuts,
     };
 
     #[test]
@@ -488,14 +567,14 @@ mod tests {
     }
 
     #[test]
-    fn build_window_toggle_plan_reactivates_fallback_window_when_no_active_window() {
+    fn build_window_toggle_plan_restores_fallback_window_when_no_active_window() {
         let plan = build_window_toggle_plan(false, true, false);
 
         assert_eq!(
             plan,
             Some(WindowTogglePlan {
                 target: WindowToggleTarget::FallbackWindow,
-                action: WindowToggleAction::Activate,
+                action: WindowToggleAction::Restore,
             })
         );
     }
@@ -505,9 +584,25 @@ mod tests {
         assert_eq!(build_window_toggle_plan(false, false, false), None);
     }
 
+    #[test]
+    fn build_window_reopen_plan_restores_fallback_window_when_no_active_window() {
+        assert_eq!(
+            build_window_reopen_plan(false, true),
+            Some(WindowTogglePlan {
+                target: WindowToggleTarget::FallbackWindow,
+                action: WindowToggleAction::Restore,
+            })
+        );
+    }
+
+    #[test]
+    fn build_window_reopen_plan_is_noop_when_window_is_already_active() {
+        assert_eq!(build_window_reopen_plan(true, true), None);
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
-    fn minimize_window_shortcuts_only_use_cmd_m_on_macos() {
-        assert_eq!(minimize_window_shortcuts(), &["cmd-m"]);
+    fn minimize_window_shortcuts_are_removed_on_macos() {
+        assert!(minimize_window_shortcuts().is_empty());
     }
 }

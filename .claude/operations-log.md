@@ -2790,6 +2790,35 @@
 - `git diff --check -- main/src/onetcli_app.rs main/src/main.rs main/Cargo.toml .claude/context-summary-issue5-macos-window-restore.md .claude/operations-log.md .claude/verification-report.md`：通过。
 - 已观察：当前仍缺真实 macOS Dock 点击或重新打开应用的桌面级冒烟验证；另外 `objc` 宏会产生 3 条 `unexpected cfgs` warning，但不影响当前编译结果。
 
+## 追加诊断 - on_reopen 未触发的真实原因
+时间：2026-03-28 18:12:00 +0800
+
+- 用户实测确认 `Application::on_reopen(...)` 回调没有触发。
+- 已核对 GPUI macOS 平台实现：`crates/gpui/src/platform/mac/platform.rs` 的 `should_handle_reopen(...)` 只有在 `!has_open_windows` 时才调用 `reopen` 回调。
+- 该 delegate 方法实际对应 Cocoa 的 `applicationShouldHandleReopen:hasVisibleWindows:`，也就是说只要系统认为还有可见窗口，GPUI 就会吞掉 reopen 回调。
+- 结论：不能继续把 macOS 恢复逻辑押在 `on_reopen` 上，需要增加独立于 GPUI reopen 条件的激活恢复链路。
+
+## 编码后声明 - issue #5 第 3 条 macOS 激活时恢复最小化窗口
+时间：2026-03-28 18:16:00 +0800
+
+### 1. 复用了以下既有组件
+- `main/src/main.rs`：继续沿用应用入口集中注册平台行为的模式。
+- `cocoa` / `objc`：复用现有 macOS 依赖，不引入新的平台绑定库。
+- `main/src/onetcli_app.rs`：保留已有 `restore_window(...)` 和窗口切换 helper，不回退先前修复。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `macos_activation_restore` 模块和 `register` / `restore_first_minimized_window` helper，保持 `snake_case`。
+- 代码风格：平台特定逻辑收敛在 `#[cfg(target_os = "macos")]` 模块内，不污染非 macOS 路径。
+- 文件组织：只改 `main/src/main.rs`，不侵入业务 view。
+
+### 3. 对比了以下相似实现
+- 对比 GPUI 的 `on_reopen`：保留其注册，但额外补一条 `NSApplicationDidBecomeActiveNotification` 观察链路，覆盖 GPUI 被条件短路的场景。
+- 对比已有 AppKit 恢复逻辑：继续使用 `deminiaturize + makeKeyAndOrderFront + activateIgnoringOtherApps`，不引入新的恢复语义。
+
+### 4. 未重复造轮子的证明
+- 没有新增热键监听器，也没有自造新的窗口管理器。
+- 没有改动上游 GPUI 源码，而是在项目主入口补平台旁路。
+
 ## 编码前检查 - 表设计器 SQL 预览滞后一拍修复
 时间：2026-03-28 16:49:00 +0800
 
@@ -2871,3 +2900,89 @@
 - `CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo check -p db_view`：通过。
 - `CLANG_MODULE_CACHE_PATH=/tmp/clang-cache cargo test -p db_view table_designer_tab::tests -- --nocapture`：在沙箱内因 `gpui` Metal shader 编译缓存写入 `~/.cache/clang/ModuleCache` 被拒而失败；提权后重跑通过（57 passed）。
 - 已观察：当前自动化验证仍主要覆盖模块逻辑与编译链路，缺少真实桌面 UI 交互对“快速切换列类型后立即看 SQL 预览”的冒烟验证。
+
+## 编码前检查 - issue #5 macOS 系统级全局热键恢复
+时间：2026-03-28 18:28:00 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-issue5-global-hotkey.md`
+□ 将使用以下可复用组件：
+- `macos_activation_restore`：`main/src/main.rs`，用于直接复用 AppKit 恢复最小化窗口链路
+- `minimize_window_shortcuts` 与既有测试：`main/src/onetcli_app.rs`，用于约束移除 `cmd-m` 后的行为
+- 平台快捷键分支样板：`examples/system_monitor/src/main.rs`、`crates/ui/src/input/state.rs`
+□ 将遵循命名约定：新增 helper 使用 `snake_case`，测试函数继续使用 `snake_case`
+□ 将遵循代码风格：平台逻辑收敛在 `main/src/main.rs`，应用内快捷键逻辑继续收敛在 `main/src/onetcli_app.rs`
+□ 确认不重复造轮子，证明：已检查 `main/src/main.rs`、`main/src/onetcli_app.rs`、`.claude/context-summary-shortcut-key-support.md`，仓库内不存在现成的系统级全局热键实现；恢复逻辑复用现有 AppKit 链路，不再复制一套窗口恢复代码
+
+## 编码后声明 - issue #5 macOS 系统级全局热键恢复
+时间：2026-03-28 18:43:00 +0800
+
+### 1. 复用了以下既有组件
+- `macos_activation_restore`：继续作为恢复最小化窗口的唯一 AppKit 实现，本次只把它提升为系统热键与应用激活的共享入口。
+- `main/src/onetcli_app.rs` 中的 `minimize_window_shortcuts` 与现有测试模块：继续承接应用内快捷键配置，只把 macOS 分支改为空。
+- 项目内既有平台分支风格：沿用 `#[cfg(target_os = "macos")]` / `#[cfg(not(target_os = "macos"))]` 的成对条件编译方式。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `build_restore_hotkey`、`restore_hotkey_id`、`should_restore_for_hotkey_event` 均使用 `snake_case`。
+- 代码风格：平台级能力仍收敛在 `main/src/main.rs`，没有把系统热键逻辑散到业务 tab 或视图层。
+- 文件组织：macOS 入口模块负责 AppKit 与系统热键，`onetcli_app.rs` 只保留应用内动作绑定。
+
+### 3. 对比了以下相似实现
+- 对比 `main/src/main.rs` 原有激活通知恢复旁路：本次没有再造第二套恢复逻辑，而是让系统热键与激活通知共享同一条 AppKit 恢复路径。
+- 对比 `examples/system_monitor/src/main.rs`：继续采用按平台语义定义快捷键的做法，只是这次 macOS 改为入口级系统热键而非窗口级 `KeyBinding`。
+- 对比 `crates/ui/src/input/state.rs`：保持条件编译平台分支的既有风格，不引入新的跨平台快捷键抽象层。
+
+### 4. 未重复造轮子的证明
+- 没有新增新的窗口恢复实现，`deminiaturize` / `makeKeyAndOrderFront` 仍只有一处核心逻辑。
+- 没有新增新的应用内动作枚举来模拟系统热键，而是直接使用成熟库 `global-hotkey`。
+- 没有改 `on_reopen` 的备用链路，只替换当前用户场景的主恢复入口。
+
+## 验证记录 - issue #5 macOS 系统级全局热键恢复
+- 红灯：`cargo test -p main -- --nocapture` 首次失败，失败点为 `main/src/main.rs` 中测试引用的 `macos_global_hotkey` 模块尚未实现，符合“先写测试再补能力”的预期。
+- 绿灯：`cargo test -p main -- --nocapture` 通过（11 passed），新增 `cmd+alt+m` 热键与事件判定测试通过，`minimize_window_shortcuts_are_removed_on_macos` 通过。
+- 编译验证：`cargo check -p main` 通过。
+- 差异检查：`git diff --check -- main/Cargo.toml Cargo.lock main/src/main.rs main/src/onetcli_app.rs .claude/context-summary-issue5-global-hotkey.md .claude/operations-log.md .claude/verification-report.md` 通过。
+- 已观察：当前仍存在与本次任务无关的工作区条目 `.claude/context-summary-issue5-macos-window-restore.md`；本次未回退该文件。
+
+## 诊断补充 - issue #5 macOS 系统级热键只能恢复不能隐藏
+时间：2026-03-28 18:58:00 +0800
+
+- 用户反馈：当前 `cmd+option+m` 已可恢复窗口，但不能再次隐藏。
+- 根因证据：`main/src/main.rs` 中 `macos_global_hotkey::register()` 的事件回调此前无条件执行 `restore_or_activate_app()`，没有 hide 分支，因此行为天然是单向恢复。
+- 参考复用：继续沿用 `macos_activation_restore` 的 AppKit 调用风格，不回退到 `gpui` 窗口级快捷键链路。
+
+## 编码后声明 - issue #5 macOS 系统级热键显示隐藏切换
+时间：2026-03-28 19:05:00 +0800
+
+### 1. 复用了以下既有组件
+- `macos_activation_restore`：继续作为入口层 AppKit 窗口控制模块，本次只补了 hide 与 toggle 判定。
+- `main.rs` 的测试模块：沿用现有纯逻辑测试方式，为热键切换语义增加红绿测试。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `HotkeyToggleAction`、`build_hotkey_toggle_action`、`toggle_app_visibility`、`hide_app` 均保持项目既有命名风格。
+- 文件组织：改动仍收敛在 `main/src/main.rs`，没有扩散到业务视图或非 macOS 模块。
+
+### 3. 对比了以下相似实现
+- 对比上一轮 `restore_or_activate_app`：上一轮只有恢复语义，本轮在同一模块补成完整 toggle，而不是再造新模块。
+- 对比 `onetcli_app.rs` 的 `build_window_toggle_plan`：本轮沿用“先做纯逻辑计划判断，再执行平台动作”的模式。
+
+### 4. 未重复造轮子的证明
+- 没有新增第二套窗口恢复实现，仍复用原有 `restore_first_minimized_window()`。
+- 没有把系统热键改回应用内 `KeyBinding`，仍使用已接入的 `global-hotkey`。
+
+## 验证记录 - issue #5 macOS 系统级热键显示隐藏切换
+- 红灯：`cargo test -p main -- --nocapture` 先失败，失败点为 `HotkeyToggleAction` 与 `build_hotkey_toggle_action` 尚未实现，符合 TDD 预期。
+- 绿灯：`cargo test -p main -- --nocapture` 通过（13 passed），新增“前台可见时 Hide / 其他状态 Restore”测试通过。
+- 编译验证：`cargo check -p main` 通过。
+- 已观察：`objc` 宏相关 `unexpected cfgs` warning 仍为既有噪音，本轮未扩散处理。
+
+## 发布准备 - v0.1.10
+时间：2026-03-28 18:27:57 +0800
+
+- 发布方式确认：`.github/workflows/release.yml` 由 `push tags: v*` 触发，发布版本以 tag 为准。
+- 版本一致性决策：将 `main/Cargo.toml` 与 `Cargo.lock` 中 `main` 包版本从 `0.1.3` 同步为 `0.1.10`，避免二进制元数据与发布 tag 脱节。
+- 风险声明：Windows 侧当前仅完成代码审阅，未在真实 Windows 环境实机验证；发布后需由用户确认 `ctrl-space` 路径是否正常。
+
+## 验证记录 - v0.1.10 发布准备
+- `cargo check -p main`：通过；`main v0.1.10` 编译成功，仍只有既有 `objc` 宏 `unexpected cfgs` warning。
+- `cargo test -p main -- --nocapture`：通过（13 passed, 0 failed）；测试输出已显示 `main v0.1.10`。
+- `git diff --check -- main/Cargo.toml Cargo.lock main/src/main.rs main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`：通过。
