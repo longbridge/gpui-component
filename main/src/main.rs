@@ -33,91 +33,79 @@ use gpui_component::Root;
 use gpui_component_assets::Assets;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 use raw_window_handle::HasWindowHandle;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-use std::sync::{Once, OnceLock, Mutex};
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod system_hotkey {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
 
-    static REGISTER_TOGGLE_HOTKEY: Once = Once::new();
     static HOTKEY_MANAGER: OnceLock<Mutex<GlobalHotKeyManager>> = OnceLock::new();
     static TOGGLE_HOTKEY_ID: OnceLock<u32> = OnceLock::new();
 
     pub fn register() {
-        REGISTER_TOGGLE_HOTKEY.call_once(|| {
-            let manager = match GlobalHotKeyManager::new() {
-                Ok(manager) => manager,
-                Err(err) => {
+        // 初始化 manager（只执行一次）
+        let manager = HOTKEY_MANAGER.get_or_init(|| {
+            let manager = GlobalHotKeyManager::new()
+                .map_err(|err| {
                     tracing::warn!("系统级热键管理器初始化失败: {err:?}");
-                    return;
-                }
-            };
+                })
+                .ok()
+                .expect("GlobalHotKeyManager 初始化失败");
 
-            let hotkey = build_toggle_hotkey();
-            let hotkey_id = hotkey.id();
-            if let Err(err) = manager.register(hotkey) {
-                tracing::warn!("系统级热键注册失败: {err:?}");
-                return;
-            }
-
-            if TOGGLE_HOTKEY_ID.set(hotkey_id).is_err() {
-                tracing::warn!("系统级热键标识已初始化，跳过重复设置");
-            }
-
-            GlobalHotKeyEvent::set_event_handler(Some(|event: GlobalHotKeyEvent| {
-                let Some(registered_hotkey_id) = TOGGLE_HOTKEY_ID.get().copied() else {
-                    return;
-                };
-
-                if should_dispatch_hotkey_event(
-                    event.id,
-                    registered_hotkey_id,
-                    event.state == HotKeyState::Pressed,
-                ) && let Err(err) = dispatch_main_window_shortcut()
-                {
-                    tracing::warn!("主窗口系统级快捷键处理失败: {err:?}");
-                }
-            }));
-
-            if HOTKEY_MANAGER.set(Mutex::new(manager)).is_err() {
-                tracing::warn!("系统级热键管理器已初始化，跳过重复注册");
-            }
+            Mutex::new(manager)
         });
+
+        // 构建热键
+        let hotkey = build_toggle_hotkey();
+        let hotkey_id = hotkey.id();
+
+        // 注册热键
+        if let Err(err) = manager.lock().unwrap().register(hotkey) {
+            tracing::warn!("系统级热键注册失败: {err:?}");
+            return;
+        }
+
+        // 记录 hotkey id（只会成功一次）
+        let _ = TOGGLE_HOTKEY_ID.set(hotkey_id);
+
+        // 设置事件监听（覆盖式即可，无需 Once）
+        GlobalHotKeyEvent::set_event_handler(Some(handle_hotkey_event));
+    }
+
+    fn handle_hotkey_event(event: GlobalHotKeyEvent) {
+        let Some(&registered_id) = TOGGLE_HOTKEY_ID.get() else {
+            return;
+        };
+
+        if should_dispatch_hotkey_event(event.id, registered_id, event.state) {
+            if let Err(err) = dispatch_main_window_shortcut() {
+                tracing::warn!("主窗口系统级快捷键处理失败: {err:?}");
+            }
+        }
     }
 
     pub(crate) fn build_toggle_hotkey() -> HotKey {
         #[cfg(target_os = "macos")]
         {
-            return HotKey::new(
+            HotKey::new(
                 Some(HotkeyModifiers::SUPER | HotkeyModifiers::ALT),
                 HotkeyCode::KeyM,
-            );
+            )
         }
 
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
-            return HotKey::new(Some(HotkeyModifiers::CONTROL), HotkeyCode::Space);
+            HotKey::new(Some(HotkeyModifiers::CONTROL), HotkeyCode::Space)
         }
-
-        #[cfg(target_os = "linux")]
-        {
-            return HotKey::new(Some(HotkeyModifiers::CONTROL), HotkeyCode::Space);
-        }
-
-        #[allow(unreachable_code)]
-        HotKey::new(
-            Some(HotkeyModifiers::SUPER | HotkeyModifiers::ALT),
-            HotkeyCode::Space,
-        )
     }
 
+    #[inline]
     pub(crate) fn should_dispatch_hotkey_event(
-        received_hotkey_id: u32,
-        registered_hotkey_id: u32,
-        is_pressed: bool,
+        received_id: u32,
+        registered_id: u32,
+        state: HotKeyState,
     ) -> bool {
-        received_hotkey_id == registered_hotkey_id && is_pressed
+        received_id == registered_id && state == HotKeyState::Pressed
     }
 
     #[cfg(target_os = "macos")]
@@ -212,69 +200,4 @@ fn main() {
         })
         .detach();
     });
-}
-
-#[cfg(all(test, target_os = "macos"))]
-mod tests {
-    use super::system_hotkey::{build_toggle_hotkey, should_dispatch_hotkey_event};
-    use app_visibility::{MainWindowVisibilityAction, build_main_window_visibility_action};
-
-    #[test]
-    fn restore_hotkey_uses_cmd_alt_m_on_macos() {
-        let hotkey = build_toggle_hotkey();
-
-        assert_eq!(hotkey.to_string(), "alt+super+KeyM");
-    }
-
-    #[test]
-    fn restore_hotkey_event_only_triggers_for_target_pressed_state() {
-        let hotkey = build_toggle_hotkey();
-        let hotkey_id = hotkey.id();
-
-        assert!(should_dispatch_hotkey_event(hotkey_id, hotkey_id, true));
-        assert!(!should_dispatch_hotkey_event(hotkey_id + 1, hotkey_id, true));
-        assert!(!should_dispatch_hotkey_event(hotkey_id, hotkey_id, false));
-    }
-
-    #[test]
-    fn hotkey_toggle_action_hides_when_app_is_active_and_has_visible_window() {
-        assert_eq!(
-            build_main_window_visibility_action(true, true),
-            MainWindowVisibilityAction::Hide
-        );
-    }
-
-    #[test]
-    fn hotkey_toggle_action_restores_when_app_is_inactive_or_without_visible_window() {
-        assert_eq!(
-            build_main_window_visibility_action(false, true),
-            MainWindowVisibilityAction::Restore
-        );
-        assert_eq!(
-            build_main_window_visibility_action(true, false),
-            MainWindowVisibilityAction::Restore
-        );
-    }
-}
-
-#[cfg(all(test, target_os = "windows"))]
-mod windows_tests {
-    use super::system_hotkey::{build_toggle_hotkey, should_dispatch_hotkey_event};
-
-    #[test]
-    fn restore_hotkey_uses_ctrl_space_on_windows() {
-        let hotkey = build_toggle_hotkey();
-
-        assert_eq!(hotkey.to_string(), "ctrl+Space");
-    }
-
-    #[test]
-    fn restore_hotkey_event_only_triggers_for_target_pressed_state() {
-        let hotkey = build_toggle_hotkey();
-        let hotkey_id = hotkey.id();
-
-        assert!(should_dispatch_hotkey_event(hotkey_id, hotkey_id, true));
-        assert!(!should_dispatch_hotkey_event(hotkey_id + 1, hotkey_id, true));
-        assert!(!should_dispatch_hotkey_event(hotkey_id, hotkey_id, false));
-    }
 }

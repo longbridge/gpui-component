@@ -383,7 +383,7 @@ mod platform {
                 let arr: [i64; 5] = [2, 0, 0, 0, 0];
                 std::ptr::copy_nonoverlapping(
                     arr.as_ptr(),
-                    d.as_mut_ptr() as *mut i64,
+                    d.as_mut() as *mut i64,
                     5,
                 );
                 d
