@@ -12,4 +12,6 @@ pub enum AppVisibilityError {
     ObserverInstanceInit,
     #[error("X11 Display 连接打开失败")]
     X11DisplayOpenFailed,
+    #[error("X11 Display 连接已打开")]
+    AlreadyInitialized,
 }
