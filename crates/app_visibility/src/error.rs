@@ -10,4 +10,6 @@ pub enum AppVisibilityError {
     ObserverClassInit,
     #[error("macOS 激活观察器实例初始化失败")]
     ObserverInstanceInit,
+    #[error("X11 Display 连接打开失败")]
+    X11DisplayOpenFailed,
 }

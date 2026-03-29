@@ -34,14 +34,14 @@ use gpui_component_assets::Assets;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 use raw_window_handle::HasWindowHandle;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use std::sync::{Once, OnceLock};
+use std::sync::{Once, OnceLock, Mutex};
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod system_hotkey {
     use super::*;
 
     static REGISTER_TOGGLE_HOTKEY: Once = Once::new();
-    static HOTKEY_MANAGER: OnceLock<GlobalHotKeyManager> = OnceLock::new();
+    static HOTKEY_MANAGER: OnceLock<Mutex<GlobalHotKeyManager>> = OnceLock::new();
     static TOGGLE_HOTKEY_ID: OnceLock<u32> = OnceLock::new();
 
     pub fn register() {
@@ -80,7 +80,7 @@ mod system_hotkey {
                 }
             }));
 
-            if HOTKEY_MANAGER.set(manager).is_err() {
+            if HOTKEY_MANAGER.set(Mutex::new(manager)).is_err() {
                 tracing::warn!("系统级热键管理器已初始化，跳过重复注册");
             }
         });

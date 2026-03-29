@@ -278,7 +278,7 @@ mod platform {
         Display, Window, XCloseDisplay, XDefaultRootWindow, XFlush, XGetWindowAttributes,
         XInternAtom, XMapWindow, XOpenDisplay, XSendEvent, XWithdrawWindow, XWindowAttributes,
         ClientMessage, SubstructureNotifyMask, SubstructureRedirectMask,
-        _XEvent, XClientMessageEvent,
+        XEvent, XClientMessageEvent,
     };
     use std::ffi::CString;
     use std::mem;
@@ -366,7 +366,7 @@ mod platform {
 
         let root = XDefaultRootWindow(display);
 
-        let mut event: _XEvent = mem::zeroed();
+        let mut event: XEvent = mem::zeroed();
         let cm = XClientMessageEvent {
             type_: ClientMessage,
             serial: 0,
@@ -376,7 +376,7 @@ mod platform {
             message_type: net_active_window,
             format: 32,
             data: {
-                let mut d = mem::zeroed();
+                let mut d: x11::xlib::ClientMessageData = mem::zeroed();
                 // data.l[0] = 2 表示来自应用程序的激活请求（非用户直接操作）
                 // data.l[1] = CurrentTime（0）
                 // data.l[2] = 0（无当前活跃窗口）
@@ -391,7 +391,7 @@ mod platform {
         };
         std::ptr::copy_nonoverlapping(
             &cm as *const XClientMessageEvent,
-            &mut event as *mut _XEvent as *mut XClientMessageEvent,
+            &mut event as *mut XEvent as *mut XClientMessageEvent,
             1,
         );
 
