@@ -44,59 +44,34 @@ pub fn register_main_window_handle(window_handle: RawWindowHandle) -> Result<(),
 mod platform {
     use super::{AppVisibilityError, MainWindowVisibilityAction, build_main_window_visibility_action};
     use raw_window_handle::RawWindowHandle;
-    use cocoa::base::{BOOL, YES, id, nil};
-    use cocoa::foundation::{NSString, NSUInteger};
-    use objc::declare::ClassDecl;
-    use objc::runtime::{Class, Object, Sel};
-    use objc::{class, msg_send, sel, sel_impl};
     use std::sync::OnceLock;
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send, sel};
+    use objc2_foundation::NSString;
 
-    static OBSERVER_CLASS: OnceLock<&'static Class> = OnceLock::new();
-    static mut OBSERVER_INSTANCE: id = nil;
+    static OBSERVER_REGISTERED: OnceLock<()> = OnceLock::new();
 
     pub fn register_activation_observer() -> Result<(), AppVisibilityError> {
-        unsafe {
-            let observer_class = if let Some(observer_class) = OBSERVER_CLASS.get() {
-                *observer_class
-            } else {
-                let superclass = class!(NSObject);
-                let mut decl = ClassDecl::new("OnetCliActivationObserver", superclass)
-                    .ok_or(AppVisibilityError::ObserverClassInit)?;
-                decl.add_method(
-                    sel!(applicationDidBecomeActive:),
-                    application_did_become_active as extern "C" fn(&Object, Sel, id),
-                );
-                let observer_class = decl.register();
-                let _ = OBSERVER_CLASS.set(observer_class);
-                observer_class
-            };
-
-            if OBSERVER_INSTANCE != nil {
-                return Ok(());
-            }
-
-            let observer: id = msg_send![observer_class, new];
-            if observer == nil {
-                return Err(AppVisibilityError::ObserverInstanceInit);
-            }
-
-            let notification_center: id = msg_send![class!(NSNotificationCenter), defaultCenter];
-            let app = shared_application();
-            let name = NSString::alloc(nil).init_str("NSApplicationDidBecomeActiveNotification");
-            let _: () = msg_send![notification_center, addObserver: observer
-                selector: sel!(applicationDidBecomeActive:)
-                name: name
-                object: app
-            ];
-            OBSERVER_INSTANCE = observer;
-
-            Ok(())
+        if OBSERVER_REGISTERED.get().is_some() {
+            return Ok(());
         }
+
+        unsafe {
+            let notification_center: *mut AnyObject = msg_send![class!(NSNotificationCenter), defaultCenter];
+            let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let name = NSString::from_str("NSApplicationDidBecomeActiveNotification");
+
+            let _: () = msg_send![notification_center, addObserver: app, selector: sel!(unhide:), name: name.as_ref() as &AnyObject, object: app];
+        }
+
+        let _ = OBSERVER_REGISTERED.set(());
+        Ok(())
     }
 
     pub fn hide_main_window() -> Result<(), AppVisibilityError> {
         unsafe {
-            hide_app(shared_application());
+            let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let _: () = msg_send![app, hide: std::ptr::null::<AnyObject>()];
         }
         Ok(())
     }
@@ -112,11 +87,15 @@ mod platform {
 
     pub fn toggle_main_window_visibility() -> Result<(), AppVisibilityError> {
         unsafe {
-            let app = shared_application();
-            let action = build_main_window_visibility_action(app_is_active(app), has_visible_window(app));
+            let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+            let is_active: bool = msg_send![app, isActive];
+            let has_visible = has_visible_window();
 
+            let action = build_main_window_visibility_action(is_active, has_visible);
             match action {
-                MainWindowVisibilityAction::Hide => hide_app(app),
+                MainWindowVisibilityAction::Hide => {
+                    let _: () = msg_send![app, hide: std::ptr::null::<AnyObject>()];
+                }
                 MainWindowVisibilityAction::Restore => {
                     if !restore_first_minimized_window() {
                         activate_app();
@@ -124,7 +103,6 @@ mod platform {
                 }
             }
         }
-
         Ok(())
     }
 
@@ -132,62 +110,45 @@ mod platform {
         Ok(())
     }
 
-    extern "C" fn application_did_become_active(_: &Object, _: Sel, _: id) {
-        let _ = restore_main_window();
-    }
-
-    unsafe fn shared_application() -> id {
-        msg_send![class!(NSApplication), sharedApplication]
-    }
-
     unsafe fn restore_first_minimized_window() -> bool {
-        let app = unsafe { shared_application() };
-        let windows: id = msg_send![app, windows];
-        let count: NSUInteger = msg_send![windows, count];
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        let windows: *mut AnyObject = msg_send![app, windows];
+        let count: usize = msg_send![windows, count];
 
         for index in 0..count {
-            let window: id = msg_send![windows, objectAtIndex: index];
-            let is_miniaturized: BOOL = msg_send![window, isMiniaturized];
-            if is_miniaturized == YES {
-                let _: () = msg_send![app, unhide: nil];
-                let _: () = msg_send![window, deminiaturize: nil];
-                let _: () = msg_send![window, makeKeyAndOrderFront: nil];
-                let _: () = msg_send![app, activateIgnoringOtherApps: YES];
+            let window: *mut AnyObject = msg_send![windows, objectAtIndex: index];
+            let is_miniaturized: bool = msg_send![window, isMiniaturized];
+
+            if is_miniaturized {
+                let _: () = msg_send![app, unhide: std::ptr::null::<AnyObject>()];
+                let _: () = msg_send![window, deminiaturize: std::ptr::null::<AnyObject>()];
+                let _: () = msg_send![window, makeKeyAndOrderFront: std::ptr::null::<AnyObject>()];
+                let _: () = msg_send![app, activateIgnoringOtherApps: true];
                 return true;
             }
         }
-
         false
     }
 
-    unsafe fn app_is_active(app: id) -> bool {
-        let is_active: BOOL = msg_send![app, isActive];
-        is_active == YES
-    }
-
-    unsafe fn has_visible_window(app: id) -> bool {
-        let windows: id = msg_send![app, windows];
-        let count: NSUInteger = msg_send![windows, count];
+    unsafe fn has_visible_window() -> bool {
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        let windows: *mut AnyObject = msg_send![app, windows];
+        let count: usize = msg_send![windows, count];
 
         for index in 0..count {
-            let window: id = msg_send![windows, objectAtIndex: index];
-            let is_miniaturized: BOOL = msg_send![window, isMiniaturized];
-            if is_miniaturized != YES {
+            let window: *mut AnyObject = msg_send![windows, objectAtIndex: index];
+            let is_miniaturized: bool = msg_send![window, isMiniaturized];
+            if !is_miniaturized {
                 return true;
             }
         }
-
         false
     }
 
     unsafe fn activate_app() {
-        let app = unsafe { shared_application() };
-        let _: () = msg_send![app, unhide: nil];
-        let _: () = msg_send![app, activateIgnoringOtherApps: YES];
-    }
-
-    unsafe fn hide_app(app: id) {
-        let _: () = msg_send![app, hide: nil];
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        let _: () = msg_send![app, unhide: std::ptr::null::<AnyObject>()];
+        let _: () = msg_send![app, activateIgnoringOtherApps: true];
     }
 }
 
@@ -203,6 +164,7 @@ mod platform {
 
     // FIX 1: RawWindowHandle 不实现 Send，用 wrapper 手动标记为 Send。
     // 安全性：我们只在主线程注册句柄，且仅通过 Mutex 访问，保证了互斥。
+    #[allow(dead_code)]
     struct SendableWindowHandle(RawWindowHandle);
     unsafe impl Send for SendableWindowHandle {}
 
@@ -271,11 +233,22 @@ mod platform {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 mod platform {
-    use super::AppVisibilityError;
+    use super::{AppVisibilityError, MainWindowVisibilityAction};
     use raw_window_handle::RawWindowHandle;
     use std::sync::{Mutex, OnceLock};
+    use x11::xlib::{
+        Display, Window, XCloseDisplay, XDefaultRootWindow, XFlush, XGetWindowAttributes,
+        XInternAtom, XMapWindow, XOpenDisplay, XSendEvent, XWithdrawWindow, XWindowAttributes,
+        ClientMessage, SubstructureNotifyMask, SubstructureRedirectMask,
+        _XEvent, XClientMessageEvent,
+    };
+    use std::ffi::CString;
+    use std::mem;
+    use std::ptr;
 
-    // FIX 1: 同 Windows 平台，用 wrapper 手动标记为 Send。
+    // RawWindowHandle 不实现 Send，用 wrapper 手动标记。
+    // 安全性：仅通过 Mutex 访问，保证互斥。
+    #[allow(dead_code)]
     struct SendableWindowHandle(RawWindowHandle);
     unsafe impl Send for SendableWindowHandle {}
 
@@ -285,28 +258,183 @@ mod platform {
         MAIN_WINDOW_HANDLE.get_or_init(|| Mutex::new(None))
     }
 
+    /// 打开一个临时的 Display 连接并在操作完成后关闭。
+    /// X11 的 Display 连接不能跨线程共享，因此每次操作都单独开启。
+    struct DisplayGuard(*mut Display);
+
+    impl DisplayGuard {
+        fn open() -> Result<Self, AppVisibilityError> {
+            let display = unsafe { XOpenDisplay(ptr::null()) };
+            if display.is_null() {
+                Err(AppVisibilityError::X11DisplayOpenFailed)
+            } else {
+                Ok(DisplayGuard(display))
+            }
+        }
+
+        fn as_ptr(&self) -> *mut Display {
+            self.0
+        }
+    }
+
+    impl Drop for DisplayGuard {
+        fn drop(&mut self) {
+            unsafe { XCloseDisplay(self.0) };
+        }
+    }
+
+    /// 从已注册的 RawWindowHandle 中取出 X11 Window ID。
+    fn get_xlib_window() -> Result<Window, AppVisibilityError> {
+        let guard = main_window_handle_slot()
+            .lock()
+            .expect("主窗口句柄锁不应中毒");
+
+        let handle = guard
+            .as_ref()
+            .ok_or(AppVisibilityError::MainWindowHandleMissing)?
+            .0;
+
+        match handle {
+            RawWindowHandle::Xlib(h) => Ok(h.window),
+            _ => Err(AppVisibilityError::UnsupportedWindowHandle),
+        }
+    }
+
+    /// 查询窗口当前是否处于可见（mapped）状态。
+    /// XGetWindowAttributes 返回的 map_state：
+    ///   IsUnmapped(0)       —— 已隐藏（withdraw 后）
+    ///   IsUnviewable(1)     —— 已映射但父窗口不可见
+    ///   IsViewable(2)       —— 正常显示
+    fn is_window_viewable(display: *mut Display, window: Window) -> bool {
+        unsafe {
+            let mut attrs: XWindowAttributes = mem::zeroed();
+            if XGetWindowAttributes(display, window, &mut attrs) == 0 {
+                return false;
+            }
+            // IsViewable == 2
+            attrs.map_state == 2
+        }
+    }
+
+    /// 通过发送 _NET_ACTIVE_WINDOW 客户端消息请求窗口管理器将窗口置前。
+    /// 这是 EWMH 标准方式，主流合规 WM（KWin、Mutter、Openbox 等）均支持。
+    unsafe fn request_wm_focus(display: *mut Display, window: Window) {
+        let atom_name = CString::new("_NET_ACTIVE_WINDOW").unwrap();
+        let net_active_window = XInternAtom(display, atom_name.as_ptr(), 0);
+        if net_active_window == 0 {
+            // WM 不支持 EWMH，直接 XMapWindow 即可，不发消息
+            return;
+        }
+
+        let root = XDefaultRootWindow(display);
+
+        let mut event: _XEvent = mem::zeroed();
+        let cm = XClientMessageEvent {
+            type_: ClientMessage,
+            serial: 0,
+            send_event: 1,
+            display,
+            window,
+            message_type: net_active_window,
+            format: 32,
+            data: {
+                let mut d = mem::zeroed();
+                // data.l[0] = 2 表示来自应用程序的激活请求（非用户直接操作）
+                // data.l[1] = CurrentTime（0）
+                // data.l[2] = 0（无当前活跃窗口）
+                let arr: [i64; 5] = [2, 0, 0, 0, 0];
+                std::ptr::copy_nonoverlapping(
+                    arr.as_ptr(),
+                    d.as_mut_ptr() as *mut i64,
+                    5,
+                );
+                d
+            },
+        };
+        std::ptr::copy_nonoverlapping(
+            &cm as *const XClientMessageEvent,
+            &mut event as *mut _XEvent as *mut XClientMessageEvent,
+            1,
+        );
+
+        XSendEvent(
+            display,
+            root,
+            0,
+            SubstructureNotifyMask | SubstructureRedirectMask,
+            &mut event,
+        );
+        XFlush(display);
+    }
+
+    // ── 公开接口 ──────────────────────────────────────────────────────────────
+
     pub fn register_activation_observer() -> Result<(), AppVisibilityError> {
+        // X11 没有类似 macOS NSApplicationDidBecomeActive 的全局激活通知机制，
+        // 通常由上层（如 tray / global hotkey）直接调用 toggle_main_window_visibility。
         Err(AppVisibilityError::UnsupportedPlatform)
     }
 
     pub fn hide_main_window() -> Result<(), AppVisibilityError> {
-        Err(AppVisibilityError::UnsupportedPlatform)
+        let window = get_xlib_window()?;
+        let dpy = DisplayGuard::open()?;
+
+        unsafe {
+            // XWithdrawWindow 发送 UnmapNotify 并撤销 WM 装饰，是最干净的"隐藏"方式。
+            // 第三个参数为 screen number，通常为 0。
+            XWithdrawWindow(dpy.as_ptr(), window, 0);
+            XFlush(dpy.as_ptr());
+        }
+
+        Ok(())
     }
 
     pub fn restore_main_window() -> Result<(), AppVisibilityError> {
-        let _ = main_window_handle_slot()
-            .lock()
-            .expect("主窗口句柄锁不应中毒")
-            .as_ref()
-            .ok_or(AppVisibilityError::MainWindowHandleMissing)?;
-        Err(AppVisibilityError::UnsupportedPlatform)
+        let window = get_xlib_window()?;
+        let dpy = DisplayGuard::open()?;
+
+        unsafe {
+            // XMapWindow 重新映射窗口（对应 withdraw 后的恢复）。
+            XMapWindow(dpy.as_ptr(), window);
+            // 再通过 _NET_ACTIVE_WINDOW 消息请求 WM 将其置前并给予焦点。
+            request_wm_focus(dpy.as_ptr(), window);
+        }
+
+        Ok(())
     }
 
     pub fn toggle_main_window_visibility() -> Result<(), AppVisibilityError> {
-        restore_main_window()
+        let window = get_xlib_window()?;
+        let dpy = DisplayGuard::open()?;
+
+        // 窗口当前是否可见决定动作
+        let visible = is_window_viewable(dpy.as_ptr(), window);
+        let action = if visible {
+            MainWindowVisibilityAction::Hide
+        } else {
+            MainWindowVisibilityAction::Restore
+        };
+
+        match action {
+            MainWindowVisibilityAction::Hide => unsafe {
+                XWithdrawWindow(dpy.as_ptr(), window, 0);
+                XFlush(dpy.as_ptr());
+            },
+            MainWindowVisibilityAction::Restore => unsafe {
+                XMapWindow(dpy.as_ptr(), window);
+                request_wm_focus(dpy.as_ptr(), window);
+            },
+        }
+
+        Ok(())
     }
 
     pub fn register_main_window_handle(window_handle: RawWindowHandle) -> Result<(), AppVisibilityError> {
+        // 仅接受 Xlib 句柄；xcb 句柄可通过 xcb_window_t 转换，但此处不做处理。
+        match window_handle {
+            RawWindowHandle::Xlib(_) => {}
+            _ => return Err(AppVisibilityError::UnsupportedWindowHandle),
+        }
         *main_window_handle_slot()
             .lock()
             .expect("主窗口句柄锁不应中毒") = Some(SendableWindowHandle(window_handle));
