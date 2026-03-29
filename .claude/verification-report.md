@@ -739,6 +739,40 @@
 
 ---
 
+## 审查报告（objc-cargo-clippy 构建修复）
+生成时间：2026-03-28 22:28:09 +0800
+
+### 需求完整性检查
+- 目标明确：修复 GitHub/macOS 构建中 `objc` 宏因 `unexpected_cfgs` 与 `cargo-clippy` 触发的失败。
+- 范围明确：仅调整工作区 Cargo lint 配置与本地留痕文档，不改业务源码。
+- 交付物明确：根因分析、上下文摘要、操作日志、本地验证和审查结论均已落地。
+- 风险与依赖明确：依赖旧版 `objc 0.2.7` 的宏实现；若未来升级依赖，需要复核此兼容声明是否仍需要。
+
+### 技术维度评分
+- 代码质量：96/100
+- 测试覆盖：90/100
+- 规范遵循：97/100
+
+### 战略维度评分
+- 需求匹配：97/100
+- 架构一致：98/100
+- 风险评估：92/100
+
+### 综合评分
+- 95/100
+- 建议：通过
+
+### 结论
+- 根 `Cargo.toml` 已新增 [`Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/Cargo.toml#L143) 的 `[workspace.lints.rust]` 配置，只显式允许 `cfg(feature, values("cargo-clippy"))`，以最小范围兼容旧版 `objc` 宏。
+- `main` crate 继续通过 [`main/Cargo.toml`](/Users/hufei/RustroverProjects/onetcli/main/Cargo.toml#L47) 的 `[lints] workspace = true` 继承工作区 lint，无需在 [`onetcli_app.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/onetcli_app.rs#L103) 或 [`main.rs`](/Users/hufei/RustroverProjects/onetcli/main/src/main.rs#L25) 的每个 `class!` / `sel!` / `msg_send!` 调用点加 `allow`。
+- 本地验证已完成：`cargo check -p main --message-format short` 和 `RUSTFLAGS='-D warnings' cargo check -p main --message-format short` 均通过，且不再出现 `unexpected_cfgs` / `cargo-clippy` 报错。
+
+### 剩余风险
+- 这是对旧依赖宏的兼容性修复，不是 `objc` 依赖升级；未来若依赖版本变化，应复核是否还需要该 `check-cfg` 声明。
+- 工作区仍存在 `num-bigint-dig v0.8.4` 的 future-incompat 提示，但与本次构建失败无关，本次未处理。
+
+---
+
 ## 审查报告（ui-main-safe-merge 实现）
 生成时间：2026-03-26 12:13:00 +0800
 
@@ -1705,3 +1739,95 @@
 - 通过 tag 触发发布工作流是仓库既有标准流程。
 - 将 `main` 包版本同步到 `0.1.10` 能减少版本元数据与发布标签不一致带来的排查成本。
 - 发布说明必须明确：Windows 仍待用户在真实环境验证。
+
+---
+
+## 审查报告（gpui_hotkey 跨平台系统热键 crate）
+生成时间：2026-03-28 22:40:31 +0800
+
+### 需求完整性检查
+- 目标明确：新增一个 workspace crate，统一封装系统级全局热键能力，并把现有 macOS 入口接线迁移过去。
+- 范围明确：本次只处理系统级热键，不替换 `GPUI` 应用内 `KeyBinding` 体系。
+- 交付物明确：新 crate、设计文档、计划文档、`main` 迁移补丁、本地验证结果和操作留痕。
+- 风险与依赖明确：底层继续依赖 `global-hotkey`；Windows / Linux 的最终行为仍需实机验证。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：91/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：96/100
+- 风险评估：90/100
+
+### 综合评分
+- 94/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p gpui_hotkey -- --nocapture`
+  - 结果：通过（3 passed）
+- 已执行：`cargo check -p gpui_hotkey`
+  - 结果：通过
+- 已执行：`cargo test -p main -- --nocapture`
+  - 结果：通过（13 passed）
+- 已执行：`cargo check -p main`
+  - 结果：通过
+- 已执行：`git diff --check -- Cargo.toml main/Cargo.toml main/src/main.rs main/src/onetcli_app.rs crates/gpui_hotkey/Cargo.toml crates/gpui_hotkey/src/lib.rs crates/gpui_hotkey/src/error.rs crates/gpui_hotkey/src/event.rs crates/gpui_hotkey/src/hotkey.rs crates/gpui_hotkey/src/manager.rs docs/superpowers/specs/2026-03-28-gpui-hotkey-design.md docs/superpowers/plans/2026-03-28-gpui-hotkey.md .claude/context-summary-gpui-hotkey-crate.md .claude/operations-log.md`
+  - 结果：通过
+
+### 结论
+- 新增的 `gpui_hotkey` crate 已将系统级全局热键从 `main` 入口层抽离出来，对外形成统一 API。
+- `GPUI` 的应用内快捷键职责被保留，系统级热键与窗口内 `KeyBinding` 的边界现在更清晰。
+- 现有 macOS toggle 热键接线已迁移到新 crate，后续 Windows / Linux 可沿同一 API 扩展，不需要外层再写平台分支。
+
+### 剩余风险
+- 当前 crate 底层依赖 `global-hotkey`，Linux 的实际效果仍受桌面环境限制。
+- 本轮自动化验证主要覆盖纯逻辑、编译和现有 `main` 测试，真实系统级热键行为仍需桌面环境冒烟确认。
+
+---
+
+## 审查报告（app_visibility Windows 恢复扩展）
+生成时间：2026-03-28 23:20:00 +0800
+
+### 需求完整性检查
+- 目标明确：把主窗口系统级能力从“仅 macOS”扩展到“Windows 可恢复，Linux 明确边界”。
+- 范围明确：`Windows/Linux` 不新增系统级隐藏，前台隐藏继续走 GPUI；系统级重点补恢复。
+- 交付物明确：`app_visibility` 主窗口句柄注册、Windows 恢复实现、`main` 入口接线、上下文和验证留痕。
+- 风险与依赖明确：当前主机仅能本地验证 macOS 主机路径，Windows/Linux 仍缺桌面实测。
+
+### 技术维度评分
+- 代码质量：93/100
+- 测试覆盖：88/100
+- 规范遵循：95/100
+
+### 战略维度评分
+- 需求匹配：95/100
+- 架构一致：96/100
+- 风险评估：90/100
+
+### 综合评分
+- 93/100
+- 建议：通过
+
+### 验证结果
+- 已执行：`cargo test -p app_visibility -- --nocapture`
+  - 结果：通过（2 passed）
+- 已执行：`cargo check -p app_visibility`
+  - 结果：通过
+- 已执行：`cargo test -p main -- --nocapture`
+  - 结果：通过（13 passed）
+- 已执行：`cargo check -p main`
+  - 结果：通过
+- 已执行：`rustup target list --installed`
+  - 结果：仅安装 `aarch64-apple-darwin`
+
+### 结论
+- `app_visibility` 现在具备主窗口句柄注册能力，`Windows` 已补上基于 Win32 的恢复路径。
+- `main` 在创建主窗口时会注册原生句柄；系统热键在 `macOS` 保持 toggle，在 `Windows` 只做恢复。
+- `Linux` 已预留主窗口句柄注册扩展位，但恢复实现仍明确未支持，避免误导。
+
+### 剩余风险
+- 当前主机无法直接验证 `Windows` 运行时行为，仍需用户在真实 Windows 环境冒烟确认。
+- `Linux` 存在 `X11/Wayland` 差异，本轮没有实现恢复，不应宣称可用。

@@ -99,7 +99,7 @@ fn minimize_window_shortcuts() -> &'static [&'static str] {
     &["ctrl-space"]
 }
 
-#[cfg(target_os = "macos")]
+
 fn restore_window(window: &mut Window) {
     let Ok(window_handle) = window.window_handle() else {
         window.activate_window();
@@ -364,12 +364,14 @@ pub fn init(cx: &mut App) {
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-f4", QuitApp, None),
     ];
+
     keybindings.extend(
         minimize_window_shortcuts()
             .iter()
             .copied()
             .map(|shortcut| KeyBinding::new(shortcut, MinimizeWindow, None)),
     );
+
     cx.bind_keys(keybindings);
 
     cx.on_action(|_: &ActivateTab1, cx| activate_tab_by_number(1, cx));

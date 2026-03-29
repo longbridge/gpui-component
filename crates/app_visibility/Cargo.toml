@@ -1,0 +1,19 @@
+[package]
+name = "app_visibility"
+version = "0.1.0"
+publish.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+raw-window-handle = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.25.0"
+objc = "0.2.7"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[lints]
+workspace = true

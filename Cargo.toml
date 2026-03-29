@@ -5,6 +5,7 @@ members = [
     "crates/story",
     "crates/ui",
     "crates/assets",
+    "crates/app_visibility",
     "crates/webview",
     "crates/reqwest_client",
     "examples/app_assets",
@@ -68,6 +69,7 @@ tracing = "0.1.41"
 
 
 reqwest_client = { path = "crates/reqwest_client" }
+app_visibility = { path = "crates/app_visibility" }
 db = { path = "crates/db" }
 db_view = { path = "crates/db_view" }
 redis_view = { path = "crates/redis_view" }
@@ -142,6 +144,9 @@ percent-encoding = "2.3.1"
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
 version = "0.58.0"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
 
 [workspace.lints.clippy]
 almost_complete_range = "allow"

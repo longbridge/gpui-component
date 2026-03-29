@@ -2986,3 +2986,150 @@
 - `cargo check -p main`：通过；`main v0.1.10` 编译成功，仍只有既有 `objc` 宏 `unexpected cfgs` warning。
 - `cargo test -p main -- --nocapture`：通过（13 passed, 0 failed）；测试输出已显示 `main v0.1.10`。
 - `git diff --check -- main/Cargo.toml Cargo.lock main/src/main.rs main/src/onetcli_app.rs .claude/operations-log.md .claude/verification-report.md`：通过。
+
+## 编码前检查 - gpui_hotkey 跨平台系统热键 crate
+时间：2026-03-28 22:40:31 +0800
+
+□ 已查阅上下文摘要文件：`.claude/context-summary-gpui-hotkey-crate.md`
+□ 将使用以下可复用组件：
+- `main/src/main.rs`：复用现有 macOS toggle 语义与恢复链路
+- `main/src/onetcli_app.rs`：复用外层 `GPUI` action 分发模式
+- `crates/webview/src/lib.rs`：参考独立 crate 封装平台能力的组织方式
+□ 将遵循命名约定：crate API 使用 `PascalCase` 类型与 `snake_case` 函数/模块命名
+□ 将遵循代码风格：系统级热键能力收敛到新 crate，`main` 只保留业务接线
+□ 确认不重复造轮子，证明：已检查 `GPUI` 官方文档与源码，只发现 `bind_keys` / `on_action` / `on_reopen` 等应用内键盘能力，未发现系统级全局热键注册 API；底层注册继续复用 `global-hotkey`
+
+## 编码后声明 - gpui_hotkey 跨平台系统热键 crate
+时间：2026-03-28 22:40:31 +0800
+
+### 1. 复用了以下既有组件
+- `global-hotkey`：继续作为跨平台系统级热键底层注册库，由新 crate 统一封装。
+- `main/src/main.rs` 中既有 `macos_activation_restore`：保留原有显示/隐藏切换语义，只迁移热键注册入口。
+- `main/src/onetcli_app.rs` 中既有 `GPUI KeyBinding`：继续负责应用内快捷键，不和系统级热键职责混用。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `HotkeySpec`、`GlobalHotkeyBinding`、`GlobalHotkeyManager`，模块与函数维持 Rust 既有命名风格。
+- 文件组织：新增 `crates/gpui_hotkey` 收敛系统级热键能力，避免继续堆在 `main` 入口文件。
+- 代码风格：对外暴露薄 API，业务语义仍由 `main` 决定。
+
+### 3. 对比了以下相似实现
+- 对比 `main/src/main.rs` 原有 `macos_global_hotkey`：本次将其替换为统一 crate 接口，不再在入口层直接管理 `global-hotkey` 细节。
+- 对比 `main/src/onetcli_app.rs` 的 `GPUI KeyBinding`：明确保留应用内快捷键链路，不错误扩张新 crate 的职责。
+- 对比 `crates/webview/src/lib.rs`：沿用“独立 crate 封装平台相关能力，对外暴露窄接口”的组织方式。
+
+### 4. 未重复造轮子的证明
+- 没有重新实现系统级热键底层注册，继续复用 `global-hotkey`。
+- 没有重复封装 `GPUI` 的窗口内快捷键体系，新 crate 仅处理系统级全局热键。
+
+## 验证记录 - gpui_hotkey 跨平台系统热键 crate
+- 红灯：`cargo test -p gpui_hotkey -- --nocapture` 首次失败，错误为 `GlobalHotkeyBinding` / `GlobalHotkeyManager` / `HotkeySpec` / `event` 等统一 API 尚未实现，符合 TDD 预期。
+- 红灯修正：第二轮 crate 测试因真实系统热键注册冲突失败，已将单元测试收敛为纯内存 test manager，避免把操作系统状态耦合进核心逻辑验证。
+- 绿灯：`cargo test -p gpui_hotkey -- --nocapture` 通过（3 passed）。
+- 编译验证：`cargo check -p gpui_hotkey` 通过。
+- 迁移验证：`cargo test -p main -- --nocapture` 通过（13 passed）。
+- 编译验证：`cargo check -p main` 通过。
+- 差异检查：`git diff --check -- Cargo.toml main/Cargo.toml main/src/main.rs main/src/onetcli_app.rs crates/gpui_hotkey/Cargo.toml crates/gpui_hotkey/src/lib.rs crates/gpui_hotkey/src/error.rs crates/gpui_hotkey/src/event.rs crates/gpui_hotkey/src/hotkey.rs crates/gpui_hotkey/src/manager.rs docs/superpowers/specs/2026-03-28-gpui-hotkey-design.md docs/superpowers/plans/2026-03-28-gpui-hotkey.md .claude/context-summary-gpui-hotkey-crate.md .claude/operations-log.md` 通过。
+- 已观察：当前统一 API 已在 crate 层跨平台成立，并已完成 macOS 入口迁移；Windows / Linux 仍需要真实桌面环境验证最终系统行为。
+
+## 编码前检查 - objc-cargo-clippy
+时间：2026-03-28 22:19:18 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-objc-cargo-clippy.md`
+- 已分析相似实现：
+  - `main/src/onetcli_app.rs`
+  - `main/src/main.rs` 中 `macos_activation_restore`
+  - `main/src/main.rs` 中 `restore_first_minimized_window` / `app_is_active` / `has_visible_window`
+- 将使用以下可复用组件：
+  - `main/Cargo.toml` 的 macOS 目标依赖声明
+  - 根 `Cargo.toml` 的工作区级 lint 配置模式
+  - 现有 `class!` / `sel!` / `msg_send!` 宏调用，不改业务逻辑
+- 将遵循命名约定：只补 Cargo 标准 lint 配置，不引入新 crate、脚本或自定义属性名
+- 将遵循代码风格：优先在配置层做最小兼容修复，不在每个宏调用点散布 `allow`
+- 确认不重复造轮子，证明：已检查仓库内 `objc` / `cocoa` 使用点与现有 lint 配置，当前不存在统一兼容层，只需复用 Cargo 官方 `check-cfg` 机制
+- 根因结论：`objc 0.2.7` 宏内部仍包含 `cfg(feature = "cargo-clippy")`，在新版 Rust `check-cfg` 下会在目标 crate 展开时触发 `unexpected_cfgs`；CI 使用 `-D warnings` 时会把该警告升级为错误
+
+## 编码后声明 - objc-cargo-clippy
+时间：2026-03-28 22:28:09 +0800
+
+### 1. 复用了以下既有组件
+- 根 `Cargo.toml` 的工作区级 lint 配置模式：沿用现有 `[workspace.lints.*]` 结构，新增 Rust lint 声明。
+- `main/Cargo.toml` 的 `[lints] workspace = true`：无需改 `main` crate 本身即可继承修复。
+- `main/src/onetcli_app.rs` 与 `main/src/main.rs` 的既有 AppKit 宏调用：保持原业务逻辑和运行时行为不变。
+
+### 2. 遵循了以下项目约定
+- 命名约定：仅使用 Cargo 官方 `unexpected_cfgs` / `check-cfg` 字段名，没有引入自定义兼容开关。
+- 代码风格：修复收敛在根 `Cargo.toml`，没有为每个 `class!` / `sel!` / `msg_send!` 调用点增加局部 `allow`。
+- 文件组织：代码改动只在工作区根配置，留痕文档写入项目本地 `.claude/`。
+
+### 3. 对比了以下相似实现
+- 对比 `main/src/onetcli_app.rs` 的 `restore_window`：说明单点改源码只能压住 3 处 `msg_send!`，不能覆盖 `main.rs` 的其余宏调用。
+- 对比 `main/src/main.rs` 的 `macos_activation_restore`：多个 `class!` / `sel!` / `msg_send!` 共用同一根因，适合配置层统一处理。
+- 对比根 `Cargo.toml` 既有 `[workspace.lints.clippy]`：项目已经采用集中式 lint 配置，本次新增 `[workspace.lints.rust]` 与现有模式一致。
+
+### 4. 未重复造轮子的证明
+- 已检查仓库内所有 `objc` / `cocoa` 使用点，确认不存在现成兼容层。
+- 已验证 Cargo 官方 `check-cfg` 能直接覆盖旧依赖宏的 `cargo-clippy` feature 检查，因此不需要自研包装宏或重写 AppKit 桥接代码。
+
+## 验证记录 - objc-cargo-clippy
+- `cargo check -p main --message-format short`
+  - 结果：通过；`main` 编译完成，未再出现 `unexpected_cfgs` / `cargo-clippy` 警告。
+- `RUSTFLAGS='-D warnings' cargo check -p main --message-format short`
+  - 结果：通过；严格 warnings 场景下不再因为 `objc` 宏展开失败。
+- `git diff --check -- Cargo.toml .claude/context-summary-objc-cargo-clippy.md .claude/operations-log.md`
+  - 结果：通过；本次改动不存在尾随空格或冲突标记。
+- 已观察
+  - 默认与严格检查都仍提示 `num-bigint-dig v0.8.4` 的 future-incompat 报告；这是工作区既有依赖提示，与本次修复无关。
+
+## 编码前检查 - app_visibility Windows 恢复扩展
+时间：2026-03-28 23:20:00 +0800
+
+- 已查阅上下文摘要文件：`.claude/context-summary-app-visibility.md`
+- 已分析相似实现：
+  - `main/src/main.rs`
+  - `main/src/onetcli_app.rs`
+  - `examples/system_monitor/src/main.rs`
+  - `main/src/main.rs` 旧 `macos_activation_restore`
+- 将使用以下可复用组件：
+  - `global-hotkey`：继续做系统级热键注册
+  - `raw-window-handle`：在主窗口创建时提取原生句柄
+  - `app_visibility`：继续作为外层唯一语义入口
+- 将遵循命名约定：类型 `PascalCase`、函数 `snake_case`、平台分支使用 `cfg(target_os = ...)`
+- 将遵循代码风格：`main` 只做接线，平台恢复细节继续收敛在 `app_visibility`
+- 确认不重复造轮子，证明：已检查 `GPUI` 现有窗口级能力和 `main` 现有入口逻辑，`Windows` 恢复仅补原生恢复，不重复封装热键层
+
+## 编码后声明 - app_visibility Windows 恢复扩展
+时间：2026-03-28 23:20:00 +0800
+
+### 1. 复用了以下既有组件
+- `app_visibility`：保持外层语义 API 不变，只新增主窗口句柄注册和 `Windows` 恢复分支。
+- `main/src/main.rs`：继续承接系统热键注册，不把 Win32 恢复细节放回入口文件。
+- `main/src/onetcli_app.rs`：保留应用内隐藏能力，不再强行把 `Windows/Linux` 隐藏塞进系统热键链路。
+
+### 2. 遵循了以下项目约定
+- 命名约定：新增 `register_main_window_handle`、`MainWindowHandleMissing`、`UnsupportedWindowHandle`，均符合现有 Rust 风格。
+- 文件组织：`main` 只负责窗口创建时注册句柄和系统热键转发，平台恢复逻辑在 `crates/app_visibility`。
+- 代码风格：热键过滤仍保留纯函数 `should_dispatch_hotkey_event`，平台差异通过条件编译隔离。
+
+### 3. 对比了以下相似实现
+- 对比 `main/src/onetcli_app.rs` 的 `restore_window`：沿用“先判断是否需要恢复，再执行平台原语”的模式，但把系统级路径收敛到 crate。
+- 对比 `examples/system_monitor/src/main.rs`：`Windows` 热键分支沿用入口按平台语义分开定义的组织方式。
+- 对比旧 `macos_activation_restore`：继续保持 `macOS` 为真正的系统级 toggle，而 `Windows` 只做恢复，不混入多余隐藏分支。
+
+### 4. 未重复造轮子的证明
+- 没有新增第二套热键封装，系统级仍直接使用 `global-hotkey`。
+- 没有为 `Windows` 重新实现应用内隐藏逻辑，前台隐藏继续依赖 GPUI 既有能力。
+- `Linux` 仅记录主窗口句柄并保留扩展位，没有伪装成已支持的恢复实现。
+
+## 验证记录 - app_visibility Windows 恢复扩展
+- `cargo test -p app_visibility -- --nocapture`
+  - 结果：通过（2 passed）
+- `cargo check -p app_visibility`
+  - 结果：通过
+- `cargo test -p main -- --nocapture`
+  - 结果：通过（13 passed）
+- `cargo check -p main`
+  - 结果：通过
+- `rustup target list --installed`
+  - 结果：仅安装 `aarch64-apple-darwin`
+- 已观察
+  - 当前开发机无法本地交叉验证 `Windows/Linux` 编译目标，因此 `Windows` 路径属于代码实现完成但未在本机实测，`Linux` 仍明确为未支持恢复。
