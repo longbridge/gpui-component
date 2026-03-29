@@ -1,6 +1,5 @@
 use raw_window_handle::HasWindowHandle;
 use std::sync::OnceLock;
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 use global_hotkey::{
     GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
     hotkey::{Code as HotkeyCode, HotKey, Modifiers as HotkeyModifiers},
