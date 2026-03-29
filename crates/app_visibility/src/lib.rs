@@ -201,9 +201,14 @@ mod platform {
         IsIconic, IsWindowVisible, SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
     };
 
-    static MAIN_WINDOW_HANDLE: OnceLock<Mutex<Option<RawWindowHandle>>> = OnceLock::new();
+    // FIX 1: RawWindowHandle 不实现 Send，用 wrapper 手动标记为 Send。
+    // 安全性：我们只在主线程注册句柄，且仅通过 Mutex 访问，保证了互斥。
+    struct SendableWindowHandle(RawWindowHandle);
+    unsafe impl Send for SendableWindowHandle {}
 
-    fn main_window_handle_slot() -> &'static Mutex<Option<RawWindowHandle>> {
+    static MAIN_WINDOW_HANDLE: OnceLock<Mutex<Option<SendableWindowHandle>>> = OnceLock::new();
+
+    fn main_window_handle_slot() -> &'static Mutex<Option<SendableWindowHandle>> {
         MAIN_WINDOW_HANDLE.get_or_init(|| Mutex::new(None))
     }
 
@@ -216,17 +221,21 @@ mod platform {
     }
 
     pub fn restore_main_window() -> Result<(), AppVisibilityError> {
-        let stored_handle = *main_window_handle_slot()
+        let guard = main_window_handle_slot()
             .lock()
-            .expect("主窗口句柄锁不应中毒")
+            .expect("主窗口句柄锁不应中毒");
+
+        let stored_handle = guard
             .as_ref()
-            .ok_or(AppVisibilityError::MainWindowHandleMissing)?;
+            .ok_or(AppVisibilityError::MainWindowHandleMissing)?
+            .0;
 
         let RawWindowHandle::Win32(handle) = stored_handle else {
             return Err(AppVisibilityError::UnsupportedWindowHandle);
         };
 
-        let hwnd = HWND(handle.hwnd.get());
+        // FIX 2: HWND 期望 *mut c_void，但 handle.hwnd.get() 返回 isize，需要转型。
+        let hwnd = HWND(handle.hwnd.get() as *mut core::ffi::c_void);
         let is_visible = unsafe { IsWindowVisible(hwnd).as_bool() };
         let is_iconic = unsafe { IsIconic(hwnd).as_bool() };
 
@@ -255,7 +264,7 @@ mod platform {
     pub fn register_main_window_handle(window_handle: RawWindowHandle) -> Result<(), AppVisibilityError> {
         *main_window_handle_slot()
             .lock()
-            .expect("主窗口句柄锁不应中毒") = Some(window_handle);
+            .expect("主窗口句柄锁不应中毒") = Some(SendableWindowHandle(window_handle));
         Ok(())
     }
 }
@@ -266,9 +275,13 @@ mod platform {
     use raw_window_handle::RawWindowHandle;
     use std::sync::{Mutex, OnceLock};
 
-    static MAIN_WINDOW_HANDLE: OnceLock<Mutex<Option<RawWindowHandle>>> = OnceLock::new();
+    // FIX 1: 同 Windows 平台，用 wrapper 手动标记为 Send。
+    struct SendableWindowHandle(RawWindowHandle);
+    unsafe impl Send for SendableWindowHandle {}
 
-    fn main_window_handle_slot() -> &'static Mutex<Option<RawWindowHandle>> {
+    static MAIN_WINDOW_HANDLE: OnceLock<Mutex<Option<SendableWindowHandle>>> = OnceLock::new();
+
+    fn main_window_handle_slot() -> &'static Mutex<Option<SendableWindowHandle>> {
         MAIN_WINDOW_HANDLE.get_or_init(|| Mutex::new(None))
     }
 
@@ -296,7 +309,7 @@ mod platform {
     pub fn register_main_window_handle(window_handle: RawWindowHandle) -> Result<(), AppVisibilityError> {
         *main_window_handle_slot()
             .lock()
-            .expect("主窗口句柄锁不应中毒") = Some(window_handle);
+            .expect("主窗口句柄锁不应中毒") = Some(SendableWindowHandle(window_handle));
         Ok(())
     }
 }
