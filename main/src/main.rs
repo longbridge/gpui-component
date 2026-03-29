@@ -102,16 +102,13 @@ mod system_hotkey {
 
         #[cfg(target_os = "linux")]
         {
-            return HotKey::new(
-                Some(HotkeyModifiers::SUPER | HotkeyModifiers::ALT),
-                HotkeyCode::KeyM,
-            );
+            return HotKey::new(Some(HotkeyModifiers::CONTROL), HotkeyCode::Space);
         }
 
         #[allow(unreachable_code)]
         HotKey::new(
             Some(HotkeyModifiers::SUPER | HotkeyModifiers::ALT),
-            HotkeyCode::KeyM,
+            HotkeyCode::Space,
         )
     }
 
@@ -147,8 +144,6 @@ fn main() {
     let app = Application::new()
         .with_assets(Assets)
         .with_quit_mode(QuitMode::LastWindowClosed);
-
-    app.on_reopen(|cx| onetcli_app::reopen_last_window(cx));
 
     app.run(move |cx| {
         #[cfg(target_os = "macos")]

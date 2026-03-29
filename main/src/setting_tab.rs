@@ -852,7 +852,7 @@ const WINDOW_SHORTCUTS: &[ShortcutEntry] = &[
         label_key: "Settings.Shortcuts.quit_app",
     },
     ShortcutEntry {
-        key_macos: "cmd-m",
+        key_macos: "cmd-alt-m",
         key_other: "ctrl-space",
         label_key: "Settings.Shortcuts.minimize_window",
     },
