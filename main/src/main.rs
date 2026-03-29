@@ -36,7 +36,7 @@ use raw_window_handle::HasWindowHandle;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::sync::{Once, OnceLock};
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod system_hotkey {
     use super::*;
 
@@ -100,6 +100,14 @@ mod system_hotkey {
             return HotKey::new(Some(HotkeyModifiers::CONTROL), HotkeyCode::Space);
         }
 
+        #[cfg(target_os = "linux")]
+        {
+            return HotKey::new(
+                Some(HotkeyModifiers::SUPER | HotkeyModifiers::ALT),
+                HotkeyCode::KeyM,
+            );
+        }
+
         #[allow(unreachable_code)]
         HotKey::new(
             Some(HotkeyModifiers::SUPER | HotkeyModifiers::ALT),
@@ -124,6 +132,11 @@ mod system_hotkey {
     fn dispatch_main_window_shortcut() -> Result<(), app_visibility::AppVisibilityError> {
         restore_main_window()
     }
+
+    #[cfg(target_os = "linux")]
+    fn dispatch_main_window_shortcut() -> Result<(), app_visibility::AppVisibilityError> {
+        toggle_main_window_visibility()
+    }
 }
 
 fn main() {
@@ -145,7 +158,7 @@ fn main() {
 
         onetcli_app::init(cx);
 
-        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
         system_hotkey::register();
 
         setting_tab::init_settings(cx);

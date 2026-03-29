@@ -179,7 +179,24 @@ mod platform {
     }
 
     pub fn hide_main_window() -> Result<(), AppVisibilityError> {
-        Err(AppVisibilityError::UnsupportedPlatform)
+        let guard = main_window_handle_slot()
+            .lock()
+            .expect("主窗口句柄锁不应中毒");
+
+        let stored_handle = guard
+            .as_ref()
+            .ok_or(AppVisibilityError::MainWindowHandleMissing)?
+            .0;
+
+        let RawWindowHandle::Win32(handle) = stored_handle else {
+            return Err(AppVisibilityError::UnsupportedWindowHandle);
+        };
+
+        let hwnd = HWND(handle.hwnd.get() as *mut core::ffi::c_void);
+        unsafe {
+            let _ = ShowWindow(hwnd, windows::Win32::UI::WindowsAndMessaging::SW_HIDE);
+        }
+        Ok(())
     }
 
     pub fn restore_main_window() -> Result<(), AppVisibilityError> {
@@ -220,7 +237,28 @@ mod platform {
     }
 
     pub fn toggle_main_window_visibility() -> Result<(), AppVisibilityError> {
-        restore_main_window()
+        let guard = main_window_handle_slot()
+            .lock()
+            .expect("主窗口句柄锁不应中毒");
+
+        let stored_handle = guard
+            .as_ref()
+            .ok_or(AppVisibilityError::MainWindowHandleMissing)?
+            .0;
+
+        let RawWindowHandle::Win32(handle) = stored_handle else {
+            return Err(AppVisibilityError::UnsupportedWindowHandle);
+        };
+
+        let hwnd = HWND(handle.hwnd.get() as *mut core::ffi::c_void);
+        let is_visible = unsafe { IsWindowVisible(hwnd).as_bool() };
+
+        if is_visible {
+            // 隐藏由 GPUI 处理
+        } else {
+            restore_main_window()?;
+        }
+        Ok(())
     }
 
     pub fn register_main_window_handle(window_handle: RawWindowHandle) -> Result<(), AppVisibilityError> {
@@ -372,7 +410,7 @@ mod platform {
     pub fn register_activation_observer() -> Result<(), AppVisibilityError> {
         // X11 没有类似 macOS NSApplicationDidBecomeActive 的全局激活通知机制，
         // 通常由上层（如 tray / global hotkey）直接调用 toggle_main_window_visibility。
-        Err(AppVisibilityError::UnsupportedPlatform)
+        Ok(())
     }
 
     pub fn hide_main_window() -> Result<(), AppVisibilityError> {
@@ -452,7 +490,15 @@ mod platform {
     }
 
     pub fn hide_main_window() -> Result<(), AppVisibilityError> {
-        Err(AppVisibilityError::UnsupportedPlatform)
+        let window = get_xlib_window()?;
+        let dpy = DisplayGuard::open()?;
+
+        unsafe {
+            XWithdrawWindow(dpy.as_ptr(), window, 0);
+            XFlush(dpy.as_ptr());
+        }
+
+        Ok(())
     }
 
     pub fn restore_main_window() -> Result<(), AppVisibilityError> {

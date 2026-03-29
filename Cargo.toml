@@ -36,7 +36,7 @@ story = { path = "crates/story" }
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_tokio = { git = "https://github.com/zed-industries/zed" }
 util = { git = "https://github.com/zed-industries/zed" }
-gpui-macros = "0.2.2"
+gpui-macros = { git = "https://github.com/zed-industries/zed" }
 sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 # reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
 reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", default-features = false, features = [
@@ -143,7 +143,7 @@ url = "2.5.4"
 percent-encoding = "2.3.1"
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
-version = "0.58.0"
+version = "0.61.0"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
