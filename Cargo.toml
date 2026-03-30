@@ -28,11 +28,11 @@ gpui-component-macros = { path = "crates/macros", version = "0.5.1" }
 gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 story = { path = "crates/story" }
 
-gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui_web = { git = "https://github.com/zed-industries/zed" }
-gpui_macros = { git = "https://github.com/zed-industries/zed" }
-reqwest_client = { git = "https://github.com/zed-industries/zed" }
+gpui = { git = "https://github.com/AzureZee/gpuix.git" }
+gpui_platform = { git = "https://github.com/AzureZee/gpuix.git", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui_web = { git = "https://github.com/AzureZee/gpuix.git" }
+gpui_macros = { git = "https://github.com/AzureZee/gpuix.git" }
+reqwest_client = { git = "https://github.com/AzureZee/gpuix.git" }
 sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 # reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
 reqwest = { git = "https://github.com/zed-industries/reqwest.git", rev = "c15662463bda39148ba154100dd44d3fba5873a4", default-features = false, features = [
