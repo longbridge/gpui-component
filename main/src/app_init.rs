@@ -1,18 +1,19 @@
 use global_hotkey::{
-    GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
     hotkey::{Code as HotkeyCode, HotKey, Modifiers as HotkeyModifiers},
+    GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
 };
 use gpui::{AnyWindowHandle, App, Window};
 use std::sync::OnceLock;
 use std::time::Duration;
+
 /// 全局初始化标记（只初始化一次）
 static VISIBILITY_INIT: OnceLock<()> = OnceLock::new();
 static MAIN_WINDOW_HANDLE: OnceLock<AnyWindowHandle> = OnceLock::new();
 
 /// 对外暴露：初始化窗口相关系统（visibility + hotkey）
 pub fn init_window_systems(window: &Window, cx: &mut App) {
-    // 已初始化直接返回
     if VISIBILITY_INIT.get().is_some() {
+        tracing::debug!("window systems already initialized");
         return;
     }
 
@@ -21,7 +22,6 @@ pub fn init_window_systems(window: &Window, cx: &mut App) {
     // 初始化 hotkey
     system_hotkey::register(cx);
 
-    // 标记完成
     let _ = VISIBILITY_INIT.set(());
 }
 
@@ -39,44 +39,45 @@ fn pick_toggle_target<T: Copy>(
 mod system_hotkey {
     use super::*;
     use gpui::{AppContext, AsyncApp, Window};
-    use std::sync::{Mutex, OnceLock, mpsc};
+    use std::sync::{mpsc, OnceLock};
 
     const HOTKEY_POLL_INTERVAL: Duration = Duration::from_millis(16);
 
-    static HOTKEY_MANAGER: OnceLock<Mutex<GlobalHotKeyManager>> = OnceLock::new();
     static TOGGLE_HOTKEY_ID: OnceLock<u32> = OnceLock::new();
     static TOGGLE_REQUEST_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
+    static REGISTERED: OnceLock<()> = OnceLock::new();
 
     pub fn register(cx: &mut App) {
-        // 初始化 manager（只执行一次）
-        let manager = HOTKEY_MANAGER.get_or_init(|| {
-            let manager = GlobalHotKeyManager::new()
-                .map_err(|err| {
-                    tracing::warn!("系统级热键管理器初始化失败: {err:?}");
-                })
-                .ok()
-                .expect("GlobalHotKeyManager 初始化失败");
-
-            Mutex::new(manager)
-        });
+        // 防止重复注册
+        if REGISTERED.set(()).is_err() {
+            tracing::debug!("hotkey already registered");
+            return;
+        }
 
         install_toggle_dispatcher(cx);
 
-        // 构建热键
+        // ✅ 关键：局部创建（不能 static）
+        let manager = GlobalHotKeyManager::new()
+            .map_err(|err| {
+                tracing::warn!("系统级热键管理器初始化失败: {err:?}");
+            })
+            .ok()
+            .expect("GlobalHotKeyManager 初始化失败");
+
         let hotkey = build_toggle_hotkey();
         let hotkey_id = hotkey.id();
 
-        // 注册热键
-        if let Err(err) = manager.lock().unwrap().register(hotkey) {
+        if let Err(err) = manager.register(hotkey) {
             tracing::warn!("系统级热键注册失败: {err:?}");
             return;
         }
 
-        // 记录 hotkey id（只会成功一次）
         let _ = TOGGLE_HOTKEY_ID.set(hotkey_id);
 
-        // 设置事件监听（覆盖式即可，无需 Once）
         GlobalHotKeyEvent::set_event_handler(Some(handle_hotkey_event));
+
+        // ⚠️ 防止 drop（否则热键失效）
+        std::mem::forget(manager);
     }
 
     fn handle_hotkey_event(event: GlobalHotKeyEvent) {
@@ -131,7 +132,10 @@ mod system_hotkey {
             let mut cx = cx.clone();
             async move {
                 loop {
-                    cx.background_executor().timer(HOTKEY_POLL_INTERVAL).await;
+                    cx.background_executor()
+                        .timer(HOTKEY_POLL_INTERVAL)
+                        .await;
+
                     while rx.try_recv().is_ok() {
                         if let Err(err) = toggle_main_window(&mut cx) {
                             tracing::warn!("主窗口系统级快捷键处理失败: {err:?}");
@@ -140,25 +144,19 @@ mod system_hotkey {
                 }
             }
         })
-        .detach();
+            .detach();
     }
 
     fn toggle_main_window(cx: &mut AsyncApp) -> anyhow::Result<()> {
         if let Some(window_handle) = resolve_toggle_target(cx) {
-            if cx
-                .update_window(window_handle, |_, window: &mut Window, _| {
-                    if window.is_window_active() {
-                        window.minimize_window();
-                    } else {
-                        window.activate_window();
-                    }
-                })
-                .is_ok()
-            {
-                return Ok(());
-            }
+            let _ = cx.update_window(window_handle, |_, window: &mut Window, _| {
+                if window.is_window_active() {
+                    window.minimize_window();
+                } else {
+                    window.activate_window();
+                }
+            });
         }
-
         Ok(())
     }
 
