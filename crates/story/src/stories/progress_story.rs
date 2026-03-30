@@ -1,9 +1,9 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Task,
-    Window, div, px,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Sizable,
+    ActiveTheme, IconName, Selectable, Sizable,
     button::Button,
     h_flex,
     progress::{Progress, ProgressCircle},
@@ -16,6 +16,7 @@ use crate::section;
 pub struct ProgressStory {
     focus_handle: gpui::FocusHandle,
     value: f32,
+    loading: bool,
     _task: Option<Task<()>>,
 }
 
@@ -42,6 +43,7 @@ impl ProgressStory {
         Self {
             focus_handle: cx.focus_handle(),
             value: 25.,
+            loading: false,
             _task: None,
         }
     }
@@ -127,6 +129,16 @@ impl Render for ProgressStory {
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         this.start_animation(cx);
                                     })),
+                            )
+                            .child(
+                                Button::new("loading-toggle-button")
+                                    .small()
+                                    .label("Loading")
+                                    .selected(self.loading)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.loading = !this.loading;
+                                        cx.notify();
+                                    })),
                             ),
                     )
                     .child(
@@ -149,14 +161,17 @@ impl Render for ProgressStory {
                     ),
             )
             .child(
-                section("Progress Bar")
-                    .max_w_md()
-                    .child(Progress::new("progress-1").value(self.value)),
+                section("Progress Bar").max_w_md().child(
+                    Progress::new("progress-1")
+                        .value(self.value)
+                        .loading(self.loading),
+                ),
             )
             .child(
                 section("Custom Style").max_w_md().child(
                     Progress::new("progress-2")
                         .value(32.)
+                        .loading(self.loading)
                         .h(px(16.))
                         .rounded(px(2.))
                         .color(cx.theme().green_light)
@@ -168,20 +183,23 @@ impl Render for ProgressStory {
                 section("Circle Progress").max_w_md().child(
                     ProgressCircle::new("circle-progress-1")
                         .value(self.value)
+                        .loading(self.loading)
                         .size_20()
-                        .child(
-                            v_flex()
-                                .size_full()
-                                .items_center()
-                                .justify_center()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .child(format!("{}%", self.value))
-                                        .text_color(cx.theme().progress_bar),
-                                )
-                                .child(div().child("Loading").text_xs()),
-                        ),
+                        .when(!self.loading, |this| {
+                            this.child(
+                                v_flex()
+                                    .size_full()
+                                    .items_center()
+                                    .justify_center()
+                                    .gap_1()
+                                    .child(
+                                        div()
+                                            .child(format!("{}%", self.value))
+                                            .text_color(cx.theme().progress_bar),
+                                    )
+                                    .child(div().child("Loading").text_xs()),
+                            )
+                        }),
                 ),
             )
             .child(
@@ -189,19 +207,26 @@ impl Render for ProgressStory {
                     h_flex()
                         .gap_2()
                         .child(
-                            ProgressCircle::new("circle-progress-1")
+                            ProgressCircle::new("circle-progress-2")
                                 .value(self.value)
+                                .loading(self.loading)
                                 .large(),
                         )
-                        .child(ProgressCircle::new("circle-progress-1").value(self.value))
                         .child(
-                            ProgressCircle::new("circle-progress-1")
+                            ProgressCircle::new("circle-progress-3")
                                 .value(self.value)
+                                .loading(self.loading),
+                        )
+                        .child(
+                            ProgressCircle::new("circle-progress-4")
+                                .value(self.value)
+                                .loading(self.loading)
                                 .small(),
                         )
                         .child(
-                            ProgressCircle::new("circle-progress-1")
+                            ProgressCircle::new("circle-progress-5")
                                 .value(self.value)
+                                .loading(self.loading)
                                 .xsmall(),
                         ),
                 ),
@@ -211,9 +236,10 @@ impl Render for ProgressStory {
                     h_flex()
                         .gap_2()
                         .child(
-                            ProgressCircle::new("circle-progress-1")
+                            ProgressCircle::new("circle-progress-6")
                                 .color(cx.theme().primary)
                                 .value(self.value)
+                                .loading(self.loading)
                                 .size_4(),
                         )
                         .child("Downloading..."),
@@ -221,9 +247,10 @@ impl Render for ProgressStory {
             )
             .child(
                 section("Circle with Color").max_w_md().child(
-                    ProgressCircle::new("circle-progress-1")
+                    ProgressCircle::new("circle-progress-7")
                         .color(cx.theme().yellow)
                         .value(self.value)
+                        .loading(self.loading)
                         .size_12(),
                 ),
             )
