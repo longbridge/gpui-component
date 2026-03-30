@@ -23,11 +23,6 @@ actions!(
     ]
 );
 
-#[cfg(not(target_os = "macos"))]
-fn restore_window(window: &mut Window) {
-    window.activate_window();
-}
-
 #[derive(Clone)]
 pub struct GlobalTabContainer {
     pub tab_container: Entity<TabContainer>,
