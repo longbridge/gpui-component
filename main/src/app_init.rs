@@ -2,22 +2,33 @@ use global_hotkey::{
     GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
     hotkey::{Code as HotkeyCode, HotKey, Modifiers as HotkeyModifiers},
 };
-use gpui::App;
-use raw_window_handle::HasWindowHandle;
+use gpui::{AnyWindowHandle, App, Window};
+use raw_window_handle::{HasWindowHandle as RawHasWindowHandle, RawWindowHandle};
 use std::sync::OnceLock;
 use std::time::Duration;
 /// 全局初始化标记（只初始化一次）
 static VISIBILITY_INIT: OnceLock<()> = OnceLock::new();
+static MAIN_WINDOW_HANDLE: OnceLock<AnyWindowHandle> = OnceLock::new();
 
 /// 对外暴露：初始化窗口相关系统（visibility + hotkey）
-pub fn init_window_systems(window: &impl HasWindowHandle, cx: &mut App) {
+pub fn init_window_systems(window: &Window, cx: &mut App) {
     // 已初始化直接返回
     if VISIBILITY_INIT.get().is_some() {
         return;
     }
 
-    // 获取 window handle
-    let handle = match window.window_handle() {
+    let _ = MAIN_WINDOW_HANDLE.set(window.window_handle());
+    init_native_visibility(window);
+
+    // 初始化 hotkey
+    system_hotkey::register(cx);
+
+    // 标记完成
+    let _ = VISIBILITY_INIT.set(());
+}
+
+fn init_native_visibility(window: &Window) {
+    let handle = match RawHasWindowHandle::window_handle(window) {
         Ok(h) => h,
         Err(err) => {
             tracing::warn!("窗口句柄获取失败: {err:?}");
@@ -25,24 +36,41 @@ pub fn init_window_systems(window: &impl HasWindowHandle, cx: &mut App) {
         }
     };
 
-    // 初始化 visibility
-    if let Err(err) = app_visibility::init(handle.as_raw()) {
-        tracing::warn!("窗口可见性系统初始化失败: {err:?}");
+    let raw_handle = handle.as_raw();
+    if !supports_native_visibility(&raw_handle) {
+        tracing::debug!("当前窗口句柄由 gpui 直接处理显隐，不初始化原生 fallback: {raw_handle:?}");
         return;
     }
 
-    // 初始化 hotkey（依赖 visibility）
-    system_hotkey::register(cx);
+    if let Err(err) = app_visibility::init(raw_handle) {
+        tracing::warn!("窗口可见性系统初始化失败: {err:?}");
+    }
+}
 
-    // 标记完成
-    let _ = VISIBILITY_INIT.set(());
+fn supports_native_visibility(handle: &RawWindowHandle) -> bool {
+    matches!(
+        handle,
+        RawWindowHandle::AppKit(_)
+            | RawWindowHandle::Win32(_)
+            | RawWindowHandle::Xlib(_)
+            | RawWindowHandle::Xcb(_)
+    )
+}
+
+fn pick_toggle_target<T: Copy>(
+    registered: Option<T>,
+    stacked: Option<&[T]>,
+    fallback: Option<T>,
+) -> Option<T> {
+    registered
+        .or_else(|| stacked.and_then(|stack| stack.first().copied()))
+        .or(fallback)
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod system_hotkey {
     use super::*;
-    use crate::app_init::HotkeyModifiers;
-    use gpui::AsyncApp;
+    use gpui::{AppContext, AsyncApp, Window};
     use std::sync::{Mutex, OnceLock, mpsc};
 
     const HOTKEY_POLL_INTERVAL: Duration = Duration::from_millis(16);
@@ -132,12 +160,12 @@ mod system_hotkey {
         }
 
         cx.spawn(move |cx: &mut AsyncApp| {
-            let cx = cx.clone();
+            let mut cx = cx.clone();
             async move {
                 loop {
                     cx.background_executor().timer(HOTKEY_POLL_INTERVAL).await;
                     while rx.try_recv().is_ok() {
-                        if let Err(err) = cx.update(|_| app_visibility::toggle()) {
+                        if let Err(err) = toggle_main_window(&mut cx) {
                             tracing::warn!("主窗口系统级快捷键处理失败: {err:?}");
                         }
                     }
@@ -145,5 +173,69 @@ mod system_hotkey {
             }
         })
         .detach();
+    }
+
+    fn toggle_main_window(cx: &mut AsyncApp) -> anyhow::Result<()> {
+        if let Some(window_handle) = resolve_toggle_target(cx) {
+            if cx
+                .update_window(window_handle, |_, window: &mut Window, _| {
+                    if window.is_window_active() {
+                        window.minimize_window();
+                    } else {
+                        window.activate_window();
+                    }
+                })
+                .is_ok()
+            {
+                return Ok(());
+            }
+        }
+
+        cx.update(|_| app_visibility::toggle())
+            .map_err(anyhow::Error::from)
+    }
+
+    fn resolve_toggle_target(cx: &AsyncApp) -> Option<AnyWindowHandle> {
+        cx.update(|app| {
+            let window_stack = app.window_stack();
+            pick_toggle_target(
+                MAIN_WINDOW_HANDLE.get().copied(),
+                window_stack.as_deref(),
+                app.active_window(),
+            )
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use raw_window_handle::{RawWindowHandle, WaylandWindowHandle, XcbWindowHandle};
+    use std::{num::NonZeroU32, ptr::NonNull};
+
+    #[test]
+    fn pick_toggle_target_prefers_registered_window() {
+        let stack = [2_u8, 3_u8];
+
+        assert_eq!(
+            pick_toggle_target(Some(1_u8), Some(&stack), Some(9_u8)),
+            Some(1_u8)
+        );
+        assert_eq!(
+            pick_toggle_target(None, Some(&stack), Some(9_u8)),
+            Some(2_u8)
+        );
+        assert_eq!(pick_toggle_target(None, None, Some(9_u8)), Some(9_u8));
+    }
+
+    #[test]
+    fn wayland_does_not_use_native_visibility_fallback() {
+        let surface = NonNull::<std::ffi::c_void>::dangling();
+        let wayland = RawWindowHandle::Wayland(WaylandWindowHandle::new(surface));
+
+        assert!(!supports_native_visibility(&wayland));
+
+        let xcb = RawWindowHandle::Xcb(XcbWindowHandle::new(NonZeroU32::new(42).unwrap()));
+        assert!(supports_native_visibility(&xcb));
     }
 }

@@ -180,12 +180,12 @@ mod platform {
 
     use x11::xlib::*;
 
-    struct SendableWindow(u64);
+    struct SendableWindow(Window);
     unsafe impl Send for SendableWindow {}
 
     static WINDOW: OnceLock<Mutex<Option<SendableWindow>>> = OnceLock::new();
 
-    fn window() -> Result<u64, AppVisibilityError> {
+    fn window() -> Result<Window, AppVisibilityError> {
         let guard = WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap();
 
         guard
@@ -195,11 +195,13 @@ mod platform {
     }
 
     pub fn init(handle: RawWindowHandle) -> Result<(), AppVisibilityError> {
-        let RawWindowHandle::Xlib(h) = handle else {
-            return Err(AppVisibilityError::UnsupportedWindowHandle);
+        let window = match handle {
+            RawWindowHandle::Xlib(h) => h.window,
+            RawWindowHandle::Xcb(h) => h.window.get().into(),
+            _ => return Err(AppVisibilityError::UnsupportedWindowHandle),
         };
 
-        *WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap() = Some(SendableWindow(h.window));
+        *WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap() = Some(SendableWindow(window));
 
         Ok(())
     }
@@ -288,7 +290,7 @@ mod platform {
         let dpy = DisplayGuard::open()?;
 
         unsafe {
-            XWithdrawWindow(dpy.0, win, 0);
+            XWithdrawWindow(dpy.0, win, XDefaultScreen(dpy.0));
             XFlush(dpy.0);
         }
 
