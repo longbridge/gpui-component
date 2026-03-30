@@ -1,20 +1,49 @@
 use anyhow::Result;
 use gpui::{Context, EntityInputHandler, Task, Window};
 use lsp_types::{
-    CompletionContext, CompletionItem, CompletionResponse, InlineCompletionContext,
-    InlineCompletionItem, InlineCompletionResponse, InlineCompletionTriggerKind,
-    request::Completion,
+    request::Completion, CompletionContext, CompletionItem, CompletionResponse,
+    InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,
+    InlineCompletionTriggerKind,
 };
 use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
 use crate::input::{
-    InputState,
     popovers::{CompletionMenu, ContextMenu},
+    InputState,
 };
 
 /// Default debounce duration for inline completions.
 const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(300);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompletionMenuAction {
+    Ignore,
+    Hide,
+    Refresh(lsp_types::CompletionTriggerKind),
+}
+
+fn completion_menu_action(
+    has_existing_menu: bool,
+    is_trigger: bool,
+    full_text: &str,
+    new_offset: usize,
+    start_offset: usize,
+) -> CompletionMenuAction {
+    if !has_existing_menu && !is_trigger {
+        return CompletionMenuAction::Ignore;
+    }
+
+    if has_existing_menu && (full_text.trim().is_empty() || new_offset < start_offset) {
+        return CompletionMenuAction::Hide;
+    }
+
+    if is_trigger {
+        CompletionMenuAction::Refresh(lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER)
+    } else {
+        CompletionMenuAction::Refresh(lsp_types::CompletionTriggerKind::INVOKED)
+    }
+}
 
 /// A trait for providing code completions based on the current input state and context.
 pub trait CompletionProvider {
@@ -125,18 +154,38 @@ impl InputState {
 
         let start = range.end;
         let new_offset = self.cursor();
-
-        if !provider.is_completion_trigger(start, new_text, cx) {
-            return;
-        }
-
-        let menu = match self.context_menu.as_ref() {
+        let existing_menu = match self.context_menu.as_ref() {
             Some(ContextMenu::Completion(menu)) => Some(menu),
             _ => None,
         };
+        let is_trigger = provider.is_completion_trigger(start, new_text, cx);
+        let start_offset = existing_menu
+            .as_ref()
+            .and_then(|menu| menu.read(cx).trigger_start_offset)
+            .unwrap_or(start);
+        let action = completion_menu_action(
+            existing_menu.is_some(),
+            is_trigger,
+            &self.text.to_string(),
+            new_offset,
+            start_offset,
+        );
+
+        match action {
+            CompletionMenuAction::Ignore => return,
+            CompletionMenuAction::Hide => {
+                if let Some(menu) = existing_menu {
+                    _ = menu.update(cx, |menu, cx| {
+                        menu.hide(cx);
+                    });
+                }
+                return;
+            }
+            CompletionMenuAction::Refresh(_) => {}
+        }
 
         // To create or get the existing completion menu.
-        let menu = match menu {
+        let menu = match existing_menu {
             Some(menu) => menu.clone(),
             None => {
                 let menu = CompletionMenu::new(cx.entity(), window, cx);
@@ -144,11 +193,6 @@ impl InputState {
                 menu
             }
         };
-
-        let start_offset = menu.read(cx).trigger_start_offset.unwrap_or(start);
-        if new_offset < start_offset {
-            return;
-        }
 
         let query = self
             .text_for_range(
@@ -164,7 +208,12 @@ impl InputState {
         });
 
         let completion_context = CompletionContext {
-            trigger_kind: lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER,
+            trigger_kind: match action {
+                CompletionMenuAction::Refresh(trigger_kind) => trigger_kind,
+                CompletionMenuAction::Ignore | CompletionMenuAction::Hide => {
+                    lsp_types::CompletionTriggerKind::INVOKED
+                }
+            },
             trigger_character: Some(query),
         };
 
@@ -305,5 +354,55 @@ impl InputState {
         let completion_text = completion_item.insert_text;
         self.replace_text_in_range_silent(Some(range_utf16), &completion_text, window, cx);
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{completion_menu_action, CompletionMenuAction};
+    use lsp_types::CompletionTriggerKind;
+
+    #[test]
+    fn ignores_non_trigger_without_existing_menu() {
+        assert_eq!(
+            completion_menu_action(false, false, "name", 4, 0),
+            CompletionMenuAction::Ignore
+        );
+    }
+
+    #[test]
+    fn hides_existing_menu_when_text_becomes_empty() {
+        assert_eq!(
+            completion_menu_action(true, false, "", 0, 0),
+            CompletionMenuAction::Hide
+        );
+        assert_eq!(
+            completion_menu_action(true, false, "   ", 0, 0),
+            CompletionMenuAction::Hide
+        );
+    }
+
+    #[test]
+    fn hides_existing_menu_when_cursor_moves_before_trigger_start() {
+        assert_eq!(
+            completion_menu_action(true, false, "na", 0, 1),
+            CompletionMenuAction::Hide
+        );
+    }
+
+    #[test]
+    fn refreshes_existing_menu_on_delete_when_text_still_has_context() {
+        assert_eq!(
+            completion_menu_action(true, false, "n", 1, 0),
+            CompletionMenuAction::Refresh(CompletionTriggerKind::INVOKED)
+        );
+    }
+
+    #[test]
+    fn refreshes_with_trigger_character_for_normal_typing() {
+        assert_eq!(
+            completion_menu_action(false, true, "na", 2, 2),
+            CompletionMenuAction::Refresh(CompletionTriggerKind::TRIGGER_CHARACTER)
+        );
     }
 }

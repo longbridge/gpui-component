@@ -31,6 +31,29 @@ impl WhereCompletionProvider {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ValueSuggestionKind {
+    General,
+    LikePattern,
+    InList,
+    BetweenStart,
+    BetweenEnd,
+    NullOnly,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum SuggestionContext<'a> {
+    Columns,
+    Operators(&'a ColumnInfo),
+    Values {
+        column: Option<&'a ColumnInfo>,
+        kind: ValueSuggestionKind,
+    },
+    IsKeywords,
+    NotOperators(Option<&'a ColumnInfo>),
+    Logic,
+}
+
 /// 获取当前正在输入的 token
 fn extract_current_word(rope: &Rope, offset: usize) -> (String, usize) {
     let mut start = offset;
@@ -92,72 +115,338 @@ fn get_last_token_before(rope: &Rope, offset: usize) -> Option<String> {
         token_start -= 1;
     }
     let token = rope.slice(token_start..idx).to_string();
-    if token.is_empty() { None } else { Some(token) }
+    if token.is_empty() {
+        None
+    } else {
+        Some(token)
+    }
+}
+
+fn tokenize_where_context(text: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut index = 0;
+
+    while index < chars.len() {
+        let ch = chars[index];
+        if ch.is_whitespace() {
+            index += 1;
+            continue;
+        }
+
+        if matches!(ch, '\'' | '"') {
+            let quote = ch;
+            index += 1;
+            while index < chars.len() {
+                if chars[index] == '\\' {
+                    index += 2;
+                    continue;
+                }
+                if chars[index] == quote {
+                    index += 1;
+                    break;
+                }
+                index += 1;
+            }
+            tokens.push("__STRING__".into());
+            continue;
+        }
+
+        if ch.is_ascii_digit() {
+            let start = index;
+            index += 1;
+            while index < chars.len() && (chars[index].is_ascii_digit() || chars[index] == '.') {
+                index += 1;
+            }
+            let token: String = chars[start..index].iter().collect();
+            tokens.push(token.to_uppercase());
+            continue;
+        }
+
+        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '.' {
+            let start = index;
+            index += 1;
+            while index < chars.len() {
+                let next = chars[index];
+                if !(next.is_ascii_alphanumeric() || next == '_' || next == '.') {
+                    break;
+                }
+                index += 1;
+            }
+            let token: String = chars[start..index].iter().collect();
+            tokens.push(token.to_uppercase());
+            continue;
+        }
+
+        if let Some(next) = chars.get(index + 1) {
+            let pair = match (ch, *next) {
+                ('!', '=') => Some("!="),
+                ('<', '=') => Some("<="),
+                ('>', '=') => Some(">="),
+                ('<', '>') => Some("<>"),
+                _ => None,
+            };
+            if let Some(pair) = pair {
+                tokens.push(pair.into());
+                index += 2;
+                continue;
+            }
+        }
+
+        if matches!(ch, '=' | '<' | '>' | '(' | ')' | ',') {
+            tokens.push(ch.to_string());
+        }
+        index += 1;
+    }
+
+    tokens
+}
+
+fn find_column<'a>(schema: &'a TableSchema, token: &str) -> Option<&'a ColumnInfo> {
+    schema
+        .columns
+        .iter()
+        .find(|column| column.name.eq_ignore_ascii_case(token))
+}
+
+fn find_preceding_column<'a>(
+    schema: &'a TableSchema,
+    tokens: &[String],
+    skip_from_end: usize,
+) -> Option<&'a ColumnInfo> {
+    let limit = tokens.len().saturating_sub(skip_from_end);
+    tokens[..limit]
+        .iter()
+        .rev()
+        .find_map(|token| find_column(schema, token))
+}
+
+fn token_is_operator(token: &str) -> bool {
+    matches!(
+        token,
+        "=" | "!=" | "<>" | ">" | "<" | ">=" | "<=" | "LIKE" | "IN" | "BETWEEN"
+    )
+}
+
+fn token_is_value(token: &str) -> bool {
+    token == "__STRING__"
+        || token == ")"
+        || token == "NULL"
+        || token == "TRUE"
+        || token == "FALSE"
+        || token == "CURRENT_DATE"
+        || token == "CURRENT_TIMESTAMP"
+        || token == "NOW"
+        || token.chars().next().is_some_and(|ch| ch.is_ascii_digit())
+}
+
+fn infer_suggestion_context<'a>(
+    schema: &'a TableSchema,
+    tokens: &[String],
+) -> SuggestionContext<'a> {
+    let Some(last) = tokens.last().map(String::as_str) else {
+        return SuggestionContext::Columns;
+    };
+
+    match last {
+        "(" => {
+            let previous = tokens.iter().rev().nth(1).map(String::as_str);
+            if previous == Some("IN") {
+                SuggestionContext::Values {
+                    column: find_preceding_column(schema, tokens, 2),
+                    kind: ValueSuggestionKind::InList,
+                }
+            } else {
+                SuggestionContext::Columns
+            }
+        }
+        "AND" => {
+            if tokens.len() >= 3
+                && tokens[tokens.len() - 2].as_str() != "BETWEEN"
+                && tokens[tokens.len() - 3].as_str() == "BETWEEN"
+            {
+                SuggestionContext::Values {
+                    column: find_preceding_column(schema, tokens, 3),
+                    kind: ValueSuggestionKind::BetweenEnd,
+                }
+            } else {
+                SuggestionContext::Columns
+            }
+        }
+        "OR" => SuggestionContext::Columns,
+        "," => {
+            if tokens.iter().rev().any(|token| token == "IN") {
+                SuggestionContext::Values {
+                    column: find_preceding_column(schema, tokens, 1),
+                    kind: ValueSuggestionKind::InList,
+                }
+            } else {
+                SuggestionContext::Columns
+            }
+        }
+        "IS" => SuggestionContext::IsKeywords,
+        "NOT" => {
+            let previous = tokens.iter().rev().nth(1).map(String::as_str);
+            if previous == Some("IS") {
+                SuggestionContext::Values {
+                    column: find_preceding_column(schema, tokens, 2),
+                    kind: ValueSuggestionKind::NullOnly,
+                }
+            } else {
+                SuggestionContext::NotOperators(find_preceding_column(schema, tokens, 1))
+            }
+        }
+        "BETWEEN" => SuggestionContext::Values {
+            column: find_preceding_column(schema, tokens, 1),
+            kind: ValueSuggestionKind::BetweenStart,
+        },
+        token if token_is_operator(token) => SuggestionContext::Values {
+            column: find_preceding_column(schema, tokens, 1),
+            kind: if token == "LIKE" {
+                ValueSuggestionKind::LikePattern
+            } else if token == "IN" {
+                ValueSuggestionKind::InList
+            } else {
+                ValueSuggestionKind::General
+            },
+        },
+        token => {
+            if let Some(column) = find_column(schema, token) {
+                return SuggestionContext::Operators(column);
+            }
+
+            if token_is_value(token) {
+                return SuggestionContext::Logic;
+            }
+
+            SuggestionContext::Columns
+        }
+    }
+}
+
+fn is_string_type(data_type: &str) -> bool {
+    let data_type = data_type.to_uppercase();
+    data_type.contains("CHAR") || data_type.contains("TEXT") || data_type.contains("VARCHAR")
+}
+
+fn is_numeric_type(data_type: &str) -> bool {
+    let data_type = data_type.to_uppercase();
+    data_type.contains("INT")
+        || data_type.contains("DECIMAL")
+        || data_type.contains("FLOAT")
+        || data_type.contains("DOUBLE")
+        || data_type.contains("NUMERIC")
+}
+
+fn is_datetime_type(data_type: &str) -> bool {
+    let data_type = data_type.to_uppercase();
+    data_type.contains("DATE") || data_type.contains("TIME")
+}
+
+fn is_boolean_type(data_type: &str) -> bool {
+    let data_type = data_type.to_uppercase();
+    data_type.contains("BOOL") || data_type == "BOOLEAN" || data_type == "BIT"
 }
 
 /// 智能建议生成
 fn suggest_items(
     schema: &TableSchema,
     current_word: &str,
-    last_token: Option<&str>,
     replace_range: Range,
-    full_text: &str,
+    context_prefix: &str,
 ) -> Vec<CompletionItem> {
     let mut items = Vec::new();
-    let after_column = last_token.and_then(|t| {
-        schema
-            .columns
-            .iter()
-            .find(|c| c.name.eq_ignore_ascii_case(t))
-    });
+    let tokens = tokenize_where_context(context_prefix);
 
-    // 检测上下文：是否在操作符后面（需要值提示）
-    let after_operator = last_token
-        .map(|t| {
-            let upper = t.to_uppercase();
-            matches!(
-                upper.as_str(),
-                "=" | "!=" | ">" | "<" | ">=" | "<=" | "LIKE" | "IN"
-            )
-        })
-        .unwrap_or(false);
-
-    // 1️⃣ 如果在操作符后面，优先提示值的模板
-    if after_operator {
-        suggest_value_templates(current_word, replace_range, &mut items);
+    match infer_suggestion_context(schema, &tokens) {
+        SuggestionContext::Columns => {
+            suggest_columns(schema, current_word, replace_range, &mut items);
+            suggest_functions(current_word, replace_range, &mut items);
+        }
+        SuggestionContext::Operators(column) => {
+            suggest_operators(column, current_word, replace_range, &mut items);
+        }
+        SuggestionContext::Values { column, kind } => {
+            suggest_value_templates(column, kind, current_word, replace_range, &mut items);
+            if kind != ValueSuggestionKind::NullOnly {
+                suggest_functions(current_word, replace_range, &mut items);
+            }
+        }
+        SuggestionContext::IsKeywords => {
+            suggest_is_keywords(current_word, replace_range, &mut items);
+        }
+        SuggestionContext::NotOperators(column) => {
+            suggest_not_operators(column, current_word, replace_range, &mut items);
+        }
+        SuggestionContext::Logic => {
+            add_logic_keywords(current_word, replace_range, &mut items);
+        }
     }
 
-    // 2️⃣ 如果上一个 token 是列名 → 推操作符
-    if let Some(col) = after_column {
-        suggest_operators(col, current_word, replace_range, &mut items);
-    } else {
-        // 3️⃣ 否则提示列名
-        suggest_columns(schema, current_word, replace_range, &mut items);
-    }
-
-    // 4️⃣ 如果已有条件 → AND / OR 优先
-    if has_complete_condition(full_text) {
-        add_logic_keywords(current_word, replace_range, &mut items);
-    }
-
-    // 5️⃣ SQL 函数智能提示
-    suggest_functions(current_word, replace_range, &mut items);
-
-    // 全局排序（值模板 > 操作符 > 字段 > 逻辑关键词 > 函数）
     items.sort_by_key(|x| x.sort_text.clone().unwrap_or("9".into()));
     items
 }
 
 /// 提示值的模板（字符串、数字、NULL 等）
-fn suggest_value_templates(current_word: &str, range: Range, items: &mut Vec<CompletionItem>) {
-    let templates = [
-        ("'...'", "''", "String value"),
-        ("NULL", "NULL", "NULL value"),
-        ("true", "true", "Boolean true"),
-        ("false", "false", "Boolean false"),
-    ];
+fn suggest_value_templates(
+    column: Option<&ColumnInfo>,
+    kind: ValueSuggestionKind,
+    current_word: &str,
+    range: Range,
+    items: &mut Vec<CompletionItem>,
+) {
+    let data_type = column.map(|column| column.data_type.as_str()).unwrap_or("");
+    let templates: Vec<(&str, &str, &str)> = match kind {
+        ValueSuggestionKind::NullOnly => vec![("NULL", "NULL", "NULL value")],
+        ValueSuggestionKind::LikePattern => vec![
+            ("'%...%'", "'%'", "Contains pattern"),
+            ("'...%'", "'%'", "Starts with pattern"),
+            ("'%...'", "'%'", "Ends with pattern"),
+            ("NULL", "NULL", "NULL value"),
+        ],
+        ValueSuggestionKind::BetweenStart | ValueSuggestionKind::BetweenEnd
+            if is_datetime_type(data_type) =>
+        {
+            vec![
+                ("'2024-01-01'", "'2024-01-01'", "Date value"),
+                ("NOW()", "NOW()", "Current timestamp"),
+                ("CURRENT_DATE", "CURRENT_DATE", "Current date"),
+            ]
+        }
+        ValueSuggestionKind::BetweenStart | ValueSuggestionKind::BetweenEnd
+            if is_numeric_type(data_type) =>
+        {
+            vec![
+                ("0", "0", "Numeric value"),
+                ("1", "1", "Numeric value"),
+                ("NULL", "NULL", "NULL value"),
+            ]
+        }
+        _ if is_boolean_type(data_type) => vec![
+            ("true", "true", "Boolean true"),
+            ("false", "false", "Boolean false"),
+            ("NULL", "NULL", "NULL value"),
+        ],
+        _ if is_numeric_type(data_type) => vec![
+            ("0", "0", "Numeric value"),
+            ("1", "1", "Numeric value"),
+            ("NULL", "NULL", "NULL value"),
+        ],
+        _ if is_datetime_type(data_type) => vec![
+            ("'2024-01-01'", "'2024-01-01'", "Date value"),
+            ("NOW()", "NOW()", "Current timestamp"),
+            ("CURRENT_DATE", "CURRENT_DATE", "Current date"),
+            ("NULL", "NULL", "NULL value"),
+        ],
+        _ => vec![
+            ("'...'", "''", "String value"),
+            ("NULL", "NULL", "NULL value"),
+            ("true", "true", "Boolean true"),
+            ("false", "false", "Boolean false"),
+        ],
+    };
 
-    for (label, text, doc) in &templates {
+    for (label, text, doc) in templates {
         if label
             .to_uppercase()
             .starts_with(&current_word.to_uppercase())
@@ -173,17 +462,6 @@ fn suggest_value_templates(current_word: &str, range: Range, items: &mut Vec<Com
             });
         }
     }
-}
-
-/// 检测是否已有完整条件（简单检测：包含操作符）
-fn has_complete_condition(text: &str) -> bool {
-    let upper = text.to_uppercase();
-    upper.contains('=')
-        || upper.contains('>')
-        || upper.contains('<')
-        || upper.contains("LIKE")
-        || upper.contains("IN")
-        || upper.contains("BETWEEN")
 }
 
 fn suggest_columns(
@@ -324,6 +602,63 @@ fn add_logic_keywords(current_word: &str, range: Range, items: &mut Vec<Completi
     }
 }
 
+fn suggest_is_keywords(current_word: &str, range: Range, items: &mut Vec<CompletionItem>) {
+    let keywords = [
+        ("NULL", "NULL", "NULL value"),
+        ("NOT NULL", "NOT NULL", "Not null value"),
+    ];
+
+    for (label, text, doc) in keywords {
+        if label.starts_with(&current_word.to_uppercase()) || current_word.is_empty() {
+            items.push(CompletionItem {
+                label: label.to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                documentation: Some(Documentation::String(doc.to_string())),
+                text_edit: Some(insert_replace(text, range)),
+                sort_text: Some("0_IS".into()),
+                ..Default::default()
+            });
+        }
+    }
+}
+
+fn suggest_not_operators(
+    column: Option<&ColumnInfo>,
+    current_word: &str,
+    range: Range,
+    items: &mut Vec<CompletionItem>,
+) {
+    let data_type = column.map(|column| column.data_type.as_str()).unwrap_or("");
+    let ops: Vec<(&str, &str, &str)> = if is_string_type(data_type) {
+        vec![
+            ("LIKE", "LIKE ", "Negated pattern match"),
+            ("IN", "IN ", "Negated list match"),
+        ]
+    } else if is_numeric_type(data_type) || is_datetime_type(data_type) {
+        vec![
+            ("IN", "IN ", "Negated list match"),
+            ("BETWEEN", "BETWEEN ", "Negated range match"),
+        ]
+    } else {
+        vec![("IN", "IN ", "Negated list match")]
+    };
+
+    for (label, text, doc) in ops {
+        if !current_word.is_empty() && !label.starts_with(&current_word.to_uppercase()) {
+            continue;
+        }
+
+        items.push(CompletionItem {
+            label: label.to_string(),
+            kind: Some(CompletionItemKind::OPERATOR),
+            documentation: Some(Documentation::String(doc.to_string())),
+            text_edit: Some(insert_replace(text, range)),
+            sort_text: Some("0_NOT".into()),
+            ..Default::default()
+        });
+    }
+}
+
 /// SQL 函数智能提示
 fn suggest_functions(current_word: &str, range: Range, items: &mut Vec<CompletionItem>) {
     // 不使用 snippet 语法，光标定位在括号内
@@ -401,15 +736,11 @@ impl CompletionProvider for WhereCompletionProvider {
             let end_pos = rope.offset_to_position(offset);
             let replace_range = Range::new(start_pos, end_pos);
 
-            let last_token = get_last_token_before(&rope, start_offset);
-            let full_text = rope.to_string();
-
             let items = suggest_items(
                 &schema,
                 current_word.as_str(),
-                last_token.as_deref(),
                 replace_range,
-                &full_text,
+                &rope.slice(0..start_offset).to_string(),
             );
 
             Ok(CompletionResponse::Array(items))
@@ -580,7 +911,9 @@ pub fn create_simple_editor(
     let editor = cx.new(|cx| {
         let editor = InputState::new(window, cx)
             .code_editor(Language::from_str("sql"))
-            .multi_line(false)
+            .multi_line(true)
+            .line_number(false)
+            .rows(1)
             .clean_on_escape();
 
         editor
@@ -669,7 +1002,7 @@ impl TableFilterEditor {
 
 impl Render for TableFilterEditor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        use gpui::{ParentElement, Styled, div};
+        use gpui::{div, ParentElement, Styled};
         use gpui_component::h_flex;
 
         h_flex()
@@ -709,3 +1042,97 @@ impl Render for TableFilterEditor {
 }
 
 impl EventEmitter<FilterEditorEvent> for TableFilterEditor {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_schema() -> TableSchema {
+        TableSchema {
+            columns: vec![
+                ColumnInfo {
+                    name: "name".into(),
+                    data_type: "VARCHAR".into(),
+                    is_nullable: true,
+                    is_primary_key: false,
+                    default_value: None,
+                    comment: None,
+                    charset: None,
+                    collation: None,
+                },
+                ColumnInfo {
+                    name: "age".into(),
+                    data_type: "INT".into(),
+                    is_nullable: false,
+                    is_primary_key: false,
+                    default_value: None,
+                    comment: None,
+                    charset: None,
+                    collation: None,
+                },
+                ColumnInfo {
+                    name: "created_at".into(),
+                    data_type: "TIMESTAMP".into(),
+                    is_nullable: false,
+                    is_primary_key: false,
+                    default_value: None,
+                    comment: None,
+                    charset: None,
+                    collation: None,
+                },
+            ],
+        }
+    }
+
+    fn labels_for(text: &str, current_word: &str) -> Vec<String> {
+        let zero = lsp_types::Position::new(0, 0);
+        suggest_items(&sample_schema(), current_word, Range::new(zero, zero), text)
+            .into_iter()
+            .map(|item| item.label)
+            .collect()
+    }
+
+    #[test]
+    fn suggests_columns_at_condition_start() {
+        let labels = labels_for("AND ", "");
+        assert!(labels.starts_with(&["name".into(), "age".into(), "created_at".into()]));
+    }
+
+    #[test]
+    fn suggests_operators_after_column() {
+        let labels = labels_for("name ", "");
+        assert!(labels.contains(&"= ''".into()));
+        assert!(labels.contains(&"LIKE '%%'".into()));
+    }
+
+    #[test]
+    fn suggests_string_values_after_like() {
+        let labels = labels_for("name LIKE ", "");
+        assert_eq!(labels.first().map(String::as_str), Some("'%...%'"));
+    }
+
+    #[test]
+    fn suggests_logic_after_complete_condition() {
+        let labels = labels_for("name = 'Alice' ", "");
+        assert_eq!(labels.first().map(String::as_str), Some("AND"));
+        assert_eq!(labels.get(1).map(String::as_str), Some("OR"));
+    }
+
+    #[test]
+    fn suggests_is_null_variants() {
+        let labels = labels_for("name IS ", "");
+        assert_eq!(labels, vec!["NULL".to_string(), "NOT NULL".to_string()]);
+    }
+
+    #[test]
+    fn suggests_not_operators_for_string_columns() {
+        let labels = labels_for("name NOT ", "");
+        assert_eq!(labels, vec!["LIKE".to_string(), "IN".to_string()]);
+    }
+
+    #[test]
+    fn suggests_between_end_value_after_and() {
+        let labels = labels_for("age BETWEEN 1 AND ", "");
+        assert_eq!(labels.first().map(String::as_str), Some("0"));
+    }
+}
