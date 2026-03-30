@@ -6,15 +6,16 @@ use std::{
 
 use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle,
-    InteractiveElement as _, IntoElement, Length, ObjectFit, ParentElement, SharedString,
-    SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, Window, div, img,
+    InteractiveElement as _, IntoElement, ObjectFit, ParentElement, SharedString, SharedUri,
+    StatefulInteractiveElement, Styled, StyledImage as _, Window, div, img,
     prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
+    ActiveTheme as _, ElementExt, Icon, IconName, StyledExt, h_flex,
     highlighter::{HighlightTheme, SyntaxHighlighter},
     text::{
         CodeBlockActionsFn,
@@ -387,6 +388,20 @@ impl Paragraph {
         }
 
         text
+    }
+
+    fn plain_text(&self) -> String {
+        self.children
+            .iter()
+            .map(|child| {
+                if let Some(image) = &child.image {
+                    image.alt.clone().unwrap_or_default().to_string()
+                } else {
+                    child.text.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("")
     }
 }
 
@@ -1053,27 +1068,17 @@ impl BlockNode {
         window: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
-        const DEFAULT_LENGTH: usize = 5;
-        const MAX_LENGTH: usize = 150;
-        let col_lens = match item {
-            BlockNode::Table(table) => {
-                let mut col_lens = vec![];
-                for row in table.children.iter() {
-                    for (ix, cell) in row.children.iter().enumerate() {
-                        if col_lens.len() <= ix {
-                            col_lens.push(DEFAULT_LENGTH);
-                        }
-
-                        let len = cell.children.text_len();
-                        if len > col_lens[ix] {
-                            col_lens[ix] = len;
-                        }
-                    }
-                }
-                col_lens
-            }
+        let layout_state = window.use_keyed_state(
+            format!("markdown-table-layout-{}", options.ix),
+            cx,
+            |_, _| TableLayoutState::default(),
+        );
+        let available_width = layout_state.read(cx).available_width;
+        let col_metrics = match item {
+            BlockNode::Table(table) => table_column_metrics(table, window),
             _ => vec![],
         };
+        let col_widths = allocate_table_column_widths(&col_metrics, available_width);
 
         match item {
             BlockNode::Table(table) => div()
@@ -1086,12 +1091,26 @@ impl BlockNode {
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
+                        .on_prepaint({
+                            let layout_state = layout_state.clone();
+                            move |bounds, _, cx| {
+                                layout_state.update(cx, |state, cx| {
+                                    if state.available_width != Some(bounds.size.width) {
+                                        state.available_width = Some(bounds.size.width);
+                                        cx.notify();
+                                    }
+                                });
+                            }
+                        })
                         .children({
                             let mut rows = Vec::with_capacity(table.children.len());
                             for (row_ix, row) in table.children.iter().enumerate() {
                                 rows.push(
                                     div()
-                                        .id("row")
+                                        .id((
+                                            ElementId::from(("row", options.ix)),
+                                            row_ix.to_string(),
+                                        ))
                                         .w_full()
                                         .when(row_ix < table.children.len() - 1, |this| {
                                             this.border_b_1()
@@ -1103,17 +1122,32 @@ impl BlockNode {
                                             let mut cells = Vec::with_capacity(row.children.len());
                                             for (ix, cell) in row.children.iter().enumerate() {
                                                 let align = table.column_align(ix);
-                                                let is_last_col = ix == row.children.len() - 1;
-                                                let len = col_lens
+                                                let metric = col_metrics
                                                     .get(ix)
                                                     .copied()
-                                                    .unwrap_or(MAX_LENGTH)
-                                                    .min(MAX_LENGTH);
+                                                    .unwrap_or_default();
+                                                let width = col_widths
+                                                    .get(ix)
+                                                    .copied()
+                                                    .unwrap_or(metric.preferred_width);
+                                                let is_last_col = ix == row.children.len() - 1;
 
                                                 cells.push(
                                                     div()
-                                                        .id("cell")
-                                                        .flex()
+                                                        .id((
+                                                            ElementId::from((
+                                                                ElementId::from((
+                                                                    "cell", options.ix,
+                                                                )),
+                                                                row_ix.to_string(),
+                                                            )),
+                                                            ix.to_string(),
+                                                        ))
+                                                        .overflow_hidden()
+                                                        .w(width)
+                                                        .min_w(width)
+                                                        .max_w(width)
+                                                        .flex_shrink_0()
                                                         .when(
                                                             align == ColumnumnAlign::Center,
                                                             |this| this.justify_center(),
@@ -1122,17 +1156,31 @@ impl BlockNode {
                                                             align == ColumnumnAlign::Right,
                                                             |this| this.justify_end(),
                                                         )
-                                                        .w(Length::Definite(relative(len as f32)))
                                                         .px_2()
                                                         .py_1()
                                                         .when(!is_last_col, |this| {
                                                             this.border_r_1()
                                                                 .border_color(cx.theme().border)
                                                         })
-                                                        .truncate()
+                                                        .whitespace_normal()
                                                         .child(
-                                                            cell.children
-                                                                .render(node_cx, window, cx),
+                                                            div().w_full().min_w_0().child(
+                                                                BlockNode::Paragraph(
+                                                                    cell.children.clone(),
+                                                                )
+                                                                .render_block(
+                                                                    NodeRenderOptions {
+                                                                        ix: row_ix
+                                                                            * row.children.len()
+                                                                            + ix,
+                                                                        is_last: true,
+                                                                        ..Default::default()
+                                                                    },
+                                                                    node_cx,
+                                                                    window,
+                                                                    cx,
+                                                                ),
+                                                            ),
                                                         ),
                                                 )
                                             }
@@ -1171,6 +1219,8 @@ impl BlockNode {
                 .into_any_element(),
             BlockNode::Paragraph(paragraph) => div()
                 .id(("p", ix))
+                .w_full()
+                .min_w_0()
                 .pb(mb)
                 .child(paragraph.render(node_cx, window, cx))
                 .into_any_element(),
@@ -1270,5 +1320,293 @@ impl BlockNode {
                 div().into_any_element()
             }
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
+struct TableColumnMetrics {
+    min_width: gpui::Pixels,
+    preferred_width: gpui::Pixels,
+}
+
+#[derive(Default)]
+struct TableLayoutState {
+    available_width: Option<gpui::Pixels>,
+}
+
+fn table_column_metrics(table: &Table, window: &mut Window) -> Vec<TableColumnMetrics> {
+    let mut col_metrics = Vec::new();
+
+    for row in table.children.iter() {
+        for (ix, cell) in row.children.iter().enumerate() {
+            if col_metrics.len() <= ix {
+                col_metrics.push(TableColumnMetrics::default());
+            }
+
+            let text = cell.children.plain_text();
+            let preferred_width = measure_table_cell_width(text.trim(), window) + px(24.);
+            let min_width = measure_table_cell_min_width(text.trim(), window) + px(24.);
+            let metric = &mut col_metrics[ix];
+
+            metric.min_width = metric.min_width.max(min_width.ceil());
+            metric.preferred_width = metric.preferred_width.max(preferred_width.ceil());
+        }
+    }
+
+    col_metrics
+}
+
+fn allocate_table_column_widths(
+    metrics: &[TableColumnMetrics],
+    available_width: Option<gpui::Pixels>,
+) -> Vec<gpui::Pixels> {
+    if metrics.is_empty() {
+        return Vec::new();
+    }
+
+    let Some(available_width) = available_width else {
+        return metrics
+            .iter()
+            .map(|metric| metric.preferred_width)
+            .collect();
+    };
+
+    let inner_width =
+        (available_width - px(2.) - px((metrics.len().saturating_sub(1)) as f32)).max(px(0.));
+    let total_min = sum_pixels(metrics.iter().map(|metric| metric.min_width));
+    let total_preferred = sum_pixels(metrics.iter().map(|metric| metric.preferred_width));
+
+    if inner_width <= total_min {
+        return metrics.iter().map(|metric| metric.min_width).collect();
+    }
+
+    if inner_width >= total_preferred {
+        return distribute_extra_width(metrics, inner_width - total_preferred);
+    }
+
+    shrink_widths_to_fit(metrics, inner_width)
+}
+
+fn distribute_extra_width(
+    metrics: &[TableColumnMetrics],
+    extra_width: gpui::Pixels,
+) -> Vec<gpui::Pixels> {
+    let mut widths = metrics
+        .iter()
+        .map(|metric| metric.preferred_width)
+        .collect::<Vec<_>>();
+    let width_count = widths.len();
+    let total_weight = metrics
+        .iter()
+        .map(|metric| metric.preferred_width.as_f32().max(1.))
+        .sum::<f32>()
+        .max(1.);
+    let mut assigned = px(0.);
+
+    for (ix, width) in widths.iter_mut().enumerate() {
+        if ix + 1 == width_count {
+            *width += extra_width - assigned;
+        } else {
+            let share = px(
+                extra_width.as_f32() * metrics[ix].preferred_width.as_f32().max(1.) / total_weight,
+            );
+            *width += share;
+            assigned += share;
+        }
+    }
+
+    widths
+}
+
+fn shrink_widths_to_fit(
+    metrics: &[TableColumnMetrics],
+    available_width: gpui::Pixels,
+) -> Vec<gpui::Pixels> {
+    let mut widths = metrics
+        .iter()
+        .map(|metric| metric.preferred_width)
+        .collect::<Vec<_>>();
+    let mut remaining_deficit = sum_pixels(widths.iter().copied()) - available_width;
+
+    while remaining_deficit > px(0.5) {
+        let shrinkable = widths
+            .iter()
+            .enumerate()
+            .filter_map(|(ix, width)| {
+                let capacity = *width - metrics[ix].min_width;
+                (capacity > px(0.)).then_some((ix, capacity))
+            })
+            .collect::<Vec<_>>();
+        if shrinkable.is_empty() {
+            break;
+        }
+
+        let total_capacity = shrinkable
+            .iter()
+            .map(|(_, capacity)| capacity.as_f32())
+            .sum::<f32>();
+        if total_capacity <= 0. {
+            break;
+        }
+
+        let mut reduced = px(0.);
+        for (position, (ix, capacity)) in shrinkable.iter().enumerate() {
+            let target = if position + 1 == shrinkable.len() {
+                remaining_deficit - reduced
+            } else {
+                px(remaining_deficit.as_f32() * capacity.as_f32() / total_capacity)
+            };
+            let shrink_by = target.min(*capacity);
+            widths[*ix] -= shrink_by;
+            reduced += shrink_by;
+        }
+
+        if reduced <= px(0.5) {
+            break;
+        }
+        remaining_deficit -= reduced;
+    }
+
+    widths
+}
+
+fn sum_pixels(values: impl IntoIterator<Item = gpui::Pixels>) -> gpui::Pixels {
+    px(values.into_iter().map(|value| value.as_f32()).sum::<f32>())
+}
+
+fn measure_table_cell_width(text: &str, window: &mut Window) -> gpui::Pixels {
+    if text.is_empty() {
+        return px(0.);
+    }
+
+    let text_style = window.text_style();
+    let font_size = text_style.font_size.to_pixels(window.rem_size());
+    let runs = [text_style.to_run(text.len())];
+
+    window
+        .text_system()
+        .shape_text(text.to_string().into(), font_size, &runs, None, None)
+        .map(|lines| {
+            lines
+                .iter()
+                .map(|line| {
+                    line.size(text_style.line_height_in_pixels(window.rem_size()))
+                        .width
+                        .ceil()
+                })
+                .max()
+                .unwrap_or(px(0.))
+        })
+        .unwrap_or_else(|error| {
+            tracing::warn!("failed to measure markdown table cell width: {error}");
+            px(0.)
+        })
+}
+
+fn measure_table_cell_min_width(text: &str, window: &mut Window) -> gpui::Pixels {
+    table_cell_line_break_segments(text)
+        .into_iter()
+        .map(|segment| measure_table_cell_width(segment.as_str(), window))
+        .max()
+        .unwrap_or(px(0.))
+}
+
+fn table_cell_line_break_segments(text: &str) -> Vec<String> {
+    let mut segments = Vec::new();
+    let mut word = String::new();
+
+    for grapheme in text.graphemes(true) {
+        if grapheme.chars().all(char::is_whitespace) {
+            if !word.is_empty() {
+                segments.push(std::mem::take(&mut word));
+            }
+            continue;
+        }
+
+        if grapheme.chars().all(is_table_word_char) {
+            word.push_str(grapheme);
+            continue;
+        }
+
+        if !word.is_empty() {
+            segments.push(std::mem::take(&mut word));
+        }
+        segments.push(grapheme.to_string());
+    }
+
+    if !word.is_empty() {
+        segments.push(word);
+    }
+
+    if segments.is_empty() {
+        segments.push(String::new());
+    }
+
+    segments
+}
+
+fn is_table_word_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        TableColumnMetrics, allocate_table_column_widths, is_table_word_char,
+        table_cell_line_break_segments,
+    };
+    use gpui::px;
+
+    #[test]
+    fn table_cell_segments_keep_ascii_words_together() {
+        assert_eq!(
+            table_cell_line_break_segments("Framework Detection Pattern"),
+            vec!["Framework", "Detection", "Pattern"]
+        );
+        assert!(is_table_word_char('A'));
+        assert!(is_table_word_char('_'));
+        assert!(!is_table_word_char('/'));
+    }
+
+    #[test]
+    fn allocate_widths_keeps_short_first_column_stable() {
+        let widths = allocate_table_column_widths(
+            &[
+                TableColumnMetrics {
+                    min_width: px(105.),
+                    preferred_width: px(105.),
+                },
+                TableColumnMetrics {
+                    min_width: px(240.),
+                    preferred_width: px(1173.),
+                },
+            ],
+            Some(px(760.)),
+        );
+
+        assert_eq!(widths, vec![px(105.), px(652.)]);
+    }
+
+    #[test]
+    fn allocate_widths_shrinks_middle_column_before_short_last_column() {
+        let widths = allocate_table_column_widths(
+            &[
+                TableColumnMetrics {
+                    min_width: px(105.),
+                    preferred_width: px(105.),
+                },
+                TableColumnMetrics {
+                    min_width: px(200.),
+                    preferred_width: px(1200.),
+                },
+                TableColumnMetrics {
+                    min_width: px(80.),
+                    preferred_width: px(80.),
+                },
+            ],
+            Some(px(760.)),
+        );
+
+        assert_eq!(widths, vec![px(105.), px(571.), px(80.)]);
     }
 }
