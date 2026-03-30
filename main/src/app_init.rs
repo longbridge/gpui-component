@@ -1,14 +1,16 @@
-use raw_window_handle::HasWindowHandle;
-use std::sync::OnceLock;
 use global_hotkey::{
     GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
     hotkey::{Code as HotkeyCode, HotKey, Modifiers as HotkeyModifiers},
 };
+use gpui::App;
+use raw_window_handle::HasWindowHandle;
+use std::sync::OnceLock;
+use std::time::Duration;
 /// 全局初始化标记（只初始化一次）
 static VISIBILITY_INIT: OnceLock<()> = OnceLock::new();
 
 /// 对外暴露：初始化窗口相关系统（visibility + hotkey）
-pub fn init_window_systems(window: &impl HasWindowHandle) {
+pub fn init_window_systems(window: &impl HasWindowHandle, cx: &mut App) {
     // 已初始化直接返回
     if VISIBILITY_INIT.get().is_some() {
         return;
@@ -30,23 +32,26 @@ pub fn init_window_systems(window: &impl HasWindowHandle) {
     }
 
     // 初始化 hotkey（依赖 visibility）
-    system_hotkey::register();
+    system_hotkey::register(cx);
 
     // 标记完成
     let _ = VISIBILITY_INIT.set(());
 }
 
-
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod system_hotkey {
-    use crate::app_init::HotkeyModifiers;
     use super::*;
-    use std::sync::{Mutex, OnceLock};
+    use crate::app_init::HotkeyModifiers;
+    use gpui::AsyncApp;
+    use std::sync::{Mutex, OnceLock, mpsc};
+
+    const HOTKEY_POLL_INTERVAL: Duration = Duration::from_millis(16);
 
     static HOTKEY_MANAGER: OnceLock<Mutex<GlobalHotKeyManager>> = OnceLock::new();
     static TOGGLE_HOTKEY_ID: OnceLock<u32> = OnceLock::new();
+    static TOGGLE_REQUEST_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
 
-    pub fn register() {
+    pub fn register(cx: &mut App) {
         // 初始化 manager（只执行一次）
         let manager = HOTKEY_MANAGER.get_or_init(|| {
             let manager = GlobalHotKeyManager::new()
@@ -58,6 +63,8 @@ mod system_hotkey {
 
             Mutex::new(manager)
         });
+
+        install_toggle_dispatcher(cx);
 
         // 构建热键
         let hotkey = build_toggle_hotkey();
@@ -82,8 +89,10 @@ mod system_hotkey {
         };
 
         if should_dispatch_hotkey_event(event.id, registered_id, event.state) {
-            if let Err(err) = dispatch_main_window_shortcut() {
-                tracing::warn!("主窗口系统级快捷键处理失败: {err:?}");
+            if let Some(tx) = TOGGLE_REQUEST_TX.get() {
+                if let Err(err) = tx.send(()) {
+                    tracing::warn!("主窗口热键事件派发失败: {err}");
+                }
             }
         }
     }
@@ -112,7 +121,29 @@ mod system_hotkey {
         received_id == registered_id && state == HotKeyState::Pressed
     }
 
-    fn dispatch_main_window_shortcut() -> Result<(), app_visibility::AppVisibilityError> {
-        app_visibility::toggle()
+    fn install_toggle_dispatcher(cx: &mut App) {
+        if TOGGLE_REQUEST_TX.get().is_some() {
+            return;
+        }
+
+        let (tx, rx) = mpsc::channel();
+        if TOGGLE_REQUEST_TX.set(tx).is_err() {
+            return;
+        }
+
+        cx.spawn(move |cx: &mut AsyncApp| {
+            let cx = cx.clone();
+            async move {
+                loop {
+                    cx.background_executor().timer(HOTKEY_POLL_INTERVAL).await;
+                    while rx.try_recv().is_ok() {
+                        if let Err(err) = cx.update(|_| app_visibility::toggle()) {
+                            tracing::warn!("主窗口系统级快捷键处理失败: {err:?}");
+                        }
+                    }
+                }
+            }
+        })
+        .detach();
     }
 }

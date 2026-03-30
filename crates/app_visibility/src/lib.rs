@@ -1,7 +1,7 @@
 mod error;
 
-use raw_window_handle::RawWindowHandle;
 pub use crate::error::*;
+use raw_window_handle::RawWindowHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowState {
@@ -35,13 +35,16 @@ mod platform {
     use std::sync::OnceLock;
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        IsIconic, IsWindowVisible, SetForegroundWindow, ShowWindow, SW_HIDE, SW_RESTORE, SW_SHOW,
+        IsIconic, IsWindowVisible, SW_HIDE, SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
     };
 
     static HWND_STORE: OnceLock<HWND> = OnceLock::new();
 
     fn hwnd() -> Result<HWND, AppVisibilityError> {
-        HWND_STORE.get().copied().ok_or(AppVisibilityError::NotInitialized)
+        HWND_STORE
+            .get()
+            .copied()
+            .ok_or(AppVisibilityError::MainWindowHandleMissing)
     }
 
     pub fn init(handle: RawWindowHandle) -> Result<(), AppVisibilityError> {
@@ -58,8 +61,9 @@ mod platform {
     pub fn current_state() -> Result<WindowState, AppVisibilityError> {
         let hwnd = hwnd()?;
         let visible = unsafe { IsWindowVisible(hwnd).as_bool() };
+        let iconic = unsafe { IsIconic(hwnd).as_bool() };
 
-        Ok(if visible {
+        Ok(if visible && !iconic {
             WindowState::Visible
         } else {
             WindowState::Hidden
@@ -182,15 +186,12 @@ mod platform {
     static WINDOW: OnceLock<Mutex<Option<SendableWindow>>> = OnceLock::new();
 
     fn window() -> Result<u64, AppVisibilityError> {
-        let guard = WINDOW
-            .get_or_init(|| Mutex::new(None))
-            .lock()
-            .unwrap();
+        let guard = WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap();
 
         guard
             .as_ref()
             .map(|w| w.0)
-            .ok_or(AppVisibilityError::NotInitialized)
+            .ok_or(AppVisibilityError::MainWindowHandleMissing)
     }
 
     pub fn init(handle: RawWindowHandle) -> Result<(), AppVisibilityError> {
@@ -198,10 +199,7 @@ mod platform {
             return Err(AppVisibilityError::UnsupportedWindowHandle);
         };
 
-        *WINDOW
-            .get_or_init(|| Mutex::new(None))
-            .lock()
-            .unwrap() = Some(SendableWindow(h.window));
+        *WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap() = Some(SendableWindow(h.window));
 
         Ok(())
     }

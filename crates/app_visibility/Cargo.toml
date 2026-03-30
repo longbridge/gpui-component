@@ -9,14 +9,14 @@ thiserror = { workspace = true }
 raw-window-handle = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSWindow"] }
-objc2-foundation = { version = "0.3", features = ["NSNotification", "NSString"] }
+objc2 = "0.6.2"
+objc2-app-kit = { version = "0.3.1", features = ["NSApplication", "NSWindow"] }
+objc2-foundation = { version = "0.3.1", features = ["NSNotification", "NSString"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
-x11 = { version = "2", features = ["xlib"] }
+x11 = { version = "2.21.0", features = ["xlib"] }
 [lints]
 workspace = true

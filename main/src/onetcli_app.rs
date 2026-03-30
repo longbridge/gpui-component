@@ -4,7 +4,6 @@ use gpui::{
     Window, actions, div,
 };
 
-
 actions!(
     onetcli_app,
     [

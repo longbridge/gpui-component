@@ -4,6 +4,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 mod auth;
 
+mod app_init;
 mod encourage;
 mod home;
 mod home_tab;
@@ -13,7 +14,6 @@ mod setting_tab;
 mod settings;
 mod update;
 mod user_avatar;
-mod app_init;
 
 use crate::onetcli_app::OnetCliApp;
 use db::GlobalDbState;
@@ -22,8 +22,6 @@ use gpui::*;
 
 use gpui_component::Root;
 use gpui_component_assets::Assets;
-
-
 
 fn main() {
     if update::handle_update_command() {
@@ -35,7 +33,6 @@ fn main() {
         .with_quit_mode(QuitMode::LastWindowClosed);
 
     app.run(move |cx| {
-
         onetcli_app::init(cx);
 
         setting_tab::init_settings(cx);
@@ -74,7 +71,7 @@ fn main() {
         cx.spawn(async move |cx| {
             cx.open_window(options, |window, cx| {
                 window.activate_window();
-                app_init::init_window_systems(window);
+                app_init::init_window_systems(window, cx);
                 update::schedule_update_check(window, cx);
                 let view = cx.new(|cx| OnetCliApp::new(window, cx));
                 cx.new(|cx| Root::new(view, window, cx))
