@@ -5,7 +5,6 @@ members = [
     "crates/story",
     "crates/ui",
     "crates/assets",
-    "crates/app_visibility",
     "crates/webview",
     "crates/reqwest_client",
     "examples/app_assets",
@@ -69,7 +68,6 @@ tracing = "0.1.41"
 
 
 reqwest_client = { path = "crates/reqwest_client" }
-app_visibility = { path = "crates/app_visibility" }
 db = { path = "crates/db" }
 db_view = { path = "crates/db_view" }
 redis_view = { path = "crates/redis_view" }
@@ -141,6 +139,7 @@ mongodb = "3.5.1"
 futures-util="0.3.31"
 url = "2.5.4"
 percent-encoding = "2.3.1"
+global-hotkey = "0.7.0"
 [workspace.dependencies.windows]
 features = ["Wdk", "Wdk_System", "Wdk_System_SystemServices"]
 version = "0.61.0"

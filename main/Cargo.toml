@@ -34,17 +34,7 @@ one-core.workspace = true
 one-ui.workspace = true
 reqwest_client.workspace = true
 db.workspace = true
-app_visibility.workspace = true
-
-[target.'cfg(target_os = "macos")'.dependencies]
-raw-window-handle = { workspace = true }
-cocoa = "0.25.0"
-objc = "0.2.7"
-global-hotkey = "0.7.0"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-raw-window-handle = { workspace = true }
-global-hotkey = "0.7.0"
+global-hotkey.workspace = true
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 winresource = "0.1"

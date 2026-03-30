@@ -3,7 +3,6 @@ use global_hotkey::{
     hotkey::{Code as HotkeyCode, HotKey, Modifiers as HotkeyModifiers},
 };
 use gpui::{AnyWindowHandle, App, Window};
-use raw_window_handle::{HasWindowHandle as RawHasWindowHandle, RawWindowHandle};
 use std::sync::OnceLock;
 use std::time::Duration;
 /// 全局初始化标记（只初始化一次）
@@ -18,43 +17,12 @@ pub fn init_window_systems(window: &Window, cx: &mut App) {
     }
 
     let _ = MAIN_WINDOW_HANDLE.set(window.window_handle());
-    init_native_visibility(window);
 
     // 初始化 hotkey
     system_hotkey::register(cx);
 
     // 标记完成
     let _ = VISIBILITY_INIT.set(());
-}
-
-fn init_native_visibility(window: &Window) {
-    let handle = match RawHasWindowHandle::window_handle(window) {
-        Ok(h) => h,
-        Err(err) => {
-            tracing::warn!("窗口句柄获取失败: {err:?}");
-            return;
-        }
-    };
-
-    let raw_handle = handle.as_raw();
-    if !supports_native_visibility(&raw_handle) {
-        tracing::debug!("当前窗口句柄由 gpui 直接处理显隐，不初始化原生 fallback: {raw_handle:?}");
-        return;
-    }
-
-    if let Err(err) = app_visibility::init(raw_handle) {
-        tracing::warn!("窗口可见性系统初始化失败: {err:?}");
-    }
-}
-
-fn supports_native_visibility(handle: &RawWindowHandle) -> bool {
-    matches!(
-        handle,
-        RawWindowHandle::AppKit(_)
-            | RawWindowHandle::Win32(_)
-            | RawWindowHandle::Xlib(_)
-            | RawWindowHandle::Xcb(_)
-    )
 }
 
 fn pick_toggle_target<T: Copy>(
@@ -191,8 +159,7 @@ mod system_hotkey {
             }
         }
 
-        cx.update(|_| app_visibility::toggle())
-            .map_err(anyhow::Error::from)
+        Ok(())
     }
 
     fn resolve_toggle_target(cx: &AsyncApp) -> Option<AnyWindowHandle> {
@@ -210,8 +177,6 @@ mod system_hotkey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use raw_window_handle::{RawWindowHandle, WaylandWindowHandle, XcbWindowHandle};
-    use std::{num::NonZeroU32, ptr::NonNull};
 
     #[test]
     fn pick_toggle_target_prefers_registered_window() {
@@ -229,13 +194,11 @@ mod tests {
     }
 
     #[test]
-    fn wayland_does_not_use_native_visibility_fallback() {
-        let surface = NonNull::<std::ffi::c_void>::dangling();
-        let wayland = RawWindowHandle::Wayland(WaylandWindowHandle::new(surface));
-
-        assert!(!supports_native_visibility(&wayland));
-
-        let xcb = RawWindowHandle::Xcb(XcbWindowHandle::new(NonZeroU32::new(42).unwrap()));
-        assert!(supports_native_visibility(&xcb));
+    fn pick_toggle_target_skips_empty_window_stack() {
+        let empty: [u8; 0] = [];
+        assert_eq!(
+            pick_toggle_target(None, Some(&empty), Some(7_u8)),
+            Some(7_u8)
+        );
     }
 }
