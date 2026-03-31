@@ -339,9 +339,9 @@ impl TabContentRegistry {
     pub fn register_fn<F>(&mut self, key: SharedString, builder: F)
     where
         F: Fn(&TabItemState, &mut Window, &mut App) -> Option<Arc<dyn TabContentView>>
-            + Send
-            + Sync
-            + 'static,
+        + Send
+        + Sync
+        + 'static,
     {
         self.builders
             .insert(key, Arc::new(FnTabContentBuilder(builder)));
@@ -373,30 +373,6 @@ impl gpui::Global for TabContentRegistry {}
 /// 窗口拖动状态，用于在 Windows 和 Linux 上支持拖动窗口
 struct TabBarDragState {
     should_move: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct TabBarDragPlan {
-    enable_scroll_area_drag: bool,
-    enable_single_pinned_tab_drag: bool,
-}
-
-fn build_tab_bar_drag_plan(
-    show_window_controls: bool,
-    has_pinned_tab: bool,
-    has_scrollable_tabs: bool,
-) -> TabBarDragPlan {
-    if !show_window_controls {
-        return TabBarDragPlan {
-            enable_scroll_area_drag: false,
-            enable_single_pinned_tab_drag: false,
-        };
-    }
-
-    TabBarDragPlan {
-        enable_scroll_area_drag: true,
-        enable_single_pinned_tab_drag: has_pinned_tab && !has_scrollable_tabs,
-    }
 }
 
 impl Render for TabBarDragState {
@@ -1546,17 +1522,9 @@ impl TabContainer {
         // 窗口拖动状态管理（仅在 Windows/Linux 上需要，且启用窗口控件时）
         let is_linux = cfg!(target_os = "linux");
         let is_macos = cfg!(target_os = "macos");
-        let is_windows = cfg!(target_os = "windows");
         let is_client_decorated = matches!(window.window_decorations(), Decorations::Client { .. });
         let show_window_controls = self.show_window_controls;
-        // Windows 下 tab 重排拖拽会与窗口拖动区域冲突，可能导致白屏/崩溃。
-        // 先禁用 Windows 的 tab 重排拖拽，保证标题栏拖动稳定性。
-        let allow_tab_drag = !is_macos && !is_windows;
-        let drag_plan = build_tab_bar_drag_plan(
-            show_window_controls,
-            self.pinned_tab.is_some(),
-            !self.tabs.is_empty(),
-        );
+        let allow_tab_drag = !is_macos;
 
         // 使用状态管理窗口拖动
         let drag_state = window.use_state(cx, |_, _| TabBarDragState { should_move: false });
@@ -1574,33 +1542,33 @@ impl TabContainer {
                 this.when(is_linux, |this| {
                     this.on_double_click(|_, window, _| window.zoom_window())
                 })
-                .when(is_macos, |this| {
-                    this.on_double_click(|_, window, _| window.titlebar_double_click())
-                })
-                .on_mouse_down_out(window.listener_for(&drag_state, |state, _, _, _| {
-                    state.should_move = false;
-                }))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    window.listener_for(&drag_state, |state, _, _, _| {
-                        state.should_move = true;
-                    }),
-                )
-                .on_mouse_up(
-                    MouseButton::Left,
-                    window.listener_for(&drag_state, |state, _, _, _| {
+                    .when(is_macos, |this| {
+                        this.on_double_click(|_, window, _| window.titlebar_double_click())
+                    })
+                    .on_mouse_down_out(window.listener_for(&drag_state, |state, _, _, _| {
                         state.should_move = false;
-                    }),
-                )
-                .on_mouse_move(window.listener_for(
-                    &drag_state,
-                    |state, _, window, _| {
-                        if state.should_move {
+                    }))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        window.listener_for(&drag_state, |state, _, _, _| {
+                            state.should_move = true;
+                        }),
+                    )
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        window.listener_for(&drag_state, |state, _, _, _| {
                             state.should_move = false;
-                            window.start_window_move();
-                        }
-                    },
-                ))
+                        }),
+                    )
+                    .on_mouse_move(window.listener_for(
+                        &drag_state,
+                        |state, _, window, _| {
+                            if state.should_move {
+                                state.should_move = false;
+                                window.start_window_move();
+                            }
+                        },
+                    ))
             })
             .when(is_macos, |this| {
                 this.child(
@@ -1637,53 +1605,11 @@ impl TabContainer {
                             el.hover(move |style| style.bg(hover_tab_color))
                                 .bg(inactive_tab_color)
                         })
-                        .when(drag_plan.enable_single_pinned_tab_drag, |el| {
-                            el.window_control_area(WindowControlArea::Drag)
-                                .on_mouse_down_out(window.listener_for(
-                                    &drag_state,
-                                    |state, _, _, _| {
-                                        state.should_move = false;
-                                    },
-                                ))
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    window.listener_for(&drag_state, |state, _, _, _| {
-                                        state.should_move = true;
-                                    }),
-                                )
-                                .on_mouse_up(
-                                    MouseButton::Left,
-                                    window.listener_for(&drag_state, |state, _, _, _| {
-                                        state.should_move = false;
-                                    }),
-                                )
-                                .on_mouse_move(window.listener_for(
-                                    &drag_state,
-                                    |state, _, window, _| {
-                                        if state.should_move {
-                                            state.should_move = false;
-                                            window.start_window_move();
-                                        }
-                                    },
-                                ))
-                        })
-                        .when(!drag_plan.enable_single_pinned_tab_drag, |el| {
-                            el.cursor_pointer()
-                                // pinned tab 在存在普通 tab 时只是一个普通可点击页签，
-                                // 需要阻止事件冒泡到标题栏拖动区域。
-                                .on_mouse_down(MouseButton::Left, |_, window, cx| {
-                                    window.prevent_default();
-                                    cx.stop_propagation();
-                                })
-                                .on_mouse_move(|_, window, cx| {
-                                    window.prevent_default();
-                                    cx.stop_propagation();
-                                })
-                                .on_click(move |_, window, cx| {
-                                    view_for_pinned.update(cx, |this, cx| {
-                                        this.activate_pinned_tab(window, cx);
-                                    });
-                                })
+                        .cursor_pointer()
+                        .on_click(move |_, window, cx| {
+                            view_for_pinned.update(cx, |this, cx| {
+                                this.activate_pinned_tab(window, cx);
+                            });
                         })
                         .when_some(pinned_icon, |el, icon| {
                             el.child(div().flex_shrink_0().flex().items_center().child(icon))
@@ -1698,23 +1624,23 @@ impl TabContainer {
                                 .child(pinned_title.to_string()),
                         ),
                 )
-                // Separator between pinned tab and scrollable tabs
-                .child(
-                    div()
-                        .flex_shrink_0()
-                        .mx_1()
-                        .when_some(top_padding, |el, padding| el.mt(padding))
-                        .w(px(1.0))
-                        .h(px(16.0))
-                        .bg(border_color),
-                )
+                    // Separator between pinned tab and scrollable tabs
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .mx_1()
+                            .when_some(top_padding, |el, padding| el.mt(padding))
+                            .w(px(1.0))
+                            .h(px(16.0))
+                            .bg(border_color),
+                    )
             })
             .child(
                 h_flex()
                     .id("tabs")
                     .flex_1()
                     // 仅在启用窗口控件时设置拖动区域（用于 Windows 原生拖动）
-                    .when(drag_plan.enable_scroll_area_drag, |this| {
+                    .when(show_window_controls, |this| {
                         this.window_control_area(WindowControlArea::Drag)
                             .on_mouse_down_out(window.listener_for(
                                 &drag_state,
@@ -1795,17 +1721,19 @@ impl TabContainer {
                                 el.hover(move |style| style.bg(hover_tab_color))
                                     .bg(inactive_tab_color)
                             })
-                            // 普通 tab 不应把拖动/按下事件冒泡为窗口拖动。
-                            .on_mouse_down(MouseButton::Left, move |_evt, window: &mut Window, cx| {
-                                window.prevent_default();
-                                cx.stop_propagation();
-                            })
-                            .on_mouse_move(move |_evt, window: &mut Window, cx| {
-                                window.prevent_default();
-                                cx.stop_propagation();
-                            })
                             .when(allow_tab_drag, |el| {
                                 el.cursor_grab()
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        move |_evt, window: &mut Window, cx| {
+                                            window.prevent_default();
+                                            cx.stop_propagation();
+                                        },
+                                    )
+                                    .on_mouse_move(move |_evt, window: &mut Window, cx| {
+                                        window.prevent_default();
+                                        cx.stop_propagation();
+                                    })
                                     .on_drag(
                                         DragTab::new(idx, title.clone()),
                                         |drag, _, window, cx| {
@@ -1895,44 +1823,44 @@ impl TabContainer {
                                         ),
                                     ),
                                 )
-                                .item(PopupMenuItem::new("Close All").on_click(
-                                    window.listener_for(
-                                        &view_for_menu,
-                                        move |this, _, window, cx| {
-                                            this.close_all_tabs(window, cx).detach();
-                                        },
-                                    ),
-                                ))
-                                .item(
-                                    PopupMenuItem::new("Close Others")
-                                        .disabled(tab_count <= 1)
-                                        .on_click(window.listener_for(
+                                    .item(PopupMenuItem::new("Close All").on_click(
+                                        window.listener_for(
                                             &view_for_menu,
                                             move |this, _, window, cx| {
-                                                this.close_other_tabs(idx, window, cx).detach();
+                                                this.close_all_tabs(window, cx).detach();
                                             },
-                                        )),
-                                )
-                                .item(
-                                    PopupMenuItem::new("Close Tabs To The Left")
-                                        .disabled(!has_tabs_left)
-                                        .on_click(window.listener_for(
-                                            &view_for_menu,
-                                            move |this, _, window, cx| {
-                                                this.close_tabs_to_left(idx, window, cx).detach();
-                                            },
-                                        )),
-                                )
-                                .item(
-                                    PopupMenuItem::new("Close Tabs To The Right")
-                                        .disabled(!has_tabs_right)
-                                        .on_click(window.listener_for(
-                                            &view_for_menu,
-                                            move |this, _, window, cx| {
-                                                this.close_tabs_to_right(idx, window, cx).detach();
-                                            },
-                                        )),
-                                )
+                                        ),
+                                    ))
+                                    .item(
+                                        PopupMenuItem::new("Close Others")
+                                            .disabled(tab_count <= 1)
+                                            .on_click(window.listener_for(
+                                                &view_for_menu,
+                                                move |this, _, window, cx| {
+                                                    this.close_other_tabs(idx, window, cx).detach();
+                                                },
+                                            )),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new("Close Tabs To The Left")
+                                            .disabled(!has_tabs_left)
+                                            .on_click(window.listener_for(
+                                                &view_for_menu,
+                                                move |this, _, window, cx| {
+                                                    this.close_tabs_to_left(idx, window, cx).detach();
+                                                },
+                                            )),
+                                    )
+                                    .item(
+                                        PopupMenuItem::new("Close Tabs To The Right")
+                                            .disabled(!has_tabs_right)
+                                            .on_click(window.listener_for(
+                                                &view_for_menu,
+                                                move |this, _, window, cx| {
+                                                    this.close_tabs_to_right(idx, window, cx).detach();
+                                                },
+                                            )),
+                                    )
                             })
                     })),
             )
@@ -1977,7 +1905,7 @@ impl TabContainer {
                                         window,
                                         cx,
                                     )
-                                    .searchable(true)
+                                        .searchable(true)
                                 }));
                             }
                         }
@@ -2092,15 +2020,15 @@ impl TabContainer {
                     window.prevent_default();
                     cx.stop_propagation();
                 })
-                .on_click(move |_, window, cx| {
-                    cx.stop_propagation();
-                    match control_area {
-                        WindowControlArea::Min => window.minimize_window(),
-                        WindowControlArea::Max => window.zoom_window(),
-                        WindowControlArea::Close => window.remove_window(),
-                        _ => {}
-                    }
-                })
+                    .on_click(move |_, window, cx| {
+                        cx.stop_propagation();
+                        match control_area {
+                            WindowControlArea::Min => window.minimize_window(),
+                            WindowControlArea::Max => window.zoom_window(),
+                            WindowControlArea::Close => window.remove_window(),
+                            _ => {}
+                        }
+                    })
             })
             .child(Icon::new(icon).with_size(Size::Small))
     }
@@ -2136,49 +2064,5 @@ impl Render for TabContainer {
                     .child(self.render_tab_bar(window, cx))
                     .child(self.render_tab_content(window, cx)),
             )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{TabBarDragPlan, build_tab_bar_drag_plan};
-
-    #[test]
-    fn build_tab_bar_drag_plan_enables_pinned_drag_for_single_home_tab() {
-        let plan = build_tab_bar_drag_plan(true, true, false);
-
-        assert_eq!(
-            plan,
-            TabBarDragPlan {
-                enable_scroll_area_drag: true,
-                enable_single_pinned_tab_drag: true,
-            }
-        );
-    }
-
-    #[test]
-    fn build_tab_bar_drag_plan_keeps_pinned_drag_disabled_when_other_tabs_exist() {
-        let plan = build_tab_bar_drag_plan(true, true, true);
-
-        assert_eq!(
-            plan,
-            TabBarDragPlan {
-                enable_scroll_area_drag: true,
-                enable_single_pinned_tab_drag: false,
-            }
-        );
-    }
-
-    #[test]
-    fn build_tab_bar_drag_plan_disables_all_drag_without_window_controls() {
-        let plan = build_tab_bar_drag_plan(false, true, false);
-
-        assert_eq!(
-            plan,
-            TabBarDragPlan {
-                enable_scroll_area_drag: false,
-                enable_single_pinned_tab_drag: false,
-            }
-        );
     }
 }
