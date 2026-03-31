@@ -1667,11 +1667,23 @@ impl TabContainer {
                                     },
                                 ))
                         })
-                        .cursor_pointer()
-                        .on_click(move |_, window, cx| {
-                            view_for_pinned.update(cx, |this, cx| {
-                                this.activate_pinned_tab(window, cx);
-                            });
+                        .when(!drag_plan.enable_single_pinned_tab_drag, |el| {
+                            el.cursor_pointer()
+                                // pinned tab 在存在普通 tab 时只是一个普通可点击页签，
+                                // 需要阻止事件冒泡到标题栏拖动区域。
+                                .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                                    window.prevent_default();
+                                    cx.stop_propagation();
+                                })
+                                .on_mouse_move(|_, window, cx| {
+                                    window.prevent_default();
+                                    cx.stop_propagation();
+                                })
+                                .on_click(move |_, window, cx| {
+                                    view_for_pinned.update(cx, |this, cx| {
+                                        this.activate_pinned_tab(window, cx);
+                                    });
+                                })
                         })
                         .when_some(pinned_icon, |el, icon| {
                             el.child(div().flex_shrink_0().flex().items_center().child(icon))
@@ -1783,19 +1795,17 @@ impl TabContainer {
                                 el.hover(move |style| style.bg(hover_tab_color))
                                     .bg(inactive_tab_color)
                             })
+                            // 普通 tab 不应把拖动/按下事件冒泡为窗口拖动。
+                            .on_mouse_down(MouseButton::Left, move |_evt, window: &mut Window, cx| {
+                                window.prevent_default();
+                                cx.stop_propagation();
+                            })
+                            .on_mouse_move(move |_evt, window: &mut Window, cx| {
+                                window.prevent_default();
+                                cx.stop_propagation();
+                            })
                             .when(allow_tab_drag, |el| {
                                 el.cursor_grab()
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        move |_evt, window: &mut Window, cx| {
-                                            window.prevent_default();
-                                            cx.stop_propagation();
-                                        },
-                                    )
-                                    .on_mouse_move(move |_evt, window: &mut Window, cx| {
-                                        window.prevent_default();
-                                        cx.stop_propagation();
-                                    })
                                     .on_drag(
                                         DragTab::new(idx, title.clone()),
                                         |drag, _, window, cx| {
