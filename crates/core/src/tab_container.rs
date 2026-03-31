@@ -1546,9 +1546,12 @@ impl TabContainer {
         // 窗口拖动状态管理（仅在 Windows/Linux 上需要，且启用窗口控件时）
         let is_linux = cfg!(target_os = "linux");
         let is_macos = cfg!(target_os = "macos");
+        let is_windows = cfg!(target_os = "windows");
         let is_client_decorated = matches!(window.window_decorations(), Decorations::Client { .. });
         let show_window_controls = self.show_window_controls;
-        let allow_tab_drag = !is_macos;
+        // Windows 下 tab 重排拖拽会与窗口拖动区域冲突，可能导致白屏/崩溃。
+        // 先禁用 Windows 的 tab 重排拖拽，保证标题栏拖动稳定性。
+        let allow_tab_drag = !is_macos && !is_windows;
         let drag_plan = build_tab_bar_drag_plan(
             show_window_controls,
             self.pinned_tab.is_some(),
