@@ -1,5 +1,7 @@
 //! This is a fork of gpui's anchored element that adds support for offsetting
 //! https://github.com/zed-industries/zed/blob/b06f4088a3565c5e30663106ff79c1ced645d87a/crates/gpui/src/elements/anchored.rs
+use std::rc::Rc;
+
 use gpui::{
     AnyElement, App, Axis, Bounds, Display, Edges, Element, GlobalElementId, Half,
     InspectorElementId, IntoElement, LayoutId, ParentElement, Pixels, Point, Position, Size, Style,
@@ -21,6 +23,7 @@ pub(crate) struct Anchored {
     anchor_corner: Anchor,
     fit_mode: AnchoredFitMode,
     anchor_position: Option<Point<Pixels>>,
+    anchor_position_fn: Option<Rc<dyn Fn() -> Point<Pixels>>>,
     position_mode: AnchoredPositionMode,
     offset: Option<Point<Pixels>>,
 }
@@ -33,6 +36,7 @@ pub(crate) fn anchored() -> Anchored {
         anchor_corner: Anchor::TopLeft,
         fit_mode: AnchoredFitMode::SwitchAnchor,
         anchor_position: None,
+        anchor_position_fn: None,
         position_mode: AnchoredPositionMode::Window,
         offset: None,
     }
@@ -50,6 +54,14 @@ impl Anchored {
     /// (otherwise the location the anchored element is rendered is used)
     pub fn position(mut self, anchor: Point<Pixels>) -> Self {
         self.anchor_position = Some(anchor);
+        self
+    }
+
+    /// Sets a closure that will be called at prepaint time to get the position.
+    /// This takes precedence over [`Anchored::position`] when set, and is useful
+    /// when the position is not yet known at render time.
+    pub fn position_fn(mut self, f: impl Fn() -> Point<Pixels> + 'static) -> Self {
+        self.anchor_position_fn = Some(Rc::new(f));
         self
     }
 
@@ -145,8 +157,14 @@ impl Element for Anchored {
         }
         let size: Size<Pixels> = (child_max - child_min).into();
 
+        let anchor_position = self
+            .anchor_position_fn
+            .as_ref()
+            .map(|f| f())
+            .or(self.anchor_position);
+
         let (origin, mut desired) = self.position_mode.get_position_and_bounds(
-            self.anchor_position,
+            anchor_position,
             self.anchor_corner,
             size,
             bounds,
