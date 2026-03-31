@@ -185,7 +185,7 @@ pub struct TableState<D: TableDelegate> {
     pub col_selectable: bool,
     /// Whether the table can select row.
     pub row_selectable: bool,
-    /// Whether the table can select cell, default is true.
+    /// Whether the table can select cell, default is false.
     ///
     /// When enabled:
     /// - Users can click on individual cells to select them
@@ -307,7 +307,7 @@ where
         self
     }
 
-    /// Set to enable/disable cell selection, default is true.
+    /// Set to enable/disable cell selection, default is false.
     ///
     /// When enabled:
     /// - Individual cells become selectable by clicking
