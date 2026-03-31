@@ -204,7 +204,7 @@ impl TabVariant {
                 ..Default::default()
             },
             TabVariant::Underline => TabStyle {
-                fg: cx.theme().tab_foreground,
+                fg: cx.theme().tab_active_foreground,
                 bg: cx.theme().transparent,
                 inner_bg: cx.theme().transparent,
                 borders: Edges {
