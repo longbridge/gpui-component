@@ -8,10 +8,12 @@
 
 pub mod file_manager_panel;
 mod quick_command_panel;
+mod server_monitor_panel;
 mod settings_panel;
 
 pub use file_manager_panel::{FileManagerPanel, FileManagerPanelEvent};
 pub use quick_command_panel::QuickCommandPanel;
+pub use server_monitor_panel::{ServerMonitorPanel, ServerMonitorPanelEvent};
 pub use settings_panel::SettingsPanel;
 
 use crate::theme::{TerminalColors, TerminalTheme};
@@ -26,6 +28,7 @@ use one_core::layout::TOOLBAR_WIDTH;
 use one_core::storage::models::StoredConnection;
 use one_core::{AiChatPanel, AiChatPanelEvent, CodeBlockAction, LanguageMatcher};
 use rust_i18n::t;
+use terminal::terminal::SshTerminalConfig;
 
 const TERMINAL_AI_SYSTEM_INSTRUCTION: &str = r#"你是终端侧边栏中的 Linux 命令助手，默认面向 Linux shell 环境回答。
 请严格遵循以下规则：
@@ -48,6 +51,8 @@ pub enum SidebarPanel {
     AiChat,
     /// 文件管理器面板（仅 SSH 终端）
     FileManager,
+    /// 服务器监控面板（仅 SSH 终端）
+    ServerMonitor,
 }
 
 impl SidebarPanel {
@@ -58,6 +63,7 @@ impl SidebarPanel {
             SidebarPanel::QuickCommand => IconName::SquareTerminal.mono(),
             SidebarPanel::AiChat => IconName::AI.color(),
             SidebarPanel::FileManager => IconName::FolderOpen.mono(),
+            SidebarPanel::ServerMonitor => IconName::Monitor.color(),
         }
     }
 
@@ -68,6 +74,7 @@ impl SidebarPanel {
             SidebarPanel::QuickCommand => "Quick Commands",
             SidebarPanel::AiChat => "AI Chat",
             SidebarPanel::FileManager => "File Manager",
+            SidebarPanel::ServerMonitor => "Server Monitor",
         }
     }
 }
@@ -125,6 +132,8 @@ pub struct TerminalSidebar {
     ai_chat_panel: Entity<AiChatPanel>,
     /// 文件管理器面板（仅 SSH 终端时创建）
     file_manager_panel: Option<Entity<FileManagerPanel>>,
+    /// 服务器监控面板（仅 SSH 终端时创建）
+    server_monitor_panel: Option<Entity<ServerMonitorPanel>>,
     /// 路径与终端同步开关（默认开启）
     sync_path_enabled: bool,
     /// 焦点句柄
@@ -139,6 +148,7 @@ impl TerminalSidebar {
     pub fn new(
         connection_id: Option<i64>,
         stored_connection: Option<StoredConnection>,
+        ssh_config: Option<SshTerminalConfig>,
         initial_theme: &TerminalTheme,
         sync_path_enabled: bool,
         window: &mut Window,
@@ -146,6 +156,7 @@ impl TerminalSidebar {
     ) -> Self {
         let colors = initial_theme.colors();
         let has_file_manager = stored_connection.is_some();
+        let auto_show_server_monitor = ServerMonitorPanel::load_monitor_enabled(connection_id);
         let settings_panel = cx.new(|cx| {
             SettingsPanel::new(
                 initial_theme,
@@ -163,6 +174,17 @@ impl TerminalSidebar {
         // 仅 SSH 终端（有 StoredConnection）时创建文件管理器面板
         let file_manager_panel =
             stored_connection.map(|conn| cx.new(|cx| FileManagerPanel::new(conn, window, cx)));
+        let server_monitor_panel = ssh_config
+            .map(|config| {
+                cx.new(|cx| {
+                    ServerMonitorPanel::new(
+                        connection_id,
+                        config.ssh_config.clone(),
+                        auto_show_server_monitor,
+                        cx,
+                    )
+                })
+            });
 
         // 注册 bash/sh 代码块操作，并注入终端专属提示词
         let sidebar_entity = cx.entity();
@@ -282,12 +304,25 @@ impl TerminalSidebar {
             subs.push(fm_sub);
         }
 
+        if let Some(ref monitor_panel) = server_monitor_panel {
+            let monitor_sub = cx.subscribe(
+                monitor_panel,
+                |this, _, event: &ServerMonitorPanelEvent, cx| match event {
+                    ServerMonitorPanelEvent::Close => {
+                        this.set_active_panel(None, cx);
+                    }
+                },
+            );
+            subs.push(monitor_sub);
+        }
+
         Self {
             active_panel: None,
             settings_panel,
             quick_command_panel,
             ai_chat_panel,
             file_manager_panel,
+            server_monitor_panel,
             sync_path_enabled,
             focus_handle: cx.focus_handle(),
             colors,
@@ -320,6 +355,13 @@ impl TerminalSidebar {
                     fm_panel.update(cx, |panel, cx| {
                         // 仅在 Idle 状态时自动连接
                         panel.connect_if_idle(cx);
+                    });
+                }
+            }
+            if panel == SidebarPanel::ServerMonitor {
+                if let Some(ref monitor_panel) = self.server_monitor_panel {
+                    monitor_panel.update(cx, |panel, cx| {
+                        panel.restore_monitoring(cx);
                     });
                 }
             }
@@ -459,6 +501,14 @@ impl TerminalSidebar {
         }
     }
 
+    pub fn reconnect_server_monitor(&mut self, cx: &mut Context<Self>) {
+        if let Some(ref monitor_panel) = self.server_monitor_panel {
+            monitor_panel.update(cx, |panel, cx| {
+                panel.reconnect(cx);
+            });
+        }
+    }
+
     /// 渲染工具栏按钮
     fn render_toolbar_button(
         &self,
@@ -498,6 +548,7 @@ impl TerminalSidebar {
         let border_color = self.colors.border;
         let muted_bg = self.colors.background;
         let has_file_manager = self.file_manager_panel.is_some();
+        let has_server_monitor = self.server_monitor_panel.is_some();
 
         v_flex()
             .flex_shrink_0()
@@ -514,6 +565,9 @@ impl TerminalSidebar {
             .child(self.render_toolbar_button(SidebarPanel::AiChat, window, cx))
             .when(has_file_manager, |this| {
                 this.child(self.render_toolbar_button(SidebarPanel::FileManager, window, cx))
+            })
+            .when(has_server_monitor, |this| {
+                this.child(self.render_toolbar_button(SidebarPanel::ServerMonitor, window, cx))
             })
             .into_any_element()
     }
@@ -532,6 +586,13 @@ impl TerminalSidebar {
             SidebarPanel::FileManager => {
                 if let Some(ref fm_panel) = self.file_manager_panel {
                     fm_panel.clone().into_any_element()
+                } else {
+                    div().into_any_element()
+                }
+            }
+            SidebarPanel::ServerMonitor => {
+                if let Some(ref monitor_panel) = self.server_monitor_panel {
+                    monitor_panel.clone().into_any_element()
                 } else {
                     div().into_any_element()
                 }

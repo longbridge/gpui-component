@@ -10054,6 +10054,8 @@ dependencies = [
  "one-ui",
  "regex",
  "rust-i18n",
+ "serde",
+ "serde_json",
  "serialport",
  "sftp",
  "ssh",

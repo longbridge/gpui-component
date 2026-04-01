@@ -538,12 +538,14 @@ impl TerminalView {
 
         // 创建默认主题（需要在创建侧边栏之前）
         let default_theme = TerminalTheme::ocean();
+        let ssh_config = terminal.read(cx).ssh_config().cloned();
 
         // 创建侧边栏（传递 StoredConnection 用于文件管理器）
         let sidebar = cx.new(|cx| {
             TerminalSidebar::new(
                 connection_id,
                 stored_connection,
+                ssh_config,
                 &default_theme,
                 sync_path_enabled,
                 window,
@@ -1002,6 +1004,7 @@ impl TerminalView {
             .map(str::to_string);
         self.sidebar.update(cx, |sidebar, cx| {
             sidebar.reconnect_file_manager(working_dir, cx);
+            sidebar.reconnect_server_monitor(cx);
         });
         self.terminal.update(cx, |terminal, cx| {
             terminal.reconnect(cx);

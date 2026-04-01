@@ -494,6 +494,76 @@ TerminalSidebar:
     zh-CN: "粘贴到终端"
     zh-HK: "貼上到終端"
 
+ServerMonitor:
+  title:
+    en: Server Monitor
+    zh-CN: 服务器监控
+    zh-HK: 伺服器監控
+  start:
+    en: Start Monitoring
+    zh-CN: 开始监控
+    zh-HK: 開始監控
+  start_hint:
+    en: Start monitoring for the current SSH connection. This will deploy a helper script under ~/.onetcli-monitor on the remote host after your confirmation.
+    zh-CN: 为当前 SSH 连接启动监控。确认后会在远端主目录下部署 ~/.onetcli-monitor 监控脚本，并开始定时采集。
+    zh-HK: 為目前 SSH 連線啟動監控。確認後會在遠端主目錄下部署 ~/.onetcli-monitor 監控腳本，並開始定時採集。
+  preparing:
+    en: Preparing remote monitor helper...
+    zh-CN: 正在准备远端监控脚本...
+    zh-HK: 正在準備遠端監控腳本...
+  refresh:
+    en: Refresh
+    zh-CN: 刷新
+    zh-HK: 重新整理
+  close:
+    en: Close
+    zh-CN: 关闭
+    zh-HK: 關閉
+  cpu:
+    en: CPU
+    zh-CN: CPU
+    zh-HK: CPU
+  memory:
+    en: Memory
+    zh-CN: 内存
+    zh-HK: 記憶體
+  disk:
+    en: Disk
+    zh-CN: 磁盘
+    zh-HK: 磁碟
+  disk_hint:
+    en: Mount usage
+    zh-CN: 挂载点使用情况
+    zh-HK: 掛載點使用情況
+  network:
+    en: Network
+    zh-CN: 网络
+    zh-HK: 網路
+  processes:
+    en: Processes
+    zh-CN: 进程
+    zh-HK: 行程
+  process_hint:
+    en: Top resource usage
+    zh-CN: 资源占用排行
+    zh-HK: 資源佔用排行
+  by_cpu:
+    en: By CPU
+    zh-CN: 按 CPU
+    zh-HK: 按 CPU
+  by_memory:
+    en: By Memory
+    zh-CN: 按内存
+    zh-HK: 按記憶體
+  awaiting_data:
+    en: Awaiting next sample...
+    zh-CN: 等待下一次采样...
+    zh-HK: 等待下一次採樣...
+  unavailable:
+    en: Unavailable
+    zh-CN: 暂不可用
+    zh-HK: 暫不可用
+
 QuickCommand:
   copied:
     en: Command copied to clipboard
