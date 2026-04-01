@@ -19,13 +19,17 @@ use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{
     ActiveConnections, ProxyType as StorageProxyType, SerialParams, SshAuthMethod, StoredConnection,
 };
-use std::env;
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::time::interval;
+
+#[cfg(any(test, target_os = "windows"))]
+use std::env;
+#[cfg(any(test, target_os = "windows"))]
+use std::ffi::OsStr;
+#[cfg(any(test, target_os = "windows"))]
+use std::path::{Path, PathBuf};
 
 use crate::pty_backend::{GpuiEventProxy, LocalPtyBackend};
 
@@ -151,11 +155,13 @@ fn build_ssh_init_commands(
     compose_ssh_init_commands(base_init_commands.as_deref(), sync_path_with_terminal)
 }
 
+#[cfg(any(test, target_os = "windows"))]
 fn path_if_file(path: impl Into<PathBuf>) -> Option<String> {
     let path = path.into();
     path.is_file().then(|| path.to_string_lossy().into_owned())
 }
 
+#[cfg(any(test, target_os = "windows"))]
 fn find_executable_in_path(path_env: Option<&OsStr>, program: &str) -> Option<String> {
     let path_env = path_env?;
     env::split_paths(path_env)
@@ -163,6 +169,7 @@ fn find_executable_in_path(path_env: Option<&OsStr>, program: &str) -> Option<St
         .find_map(path_if_file)
 }
 
+#[cfg(any(test, target_os = "windows"))]
 fn resolve_default_windows_shell_from_env(
     path_env: Option<&OsStr>,
     system_root: Option<&OsStr>,
@@ -330,6 +337,47 @@ impl TerminalScrollProxy {
 }
 
 impl Terminal {
+    fn new_local_disconnected(error: String, cx: &mut Context<Self>) -> Self {
+        let (event_tx, event_rx) = unbounded_channel::<TerminalEvent>();
+        let (term, _event_proxy, _colors) =
+            Self::create_term(DEFAULT_COLS, DEFAULT_ROWS, event_tx.clone());
+
+        Self::spawn_event_loop(event_rx, cx);
+
+        Self {
+            term,
+            backend: None,
+            title: String::new(),
+            current_working_dir: None,
+            child_exited: None,
+            connection_state: ConnectionState::Disconnected { error: Some(error) },
+            cols: DEFAULT_COLS,
+            rows: DEFAULT_ROWS,
+            ssh_config: None,
+            serial_params: None,
+            event_tx: Some(event_tx),
+            event_proxy: None,
+            connection_id: None,
+            connection_name: None,
+            ssh_base_init_commands: None,
+            init_commands: None,
+            connection_kind: TerminalConnectionKind::Local,
+        }
+    }
+
+    pub fn new_local_or_disconnected(
+        config: LocalConfig,
+        cx: &mut Context<Self>,
+    ) -> (Self, Option<String>) {
+        match Self::new_local(config, cx) {
+            Ok(terminal) => (terminal, None),
+            Err(error) => {
+                let message = error.to_string();
+                (Self::new_local_disconnected(message.clone(), cx), Some(message))
+            }
+        }
+    }
+
     /// 创建本地终端
     pub fn new_local(config: LocalConfig, cx: &mut Context<Self>) -> Result<Self> {
         let (event_tx, event_rx) = unbounded_channel::<TerminalEvent>();
