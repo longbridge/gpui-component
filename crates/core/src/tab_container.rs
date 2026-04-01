@@ -1639,6 +1639,8 @@ impl TabContainer {
                 h_flex()
                     .id("tabs")
                     .flex_1()
+                    .h_full()
+                    .items_center()
                     // 仅在启用窗口控件时设置拖动区域（用于 Windows 原生拖动）
                     .when(show_window_controls, |this| {
                         this.window_control_area(WindowControlArea::Drag)
