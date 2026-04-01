@@ -457,13 +457,21 @@ impl Tiles {
         } else {
             previous_bounds.origin.y
         };
-        let final_width = if let Some(width) = new_width {
+        // When both x and width are provided (left resize)
+        let final_width = if new_x.is_some() && new_width.is_some() {
+            let right_edge = previous_bounds.origin.x + previous_bounds.size.width;
+            (right_edge - final_x).max(MINIMUM_SIZE.width)
+        } else if let Some(width) = new_width {
             round_to_nearest_ten(width, cx)
         } else {
             previous_bounds.size.width
         };
 
-        let final_height = if let Some(height) = new_height {
+        // When both y and height are provided (top resize)
+        let final_height = if new_y.is_some() && new_height.is_some() {
+            let bottom_edge = previous_bounds.origin.y + previous_bounds.size.height;
+            (bottom_edge - final_y).max(MINIMUM_SIZE.height)
+        } else if let Some(height) = new_height {
             round_to_nearest_ten(height, cx)
         } else {
             previous_bounds.size.height
@@ -804,9 +812,9 @@ impl Tiles {
                             let pos = e.event.position;
                             let delta = drag_data.last_position.y - pos.y;
                             let new_y = (drag_data.last_bounds.origin.y - delta).max(px(0.));
-                            let size_delta = drag_data.last_position.y - new_y;
+                            let size_delta = drag_data.last_bounds.origin.y - new_y;
                             let new_height = (drag_data.last_bounds.size.height + size_delta)
-                                .max(MINIMUM_SIZE.width);
+                                .max(MINIMUM_SIZE.height);
                             this.resize(None, Some(new_y), None, Some(new_height), window, cx);
                         }
                     },
@@ -860,8 +868,8 @@ impl Tiles {
 
                             let pos = e.event.position;
                             let delta = pos.y - drag_data.last_position.y;
-                            let new_height =
-                                (drag_data.last_bounds.size.height + delta).max(MINIMUM_SIZE.width);
+                            let new_height = (drag_data.last_bounds.size.height + delta)
+                                .max(MINIMUM_SIZE.height);
                             this.resize(None, None, None, Some(new_height), window, cx);
                         }
                     },
