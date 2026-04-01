@@ -1,5 +1,5 @@
-use crate::common::db_connection_form::{DbConnectionForm, DbFormConfig};
 use crate::common::DatabaseEditorView;
+use crate::common::db_connection_form::{DbConnectionForm, DbFormConfig};
 use crate::database_objects_tab::DatabaseObjectsEvent;
 use crate::database_view_plugin::{
     ContextMenuItem, DatabaseViewPlugin, TableDesignerCapabilities, ToolbarButton,
@@ -63,7 +63,7 @@ impl DatabaseViewPlugin for DuckDbDatabaseViewPlugin {
             supports_engine: false,
             supports_charset: false,
             supports_collation: false,
-            supports_auto_increment: true,
+            supports_auto_increment: false,
             supports_tablespace: false,
         }
     }

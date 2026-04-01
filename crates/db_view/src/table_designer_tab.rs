@@ -27,13 +27,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::database_view_plugin::{ColumnEditorCapabilities, DatabaseViewPluginRegistry};
 use db::GlobalDbState;
+#[cfg(test)]
+use db::duckdb::DuckDbPlugin;
 use db::plugin::DatabasePlugin;
 use db::types::{
     CharsetInfo, CollationInfo, ColumnDefinition, ColumnInfo, IndexDefinition, IndexInfo,
     ParsedColumnType, TableDesign, TableOptions,
 };
-#[cfg(test)]
-use db::duckdb::DuckDbPlugin;
 use gpui_component::select::SearchableVec;
 use one_core::storage::DatabaseType;
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
@@ -154,8 +154,7 @@ fn column_info_to_definition(
     } else {
         base_type.clone()
     };
-    let is_auto_increment = if matches!(database_type, DatabaseType::SQLite | DatabaseType::DuckDB)
-    {
+    let is_auto_increment = if matches!(database_type, DatabaseType::SQLite) {
         col.is_primary_key && base_type.eq_ignore_ascii_case("INTEGER")
     } else {
         parsed.is_auto_increment
@@ -2126,10 +2125,7 @@ impl ColumnsEditor {
                 scale_input,
                 nullable: col.is_nullable,
                 is_pk: col.is_primary_key,
-                auto_increment: if matches!(
-                    self.database_type,
-                    DatabaseType::SQLite | DatabaseType::DuckDB
-                ) {
+                auto_increment: if matches!(self.database_type, DatabaseType::SQLite) {
                     col.is_primary_key && parsed_type.base_type.eq_ignore_ascii_case("INTEGER")
                 } else {
                     parsed_type.is_auto_increment
@@ -3281,10 +3277,7 @@ mod tests {
     fn test_preview_refresh_schedule_state_coalesces_requests_in_same_cycle() {
         let mut state = PreviewRefreshScheduleState::default();
 
-        assert!(
-            state.request_refresh(),
-            "第一次请求应当安排一次预览刷新"
-        );
+        assert!(state.request_refresh(), "第一次请求应当安排一次预览刷新");
         assert!(
             !state.request_refresh(),
             "同一事件周期内的第二次请求不应重复安排刷新"
