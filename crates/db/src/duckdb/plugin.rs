@@ -1,9 +1,11 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use gpui_component::table::Column;
 use one_core::storage::{DatabaseType, DbConnectionConfig};
 
 use crate::connection::{DbConnection, DbError};
 use crate::duckdb::DuckDbConnection;
+use crate::executor::SqlResult;
 use crate::import_export::{
     ExportConfig, ExportProgressSender, ExportResult, ImportConfig, ImportProgressSender,
     ImportResult,
@@ -28,6 +30,24 @@ impl Default for DuckDbPlugin {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn parse_index_columns_from_sql(sql: &str) -> Vec<String> {
+    let Some(open_idx) = sql.rfind('(') else {
+        return Vec::new();
+    };
+    let Some(close_idx) = sql.rfind(')') else {
+        return Vec::new();
+    };
+    if close_idx <= open_idx {
+        return Vec::new();
+    }
+
+    sql[open_idx + 1..close_idx]
+        .split(',')
+        .map(|part| part.trim().trim_matches('"').to_string())
+        .filter(|part| !part.is_empty())
+        .collect()
 }
 
 #[async_trait]
@@ -123,13 +143,57 @@ impl DatabasePlugin for DuckDbPlugin {
     async fn list_indexes(
         &self,
         connection: &dyn DbConnection,
-        database: &str,
+        _database: &str,
         schema: Option<String>,
         table: &str,
     ) -> Result<Vec<IndexInfo>> {
-        self.sqlite
-            .list_indexes(connection, database, schema, table)
+        let sql = match schema {
+            Some(schema_name) => format!(
+                "SELECT index_name, is_unique, sql FROM duckdb_indexes() WHERE schema_name = '{}' AND table_name = '{}' ORDER BY index_name",
+                schema_name.replace('\'', "''"),
+                table.replace('\'', "''")
+            ),
+            None => format!(
+                "SELECT index_name, is_unique, sql FROM duckdb_indexes() WHERE table_name = '{}' ORDER BY index_name",
+                table.replace('\'', "''")
+            ),
+        };
+
+        let result = connection
+            .query(&sql)
             .await
+            .map_err(|e| anyhow::anyhow!("Failed to list indexes: {}", e))?;
+
+        if let SqlResult::Query(query_result) = result {
+            let mut indexes = Vec::new();
+
+            for row in query_result.rows {
+                let index_name = row.first().cloned().flatten().unwrap_or_default();
+                let is_unique = row
+                    .get(1)
+                    .cloned()
+                    .flatten()
+                    .map(|v| matches!(v.as_str(), "true" | "TRUE" | "1"))
+                    .unwrap_or(false);
+                let columns = row
+                    .get(2)
+                    .cloned()
+                    .flatten()
+                    .map(|sql| parse_index_columns_from_sql(sql.as_str()))
+                    .unwrap_or_default();
+
+                indexes.push(IndexInfo {
+                    name: index_name,
+                    columns,
+                    is_unique,
+                    index_type: None,
+                });
+            }
+
+            Ok(indexes)
+        } else {
+            Err(anyhow::anyhow!("Unexpected result type"))
+        }
     }
 
     async fn list_indexes_view(
@@ -139,9 +203,35 @@ impl DatabasePlugin for DuckDbPlugin {
         schema: Option<&str>,
         table: &str,
     ) -> Result<ObjectView> {
-        self.sqlite
-            .list_indexes_view(connection, database, schema, table)
-            .await
+        use gpui::px;
+
+        let indexes = self
+            .list_indexes(connection, database, schema.map(|s| s.to_string()), table)
+            .await?;
+
+        let columns = vec![
+            Column::new("name", "Name").width(px(180.0)),
+            Column::new("columns", "Columns").width(px(250.0)),
+            Column::new("unique", "Unique").width(px(80.0)),
+        ];
+
+        let rows: Vec<Vec<String>> = indexes
+            .iter()
+            .map(|idx| {
+                vec![
+                    idx.name.clone(),
+                    idx.columns.join(", "),
+                    if idx.is_unique { "YES" } else { "NO" }.to_string(),
+                ]
+            })
+            .collect();
+
+        Ok(ObjectView {
+            db_node_type: DbNodeType::Index,
+            title: format!("{} index(es)", indexes.len()),
+            columns,
+            rows,
+        })
     }
 
     async fn list_views(
@@ -351,5 +441,65 @@ impl DatabasePlugin for DuckDbPlugin {
         self.sqlite
             .export_data_with_progress(connection, config, progress_tx)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DuckDbPlugin;
+    use crate::connection::DbConnection;
+    use crate::duckdb::DuckDbConnection;
+    use crate::plugin::DatabasePlugin;
+    use one_core::storage::{DatabaseType, DbConnectionConfig};
+
+    fn build_config(path: String) -> DbConnectionConfig {
+        DbConnectionConfig {
+            id: "duckdb-plugin-test".to_string(),
+            name: "duckdb-plugin-test".to_string(),
+            database_type: DatabaseType::DuckDB,
+            host: path,
+            port: 0,
+            workspace_id: None,
+            username: String::new(),
+            password: String::new(),
+            database: None,
+            service_name: None,
+            sid: None,
+            extra_params: Default::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_indexes_returns_secondary_indexes() {
+        let temp_dir = tempfile::tempdir().expect("temp dir should be created");
+        let db_path = temp_dir.path().join("duckdb-indexes-test.duckdb");
+
+        let mut connection = DuckDbConnection::new(build_config(
+            db_path.to_string_lossy().to_string(),
+        ));
+        connection.connect().await.expect("duckdb should connect");
+        connection
+            .query("CREATE TABLE test (id INTEGER, email TEXT);")
+            .await
+            .expect("table creation should succeed");
+        connection
+            .query("CREATE UNIQUE INDEX idx_test_email ON test (email);")
+            .await
+            .expect("index creation should succeed");
+
+        let plugin = DuckDbPlugin::new();
+        let indexes = plugin
+            .list_indexes(&connection, "main", None, "test")
+            .await
+            .expect("list_indexes should succeed");
+
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "idx_test_email");
+        assert!(indexes[0].is_unique);
+
+        connection
+            .disconnect()
+            .await
+            .expect("duckdb should disconnect");
     }
 }

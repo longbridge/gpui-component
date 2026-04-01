@@ -30,6 +30,7 @@ impl DuckDbConnection {
     fn extract_value(value: ValueRef<'_>, decl_type: Option<&str>) -> Option<String> {
         match value {
             ValueRef::Null => None,
+            ValueRef::Boolean(v) => Some(v.to_string()),
             ValueRef::TinyInt(i) => Some(i.to_string()),
             ValueRef::SmallInt(i) => Some(i.to_string()),
             ValueRef::Int(i) => {
