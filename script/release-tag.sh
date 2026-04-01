@@ -12,7 +12,7 @@ REMOTE="${REMOTE:-origin}"
 BRANCH="${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 FORCE_RETAG="${FORCE_RETAG:-false}"
 ALLOW_DIRTY="${ALLOW_DIRTY:-false}"
-MAIN_MANIFEST="${MAIN_MANIFEST:-main/Cargo.toml}"
+MAIN_MANIFEST="${MAIN_MANIFEST:-../main/Cargo.toml}"
 RELEASE_VERSION="${TAG#v}"
 
 update_main_version() {
