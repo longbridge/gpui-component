@@ -918,6 +918,11 @@ impl Terminal {
         self.current_working_dir.as_deref()
     }
 
+    /// 获取 SSH 连接配置（仅 SSH 终端）
+    pub fn ssh_config(&self) -> Option<&SshTerminalConfig> {
+        self.ssh_config.as_ref()
+    }
+
     /// 获取连接类型
     pub fn connection_kind(&self) -> TerminalConnectionKind {
         self.connection_kind

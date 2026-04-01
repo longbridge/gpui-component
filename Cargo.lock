@@ -5834,7 +5834,7 @@ checksum = "670fdfda89751bc4a84ac13eaa63e205cf0fd22b4c9a5fbfa085b63c1f1d3a30"
 
 [[package]]
 name = "main"
-version = "0.1.10"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -10379,6 +10379,8 @@ dependencies = [
  "one-ui",
  "regex",
  "rust-i18n",
+ "serde",
+ "serde_json",
  "serialport",
  "sftp",
  "ssh",
