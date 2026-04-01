@@ -1,5 +1,6 @@
 use crate::home_tab::HomePage;
 use crate::setting_tab::{AppSettings, DatabaseOpenMode, SettingsPanel};
+use gpui_component::{WindowExt, notification::Notification};
 use db_view::chatdb::chat_panel::ChatPanel;
 use db_view::database_tab::DatabaseTabView;
 use gpui::AppContext;
@@ -13,6 +14,17 @@ use terminal::LocalConfig;
 use terminal_view::{TerminalConnectionKind, TerminalTheme, TerminalView, TerminalViewEvent};
 
 impl HomePage {
+    fn notify_local_terminal_error(
+        &self,
+        error: impl std::fmt::Display,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let message = format!("创建本地终端失败: {}", error);
+        tracing::error!("{message}");
+        window.push_notification(Notification::error(message).autohide(true), cx);
+    }
+
     fn terminal_sync_path_enabled(cx: &App) -> bool {
         if cx.has_global::<AppSettings>() {
             AppSettings::global(cx).terminal_sync_path_with_terminal
@@ -346,15 +358,19 @@ impl HomePage {
                         } else {
                             None
                         };
-                        let terminal_view = cx.new(|cx| {
-                            TerminalView::new_with_index(config, idx, window, cx)
-                                .expect("创建本地终端失败")
-                        });
-                        this.setup_terminal_view(&terminal_view, window, cx);
-                        tab_container.update(cx, |tc, cx| {
-                            let tab = TabItem::new(tab_id, "terminal", terminal_view);
-                            tc.add_and_activate_tab_with_focus(tab, window, cx);
-                        });
+                        match TerminalView::new_with_index(config, idx, window, cx) {
+                            Ok(terminal_view) => {
+                                let terminal_view = cx.new(|_| terminal_view);
+                                this.setup_terminal_view(&terminal_view, window, cx);
+                                tab_container.update(cx, |tc, cx| {
+                                    let tab = TabItem::new(tab_id, "terminal", terminal_view);
+                                    tc.add_and_activate_tab_with_focus(tab, window, cx);
+                                });
+                            }
+                            Err(error) => {
+                                this.notify_local_terminal_error(error, window, cx);
+                            }
+                        }
                     }
                     SftpViewEvent::OpenSshTerminal {
                         connection,
@@ -572,16 +588,20 @@ impl HomePage {
         let tab_container = self.tab_container.clone();
         let home = cx.entity();
         window.defer(cx, move |window, cx| {
-            let terminal_view = cx.new(|cx| {
-                TerminalView::new_with_index(LocalConfig::default(), tab_index, window, cx)
-                    .expect("Failed to create TerminalView")
-            });
             home.update(cx, |this, cx| {
-                this.setup_terminal_view(&terminal_view, window, cx);
-            });
-            tab_container.update(cx, |tc, cx| {
-                let tab = TabItem::new(tab_id, "home", terminal_view);
-                tc.add_and_activate_tab_with_focus(tab, window, cx);
+                match TerminalView::new_with_index(LocalConfig::default(), tab_index, window, cx) {
+                    Ok(terminal_view) => {
+                        let terminal_view = cx.new(|_| terminal_view);
+                        this.setup_terminal_view(&terminal_view, window, cx);
+                        tab_container.update(cx, |tc, cx| {
+                            let tab = TabItem::new(tab_id, "home", terminal_view);
+                            tc.add_and_activate_tab_with_focus(tab, window, cx);
+                        });
+                    }
+                    Err(error) => {
+                        this.notify_local_terminal_error(error, window, cx);
+                    }
+                }
             });
         });
     }

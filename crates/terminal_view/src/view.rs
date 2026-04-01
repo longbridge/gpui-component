@@ -436,8 +436,8 @@ impl TerminalView {
     ) -> Result<Self> {
         // 创建 Terminal Entity
         let local_working_dir = config.working_dir.clone().map(PathBuf::from);
-        let terminal =
-            cx.new(|cx| Terminal::new_local(config, cx).expect("Failed to create local terminal"));
+        let terminal_model = Terminal::new_local(config, cx)?;
+        let terminal = cx.new(|_| terminal_model);
         Self::new_with_terminal(
             terminal,
             None,

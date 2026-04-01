@@ -19,6 +19,9 @@ use one_core::gpui_tokio::Tokio;
 use one_core::storage::models::{
     ActiveConnections, ProxyType as StorageProxyType, SerialParams, SshAuthMethod, StoredConnection,
 };
+use std::env;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -148,6 +151,75 @@ fn build_ssh_init_commands(
     compose_ssh_init_commands(base_init_commands.as_deref(), sync_path_with_terminal)
 }
 
+fn path_if_file(path: impl Into<PathBuf>) -> Option<String> {
+    let path = path.into();
+    path.is_file().then(|| path.to_string_lossy().into_owned())
+}
+
+fn find_executable_in_path(path_env: Option<&OsStr>, program: &str) -> Option<String> {
+    let path_env = path_env?;
+    env::split_paths(path_env)
+        .map(|dir| dir.join(program))
+        .find_map(path_if_file)
+}
+
+fn resolve_default_windows_shell_from_env(
+    path_env: Option<&OsStr>,
+    system_root: Option<&OsStr>,
+    comspec: Option<&OsStr>,
+) -> String {
+    if let Some(pwsh) = find_executable_in_path(path_env, "pwsh.exe") {
+        return pwsh;
+    }
+
+    if let Some(system_root) = system_root {
+        let powershell = Path::new(system_root)
+            .join("System32")
+            .join("WindowsPowerShell")
+            .join("v1.0")
+            .join("powershell.exe");
+        if let Some(powershell) = path_if_file(powershell) {
+            return powershell;
+        }
+    }
+
+    if let Some(powershell) = find_executable_in_path(path_env, "powershell.exe") {
+        return powershell;
+    }
+
+    if let Some(comspec) = comspec.and_then(path_if_file) {
+        return comspec;
+    }
+
+    if let Some(system_root) = system_root {
+        let cmd = Path::new(system_root).join("System32").join("cmd.exe");
+        if let Some(cmd) = path_if_file(cmd) {
+            return cmd;
+        }
+    }
+
+    "cmd.exe".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn build_local_shell(shell: Option<String>) -> Option<tty::Shell> {
+    let program = shell.unwrap_or_else(|| {
+        resolve_default_windows_shell_from_env(
+            env::var_os("PATH").as_deref(),
+            env::var_os("SystemRoot")
+                .or_else(|| env::var_os("SYSTEMROOT"))
+                .as_deref(),
+            env::var_os("COMSPEC").as_deref(),
+        )
+    });
+    Some(tty::Shell::new(program, vec![]))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn build_local_shell(shell: Option<String>) -> Option<tty::Shell> {
+    shell.map(|program| tty::Shell::new(program, vec![]))
+}
+
 /// 终端模型 Entity
 ///
 /// 负责管理终端的核心状态，包括：
@@ -263,11 +335,16 @@ impl Terminal {
         let (event_tx, event_rx) = unbounded_channel::<TerminalEvent>();
         let (term, event_proxy, _colors) =
             Self::create_term(DEFAULT_COLS, DEFAULT_ROWS, event_tx.clone());
+        let LocalConfig {
+            shell,
+            working_dir,
+            env,
+        } = config;
 
         let pty_options = PtyOptions {
-            shell: config.shell.map(|s| tty::Shell::new(s, vec![])),
-            working_directory: config.working_dir.map(|s| s.into()),
-            env: config.env.into_iter().collect(),
+            shell: build_local_shell(shell),
+            working_directory: working_dir.map(Into::into),
+            env: env.into_iter().collect(),
             drain_on_exit: true,
             #[cfg(target_os = "windows")]
             escape_args: true,
@@ -995,8 +1072,10 @@ impl EventEmitter<TerminalModelEvent> for Terminal {}
 mod tests {
     use super::{
         OSC7_PROMPT_COMMAND, build_cd_command, build_ssh_base_init_commands,
-        build_ssh_init_commands, compose_ssh_init_commands, shell_escape_arg,
+        build_ssh_init_commands, compose_ssh_init_commands, resolve_default_windows_shell_from_env,
+        shell_escape_arg,
     };
+    use std::fs;
 
     #[test]
     fn shell_escape_arg_handles_single_quote() {
@@ -1048,6 +1127,47 @@ mod tests {
             compose_ssh_init_commands(None, false).is_none(),
             "无基础命令且关闭同步时不应生成初始化命令"
         );
+    }
+
+    #[test]
+    fn resolve_default_windows_shell_prefers_pwsh_from_path() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "onetcli-terminal-test-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_dir).expect("应创建临时目录");
+
+        let pwsh = temp_dir.join("pwsh.exe");
+        let cmd = temp_dir.join("cmd.exe");
+        fs::write(&pwsh, b"").expect("应创建 pwsh 占位文件");
+        fs::write(&cmd, b"").expect("应创建 cmd 占位文件");
+
+        let path_env = std::ffi::OsString::from(temp_dir.as_os_str());
+        let resolved = resolve_default_windows_shell_from_env(
+            Some(path_env.as_os_str()),
+            None,
+            Some(cmd.as_os_str()),
+        );
+
+        assert_eq!(resolved, pwsh.to_string_lossy());
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn resolve_default_windows_shell_falls_back_to_comspec() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "onetcli-terminal-test-comspec-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_dir).expect("应创建临时目录");
+
+        let cmd = temp_dir.join("cmd.exe");
+        fs::write(&cmd, b"").expect("应创建 cmd 占位文件");
+
+        let resolved = resolve_default_windows_shell_from_env(None, None, Some(cmd.as_os_str()));
+
+        assert_eq!(resolved, cmd.to_string_lossy());
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }
 
