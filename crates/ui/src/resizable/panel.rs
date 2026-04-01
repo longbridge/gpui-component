@@ -284,13 +284,7 @@ impl RenderOnce for ResizablePanel {
                     })
                 }
             })
-            .child(
-                // Here add a wrapper `div` to avoid the content may not fill full issue.
-                //
-                // Ref:
-                // https://github.com/longbridge/gpui-component/pull/2097
-                div().size_full().children(self.children),
-            )
+            .children(self.children)
             .when(self.panel_ix > 0, |this| {
                 let ix = self.panel_ix - 1;
                 this.child(resize_handle(("resizable-handle", ix), self.axis).on_drag(
