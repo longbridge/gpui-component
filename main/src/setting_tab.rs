@@ -25,6 +25,7 @@ use rust_i18n::t;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
+use crate::app_init::is_valid_system_hotkey;
 use crate::auth::get_auth_service;
 use crate::encourage::render_encourage_section;
 use crate::license::{get_license_service, offline_license_public_key};
@@ -137,7 +138,14 @@ pub struct AppSettings {
     /// SQL查询自动保存的间隔（秒），默认5秒
     #[serde(default = "default_auto_save_interval")]
     pub sql_auto_save_interval: f64,
+    #[serde(default = "default_system_hotkey_macos")]
+    pub system_hotkey_macos: String,
+    #[serde(default = "default_system_hotkey_other")]
+    pub system_hotkey_other: String,
 }
+
+pub(crate) const DEFAULT_SYSTEM_HOTKEY_MACOS: &str = "cmd-alt-m";
+pub(crate) const DEFAULT_SYSTEM_HOTKEY_OTHER: &str = "ctrl-space";
 
 fn default_font_family() -> String {
     "Arial".to_string()
@@ -163,6 +171,14 @@ fn default_auto_save_interval() -> f64 {
     5.0
 }
 
+fn default_system_hotkey_macos() -> String {
+    DEFAULT_SYSTEM_HOTKEY_MACOS.to_string()
+}
+
+fn default_system_hotkey_other() -> String {
+    DEFAULT_SYSTEM_HOTKEY_OTHER.to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -183,6 +199,8 @@ impl Default for AppSettings {
             database_open_mode: DatabaseOpenMode::default(),
             enable_sql_auto_save: true,
             sql_auto_save_interval: default_auto_save_interval(),
+            system_hotkey_macos: default_system_hotkey_macos(),
+            system_hotkey_other: default_system_hotkey_other(),
         }
     }
 }
@@ -196,6 +214,18 @@ impl AppSettings {
 
     pub fn global_mut(cx: &mut App) -> &mut AppSettings {
         cx.global_mut::<AppSettings>()
+    }
+
+    pub(crate) fn current_system_hotkey(&self) -> &str {
+        #[cfg(target_os = "macos")]
+        {
+            &self.system_hotkey_macos
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            &self.system_hotkey_other
+        }
     }
 
     fn config_path() -> Option<PathBuf> {
@@ -332,6 +362,7 @@ impl SettingsPanel {
     fn setting_pages(&self, _window: &mut Window, _cx: &App) -> Vec<SettingPage> {
         let llm_view = self.llm_providers_view.clone();
         let default_settings = AppSettings::default();
+        let default_system_hotkey = AppSettings::default().current_system_hotkey().to_string();
 
         vec![
             SettingPage::new(t!("Settings.General.title"))
@@ -609,9 +640,61 @@ impl SettingsPanel {
                         ]),
                 ]),
             // 快捷键页面
-            SettingPage::new(t!("Settings.Shortcuts.title")).group(SettingGroup::new().item(
-                SettingItem::render(move |_options, _window, cx| render_shortcuts_section(cx)),
-            )),
+            SettingPage::new(t!("Settings.Shortcuts.title")).group(
+                SettingGroup::new()
+                    .item(
+                        SettingItem::new(
+                            t!("Settings.Shortcuts.system_hotkey"),
+                            SettingField::input(
+                                |cx: &App| {
+                                    SharedString::from(
+                                        AppSettings::global(cx).current_system_hotkey().to_string(),
+                                    )
+                                },
+                                |val: SharedString, cx: &mut App| {
+                                    let spec = val.trim().to_string();
+                                    if spec.is_empty() {
+                                        let settings = AppSettings::global_mut(cx);
+                                        #[cfg(target_os = "macos")]
+                                        {
+                                            settings.system_hotkey_macos =
+                                                DEFAULT_SYSTEM_HOTKEY_MACOS.to_string();
+                                        }
+                                        #[cfg(not(target_os = "macos"))]
+                                        {
+                                            settings.system_hotkey_other =
+                                                DEFAULT_SYSTEM_HOTKEY_OTHER.to_string();
+                                        }
+                                        settings.save();
+                                        return;
+                                    }
+
+                                    if !is_valid_system_hotkey(&spec) {
+                                        return;
+                                    }
+
+                                    let settings = AppSettings::global_mut(cx);
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        settings.system_hotkey_macos = spec;
+                                    }
+                                    #[cfg(not(target_os = "macos"))]
+                                    {
+                                        settings.system_hotkey_other = spec;
+                                    }
+                                    settings.save();
+                                },
+                            )
+                            .default_value(SharedString::from(
+                                default_system_hotkey,
+                            )),
+                        )
+                        .description(t!("Settings.Shortcuts.system_hotkey_desc").to_string()),
+                    )
+                    .item(SettingItem::render(move |_options, _window, cx| {
+                        render_shortcuts_section(cx)
+                    })),
+            ),
             SettingPage::new(t!("LlmProviders.title")).group(SettingGroup::new().item(
                 SettingItem::render(move |_options, _window, _cx| {
                     llm_view.clone().into_any_element()
@@ -852,8 +935,8 @@ const WINDOW_SHORTCUTS: &[ShortcutEntry] = &[
         label_key: "Settings.Shortcuts.quit_app",
     },
     ShortcutEntry {
-        key_macos: "cmd-alt-m",
-        key_other: "ctrl-space",
+        key_macos: DEFAULT_SYSTEM_HOTKEY_MACOS,
+        key_other: DEFAULT_SYSTEM_HOTKEY_OTHER,
         label_key: "Settings.Shortcuts.minimize_window",
     },
     ShortcutEntry {
@@ -954,10 +1037,31 @@ const SHORTCUT_GROUPS: &[ShortcutGroup] = &[
     },
 ];
 
+fn shortcut_spec_for_entry(entry: &ShortcutEntry, cx: &App) -> String {
+    if entry.label_key == "Settings.Shortcuts.minimize_window" {
+        return AppSettings::global(cx).current_system_hotkey().to_string();
+    }
+
+    if cfg!(target_os = "macos") {
+        entry.key_macos.to_string()
+    } else {
+        entry.key_other.to_string()
+    }
+}
+
+fn render_shortcut_value(key_str: &str, cx: &App) -> gpui::AnyElement {
+    match Keystroke::parse(key_str) {
+        Ok(keystroke) => Kbd::new(keystroke).into_any_element(),
+        Err(_) => div()
+            .text_sm()
+            .text_color(cx.theme().muted_foreground)
+            .child(key_str.to_string())
+            .into_any_element(),
+    }
+}
+
 /// 渲染快捷键说明页面
 fn render_shortcuts_section(cx: &App) -> gpui::AnyElement {
-    let is_macos = cfg!(target_os = "macos");
-
     let mut container = v_flex().gap_4().p_4();
 
     for group in SHORTCUT_GROUPS {
@@ -975,13 +1079,7 @@ fn render_shortcuts_section(cx: &App) -> gpui::AnyElement {
         let mut list = v_flex().gap_1().pl_2();
 
         for entry in group.entries {
-            let key_str = if is_macos {
-                entry.key_macos
-            } else {
-                entry.key_other
-            };
-
-            let keystroke = Keystroke::parse(key_str).expect("快捷键定义非法");
+            let key_str = shortcut_spec_for_entry(entry, cx);
 
             list = list.child(
                 h_flex()
@@ -994,7 +1092,7 @@ fn render_shortcuts_section(cx: &App) -> gpui::AnyElement {
                             .text_color(cx.theme().muted_foreground)
                             .child(t!(entry.label_key).to_string()),
                     )
-                    .child(Kbd::new(keystroke)),
+                    .child(render_shortcut_value(&key_str, cx)),
             );
         }
 

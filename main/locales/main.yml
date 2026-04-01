@@ -711,6 +711,14 @@ Settings:
       en: Shortcuts
       zh-CN: 快捷键
       zh-HK: 快捷鍵
+    system_hotkey:
+      en: System Hotkey
+      zh-CN: 系统热键
+      zh-HK: 系統熱鍵
+    system_hotkey_desc:
+      en: Customize the global window toggle hotkey with keystroke syntax like cmd-alt-m or ctrl-space. Changes take effect after restarting the app, and invalid input is ignored.
+      zh-CN: 使用类似 cmd-alt-m 或 ctrl-space 的快捷键格式自定义全局窗口切换热键。修改后需重启应用生效，非法输入不会保存。
+      zh-HK: 使用類似 cmd-alt-m 或 ctrl-space 的快捷鍵格式自定義全域視窗切換熱鍵。修改後需重新啟動應用生效，非法輸入不會保存。
     window:
       en: Window Management
       zh-CN: 窗口管理

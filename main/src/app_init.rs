@@ -1,5 +1,5 @@
 use global_hotkey::{
-    hotkey::{Code as HotkeyCode, HotKey, Modifiers as HotkeyModifiers},
+    hotkey::HotKey,
     GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
 };
 use gpui::{AnyWindowHandle, App, Window};
@@ -25,6 +25,16 @@ pub fn init_window_systems(window: &Window, cx: &mut App) {
     let _ = VISIBILITY_INIT.set(());
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+pub(crate) fn is_valid_system_hotkey(spec: &str) -> bool {
+    system_hotkey::parse_project_hotkey(spec).is_ok()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+pub(crate) fn is_valid_system_hotkey(_spec: &str) -> bool {
+    false
+}
+
 fn pick_toggle_target<T: Copy>(
     registered: Option<T>,
     stacked: Option<&[T]>,
@@ -38,7 +48,12 @@ fn pick_toggle_target<T: Copy>(
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod system_hotkey {
     use super::*;
-    use gpui::{AppContext, AsyncApp, Window};
+    use crate::setting_tab::AppSettings;
+    #[cfg(target_os = "macos")]
+    use crate::setting_tab::DEFAULT_SYSTEM_HOTKEY_MACOS;
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    use crate::setting_tab::DEFAULT_SYSTEM_HOTKEY_OTHER;
+    use gpui::{AppContext, AsyncApp, Keystroke, Window};
     use std::sync::{mpsc, OnceLock};
 
     const HOTKEY_POLL_INTERVAL: Duration = Duration::from_millis(16);
@@ -64,7 +79,7 @@ mod system_hotkey {
             .ok()
             .expect("GlobalHotKeyManager 初始化失败");
 
-        let hotkey = build_toggle_hotkey();
+        let hotkey = build_toggle_hotkey(cx);
         let hotkey_id = hotkey.id();
 
         if let Err(err) = manager.register(hotkey) {
@@ -94,18 +109,73 @@ mod system_hotkey {
         }
     }
 
-    pub(crate) fn build_toggle_hotkey() -> HotKey {
+    pub(crate) fn build_toggle_hotkey(cx: &App) -> HotKey {
+        let settings = AppSettings::global(cx);
+        toggle_hotkey_from_config(
+            settings.current_system_hotkey(),
+            default_toggle_hotkey_spec(),
+        )
+    }
+
+    pub(crate) fn parse_project_hotkey(spec: &str) -> anyhow::Result<HotKey> {
+        let keystroke = Keystroke::parse(spec)?;
+        let hotkey = keystroke_to_hotkey_string(&keystroke);
+        Ok(hotkey.parse::<HotKey>()?)
+    }
+
+    pub(crate) fn toggle_hotkey_from_config(spec: &str, fallback: &str) -> HotKey {
+        parse_project_hotkey(spec).unwrap_or_else(|err| {
+            tracing::warn!(
+                "系统级热键配置非法，已回退默认值: input={spec:?}, fallback={fallback:?}, err={err:?}"
+            );
+            parse_project_hotkey(fallback).expect("默认系统级热键定义非法")
+        })
+    }
+
+    fn default_toggle_hotkey_spec() -> &'static str {
         #[cfg(target_os = "macos")]
         {
-            HotKey::new(
-                Some(HotkeyModifiers::SUPER | HotkeyModifiers::ALT),
-                HotkeyCode::KeyM,
-            )
+            DEFAULT_SYSTEM_HOTKEY_MACOS
         }
 
         #[cfg(any(target_os = "windows", target_os = "linux"))]
         {
-            HotKey::new(Some(HotkeyModifiers::CONTROL), HotkeyCode::Space)
+            DEFAULT_SYSTEM_HOTKEY_OTHER
+        }
+    }
+
+    fn keystroke_to_hotkey_string(keystroke: &Keystroke) -> String {
+        let mut tokens: Vec<String> = Vec::with_capacity(5);
+        if keystroke.modifiers.control {
+            tokens.push("ctrl".to_string());
+        }
+        if keystroke.modifiers.alt {
+            tokens.push("alt".to_string());
+        }
+        if keystroke.modifiers.shift {
+            tokens.push("shift".to_string());
+        }
+        if keystroke.modifiers.platform {
+            tokens.push("cmd".to_string());
+        }
+        tokens.push(normalize_hotkey_key(&keystroke.key));
+        tokens.join("+")
+    }
+
+    fn normalize_hotkey_key(key: &str) -> String {
+        match key {
+            "+" | "=" => "Equal".to_string(),
+            "-" => "Minus".to_string(),
+            "," => "Comma".to_string(),
+            "." => "Period".to_string(),
+            ";" => "Semicolon".to_string(),
+            "'" => "Quote".to_string(),
+            "`" => "Backquote".to_string(),
+            "/" => "Slash".to_string(),
+            "\\" => "Backslash".to_string(),
+            "[" => "BracketLeft".to_string(),
+            "]" => "BracketRight".to_string(),
+            other => other.to_string(),
         }
     }
 
@@ -175,6 +245,7 @@ mod system_hotkey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use global_hotkey::hotkey::{Code as HotkeyCode, Modifiers as HotkeyModifiers};
 
     #[test]
     fn pick_toggle_target_prefers_registered_window() {
@@ -198,5 +269,33 @@ mod tests {
             pick_toggle_target(None, Some(&empty), Some(7_u8)),
             Some(7_u8)
         );
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    #[test]
+    fn parse_project_hotkey_supports_letter_shortcuts() {
+        let hotkey = system_hotkey::parse_project_hotkey("cmd-alt-m").unwrap();
+
+        assert_eq!(hotkey.key, HotkeyCode::KeyM);
+        assert!(hotkey.mods.contains(HotkeyModifiers::SUPER));
+        assert!(hotkey.mods.contains(HotkeyModifiers::ALT));
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    #[test]
+    fn parse_project_hotkey_supports_named_keys() {
+        let hotkey = system_hotkey::parse_project_hotkey("ctrl-space").unwrap();
+
+        assert_eq!(hotkey.key, HotkeyCode::Space);
+        assert!(hotkey.mods.contains(HotkeyModifiers::CONTROL));
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    #[test]
+    fn toggle_hotkey_from_config_falls_back_to_default_when_invalid() {
+        let hotkey = system_hotkey::toggle_hotkey_from_config("cmd-alt-invalid", "ctrl-space");
+
+        assert_eq!(hotkey.key, HotkeyCode::Space);
+        assert!(hotkey.mods.contains(HotkeyModifiers::CONTROL));
     }
 }
