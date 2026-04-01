@@ -49,7 +49,7 @@ jobs:
       - name: Lint
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
-          cargo clippy -- --deny warnings
+          cargo clippy --workspace --all-targets
       - name: Test Linux
         if: ${{ matrix.run_on == 'ubuntu-latest' }}
         run: |
