@@ -1,6 +1,6 @@
 use gpui::{
     div, prelude::FluentBuilder as _, px, AnyElement, App, Axis, DefiniteLength, IntoElement,
-    ParentElement, RenderOnce, SharedString, Styled, Window,
+    ParentElement, relative, RenderOnce, SharedString, Styled, Window
 };
 
 use crate::{h_flex, text::Text, v_flex, ActiveTheme as _, AxisExt, Sizable, Size};
@@ -298,7 +298,7 @@ impl RenderOnce for DescriptionList {
                             let is_first_col = item_ix == 0;
 
                             match item {
-                                DescriptionItem::Item { label, value, .. } => {
+                                DescriptionItem::Item { label, value, span } => {
                                     let el = if self.layout.is_vertical() {
                                         v_flex()
                                     } else {
@@ -306,6 +306,7 @@ impl RenderOnce for DescriptionList {
                                     };
 
                                     el.flex_1()
+                                        .flex_basis(relative((span as f32) / (self.columns as f32)))
                                         .overflow_x_hidden()
                                         .child(
                                             div()
