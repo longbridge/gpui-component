@@ -170,10 +170,10 @@ impl TableVisibleRange {
 pub(crate) struct HeaderCell {
     pub label: SharedString,
     pub width: Pixels,
-    pub col_span: usize,
-    pub is_leaf: bool,
-    pub leaf_col_ix: Option<usize>,
-    pub start_leaf_col_ix: usize,
+    col_span: usize,
+    is_leaf: bool,
+    leaf_col_ix: Option<usize>,
+    start_leaf_col_ix: usize,
 }
 
 pub struct TableState<D: TableDelegate> {
@@ -1893,10 +1893,11 @@ where
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
+        let header_rows = self.header_layout.len().max(1);
         Some(
             div()
                 .absolute()
-                .top(self.options.size.table_row_height())
+                .top(self.options.size.table_row_height() * header_rows as f32)
                 .right_0()
                 .bottom_0()
                 .w(Scrollbar::width())
