@@ -672,22 +672,32 @@ impl SettingsPanel {
                                                 let entity = entity.clone();
                                                 dialog
                                                     .confirm()
-                                                    .title(t!("Settings.sync_path_confirm_title").to_string())
-                                                    .child(
-                                                        div()
-                                                            .text_sm()
-                                                            .child(t!("Settings.sync_path_confirm_message")),
+                                                    .title(
+                                                        t!("Settings.sync_path_confirm_title")
+                                                            .to_string(),
                                                     )
+                                                    .child(div().text_sm().child(t!(
+                                                        "Settings.sync_path_confirm_message"
+                                                    )))
                                                     .button_props(
                                                         DialogButtonProps::default()
-                                                            .ok_text(t!("Settings.sync_path_confirm_ok").to_string())
+                                                            .ok_text(
+                                                                t!("Settings.sync_path_confirm_ok")
+                                                                    .to_string(),
+                                                            )
                                                             .ok_variant(ButtonVariant::Primary)
-                                                            .cancel_text(t!("Common.cancel").to_string()),
+                                                            .cancel_text(
+                                                                t!("Common.cancel").to_string(),
+                                                            ),
                                                     )
                                                     .on_ok(move |_, _window, cx| {
                                                         entity.update(cx, |this, cx| {
                                                             this.sync_path = true;
-                                                            cx.emit(SettingsPanelEvent::SyncPathChanged(true));
+                                                            cx.emit(
+                                                                SettingsPanelEvent::SyncPathChanged(
+                                                                    true,
+                                                                ),
+                                                            );
                                                         });
                                                         true
                                                     })

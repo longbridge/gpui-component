@@ -2244,8 +2244,7 @@ impl DbTreeView {
             && !matches!(
                 database_type,
                 Some(DatabaseType::SQLite | DatabaseType::DuckDB)
-            )
-        {
+            ) {
             Some(self.get_selected_database_count(&node_id))
         } else {
             None

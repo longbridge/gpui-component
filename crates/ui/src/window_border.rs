@@ -114,7 +114,8 @@ impl RenderOnce for WindowBorder {
                             move |_bounds, hitbox, window, _| {
                                 let mouse = window.mouse_position();
                                 let size = window.window_bounds().get_bounds().size;
-                                let Decorations::Client { tiling } = window.window_decorations() else {
+                                let Decorations::Client { tiling } = window.window_decorations()
+                                else {
                                     return;
                                 };
                                 if tiling.top && tiling.bottom && tiling.left && tiling.right {

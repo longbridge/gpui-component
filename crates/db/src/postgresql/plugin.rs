@@ -2018,11 +2018,9 @@ mod tests {
         let original = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![
-                ColumnDefinition::new("name")
-                    .data_type("VARCHAR")
-                    .length(50),
-            ],
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("VARCHAR")
+                .length(50)],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2031,11 +2029,9 @@ mod tests {
         let new = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![
-                ColumnDefinition::new("name")
-                    .data_type("VARCHAR")
-                    .length(100),
-            ],
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("VARCHAR")
+                .length(100)],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2090,11 +2086,9 @@ mod tests {
         let original = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![
-                ColumnDefinition::new("name")
-                    .data_type("VARCHAR")
-                    .length(50),
-            ],
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("VARCHAR")
+                .length(50)],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2103,13 +2097,11 @@ mod tests {
         let new = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![
-                ColumnDefinition::new("name")
-                    .data_type("VARCHAR")
-                    .length(50)
-                    .nullable(false)
-                    .default_value("'guest'"),
-            ],
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("VARCHAR")
+                .length(50)
+                .nullable(false)
+                .default_value("'guest'")],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2151,10 +2143,9 @@ mod tests {
         assert!(!info.snippets.is_empty());
 
         assert!(info.keywords.iter().any(|(k, _)| *k == "RETURNING"));
-        assert!(
-            info.functions
-                .iter()
-                .any(|(f, _)| f.starts_with("ARRAY_AGG"))
-        );
+        assert!(info
+            .functions
+            .iter()
+            .any(|(f, _)| f.starts_with("ARRAY_AGG")));
     }
 }

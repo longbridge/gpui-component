@@ -102,7 +102,11 @@ impl SqlWorkflowAgent {
         };
 
         let (selected_tables, table_source, warning) = if !parsed.mentioned_tables.is_empty() {
-            (parsed.mentioned_tables.clone(), TableSelectionSource::UserMentioned, None)
+            (
+                parsed.mentioned_tables.clone(),
+                TableSelectionSource::UserMentioned,
+                None,
+            )
         } else if let Some(history_tables) = history_tables {
             // 优先级2: 从对话历史中复用已选表
             let _ = tx

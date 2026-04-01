@@ -115,11 +115,7 @@ fn get_last_token_before(rope: &Rope, offset: usize) -> Option<String> {
         token_start -= 1;
     }
     let token = rope.slice(token_start..idx).to_string();
-    if token.is_empty() {
-        None
-    } else {
-        Some(token)
-    }
+    if token.is_empty() { None } else { Some(token) }
 }
 
 fn tokenize_where_context(text: &str) -> Vec<String> {
@@ -1002,7 +998,7 @@ impl TableFilterEditor {
 
 impl Render for TableFilterEditor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        use gpui::{div, ParentElement, Styled};
+        use gpui::{ParentElement, Styled, div};
         use gpui_component::h_flex;
 
         h_flex()

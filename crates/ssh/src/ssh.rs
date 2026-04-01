@@ -667,10 +667,7 @@ mod tests {
             .iter()
             .filter(|a| !matches!(a, SshAuth::AutoPublicKey))
             .collect();
-        assert!(
-            filtered.is_empty(),
-            "空候选列表过滤后应为空"
-        );
+        assert!(filtered.is_empty(), "空候选列表过滤后应为空");
 
         // 验证失败消息生成不 panic
         let msg = build_auto_publickey_failure_message(&messages, false, &[]);

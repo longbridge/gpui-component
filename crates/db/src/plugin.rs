@@ -1,16 +1,16 @@
-use crate::QueryResult;
 use crate::connection::{DbConnection, DbError};
 use crate::executor::{SqlResult, SqlSource, StatementType};
 use crate::import_export::{
-    DataFormat, ExportConfig, ExportProgressSender, ExportResult, FormatHandler, ImportConfig,
-    ImportProgressSender, ImportResult,
     formats::{
         CsvFormatHandler, JsonFormatHandler, SqlFormatHandler, TxtFormatHandler, XmlFormatHandler,
     },
+    DataFormat, ExportConfig, ExportProgressSender, ExportResult, FormatHandler, ImportConfig,
+    ImportProgressSender, ImportResult,
 };
 use crate::streaming_parser::StreamingSqlParser;
 use crate::types::*;
-use anyhow::{Error, Result, anyhow, bail};
+use crate::QueryResult;
+use anyhow::{anyhow, bail, Error, Result};
 use async_trait::async_trait;
 use one_core::storage::manager::get_queries_dir;
 use one_core::storage::{DatabaseType, DbConnectionConfig};
@@ -186,6 +186,104 @@ pub trait DatabasePlugin: Send + Sync {
             }
         }
         is_query_statement_fallback(sql)
+    }
+
+    /// Split SQL text into statements using the database-specific parser.
+    fn split_sql_statements(&self, sql: &str) -> Vec<String> {
+        let trimmed = sql.trim();
+        let Ok(parser) = self.create_parser(SqlSource::Script(trimmed.to_string())) else {
+            return vec![trimmed.to_string()];
+        };
+
+        let mut statements = Vec::new();
+        for statement in parser {
+            match statement {
+                Ok(statement) => {
+                    let statement = statement.trim();
+                    if !statement.is_empty() {
+                        statements.push(statement.to_string());
+                    }
+                }
+                Err(_) => return vec![trimmed.to_string()],
+            }
+        }
+
+        if statements.is_empty() {
+            return vec![trimmed.to_string()];
+        }
+
+        statements
+    }
+
+    /// Build a single EXPLAIN statement for this database type.
+    fn build_explain_statement(&self, sql: &str) -> String {
+        let sql = sql.trim();
+        match self.name() {
+            DatabaseType::MySQL
+            | DatabaseType::PostgreSQL
+            | DatabaseType::DuckDB
+            | DatabaseType::ClickHouse => {
+                format!("EXPLAIN {sql}")
+            }
+            DatabaseType::SQLite => format!("EXPLAIN QUERY PLAN {sql}"),
+            DatabaseType::MSSQL => {
+                format!("SET SHOWPLAN_TEXT ON;\n{sql}\nSET SHOWPLAN_TEXT OFF;")
+            }
+            DatabaseType::Oracle => {
+                format!(
+                    "EXPLAIN PLAN FOR {sql};\nSELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY())"
+                )
+            }
+        }
+    }
+
+    /// Check whether SQL already is an EXPLAIN/SHOWPLAN statement or script.
+    fn is_explain_statement(&self, sql: &str) -> bool {
+        let trimmed = sql.trim_start();
+        let upper = trimmed.to_ascii_uppercase();
+
+        match self.name() {
+            DatabaseType::MSSQL => upper.starts_with("SET SHOWPLAN_TEXT ON"),
+            _ => upper.starts_with("EXPLAIN"),
+        }
+    }
+
+    /// Build EXPLAIN SQL for all query statements in a SQL script.
+    fn build_explain_sql(&self, sql: &str) -> Option<String> {
+        let trimmed = sql.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        if matches!(self.name(), DatabaseType::MSSQL) && self.is_explain_statement(trimmed) {
+            return Some(trimmed.to_string());
+        }
+
+        let separator = if matches!(self.name(), DatabaseType::MSSQL) {
+            "\n"
+        } else {
+            ";\n"
+        };
+
+        let explain_statements = self
+            .split_sql_statements(trimmed)
+            .into_iter()
+            .filter_map(|statement| {
+                if self.is_explain_statement(&statement) {
+                    return Some(statement.trim().to_string());
+                }
+                if self.is_query_statement(&statement) {
+                    return Some(self.build_explain_statement(&statement));
+                }
+                None
+            })
+            .collect::<Vec<_>>();
+
+        if explain_statements.is_empty() {
+            return None;
+        }
+
+        Some(explain_statements.join(separator))
     }
 
     /// Determine the statement category

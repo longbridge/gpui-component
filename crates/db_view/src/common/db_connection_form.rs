@@ -1,11 +1,12 @@
 use anyhow::Error;
-use db::{oracle, GlobalDbState};
+use db::{GlobalDbState, oracle};
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, prelude::*, px, App, AsyncApp, Axis, Context, Entity, EventEmitter, FocusHandle,
-    Focusable, IntoElement, ParentElement, PathPromptOptions, Render, SharedString, Styled, Window,
+    App, AsyncApp, Axis, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
+    ParentElement, PathPromptOptions, Render, SharedString, Styled, Window, div, prelude::*, px,
 };
 use gpui_component::{
+    ActiveTheme, Disableable, Icon, IconName, IndexPath, Sizable, Size,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
     clipboard::Clipboard,
@@ -17,14 +18,14 @@ use gpui_component::{
     scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectItem, SelectState},
     tab::{Tab, TabBar},
-    v_flex, ActiveTheme, Disableable, Icon, IconName, IndexPath, Sizable, Size,
+    v_flex,
 };
 use one_core::cloud_sync::{GlobalCloudUser, TeamOption};
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::traits::Repository;
 use one_core::storage::{
-    get_config_dir, ConnectionRepository, DatabaseType, DbConnectionConfig, GlobalStorageState,
-    StoredConnection, Workspace,
+    ConnectionRepository, DatabaseType, DbConnectionConfig, GlobalStorageState, StoredConnection,
+    Workspace, get_config_dir,
 };
 use rust_i18n::t;
 
@@ -467,23 +468,21 @@ impl DbFormConfig {
     }
 
     fn clickhouse_ssl_tab_group() -> TabGroup {
-        TabGroup::new("ssl", t!("ConnectionForm.ssl")).fields(vec![FormField::new(
-            "schema",
-            t!("ConnectionForm.schema"),
-            FormFieldType::Select,
-        )
-        .optional()
-        .default("http")
-        .options(vec![
-            (
-                "http".to_string(),
-                t!("ConnectionForm.schema_http").to_string(),
-            ),
-            (
-                "https".to_string(),
-                t!("ConnectionForm.schema_https").to_string(),
-            ),
-        ])])
+        TabGroup::new("ssl", t!("ConnectionForm.ssl")).fields(vec![
+            FormField::new("schema", t!("ConnectionForm.schema"), FormFieldType::Select)
+                .optional()
+                .default("http")
+                .options(vec![
+                    (
+                        "http".to_string(),
+                        t!("ConnectionForm.schema_http").to_string(),
+                    ),
+                    (
+                        "https".to_string(),
+                        t!("ConnectionForm.schema_https").to_string(),
+                    ),
+                ]),
+        ])
     }
 
     /// MySQL form configuration
@@ -547,15 +546,17 @@ impl DbFormConfig {
                 ]),
                 Self::mysql_ssl_tab_group(),
                 Self::ssh_tab_group(),
-                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![FormField::new(
-                    "remark",
-                    t!("ConnectionForm.remark"),
-                    FormFieldType::TextArea,
-                )
-                .rows(14)
-                .optional()
-                .placeholder(t!("ConnectionForm.enter_remark"))
-                .default("")]),
+                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
+                    FormField::new(
+                        "remark",
+                        t!("ConnectionForm.remark"),
+                        FormFieldType::TextArea,
+                    )
+                    .rows(14)
+                    .optional()
+                    .placeholder(t!("ConnectionForm.enter_remark"))
+                    .default(""),
+                ]),
             ],
         }
     }
@@ -620,15 +621,17 @@ impl DbFormConfig {
                 ]),
                 Self::postgres_ssl_tab_group(),
                 Self::ssh_tab_group(),
-                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![FormField::new(
-                    "remark",
-                    t!("ConnectionForm.remark"),
-                    FormFieldType::TextArea,
-                )
-                .rows(14)
-                .optional()
-                .placeholder(t!("ConnectionForm.enter_remark"))
-                .default("")]),
+                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
+                    FormField::new(
+                        "remark",
+                        t!("ConnectionForm.remark"),
+                        FormFieldType::TextArea,
+                    )
+                    .rows(14)
+                    .optional()
+                    .placeholder(t!("ConnectionForm.enter_remark"))
+                    .default(""),
+                ]),
             ],
         }
     }
@@ -693,15 +696,17 @@ impl DbFormConfig {
                 ]),
                 Self::mssql_ssl_tab_group(),
                 Self::ssh_tab_group(),
-                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![FormField::new(
-                    "remark",
-                    t!("ConnectionForm.remark"),
-                    FormFieldType::TextArea,
-                )
-                .rows(14)
-                .optional()
-                .placeholder(t!("ConnectionForm.enter_remark"))
-                .default("")]),
+                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
+                    FormField::new(
+                        "remark",
+                        t!("ConnectionForm.remark"),
+                        FormFieldType::TextArea,
+                    )
+                    .rows(14)
+                    .optional()
+                    .placeholder(t!("ConnectionForm.enter_remark"))
+                    .default(""),
+                ]),
             ],
         }
     }
@@ -757,15 +762,17 @@ impl DbFormConfig {
                     .default("30"),
                 ]),
                 Self::ssh_tab_group(),
-                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![FormField::new(
-                    "remark",
-                    t!("ConnectionForm.remark"),
-                    FormFieldType::TextArea,
-                )
-                .rows(14)
-                .optional()
-                .placeholder(t!("ConnectionForm.enter_remark"))
-                .default("")]),
+                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
+                    FormField::new(
+                        "remark",
+                        t!("ConnectionForm.remark"),
+                        FormFieldType::TextArea,
+                    )
+                    .rows(14)
+                    .optional()
+                    .placeholder(t!("ConnectionForm.enter_remark"))
+                    .default(""),
+                ]),
             ],
         }
     }
@@ -834,15 +841,17 @@ impl DbFormConfig {
                 ]),
                 Self::clickhouse_ssl_tab_group(),
                 Self::ssh_tab_group(),
-                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![FormField::new(
-                    "remark",
-                    t!("ConnectionForm.remark"),
-                    FormFieldType::TextArea,
-                )
-                .rows(14)
-                .optional()
-                .placeholder(t!("ConnectionForm.enter_remark"))
-                .default("")]),
+                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
+                    FormField::new(
+                        "remark",
+                        t!("ConnectionForm.remark"),
+                        FormFieldType::TextArea,
+                    )
+                    .rows(14)
+                    .optional()
+                    .placeholder(t!("ConnectionForm.enter_remark"))
+                    .default(""),
+                ]),
             ],
         }
     }
@@ -873,15 +882,17 @@ impl DbFormConfig {
                     .placeholder("/path/to/database.db")
                     .default(default_db_path),
                 ]),
-                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![FormField::new(
-                    "remark",
-                    t!("ConnectionForm.remark"),
-                    FormFieldType::TextArea,
-                )
-                .rows(14)
-                .optional()
-                .placeholder(t!("ConnectionForm.enter_remark"))
-                .default("")]),
+                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
+                    FormField::new(
+                        "remark",
+                        t!("ConnectionForm.remark"),
+                        FormFieldType::TextArea,
+                    )
+                    .rows(14)
+                    .optional()
+                    .placeholder(t!("ConnectionForm.enter_remark"))
+                    .default(""),
+                ]),
             ],
         }
     }
@@ -889,7 +900,11 @@ impl DbFormConfig {
     /// DuckDB form configuration
     pub fn duckdb() -> Self {
         let default_db_path = get_config_dir()
-            .map(|p| p.join("onetcli_default.duckdb").to_string_lossy().to_string())
+            .map(|p| {
+                p.join("onetcli_default.duckdb")
+                    .to_string_lossy()
+                    .to_string()
+            })
             .unwrap_or_else(|_| "onetcli_default.duckdb".to_string());
 
         Self {
@@ -912,15 +927,17 @@ impl DbFormConfig {
                     .placeholder("/path/to/database.duckdb")
                     .default(default_db_path),
                 ]),
-                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![FormField::new(
-                    "remark",
-                    t!("ConnectionForm.remark"),
-                    FormFieldType::TextArea,
-                )
-                .rows(14)
-                .optional()
-                .placeholder(t!("ConnectionForm.enter_remark"))
-                .default("")]),
+                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![
+                    FormField::new(
+                        "remark",
+                        t!("ConnectionForm.remark"),
+                        FormFieldType::TextArea,
+                    )
+                    .rows(14)
+                    .optional()
+                    .placeholder(t!("ConnectionForm.enter_remark"))
+                    .default(""),
+                ]),
             ],
         }
     }

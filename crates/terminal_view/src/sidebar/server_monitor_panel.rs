@@ -1,23 +1,21 @@
 //! 终端侧边栏服务器监控面板
 
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{anyhow, Context as _, Result};
 use chrono::Utc;
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, App, Context, EventEmitter, FocusHandle, Focusable, Hsla,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, Task, Window, div, linear_color_stop, linear_gradient,
-    px,
+    div, linear_color_stop, linear_gradient, px, AnyElement, App, Context, EventEmitter,
+    FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, ParentElement, Render,
+    SharedString, StatefulInteractiveElement, Styled, Task, Window,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Sizable, StyledExt,
     button::{Button, ButtonVariants},
     chart::{AreaChart, LineChart, PieChart},
     h_flex,
     progress::Progress,
     spinner::Spinner,
     tooltip::Tooltip,
-    v_flex,
+    v_flex, ActiveTheme, Disableable, IconName, Sizable, StyledExt,
 };
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::get_config_dir;
@@ -213,7 +211,13 @@ pub struct CpuSnapshot {
 
 impl CpuSnapshot {
     #[cfg(test)]
-    pub fn new(name: &str, load_user: u64, load_system: u64, load_idle: u64, load_total: u64) -> Self {
+    pub fn new(
+        name: &str,
+        load_user: u64,
+        load_system: u64,
+        load_idle: u64,
+        load_total: u64,
+    ) -> Self {
         Self {
             name: name.to_string(),
             load_user,
@@ -249,8 +253,24 @@ pub struct MemoryStats {
 
 impl MemoryStats {
     #[cfg(test)]
-    pub fn new(total: u64, free: u64, used: u64, buffcache: u64, swap_total: u64, swap_used: u64, swap_free: u64) -> Self {
-        Self { total, free, used, buffcache, swap_total, swap_used, swap_free }
+    pub fn new(
+        total: u64,
+        free: u64,
+        used: u64,
+        buffcache: u64,
+        swap_total: u64,
+        swap_used: u64,
+        swap_free: u64,
+    ) -> Self {
+        Self {
+            total,
+            free,
+            used,
+            buffcache,
+            swap_total,
+            swap_used,
+            swap_free,
+        }
     }
 
     pub fn used_percent(&self) -> f64 {
@@ -519,37 +539,35 @@ impl ServerMonitorPanel {
             Ok::<_, anyhow::Error>((client, stats))
         });
 
-        cx.spawn(async move |this, cx| {
-            match task.await {
-                Ok(Ok((client, stats))) => {
-                    let _ = this.update(cx, |this, cx| {
-                        this.preparing = false;
-                        this.monitor_enabled = true;
-                        this.client = Some(client);
-                        this.last_error = None;
-                        this.apply_stats(stats);
-                        this.ensure_refresh_loop(cx);
-                        cx.notify();
-                    });
-                }
-                Ok(Err(error)) => {
-                    let _ = this.update(cx, |this, cx| {
-                        this.preparing = false;
-                        this.monitor_enabled = false;
-                        this.client = None;
-                        this.last_error = Some(format!("{error}"));
-                        cx.notify();
-                    });
-                }
-                Err(error) => {
-                    let _ = this.update(cx, |this, cx| {
-                        this.preparing = false;
-                        this.monitor_enabled = false;
-                        this.client = None;
-                        this.last_error = Some(format!("{error}"));
-                        cx.notify();
-                    });
-                }
+        cx.spawn(async move |this, cx| match task.await {
+            Ok(Ok((client, stats))) => {
+                let _ = this.update(cx, |this, cx| {
+                    this.preparing = false;
+                    this.monitor_enabled = true;
+                    this.client = Some(client);
+                    this.last_error = None;
+                    this.apply_stats(stats);
+                    this.ensure_refresh_loop(cx);
+                    cx.notify();
+                });
+            }
+            Ok(Err(error)) => {
+                let _ = this.update(cx, |this, cx| {
+                    this.preparing = false;
+                    this.monitor_enabled = false;
+                    this.client = None;
+                    this.last_error = Some(format!("{error}"));
+                    cx.notify();
+                });
+            }
+            Err(error) => {
+                let _ = this.update(cx, |this, cx| {
+                    this.preparing = false;
+                    this.monitor_enabled = false;
+                    this.client = None;
+                    this.last_error = Some(format!("{error}"));
+                    cx.notify();
+                });
             }
         })
         .detach();
@@ -561,27 +579,25 @@ impl ServerMonitorPanel {
             return;
         }
 
-        self.refresh_task = Some(cx.spawn(async move |this, cx| {
-            loop {
-                let should_continue = this
-                    .update(cx, |this, cx| {
-                        if !this.monitor_enabled {
-                            this.refresh_task = None;
-                            return false;
-                        }
-                        this.refresh_now(cx);
-                        true
-                    })
-                    .unwrap_or(false);
+        self.refresh_task = Some(cx.spawn(async move |this, cx| loop {
+            let should_continue = this
+                .update(cx, |this, cx| {
+                    if !this.monitor_enabled {
+                        this.refresh_task = None;
+                        return false;
+                    }
+                    this.refresh_now(cx);
+                    true
+                })
+                .unwrap_or(false);
 
-                if !should_continue {
-                    break;
-                }
-
-                cx.background_executor()
-                    .timer(Duration::from_secs(REFRESH_INTERVAL_SECS))
-                    .await;
+            if !should_continue {
+                break;
             }
+
+            cx.background_executor()
+                .timer(Duration::from_secs(REFRESH_INTERVAL_SECS))
+                .await;
         }));
     }
 
@@ -600,33 +616,31 @@ impl ServerMonitorPanel {
             refresh_remote_stats(config, existing_client, &session_id, needs_prepare).await
         });
 
-        cx.spawn(async move |this, cx| {
-            match task.await {
-                Ok(Ok((client, stats))) => {
-                    let _ = this.update(cx, |this, cx| {
-                        this.in_flight = false;
-                        this.client = Some(client);
-                        this.last_error = None;
-                        this.apply_stats(stats);
-                        cx.notify();
-                    });
-                }
-                Ok(Err(error)) => {
-                    let _ = this.update(cx, |this, cx| {
-                        this.in_flight = false;
-                        this.client = None;
-                        this.last_error = Some(format!("{error}"));
-                        cx.notify();
-                    });
-                }
-                Err(error) => {
-                    let _ = this.update(cx, |this, cx| {
-                        this.in_flight = false;
-                        this.client = None;
-                        this.last_error = Some(format!("{error}"));
-                        cx.notify();
-                    });
-                }
+        cx.spawn(async move |this, cx| match task.await {
+            Ok(Ok((client, stats))) => {
+                let _ = this.update(cx, |this, cx| {
+                    this.in_flight = false;
+                    this.client = Some(client);
+                    this.last_error = None;
+                    this.apply_stats(stats);
+                    cx.notify();
+                });
+            }
+            Ok(Err(error)) => {
+                let _ = this.update(cx, |this, cx| {
+                    this.in_flight = false;
+                    this.client = None;
+                    this.last_error = Some(format!("{error}"));
+                    cx.notify();
+                });
+            }
+            Err(error) => {
+                let _ = this.update(cx, |this, cx| {
+                    this.in_flight = false;
+                    this.client = None;
+                    this.last_error = Some(format!("{error}"));
+                    cx.notify();
+                });
             }
         })
         .detach();
@@ -703,7 +717,12 @@ impl ServerMonitorPanel {
             .child(
                 v_flex()
                     .gap_0p5()
-                    .child(div().text_sm().font_semibold().child(t!("ServerMonitor.title")))
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_semibold()
+                            .child(t!("ServerMonitor.title")),
+                    )
                     .child(
                         div()
                             .text_xs()
@@ -875,39 +894,36 @@ impl ServerMonitorPanel {
         v_flex()
             .gap_3()
             .child(self.render_banner(cx))
-            .child(self.render_card(t!("ServerMonitor.cpu"), cpu_value, self.render_cpu_chart(cx), cx))
-            .child(
-                self.render_card(
-                    t!("ServerMonitor.memory"),
-                    memory_text,
-                    self.render_memory_chart(cx),
-                    cx,
-                ),
-            )
-            .child(
-                self.render_card(
-                    t!("ServerMonitor.disk"),
-                    t!("ServerMonitor.disk_hint").to_string(),
-                    self.render_disk_list(cx),
-                    cx,
-                ),
-            )
-            .child(
-                self.render_card(
-                    t!("ServerMonitor.network"),
-                    network_text,
-                    self.render_network_chart(cx),
-                    cx,
-                ),
-            )
-            .child(
-                self.render_card(
-                    t!("ServerMonitor.processes"),
-                    t!("ServerMonitor.process_hint").to_string(),
-                    self.render_process_lists(cx),
-                    cx,
-                ),
-            )
+            .child(self.render_card(
+                t!("ServerMonitor.cpu"),
+                cpu_value,
+                self.render_cpu_chart(cx),
+                cx,
+            ))
+            .child(self.render_card(
+                t!("ServerMonitor.memory"),
+                memory_text,
+                self.render_memory_chart(cx),
+                cx,
+            ))
+            .child(self.render_card(
+                t!("ServerMonitor.disk"),
+                t!("ServerMonitor.disk_hint").to_string(),
+                self.render_disk_list(cx),
+                cx,
+            ))
+            .child(self.render_card(
+                t!("ServerMonitor.network"),
+                network_text,
+                self.render_network_chart(cx),
+                cx,
+            ))
+            .child(self.render_card(
+                t!("ServerMonitor.processes"),
+                t!("ServerMonitor.process_hint").to_string(),
+                self.render_process_lists(cx),
+                cx,
+            ))
     }
 
     fn render_card(
@@ -966,7 +982,11 @@ impl ServerMonitorPanel {
     }
 
     fn render_memory_chart(&self, cx: &mut Context<Self>) -> AnyElement {
-        let Some(memory) = self.current_stats.as_ref().and_then(|stats| stats.memory.as_ref()) else {
+        let Some(memory) = self
+            .current_stats
+            .as_ref()
+            .and_then(|stats| stats.memory.as_ref())
+        else {
             return placeholder(t!("ServerMonitor.unavailable"), cx);
         };
 
@@ -995,17 +1015,16 @@ impl ServerMonitorPanel {
                         h_flex()
                             .gap_2()
                             .items_center()
-                            .child(
-                                div()
-                                    .size_2()
-                                    .rounded_full()
-                                    .bg(segment.color),
-                            )
+                            .child(div().size_2().rounded_full().bg(segment.color))
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(format!("{} {}", segment.label, format_kib(segment.value as u64))),
+                                    .child(format!(
+                                        "{} {}",
+                                        segment.label,
+                                        format_kib(segment.value as u64)
+                                    )),
                             )
                     })),
             )
@@ -1037,10 +1056,17 @@ impl ServerMonitorPanel {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(format!("{:.0}% · {}", disk.percent, format_kib(disk.available))),
+                                    .child(format!(
+                                        "{:.0}% · {}",
+                                        disk.percent,
+                                        format_kib(disk.available)
+                                    )),
                             ),
                     )
-                    .child(Progress::new(SharedString::from(format!("disk-{mount}"))).value(disk.percent as f32))
+                    .child(
+                        Progress::new(SharedString::from(format!("disk-{mount}")))
+                            .value(disk.percent as f32),
+                    )
             }))
             .into_any_element()
     }
@@ -1066,7 +1092,11 @@ impl ServerMonitorPanel {
     }
 
     fn render_process_lists(&self, cx: &mut Context<Self>) -> AnyElement {
-        let Some(process) = self.current_stats.as_ref().and_then(|stats| stats.process.as_ref()) else {
+        let Some(process) = self
+            .current_stats
+            .as_ref()
+            .and_then(|stats| stats.process.as_ref())
+        else {
             return placeholder(t!("ServerMonitor.unavailable"), cx);
         };
 
@@ -1159,7 +1189,10 @@ fn render_process_column(
             let tooltip_command = command.clone();
             let display_command = command.clone();
             v_flex()
-                .id(SharedString::from(format!("process-{}-{}", entry.pid, command)))
+                .id(SharedString::from(format!(
+                    "process-{}-{}",
+                    entry.pid, command
+                )))
                 .w_full()
                 .min_w(px(0.0))
                 .rounded_md()
@@ -1243,7 +1276,10 @@ pub fn sample_cpu_usage(previous: &[CpuSnapshot], current: &[CpuSnapshot]) -> Cp
     let mut cores = Vec::new();
 
     for current_snapshot in current {
-        let Some(previous_snapshot) = previous.iter().find(|snapshot| snapshot.name == current_snapshot.name) else {
+        let Some(previous_snapshot) = previous
+            .iter()
+            .find(|snapshot| snapshot.name == current_snapshot.name)
+        else {
             continue;
         };
 
@@ -1522,8 +1558,12 @@ fn parse_network_totals(section: &BTreeMap<String, String>) -> NetworkTotals {
             .filter_map(|index| {
                 Some(NetworkInterfaceTotal {
                     name: section.get(&format!("interfaces[{index}].name"))?.clone(),
-                    rx_total: parse_u64(section.get(&format!("interfaces[{index}].rxBytesTotal"))?)?,
-                    tx_total: parse_u64(section.get(&format!("interfaces[{index}].txBytesTotal"))?)?,
+                    rx_total: parse_u64(
+                        section.get(&format!("interfaces[{index}].rxBytesTotal"))?,
+                    )?,
+                    tx_total: parse_u64(
+                        section.get(&format!("interfaces[{index}].txBytesTotal"))?,
+                    )?,
                 })
             })
             .collect(),
@@ -1601,7 +1641,14 @@ async fn refresh_remote_stats(
     session_id: &str,
     needs_prepare: bool,
 ) -> Result<(Arc<Mutex<RusshClient>>, ServerStats)> {
-    match refresh_remote_stats_inner(config.clone(), existing_client.clone(), session_id, needs_prepare).await {
+    match refresh_remote_stats_inner(
+        config.clone(),
+        existing_client.clone(),
+        session_id,
+        needs_prepare,
+    )
+    .await
+    {
         Ok(result) => Ok(result),
         Err(_error) if existing_client.is_some() => {
             let client = Arc::new(Mutex::new(RusshClient::connect(config).await?));
@@ -1667,7 +1714,9 @@ async fn exec_capture(client: Arc<Mutex<RusshClient>>, command: &str) -> Result<
                 signal_name,
                 error_message,
             } => {
-                return Err(anyhow!("remote command failed with signal {signal_name}: {error_message}"));
+                return Err(anyhow!(
+                    "remote command failed with signal {signal_name}: {error_message}"
+                ));
             }
             ChannelEvent::Eof | ChannelEvent::Close => break,
         }
@@ -1676,7 +1725,9 @@ async fn exec_capture(client: Arc<Mutex<RusshClient>>, command: &str) -> Result<
     let _ = channel.close().await;
     if exit_status != 0 {
         let stderr = String::from_utf8_lossy(&stderr);
-        return Err(anyhow!("remote command exited with status {exit_status}: {stderr}"));
+        return Err(anyhow!(
+            "remote command exited with status {exit_status}: {stderr}"
+        ));
     }
 
     String::from_utf8(stdout).context("monitor payload is not valid utf-8")
@@ -1692,7 +1743,10 @@ fn build_prepare_command() -> String {
 }
 
 fn build_collect_command(session_id: &str) -> String {
-    format!("{REMOTE_HELPER_SCRIPT} --session {}", shell_quote(session_id))
+    format!(
+        "{REMOTE_HELPER_SCRIPT} --session {}",
+        shell_quote(session_id)
+    )
 }
 
 fn shell_quote(value: &str) -> String {
@@ -1753,8 +1807,8 @@ fn format_bytes_per_sec(value: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        CpuSnapshot, HistoryLimit, MemoryStats, NetworkTotals, ProcessEntry, push_history_point,
-        sample_cpu_usage, sample_network_rates, split_sections,
+        push_history_point, sample_cpu_usage, sample_network_rates, split_sections, CpuSnapshot,
+        HistoryLimit, MemoryStats, NetworkTotals, ProcessEntry,
     };
 
     #[test]
@@ -1777,7 +1831,9 @@ process:
         );
 
         assert_eq!(
-            sections.get("os").and_then(|section| section.get("prettyName")),
+            sections
+                .get("os")
+                .and_then(|section| section.get("prettyName")),
             Some(&"Ubuntu 24.04 LTS".to_string())
         );
         assert_eq!(

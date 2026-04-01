@@ -5,7 +5,6 @@ use gpui_component::table::Column;
 use one_core::storage::{DatabaseType, DbConnectionConfig};
 use rust_i18n::t;
 
-use crate::QueryResult;
 use crate::connection::{DbConnection, DbError};
 use crate::executor::SqlResult;
 use crate::import_export::{
@@ -15,6 +14,7 @@ use crate::import_export::{
 use crate::oracle::connection::OracleDbConnection;
 use crate::plugin::{DatabasePlugin, SqlCompletionInfo};
 use crate::types::*;
+use crate::QueryResult;
 
 /// Oracle data types (name, description)
 pub const ORACLE_DATA_TYPES: &[(&str, &str)] = &[
@@ -2064,12 +2064,10 @@ mod tests {
         let original = TableDesign {
             database_name: "test_schema".to_string(),
             table_name: "users".to_string(),
-            columns: vec![
-                ColumnDefinition::new("status")
-                    .data_type("VARCHAR2")
-                    .length(20)
-                    .default_value("'A'"),
-            ],
+            columns: vec![ColumnDefinition::new("status")
+                .data_type("VARCHAR2")
+                .length(20)
+                .default_value("'A'")],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2078,12 +2076,10 @@ mod tests {
         let new = TableDesign {
             database_name: "test_schema".to_string(),
             table_name: "users".to_string(),
-            columns: vec![
-                ColumnDefinition::new("status")
-                    .data_type("VARCHAR2")
-                    .length(20)
-                    .nullable(false),
-            ],
+            columns: vec![ColumnDefinition::new("status")
+                .data_type("VARCHAR2")
+                .length(20)
+                .nullable(false)],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2122,11 +2118,9 @@ mod tests {
                     .data_type("VARCHAR2")
                     .length(100),
             ],
-            indexes: vec![
-                IndexDefinition::new("idx_email")
-                    .columns(vec!["email".to_string()])
-                    .unique(true),
-            ],
+            indexes: vec![IndexDefinition::new("idx_email")
+                .columns(vec!["email".to_string()])
+                .unique(true)],
             foreign_keys: vec![],
             options: TableOptions::default(),
         };
@@ -2176,10 +2170,9 @@ mod tests {
 
         assert!(info.functions.iter().any(|(f, _)| f.starts_with("DECODE")));
         assert!(info.functions.iter().any(|(f, _)| f.starts_with("LISTAGG")));
-        assert!(
-            info.functions
-                .iter()
-                .any(|(f, _)| f.starts_with("SYS_GUID"))
-        );
+        assert!(info
+            .functions
+            .iter()
+            .any(|(f, _)| f.starts_with("SYS_GUID")));
     }
 }

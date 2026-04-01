@@ -49,8 +49,10 @@ impl CacheContext {
     /// - 网络数据库: {database_type}/{host}_{port}
     /// - SQLite / DuckDB: {database_type}/{db_name}_{path_hash}
     pub fn cache_dir_name(&self) -> String {
-        if matches!(self.database_type, DatabaseType::SQLite | DatabaseType::DuckDB)
-            || self.port == 0
+        if matches!(
+            self.database_type,
+            DatabaseType::SQLite | DatabaseType::DuckDB
+        ) || self.port == 0
         {
             let path = std::path::Path::new(&self.host);
             let db_name = path
@@ -75,8 +77,10 @@ impl CacheContext {
 
     /// 生成缓存键前缀
     pub fn cache_key_prefix(&self) -> String {
-        if matches!(self.database_type, DatabaseType::SQLite | DatabaseType::DuckDB)
-            || self.port == 0
+        if matches!(
+            self.database_type,
+            DatabaseType::SQLite | DatabaseType::DuckDB
+        ) || self.port == 0
         {
             let path = std::path::Path::new(&self.host);
             let db_name = path

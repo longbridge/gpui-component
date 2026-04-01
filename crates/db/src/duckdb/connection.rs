@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use async_trait::async_trait;
-use duckdb::{Connection, types::ValueRef};
+use duckdb::{types::ValueRef, Connection};
 use tokio::sync::mpsc;
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, info};
@@ -11,7 +11,7 @@ use crate::connection::{DbConnection, DbError, StreamingProgress};
 use crate::executor::{
     ExecOptions, ExecResult, QueryColumnMeta, QueryResult, SqlErrorInfo, SqlResult, SqlSource,
 };
-use crate::{DatabasePlugin, format_message, truncate_str};
+use crate::{format_message, truncate_str, DatabasePlugin};
 use one_core::storage::DbConnectionConfig;
 
 pub struct DuckDbConnection {
@@ -159,21 +159,20 @@ impl DuckDbConnection {
                         let column_types: Vec<Option<String>> = (0..column_count)
                             .map(|idx| Some(format!("{:?}", stmt_ref.column_type(idx))))
                             .collect();
-                            let mut data_rows = Vec::new();
-                            while let Some(row) = rows.next()? {
-                                let row_data: Vec<Option<String>> = (0..column_count)
-                                    .map(|i| {
-                                        let decl_type =
-                                            column_types.get(i).and_then(|t| t.as_deref());
-                                        row.get_ref(i)
-                                            .ok()
-                                            .and_then(|v| Self::extract_value(v, decl_type))
-                                    })
-                                    .collect();
-                                data_rows.push(row_data);
-                            }
-                            Ok((columns, column_types, data_rows))
-                        });
+                        let mut data_rows = Vec::new();
+                        while let Some(row) = rows.next()? {
+                            let row_data: Vec<Option<String>> = (0..column_count)
+                                .map(|i| {
+                                    let decl_type = column_types.get(i).and_then(|t| t.as_deref());
+                                    row.get_ref(i)
+                                        .ok()
+                                        .and_then(|v| Self::extract_value(v, decl_type))
+                                })
+                                .collect();
+                            data_rows.push(row_data);
+                        }
+                        Ok((columns, column_types, data_rows))
+                    });
 
                     match rows_result {
                         Ok((columns, column_types, data_rows)) => {

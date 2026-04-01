@@ -1,6 +1,6 @@
 use crate::sql_editor::SqlEditor;
 use crate::sql_result_tab::SqlResultTabContainer;
-use db::{DbManager, GlobalDbState, SqlSource, StreamingSqlParser, format_sql};
+use db::{DbManager, GlobalDbState, format_sql};
 use gpui::prelude::*;
 use gpui::{
     App, AppContext, AsyncApp, Axis, Bounds, ClickEvent, Context, Element, Entity, EventEmitter,
@@ -20,8 +20,6 @@ use one_core::utils::auto_save_config::AutoSaveConfig;
 use one_ui::resize_handle::{HandlePlacement, ResizePanel, resize_handle};
 use rust_i18n::t;
 use smol::Timer;
-use sqlparser::ast::{Query, SetExpr, Statement};
-use sqlparser::parser::Parser;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -626,107 +624,6 @@ impl SqlEditorTab {
         self.editor.read(cx).get_text(cx)
     }
 
-    fn split_sql_statements(database_type: DatabaseType, sql: &str) -> Vec<String> {
-        let trimmed = sql.trim();
-        let Ok(parser) =
-            StreamingSqlParser::from_source(SqlSource::Script(trimmed.to_string()), database_type)
-        else {
-            return vec![trimmed.to_string()];
-        };
-
-        let mut statements = Vec::new();
-        for statement in parser {
-            match statement {
-                Ok(statement) => {
-                    let statement = statement.trim();
-                    if !statement.is_empty() {
-                        statements.push(statement.to_string());
-                    }
-                }
-                Err(_) => return vec![trimmed.to_string()],
-            }
-        }
-
-        if statements.is_empty() {
-            return vec![trimmed.to_string()];
-        }
-
-        statements
-    }
-
-    fn build_explain_statement(database_type: DatabaseType, sql: &str) -> String {
-        let sql = sql.trim();
-        match database_type {
-            DatabaseType::MySQL
-            | DatabaseType::PostgreSQL
-            | DatabaseType::DuckDB
-            | DatabaseType::ClickHouse => {
-                format!("EXPLAIN {sql}")
-            }
-            DatabaseType::SQLite => {
-                format!("EXPLAIN QUERY PLAN {sql}")
-            }
-            DatabaseType::MSSQL => {
-                format!("SET SHOWPLAN_TEXT ON;\n{sql}\nSET SHOWPLAN_TEXT OFF;")
-            }
-            DatabaseType::Oracle => {
-                format!(
-                    "EXPLAIN PLAN FOR {sql};\nSELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY())"
-                )
-            }
-        }
-    }
-
-    fn is_select_set_expr(expr: &SetExpr) -> bool {
-        match expr {
-            SetExpr::Select(_) => true,
-            SetExpr::Query(query) => Self::is_select_query(query),
-            SetExpr::SetOperation { left, right, .. } => {
-                Self::is_select_set_expr(left.as_ref()) && Self::is_select_set_expr(right.as_ref())
-            }
-            _ => false,
-        }
-    }
-
-    fn is_select_query(query: &Query) -> bool {
-        Self::is_select_set_expr(query.body.as_ref())
-    }
-
-    fn is_select_statement(database_type: DatabaseType, sql: &str) -> bool {
-        let Ok(plugin) = DbManager::default().get_plugin(&database_type) else {
-            return false;
-        };
-        let Ok(statements) = Parser::parse_sql(plugin.sql_dialect().as_ref(), sql) else {
-            return false;
-        };
-
-        matches!(
-            statements.as_slice(),
-            [Statement::Query(query)] if Self::is_select_query(query)
-        )
-    }
-
-    fn build_explain_sql(database_type: DatabaseType, sql: &str) -> Option<String> {
-        let statements = Self::split_sql_statements(database_type, sql);
-        let separator = if matches!(database_type, DatabaseType::MSSQL) {
-            "\n"
-        } else {
-            ";\n"
-        };
-
-        let explain_statements = statements
-            .into_iter()
-            .filter(|statement| Self::is_select_statement(database_type, statement))
-            .map(|statement| Self::build_explain_statement(database_type, &statement))
-            .collect::<Vec<_>>();
-
-        if explain_statements.is_empty() {
-            return None;
-        }
-
-        Some(explain_statements.join(separator))
-    }
-
     fn execute_sql_text(&mut self, sql: String, window: &mut Window, cx: &mut Context<Self>) {
         let connection_id = self.connection_id.clone();
         let sql_result_tab_container = self.sql_result_tab_container.clone();
@@ -990,8 +887,13 @@ impl SqlEditorTab {
             (selected_value, schema)
         };
 
-        let Some(explain_sql) = Self::build_explain_sql(self.database_type, &sql) else {
-            window.push_notification("EXPLAIN 仅支持 SELECT 语句".to_string(), cx);
+        let Ok(plugin) = DbManager::default().get_plugin(&self.database_type) else {
+            window.push_notification("未找到当前数据库插件".to_string(), cx);
+            return;
+        };
+
+        let Some(explain_sql) = plugin.build_explain_sql(&sql) else {
+            window.push_notification("EXPLAIN 仅支持查询语句".to_string(), cx);
             return;
         };
 
@@ -1295,13 +1197,20 @@ impl Element for ResizeEventHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::SqlEditorTab;
+    use db::DbManager;
     use one_core::storage::DatabaseType;
+
+    fn build_explain_sql(database_type: DatabaseType, sql: &str) -> Option<String> {
+        let plugin = DbManager::default()
+            .get_plugin(&database_type)
+            .expect("plugin should exist");
+        plugin.build_explain_sql(sql)
+    }
 
     #[test]
     fn test_build_explain_sql_mysql() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(DatabaseType::MySQL, " SELECT * FROM users "),
+            build_explain_sql(DatabaseType::MySQL, " SELECT * FROM users "),
             Some("EXPLAIN SELECT * FROM users".to_string())
         );
     }
@@ -1309,7 +1218,7 @@ mod tests {
     #[test]
     fn test_build_explain_sql_sqlite() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(DatabaseType::SQLite, "select * from users"),
+            build_explain_sql(DatabaseType::SQLite, "select * from users"),
             Some("EXPLAIN QUERY PLAN select * from users".to_string())
         );
     }
@@ -1317,7 +1226,7 @@ mod tests {
     #[test]
     fn test_build_explain_sql_duckdb() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(DatabaseType::DuckDB, "select * from users"),
+            build_explain_sql(DatabaseType::DuckDB, "select * from users"),
             Some("EXPLAIN select * from users".to_string())
         );
     }
@@ -1325,7 +1234,7 @@ mod tests {
     #[test]
     fn test_build_explain_sql_mssql() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(DatabaseType::MSSQL, "select * from users"),
+            build_explain_sql(DatabaseType::MSSQL, "select * from users"),
             Some("SET SHOWPLAN_TEXT ON;\nselect * from users\nSET SHOWPLAN_TEXT OFF;".to_string())
         );
     }
@@ -1333,7 +1242,7 @@ mod tests {
     #[test]
     fn test_build_explain_sql_oracle() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(DatabaseType::Oracle, "select * from users"),
+            build_explain_sql(DatabaseType::Oracle, "select * from users"),
             Some(
                 "EXPLAIN PLAN FOR select * from users;\nSELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY())"
                     .to_string()
@@ -1344,7 +1253,7 @@ mod tests {
     #[test]
     fn test_build_explain_sql_mysql_multiple_statements() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(
+            build_explain_sql(
                 DatabaseType::MySQL,
                 "select * from users; select * from posts;"
             ),
@@ -1355,10 +1264,7 @@ mod tests {
     #[test]
     fn test_build_explain_sql_mysql_preserves_semicolon_in_string() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(
-                DatabaseType::MySQL,
-                "select ';' as semi; select 2 as id;"
-            ),
+            build_explain_sql(DatabaseType::MySQL, "select ';' as semi; select 2 as id;"),
             Some("EXPLAIN select ';' as semi;\nEXPLAIN select 2 as id".to_string())
         );
     }
@@ -1366,10 +1272,7 @@ mod tests {
     #[test]
     fn test_build_explain_sql_oracle_multiple_statements() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(
-                DatabaseType::Oracle,
-                "select * from users; select * from posts;"
-            ),
+            build_explain_sql(DatabaseType::Oracle, "select * from users; select * from posts;"),
             Some(
                 "EXPLAIN PLAN FOR select * from users;\nSELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY());\nEXPLAIN PLAN FOR select * from posts;\nSELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY())"
                     .to_string()
@@ -1380,7 +1283,7 @@ mod tests {
     #[test]
     fn test_build_explain_sql_skips_non_select_statements() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(
+            build_explain_sql(
                 DatabaseType::MySQL,
                 "insert into users values (1); select * from users; update users set id = 2;"
             ),
@@ -1391,11 +1294,55 @@ mod tests {
     #[test]
     fn test_build_explain_sql_returns_none_for_non_select_only() {
         assert_eq!(
-            SqlEditorTab::build_explain_sql(
+            build_explain_sql(
                 DatabaseType::MySQL,
                 "insert into users values (1); update users set id = 2;"
             ),
             None
+        );
+    }
+
+    #[test]
+    fn test_build_explain_sql_supports_with_query_via_is_query_statement() {
+        assert_eq!(
+            build_explain_sql(
+                DatabaseType::MySQL,
+                "with active_users as (select * from users) select * from active_users"
+            ),
+            Some(
+                "EXPLAIN with active_users as (select * from users) select * from active_users"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn test_build_explain_sql_keeps_existing_explain_statement() {
+        assert_eq!(
+            build_explain_sql(DatabaseType::MySQL, "EXPLAIN select * from users"),
+            Some("EXPLAIN select * from users".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_explain_sql_keeps_existing_explain_and_wraps_remaining_queries() {
+        assert_eq!(
+            build_explain_sql(
+                DatabaseType::MySQL,
+                "EXPLAIN select * from users; select * from posts;"
+            ),
+            Some("EXPLAIN select * from users;\nEXPLAIN select * from posts".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_explain_sql_keeps_existing_mssql_showplan_script() {
+        assert_eq!(
+            build_explain_sql(
+                DatabaseType::MSSQL,
+                "SET SHOWPLAN_TEXT ON;\nselect * from users\nSET SHOWPLAN_TEXT OFF;"
+            ),
+            Some("SET SHOWPLAN_TEXT ON;\nselect * from users\nSET SHOWPLAN_TEXT OFF;".to_string())
         );
     }
 }

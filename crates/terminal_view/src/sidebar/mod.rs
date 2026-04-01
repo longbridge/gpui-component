@@ -174,17 +174,16 @@ impl TerminalSidebar {
         // 仅 SSH 终端（有 StoredConnection）时创建文件管理器面板
         let file_manager_panel =
             stored_connection.map(|conn| cx.new(|cx| FileManagerPanel::new(conn, window, cx)));
-        let server_monitor_panel = ssh_config
-            .map(|config| {
-                cx.new(|cx| {
-                    ServerMonitorPanel::new(
-                        connection_id,
-                        config.ssh_config.clone(),
-                        auto_show_server_monitor,
-                        cx,
-                    )
-                })
-            });
+        let server_monitor_panel = ssh_config.map(|config| {
+            cx.new(|cx| {
+                ServerMonitorPanel::new(
+                    connection_id,
+                    config.ssh_config.clone(),
+                    auto_show_server_monitor,
+                    cx,
+                )
+            })
+        });
 
         // 注册 bash/sh 代码块操作，并注入终端专属提示词
         let sidebar_entity = cx.entity();
@@ -489,11 +488,7 @@ impl TerminalSidebar {
     }
 
     /// 在终端重连时同步重建文件管理器连接
-    pub fn reconnect_file_manager(
-        &mut self,
-        working_dir: Option<String>,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn reconnect_file_manager(&mut self, working_dir: Option<String>, cx: &mut Context<Self>) {
         if let Some(ref fm_panel) = self.file_manager_panel {
             fm_panel.update(cx, |panel, cx| {
                 panel.reconnect_with_working_dir(working_dir.clone(), cx);

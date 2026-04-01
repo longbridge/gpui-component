@@ -1,16 +1,16 @@
 use anyhow::Result;
 use gpui::{Context, EntityInputHandler, Task, Window};
 use lsp_types::{
-    request::Completion, CompletionContext, CompletionItem, CompletionResponse,
-    InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,
-    InlineCompletionTriggerKind,
+    CompletionContext, CompletionItem, CompletionResponse, InlineCompletionContext,
+    InlineCompletionItem, InlineCompletionResponse, InlineCompletionTriggerKind,
+    request::Completion,
 };
 use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
 use crate::input::{
-    popovers::{CompletionMenu, ContextMenu},
     InputState,
+    popovers::{CompletionMenu, ContextMenu},
 };
 
 /// Default debounce duration for inline completions.
@@ -359,7 +359,7 @@ impl InputState {
 
 #[cfg(test)]
 mod tests {
-    use super::{completion_menu_action, CompletionMenuAction};
+    use super::{CompletionMenuAction, completion_menu_action};
     use lsp_types::CompletionTriggerKind;
 
     #[test]

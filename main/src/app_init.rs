@@ -1,7 +1,4 @@
-use global_hotkey::{
-    hotkey::HotKey,
-    GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState,
-};
+use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState, hotkey::HotKey};
 use gpui::{AnyWindowHandle, App, Window};
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -54,7 +51,7 @@ mod system_hotkey {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     use crate::setting_tab::DEFAULT_SYSTEM_HOTKEY_OTHER;
     use gpui::{AppContext, AsyncApp, Keystroke, Window};
-    use std::sync::{mpsc, OnceLock};
+    use std::sync::{OnceLock, mpsc};
 
     const HOTKEY_POLL_INTERVAL: Duration = Duration::from_millis(16);
 
@@ -202,9 +199,7 @@ mod system_hotkey {
             let mut cx = cx.clone();
             async move {
                 loop {
-                    cx.background_executor()
-                        .timer(HOTKEY_POLL_INTERVAL)
-                        .await;
+                    cx.background_executor().timer(HOTKEY_POLL_INTERVAL).await;
 
                     while rx.try_recv().is_ok() {
                         if let Err(err) = toggle_main_window(&mut cx) {
@@ -214,7 +209,7 @@ mod system_hotkey {
                 }
             }
         })
-            .detach();
+        .detach();
     }
 
     fn toggle_main_window(cx: &mut AsyncApp) -> anyhow::Result<()> {

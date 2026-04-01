@@ -795,7 +795,6 @@ impl Render for SerialFormWindow {
                                 &t!("Serial.workspace"),
                                 Select::new(&self.workspace_select).w_full(),
                             ))
-
                             .child(self.render_form_row(
                                 &t!("TeamSync.team_label"),
                                 Select::new(&self.team_select).w_full(),

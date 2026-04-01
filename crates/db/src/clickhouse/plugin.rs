@@ -1314,11 +1314,9 @@ mod tests {
                     .data_type("UInt32")
                     .nullable(false),
             ],
-            indexes: vec![
-                IndexDefinition::new("idx_user_id")
-                    .columns(vec!["user_id".to_string()])
-                    .unique(false),
-            ],
+            indexes: vec![IndexDefinition::new("idx_user_id")
+                .columns(vec!["user_id".to_string()])
+                .unique(false)],
             foreign_keys: vec![],
             options: TableOptions::default(),
         };

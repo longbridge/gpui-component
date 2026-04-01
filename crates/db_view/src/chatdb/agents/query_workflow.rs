@@ -17,8 +17,7 @@ use std::sync::LazyLock;
 pub const TABLE_COUNT_THRESHOLD: usize = 30;
 
 /// 匹配 JSON 数组的正则（模块级共享）
-static JSON_ARRAY_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"\[[\s\S]*?\]"#).unwrap());
+static JSON_ARRAY_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\[[\s\S]*?\]"#).unwrap());
 
 // ============================================================================
 // 数据结构
@@ -87,9 +86,7 @@ impl QueryContext {
         // 选择的表
         if !self.selected_table_names.is_empty() {
             let source = match self.table_source {
-                TableSelectionSource::UserMentioned => {
-                    t!("QueryWorkflow.source_user").to_string()
-                }
+                TableSelectionSource::UserMentioned => t!("QueryWorkflow.source_user").to_string(),
                 TableSelectionSource::AiSelected => t!("QueryWorkflow.source_ai").to_string(),
                 TableSelectionSource::HistoryReused => {
                     t!("QueryWorkflow.source_history").to_string()
@@ -322,9 +319,8 @@ pub fn is_followup_question(question: &str) -> bool {
 /// 并解析后续的 JSON 数组，返回已选表名列表。
 pub fn extract_tables_from_history(chat_history: &[Message]) -> Option<Vec<String>> {
     // 匹配 "**相关表**" 或 "**Related Tables**" 标记
-    static RELATED_TABLES_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?:\*\*相关表\*\*|\*\*Related Tables\*\*)").unwrap()
-    });
+    static RELATED_TABLES_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?:\*\*相关表\*\*|\*\*Related Tables\*\*)").unwrap());
 
     // 从后往前找最近一条 Assistant 消息
     let last_assistant = chat_history
@@ -446,7 +442,10 @@ mod tests {
             ),
         ];
         let result = extract_tables_from_history(&history);
-        assert_eq!(result, Some(vec!["login_user".to_string(), "user_role".to_string()]));
+        assert_eq!(
+            result,
+            Some(vec!["login_user".to_string(), "user_role".to_string()])
+        );
     }
 
     #[test]
@@ -464,7 +463,10 @@ mod tests {
             ),
         ];
         let result = extract_tables_from_history(&history);
-        assert_eq!(result, Some(vec!["orders".to_string(), "order_items".to_string()]));
+        assert_eq!(
+            result,
+            Some(vec!["orders".to_string(), "order_items".to_string()])
+        );
     }
 
     #[test]

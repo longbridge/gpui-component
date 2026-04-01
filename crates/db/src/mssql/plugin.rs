@@ -2354,11 +2354,9 @@ mod tests {
         let original = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![
-                ColumnDefinition::new("name")
-                    .data_type("NVARCHAR")
-                    .length(50),
-            ],
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("NVARCHAR")
+                .length(50)],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2367,12 +2365,10 @@ mod tests {
         let new = TableDesign {
             database_name: "test_db".to_string(),
             table_name: "users".to_string(),
-            columns: vec![
-                ColumnDefinition::new("name")
-                    .data_type("NVARCHAR")
-                    .length(100)
-                    .nullable(false),
-            ],
+            columns: vec![ColumnDefinition::new("name")
+                .data_type("NVARCHAR")
+                .length(100)
+                .nullable(false)],
             indexes: vec![],
             foreign_keys: vec![],
             options: TableOptions::default(),
@@ -2411,11 +2407,9 @@ mod tests {
                     .data_type("NVARCHAR")
                     .length(50),
             ],
-            indexes: vec![
-                IndexDefinition::new("idx_name")
-                    .columns(vec!["name".to_string()])
-                    .unique(true),
-            ],
+            indexes: vec![IndexDefinition::new("idx_name")
+                .columns(vec!["name".to_string()])
+                .unique(true)],
             foreign_keys: vec![],
             options: TableOptions::default(),
         };

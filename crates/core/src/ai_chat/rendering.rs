@@ -3,17 +3,17 @@
 //! 提供通用的消息渲染函数，可被不同的面板复用。
 //! SQL 面板可以在此基础上覆盖特定渲染（如 SQL 代码块）。
 
+use crate::ai_chat::panel::CodeBlockActionRegistry;
+use crate::ai_chat::types::{ChatMessageUIGeneric, ChatRole, MessageExtension, MessageVariant};
 use gpui::{
     AnyElement, App, InteractiveElement, IntoElement, ParentElement, SharedString, Styled, div,
 };
+use gpui_component::button::Button;
+use gpui_component::clipboard::Clipboard;
 use gpui_component::{
     ActiveTheme, Icon, IconName, Sizable, Size, button::ButtonVariants, h_flex, text::TextView,
 };
 use rust_i18n::t;
-use gpui_component::button::Button;
-use gpui_component::clipboard::Clipboard;
-use crate::ai_chat::panel::CodeBlockActionRegistry;
-use crate::ai_chat::types::{ChatMessageUIGeneric, ChatRole, MessageExtension, MessageVariant};
 
 /// 共享消息渲染器
 pub struct ChatMessageRenderer;
@@ -139,10 +139,9 @@ impl ChatMessageRenderer {
                             let lang_str = lang.as_ref().map(|s| s.as_ref());
                             let matched_actions = registry.get_actions_for_lang(lang_str);
 
-                            let mut row = h_flex().gap_1().child(
-                                Clipboard::new("copy")
-                                    .value(code.clone()),
-                            );
+                            let mut row = h_flex()
+                                .gap_1()
+                                .child(Clipboard::new("copy").value(code.clone()));
 
                             for (idx, action) in matched_actions.iter().enumerate() {
                                 let btn_id = SharedString::from(format!("{}-{}", action.id, idx));
@@ -151,11 +150,8 @@ impl ChatMessageRenderer {
                                 let label = action.label.clone();
                                 let code = code.to_string();
                                 let lang = lang.as_ref().map(|s| s.to_string());
-                                let mut btn = Button::new(btn_id)
-                                    .icon(icon)
-                                    .ghost()
-                                    .xsmall()
-                                    .on_click({
+                                let mut btn =
+                                    Button::new(btn_id).icon(icon).ghost().xsmall().on_click({
                                         let code = code.clone();
                                         let lang = lang.clone();
                                         move |_, window, cx| {

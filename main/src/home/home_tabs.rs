@@ -571,8 +571,9 @@ impl HomePage {
         let home = cx.entity();
         window.defer(cx, move |window, cx| {
             home.update(cx, |this, cx| {
-                let terminal_view =
-                    cx.new(|cx| TerminalView::new_with_index(LocalConfig::default(), tab_index, window, cx));
+                let terminal_view = cx.new(|cx| {
+                    TerminalView::new_with_index(LocalConfig::default(), tab_index, window, cx)
+                });
                 this.setup_terminal_view(&terminal_view, window, cx);
                 tab_container.update(cx, |tc, cx| {
                     let tab = TabItem::new(tab_id, "home", terminal_view);
