@@ -885,6 +885,45 @@ impl DbFormConfig {
             ],
         }
     }
+
+    /// DuckDB form configuration
+    pub fn duckdb() -> Self {
+        let default_db_path = get_config_dir()
+            .map(|p| p.join("onetcli_default.duckdb").to_string_lossy().to_string())
+            .unwrap_or_else(|_| "onetcli_default.duckdb".to_string());
+
+        Self {
+            db_type: DatabaseType::DuckDB,
+            title: format!("{} (DuckDB)", t!("Common.new")),
+            tab_groups: vec![
+                TabGroup::new("general", t!("ConnectionForm.general")).fields(vec![
+                    FormField::new(
+                        "name",
+                        t!("ConnectionForm.connection_name"),
+                        FormFieldType::Text,
+                    )
+                    .placeholder("My DuckDB Database")
+                    .default("Local DuckDB"),
+                    FormField::new(
+                        "host",
+                        t!("ConnectionForm.database_file_path"),
+                        FormFieldType::Text,
+                    )
+                    .placeholder("/path/to/database.duckdb")
+                    .default(default_db_path),
+                ]),
+                TabGroup::new("notes", t!("ConnectionForm.notes")).fields(vec![FormField::new(
+                    "remark",
+                    t!("ConnectionForm.remark"),
+                    FormFieldType::TextArea,
+                )
+                .rows(14)
+                .optional()
+                .placeholder(t!("ConnectionForm.enter_remark"))
+                .default("")]),
+            ],
+        }
+    }
 }
 
 fn normalized_ssh_auth_type(auth_type: &str) -> &str {
@@ -1844,7 +1883,8 @@ impl DbConnectionForm {
             .label_width(px(100.))
             .children(current_tab_fields.iter().enumerate().map(|(i, field_info)| {
                 let input_idx = field_input_offset + i;
-                let is_sqlite_path = db_type == DatabaseType::SQLite && field_info.name == "host";
+                let is_sqlite_path = matches!(db_type, DatabaseType::SQLite | DatabaseType::DuckDB)
+                    && field_info.name == "host";
                 let is_textarea = field_info.field_type == FormFieldType::TextArea;
                 let is_select = field_info.field_type == FormFieldType::Select;
                 let is_password = field_info.field_type == FormFieldType::Password;

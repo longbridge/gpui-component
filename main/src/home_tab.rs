@@ -2735,8 +2735,10 @@ impl HomePage {
                             })
                             .when(conn.connection_type == ConnectionType::Database, |this| {
                                 if let Ok(params) = conn.to_db_connection() {
-                                    let conn_info = if params.database_type == DatabaseType::SQLite
-                                    {
+                                    let conn_info = if matches!(
+                                        params.database_type,
+                                        DatabaseType::SQLite | DatabaseType::DuckDB
+                                    ) {
                                         params.host.clone()
                                     } else {
                                         let database = match params.database {

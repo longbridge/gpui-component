@@ -2,6 +2,7 @@ use crate::cache::CacheContext;
 use crate::cache_manager::GlobalNodeCache;
 use crate::clickhouse::ClickHousePlugin;
 use crate::connection::{DbConnection, DbError, StreamingProgress};
+use crate::duckdb::DuckDbPlugin;
 use crate::import_export::{
     ExportConfig, ExportProgressSender, ExportResult, ImportConfig, ImportResult,
 };
@@ -128,6 +129,7 @@ pub struct DbManager {
     mysql: Arc<dyn DatabasePlugin>,
     postgresql: Arc<dyn DatabasePlugin>,
     sqlite: Arc<dyn DatabasePlugin>,
+    duckdb: Arc<dyn DatabasePlugin>,
     clickhouse: Arc<dyn DatabasePlugin>,
     mssql: Arc<dyn DatabasePlugin>,
     oracle: Arc<dyn DatabasePlugin>,
@@ -139,6 +141,7 @@ impl DbManager {
             mysql: Arc::new(MySqlPlugin::new()),
             postgresql: Arc::new(PostgresPlugin::new()),
             sqlite: Arc::new(SqlitePlugin::new()),
+            duckdb: Arc::new(DuckDbPlugin::new()),
             clickhouse: Arc::new(ClickHousePlugin::new()),
             mssql: Arc::new(MsSqlPlugin::new()),
             oracle: Arc::new(OraclePlugin::new()),
@@ -150,6 +153,7 @@ impl DbManager {
             DatabaseType::MySQL => Ok(Arc::clone(&self.mysql)),
             DatabaseType::PostgreSQL => Ok(Arc::clone(&self.postgresql)),
             DatabaseType::SQLite => Ok(Arc::clone(&self.sqlite)),
+            DatabaseType::DuckDB => Ok(Arc::clone(&self.duckdb)),
             DatabaseType::ClickHouse => Ok(Arc::clone(&self.clickhouse)),
             DatabaseType::MSSQL => Ok(Arc::clone(&self.mssql)),
             DatabaseType::Oracle => Ok(Arc::clone(&self.oracle)),
@@ -169,6 +173,7 @@ impl Clone for DbManager {
             mysql: Arc::clone(&self.mysql),
             postgresql: Arc::clone(&self.postgresql),
             sqlite: Arc::clone(&self.sqlite),
+            duckdb: Arc::clone(&self.duckdb),
             clickhouse: Arc::clone(&self.clickhouse),
             mssql: Arc::clone(&self.mssql),
             oracle: Arc::clone(&self.oracle),
@@ -2274,6 +2279,15 @@ impl Global for GlobalDbState {}
 mod tests {
     use super::*;
     use one_core::storage::DatabaseType;
+
+    #[test]
+    fn test_db_manager_registers_duckdb_plugin() {
+        let plugin = DbManager::default()
+            .get_plugin(&DatabaseType::DuckDB)
+            .expect("DuckDB plugin should be registered");
+
+        assert_eq!(plugin.name(), DatabaseType::DuckDB);
+    }
 
     #[test]
     fn test_cached_children_ready_allows_empty_children() {

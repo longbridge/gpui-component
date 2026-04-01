@@ -32,6 +32,8 @@ use db::types::{
     CharsetInfo, CollationInfo, ColumnDefinition, ColumnInfo, IndexDefinition, IndexInfo,
     ParsedColumnType, TableDesign, TableOptions,
 };
+#[cfg(test)]
+use db::duckdb::DuckDbPlugin;
 use gpui_component::select::SearchableVec;
 use one_core::storage::DatabaseType;
 use one_core::tab_container::{TabContainer, TabContent, TabContentEvent};
@@ -152,7 +154,8 @@ fn column_info_to_definition(
     } else {
         base_type.clone()
     };
-    let is_auto_increment = if database_type == DatabaseType::SQLite {
+    let is_auto_increment = if matches!(database_type, DatabaseType::SQLite | DatabaseType::DuckDB)
+    {
         col.is_primary_key && base_type.eq_ignore_ascii_case("INTEGER")
     } else {
         parsed.is_auto_increment
@@ -2123,7 +2126,10 @@ impl ColumnsEditor {
                 scale_input,
                 nullable: col.is_nullable,
                 is_pk: col.is_primary_key,
-                auto_increment: if self.database_type == DatabaseType::SQLite {
+                auto_increment: if matches!(
+                    self.database_type,
+                    DatabaseType::SQLite | DatabaseType::DuckDB
+                ) {
                     col.is_primary_key && parsed_type.base_type.eq_ignore_ascii_case("INTEGER")
                 } else {
                     parsed_type.is_auto_increment
@@ -3199,6 +3205,7 @@ mod tests {
             DatabaseType::MySQL => Box::new(MySqlPlugin::new()),
             DatabaseType::PostgreSQL => Box::new(PostgresPlugin::new()),
             DatabaseType::SQLite => Box::new(SqlitePlugin::new()),
+            DatabaseType::DuckDB => Box::new(DuckDbPlugin::new()),
             DatabaseType::MSSQL => Box::new(MsSqlPlugin::new()),
             DatabaseType::Oracle => Box::new(OraclePlugin::new()),
             DatabaseType::ClickHouse => Box::new(ClickHousePlugin::new()),
@@ -3235,10 +3242,10 @@ mod tests {
                     "PostgreSQL 应使用 RENAME COLUMN: {sql}"
                 );
             }
-            DatabaseType::SQLite => {
+            DatabaseType::SQLite | DatabaseType::DuckDB => {
                 assert!(
                     sql.contains("RENAME COLUMN \"b\" TO \"a\""),
-                    "SQLite 应使用 RENAME COLUMN: {sql}"
+                    "SQLite/DuckDB 应使用 RENAME COLUMN: {sql}"
                 );
             }
             DatabaseType::MSSQL => {
@@ -3505,7 +3512,7 @@ mod tests {
             let add_b2 = format!("ADD COLUMN {}", plugin.quote_identifier("b2"));
             // MySQL ADD COLUMN 可能不包含引号后的完整格式，用更宽松的匹配
             let add_keyword = "ADD COLUMN";
-            if database_type != DatabaseType::SQLite {
+            if !matches!(database_type, DatabaseType::SQLite | DatabaseType::DuckDB) {
                 assert!(
                     !sql.contains(&add_b2)
                         && (!sql.contains(add_keyword) || sql.contains("RENAME")),
@@ -3640,7 +3647,7 @@ mod tests {
             let plugin = build_plugin(database_type);
             let sql = plugin.build_alter_table_sql(&original, &current);
             // SQLite 使用 table recreation 方式，不包含 DROP COLUMN 关键词
-            if database_type != DatabaseType::SQLite {
+            if !matches!(database_type, DatabaseType::SQLite | DatabaseType::DuckDB) {
                 assert!(
                     sql.contains("DROP COLUMN"),
                     "[{:?}] 删除列应包含 DROP COLUMN: {sql}",
@@ -3757,7 +3764,7 @@ mod tests {
                 database_type
             );
             // SQLite 使用 table recreation，不直接包含 DROP COLUMN
-            if database_type != DatabaseType::SQLite {
+            if !matches!(database_type, DatabaseType::SQLite | DatabaseType::DuckDB) {
                 // 应 DROP 被删除的列 c
                 let drop_c = format!("DROP COLUMN {}", plugin.quote_identifier("c"));
                 assert!(

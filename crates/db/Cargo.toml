@@ -9,6 +9,7 @@ async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 rusqlite.workspace = true
+duckdb.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 hex.workspace = true

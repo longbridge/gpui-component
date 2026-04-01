@@ -17,6 +17,7 @@ pub mod types;
 
 // Database implementations
 pub mod clickhouse;
+pub mod duckdb;
 pub mod mssql;
 pub mod mysql;
 pub mod oracle;

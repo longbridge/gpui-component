@@ -657,7 +657,10 @@ impl SqlEditorTab {
     fn build_explain_statement(database_type: DatabaseType, sql: &str) -> String {
         let sql = sql.trim();
         match database_type {
-            DatabaseType::MySQL | DatabaseType::PostgreSQL | DatabaseType::ClickHouse => {
+            DatabaseType::MySQL
+            | DatabaseType::PostgreSQL
+            | DatabaseType::DuckDB
+            | DatabaseType::ClickHouse => {
                 format!("EXPLAIN {sql}")
             }
             DatabaseType::SQLite => {
@@ -1308,6 +1311,14 @@ mod tests {
         assert_eq!(
             SqlEditorTab::build_explain_sql(DatabaseType::SQLite, "select * from users"),
             Some("EXPLAIN QUERY PLAN select * from users".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_explain_sql_duckdb() {
+        assert_eq!(
+            SqlEditorTab::build_explain_sql(DatabaseType::DuckDB, "select * from users"),
+            Some("EXPLAIN select * from users".to_string())
         );
     }
 

@@ -47,9 +47,11 @@ impl CacheContext {
 
     /// 生成缓存目录名
     /// - 网络数据库: {database_type}/{host}_{port}
-    /// - SQLite: {database_type}/{db_name}_{path_hash}
+    /// - SQLite / DuckDB: {database_type}/{db_name}_{path_hash}
     pub fn cache_dir_name(&self) -> String {
-        if self.database_type == DatabaseType::SQLite || self.port == 0 {
+        if matches!(self.database_type, DatabaseType::SQLite | DatabaseType::DuckDB)
+            || self.port == 0
+        {
             let path = std::path::Path::new(&self.host);
             let db_name = path
                 .file_stem()
@@ -73,7 +75,9 @@ impl CacheContext {
 
     /// 生成缓存键前缀
     pub fn cache_key_prefix(&self) -> String {
-        if self.database_type == DatabaseType::SQLite || self.port == 0 {
+        if matches!(self.database_type, DatabaseType::SQLite | DatabaseType::DuckDB)
+            || self.port == 0
+        {
             let path = std::path::Path::new(&self.host);
             let db_name = path
                 .file_stem()
@@ -81,7 +85,12 @@ impl CacheContext {
                 .unwrap_or("unknown");
             let safe_name = db_name.replace([':', '/', '\\', '<', '>', '|', '?', '*', '.'], "_");
             let hash = Self::short_hash(&self.host);
-            format!("sqlite_{}_{}", safe_name, hash)
+            format!(
+                "{}_{}_{}",
+                self.database_type.as_str().to_ascii_lowercase(),
+                safe_name,
+                hash
+            )
         } else {
             let safe_host = self
                 .host

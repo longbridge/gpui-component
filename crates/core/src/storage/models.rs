@@ -122,6 +122,7 @@ pub enum DatabaseType {
     MySQL,
     PostgreSQL,
     SQLite,
+    DuckDB,
     MSSQL,
     Oracle,
     ClickHouse,
@@ -133,6 +134,7 @@ impl DatabaseType {
             DatabaseType::MySQL,
             DatabaseType::PostgreSQL,
             DatabaseType::SQLite,
+            DatabaseType::DuckDB,
             DatabaseType::MSSQL,
             DatabaseType::Oracle,
             DatabaseType::ClickHouse,
@@ -144,6 +146,7 @@ impl DatabaseType {
             DatabaseType::MySQL => "MySQL",
             DatabaseType::PostgreSQL => "PostgreSQL",
             DatabaseType::SQLite => "SQLite",
+            DatabaseType::DuckDB => "DuckDB",
             DatabaseType::MSSQL => "MSSQL",
             DatabaseType::Oracle => "Oracle",
             DatabaseType::ClickHouse => "ClickHouse",
@@ -155,6 +158,7 @@ impl DatabaseType {
             "MySQL" => Some(DatabaseType::MySQL),
             "PostgreSQL" => Some(DatabaseType::PostgreSQL),
             "SQLite" => Some(DatabaseType::SQLite),
+            "DuckDB" => Some(DatabaseType::DuckDB),
             "MSSQL" => Some(DatabaseType::MSSQL),
             "Oracle" => Some(DatabaseType::Oracle),
             "ClickHouse" => Some(DatabaseType::ClickHouse),
@@ -167,6 +171,7 @@ impl DatabaseType {
             DatabaseType::MySQL => IconName::MySQLColor.color().with_size(Large),
             DatabaseType::PostgreSQL => IconName::PostgreSQLColor.color().with_size(Large),
             DatabaseType::SQLite => IconName::SQLiteColor.color().with_size(Large),
+            DatabaseType::DuckDB => IconName::Database.color().with_size(Large),
             DatabaseType::MSSQL => IconName::MSSQLColor.color().with_size(Large),
             DatabaseType::Oracle => IconName::OracleColor.color().with_size(Large),
             DatabaseType::ClickHouse => IconName::ClickHouseColor.color().with_size(Large),
@@ -177,6 +182,7 @@ impl DatabaseType {
             DatabaseType::MySQL => IconName::MySQLLineColor.color().with_size(Large),
             DatabaseType::PostgreSQL => IconName::PostgreSQLLineColor.color().with_size(Large),
             DatabaseType::SQLite => IconName::SQLiteLineColor.color().with_size(Large),
+            DatabaseType::DuckDB => IconName::Database.color().with_size(Large),
             DatabaseType::MSSQL => IconName::MSSQLLineColor.color().with_size(Large),
             DatabaseType::Oracle => IconName::OracleLineColor.color().with_size(Large),
             DatabaseType::ClickHouse => IconName::ClickHouseLineColor.color().with_size(Large),
@@ -476,7 +482,7 @@ impl DbConnectionConfig {
 
     pub fn server_info(&self) -> String {
         match self.database_type {
-            DatabaseType::SQLite => format!("{}", self.host),
+            DatabaseType::SQLite | DatabaseType::DuckDB => format!("{}", self.host),
             _ => format!("{}:{}", self.host, self.port),
         }
     }
@@ -961,6 +967,7 @@ pub fn parse_db_type(s: &str) -> DatabaseType {
         "MySQL" => DatabaseType::MySQL,
         "PostgreSQL" => DatabaseType::PostgreSQL,
         "SQLite" => DatabaseType::SQLite,
+        "DuckDB" => DatabaseType::DuckDB,
         _ => DatabaseType::MySQL,
     }
 }

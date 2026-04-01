@@ -7,6 +7,7 @@ pub mod connection_form_window;
 pub mod database_objects_tab;
 pub mod database_tab;
 pub mod database_view_plugin;
+pub mod duckdb;
 mod db_tree_event;
 pub mod db_tree_view;
 mod import_export;

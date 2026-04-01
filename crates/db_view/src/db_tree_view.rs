@@ -2241,7 +2241,10 @@ impl DbTreeView {
 
         // 数据库筛选计数
         let db_count = if node_type == Some(DbNodeType::Connection)
-            && database_type != Some(DatabaseType::SQLite)
+            && !matches!(
+                database_type,
+                Some(DatabaseType::SQLite | DatabaseType::DuckDB)
+            )
         {
             Some(self.get_selected_database_count(&node_id))
         } else {
