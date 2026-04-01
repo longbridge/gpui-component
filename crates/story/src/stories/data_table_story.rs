@@ -20,7 +20,10 @@ use gpui_component::{
     label::Label,
     menu::{DropdownMenu, PopupMenu},
     spinner::Spinner,
-    table::{Column, ColumnFixed, ColumnSort, DataTable, TableDelegate, TableEvent, TableState},
+    table::{
+        Column, ColumnFixed, ColumnHeader, ColumnSort, DataTable, TableDelegate, TableEvent,
+        TableState,
+    },
     v_flex,
 };
 use serde::{Deserialize, Serialize};
@@ -335,6 +338,42 @@ impl TableDelegate for StockTableDelegate {
         self.columns[col_ix].clone()
     }
 
+    fn header_rows(&self, cx: &App) -> Vec<Vec<ColumnHeader>> {
+        vec![
+            vec![
+                ColumnHeader::Group {
+                    label: "Stock Info".into(),
+                    span: 4,
+                },
+                ColumnHeader::Group {
+                    label: "Price & Change".into(),
+                    span: 3,
+                },
+            ],
+            vec![
+                ColumnHeader::Group {
+                    label: "Identity".into(),
+                    span: 4,
+                },
+                ColumnHeader::Group {
+                    label: "Stock Info".into(),
+                    span: 7,
+                },
+                ColumnHeader::Group {
+                    label: "Ranking & Stats".into(),
+                    span: 14,
+                },
+                ColumnHeader::Group {
+                    label: "Market Data".into(),
+                    span: self.columns_count(cx) - 25,
+                },
+            ],
+            (0..self.columns_count(cx))
+                .map(|i| ColumnHeader::Leaf(self.column(i, cx)))
+                .collect::<Vec<_>>(),
+        ]
+    }
+
     fn render_th(
         &mut self,
         col_ix: usize,
@@ -345,9 +384,15 @@ impl TableDelegate for StockTableDelegate {
 
         div()
             .child(col.name.clone())
-            .when(col_ix >= 3 && col_ix <= 10, |this| this.table_cell_size(self.size))
-            .when(col.align == TextAlign::Center, |this| this.h_flex().w_full().justify_center())
-            .when(col.align == TextAlign::Right, |this| this.h_flex().w_full().justify_end())
+            .when(col_ix >= 3 && col_ix <= 10, |this| {
+                this.table_cell_size(self.size)
+            })
+            .when(col.align == TextAlign::Center, |this| {
+                this.h_flex().w_full().justify_center()
+            })
+            .when(col.align == TextAlign::Right, |this| {
+                this.h_flex().w_full().justify_end()
+            })
     }
 
     fn context_menu(

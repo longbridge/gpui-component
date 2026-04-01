@@ -166,6 +166,16 @@ impl TableVisibleRange {
 ///     }
 /// });
 /// ```
+#[derive(Clone)]
+pub(crate) struct HeaderCell {
+    pub label: SharedString,
+    pub width: Pixels,
+    pub col_span: usize,
+    pub is_leaf: bool,
+    pub leaf_col_ix: Option<usize>,
+    pub start_leaf_col_ix: usize,
+}
+
 pub struct TableState<D: TableDelegate> {
     focus_handle: FocusHandle,
     delegate: D,
@@ -176,6 +186,7 @@ pub struct TableState<D: TableDelegate> {
     fixed_head_cols_bounds: Bounds<Pixels>,
 
     col_groups: Vec<ColGroup>,
+    header_layout: Vec<Vec<HeaderCell>>,
 
     /// Whether the table can loop selection, default is true.
     ///
@@ -233,6 +244,7 @@ where
             options: TableOptions::default(),
             delegate,
             col_groups: Vec::new(),
+            header_layout: Vec::new(),
             horizontal_scroll_handle: VirtualListScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
             selection_mode: SelectionMode::Row,
@@ -488,7 +500,69 @@ where
                 ColGroup { width: column.width, bounds: Bounds::default(), column }
             })
             .collect();
-        cx.notify();
+
+        self.update_header_layout(cx);
+    }
+
+    fn update_header_layout(&mut self, cx: &mut Context<Self>) {
+        let rows = self.delegate.header_rows(cx);
+        let mut layout = Vec::with_capacity(rows.len());
+
+        fn process_header(
+            header: &ColumnHeader,
+            col_groups: &[ColGroup],
+            current_leaf_ix: &mut usize,
+        ) -> HeaderCell {
+            match header {
+                ColumnHeader::Leaf(col) => {
+                    let ix = *current_leaf_ix;
+                    *current_leaf_ix += 1;
+                    HeaderCell {
+                        label: col.name.clone(),
+                        width: col_groups.get(ix).map_or(px(0.), |g| g.width),
+                        col_span: 1,
+                        is_leaf: true,
+                        leaf_col_ix: Some(ix),
+                        start_leaf_col_ix: ix,
+                    }
+                }
+                ColumnHeader::Group {
+                    label,
+                    span,
+                } => {
+                    let mut width = px(0.);
+                    let start_leaf_col_ix = *current_leaf_ix;
+                    for i in 0..*span {
+                        if *current_leaf_ix + i < col_groups.len() {
+                            width += col_groups[*current_leaf_ix + i].width;
+                        }
+                    }
+                    *current_leaf_ix += *span;
+                    HeaderCell {
+                        label: label.clone(),
+                        width,
+                        col_span: *span,
+                        is_leaf: false,
+                        leaf_col_ix: None,
+                        start_leaf_col_ix,
+                    }
+                }
+            }
+        }
+
+        for row in rows {
+            let mut cell_row = Vec::with_capacity(row.len());
+            let mut current_leaf_ix = 0;
+            for header in row {
+                cell_row.push(process_header(
+                    &header,
+                    &self.col_groups,
+                    &mut current_leaf_ix,
+                ));
+            }
+            layout.push(cell_row);
+        }
+        self.header_layout = layout;
     }
 
     fn fixed_left_cols_count(&self) -> usize {
@@ -903,19 +977,19 @@ where
             return;
         }
 
-        let Some(col_group) = self.col_groups.get_mut(ix) else {
-            return;
-        };
-
-        if !col_group.is_resizable() {
-            return;
+        let mut changed = false;
+        if let Some(col_group) = self.col_groups.get_mut(ix) {
+            if col_group.is_resizable() {
+                let new_width = size.clamp(col_group.column.min_width, col_group.column.max_width);
+                if col_group.width != new_width {
+                    col_group.width = new_width;
+                    changed = true;
+                }
+            }
         }
 
-        let new_width = size.clamp(col_group.column.min_width, col_group.column.max_width);
-
-        // Only update if it actually changed
-        if col_group.width != new_width {
-            col_group.width = new_width;
+        if changed {
+            self.update_header_layout(cx);
             cx.notify();
         }
     }
@@ -1315,14 +1389,13 @@ where
 
         let mut header = self.delegate_mut().render_header(window, cx);
         let style = header.style().clone();
+        let layout = self.header_layout.clone();
 
         header
             .h_flex()
             .w_full()
-            .h(self.options.size.table_row_height())
             .flex_shrink_0()
-            .border_b_1()
-            .border_color(cx.theme().border)
+            .bg(cx.theme().table_head)
             .text_color(cx.theme().table_head_foreground)
             .refine_style(&style)
             .when(self.cell_selectable, |this| {
@@ -1336,13 +1409,39 @@ where
                         .relative()
                         .h_full()
                         .bg(cx.theme().table_head)
-                        .children(
-                            self.col_groups
-                                .clone()
-                                .into_iter()
-                                .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
-                                .enumerate()
-                                .map(|(col_ix, _)| self.render_th(col_ix, window, cx)),
+                        .child(
+                            v_flex().min_w_full().flex_shrink_0().children(layout.iter().enumerate().map(|(_row_ix, row_cells)| {
+                                h_flex()
+                                    .min_w_full()
+                                    .h(self.options.size.table_row_height())
+                                    .border_b_1()
+                                    .border_color(cx.theme().border)
+                                    .children(row_cells.iter().filter_map(|cell| {
+                                        if cell.start_leaf_col_ix < left_columns_count {
+                                            if cell.is_leaf {
+                                                if let Some(ix) = cell.leaf_col_ix {
+                                                    return Some(
+                                                        self.render_th(ix, window, cx)
+                                                            .into_any_element(),
+                                                    );
+                                                }
+                                            } else {
+                                                return Some(
+                                                    self.delegate_mut()
+                                                        .render_group_th(
+                                                            &cell.label,
+                                                            cell.col_span,
+                                                            cell.width,
+                                                            window,
+                                                            cx,
+                                                        )
+                                                        .into_any_element(),
+                                                );
+                                            }
+                                        }
+                                        None
+                                    }))
+                            }))
                         )
                         .child(
                             // Fixed columns border
@@ -1371,19 +1470,39 @@ where
                     .track_scroll(&horizontal_scroll_handle)
                     .bg(cx.theme().table_head)
                     .child(
-                        h_flex()
-                            .relative()
-                            .children(
-                                self.col_groups
-                                    .clone()
-                                    .into_iter()
-                                    .skip(left_columns_count)
-                                    .enumerate()
-                                    .map(|(col_ix, _)| {
-                                        self.render_th(left_columns_count + col_ix, window, cx)
-                                    }),
-                            )
-                            .child(self.delegate.render_last_empty_col(window, cx)),
+                        v_flex().min_w_full().flex_shrink_0().children(layout.iter().enumerate().map(|(_row_ix, row_cells)| {
+                            h_flex()
+                                .min_w_full()
+                                .h(self.options.size.table_row_height())
+                                .border_b_1()
+                                .border_color(cx.theme().border)
+                                .children(row_cells.iter().filter_map(|cell| {
+                                    if cell.start_leaf_col_ix >= left_columns_count {
+                                        if cell.is_leaf {
+                                            if let Some(ix) = cell.leaf_col_ix {
+                                                return Some(
+                                                    self.render_th(ix, window, cx)
+                                                        .into_any_element(),
+                                                );
+                                            }
+                                        } else {
+                                            return Some(
+                                                self.delegate_mut()
+                                                    .render_group_th(
+                                                        &cell.label,
+                                                        cell.col_span,
+                                                        cell.width,
+                                                        window,
+                                                        cx,
+                                                    )
+                                                    .into_any_element(),
+                                            );
+                                        }
+                                    }
+                                    None
+                                }))
+                                .child(self.delegate.render_last_empty_col(window, cx))
+                        }))
                     ),
             )
     }

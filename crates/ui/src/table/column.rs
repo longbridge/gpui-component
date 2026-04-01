@@ -50,6 +50,18 @@ pub struct Column {
     pub max_width: Pixels,
 }
 
+/// A header cell can be a leaf column or a spanning group header.
+#[derive(Debug, Clone)]
+pub enum ColumnHeader {
+    /// A regular sortable/resizable leaf column.
+    Leaf(Column),
+    /// A group header spanning `span` leaf columns beneath it.
+    Group {
+        label: SharedString,
+        span: usize,
+    },
+}
+
 impl Default for Column {
     fn default() -> Self {
         Self {
