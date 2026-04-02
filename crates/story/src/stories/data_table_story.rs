@@ -20,7 +20,10 @@ use gpui_component::{
     label::Label,
     menu::{DropdownMenu, PopupMenu},
     spinner::Spinner,
-    table::{Column, ColumnFixed, ColumnSort, DataTable, TableDelegate, TableEvent, TableState},
+    table::{
+        Column, ColumnFixed, ColumnGroup, ColumnSort, DataTable, TableDelegate, TableEvent,
+        TableState,
+    },
     v_flex,
 };
 use serde::{Deserialize, Serialize};
@@ -189,6 +192,7 @@ struct StockTableDelegate {
     loading: bool,
     lazy_load: bool,
     full_loading: bool,
+    show_group_headers: bool,
     clicked_row: Option<usize>,
     eof: bool,
     visible_rows: Range<usize>,
@@ -263,6 +267,7 @@ impl StockTableDelegate {
             ],
             loading: false,
             full_loading: false,
+            show_group_headers: true,
             eof: false,
             visible_cols: Range::default(),
             visible_rows: Range::default(),
@@ -335,6 +340,42 @@ impl TableDelegate for StockTableDelegate {
         self.columns[col_ix].clone()
     }
 
+    fn group_headers(&self, cx: &App) -> Option<Vec<Vec<ColumnGroup>>> {
+        if !self.show_group_headers {
+            return None;
+        }
+        Some(
+        vec![
+            vec![
+                ColumnGroup {
+                    label: "Stock Info".into(),
+                    span: 4,
+                },
+                ColumnGroup {
+                    label: "Price & Change".into(),
+                    span: 3,
+                },
+            ],
+            vec![
+                ColumnGroup {
+                    label: "Identity".into(),
+                    span: 4,
+                },
+                ColumnGroup {
+                    label: "Stock Info".into(),
+                    span: 7,
+                },
+                ColumnGroup {
+                    label: "Ranking & Stats".into(),
+                    span: 14,
+                },
+                ColumnGroup {
+                    label: "Market Data".into(),
+                    span: self.columns_count(cx) - 25,
+                },
+            ],
+        ])
+    }
     fn render_th(
         &mut self,
         col_ix: usize,
@@ -345,9 +386,15 @@ impl TableDelegate for StockTableDelegate {
 
         div()
             .child(col.name.clone())
-            .when(col_ix >= 3 && col_ix <= 10, |this| this.table_cell_size(self.size))
-            .when(col.align == TextAlign::Center, |this| this.h_flex().w_full().justify_center())
-            .when(col.align == TextAlign::Right, |this| this.h_flex().w_full().justify_end())
+            .when(col_ix >= 3 && col_ix <= 10, |this| {
+                this.table_cell_size(self.size)
+            })
+            .when(col.align == TextAlign::Center, |this| {
+                this.h_flex().w_full().justify_center()
+            })
+            .when(col.align == TextAlign::Right, |this| {
+                this.h_flex().w_full().justify_end()
+            })
     }
 
     fn context_menu(
@@ -809,6 +856,13 @@ impl DataTableStory {
         cx.notify();
     }
 
+    fn toggle_group_headers(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().show_group_headers = *checked;
+            table.refresh_header_layout(cx);
+        });
+    }
+
     fn on_table_event(
         &mut self,
         _: &Entity<TableState<StockTableDelegate>>,
@@ -982,6 +1036,12 @@ impl Render for DataTableStory {
                             .label("Refresh Data")
                             .selected(self.refresh_data)
                             .on_click(cx.listener(Self::toggle_refresh_data)),
+                    )
+                    .child(
+                        Checkbox::new("group-headers")
+                            .label("Group Headers")
+                            .checked(self.table.read(cx).delegate().show_group_headers)
+                            .on_click(cx.listener(Self::toggle_group_headers)),
                     ),
             )
             .child(
