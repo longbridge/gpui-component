@@ -14,30 +14,60 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
+        build-dependencies = with pkgs; [
+          pkg-config # For dynamically linked libraries
+          makeWrapper # To provide LD_LIBRARY_PATH to the final binary
+          (rust-bin.beta.latest.default.override {
+            extensions = [ "rust-src" ];
+          })
+        ];
+        dynamic-libraries = with pkgs; [
+          wayland
+          
+          vulkan-headers
+          vulkan-loader
+          
+          libxcb
+          libxkbcommon
+          
+          atk
+          fontconfig
+          gio-sharp
+          glib
+          gtk3
+        ];
       in
       {
+        defaultPackage = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
+          pname = "gpui-component-story";
+          version = "0.5.1";
+          src = ./.;
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            # Alternative, if we don't want to provide specific hashes for git crates
+            # allowBuiltinFetchGit = true;
+            outputHashes = {
+              "collections-0.1.0" = "sha256-TmEwCn1SthpwL5kLqnnO4GCG6sRN9snHoioot+NiTP0=";
+              "psm-0.1.30" = "sha256-SQ7aX0XtQEM2/5QPAmFncK4ALatqCrWFphANL7f921c=";
+              "xim-ctext-0.3.0" = "sha256-pRT4Sz1JU9ros47/7pmIW9kosWOGMOItcnNd+VrvnpE=";
+              "zed-font-kit-0.14.1-zed" = "sha256-rxpumYP0QpHW+4e+J1qo5lEZXfBk1LaL/Y0APkUp9cg=";
+              "zed-reqwest-0.12.15-zed" = "sha256-p4SiUrOrbTlk/3bBrzN/mq/t+1Gzy2ot4nso6w6S+F8=";
+              "zed-scap-0.0.8-zed" = "sha256-BihiQHlal/eRsktyf0GI3aSWsUCW7WcICMsC2Xvb7kw=";
+            };
+          };
+          nativeBuildInputs = build-dependencies;
+          buildInputs = dynamic-libraries;
+          postFixup = ''
+            wrapProgram $out/bin/gpui-component-story \
+            --suffix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath dynamic-libraries}
+          '';
+        });
         devShells.default = with pkgs; mkShell {
-          buildInputs = [
-            openssl
-            pkg-config
-            xorg.libX11
-            glib
-            pango
-            atkmm
-            gdk-pixbuf
-            gtk3
-            libsoup_3
-            webkitgtk_4_1
-            libxkbcommon
-            vulkan-loader
-            (rust-bin.beta.latest.default.override {
-              extensions = [ "rust-src" ];
-            })
-          ];
+          buildInputs = build-dependencies ++ dynamic-libraries;
 
           env = {
             RUST_BACKTRACE = "1";
-            LD_LIBRARY_PATH = lib.makeLibraryPath [ vulkan-loader ];
+            LD_LIBRARY_PATH = lib.makeLibraryPath dynamic-libraries;
           };
         };
       }
