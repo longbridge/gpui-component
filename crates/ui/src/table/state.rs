@@ -493,6 +493,14 @@ where
         (headers, rows)
     }
 
+    /// Re-compute the header layout from the current delegate.
+    ///
+    /// Call this after changing delegate state that affects `group_headers`.
+    pub fn refresh_header_layout(&mut self, cx: &mut Context<Self>) {
+        self.update_header_layout(cx);
+        cx.notify();
+    }
+
     fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
         self.col_groups = (0..self.delegate.columns_count(cx))
             .map(|col_ix| {

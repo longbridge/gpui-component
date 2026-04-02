@@ -192,6 +192,7 @@ struct StockTableDelegate {
     loading: bool,
     lazy_load: bool,
     full_loading: bool,
+    show_group_headers: bool,
     clicked_row: Option<usize>,
     eof: bool,
     visible_rows: Range<usize>,
@@ -266,6 +267,7 @@ impl StockTableDelegate {
             ],
             loading: false,
             full_loading: false,
+            show_group_headers: true,
             eof: false,
             visible_cols: Range::default(),
             visible_rows: Range::default(),
@@ -339,6 +341,9 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn group_headers(&self, cx: &App) -> Option<Vec<Vec<ColumnGroup>>> {
+        if !self.show_group_headers {
+            return None;
+        }
         Some(
         vec![
             vec![
@@ -851,6 +856,13 @@ impl DataTableStory {
         cx.notify();
     }
 
+    fn toggle_group_headers(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().show_group_headers = *checked;
+            table.refresh_header_layout(cx);
+        });
+    }
+
     fn on_table_event(
         &mut self,
         _: &Entity<TableState<StockTableDelegate>>,
@@ -1024,6 +1036,12 @@ impl Render for DataTableStory {
                             .label("Refresh Data")
                             .selected(self.refresh_data)
                             .on_click(cx.listener(Self::toggle_refresh_data)),
+                    )
+                    .child(
+                        Checkbox::new("group-headers")
+                            .label("Group Headers")
+                            .checked(self.table.read(cx).delegate().show_group_headers)
+                            .on_click(cx.listener(Self::toggle_group_headers)),
                     ),
             )
             .child(
