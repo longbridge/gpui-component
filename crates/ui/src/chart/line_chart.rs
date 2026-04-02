@@ -119,7 +119,7 @@ where
         // Draw X axis
         let data_len = self.data.len();
         let x_label = self.data.iter().enumerate().filter_map(|(i, d)| {
-            if (i + 1) % self.tick_margin == 0 {
+            if i == 0 || i + 1 == data_len || (i + 1) % self.tick_margin == 0 {
                 x.tick(&x_fn(d)).map(|x_tick| {
                     let align = match i {
                         0 => {

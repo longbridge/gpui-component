@@ -1,21 +1,22 @@
 //! 终端侧边栏服务器监控面板
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use chrono::Utc;
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    div, linear_color_stop, linear_gradient, px, AnyElement, App, Context, EventEmitter,
-    FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, ParentElement, Render,
-    SharedString, StatefulInteractiveElement, Styled, Task, Window,
+    AnyElement, App, Context, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Task,
+    Window, div, linear_color_stop, linear_gradient, px,
 };
 use gpui_component::{
+    ActiveTheme, Disableable, IconName, Sizable, StyledExt,
     button::{Button, ButtonVariants},
     chart::{AreaChart, LineChart, PieChart},
     h_flex,
     progress::Progress,
     spinner::Spinner,
     tooltip::Tooltip,
-    v_flex, ActiveTheme, Disableable, IconName, Sizable, StyledExt,
+    v_flex,
 };
 use one_core::gpui_tokio::Tokio;
 use one_core::storage::get_config_dir;
@@ -30,6 +31,7 @@ use tokio::sync::Mutex;
 
 const REFRESH_INTERVAL_SECS: u64 = 3;
 const HISTORY_LIMIT: usize = 30;
+const MAX_HISTORY_X_AXIS_LABELS: usize = 6;
 const SERVER_MONITOR_PREFS_FILE: &str = "server-monitor.json";
 const REMOTE_HELPER_DIR: &str = "$HOME/.onetcli-monitor";
 const REMOTE_HELPER_SCRIPT: &str = "$HOME/.onetcli-monitor/collect.sh";
@@ -393,6 +395,7 @@ struct ServerStats {
 struct HistoryPoint {
     label: SharedString,
     value: f64,
+    ceiling: f64,
 }
 
 #[derive(Clone)]
@@ -579,25 +582,27 @@ impl ServerMonitorPanel {
             return;
         }
 
-        self.refresh_task = Some(cx.spawn(async move |this, cx| loop {
-            let should_continue = this
-                .update(cx, |this, cx| {
-                    if !this.monitor_enabled {
-                        this.refresh_task = None;
-                        return false;
-                    }
-                    this.refresh_now(cx);
-                    true
-                })
-                .unwrap_or(false);
+        self.refresh_task = Some(cx.spawn(async move |this, cx| {
+            loop {
+                let should_continue = this
+                    .update(cx, |this, cx| {
+                        if !this.monitor_enabled {
+                            this.refresh_task = None;
+                            return false;
+                        }
+                        this.refresh_now(cx);
+                        true
+                    })
+                    .unwrap_or(false);
 
-            if !should_continue {
-                break;
+                if !should_continue {
+                    break;
+                }
+
+                cx.background_executor()
+                    .timer(Duration::from_secs(REFRESH_INTERVAL_SECS))
+                    .await;
             }
-
-            cx.background_executor()
-                .timer(Duration::from_secs(REFRESH_INTERVAL_SECS))
-                .await;
         }));
     }
 
@@ -960,25 +965,28 @@ impl ServerMonitorPanel {
     }
 
     fn render_cpu_chart(&self, cx: &mut Context<Self>) -> AnyElement {
+        let cpu_usage = self
+            .current_stats
+            .as_ref()
+            .and_then(|stats| stats.cpu_usage.as_ref());
+
         if self.cpu_history.is_empty() {
-            return placeholder(t!("ServerMonitor.awaiting_data"), cx);
+            return cpu_usage
+                .filter(|usage| !usage.cores.is_empty())
+                .map(|usage| render_cpu_core_grid(&usage.cores, cx))
+                .unwrap_or_else(|| placeholder(t!("ServerMonitor.awaiting_data"), cx));
         }
 
-        let points = history_points(&self.cpu_history);
-        div()
-            .h(px(120.0))
-            .child(
-                AreaChart::new(points)
-                    .x(|point| point.label.clone())
-                    .y(|point| point.value)
-                    .stroke(cx.theme().chart_1)
-                    .fill(linear_gradient(
-                        0.0,
-                        linear_color_stop(cx.theme().chart_1.opacity(0.35), 1.0),
-                        linear_color_stop(cx.theme().background.opacity(0.1), 0.0),
-                    )),
-            )
-            .into_any_element()
+        cpu_usage
+            .filter(|usage| !usage.cores.is_empty())
+            .map(|usage| {
+                v_flex()
+                    .gap_3()
+                    .child(render_cpu_history_chart(&self.cpu_history, cx))
+                    .child(render_cpu_core_grid(&usage.cores, cx))
+                    .into_any_element()
+            })
+            .unwrap_or_else(|| render_cpu_history_chart(&self.cpu_history, cx))
     }
 
     fn render_memory_chart(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -1086,7 +1094,8 @@ impl ServerMonitorPanel {
                     .stroke(cx.theme().chart_2)
                     .dot()
                     .y(|point| point.tx)
-                    .stroke(cx.theme().chart_4),
+                    .stroke(cx.theme().chart_4)
+                    .tick_margin(history_tick_margin(self.rx_history.len())),
             )
             .into_any_element()
     }
@@ -1227,6 +1236,72 @@ fn render_process_column(
         .into_any_element()
 }
 
+fn render_cpu_core_grid(
+    cores: &[CpuUsageCore],
+    cx: &mut Context<ServerMonitorPanel>,
+) -> AnyElement {
+    v_flex()
+        .gap_2()
+        .child(
+            div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .child("Per-core"),
+        )
+        .child(
+            h_flex()
+                .w_full()
+                .flex_wrap()
+                .gap_2()
+                .children(cores.iter().map(|core| {
+                    let value = core.percent.clamp(0.0, 100.0);
+                    let label = core.name.clone();
+                    v_flex()
+                        .w(px(108.0))
+                        .gap_1()
+                        .child(
+                            h_flex()
+                                .justify_between()
+                                .child(div().text_xs().child(label.clone()))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(format!("{value:.1}%")),
+                                ),
+                        )
+                        .child(
+                            Progress::new(SharedString::from(format!("cpu-core-{label}")))
+                                .value(value as f32),
+                        )
+                })),
+        )
+        .into_any_element()
+}
+
+fn render_cpu_history_chart(values: &[f64], cx: &App) -> AnyElement {
+    let points = history_points(values);
+    div()
+        .h(px(120.0))
+        .child(
+            AreaChart::new(points)
+                .x(|point| point.label.clone())
+                .y(|point| point.value)
+                .stroke(cx.theme().chart_1)
+                .fill(linear_gradient(
+                    0.0,
+                    linear_color_stop(cx.theme().chart_1.opacity(0.35), 1.0),
+                    linear_color_stop(cx.theme().background.opacity(0.1), 0.0),
+                ))
+                // Keep the Y axis stable at 0..100 so idle CPUs still render a visible chart.
+                .y(|point| point.ceiling)
+                .stroke(cx.theme().chart_1.opacity(0.0))
+                .fill(cx.theme().chart_1.opacity(0.0))
+                .tick_margin(history_tick_margin(values.len())),
+        )
+        .into_any_element()
+}
+
 fn placeholder(message: impl Into<SharedString>, cx: &App) -> AnyElement {
     let message: SharedString = message.into();
     div()
@@ -1247,6 +1322,7 @@ fn history_points(values: &[f64]) -> Vec<HistoryPoint> {
         .map(|(index, value)| HistoryPoint {
             label: SharedString::from(index.to_string()),
             value: *value,
+            ceiling: 100.0,
         })
         .collect()
 }
@@ -1261,6 +1337,14 @@ fn network_history_points(rx: &[f64], tx: &[f64]) -> Vec<NetworkHistoryPoint> {
             tx: *tx,
         })
         .collect()
+}
+
+fn history_tick_margin(point_count: usize) -> usize {
+    if point_count <= MAX_HISTORY_X_AXIS_LABELS {
+        1
+    } else {
+        (point_count + MAX_HISTORY_X_AXIS_LABELS - 1) / MAX_HISTORY_X_AXIS_LABELS
+    }
 }
 
 pub fn push_history_point(history: &mut Vec<f64>, value: f64, limit: HistoryLimit) {
@@ -1616,7 +1700,13 @@ fn parse_indexed(prefix: &str, section: &BTreeMap<String, String>) -> Vec<usize>
 }
 
 fn parse_u64(value: &str) -> Option<u64> {
-    value.parse::<u64>().ok()
+    value.parse::<u64>().ok().or_else(|| {
+        let parsed = value.parse::<f64>().ok()?;
+        if !parsed.is_finite() || parsed < 0.0 {
+            return None;
+        }
+        Some(parsed.round() as u64)
+    })
 }
 
 fn parse_u32(value: &str) -> Option<u32> {
@@ -1807,8 +1897,9 @@ fn format_bytes_per_sec(value: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        push_history_point, sample_cpu_usage, sample_network_rates, split_sections, CpuSnapshot,
-        HistoryLimit, MemoryStats, NetworkTotals, ProcessEntry,
+        CpuSnapshot, HistoryLimit, MemoryStats, NetworkTotals, ProcessEntry, history_points,
+        history_tick_margin, parse_server_stats, push_history_point, sample_cpu_usage,
+        sample_network_rates, split_sections,
     };
 
     #[test]
@@ -1867,6 +1958,64 @@ process:
     }
 
     #[test]
+    fn parse_server_stats_keeps_total_cpu_snapshot_with_scientific_notation() {
+        let previous = parse_server_stats(
+            r#"
+time:
+  timestamp: 1
+cpu:
+  snapshot:
+    - name: "cpu"
+      loadUser: 90851036
+      loadSystem: 231738113
+      loadIdle: 5141899108
+      loadTotal: 5.464488257e+09
+    - name: "cpu0"
+      loadUser: 12295114
+      loadSystem: 31524889
+      loadIdle: 411583038
+      loadTotal: 455719704
+"#,
+        )
+        .expect("previous payload should parse");
+        let current = parse_server_stats(
+            r#"
+time:
+  timestamp: 2
+cpu:
+  snapshot:
+    - name: "cpu"
+      loadUser: 90852036
+      loadSystem: 231739113
+      loadIdle: 5141899208
+      loadTotal: 5.464490357e+09
+    - name: "cpu0"
+      loadUser: 12295214
+      loadSystem: 31524989
+      loadIdle: 411583138
+      loadTotal: 455720004
+"#,
+        )
+        .expect("current payload should parse");
+
+        let sampled = sample_cpu_usage(&previous.cpu_snapshots, &current.cpu_snapshots);
+
+        assert!(
+            previous
+                .cpu_snapshots
+                .iter()
+                .any(|snapshot| snapshot.name == "cpu")
+        );
+        assert!(
+            current
+                .cpu_snapshots
+                .iter()
+                .any(|snapshot| snapshot.name == "cpu")
+        );
+        assert!(sampled.total_percent > 0.0);
+    }
+
+    #[test]
     fn sample_network_rates_uses_interval_and_total_delta() {
         let previous = NetworkTotals::new(vec![("eth0", 1_000, 2_000), ("ens5", 2_000, 4_000)]);
         let current = NetworkTotals::new(vec![("eth0", 1_900, 2_300), ("ens5", 2_300, 5_200)]);
@@ -1886,6 +2035,23 @@ process:
         push_history_point(&mut history, 40.0, HistoryLimit::new(3));
 
         assert_eq!(history, vec![20.0, 30.0, 40.0]);
+    }
+
+    #[test]
+    fn history_points_keep_cpu_chart_domain_non_degenerate() {
+        let points = history_points(&[0.0, 0.0, 0.0]);
+
+        assert_eq!(points.len(), 3);
+        assert!(points.iter().all(|point| point.value == 0.0));
+        assert!(points.iter().all(|point| point.ceiling == 100.0));
+    }
+
+    #[test]
+    fn history_tick_margin_scales_down_dense_axes() {
+        assert_eq!(history_tick_margin(0), 1);
+        assert_eq!(history_tick_margin(6), 1);
+        assert_eq!(history_tick_margin(7), 2);
+        assert_eq!(history_tick_margin(30), 5);
     }
 
     #[test]
