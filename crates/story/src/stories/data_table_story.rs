@@ -21,7 +21,7 @@ use gpui_component::{
     menu::{DropdownMenu, PopupMenu},
     spinner::Spinner,
     table::{
-        Column, ColumnFixed, ColumnHeader, ColumnSort, DataTable, TableDelegate, TableEvent,
+        Column, ColumnFixed, ColumnGroup, ColumnSort, DataTable, TableDelegate, TableEvent,
         TableState,
     },
     v_flex,
@@ -338,42 +338,39 @@ impl TableDelegate for StockTableDelegate {
         self.columns[col_ix].clone()
     }
 
-    fn header_rows(&self, cx: &App) -> Vec<Vec<ColumnHeader>> {
+    fn group_headers(&self, cx: &App) -> Option<Vec<Vec<ColumnGroup>>> {
+        Some(
         vec![
             vec![
-                ColumnHeader::Group {
+                ColumnGroup {
                     label: "Stock Info".into(),
                     span: 4,
                 },
-                ColumnHeader::Group {
+                ColumnGroup {
                     label: "Price & Change".into(),
                     span: 3,
                 },
             ],
             vec![
-                ColumnHeader::Group {
+                ColumnGroup {
                     label: "Identity".into(),
                     span: 4,
                 },
-                ColumnHeader::Group {
+                ColumnGroup {
                     label: "Stock Info".into(),
                     span: 7,
                 },
-                ColumnHeader::Group {
+                ColumnGroup {
                     label: "Ranking & Stats".into(),
                     span: 14,
                 },
-                ColumnHeader::Group {
+                ColumnGroup {
                     label: "Market Data".into(),
                     span: self.columns_count(cx) - 25,
                 },
             ],
-            (0..self.columns_count(cx))
-                .map(|i| ColumnHeader::Leaf(self.column(i, cx)))
-                .collect::<Vec<_>>(),
-        ]
+        ])
     }
-
     fn render_th(
         &mut self,
         col_ix: usize,

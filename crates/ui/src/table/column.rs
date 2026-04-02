@@ -50,16 +50,20 @@ pub struct Column {
     pub max_width: Pixels,
 }
 
-/// A header cell can be a leaf column or a spanning group header.
+/// A column group can be used to group multiple columns under a single header.
 #[derive(Debug, Clone)]
-pub enum ColumnHeader {
-    /// A regular sortable/resizable leaf column.
-    Leaf(Column),
-    /// A group header spanning `span` leaf columns beneath it.
-    Group {
-        label: SharedString,
-        span: usize,
-    },
+pub struct ColumnGroup {
+    pub label: SharedString,
+    pub span: usize,
+}
+
+impl ColumnGroup {
+    pub fn new(label: impl Into<SharedString>, span: usize) -> Self {
+        Self {
+            label: label.into(),
+            span,
+        }
+    }
 }
 
 impl Default for Column {

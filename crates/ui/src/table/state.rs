@@ -505,63 +505,52 @@ where
     }
 
     fn update_header_layout(&mut self, cx: &mut Context<Self>) {
-        let rows = self.delegate.header_rows(cx);
-        let mut layout = Vec::with_capacity(rows.len());
+        let group_rows = self.delegate.group_headers(cx);
 
-        fn process_header(
-            header: &ColumnHeader,
-            col_groups: &[ColGroup],
-            current_leaf_ix: &mut usize,
-        ) -> HeaderCell {
-            match header {
-                ColumnHeader::Leaf(col) => {
-                    let ix = *current_leaf_ix;
-                    *current_leaf_ix += 1;
-                    HeaderCell {
-                        label: col.name.clone(),
-                        width: col_groups.get(ix).map_or(px(0.), |g| g.width),
-                        col_span: 1,
-                        is_leaf: true,
-                        leaf_col_ix: Some(ix),
-                        start_leaf_col_ix: ix,
-                    }
-                }
-                ColumnHeader::Group {
-                    label,
-                    span,
-                } => {
+        let mut layout = match group_rows.as_ref() {
+            Some(rows) => Vec::with_capacity(rows.len() + 1),
+            None => Vec::with_capacity(1),
+        };
+
+        if let Some(group_rows) = group_rows {
+            for row in group_rows {
+                let mut cell_row = Vec::with_capacity(row.len());
+                let mut current_leaf_ix = 0;
+                for group in row {
                     let mut width = px(0.);
-                    let start_leaf_col_ix = *current_leaf_ix;
-                    for i in 0..*span {
-                        if *current_leaf_ix + i < col_groups.len() {
-                            width += col_groups[*current_leaf_ix + i].width;
+                    let start_leaf_col_ix = current_leaf_ix;
+                    for i in 0..group.span {
+                        if current_leaf_ix + i < self.col_groups.len() {
+                            width += self.col_groups[current_leaf_ix + i].width;
                         }
                     }
-                    *current_leaf_ix += *span;
-                    HeaderCell {
-                        label: label.clone(),
+                    current_leaf_ix += group.span;
+                    cell_row.push(HeaderCell {
+                        label: group.label.clone(),
                         width,
-                        col_span: *span,
+                        col_span: group.span,
                         is_leaf: false,
                         leaf_col_ix: None,
                         start_leaf_col_ix,
-                    }
+                    });
                 }
+                layout.push(cell_row);
             }
         }
 
-        for row in rows {
-            let mut cell_row = Vec::with_capacity(row.len());
-            let mut current_leaf_ix = 0;
-            for header in row {
-                cell_row.push(process_header(
-                    &header,
-                    &self.col_groups,
-                    &mut current_leaf_ix,
-                ));
-            }
-            layout.push(cell_row);
+        let mut leaf_row = Vec::with_capacity(self.col_groups.len());
+        for (ix, group) in self.col_groups.iter().enumerate() {
+            leaf_row.push(HeaderCell {
+                label: group.column.name.clone(),
+                width: group.width,
+                col_span: 1,
+                is_leaf: true,
+                leaf_col_ix: Some(ix),
+                start_leaf_col_ix: ix,
+            });
         }
+        layout.push(leaf_row);
+
         self.header_layout = layout;
     }
 

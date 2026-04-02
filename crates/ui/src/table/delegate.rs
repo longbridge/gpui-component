@@ -8,7 +8,7 @@ use gpui::{
 use crate::{
     ActiveTheme as _, Icon, IconName, Size, h_flex,
     menu::PopupMenu,
-    table::{Column, ColumnHeader, ColumnSort, TableState, loading::Loading},
+    table::{Column, ColumnGroup, ColumnSort, TableState, loading::Loading},
 };
 
 /// A delegate trait for providing data and rendering for a table.
@@ -44,14 +44,11 @@ pub trait TableDelegate: Sized + 'static {
         div().id("header")
     }
 
-    /// Return the header row definitions (can be multi-level).
-    /// Default: single row derived from `column()` calls.
-    fn header_rows(&self, cx: &App) -> Vec<Vec<ColumnHeader>> {
-        vec![
-            (0..self.columns_count(cx))
-                .map(|i| ColumnHeader::Leaf(self.column(i, cx)))
-                .collect::<Vec<_>>(),
-        ]
+    /// Return the group headers definitions (can be multi-level).
+    ///
+    /// By default, it returns None, meaning no group headers.
+    fn group_headers(&self, cx: &App) -> Option<Vec<Vec<ColumnGroup>>> {
+        None
     }
 
     /// Custom render for a group header cell.
