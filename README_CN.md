@@ -15,6 +15,7 @@
 <p align="center">
   <a href="README.md">English</a> ·
   <a href="#安装">安装</a> ·
+  <a href="https://github.com/suruns/onetcli/releases">发布</a> ·
   <a href="#功能特性">功能特性</a> ·
   <a href="#应用截图">截图</a> ·
   <a href="CONTRIBUTING.md">参与贡献</a>
@@ -29,13 +30,13 @@
 
 ## 功能特性
 
-**多数据库管理** — 在同一界面连接 PostgreSQL、MySQL、SQLite、SQL Server、Oracle 和 ClickHouse。
+**多数据库管理** — 在同一界面连接 PostgreSQL、MySQL、SQLite、SQL Server、Oracle、ClickHouse 和 DuckDB。
 
 **Redis** — 专用 Redis 视图，支持键浏览、值查看与集群连接。
 
 **MongoDB** — MongoDB 浏览器，支持集合浏览、文档查看与查询。
 
-**SSH 与 SFTP** — 集成 SSH 终端和 SFTP 文件管理器，支持密钥认证。
+**SSH、SFTP 与串口** — 在同一工作区集成 SSH 终端、SFTP 文件管理器与串口连接能力。
 
 **本地终端** — 内置终端，支持多标签页工作流。
 
@@ -68,6 +69,8 @@
 | Windows | x86_64 | — |
 
 ## 安装
+
+最新版本下载：[v0.2.2](https://github.com/suruns/onetcli/releases/tag/v0.2.2)
 
 ### 前置条件
 
