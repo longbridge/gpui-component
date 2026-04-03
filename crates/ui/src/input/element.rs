@@ -1842,17 +1842,23 @@ impl Element for TextElement {
             cx,
         );
 
+        let scale_factor = window.scale_factor();
         self.state.update(cx, |state, cx| {
             state.last_layout = Some(prepaint.last_layout.clone());
             state.last_bounds = Some(bounds);
             state.last_cursor = Some(state.cursor());
-            state.set_input_bounds(input_bounds, cx);
+            state.set_input_bounds(input_bounds, scale_factor, cx);
             state.last_selected_range = Some(selected_range);
             state.scroll_size = prepaint.scroll_size;
-            state.update_scroll_offset(Some(prepaint.cursor_scroll_offset), cx);
+            state.update_scroll_offset(
+                Some(prepaint.cursor_scroll_offset),
+                scale_factor,
+                cx,
+            );
             state.deferred_scroll_offset = None;
-
-            cx.notify();
+            // No unconditional cx.notify() here — paint is a read-only observation endpoint.
+            // set_input_bounds and update_scroll_offset notify internally only when
+            // values truly change at physical-pixel granularity.
         });
 
         if let Some(hitbox) = prepaint.hover_definition_hitbox.as_ref() {
