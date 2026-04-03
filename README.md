@@ -15,7 +15,7 @@
 <p align="center">
   <a href="README_CN.md">中文</a> ·
   <a href="#installation">Installation</a> ·
-  <a href="https://github.com/suruns/onetcli/releases">Releases</a> ·
+  <a href="https://github.com/feigeCode/onetcli/releases">Releases</a> ·
   <a href="#features">Features</a> ·
   <a href="#screenshots">Screenshots</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
@@ -70,7 +70,7 @@
 
 ## Installation
 
-Latest release: [v0.2.2](https://github.com/suruns/onetcli/releases/tag/v0.2.2)
+Latest release: [v0.2.2](https://github.com/feigeCode/onetcli/releases/tag/v0.2.2)
 
 ### Prerequisites
 

@@ -15,7 +15,7 @@
 <p align="center">
   <a href="README.md">English</a> ·
   <a href="#安装">安装</a> ·
-  <a href="https://github.com/suruns/onetcli/releases">发布</a> ·
+  <a href="https://github.com/feigeCode/onetcli/releases">发布</a> ·
   <a href="#功能特性">功能特性</a> ·
   <a href="#应用截图">截图</a> ·
   <a href="CONTRIBUTING.md">参与贡献</a>
@@ -70,7 +70,7 @@
 
 ## 安装
 
-最新版本下载：[v0.2.2](https://github.com/suruns/onetcli/releases/tag/v0.2.2)
+最新版本下载：[v0.2.2](https://github.com/feigeCode/onetcli/releases/tag/v0.2.2)
 
 ### 前置条件
 
