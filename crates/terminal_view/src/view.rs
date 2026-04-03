@@ -1237,16 +1237,17 @@ impl TerminalView {
         cx.notify();
     }
 
-    fn copy(&mut self, _: &Copy, _window: &mut Window, cx: &mut Context<Self>) {
+    fn copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(text) = self.terminal.read(cx).selection_text() {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
         }
+        self.focus_terminal(window, cx);
     }
 
-    fn paste(&mut self, _: &Paste, _window: &mut Window, cx: &mut Context<Self>) {
+    fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
             if let Some(text) = clipboard.text() {
-                self.paste_text(&text, _window, cx);
+                self.paste_text(&text, window, cx);
             }
         }
     }
@@ -1278,7 +1279,7 @@ impl TerminalView {
         // ALT_SCREEN（如 Vim、less）属于全屏交互程序，粘贴内容不会像 shell 那样直接执行。
         // 这里跳过高危/多行确认，避免编辑器场景误弹确认框。
         if mode.contains(TermMode::ALT_SCREEN) {
-            self.paste_text_unchecked(text, cx);
+            self.paste_text_unchecked(text, window, cx);
             return;
         }
 
@@ -1314,10 +1315,10 @@ impl TerminalView {
             return;
         }
 
-        self.paste_text_unchecked(text, cx);
+        self.paste_text_unchecked(text, window, cx);
     }
 
-    fn paste_text_unchecked(&mut self, text: &str, cx: &mut Context<Self>) {
+    fn paste_text_unchecked(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         // 仅在应用请求 bracketed paste 模式时才包装，避免把控制序列
         // 原样送进不支持的程序（例如 Vim 未开启时可能导致光标/位置异常）。
         let mode = self.terminal.read(cx).mode();
@@ -1327,6 +1328,7 @@ impl TerminalView {
         } else {
             self.write_to_pty(text.as_bytes().to_vec(), cx);
         }
+        self.focus_terminal(window, cx);
     }
 
     /// 粘贴代码块到终端（用于AI生成的代码）
@@ -1384,13 +1386,17 @@ impl TerminalView {
                         .ok_text(t!("Common.ok"))
                         .cancel_text(t!("Common.cancel")),
                 )
-                .on_ok(move |_event, _window, cx| {
+                .on_ok(move |_event, window, cx| {
                     view_ok.update(cx, |this, cx| {
-                        this.paste_text_unchecked(&text_ok, cx);
+                        this.paste_text_unchecked(&text_ok, window, cx);
                     });
                     true
                 })
         });
+    }
+
+    fn focus_terminal(&self, window: &mut Window, cx: &mut Context<Self>) {
+        window.focus(&self.focus_handle, cx);
     }
 
     fn show_unbracketed_paste_block_dialog(
