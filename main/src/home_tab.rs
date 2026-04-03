@@ -832,6 +832,67 @@ impl HomePage {
         }
     }
 
+    /// 复制连接，创建一个副本
+    fn duplicate_connection(
+        &mut self,
+        conn: StoredConnection,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let storage = cx.global::<GlobalStorageState>().storage.clone();
+        let current_user = self.current_user.clone();
+
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let result: anyhow::Result<StoredConnection> = (|| {
+                let repo = storage
+                    .get::<ConnectionRepository>()
+                    .ok_or_else(|| anyhow::anyhow!("ConnectionRepository not found"))?;
+
+                // 获取现有连接名称列表，用于生成唯一名称
+                let existing_names: std::collections::HashSet<String> = repo
+                    .list()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|c| c.name.clone())
+                    .collect();
+
+                // 生成新的唯一名称
+                let new_name = generate_duplicate_name(&conn.name, &existing_names);
+
+                // 克隆连接，清除 id 和云同步相关字段
+                let mut new_conn = conn.clone();
+                new_conn.id = None;
+                new_conn.cloud_id = None;
+                new_conn.last_synced_at = None;
+                new_conn.name = new_name;
+                new_conn.owner_id = current_user.map(|u| u.id);
+
+                // 保存新连接
+                repo.insert(&mut new_conn)?;
+                Ok(new_conn)
+            })();
+
+            match result {
+                Ok(saved_conn) => {
+                    // 发出 ConnectionCreated 事件，首页自动刷新
+                    _ = this.update(cx, |_this, cx| {
+                        if let Some(notifier) = get_notifier(cx) {
+                            notifier.update(cx, |_, cx| {
+                                cx.emit(ConnectionDataEvent::ConnectionCreated {
+                                    connection: saved_conn,
+                                });
+                            });
+                        }
+                    });
+                }
+                Err(e) => {
+                    tracing::error!("复制连接失败: {}", e);
+                }
+            }
+        })
+        .detach();
+    }
+
     fn confirm_delete_connection(
         &mut self,
         conn_id: i64,
@@ -2480,6 +2541,7 @@ impl HomePage {
         let edit_conn = conn.clone();
         let edit_conn_type = conn.connection_type;
         let edit_conn_name = conn.name.clone();
+        let duplicate_conn = conn.clone();
         let delete_conn_id = conn.id;
         let delete_conn_name = conn.name.clone();
         let is_selected = selected_id == conn.id;
@@ -2580,6 +2642,22 @@ impl HomePage {
                     })
                     .when(can_edit, |this| {
                         this.child(
+                            Button::new(SharedString::from(format!(
+                                "duplicate-conn-{}",
+                                conn.id.unwrap_or(0)
+                            )))
+                            .icon(IconName::Copy)
+                            .with_size(Size::Small)
+                            .primary()
+                            .tooltip(t!("Home.duplicate_connection"))
+                            .on_click(cx.listener(
+                                move |this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    this.duplicate_connection(duplicate_conn.clone(), window, cx);
+                                },
+                            )),
+                        )
+                        .child(
                             Button::new(SharedString::from(format!(
                                 "edit-conn-{}",
                                 conn.id.unwrap_or(0)
@@ -2931,6 +3009,25 @@ impl HomePage {
 
         card.into_any_element()
     }
+}
+
+/// 生成复制连接的唯一名称
+fn generate_duplicate_name(original_name: &str, existing_names: &std::collections::HashSet<String>) -> String {
+    let base_name = format!("{} (副本)", original_name);
+
+    if !existing_names.contains(&base_name) {
+        return base_name;
+    }
+
+    // 如果基础名称已存在，添加数字序号
+    for i in 2..100 {
+        let name = format!("{} (副本 {})", original_name, i);
+        if !existing_names.contains(&name) {
+            return name;
+        }
+    }
+
+    base_name
 }
 
 impl Focusable for HomePage {
