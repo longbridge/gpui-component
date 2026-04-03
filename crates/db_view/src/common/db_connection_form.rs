@@ -1598,6 +1598,12 @@ impl DbConnectionForm {
                 c.team_id = team_id;
                 c.params = serde_json::to_string(&connection)
                     .map_err(|e| format!("{}: {}", t!("ConnectionForm.serialize_failed"), e))?;
+                // 更新 selected_databases 以匹配新的 database 配置
+                c.selected_databases = if let Some(database) = &connection.database {
+                    Some(format!("[\"{}\"]", database))
+                } else {
+                    None
+                };
                 c
             }
             None => {

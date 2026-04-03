@@ -145,6 +145,10 @@ Home:
     en: Edit Connection
     zh-CN: 编辑连接
     zh-HK: 編輯連線
+  duplicate_connection:
+    en: Duplicate Connection
+    zh-CN: 复制连接
+    zh-HK: 複製連線
   delete_connection:
     en: Delete Connection
     zh-CN: 删除连接
