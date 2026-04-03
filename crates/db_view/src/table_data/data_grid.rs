@@ -10,6 +10,7 @@ use gpui_component::{
 };
 use one_ui::edit_table::{Column, EditTable, EditTableEvent, EditTableState};
 use rust_i18n::t;
+use rust_xlsxwriter::Workbook;
 use tracing::{error, log::trace};
 
 use crate::import_export::table_export_view::DataExportView;
@@ -229,6 +230,59 @@ impl ExportFormat {
     fn include_header(self) -> bool {
         matches!(self, ExportFormat::Xlsx | ExportFormat::Csv)
     }
+}
+
+fn build_export_bytes(
+    format: ExportFormat,
+    rows: Vec<Vec<Option<String>>>,
+    columns: Vec<SharedString>,
+    mut metadata: TableMetadata,
+) -> Result<Option<Vec<u8>>, String> {
+    if rows.is_empty() {
+        return Ok(None);
+    }
+
+    let mut export_rows: Vec<Vec<String>> = rows
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|value| value.unwrap_or_else(|| "NULL".to_string()))
+                .collect()
+        })
+        .collect();
+
+    if format.include_header() {
+        let header = columns
+            .iter()
+            .map(|column| column.as_ref().to_string())
+            .collect();
+        export_rows.insert(0, header);
+    }
+
+    metadata.column_names = columns.clone();
+
+    match format {
+        ExportFormat::Xlsx => build_xlsx_bytes(&export_rows).map(Some),
+        _ => Ok(Some(
+            CopyFormatter::format(format.copy_format(), &export_rows, &columns, &metadata)
+                .into_bytes(),
+        )),
+    }
+}
+
+fn build_xlsx_bytes(rows: &[Vec<String>]) -> Result<Vec<u8>, String> {
+    let mut workbook = Workbook::new();
+    let worksheet = workbook.add_worksheet();
+
+    for (row_index, row) in rows.iter().enumerate() {
+        for (col_index, cell) in row.iter().enumerate() {
+            worksheet
+                .write_string(row_index as u32, col_index as u16, cell)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+
+    workbook.save_to_buffer().map_err(|error| error.to_string())
 }
 
 /// 数据表格组件
@@ -773,23 +827,35 @@ impl DataGrid {
                 return;
             };
 
-            let content =
-                match Self::build_export_content(format, rows, columns.clone(), metadata.clone()) {
-                    Some(content) => content,
-                    None => {
-                        let _ = cx.update(|cx| {
-                            if let Some(window_id) = window_id {
-                                let _ = cx.update_window(window_id, |_entity, window, cx| {
-                                    window.push_notification(
-                                        t!("TableDataGrid.no_data_to_export").to_string(),
-                                        cx,
-                                    );
-                                });
-                            }
-                        });
-                        return;
-                    }
-                };
+            let bytes = match build_export_bytes(format, rows, columns.clone(), metadata.clone()) {
+                Ok(Some(bytes)) => bytes,
+                Ok(None) => {
+                    let _ = cx.update(|cx| {
+                        if let Some(window_id) = window_id {
+                            let _ = cx.update_window(window_id, |_entity, window, cx| {
+                                window.push_notification(
+                                    t!("TableDataGrid.no_data_to_export").to_string(),
+                                    cx,
+                                );
+                            });
+                        }
+                    });
+                    return;
+                }
+                Err(error) => {
+                    let _ = cx.update(|cx| {
+                        if let Some(window_id) = window_id {
+                            let _ = cx.update_window(window_id, |_entity, window, cx| {
+                                window.push_notification(
+                                    t!("TableDataGrid.export_failed", error = error).to_string(),
+                                    cx,
+                                );
+                            });
+                        }
+                    });
+                    return;
+                }
+            };
 
             let base_name = if table_name.is_empty() {
                 "result_set"
@@ -818,7 +884,7 @@ impl DataGrid {
             let full_path_for_write = full_path.clone();
 
             let write_result = cx
-                .background_spawn(async move { std::fs::write(&full_path_for_write, content) })
+                .background_spawn(async move { std::fs::write(&full_path_for_write, bytes) })
                 .await;
 
             let _ = cx.update(|cx| {
@@ -905,42 +971,6 @@ impl DataGrid {
                 .collect();
             (columns, query_result.rows)
         }
-    }
-
-    fn build_export_content(
-        format: ExportFormat,
-        rows: Vec<Vec<Option<String>>>,
-        columns: Vec<SharedString>,
-        mut metadata: TableMetadata,
-    ) -> Option<String> {
-        if rows.is_empty() {
-            return None;
-        }
-
-        let mut export_rows: Vec<Vec<String>> = rows
-            .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(|value| value.unwrap_or_else(|| "NULL".to_string()))
-                    .collect()
-            })
-            .collect();
-
-        if format.include_header() {
-            let header = columns
-                .iter()
-                .map(|column| column.as_ref().to_string())
-                .collect();
-            export_rows.insert(0, header);
-        }
-
-        metadata.column_names = columns.clone();
-        Some(CopyFormatter::format(
-            format.copy_format(),
-            &export_rows,
-            &columns,
-            &metadata,
-        ))
     }
 
     fn load_data_with_sql(&self, sql: String, cx: &mut App) {
@@ -2517,10 +2547,38 @@ pub fn notification(cx: &mut App, error: String) {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_header_order_by_clause, collect_delete_row_indices};
+    use super::{
+        ExportFormat, TableMetadata, build_header_order_by_clause, collect_delete_row_indices,
+    };
     use db::DbManager;
+    use gpui::SharedString;
     use one_core::storage::DatabaseType;
     use one_ui::edit_table::ColumnSort;
+    use std::io::{Cursor, Read};
+    use zip::ZipArchive;
+
+    fn sample_export_input() -> (Vec<Vec<Option<String>>>, Vec<SharedString>, TableMetadata) {
+        let rows = vec![vec![
+            Some("1".to_string()),
+            Some("Line 1\nLine 2".to_string()),
+        ]];
+        let columns = vec![SharedString::from("id"), SharedString::from("body")];
+        let metadata = TableMetadata::new("news").with_columns(vec!["id", "body"]);
+        (rows, columns, metadata)
+    }
+
+    fn read_xlsx_entry(bytes: &[u8], entry_name: &str) -> String {
+        let mut archive =
+            ZipArchive::new(Cursor::new(bytes)).expect("xlsx bytes should be a valid zip archive");
+        let mut entry = archive
+            .by_name(entry_name)
+            .unwrap_or_else(|_| panic!("missing xlsx entry: {entry_name}"));
+        let mut content = String::new();
+        entry
+            .read_to_string(&mut content)
+            .expect("xlsx entry should be valid utf-8 xml");
+        content
+    }
 
     #[test]
     fn build_header_order_by_clause_quotes_mysql_identifier() {
@@ -2580,5 +2638,34 @@ mod tests {
         let rows = collect_delete_row_indices(vec![1, 0], Some(5));
 
         assert_eq!(rows, vec![1, 0]);
+    }
+
+    #[test]
+    fn build_export_bytes_creates_zip_based_xlsx_payload() {
+        let (rows, columns, metadata) = sample_export_input();
+
+        let bytes = super::build_export_bytes(ExportFormat::Xlsx, rows, columns, metadata)
+            .expect("xlsx export should build successfully")
+            .expect("xlsx export should produce bytes");
+
+        assert!(bytes.starts_with(b"PK"));
+        let sheet_xml = read_xlsx_entry(&bytes, "xl/worksheets/sheet1.xml");
+        assert!(sheet_xml.contains("<sheetData>"));
+    }
+
+    #[test]
+    fn build_export_bytes_preserves_newlines_in_xlsx_cells() {
+        let (rows, columns, metadata) = sample_export_input();
+
+        let bytes = super::build_export_bytes(ExportFormat::Xlsx, rows, columns, metadata)
+            .expect("xlsx export should build successfully")
+            .expect("xlsx export should produce bytes");
+
+        let shared_strings = read_xlsx_entry(&bytes, "xl/sharedStrings.xml");
+        assert!(
+            shared_strings.contains("Line 1\nLine 2")
+                || shared_strings.contains("Line 1&#10;Line 2")
+                || shared_strings.contains("Line 1&#xA;Line 2")
+        );
     }
 }

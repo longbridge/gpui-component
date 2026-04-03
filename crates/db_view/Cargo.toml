@@ -22,12 +22,14 @@ one-core.workspace = true
 sum-tree.workspace = true
 lsp-types.workspace = true
 uuid.workspace = true
+rust_xlsxwriter.workspace = true
 rust-i18n.workspace = true
 json5.workspace = true
 regex.workspace = true
 sqlparser.workspace = true
 [dev-dependencies]
 proptest = { workspace = true }
+zip = "6.0.0"
 
 [lints]
 workspace = true

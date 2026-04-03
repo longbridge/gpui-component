@@ -109,6 +109,7 @@ clickhouse = { version = "0.14.1", features = ["rustls-tls-native-roots"] }
 sqlformat = "0.5.0"
 sqlparser = "0.60.0"
 uuid = { version = "1.18.0", features = ["v4", "serde"] }
+rust_xlsxwriter = "0.94.0"
 dashmap = "5.5.3"
 moka = { version = "0.12", features = ["sync"] }
 thiserror="2.0.14"
