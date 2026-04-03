@@ -1555,6 +1555,10 @@ impl InputState {
         } else {
             line_height
         };
+        // Cap margin to viewport height: taffy edge-rounding can shrink bounds.height
+        // below line_height (e.g. 34.5 phys → 34 phys at 1.5× scale), and an
+        // uncapped margin would falsely trigger scroll on every cursor movement.
+        let edge_height = edge_height.min(bounds.size.height);
         if row_offset_y - edge_height + line_height < -scroll_offset.y {
             // Scroll up
             scroll_offset.y = -row_offset_y + edge_height - line_height;

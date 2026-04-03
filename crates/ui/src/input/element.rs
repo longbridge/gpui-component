@@ -107,13 +107,16 @@ impl TextElement {
         let mut cursor_bounds = None;
 
         // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
+        // Cap to bounds height: taffy edge-rounding can shrink bounds.height below
+        // line_height, and an uncapped margin would falsely trigger scroll adjustments.
         let top_bottom_margin = if state.mode.is_auto_grow() {
             line_height
         } else if visible_range.len() < BOTTOM_MARGIN_ROWS * 8 {
             line_height
         } else {
             BOTTOM_MARGIN_ROWS * line_height
-        };
+        }
+        .min(bounds.size.height);
 
         // The cursor corresponds to the current cursor position in the text no only the line.
         let mut cursor_pos = None;
