@@ -19,7 +19,15 @@ pub fn run() -> Result<(), JsValue> {
     #[cfg(not(target_family = "wasm"))]
     let app = gpui_platform::application();
     #[cfg(target_family = "wasm")]
-    let app = gpui_platform::single_threaded_web();
+    let app = {
+        let app = gpui_platform::single_threaded_web();
+
+        // Temporary fix: intentionally leak the `Rc<AppCell>` to keep the application alive
+        struct WasmApplication(std::rc::Rc<AppCell>);
+        let wasm_app = unsafe { std::mem::transmute::<Application, WasmApplication>(app) };
+        std::mem::forget(wasm_app.0.clone());
+        unsafe { std::mem::transmute::<WasmApplication, Application>(wasm_app) }
+    };
 
     app.with_assets(Assets::new(
         "https://longbridge.github.io/gpui-component/gallery/",
