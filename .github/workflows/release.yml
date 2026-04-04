@@ -14,8 +14,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Rust 全局编译优化，减小体积 + 加快编译
-  RUSTFLAGS: "--strip=symbols"
 
 jobs:
   build:
