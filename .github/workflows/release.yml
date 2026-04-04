@@ -53,8 +53,6 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           df -h
-          sudo rm -rf /Applications/Xcode*
-          sudo rm -rf /Library/Developer
           sudo rm -rf /usr/local/Cellar
           sudo rm -rf /usr/local/lib/node_modules
           sudo rm -rf ~/.npm ~/.nvm ~/Library/Caches
@@ -79,7 +77,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
