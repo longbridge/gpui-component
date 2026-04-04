@@ -53,7 +53,6 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           df -h
-          sudo rm -rf /usr/local/Cellar
           sudo rm -rf /usr/local/lib/node_modules
           sudo rm -rf ~/.npm ~/.nvm ~/Library/Caches
           sudo rm -rf /System/Library/Frameworks/Python.framework
