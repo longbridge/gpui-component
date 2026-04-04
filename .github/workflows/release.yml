@@ -62,7 +62,21 @@ jobs:
         run: |
           cmake --version
 
-      - name: Cache Cargo
+      - name: Cache Cargo (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: build-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            build-${{ matrix.target }}-
+
+      - name: Cache Cargo (non-macOS)
+        if: runner.os != 'macOS'
         uses: actions/cache@v4
         with:
           path: |
@@ -111,6 +125,25 @@ jobs:
           ONETCLI_ALIPAY_QR_URL: ${{ secrets.ONETCLI_ALIPAY_QR_URL }}
           ONETCLI_PAYPAL_QR_URL: ${{ secrets.ONETCLI_PAYPAL_QR_URL }}
         run: cargo build --release -p main --target ${{ matrix.target }}
+
+      - name: Free disk space before macOS bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "Disk usage before cleanup:"
+          df -h
+          du -sh target || true
+          du -sh ~/.cargo || true
+
+          rm -rf target/debug
+          find target -type d -name incremental -prune -exec rm -rf {} +
+          rm -rf ~/.cargo/registry/cache
+          rm -rf ~/.cargo/git/db
+
+          echo "Disk usage after cleanup:"
+          df -h
+          du -sh target || true
+          du -sh ~/.cargo || true
 
       - name: Create macOS app bundle
         if: runner.os == 'macOS'

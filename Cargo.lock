@@ -2405,7 +2405,6 @@ dependencies = [
  "serde",
  "serde_json",
  "smol",
- "sqlparser",
  "tokio",
  "tokio-util",
  "tracing",
