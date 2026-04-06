@@ -93,13 +93,13 @@ impl ConnectionType {
 
     pub fn label(&self) -> &'static str {
         match self {
-            ConnectionType::All => "全部",
-            ConnectionType::Database => "数据库",
+            ConnectionType::All => "All",
+            ConnectionType::Database => "Database",
             ConnectionType::SshSftp => "SSH/SFTP",
             ConnectionType::Redis => "Redis",
             ConnectionType::MongoDB => "MongoDB",
             ConnectionType::ChatDB => "ChatDB",
-            ConnectionType::Serial => "串口",
+            ConnectionType::Serial => "Serial",
         }
     }
 
