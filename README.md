@@ -63,6 +63,8 @@
 **Built-in Simple Server Monitoring, Native Rendered Charts**
 ![monitor.png](monitor.png)
 
+**The terminal comes with an SFTP sidebar that supports file drag-and-drop upload.**    
+![sftp_sidebar.png](sftp_sidebar.png)
 
 ## Platform Support
 

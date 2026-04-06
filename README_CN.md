@@ -60,8 +60,11 @@
 |:-:|:-:|
 | ![MongoDB](mongodb.png) | ![AI 对话](chatdb.png) |
 
-**自带简易服务器监控，原生渲染的图表**
+**自带简易服务器监控，原生渲染的图表** 
 ![monitor.png](monitor.png)
+
+**终端自带SFTP侧边栏，支持文件拖拽上传**
+![sftp_sidebar.png](sftp_sidebar.png)
 
 ## 平台支持
 
