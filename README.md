@@ -60,6 +60,10 @@
 |:-:|:-:|
 | ![MongoDB](mongodb.png) | ![AI Chat](chatdb.png) |
 
+**Built-in Simple Server Monitoring, Native Rendered Charts**
+![monitor.png](monitor.png)
+
+
 ## Platform Support
 
 | Platform | Architecture | Rendering |

@@ -60,6 +60,9 @@
 |:-:|:-:|
 | ![MongoDB](mongodb.png) | ![AI 对话](chatdb.png) |
 
+**自带简易服务器监控，原生渲染的图表**
+![monitor.png](monitor.png)
+
 ## 平台支持
 
 | 平台 | 架构 | 渲染后端 |
