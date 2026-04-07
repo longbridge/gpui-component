@@ -151,25 +151,22 @@ impl Input {
         self
     }
 
-    fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
+    fn render_toggle_mask_button(state: &Entity<InputState>, cx: &App) -> impl IntoElement {
+        let masked = state.read(cx).masked;
         Button::new("toggle-mask")
-            .icon(IconName::Eye)
+            .icon(if masked {
+                IconName::Eye
+            } else {
+                IconName::EyeOff
+            })
             .xsmall()
             .ghost()
             .tab_stop(false)
-            .on_mouse_down(MouseButton::Left, {
+            .on_click({
                 let state = state.clone();
                 move |_, window, cx| {
                     state.update(cx, |state, cx| {
-                        state.set_masked(false, window, cx);
-                    })
-                }
-            })
-            .on_mouse_up(MouseButton::Left, {
-                let state = state.clone();
-                move |_, window, cx| {
-                    state.update(cx, |state, cx| {
-                        state.set_masked(true, window, cx);
+                        state.set_masked(!state.masked, window, cx);
                     })
                 }
             })
@@ -425,7 +422,7 @@ impl RenderOnce for Input {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
                         })
                         .when(self.mask_toggle, |this| {
-                            this.child(Self::render_toggle_mask_button(self.state.clone()))
+                            this.child(Self::render_toggle_mask_button(&self.state, cx))
                         })
                         .when(show_clear_button, |this| {
                             this.child(clear_button(cx).on_click({
