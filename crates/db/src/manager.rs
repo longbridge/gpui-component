@@ -304,10 +304,21 @@ impl ConnectionManager {
         config: DbConnectionConfig,
         db_manager: &DbManager,
     ) -> Result<String, DbError> {
+        let session_started = Instant::now();
         let config_id = config.id.clone();
+        let database_type = config.database_type;
+        let database = config.database.clone();
 
         // Try to acquire an existing session and switch database if needed
         if let Some(session_id) = self.try_acquire_session(&config).await? {
+            info!(
+                "[DB][Timing] create_session reused config_id={} database_type={:?} database={:?} session_id={} elapsed={}ms",
+                config_id,
+                database_type,
+                database,
+                session_id,
+                session_started.elapsed().as_millis()
+            );
             return Ok(session_id);
         }
 
@@ -315,10 +326,16 @@ impl ConnectionManager {
 
         // Create new connection
         let plugin = db_manager.get_plugin(&config.database_type)?;
-        let mut connection = plugin.create_connection(config.clone()).await?;
-
-        // Connect to database
-        connection.connect().await?;
+        let connect_started = Instant::now();
+        let connection = plugin.create_connection(config.clone()).await?;
+        info!(
+            "[DB][Timing] create_session connect config_id={} database_type={:?} database={:?} session_id={} elapsed={}ms",
+            config_id,
+            database_type,
+            database,
+            session_id,
+            connect_started.elapsed().as_millis()
+        );
         info!(
             "Created new session: {} (database: {:?})",
             session_id, config.database
@@ -334,6 +351,13 @@ impl ConnectionManager {
             .or_insert_with(Vec::new)
             .push(session);
 
+        info!(
+            "[DB][Timing] create_session total database_type={:?} database={:?} session_id={} elapsed={}ms",
+            database_type,
+            database,
+            session_id,
+            session_started.elapsed().as_millis()
+        );
         Ok(session_id)
     }
 
@@ -668,8 +692,7 @@ impl ConnectionPool {
         _db_manager: &DbManager,
     ) -> anyhow::Result<Arc<RwLock<Box<dyn DbConnection + Send + Sync>>>> {
         let plugin = self.db_manager.get_plugin(&config.database_type)?;
-        let mut connection = plugin.create_connection(config).await?;
-        connection.connect().await?;
+        let connection = plugin.create_connection(config).await?;
         Ok(Arc::new(RwLock::new(connection)))
     }
 }
@@ -963,7 +986,7 @@ impl GlobalDbState {
         opts: Option<ExecOptions>,
         schema_to_switch: Option<String>,
     ) -> anyhow::Result<Vec<SqlResult>> {
-        // 获取缓存实例用于 DDL 失效
+        // Access the cache used for DDL invalidation.
         let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
         let cache_ctx = cx.update(|cx| {
@@ -1040,7 +1063,7 @@ impl GlobalDbState {
         })
         .await?;
 
-        // 执行成功后，处理 DDL 缓存失效
+        // Process DDL cache invalidation after successful execution.
         if let Some(cache) = cache {
             let ddl_info = Tokio::spawn_result(cx, async move {
                 Ok(cache
@@ -1055,7 +1078,7 @@ impl GlobalDbState {
             })
             .await;
 
-            // 如果检测到 DDL 变更，发射 SchemaChanged 事件
+            // Emit a SchemaChanged event when DDL changes are detected.
             if let Ok(Some((conn_id, database, schema))) = ddl_info {
                 if let Some(notifier) = notifier {
                     cx.update(|cx| {
@@ -1291,16 +1314,17 @@ impl GlobalDbState {
         connection_id: String,
         node: DbNode,
     ) -> anyhow::Result<Vec<DbNode>> {
-        // 获取连接配置
+        let load_started = Instant::now();
+        // Resolve the connection config for the current node.
         let mut config = self
             .get_config(&connection_id)
             .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?
             .clone();
 
-        // 创建缓存上下文
+        // Build the cache context up front for cache lookup and write-back.
         let cache_ctx = crate::CacheContext::from_config(&config);
 
-        // 获取缓存实例
+        // Access the global node cache if it is available.
         let cache = cx.update(|cx| cx.try_global::<crate::GlobalNodeCache>().cloned());
 
         // For Database and Schema nodes, we need to connect to the specific database
@@ -1313,30 +1337,51 @@ impl GlobalDbState {
 
         let clone_self = self.clone();
         let node_clone = node.clone();
+        let connection_id_for_ui = connection_id.clone();
+        let node_for_ui = node.clone();
 
-        Tokio::spawn_result(cx, async move {
-            // 尝试从缓存获取
+        let result = Tokio::spawn_result(cx, async move {
+            let async_started = Instant::now();
+            // Try cache first to avoid unnecessary session creation.
             if let Some(ref cache) = cache {
                 if let Some(cached) = cache.get_node(&cache_ctx, &node_clone.id).await {
                     if Self::cached_children_ready(&cached) {
                         tracing::debug!("Cache hit for node: {}", node_clone.id);
+                        info!(
+                            "[DB][Timing] load_node_children cache_hit connection_id={} node_id={} node_type={:?} children={} elapsed={}ms",
+                            connection_id,
+                            node_clone.id,
+                            node_clone.node_type,
+                            cached.children.len(),
+                            async_started.elapsed().as_millis()
+                        );
                         return Ok(cached.children);
                     }
                 }
             }
 
-            // 缓存未命中，从数据库加载
+            // Cache miss. Load children from the database.
             tracing::debug!(
                 "Cache miss for node: {}, loading from database",
                 node_clone.id
             );
 
             let plugin = clone_self.get_plugin(&config.database_type)?;
+            let session_started = Instant::now();
             let session_id = clone_self
                 .connection_manager
                 .create_session(config.clone(), &clone_self.db_manager)
                 .await?;
+            info!(
+                "[DB][Timing] load_node_children create_session connection_id={} node_id={} node_type={:?} session_id={} elapsed={}ms",
+                connection_id,
+                node_clone.id,
+                node_clone.node_type,
+                session_id,
+                session_started.elapsed().as_millis()
+            );
 
+            let fetch_started = Instant::now();
             let result = {
                 let mut guard = clone_self
                     .connection_manager
@@ -1350,16 +1395,33 @@ impl GlobalDbState {
                     .await
                     .map_err(|e| anyhow::anyhow!("{}", e))
             };
+            info!(
+                "[DB][Timing] load_node_children fetch connection_id={} node_id={} node_type={:?} session_id={} elapsed={}ms",
+                connection_id,
+                node_clone.id,
+                node_clone.node_type,
+                session_id,
+                fetch_started.elapsed().as_millis()
+            );
 
+            let release_started = Instant::now();
             if let Err(e) = clone_self
                 .connection_manager
                 .release_session(&session_id)
                 .await
             {
                 warn!("Failed to release session {}: {}", session_id, e);
+            } else {
+                info!(
+                    "[DB][Timing] load_node_children release_session connection_id={} node_id={} session_id={} elapsed={}ms",
+                    connection_id,
+                    node_clone.id,
+                    session_id,
+                    release_started.elapsed().as_millis()
+                );
             }
 
-            // 如果加载成功，缓存结果
+            // Persist successful results back to the cache.
             if let Ok(ref children) = result {
                 if let Some(ref cache) = cache {
                     let mut node_with_children = node_clone.clone();
@@ -1375,11 +1437,41 @@ impl GlobalDbState {
                         children.len()
                     );
                 }
+                info!(
+                    "[DB][Timing] load_node_children total connection_id={} node_id={} node_type={:?} children={} elapsed={}ms",
+                    connection_id,
+                    node_clone.id,
+                    node_clone.node_type,
+                    children.len(),
+                    async_started.elapsed().as_millis()
+                );
+            } else if let Err(ref error) = result {
+                warn!(
+                    "[DB][Timing] load_node_children failed connection_id={} node_id={} node_type={:?} elapsed={}ms error={}",
+                    connection_id,
+                    node_clone.id,
+                    node_clone.node_type,
+                    async_started.elapsed().as_millis(),
+                    error
+                );
             }
 
             result
         })
-        .await
+        .await;
+
+        if let Ok(children) = &result {
+            info!(
+                "[DB][Timing] load_node_children ui_total connection_id={} node_id={} node_type={:?} children={} elapsed={}ms",
+                connection_id_for_ui,
+                node_for_ui.id,
+                node_for_ui.node_type,
+                children.len(),
+                load_started.elapsed().as_millis()
+            );
+        }
+
+        result
     }
 
     /// Apply table changes
@@ -1435,10 +1527,10 @@ impl GlobalDbState {
         cx: &mut AsyncApp,
         connection_id: String,
     ) -> anyhow::Result<Vec<String>> {
-        // 获取缓存实例
+        // Access the cache instance.
         let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
-        // 尝试从缓存获取
+        // Try the cache first.
         if let Some(cache) = cache.clone() {
             let conn_id = connection_id.clone();
             let result = Tokio::spawn_result(cx, async move {
@@ -1455,13 +1547,13 @@ impl GlobalDbState {
             }
         }
 
-        // 缓存未命中，从数据库查询
+        // Cache miss. Query the database.
         let conn_id = connection_id.clone();
         let databases = with_plugin_session!(self, cx, connection_id, |plugin, conn| {
             plugin.list_databases(&*conn).await
         })?;
 
-        // 写入缓存
+        // Persist the result in cache.
         if let Some(cache) = cache {
             let databases_clone = databases.clone();
             Tokio::spawn(cx, async move {
@@ -1508,10 +1600,10 @@ impl GlobalDbState {
         connection_id: String,
         database: String,
     ) -> anyhow::Result<Vec<String>> {
-        // 获取缓存实例
+        // Access the cache instance.
         let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
-        // 尝试从缓存获取
+        // Try the cache first.
         if let Some(cache) = cache.clone() {
             let conn_id = connection_id.clone();
             let db = database.clone();
@@ -1529,7 +1621,7 @@ impl GlobalDbState {
             }
         }
 
-        // 缓存未命中，从数据库查询
+        // Cache miss. Query the database.
         let conn_id = connection_id.clone();
         let db = database.clone();
         let schemas =
@@ -1537,7 +1629,7 @@ impl GlobalDbState {
                 plugin.list_schemas(&*conn, &database).await
             })?;
 
-        // 写入缓存
+        // Persist the result in cache.
         if let Some(cache) = cache {
             let schemas_clone = schemas.clone();
             Tokio::spawn(cx, async move {
@@ -1558,10 +1650,10 @@ impl GlobalDbState {
         database: String,
         schema: Option<String>,
     ) -> anyhow::Result<Vec<crate::types::TableInfo>> {
-        // 获取缓存实例
+        // Access the cache instance.
         let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
-        // 尝试从缓存获取
+        // Try the cache first.
         if let Some(cache) = cache.clone() {
             let conn_id = connection_id.clone();
             let db = database.clone();
@@ -1580,7 +1672,7 @@ impl GlobalDbState {
             }
         }
 
-        // 缓存未命中，从数据库查询
+        // Cache miss. Query the database.
         let conn_id = connection_id.clone();
         let db = database.clone();
         let sch = schema.clone();
@@ -1589,7 +1681,7 @@ impl GlobalDbState {
                 plugin.list_tables(&*conn, &database, schema).await
             })?;
 
-        // 写入缓存
+        // Persist the result in cache.
         if let Some(cache) = cache {
             let tables_clone = tables.clone();
             Tokio::spawn(cx, async move {
@@ -1626,10 +1718,10 @@ impl GlobalDbState {
         schema: Option<String>,
         table: String,
     ) -> anyhow::Result<Vec<crate::types::ColumnInfo>> {
-        // 获取缓存实例
+        // Access the cache instance.
         let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
-        // 尝试从缓存获取
+        // Try the cache first.
         if let Some(cache) = cache.clone() {
             let conn_id = connection_id.clone();
             let db = database.clone();
@@ -1656,7 +1748,7 @@ impl GlobalDbState {
             }
         }
 
-        // 缓存未命中，从数据库查询
+        // Cache miss. Query the database.
         let conn_id = connection_id.clone();
         let db = database.clone();
         let sch = schema.clone();
@@ -1666,7 +1758,7 @@ impl GlobalDbState {
                 plugin.list_columns(&*conn, &database, schema, &table).await
             })?;
 
-        // 写入缓存
+        // Persist the result in cache.
         if let Some(cache) = cache {
             let columns_clone = columns.clone();
             Tokio::spawn(cx, async move {
@@ -1706,10 +1798,10 @@ impl GlobalDbState {
         schema: Option<String>,
         table: String,
     ) -> anyhow::Result<Vec<crate::types::IndexInfo>> {
-        // 获取缓存实例
+        // Access the cache instance.
         let cache = cx.update(|cx| cx.try_global::<GlobalNodeCache>().cloned());
 
-        // 尝试从缓存获取
+        // Try the cache first.
         if let Some(cache) = cache.clone() {
             let conn_id = connection_id.clone();
             let db = database.clone();
@@ -1736,7 +1828,7 @@ impl GlobalDbState {
             }
         }
 
-        // 缓存未命中，从数据库查询
+        // Cache miss. Query the database.
         let conn_id = connection_id.clone();
         let db = database.clone();
         let sch = schema.clone();
@@ -1746,7 +1838,7 @@ impl GlobalDbState {
                 plugin.list_indexes(&*conn, &database, schema, &table).await
             })?;
 
-        // 写入缓存
+        // Persist the result in cache.
         if let Some(cache) = cache {
             let indexes_clone = indexes.clone();
             Tokio::spawn(cx, async move {
@@ -1840,6 +1932,15 @@ impl GlobalDbState {
         connection_id: String,
         node: DbNode,
     ) -> anyhow::Result<Option<crate::types::ObjectView>> {
+        if node.node_type == DbNodeType::Connection && !node.children_loaded {
+            info!(
+                "[DB][Timing] load_object_view skipped connection_id={} node_id={} reason=connection_children_not_loaded",
+                connection_id,
+                node.id
+            );
+            return Ok(None);
+        }
+
         let mut config = self
             .get_config(&connection_id)
             .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?

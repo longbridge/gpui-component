@@ -1,4 +1,6 @@
 use anyhow::Error;
+use std::time::Instant;
+
 use db::{GlobalDbState, oracle};
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -28,6 +30,7 @@ use one_core::storage::{
     Workspace, get_config_dir,
 };
 use rust_i18n::t;
+use tracing::info;
 
 /// Form select item for dropdown fields
 #[derive(Clone, Debug)]
@@ -1030,9 +1033,9 @@ pub struct DbConnectionForm {
     team_select: Entity<SelectState<Vec<TeamSelectItem>>>,
     pending_file_path: Entity<Option<String>>,
     editing_connection: Option<StoredConnection>,
-    /// 是否启用云同步
+    /// Whether cloud sync is enabled.
     sync_enabled: Entity<bool>,
-    /// Oracle 客户端检测状态：Ok(版本) / Err(错误)
+    /// Oracle client detection status: Ok(version) / Err(error).
     oracle_client_status: Entity<Option<Result<String, String>>>,
     oracle_client_checking: Entity<bool>,
 }
@@ -1145,7 +1148,7 @@ impl DbConnectionForm {
 
         let pending_file_path = cx.new(|_| None);
 
-        // 默认启用云同步
+        // Enable cloud sync by default.
         let sync_enabled = cx.new(|_| true);
         let oracle_client_status = cx.new(|_| None);
         let oracle_client_checking = cx.new(|_| false);
@@ -1282,7 +1285,7 @@ impl DbConnectionForm {
         self.editing_connection = Some(connection.clone());
         self.set_field_value("name", &connection.name, window, cx);
 
-        // 加载同步状态
+        // Load the sync state.
         self.sync_enabled.update(cx, |sync, cx| {
             *sync = connection.sync_enabled;
             cx.notify();
@@ -1321,7 +1324,7 @@ impl DbConnectionForm {
             });
         }
 
-        // 加载团队归属
+        // Load team ownership.
         if let Some(ref team_id) = connection.team_id {
             self.team_select.update(cx, |select, cx| {
                 select.set_selected_value(&Some(team_id.clone()), window, cx);
@@ -1490,7 +1493,7 @@ impl DbConnectionForm {
             .map(|e| e.to_string())
             .unwrap_or_else(|| err.to_string());
 
-        // 去掉常见包装前缀，只保留最有价值的底层异常信息。
+        // Strip common wrapper prefixes and keep the most useful root-level message.
         let prefixes = [
             "connection error: ",
             "query error: ",
@@ -1546,9 +1549,47 @@ impl DbConnectionForm {
             let manager = global_state.db_manager;
 
             let test_result = Tokio::spawn_result(cx, async move {
+                let test_started = Instant::now();
                 let db_plugin = manager.get_plugin(&db_type)?;
-                let conn = db_plugin.create_connection(connection).await?;
-                conn.ping().await?;
+                let connect_started = Instant::now();
+                let conn = match db_plugin.create_connection(connection).await {
+                    Ok(conn) => conn,
+                    Err(error) => {
+                        info!(
+                            "[DB][Timing] test_connection failed stage=create_connection db_type={:?} elapsed={}ms error={}",
+                            db_type,
+                            test_started.elapsed().as_millis(),
+                            error
+                        );
+                        return Err(Error::new(error));
+                    }
+                };
+                info!(
+                    "[DB][Timing] test_connection create_connection db_type={:?} elapsed={}ms",
+                    db_type,
+                    connect_started.elapsed().as_millis()
+                );
+
+                let ping_started = Instant::now();
+                if let Err(error) = conn.ping().await {
+                    info!(
+                        "[DB][Timing] test_connection failed stage=ping db_type={:?} elapsed={}ms error={}",
+                        db_type,
+                        test_started.elapsed().as_millis(),
+                        error
+                    );
+                    return Err(Error::new(error));
+                }
+                info!(
+                    "[DB][Timing] test_connection ping db_type={:?} elapsed={}ms",
+                    db_type,
+                    ping_started.elapsed().as_millis()
+                );
+                info!(
+                    "[DB][Timing] test_connection total db_type={:?} elapsed={}ms",
+                    db_type,
+                    test_started.elapsed().as_millis()
+                );
                 Ok::<bool, Error>(true)
             })
             .await;
@@ -1598,7 +1639,7 @@ impl DbConnectionForm {
                 c.team_id = team_id;
                 c.params = serde_json::to_string(&connection)
                     .map_err(|e| format!("{}: {}", t!("ConnectionForm.serialize_failed"), e))?;
-                // 更新 selected_databases 以匹配新的 database 配置
+                // Keep selected_databases aligned with the current database config.
                 c.selected_databases = if let Some(database) = &connection.database {
                     Some(format!("[\"{}\"]", database))
                 } else {
@@ -1610,7 +1651,7 @@ impl DbConnectionForm {
                 let mut c = StoredConnection::from_db_connection(connection);
                 c.sync_enabled = sync_enabled;
                 c.team_id = team_id;
-                // 新建时自动填充 owner_id
+                // Auto-fill owner_id for newly created connections.
                 c.owner_id = GlobalCloudUser::get_user(cx).map(|u| u.id);
                 c
             }
@@ -1635,7 +1676,7 @@ impl DbConnectionForm {
         *self.is_testing.read(cx)
     }
 
-    /// 返回测试连接结果的显示文字，无结果时返回 None
+    /// Returns the display string for the test-connection result, or None if absent.
     pub fn test_result_msg(&self, cx: &App) -> Option<String> {
         self.test_result.read(cx).as_ref().map(|r| match r {
             Ok(true) => format!("✓ {}", t!("ConnectionForm.test_success")),
@@ -2420,7 +2461,7 @@ mod tests {
             .tab_groups
             .iter()
             .find(|group| group.name == "ssl")
-            .expect("MySQL 应包含 SSL 标签页");
+            .expect("MySQL should include the SSL tab");
 
         assert_eq!(
             field_names(ssl_tab),
@@ -2448,7 +2489,7 @@ mod tests {
             .tab_groups
             .iter()
             .find(|group| group.name == "ssh")
-            .expect("MySQL 应包含 SSH 标签页");
+            .expect("MySQL should include the SSH tab");
 
         assert_eq!(
             field_names(ssh_tab),

@@ -121,6 +121,13 @@ pub struct PostgresDbConnection {
 }
 
 impl PostgresDbConnection {
+    fn is_loopback_host(host: &str) -> bool {
+        matches!(
+            host.trim().to_ascii_lowercase().as_str(),
+            "localhost" | "127.0.0.1" | "::1"
+        )
+    }
+
     pub fn new(config: DbConnectionConfig) -> Self {
         Self {
             config,
@@ -137,6 +144,8 @@ impl PostgresDbConnection {
         {
             Some("disable") => SslMode::Disable,
             Some("require") => SslMode::Require,
+            Some("prefer") => SslMode::Prefer,
+            _ if Self::is_loopback_host(&config.host) => SslMode::Disable,
             _ => SslMode::Prefer,
         }
     }
@@ -171,8 +180,18 @@ impl PostgresDbConnection {
     }
 
     fn build_root_cert_store(config: &DbConnectionConfig) -> Result<RootCertStore, DbError> {
+        let build_started = Instant::now();
         let mut root_store = RootCertStore::empty();
+        let native_load_started = Instant::now();
         let native_certificates = rustls_native_certs::load_native_certs();
+        let native_cert_count = native_certificates.certs.len();
+        let native_error_count = native_certificates.errors.len();
+        info!(
+            "[PostgreSQL][Timing] load_native_certs={}ms certs={} errors={}",
+            native_load_started.elapsed().as_millis(),
+            native_cert_count,
+            native_error_count
+        );
 
         for error in native_certificates.errors {
             warn!(
@@ -194,7 +213,16 @@ impl PostgresDbConnection {
             .map(|value| value.trim())
             .filter(|value| !value.is_empty())
         {
-            for certificate in Self::load_root_certificates(Path::new(path))? {
+            let custom_load_started = Instant::now();
+            let certificates = Self::load_root_certificates(Path::new(path))?;
+            info!(
+                "[PostgreSQL][Timing] load_custom_root_certs={}ms path={} certs={}",
+                custom_load_started.elapsed().as_millis(),
+                path,
+                certificates.len()
+            );
+
+            for certificate in certificates {
                 root_store.add(certificate).map_err(|error| {
                     DbError::connection_with_source(
                         "failed to add PostgreSQL root certificate",
@@ -204,10 +232,15 @@ impl PostgresDbConnection {
             }
         }
 
+        info!(
+            "[PostgreSQL][Timing] build_root_cert_store={}ms",
+            build_started.elapsed().as_millis()
+        );
         Ok(root_store)
     }
 
     fn build_tls_connector(config: &DbConnectionConfig) -> Result<MakeRustlsConnect, DbError> {
+        let build_started = Instant::now();
         ensure_rustls_crypto_provider();
 
         let accept_invalid_certs = config.get_param_bool("ssl_accept_invalid_certs");
@@ -238,6 +271,12 @@ impl PostgresDbConnection {
             .with_custom_certificate_verifier(verifier)
             .with_no_client_auth();
 
+        info!(
+            "[PostgreSQL][Timing] build_tls_connector={}ms invalid_certs={} invalid_hostnames={}",
+            build_started.elapsed().as_millis(),
+            accept_invalid_certs,
+            accept_invalid_hostnames
+        );
         Ok(MakeRustlsConnect::new(client_config))
     }
 
@@ -415,6 +454,45 @@ impl PostgresDbConnection {
             message: Some(message),
         })
     }
+
+    fn should_retry_without_tls(error: &dyn std::error::Error) -> bool {
+        let mut current = Some(error);
+        while let Some(err) = current {
+            let message = err.to_string().to_ascii_lowercase();
+            if message.contains("invalid peer certificate")
+                || message.contains("unsupportedcertversion")
+                || message.contains("unsupported cert version")
+                || message.contains("certificate verify failed")
+            {
+                return true;
+            }
+            current = err.source();
+        }
+        false
+    }
+
+    async fn connect_without_tls(pg_config: &Config) -> Result<Client, tokio_postgres::Error> {
+        let (client, connection) = pg_config.connect(NoTls).await?;
+        tokio::spawn(async move {
+            if let Err(error) = connection.await {
+                error!("[PostgreSQL] Connection error: {}", error);
+            }
+        });
+        Ok(client)
+    }
+
+    async fn connect_with_tls(
+        pg_config: &Config,
+        tls_connector: MakeRustlsConnect,
+    ) -> Result<Client, tokio_postgres::Error> {
+        let (client, connection) = pg_config.connect(tls_connector).await?;
+        tokio::spawn(async move {
+            if let Err(error) = connection.await {
+                error!("[PostgreSQL] Connection error: {}", error);
+            }
+        });
+        Ok(client)
+    }
 }
 
 #[async_trait]
@@ -432,10 +510,22 @@ impl DbConnection for PostgresDbConnection {
     }
 
     async fn connect(&mut self) -> Result<(), DbError> {
+        let connect_started = Instant::now();
         let config = &self.config;
         info!("[PostgreSQL] Connecting to {}:{}", config.host, config.port);
+        let resolve_started = Instant::now();
         let target = resolve_connection_target(config).await?;
+        let resolve_elapsed_ms = resolve_started.elapsed().as_millis();
         self.tunnel = target.tunnel;
+        info!(
+            "[PostgreSQL][Timing] resolve_connection_target={}ms host={}:{} target={}:{} ssh_tunnel={}",
+            resolve_elapsed_ms,
+            config.host,
+            config.port,
+            target.host,
+            target.port,
+            self.tunnel.is_some()
+        );
 
         let mut pg_config = Config::new();
         pg_config
@@ -466,28 +556,87 @@ impl DbConnection for PostgresDbConnection {
         debug!("[PostgreSQL] Establishing connection...");
         let client = match ssl_mode {
             SslMode::Disable => {
-                let (client, connection) = pg_config.connect(NoTls).await.map_err(|e| {
-                    error!("[PostgreSQL] Connection failed: {}", e);
-                    DbError::connection_with_source("failed to connect", e)
-                })?;
-                tokio::spawn(async move {
-                    if let Err(e) = connection.await {
-                        error!("[PostgreSQL] Connection error: {}", e);
-                    }
-                });
+                let connect_without_tls_started = Instant::now();
+                let client = Self::connect_without_tls(&pg_config)
+                    .await
+                    .map_err(|error| {
+                        error!("[PostgreSQL] Connection failed: {}", error);
+                        DbError::connection_with_source("failed to connect", error)
+                    })?;
+                info!(
+                    "[PostgreSQL][Timing] connect_without_tls={}ms",
+                    connect_without_tls_started.elapsed().as_millis()
+                );
                 client
             }
-            _ => {
+            SslMode::Prefer => {
+                let tls_connector_started = Instant::now();
                 let tls_connector = Self::build_tls_connector(config)?;
-                let (client, connection) = pg_config.connect(tls_connector).await.map_err(|e| {
-                    error!("[PostgreSQL] Connection failed: {}", e);
-                    DbError::connection_with_source("failed to connect", e)
-                })?;
-                tokio::spawn(async move {
-                    if let Err(e) = connection.await {
-                        error!("[PostgreSQL] Connection error: {}", e);
+                info!(
+                    "[PostgreSQL][Timing] prepare_tls_connector={}ms",
+                    tls_connector_started.elapsed().as_millis()
+                );
+                let tls_connect_started = Instant::now();
+                match Self::connect_with_tls(&pg_config, tls_connector).await {
+                    Ok(client) => {
+                        info!(
+                            "[PostgreSQL][Timing] connect_with_tls={}ms ssl_mode=Prefer",
+                            tls_connect_started.elapsed().as_millis()
+                        );
+                        client
                     }
-                });
+                    Err(error) if Self::should_retry_without_tls(&error) => {
+                        warn!(
+                            "[PostgreSQL] TLS connect failed in prefer mode, retrying without TLS: {}",
+                            error
+                        );
+                        info!(
+                            "[PostgreSQL][Timing] connect_with_tls_failed={}ms ssl_mode=Prefer reason={}",
+                            tls_connect_started.elapsed().as_millis(),
+                            error
+                        );
+                        let retry_started = Instant::now();
+                        let client = Self::connect_without_tls(&pg_config)
+                            .await
+                            .map_err(|retry_error| {
+                                error!(
+                                    "[PostgreSQL] Non-TLS retry after TLS failure also failed: {}",
+                                    retry_error
+                                );
+                                DbError::connection_with_source("failed to connect", retry_error)
+                            })?;
+                        info!(
+                            "[PostgreSQL][Timing] retry_without_tls={}ms ssl_mode=Prefer",
+                            retry_started.elapsed().as_millis()
+                        );
+                        client
+                    }
+                    Err(error) => {
+                        error!("[PostgreSQL] Connection failed: {}", error);
+                        return Err(DbError::connection_with_source("failed to connect", error));
+                    }
+                }
+            }
+            _ => {
+                let tls_connector_started = Instant::now();
+                let tls_connector = Self::build_tls_connector(config)?;
+                info!(
+                    "[PostgreSQL][Timing] prepare_tls_connector={}ms ssl_mode={:?}",
+                    tls_connector_started.elapsed().as_millis(),
+                    ssl_mode
+                );
+                let tls_connect_started = Instant::now();
+                let client = Self::connect_with_tls(&pg_config, tls_connector)
+                    .await
+                    .map_err(|error| {
+                        error!("[PostgreSQL] Connection failed: {}", error);
+                        DbError::connection_with_source("failed to connect", error)
+                    })?;
+                info!(
+                    "[PostgreSQL][Timing] connect_with_tls={}ms ssl_mode={:?}",
+                    tls_connect_started.elapsed().as_millis(),
+                    ssl_mode
+                );
                 client
             }
         };
@@ -497,7 +646,11 @@ impl DbConnection for PostgresDbConnection {
             *guard = Some(client);
         }
 
-        info!("[PostgreSQL] Connected successfully");
+        info!(
+            "[PostgreSQL] Connected successfully in {}ms (ssl_mode={:?})",
+            connect_started.elapsed().as_millis(),
+            ssl_mode
+        );
         Ok(())
     }
 
@@ -1441,8 +1594,16 @@ mod tests {
     }
 
     #[test]
-    fn ssl_mode_defaults_to_prefer() {
+    fn ssl_mode_defaults_to_disable_for_loopback_hosts() {
         let config = build_config(&[]);
+
+        assert_eq!(PostgresDbConnection::ssl_mode(&config), SslMode::Disable);
+    }
+
+    #[test]
+    fn ssl_mode_defaults_to_prefer_for_non_loopback_hosts() {
+        let mut config = build_config(&[]);
+        config.host = "db.example.com".to_string();
 
         assert_eq!(PostgresDbConnection::ssl_mode(&config), SslMode::Prefer);
     }
@@ -1474,18 +1635,34 @@ mod tests {
 
     #[test]
     fn ssl_load_root_certificates_rejects_empty_pem_file() {
-        let mut temp_file = NamedTempFile::new().expect("应创建临时文件");
-        writeln!(temp_file, "not a certificate").expect("应写入测试内容");
+        let mut temp_file = NamedTempFile::new().expect("temporary file should be created");
+        writeln!(temp_file, "not a certificate").expect("test contents should be written");
 
         let error = PostgresDbConnection::load_root_certificates(temp_file.path())
-            .expect_err("空 PEM 文件应返回错误");
+            .expect_err("empty PEM file should return an error");
 
         assert!(
             error
                 .to_string()
                 .contains("does not contain any certificates"),
-            "错误信息应指出证书文件为空: {}",
+            "error message should indicate that the certificate file is empty: {}",
             error
         );
+    }
+
+    #[test]
+    fn retry_without_tls_matches_peer_certificate_errors() {
+        let error = std::io::Error::other(
+            "invalid peer certificate: Other(OtherError(UnsupportedCertVersion))",
+        );
+
+        assert!(PostgresDbConnection::should_retry_without_tls(&error));
+    }
+
+    #[test]
+    fn retry_without_tls_ignores_non_tls_errors() {
+        let error = std::io::Error::other("password authentication failed for user postgres");
+
+        assert!(!PostgresDbConnection::should_retry_without_tls(&error));
     }
 }

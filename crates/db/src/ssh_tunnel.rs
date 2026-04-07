@@ -18,7 +18,7 @@ const SSH_TARGET_HOST: &str = "ssh_target_host";
 const SSH_TARGET_PORT: &str = "ssh_target_port";
 const SSH_TIMEOUT: &str = "ssh_timeout";
 
-/// 默认 SSH 连接超时（秒）
+/// Default SSH connection timeout in seconds.
 const DEFAULT_SSH_TIMEOUT_SECS: u64 = 30;
 
 pub struct ResolvedConnectionTarget {
@@ -27,12 +27,20 @@ pub struct ResolvedConnectionTarget {
     pub tunnel: Option<LocalPortForwardTunnel>,
 }
 
+fn normalize_direct_host(host: &str) -> String {
+    if host.eq_ignore_ascii_case("localhost") {
+        return "127.0.0.1".to_string();
+    }
+
+    host.to_string()
+}
+
 pub async fn resolve_connection_target(
     config: &DbConnectionConfig,
 ) -> Result<ResolvedConnectionTarget, DbError> {
     if !config.get_param_bool(SSH_TUNNEL_ENABLED) {
         return Ok(ResolvedConnectionTarget {
-            host: config.host.clone(),
+            host: normalize_direct_host(&config.host),
             port: config.port,
             tunnel: None,
         });
@@ -49,7 +57,7 @@ pub async fn resolve_connection_target(
         .unwrap_or_else(|| config.host.clone());
     let target_port = optional_u16_param(config, SSH_TARGET_PORT).unwrap_or(config.port);
 
-    // 获取 SSH 连接超时
+    // Read the SSH connection timeout from config.
     let ssh_timeout_secs = config
         .get_param_as::<u64>(SSH_TIMEOUT)
         .unwrap_or(DEFAULT_SSH_TIMEOUT_SECS);
@@ -66,7 +74,7 @@ pub async fn resolve_connection_target(
         proxy: None,
     };
 
-    // 使用 tokio::timeout 包装 SSH 隧道建立
+    // Wrap tunnel setup with an explicit timeout.
     let tunnel_result = timeout(
         Duration::from_secs(ssh_timeout_secs),
         start_local_port_forward(ssh_config, target_host, target_port),
@@ -172,7 +180,7 @@ mod tests {
         extra_params.insert(SSH_AUTH_TYPE.to_string(), "agent".to_string());
         let config = build_config(extra_params);
 
-        let auth = build_auth(&config).expect("agent 认证类型应解析成功");
+        let auth = build_auth(&config).expect("agent auth type should parse successfully");
 
         assert!(matches!(auth, SshAuth::Agent));
     }
