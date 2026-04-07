@@ -158,6 +158,7 @@ impl ColorPickerState {
                 |this, state, ev: &InputEvent, window, cx| match ev {
                     InputEvent::Change => {
                         if this.suppress_input_change {
+                            this.suppress_input_change = false;
                             return;
                         }
                         let value = state.read(cx).value();
@@ -263,6 +264,9 @@ impl ColorPickerState {
         self.needs_slider_sync = false;
         self.value = value;
         self.hovered_color = value;
+        // Suppress the InputEvent::Change that set_value will trigger, to avoid
+        // the Hsla→hex→Hsla precision loss from feeding back into sync_sliders.
+        self.suppress_input_change = true;
         self.state.update(cx, |view, cx| {
             if let Some(value) = value {
                 view.set_value(value.to_hex(), window, cx);
@@ -270,6 +274,9 @@ impl ColorPickerState {
                 view.set_value("", window, cx);
             }
         });
+        // Sync sliders directly with the full-precision value instead of relying
+        // on the InputEvent::Change → parse_hex round-trip.
+        self.sync_sliders(value, window, cx);
         if emit {
             cx.emit(ColorPickerEvent::Change(value));
         }
@@ -280,12 +287,18 @@ impl ColorPickerState {
         &mut self,
         value: Hsla,
         emit: bool,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.needs_slider_sync = false;
         self.value = Some(value);
         self.hovered_color = Some(value);
+        // Keep the hex input in sync with the slider, but suppress the resulting
+        // InputEvent::Change to avoid the Hsla→hex→Hsla precision loss loop.
+        self.suppress_input_change = true;
+        self.state.update(cx, |view, cx| {
+            view.set_value(value.to_hex(), window, cx);
+        });
         if emit {
             cx.emit(ColorPickerEvent::Change(Some(value)));
         }
