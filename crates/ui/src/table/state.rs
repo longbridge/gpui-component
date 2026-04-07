@@ -49,7 +49,8 @@ impl SelectionMode {
 #[derive(Clone)]
 pub enum TableEvent {
     /// Single click or move to selected row.
-    SelectRow(usize),
+    /// Contains the row index and the keyboard modifiers held during the click.
+    SelectRow(usize, gpui::Modifiers),
     /// Double click on the row.
     DoubleClickedRow(usize),
     /// Selected column.
@@ -365,8 +366,13 @@ where
         self.selected_row
     }
 
-    /// Sets the selected row to the given index.
+    /// Sets the selected row to the given index with default (no) modifiers.
     pub fn set_selected_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
+        self.set_selected_row_with_modifiers(row_ix, gpui::Modifiers::default(), cx);
+    }
+
+    /// Sets the selected row to the given index with the specified modifiers.
+    pub fn set_selected_row_with_modifiers(&mut self, row_ix: usize, modifiers: gpui::Modifiers, cx: &mut Context<Self>) {
         let is_down = match self.selected_row {
             Some(selected_row) => row_ix > selected_row,
             None => true,
@@ -382,7 +388,7 @@ where
                 if is_down { ScrollStrategy::Bottom } else { ScrollStrategy::Top },
             );
         }
-        cx.emit(TableEvent::SelectRow(row_ix));
+        cx.emit(TableEvent::SelectRow(row_ix, modifiers));
         cx.emit(TableEvent::RightClickedRow(None));
         cx.notify();
     }
@@ -627,7 +633,7 @@ where
             return;
         }
 
-        self.set_selected_row(row_ix, cx);
+        self.set_selected_row_with_modifiers(row_ix, e.modifiers(), cx);
 
         if e.click_count() == 2 {
             cx.emit(TableEvent::DoubleClickedRow(row_ix));
