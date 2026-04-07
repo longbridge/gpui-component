@@ -1112,16 +1112,17 @@ impl BlockNode {
 
                                                 cells.push(
                                                     div()
-                                                        .id("cell")
-                                                        .flex()
+                                                        .id(("cell", ix))
+                                                        .overflow_hidden()
                                                         .when(
                                                             align == ColumnumnAlign::Center,
-                                                            |this| this.justify_center(),
+                                                            |this| this.text_center(),
                                                         )
                                                         .when(
                                                             align == ColumnumnAlign::Right,
-                                                            |this| this.justify_end(),
+                                                            |this| this.text_right(),
                                                         )
+                                                        .min_w_16()
                                                         .w(Length::Definite(relative(len as f32)))
                                                         .px_2()
                                                         .py_1()
@@ -1129,7 +1130,6 @@ impl BlockNode {
                                                             this.border_r_1()
                                                                 .border_color(cx.theme().border)
                                                         })
-                                                        .truncate()
                                                         .child(
                                                             cell.children
                                                                 .render(node_cx, window, cx),
