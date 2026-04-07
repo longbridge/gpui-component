@@ -1310,7 +1310,7 @@ impl Element for TextElement {
             .map(|&bl| state.text.line_start_offset(bl))
             .collect();
 
-        // For masked input, convert byte offsets to masked display byte offsets so that
+        // For password input (masked: true), convert byte offsets to masked display byte offsets so that
         // layout_match_range and position_for_index work in the correct coordinate space.
         let (visible_line_byte_offsets, visible_range_offset) = if state.masked {
             let offsets = visible_line_byte_offsets
