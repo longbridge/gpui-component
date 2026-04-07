@@ -25,6 +25,17 @@ const FOLD_ICON_WIDTH: Pixels = px(14.);
 const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
 const MAX_HIGHLIGHT_LINE_LENGTH: usize = 10_000;
 
+use super::MASK_CHAR;
+
+/// Convert a byte offset in the original text to a byte offset in the masked display string.
+///
+/// The masked string consists of `MASK_CHAR` repeated once per character in the original text.
+/// Since `MASK_CHAR` may be multi-byte in UTF-8, the byte offset in the masked string is
+/// `char_index * MASK_CHAR.len_utf8()`.
+fn masked_display_offset(text: &Rope, original_offset: usize) -> usize {
+    text.offset_to_char_index(original_offset) * MASK_CHAR.len_utf8()
+}
+
 /// Layout information for fold icons.
 struct FoldIconLayout {
     /// Hitbox for the line number area (used for hover detection)
@@ -96,10 +107,9 @@ impl TextElement {
 
         let mut cursor = state.cursor();
         if state.masked {
-            // Because masked use `*`, 1 char with 1 byte.
-            selected_range.start = state.text.offset_to_char_index(selected_range.start);
-            selected_range.end = state.text.offset_to_char_index(selected_range.end);
-            cursor = state.text.offset_to_char_index(cursor);
+            selected_range.start = masked_display_offset(&state.text, selected_range.start);
+            selected_range.end = masked_display_offset(&state.text, selected_range.end);
+            cursor = masked_display_offset(&state.text, cursor);
         }
 
         let mut current_row = None;
@@ -508,9 +518,8 @@ impl TextElement {
         }
 
         if state.masked {
-            // Because masked use `*`, 1 char with 1 byte.
-            selected_range.start = state.text.offset_to_char_index(selected_range.start);
-            selected_range.end = state.text.offset_to_char_index(selected_range.end);
+            selected_range.start = masked_display_offset(&state.text, selected_range.start);
+            selected_range.end = masked_display_offset(&state.text, selected_range.end);
         }
 
         let (start_ix, end_ix) = if selected_range.start < selected_range.end {
@@ -1277,7 +1286,10 @@ impl Element for TextElement {
                 cx.theme().muted_foreground,
             )
         } else if state.masked {
-            (&Rope::from("*".repeat(text.chars().count())), fg)
+            (
+                &Rope::from(MASK_CHAR.to_string().repeat(text.chars().count())),
+                fg,
+            )
         } else {
             (&text, fg)
         };
@@ -1298,12 +1310,29 @@ impl Element for TextElement {
             .map(|&bl| state.text.line_start_offset(bl))
             .collect();
 
+        // For password input (masked: true), convert byte offsets to masked display byte offsets so that
+        // layout_match_range and position_for_index work in the correct coordinate space.
+        let (visible_line_byte_offsets, visible_range_offset) = if state.masked {
+            let offsets = visible_line_byte_offsets
+                .iter()
+                .map(|&o| masked_display_offset(&text, o))
+                .collect();
+            let range_offset = masked_display_offset(&text, visible_start_offset)
+                ..masked_display_offset(&text, visible_end_offset);
+            (offsets, range_offset)
+        } else {
+            (
+                visible_line_byte_offsets,
+                visible_start_offset..visible_end_offset,
+            )
+        };
+
         let mut last_layout = LastLayout {
             visible_range,
             visible_buffer_lines,
             visible_line_byte_offsets,
             visible_top,
-            visible_range_offset: visible_start_offset..visible_end_offset,
+            visible_range_offset,
             line_height,
             wrap_width,
             line_number_width,
@@ -1632,17 +1661,6 @@ impl Element for TextElement {
         let origin = bounds.origin;
 
         let invisible_top_padding = prepaint.last_layout.visible_top;
-
-        let mut mask_offset_y = px(0.);
-        let state = self.state.read(cx);
-        if state.masked && state.text.len() > 0 {
-            // Move down offset for vertical centering the *****
-            if cfg!(target_os = "macos") {
-                mask_offset_y = px(3.);
-            } else {
-                mask_offset_y = px(2.5);
-            }
-        }
         let active_line_color = cx.theme().highlight_theme.style.editor_active_line;
 
         // Paint active line
@@ -1703,7 +1721,7 @@ impl Element for TextElement {
         }
 
         // Paint text with inline completion ghost line support
-        let mut offset_y = mask_offset_y + invisible_top_padding;
+        let mut offset_y = invisible_top_padding;
         let ghost_lines = &prepaint.ghost_lines;
         let has_ghost_lines = !ghost_lines.is_empty();
 
