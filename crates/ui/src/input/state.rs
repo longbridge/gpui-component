@@ -20,7 +20,7 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DisplayMap, blink_cursor::BlinkCursor, change::Change, element::TextElement,
+    DisplayMap, MASK_CHAR, blink_cursor::BlinkCursor, change::Change, element::TextElement,
     mask_pattern::MaskPattern, mode::InputMode, number_input,
 };
 use crate::Size;
@@ -1706,7 +1706,8 @@ impl InputState {
                 let local_index = line_layout.closest_index_for_x(pos.x, last_layout);
                 let index = line_start_offset + local_index;
                 return if self.masked {
-                    self.text.char_index_to_offset(index)
+                    self.text
+                        .char_index_to_offset(index / MASK_CHAR.len_utf8())
                 } else {
                     index.min(self.text.len())
                 };
@@ -1716,14 +1717,16 @@ impl InputState {
             if let Some(local_index) = line_layout.closest_index_for_position(pos, last_layout) {
                 let index = line_start_offset + local_index;
                 return if self.masked {
-                    self.text.char_index_to_offset(index)
+                    self.text
+                        .char_index_to_offset(index / MASK_CHAR.len_utf8())
                 } else {
                     index.min(self.text.len())
                 };
             } else if pos.y < px(0.) {
                 // Mouse is above this line, return start of this line
                 return if self.masked {
-                    self.text.char_index_to_offset(line_start_offset)
+                    self.text
+                        .char_index_to_offset(line_start_offset / MASK_CHAR.len_utf8())
                 } else {
                     line_start_offset
                 };
@@ -1733,12 +1736,7 @@ impl InputState {
         }
 
         // Mouse is below all visible lines, return end of text
-        let index = self.text.len();
-        if self.masked {
-            self.text.char_index_to_offset(index)
-        } else {
-            index
-        }
+        self.text.len()
     }
 
     /// Returns a y offsetted point for the line origin.
