@@ -1,5 +1,7 @@
 # GPUI Component
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) [![Docs](https://docs.rs/gpui-component/badge.svg)](https://docs.rs/gpui-component/) [![Crates.io](https://img.shields.io/crates/v/gpui-component.svg)](https://crates.io/crates/gpui-component)
 
 UI components for building fantastic desktop applications using [GPUI](https://gpui.rs).
@@ -15,7 +17,7 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 - **High Performance**: Virtualized Table and List components for smooth large-data rendering.
 - **Content Rendering**: Native support for Markdown and simple HTML.
 - **Charting**: Built-in charts for visualizing your data.
-- **Editor**: High performance code editor (support up to 200K lines) with LSP (diagnostics, completion, hover, etc).
+- **Editor**: High performance code editor (Up to 200K lines for stable performance) with LSP (diagnostics, completion, hover, etc).
 - **Syntax Highlighting**: Syntax highlighting for editor and markdown components using Tree Sitter.
 
 ## Showcase
@@ -196,5 +198,5 @@ Check out [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 Apache-2.0
 
-- UI design based on [shadcn/ui](https://ui.shadcn.com).
+- UI design based on [shadcn/ui](https://ui.shadcn.com), some from [Reui](https://reui.io).
 - Icons from [Lucide](https://lucide.dev).
