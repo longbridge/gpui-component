@@ -1321,7 +1321,10 @@ impl Element for TextElement {
                 ..masked_display_offset(&text, visible_end_offset);
             (offsets, range_offset)
         } else {
-            (visible_line_byte_offsets, visible_start_offset..visible_end_offset)
+            (
+                visible_line_byte_offsets,
+                visible_start_offset..visible_end_offset,
+            )
         };
 
         let mut last_layout = LastLayout {
@@ -1658,17 +1661,6 @@ impl Element for TextElement {
         let origin = bounds.origin;
 
         let invisible_top_padding = prepaint.last_layout.visible_top;
-
-        // let mut mask_offset_y = px(0.);
-        // let state = self.state.read(cx);
-        // if state.masked && state.text.len() > 0 {
-        //     // Move down offset for vertical centering the *****
-        //     if cfg!(target_os = "macos") {
-        //         mask_offset_y = px(3.);
-        //     } else {
-        //         mask_offset_y = px(2.5);
-        //     }
-        // }
         let active_line_color = cx.theme().highlight_theme.style.editor_active_line;
 
         // Paint active line
