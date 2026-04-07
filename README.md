@@ -86,15 +86,44 @@ The example uses [Lucide](https://lucide.dev) icons, but you can use any icons y
 
 ## Development
 
-### Desktop Gallery
+### Desktop Gallery (Story)
 
-We have a gallery of applications built with GPUI Component.
+The `story` crate is a gallery application that showcases all available components. Run it with:
 
 ```bash
 cargo run
 ```
 
-More examples can be found in the `examples` directory. You can run them with `cargo run --example <example_name>`.
+### Examples
+
+Some important examples are built into the `story` crate and can be run directly:
+
+```bash
+# Code editor with LSP support and syntax highlighting
+cargo run --example editor
+
+# Dock layout system (panels, split views, tabs)
+cargo run --example dock
+
+# Markdown rendering
+cargo run --example markdown
+
+# HTML rendering
+cargo run --example html
+```
+
+The `examples` directory also contains standalone examples, each focused on a single feature. Each example is a separate crate, run them with `cargo run -p <name>`:
+
+```bash
+# Basic hello world
+cargo run -p hello_world
+
+# System monitor (real-time charts with CPU/memory data)
+cargo run -p system_monitor
+
+# Window title customization
+cargo run -p window_title
+```
 
 ### Web Gallery (WASM)
 
