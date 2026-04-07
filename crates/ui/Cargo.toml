@@ -15,7 +15,6 @@ edition.workspace = true
 doctest = false
 
 [features]
-default = ["tree-sitter-languages"]
 decimal = ["dep:rust_decimal"]
 inspector = ["gpui_macros/inspector", "gpui/inspector"]
 
