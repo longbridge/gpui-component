@@ -87,8 +87,9 @@ impl RenderOnce for Progress {
             Size::Size(s) => (s, s / 2.),
         };
 
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
-        let prev_value = state.read(cx).value;
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState::new(value));
+        let prev_target = state.read(cx).target();
+        let has_changed = prev_target != value;
 
         div()
             .id(self.id)
@@ -112,13 +113,18 @@ impl RenderOnce for Progress {
                         _ => this.rounded_r_none(),
                     })
                     .map(|this| {
-                        if prev_value != value {
+                        if has_changed {
+                            let from = prev_target;
+                            state.read(cx).set_target(value);
+
                             let duration = Duration::from_secs_f64(0.15);
                             cx.spawn({
                                 let state = state.clone();
                                 async move |cx| {
                                     cx.background_executor().timer(duration).await;
-                                    _ = state.update(cx, |this, _| this.value = value);
+                                    _ = state.update(cx, |this, _| {
+                                        this.value = this.target();
+                                    });
                                 }
                             })
                             .detach();
@@ -127,7 +133,7 @@ impl RenderOnce for Progress {
                                 "progress-animation",
                                 Animation::new(duration),
                                 move |this, delta| {
-                                    let current_value = prev_value + (value - prev_value) * delta;
+                                    let current_value = from + (value - from) * delta;
                                     let w = relative((current_value / 100.).clamp(0., 1.));
                                     this.w(w)
                                 },
@@ -138,17 +144,16 @@ impl RenderOnce for Progress {
                                 "progress-loading",
                                 Animation::new(Duration::from_secs(1)).repeat(),
                                 move |this, delta| {
-                                    let start = relative(ease_in_out(
-                                        ((delta - 0.5) / 0.5).clamp(0., 1.),
-                                    ));
+                                    let start =
+                                        relative(ease_in_out(((delta - 0.5) / 0.5).clamp(0., 1.)));
                                     let end = relative(ease_in_out(1.0 - delta));
-                                    this.when(delta > 0.5, |this| this.left(start))
-                                        .right(end)
+                                    this.when(delta > 0.5, |this| this.left(start)).right(end)
                                 },
                             )
                             .into_any_element()
                         } else {
-                            this.w(relative((value / 100.).clamp(0., 1.))).into_any_element()
+                            this.w(relative((value / 100.).clamp(0., 1.)))
+                                .into_any_element()
                         }
                     }),
             )
