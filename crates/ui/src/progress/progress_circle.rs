@@ -155,9 +155,10 @@ impl RenderOnce for ProgressCircle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let value = self.value;
         let loading = self.loading;
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState { value });
-        let prev_value = state.read(cx).value;
-        let has_changed = prev_value != value;
+        let state =
+            window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState::new(value));
+        let prev_target = state.read(cx).target();
+        let has_changed = prev_target != value;
 
         let color = self.color.unwrap_or(cx.theme().progress_bar);
 
@@ -178,21 +179,26 @@ impl RenderOnce for ProgressCircle {
             .children(self.children)
             .map(|this| {
                 if has_changed {
+                    let from = prev_target;
+                    state.read(cx).set_target(value);
+
                     let duration = Duration::from_secs_f64(0.15);
                     cx.spawn({
                         let state = state.clone();
                         async move |cx| {
                             cx.background_executor().timer(duration).await;
-                            _ = state.update(cx, |this, _| this.value = value);
+                            _ = state.update(cx, |this, _| {
+                                this.value = this.target();
+                            });
                         }
                     })
                     .detach();
 
                     this.with_animation(
-                        format!("progress-circle-{}", prev_value),
+                        format!("progress-circle-{}", from),
                         Animation::new(duration),
                         move |this, delta| {
-                            let v = prev_value + (value - prev_value) * delta;
+                            let v = from + (value - from) * delta;
                             this.child(Self::render_circle(0., v, color))
                         },
                     )
