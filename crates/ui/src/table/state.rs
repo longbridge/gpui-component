@@ -392,6 +392,15 @@ where
         self.right_clicked_row
     }
 
+    /// Set or clear the right-clicked row state.
+    ///
+    /// Pass `None` to clear — useful when opening a header context menu
+    /// to prevent the row context menu from appearing simultaneously.
+    pub fn set_right_clicked_row(&mut self, row: Option<usize>, cx: &mut Context<Self>) {
+        self.right_clicked_row = row;
+        cx.notify();
+    }
+
     /// Returns the selected column index.
     pub fn selected_col(&self) -> Option<usize> {
         self.selected_col
