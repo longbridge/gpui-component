@@ -345,6 +345,8 @@ pub struct InputState {
     /// Completion/CodeAction context menu
     pub(super) context_menu: Option<ContextMenu>,
     pub(super) mouse_context_menu: Entity<MouseContextMenu>,
+    pub(super) enable_mouse_context_menu: bool,
+
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
     pub(super) hover_popover: Option<Entity<HoverPopover>>,
@@ -441,6 +443,7 @@ impl InputState {
             diagnostic_popover: None,
             context_menu: None,
             mouse_context_menu,
+            enable_mouse_context_menu: true,
             completion_inserting: false,
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
@@ -493,6 +496,14 @@ impl InputState {
         let language: SharedString = language.into();
         self.mode = InputMode::code_editor(language);
         self.searchable = true;
+        self
+    }
+
+    /// Sets whether the mouse context menu that shows on right-click is enabled.
+    ///
+    /// The mouse context menu is enabled by default.
+    pub fn mouse_context_menu(mut self, enable: bool) -> Self {
+        self.enable_mouse_context_menu = enable;
         self
     }
 
@@ -1366,7 +1377,9 @@ impl InputState {
 
         // Show Mouse context menu
         if event.button == MouseButton::Right {
-            self.handle_right_click_menu(event, offset, window, cx);
+            if self.enable_mouse_context_menu {
+                self.handle_right_click_menu(event, offset, window, cx);
+            }
             return;
         }
 
