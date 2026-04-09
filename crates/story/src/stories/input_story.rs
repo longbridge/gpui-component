@@ -92,7 +92,9 @@ impl InputStory {
             })
         });
         let custom_input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Custom Input use monospace, 0123456789.")
+            InputState::new(window, cx)
+                .placeholder("Custom Input use monospace, 0123456789.")
+                .context_menu(false)
         });
 
         let color_input = cx.new(|cx| {

@@ -41,7 +41,7 @@ impl InputState {
             self.move_to(offset, None, cx);
         }
 
-        self.context_menu = Some(ContextMenu::MouseContext(self.mouse_context_menu.clone()));
+        self.context_menu_content = Some(ContextMenu::MouseContext(self.context_menu.clone()));
 
         let is_code_editor = self.mode.is_code_editor();
         if is_code_editor {
@@ -55,7 +55,7 @@ impl InputState {
         let has_paste = is_enable && cx.read_from_clipboard().is_some();
 
         let action_context = self.focus_handle.clone();
-        self.mouse_context_menu.update(cx, |this, cx| {
+        self.context_menu.update(cx, |this, cx| {
             this.mouse_position = event.position;
             this.menu.update(cx, |menu, cx| {
                 let new_menu = PopupMenu::new(cx)
