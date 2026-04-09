@@ -34,7 +34,7 @@ use crate::input::{
     HoverDefinition, InlineCompletion, Lsp, Position, RopeExt as _, Selection,
     display_map::LineLayout,
     element::RIGHT_MARGIN,
-    popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
+    popovers::{ContextMenu, DiagnosticPopover, HoverPopover, InputContextMenu},
     search::{self, SearchPanel},
 };
 use crate::{Root, history::History};
@@ -343,9 +343,9 @@ pub struct InputState {
     /// Popover
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
     /// Completion/CodeAction context menu
-    pub(super) context_menu: Option<ContextMenu>,
-    pub(super) mouse_context_menu: Entity<MouseContextMenu>,
-    pub(super) enable_mouse_context_menu: bool,
+    pub(super) context_menu_content: Option<ContextMenu>,
+    pub(super) context_menu: Entity<InputContextMenu>,
+    pub(super) enable_context_menu: bool,
 
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
@@ -403,7 +403,7 @@ impl InputState {
         ];
 
         let text_style = window.text_style();
-        let mouse_context_menu = MouseContextMenu::new(cx.entity(), window, cx);
+        let mouse_context_menu = InputContextMenu::new(cx.entity(), window, cx);
 
         Self {
             focus_handle: focus_handle.clone(),
@@ -441,9 +441,9 @@ impl InputState {
             text_align: TextAlign::Left,
             lsp: Lsp::default(),
             diagnostic_popover: None,
-            context_menu: None,
-            mouse_context_menu,
-            enable_mouse_context_menu: true,
+            context_menu_content: None,
+            context_menu: mouse_context_menu,
+            enable_context_menu: true,
             completion_inserting: false,
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
@@ -499,11 +499,11 @@ impl InputState {
         self
     }
 
-    /// Sets whether the mouse context menu that shows on right-click is enabled.
+    /// Sets whether the context menu that shows on right-click is enabled.
     ///
-    /// The mouse context menu is enabled by default.
-    pub fn mouse_context_menu(mut self, enable: bool) -> Self {
-        self.enable_mouse_context_menu = enable;
+    /// The context menu is enabled by default.
+    pub fn context_menu(mut self, enable: bool) -> Self {
+        self.enable_context_menu = enable;
         self
     }
 
@@ -1377,7 +1377,7 @@ impl InputState {
 
         // Show Mouse context menu
         if event.button == MouseButton::Right {
-            if self.enable_mouse_context_menu {
+            if self.enable_context_menu {
                 self.handle_right_click_menu(event, offset, window, cx);
             }
             return;
@@ -1719,8 +1719,7 @@ impl InputState {
                 let local_index = line_layout.closest_index_for_x(pos.x, last_layout);
                 let index = line_start_offset + local_index;
                 return if self.masked {
-                    self.text
-                        .char_index_to_offset(index / MASK_CHAR.len_utf8())
+                    self.text.char_index_to_offset(index / MASK_CHAR.len_utf8())
                 } else {
                     index.min(self.text.len())
                 };
@@ -1730,8 +1729,7 @@ impl InputState {
             if let Some(local_index) = line_layout.closest_index_for_position(pos, last_layout) {
                 let index = line_start_offset + local_index;
                 return if self.masked {
-                    self.text
-                        .char_index_to_offset(index / MASK_CHAR.len_utf8())
+                    self.text.char_index_to_offset(index / MASK_CHAR.len_utf8())
                 } else {
                     index.min(self.text.len())
                 };
@@ -1890,7 +1888,7 @@ impl InputState {
 
         self.hover_popover = None;
         self.diagnostic_popover = None;
-        self.context_menu = None;
+        self.context_menu_content = None;
         self.clear_inline_completion(cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
@@ -2505,7 +2503,7 @@ impl Render for InputState {
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
             .children(self.diagnostic_popover.clone())
-            .children(self.context_menu.as_ref().map(|menu| menu.render()))
+            .children(self.context_menu_content.as_ref().map(|menu| menu.render()))
             .children(self.hover_popover.clone())
     }
 }

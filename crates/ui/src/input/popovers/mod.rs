@@ -23,7 +23,7 @@ use crate::{
 pub(crate) enum ContextMenu {
     Completion(Entity<CompletionMenu>),
     CodeAction(Entity<CodeActionMenu>),
-    MouseContext(Entity<MouseContextMenu>),
+    RightClick(Entity<InputContextMenu>),
 }
 
 impl ContextMenu {
@@ -31,7 +31,7 @@ impl ContextMenu {
         match self {
             ContextMenu::Completion(menu) => menu.read(cx).is_open(),
             ContextMenu::CodeAction(menu) => menu.read(cx).is_open(),
-            ContextMenu::MouseContext(menu) => menu.read(cx).is_open(),
+            ContextMenu::RightClick(menu) => menu.read(cx).is_open(),
         }
     }
 
@@ -39,7 +39,7 @@ impl ContextMenu {
         match self {
             ContextMenu::Completion(menu) => menu.clone().into_any_element(),
             ContextMenu::CodeAction(menu) => menu.clone().into_any_element(),
-            ContextMenu::MouseContext(menu) => menu.clone().into_any_element(),
+            ContextMenu::RightClick(menu) => menu.clone().into_any_element(),
         }
     }
 }
