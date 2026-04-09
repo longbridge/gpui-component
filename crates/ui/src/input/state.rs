@@ -34,7 +34,7 @@ use crate::input::{
     HoverDefinition, InlineCompletion, Lsp, Position, RopeExt as _, Selection,
     display_map::LineLayout,
     element::RIGHT_MARGIN,
-    popovers::{ContextMenu, DiagnosticPopover, HoverPopover, MouseContextMenu},
+    popovers::{ContextMenu, DiagnosticPopover, HoverPopover, InputContextMenu},
     search::{self, SearchPanel},
 };
 use crate::{Root, history::History};
@@ -344,7 +344,7 @@ pub struct InputState {
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
     /// Completion/CodeAction context menu
     pub(super) context_menu_content: Option<ContextMenu>,
-    pub(super) context_menu: Entity<MouseContextMenu>,
+    pub(super) context_menu: Entity<InputContextMenu>,
     pub(super) enable_context_menu: bool,
 
     /// A flag to indicate if we are currently inserting a completion item.
@@ -403,7 +403,7 @@ impl InputState {
         ];
 
         let text_style = window.text_style();
-        let mouse_context_menu = MouseContextMenu::new(cx.entity(), window, cx);
+        let mouse_context_menu = InputContextMenu::new(cx.entity(), window, cx);
 
         Self {
             focus_handle: focus_handle.clone(),

@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Context menu for mouse right clicks.
-pub(crate) struct MouseContextMenu {
+pub(crate) struct InputContextMenu {
     editor: Entity<InputState>,
     menu: Entity<PopupMenu>,
     mouse_position: Point<Pixels>,
@@ -41,7 +41,7 @@ impl InputState {
             self.move_to(offset, None, cx);
         }
 
-        self.context_menu_content = Some(ContextMenu::MouseContext(self.context_menu.clone()));
+        self.context_menu_content = Some(ContextMenu::RightClick(self.context_menu.clone()));
 
         let is_code_editor = self.mode.is_code_editor();
         if is_code_editor {
@@ -94,7 +94,7 @@ impl InputState {
     }
 }
 
-impl MouseContextMenu {
+impl InputContextMenu {
     pub(crate) fn new(
         editor: Entity<InputState>,
         window: &mut Window,
@@ -133,7 +133,7 @@ impl MouseContextMenu {
     }
 }
 
-impl Render for MouseContextMenu {
+impl Render for InputContextMenu {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.open {
             return div().into_any_element();
