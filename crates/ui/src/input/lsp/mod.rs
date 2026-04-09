@@ -73,13 +73,13 @@ impl Lsp {
 
 impl InputState {
     pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
-        self.context_menu = None;
+        self.context_menu_content = None;
         self._context_menu_task = Task::ready(Ok(()));
         cx.notify();
     }
 
     pub(crate) fn is_context_menu_open(&self, cx: &App) -> bool {
-        let Some(menu) = self.context_menu.as_ref() else {
+        let Some(menu) = self.context_menu_content.as_ref() else {
             return false;
         };
 
@@ -95,7 +95,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let Some(menu) = self.context_menu.as_ref() else {
+        let Some(menu) = self.context_menu_content.as_ref() else {
             return false;
         };
 
@@ -112,7 +112,7 @@ impl InputState {
                     handled = menu.handle_action(action, window, cx)
                 });
             }
-            ContextMenu::MouseContext(..) => {}
+            ContextMenu::RightClick(..) => {}
         };
 
         handled

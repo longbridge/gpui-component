@@ -438,6 +438,7 @@ impl Render for SearchPanel {
                     .gap_2()
                     .child(
                         div()
+                            .flex()
                             .flex_1()
                             .gap_1()
                             .child(

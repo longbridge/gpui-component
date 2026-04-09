@@ -151,25 +151,22 @@ impl Input {
         self
     }
 
-    fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
+    fn render_toggle_mask_button(state: &Entity<InputState>, cx: &App) -> impl IntoElement {
+        let masked = state.read(cx).masked;
         Button::new("toggle-mask")
-            .icon(IconName::Eye)
+            .icon(if masked {
+                IconName::Eye
+            } else {
+                IconName::EyeOff
+            })
             .xsmall()
             .ghost()
             .tab_stop(false)
-            .on_mouse_down(MouseButton::Left, {
+            .on_click({
                 let state = state.clone();
                 move |_, window, cx| {
                     state.update(cx, |state, cx| {
-                        state.set_masked(false, window, cx);
-                    })
-                }
-            })
-            .on_mouse_up(MouseButton::Left, {
-                let state = state.clone();
-                move |_, window, cx| {
-                    state.update(cx, |state, cx| {
-                        state.set_masked(true, window, cx);
+                        state.set_masked(!state.masked, window, cx);
                     })
                 }
             })
@@ -272,7 +269,7 @@ impl RenderOnce for Input {
             _ => px(6.),
         };
 
-        let (bg, fg) = input_style(state.disabled, cx);
+        let (bg, _) = input_style(state.disabled, cx);
         let bg = if state.mode.is_code_editor() {
             cx.theme().editor_background()
         } else {
@@ -387,7 +384,6 @@ impl RenderOnce for Input {
             })
             .when(self.appearance, |this| {
                 this.bg(bg)
-                    .text_color(fg)
                     .when(self.disabled, |this| this.opacity(0.5))
                     .rounded(cx.theme().radius)
                     .when(self.bordered, |this| {
@@ -426,7 +422,7 @@ impl RenderOnce for Input {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
                         })
                         .when(self.mask_toggle, |this| {
-                            this.child(Self::render_toggle_mask_button(self.state.clone()))
+                            this.child(Self::render_toggle_mask_button(&self.state, cx))
                         })
                         .when(show_clear_button, |this| {
                             this.child(clear_button(cx).on_click({
