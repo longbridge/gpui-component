@@ -717,12 +717,15 @@ where
         cx.notify();
     }
 
-    fn escape(&mut self, _: &Cancel, _: &mut Window, cx: &mut Context<Self>) {
+    fn escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             cx.propagate();
         }
 
         self.set_open(false, cx);
+        cx.defer_in(window, |this, window, cx| {
+            this.focus_handle.focus(window, cx)
+        });
         cx.notify();
     }
 
