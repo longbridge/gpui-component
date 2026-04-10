@@ -1409,6 +1409,19 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Check if mouse is within bounds
+        let within_bounds = self
+            .last_bounds
+            .as_ref()
+            .map(|bounds| bounds.contains(&event.position))
+            .unwrap_or(false);
+
+        if !within_bounds {
+            // Clear hover when mouse leaves the input
+            self.clear_hover_state(cx);
+            return;
+        }
+
         // Show diagnostic popover on mouse move
         let offset = self.index_for_mouse_position(event.position);
         self.handle_mouse_move(offset, event, window, cx);
