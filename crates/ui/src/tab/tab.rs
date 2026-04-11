@@ -1,9 +1,6 @@
 use std::rc::Rc;
 
-use crate::{
-    ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex,
-    tooltip::ComponentTooltip,
-};
+use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, ClickEvent, Div, Edges, Hsla, InteractiveElement, IntoElement, MouseButton,
@@ -407,7 +404,6 @@ pub struct Tab {
     pub(super) disabled: bool,
     pub(super) selected: bool,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
-    tooltip: ComponentTooltip,
 }
 
 impl From<&'static str> for Tab {
@@ -456,7 +452,6 @@ impl Default for Tab {
             variant: TabVariant::default(),
             size: Size::default(),
             on_click: None,
-            tooltip: ComponentTooltip::default(),
         }
     }
 }
@@ -699,6 +694,5 @@ impl RenderOnce for Tab {
                     this.on_click(move |event, window, cx| on_click(event, window, cx))
                 })
             })
-            .map(|this| self.tooltip.apply(this))
     }
 }

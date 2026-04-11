@@ -12,7 +12,6 @@ use gpui_component::{
     h_flex,
     radio::Radio,
     switch::Switch,
-    tab::{Tab, TabBar},
     tooltip::Tooltip,
     v_flex,
 };
@@ -117,18 +116,15 @@ impl Render for TooltipStory {
                 ),
             )
             .child(
-                section("Tab Tooltip").child(
-                    TabBar::new("tab-tooltip")
-                        .child(Tab::new().label("Home").tooltip("Go to home page"))
-                        .child(Tab::new().label("Settings").tooltip("Open settings"))
-                        .child(Tab::new().label("Profile").tooltip("View profile")),
-                ),
-            )
-            .child(
                 section("Toggle Tooltip").child(
-                    h_flex().gap_2()
+                    h_flex()
+                        .gap_2()
                         .child(Toggle::new("toggle1").label("Bold").tooltip("Toggle bold"))
-                        .child(Toggle::new("toggle2").icon(IconName::Heart).tooltip("Toggle favorite")),
+                        .child(
+                            Toggle::new("toggle2")
+                                .icon(IconName::Heart)
+                                .tooltip("Toggle favorite"),
+                        ),
                 ),
             )
             .child(
