@@ -212,3 +212,8 @@
     right: 12px;
   }
 }
+
+#app .VPNavBarTranslations,
+#app .VPNavScreenTranslations {
+  display: none !important;
+}
