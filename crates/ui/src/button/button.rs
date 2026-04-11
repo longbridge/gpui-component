@@ -2,7 +2,9 @@ use std::rc::Rc;
 
 use crate::{
     ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, IconName, Selectable,
-    Sizable, Size, StyleSized, StyledExt, button::ButtonIcon, h_flex,
+    Sizable, Size, StyleSized, StyledExt,
+    button::ButtonIcon,
+    h_flex,
     tooltip::{ManagedTooltipExt as _, Tooltip},
 };
 use gpui::{
@@ -295,7 +297,7 @@ impl Button {
     /// Set a managed tooltip with a custom view builder.
     ///
     /// The tooltip will be positioned relative to the button itself.
-    pub fn managed_tooltip(
+    pub fn tooltip_fn(
         mut self,
         builder: impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static,
     ) -> Self {

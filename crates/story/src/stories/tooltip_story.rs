@@ -84,7 +84,7 @@ impl Render for TooltipStory {
                     .child(
                         Button::new("btn3")
                             .label("Hover me")
-                            .managed_tooltip(|window, cx| {
+                            .tooltip_fn(|window, cx| {
                                 Tooltip::element(|_, cx| {
                                     h_flex()
                                         .gap_x_1()

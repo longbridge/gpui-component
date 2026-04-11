@@ -1,6 +1,9 @@
 use std::{rc::Rc, time::Duration};
 
-use gpui::{Animation, AnimationExt, ElementId, IntoElement, Pixels, Point, Styled, point, px};
+use gpui::{
+    Animation, AnimationExt, ElementId, IntoElement, Pixels, Point, Styled, point,
+    prelude::FluentBuilder, px,
+};
 use smallvec::SmallVec;
 
 /// A cubic bezier function like CSS `cubic-bezier`.
@@ -67,7 +70,10 @@ impl Lerp for Pixels {
 
 impl Lerp for Point<Pixels> {
     fn lerp(&self, target: &Self, t: f32) -> Self {
-        point(Lerp::lerp(&self.x, &target.x, t), Lerp::lerp(&self.y, &target.y, t))
+        point(
+            Lerp::lerp(&self.x, &target.x, t),
+            Lerp::lerp(&self.y, &target.y, t),
+        )
     }
 }
 
@@ -161,3 +167,5 @@ impl Transition {
         })
     }
 }
+
+impl FluentBuilder for Transition {}

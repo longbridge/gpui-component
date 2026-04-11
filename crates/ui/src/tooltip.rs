@@ -1,13 +1,13 @@
 use std::{cell::Cell, rc::Rc, time::Duration};
 
 use gpui::{
-    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, ElementId, IntoElement,
+    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, ElementId, Half, IntoElement,
     ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Task, Window, deferred, div, prelude::FluentBuilder, px,
+    Styled, Task, Window, deferred, div, point, prelude::FluentBuilder, px,
 };
 
 use crate::{
-    ActiveTheme, StyledExt,
+    ActiveTheme, Anchor, StyledExt,
     anchored::anchored,
     animation::{Transition, ease_in_out_cubic, ease_out_cubic},
     h_flex,
@@ -143,13 +143,13 @@ impl Render for Tooltip {
 // ── Managed tooltip system ──────────────────────────────────────────────────
 
 /// Grace period: if a tooltip was hidden within this time, skip delay for next show.
-const TOOLTIP_GRACE_PERIOD: Duration = Duration::from_millis(300);
+const GRACE_PERIOD: Duration = Duration::from_millis(300);
 /// Delay before showing a tooltip when no tooltip is currently active.
-const TOOLTIP_SHOW_DELAY: Duration = Duration::from_millis(500);
+const SHOW_DELAY: Duration = Duration::from_millis(500);
 /// Duration of the slide-down enter animation.
-const TOOLTIP_ENTER_DURATION: Duration = Duration::from_millis(150);
+const ENTER_DURATION: Duration = Duration::from_millis(150);
 /// Duration of the position-slide animation when switching tooltips.
-const TOOLTIP_SLIDE_DURATION: Duration = Duration::from_millis(200);
+const SLIDE_DURATION: Duration = Duration::from_millis(200);
 
 /// Content for a managed tooltip.
 #[derive(Clone)]
@@ -166,11 +166,12 @@ pub struct TooltipOverlay {
     content: Option<TooltipContent>,
     prev_trigger_bounds: Option<Bounds<Pixels>>,
     epoch: usize,
-    show_task: Option<Task<()>>,
-    hide_task: Option<Task<()>>,
     had_recent_tooltip: bool,
     animation_epoch: usize,
     is_switching: bool,
+
+    _show_task: Option<Task<()>>,
+    _hide_task: Option<Task<()>>,
 }
 
 impl TooltipOverlay {
@@ -179,11 +180,11 @@ impl TooltipOverlay {
             content: None,
             prev_trigger_bounds: None,
             epoch: 0,
-            show_task: None,
-            hide_task: None,
             had_recent_tooltip: false,
             animation_epoch: 0,
             is_switching: false,
+            _show_task: None,
+            _hide_task: None,
         }
     }
 
@@ -201,7 +202,7 @@ impl TooltipOverlay {
         cx: &mut Context<Self>,
     ) {
         // Cancel any pending hide
-        self.hide_task = None;
+        self._hide_task = None;
 
         let was_visible = self.content.is_some();
         let in_grace = self.had_recent_tooltip;
@@ -210,7 +211,7 @@ impl TooltipOverlay {
             // Switch: show immediately with slide animation
             self.prev_trigger_bounds = self.content.as_ref().map(|c| c.trigger_bounds);
             self.content = Some(content);
-            self.show_task = None;
+            self._show_task = None;
             self.is_switching = was_visible;
             self.animation_epoch += 1;
             cx.notify();
@@ -218,16 +219,18 @@ impl TooltipOverlay {
             // New: delay then show with slideDown
             let epoch = self.next_epoch();
             let content = content.clone();
-            self.show_task = Some(cx.spawn_in(window, async move |this, cx| {
-                cx.background_executor().timer(TOOLTIP_SHOW_DELAY).await;
+            self._show_task = Some(cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor().timer(SHOW_DELAY).await;
                 let _ = this.update_in(cx, |this, _, cx| {
-                    if this.epoch == epoch {
-                        this.content = Some(content);
-                        this.prev_trigger_bounds = None;
-                        this.is_switching = false;
-                        this.animation_epoch += 1;
-                        cx.notify();
+                    if this.epoch != epoch {
+                        return;
                     }
+
+                    this.content = Some(content);
+                    this.prev_trigger_bounds = None;
+                    this.is_switching = false;
+                    this.animation_epoch += 1;
+                    cx.notify();
                 });
             }));
         }
@@ -237,7 +240,7 @@ impl TooltipOverlay {
     /// moving to another tooltip-bearing element feels instant.
     pub(crate) fn request_hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // Cancel any pending show
-        self.show_task = None;
+        self._show_task = None;
 
         if self.content.is_none() {
             return;
@@ -246,31 +249,18 @@ impl TooltipOverlay {
         let epoch = self.next_epoch();
         self.had_recent_tooltip = true;
 
-        self.hide_task = Some(cx.spawn_in(window, async move |this, cx| {
-            cx.background_executor().timer(TOOLTIP_GRACE_PERIOD).await;
+        self._hide_task = Some(cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(GRACE_PERIOD).await;
             let _ = this.update_in(cx, |this, _, cx| {
-                if this.epoch == epoch {
-                    this.content = None;
-                    this.prev_trigger_bounds = None;
-                    this.had_recent_tooltip = false;
-                    cx.notify();
+                if this.epoch != epoch {
+                    return;
                 }
+                this.content = None;
+                this.prev_trigger_bounds = None;
+                this.had_recent_tooltip = false;
+                cx.notify();
             });
         }));
-    }
-
-    /// Immediately hide tooltip (e.g. on mouse down or scroll).
-    #[allow(dead_code)]
-    pub(crate) fn force_hide(&mut self, cx: &mut Context<Self>) {
-        self.show_task = None;
-        self.hide_task = None;
-        if self.content.is_some() {
-            self.content = None;
-            self.prev_trigger_bounds = None;
-            self.had_recent_tooltip = false;
-            self.next_epoch();
-            cx.notify();
-        }
     }
 }
 
@@ -280,47 +270,53 @@ impl Render for TooltipOverlay {
             return div().into_any_element();
         };
 
-        let tooltip_view = (content.build)(window, cx);
+        let content_view = (content.build)(window, cx);
         let trigger_bounds = content.trigger_bounds;
         let animation_epoch = self.animation_epoch;
         let is_switching = self.is_switching;
         let prev_trigger_bounds = self.prev_trigger_bounds;
 
-        // Anchor the tooltip's bottom-center to the trigger's top-center.
-        // Tooltip view has m_3() (12px margin). Offset by +4 so the visual gap is ~8px.
-        let anchor_position = gpui::point(
-            trigger_bounds.origin.x + trigger_bounds.size.width / 2.0,
-            trigger_bounds.origin.y + px(4.),
+        let anchor_position = point(
+            trigger_bounds.origin.x + trigger_bounds.size.width.half(),
+            trigger_bounds.origin.y,
         );
 
         deferred(
             anchored()
                 .snap_to_window_with_margin(px(4.))
-                .anchor(crate::Anchor::BottomCenter)
                 .position(anchor_position)
-                .child(div().child(tooltip_view).map(move |el: gpui::Div| {
+                .anchor(Anchor::BottomCenter)
+                .child(div().child(content_view).map(|el| {
                     if is_switching {
-                        if let Some(prev_bounds) = prev_trigger_bounds {
-                            let dx = trigger_bounds.center().x - prev_bounds.center().x;
-                            let dy = trigger_bounds.center().y - prev_bounds.center().y;
-                            Transition::new(TOOLTIP_SLIDE_DURATION)
-                                .ease(ease_in_out_cubic)
-                                .slide_x(-dx, px(0.))
-                                .slide_y(-dy, px(0.))
-                                .apply(
-                                    el,
-                                    ElementId::NamedInteger(
-                                        "tooltip-slide".into(),
-                                        animation_epoch as u64,
-                                    ),
-                                )
-                                .into_any_element()
-                        } else {
-                            el.into_any_element()
+                        let Some(prev_bounds) = prev_trigger_bounds else {
+                            return el.into_any_element();
+                        };
+
+                        let is_same_y =
+                            (trigger_bounds.origin.y - prev_bounds.origin.y).abs() < px(10.);
+                        if !is_same_y {
+                            // If the new trigger is at a different Y level, don't slide horizontally
+                            // to avoid weird diagonal movement. (We could consider sliding vertically
+                            // in this case, but it might be less visually clear.)
+                            return el.into_any_element();
                         }
+
+                        let dx = trigger_bounds.center().x - prev_bounds.center().x;
+
+                        Transition::new(SLIDE_DURATION)
+                            .ease(ease_in_out_cubic)
+                            .slide_x(-dx, px(0.))
+                            .apply(
+                                el,
+                                ElementId::NamedInteger(
+                                    "tooltip-slide".into(),
+                                    animation_epoch as u64,
+                                ),
+                            )
+                            .into_any_element()
                     } else {
                         // New tooltip: slideDown + fadeIn
-                        Transition::new(TOOLTIP_ENTER_DURATION)
+                        Transition::new(ENTER_DURATION)
                             .ease(ease_out_cubic)
                             .slide_y(px(4.), px(0.))
                             .fade(0.0, 1.0)
