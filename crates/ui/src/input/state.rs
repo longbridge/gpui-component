@@ -1468,7 +1468,7 @@ impl InputState {
         let delta = event.delta.pixel_delta(line_height);
 
         let old_offset = self.scroll_handle.offset();
-        self.update_scroll_offset(Some(old_offset + delta), cx);
+        self.update_scroll_offset(Some(old_offset + delta), window.scale_factor(), cx);
 
         // Only stop propagation if the offset actually changed
         if self.scroll_handle.offset() != old_offset {
@@ -1481,6 +1481,7 @@ impl InputState {
     pub(super) fn update_scroll_offset(
         &mut self,
         offset: Option<Point<Pixels>>,
+        scale_factor: f32,
         cx: &mut Context<Self>,
     ) {
         let mut offset = offset.unwrap_or(self.scroll_handle.offset());
@@ -1502,8 +1503,16 @@ impl InputState {
             offset.y.clamp(safe_y_range.start, safe_y_range.end)
         };
         offset.x = offset.x.clamp(safe_x_range.start, safe_x_range.end);
+
+        // Compare at physical-pixel granularity to avoid sub-pixel oscillation
+        // that would cause a perpetual notify→repaint loop.
+        let old = self.scroll_handle.offset();
         self.scroll_handle.set_offset(offset);
-        cx.notify();
+
+        let snap = |v: Pixels| (v.as_f32() * scale_factor).round() as i32;
+        if snap(old.x) != snap(offset.x) || snap(old.y) != snap(offset.y) {
+            cx.notify();
+        }
     }
 
     /// Scroll to make the given offset visible.
@@ -1572,6 +1581,10 @@ impl InputState {
         } else {
             line_height
         };
+        // Cap margin to viewport height: taffy edge-rounding can shrink bounds.height
+        // below line_height (e.g. 34.5 phys → 34 phys at 1.5× scale), and an
+        // uncapped margin would falsely trigger scroll on every cursor movement.
+        let edge_height = edge_height.min(bounds.size.height);
         if row_offset_y - edge_height + line_height < -scroll_offset.y {
             // Scroll up
             scroll_offset.y = -row_offset_y + edge_height - line_height;
@@ -2001,8 +2014,17 @@ impl InputState {
         cx.notify();
     }
 
-    pub(super) fn set_input_bounds(&mut self, new_bounds: Bounds<Pixels>, cx: &mut Context<Self>) {
-        let wrap_width_changed = self.input_bounds.size.width != new_bounds.size.width;
+    pub(super) fn set_input_bounds(
+        &mut self,
+        new_bounds: Bounds<Pixels>,
+        scale_factor: f32,
+        cx: &mut Context<Self>,
+    ) {
+        // Compare at physical-pixel granularity to avoid sub-pixel float noise
+        // from taffy rounding causing a perpetual notify→repaint loop.
+        let snap = |v: Pixels| (v.as_f32() * scale_factor).round() as i32;
+        let wrap_width_changed =
+            snap(self.input_bounds.size.width) != snap(new_bounds.size.width);
         self.input_bounds = new_bounds;
 
         // Update display_map wrap_width if changed.
