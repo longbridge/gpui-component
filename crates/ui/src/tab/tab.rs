@@ -542,12 +542,6 @@ impl Tab {
         self.tab_bar_prefix = Some(tab_bar_prefix);
         self
     }
-
-    /// Set tooltip text for the tab.
-    pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.tooltip.text = Some((tooltip.into(), None));
-        self
-    }
 }
 
 impl ParentElement for Tab {
