@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding, ParentElement,
-    Render, StatefulInteractiveElement, Styled, Window, actions, div,
+    Render, Styled, Window, actions, div,
 };
 
 use gpui_component::{
@@ -11,7 +11,7 @@ use gpui_component::{
     h_flex,
     radio::Radio,
     switch::Switch,
-    tooltip::Tooltip,
+    tooltip::{ManagedTooltipExt as _, Tooltip},
     v_flex,
 };
 
@@ -82,10 +82,9 @@ impl Render for TooltipStory {
                         Some("Tooltip"),
                     ))
                     .child(
-                        div()
-                            .child(Button::new("btn3").label("Hover me"))
-                            .id("tooltip-4")
-                            .tooltip(|window, cx| {
+                        Button::new("btn3")
+                            .label("Hover me")
+                            .managed_tooltip(|window, cx| {
                                 Tooltip::element(|_, cx| {
                                     h_flex()
                                         .gap_x_1()
@@ -103,20 +102,25 @@ impl Render for TooltipStory {
                     ),
             )
             .child(
-                section("Label Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
-                    |window, cx| {
-                        Tooltip::new("This is a Label")
-                            .action(&Info, Some("Tooltip"))
-                            .build(window, cx)
-                    },
-                )),
+                section("Label Tooltip").child(
+                    div()
+                        .child("Hover me")
+                        .id("tooltip-2")
+                        .managed_tooltip(|window, cx| {
+                            Tooltip::new("This is a Label")
+                                .action(&Info, Some("Tooltip"))
+                                .build(window, cx)
+                        }),
+                ),
             )
             .child(
                 section("Checkbox Tooltip").child(
                     Checkbox::new("check")
                         .label("Remember me")
                         .checked(true)
-                        .tooltip(|window, cx| Tooltip::new("This is a checkbox").build(window, cx)),
+                        .managed_tooltip(|window, cx| {
+                            Tooltip::new("This is a checkbox").build(window, cx)
+                        }),
                 ),
             )
             .child(
@@ -124,7 +128,7 @@ impl Render for TooltipStory {
                     Radio::new("radio")
                         .label("Radio with tooltip")
                         .checked(true)
-                        .tooltip(|window, cx| {
+                        .managed_tooltip(|window, cx| {
                             Tooltip::new("This is a radio button").build(window, cx)
                         }),
                 ),

@@ -1,9 +1,26 @@
+use std::{cell::Cell, rc::Rc, time::Duration};
+
 use gpui::{
-    div, prelude::FluentBuilder, px, Action, AnyElement, AnyView, App, AppContext, Context,
-    IntoElement, ParentElement, Render, SharedString, StyleRefinement, Styled, Window,
+    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, ElementId, IntoElement,
+    ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement,
+    Styled, Task, Window, deferred, div, prelude::FluentBuilder, px,
 };
 
-use crate::{h_flex, kbd::Kbd, text::Text, ActiveTheme, StyledExt};
+use crate::{
+    ActiveTheme, StyledExt,
+    anchored::anchored,
+    animation::{Transition, ease_in_out_cubic, ease_out_cubic},
+    h_flex,
+    kbd::Kbd,
+    root::Root,
+    text::Text,
+};
+
+pub(crate) fn init(_cx: &mut App) {
+    // No app-level init needed — TooltipOverlay is per-window via Root.
+}
+
+// ── Tooltip view (unchanged API) ────────────────────────────────────────────
 
 enum TooltipContext {
     Text(Text),
@@ -122,3 +139,261 @@ impl Render for Tooltip {
         )
     }
 }
+
+// ── Managed tooltip system ──────────────────────────────────────────────────
+
+/// Grace period: if a tooltip was hidden within this time, skip delay for next show.
+const TOOLTIP_GRACE_PERIOD: Duration = Duration::from_millis(300);
+/// Delay before showing a tooltip when no tooltip is currently active.
+const TOOLTIP_SHOW_DELAY: Duration = Duration::from_millis(500);
+/// Duration of the slide-down enter animation.
+const TOOLTIP_ENTER_DURATION: Duration = Duration::from_millis(150);
+/// Duration of the position-slide animation when switching tooltips.
+const TOOLTIP_SLIDE_DURATION: Duration = Duration::from_millis(200);
+
+/// Content for a managed tooltip.
+#[derive(Clone)]
+pub(crate) struct TooltipContent {
+    pub build: Rc<dyn Fn(&mut Window, &mut App) -> AnyView>,
+    pub trigger_bounds: Bounds<Pixels>,
+}
+
+/// Manages tooltip lifecycle: delay, grace period, animations, and rendering.
+///
+/// A single instance lives in [`Root`] per window. Components register hover
+/// via [`ManagedTooltipExt::managed_tooltip`] which calls into this overlay.
+pub struct TooltipOverlay {
+    content: Option<TooltipContent>,
+    prev_trigger_bounds: Option<Bounds<Pixels>>,
+    epoch: usize,
+    show_task: Option<Task<()>>,
+    hide_task: Option<Task<()>>,
+    had_recent_tooltip: bool,
+    animation_epoch: usize,
+    is_switching: bool,
+}
+
+impl TooltipOverlay {
+    pub fn new() -> Self {
+        Self {
+            content: None,
+            prev_trigger_bounds: None,
+            epoch: 0,
+            show_task: None,
+            hide_task: None,
+            had_recent_tooltip: false,
+            animation_epoch: 0,
+            is_switching: false,
+        }
+    }
+
+    fn next_epoch(&mut self) -> usize {
+        self.epoch += 1;
+        self.epoch
+    }
+
+    /// Request showing a tooltip. If another tooltip is active or was recently
+    /// hidden, shows immediately with a slide animation. Otherwise starts a delay.
+    pub(crate) fn request_show(
+        &mut self,
+        content: TooltipContent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Cancel any pending hide
+        self.hide_task = None;
+
+        let was_visible = self.content.is_some();
+        let in_grace = self.had_recent_tooltip;
+
+        if was_visible || in_grace {
+            // Switch: show immediately with slide animation
+            self.prev_trigger_bounds = self.content.as_ref().map(|c| c.trigger_bounds);
+            self.content = Some(content);
+            self.show_task = None;
+            self.is_switching = was_visible;
+            self.animation_epoch += 1;
+            cx.notify();
+        } else {
+            // New: delay then show with slideDown
+            let epoch = self.next_epoch();
+            let content = content.clone();
+            self.show_task = Some(cx.spawn_in(window, async move |this, cx| {
+                cx.background_executor().timer(TOOLTIP_SHOW_DELAY).await;
+                let _ = this.update_in(cx, |this, _, cx| {
+                    if this.epoch == epoch {
+                        this.content = Some(content);
+                        this.prev_trigger_bounds = None;
+                        this.is_switching = false;
+                        this.animation_epoch += 1;
+                        cx.notify();
+                    }
+                });
+            }));
+        }
+    }
+
+    /// Request hiding the current tooltip. Starts a brief grace period so that
+    /// moving to another tooltip-bearing element feels instant.
+    pub(crate) fn request_hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Cancel any pending show
+        self.show_task = None;
+
+        if self.content.is_none() {
+            return;
+        }
+
+        let epoch = self.next_epoch();
+        self.had_recent_tooltip = true;
+
+        self.hide_task = Some(cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(TOOLTIP_GRACE_PERIOD).await;
+            let _ = this.update_in(cx, |this, _, cx| {
+                if this.epoch == epoch {
+                    this.content = None;
+                    this.prev_trigger_bounds = None;
+                    this.had_recent_tooltip = false;
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
+    /// Immediately hide tooltip (e.g. on mouse down or scroll).
+    #[allow(dead_code)]
+    pub(crate) fn force_hide(&mut self, cx: &mut Context<Self>) {
+        self.show_task = None;
+        self.hide_task = None;
+        if self.content.is_some() {
+            self.content = None;
+            self.prev_trigger_bounds = None;
+            self.had_recent_tooltip = false;
+            self.next_epoch();
+            cx.notify();
+        }
+    }
+}
+
+impl Render for TooltipOverlay {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let Some(content) = self.content.as_ref() else {
+            return div().into_any_element();
+        };
+
+        let tooltip_view = (content.build)(window, cx);
+        let trigger_bounds = content.trigger_bounds;
+        let animation_epoch = self.animation_epoch;
+        let is_switching = self.is_switching;
+        let prev_trigger_bounds = self.prev_trigger_bounds;
+
+        // Anchor the tooltip's bottom-center to the trigger's top-center.
+        // Tooltip view has m_3() (12px margin). Offset by +4 so the visual gap is ~8px.
+        let anchor_position = gpui::point(
+            trigger_bounds.origin.x + trigger_bounds.size.width / 2.0,
+            trigger_bounds.origin.y + px(4.),
+        );
+
+        deferred(
+            anchored()
+                .snap_to_window_with_margin(px(4.))
+                .anchor(crate::Anchor::BottomCenter)
+                .position(anchor_position)
+                .child(div().child(tooltip_view).map(move |el: gpui::Div| {
+                    if is_switching {
+                        if let Some(prev_bounds) = prev_trigger_bounds {
+                            let dx = trigger_bounds.center().x - prev_bounds.center().x;
+                            let dy = trigger_bounds.center().y - prev_bounds.center().y;
+                            Transition::new(TOOLTIP_SLIDE_DURATION)
+                                .ease(ease_in_out_cubic)
+                                .slide_x(-dx, px(0.))
+                                .slide_y(-dy, px(0.))
+                                .apply(
+                                    el,
+                                    ElementId::NamedInteger(
+                                        "tooltip-slide".into(),
+                                        animation_epoch as u64,
+                                    ),
+                                )
+                                .into_any_element()
+                        } else {
+                            el.into_any_element()
+                        }
+                    } else {
+                        // New tooltip: slideDown + fadeIn
+                        Transition::new(TOOLTIP_ENTER_DURATION)
+                            .ease(ease_out_cubic)
+                            .slide_y(px(4.), px(0.))
+                            .fade(0.0, 1.0)
+                            .apply(
+                                el,
+                                ElementId::NamedInteger(
+                                    "tooltip-enter".into(),
+                                    animation_epoch as u64,
+                                ),
+                            )
+                            .into_any_element()
+                    }
+                })),
+        )
+        .with_priority(2)
+        .into_any_element()
+    }
+}
+
+// ── Extension trait for managed tooltips ─────────────────────────────────────
+
+/// Extension trait that replaces GPUI's native `.tooltip()` with managed tooltip
+/// behavior: slide-down enter animation and smooth position sliding when switching.
+///
+/// # Example
+///
+/// ```ignore
+/// use gpui_component::tooltip::ManagedTooltipExt;
+///
+/// div()
+///     .id("my-element")
+///     .managed_tooltip(Rc::new(|window, cx| {
+///         Tooltip::new("Hello").build(window, cx)
+///     }))
+/// ```
+pub trait ManagedTooltipExt: StatefulInteractiveElement + crate::ElementExt + Sized {
+    fn managed_tooltip(
+        self,
+        build_tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    ) -> Self {
+        let build_tooltip = Rc::new(build_tooltip);
+        let trigger_bounds_cell: Rc<Cell<Bounds<Pixels>>> = Rc::new(Cell::new(Bounds::default()));
+        let bounds_writer = trigger_bounds_cell.clone();
+
+        self.on_prepaint(move |bounds, _, _| {
+            bounds_writer.set(bounds);
+        })
+        .on_hover({
+            let trigger_bounds_cell = trigger_bounds_cell.clone();
+            let build_tooltip = build_tooltip.clone();
+            move |hovered, window, cx| {
+                if let Some(overlay) = Root::tooltip_overlay(window, cx) {
+                    if *hovered {
+                        let bounds = trigger_bounds_cell.get();
+                        overlay.update(cx, |o: &mut TooltipOverlay, cx| {
+                            o.request_show(
+                                TooltipContent {
+                                    build: build_tooltip.clone(),
+                                    trigger_bounds: bounds,
+                                },
+                                window,
+                                cx,
+                            );
+                        });
+                    } else {
+                        overlay.update(cx, |o: &mut TooltipOverlay, cx| {
+                            o.request_hide(window, cx);
+                        });
+                    }
+                }
+            }
+        })
+    }
+}
+
+impl<E: StatefulInteractiveElement + crate::ElementExt> ManagedTooltipExt for E {}
