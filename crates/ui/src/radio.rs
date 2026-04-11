@@ -54,15 +54,6 @@ impl Radio {
         self
     }
 
-    /// Set a custom tooltip view builder for the radio.
-    pub fn tooltip_fn(
-        mut self,
-        builder: impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static,
-    ) -> Self {
-        self.component_tooltip.builder = Some(Rc::new(builder));
-        self
-    }
-
     /// Set the label of the Radio element.
     pub fn label(mut self, label: impl Into<Text>) -> Self {
         self.label = Some(label.into());

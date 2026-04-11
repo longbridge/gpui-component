@@ -1,13 +1,11 @@
 use crate::{
-    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt,
-    h_flex,
-    text::Text,
+    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, h_flex, text::Text,
     tooltip::ComponentTooltip,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, App, ElementId, Hsla,
-    InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window,
+    Animation, AnimationExt as _, App, ElementId, Hsla, InteractiveElement, IntoElement,
+    ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use std::{rc::Rc, time::Duration};
 
@@ -75,15 +73,6 @@ impl Switch {
     /// Set tooltip text for the switch.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
         self.component_tooltip.text = Some((tooltip.into(), None));
-        self
-    }
-
-    /// Set a custom tooltip view builder for the switch.
-    pub fn tooltip_fn(
-        mut self,
-        builder: impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static,
-    ) -> Self {
-        self.component_tooltip.builder = Some(Rc::new(builder));
         self
     }
 }

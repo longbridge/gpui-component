@@ -2,16 +2,12 @@ use std::{rc::Rc, time::Duration};
 
 use crate::{
     ActiveTheme, Disableable, FocusableExt, IconName, Selectable, Sizable, Size, StyledExt as _,
-    icon::IconNamed,
-    text::Text,
-    tooltip::ComponentTooltip,
-    v_flex,
+    icon::IconNamed, text::Text, tooltip::ComponentTooltip, v_flex,
 };
 use gpui::{
     Animation, AnimationExt, AnyElement, App, Div, ElementId, InteractiveElement, IntoElement,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    Window, div,
-    prelude::FluentBuilder as _, px, relative, rems, svg,
+    Window, div, prelude::FluentBuilder as _, px, relative, rems, svg,
 };
 
 /// A Checkbox element.
@@ -53,15 +49,6 @@ impl Checkbox {
     /// Set tooltip text for the checkbox.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
         self.component_tooltip.text = Some((tooltip.into(), None));
-        self
-    }
-
-    /// Set a custom tooltip view builder for the checkbox.
-    pub fn tooltip_fn(
-        mut self,
-        builder: impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static,
-    ) -> Self {
-        self.component_tooltip.builder = Some(Rc::new(builder));
         self
     }
 
