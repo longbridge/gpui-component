@@ -200,7 +200,7 @@ pub struct Button {
         SharedString,
         Option<(Rc<Box<dyn Action>>, Option<SharedString>)>,
     )>,
-    custom_tooltip: Option<Rc<dyn Fn(&mut Window, &mut App) -> gpui::AnyView>>,
+    tooltip_builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> gpui::AnyView>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     on_hover: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     loading: bool,
@@ -236,7 +236,7 @@ impl Button {
             border_edges: Edges::all(true),
             size: Size::Medium,
             tooltip: None,
-            custom_tooltip: None,
+            tooltip_builder: None,
             on_click: None,
             on_hover: None,
             loading: false,
@@ -292,15 +292,14 @@ impl Button {
         self
     }
 
-    /// Set a custom tooltip view builder for the button.
+    /// Set a managed tooltip with a custom view builder.
     ///
-    /// This is useful when you need a tooltip with custom elements (icons, colors, etc.)
-    /// rather than plain text. The tooltip will be positioned relative to the button itself.
-    pub fn custom_tooltip(
+    /// The tooltip will be positioned relative to the button itself.
+    pub fn managed_tooltip(
         mut self,
         builder: impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static,
     ) -> Self {
-        self.custom_tooltip = Some(Rc::new(builder));
+        self.tooltip_builder = Some(Rc::new(builder));
         self
     }
 
@@ -625,8 +624,23 @@ impl RenderOnce for Button {
                     .border_color(normal_style.border.opacity(0.8))
                     .text_color(normal_style.fg.opacity(0.8))
             })
-            .when_some(self.tooltip_builder(), |this, builder| {
-                this.managed_tooltip(move |window, cx| builder(window, cx))
+            .map(|this| {
+                if let Some(builder) = self.tooltip_builder {
+                    this.managed_tooltip(move |window, cx| builder(window, cx))
+                } else if let Some((tooltip, action)) = self.tooltip {
+                    this.managed_tooltip(move |window, cx| {
+                        Tooltip::new(tooltip.clone())
+                            .when_some(action.clone(), |this, (action, context)| {
+                                this.action(
+                                    action.boxed_clone().as_ref(),
+                                    context.as_ref().map(|c| c.as_ref()),
+                                )
+                            })
+                            .build(window, cx)
+                    })
+                } else {
+                    this
+                }
             })
             .focus_ring(is_focused, px(0.), window, cx)
     }
