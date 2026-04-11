@@ -15,7 +15,7 @@ use crate::{
     popover::Popover,
     slider::{Slider, SliderEvent, SliderState},
     tab::{Tab, TabBar},
-    tooltip::Tooltip,
+    tooltip::{ManagedTooltipExt as _, Tooltip},
     v_flex,
 };
 
@@ -840,8 +840,8 @@ impl RenderOnce for ColorPickerButton {
                                 .when(self.selected, |this| this.border_2())
                         })
                         .when_some(self.tooltip, |this, tooltip| {
-                            this.tooltip(move |_, cx| {
-                                cx.new(|_| Tooltip::new(tooltip.clone())).into()
+                            this.managed_tooltip(move |window, cx| {
+                                Tooltip::new(tooltip.clone()).build(window, cx)
                             })
                         }),
                 )

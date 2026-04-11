@@ -6,6 +6,8 @@ target/
 index.scip
 *.log
 node_modules/
+.claude/worktrees/
+docs/superpowers/
 
 # WASM build artifacts
 crates/story-web/www/src/wasm/*.js
