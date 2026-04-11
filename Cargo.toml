@@ -54,7 +54,7 @@ ropey = { version = "=2.0.0-beta.1", features = [
     "metric_lines_lf",
     "metric_utf16",
 ] }
-rust-i18n = "3"
+rust-i18n = "4"
 schemars = "1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1"
