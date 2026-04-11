@@ -86,15 +86,6 @@ impl Render for TooltipStory {
                     ),
             )
             .child(
-                section("Label Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
-                    |window, cx| {
-                        Tooltip::new("This is a Label")
-                            .action(&Info, Some("Tooltip"))
-                            .build(window, cx)
-                    },
-                )),
-            )
-            .child(
                 section("Checkbox Tooltip").child(
                     Checkbox::new("check")
                         .label("Remember me")
@@ -116,6 +107,15 @@ impl Render for TooltipStory {
                         .checked(true)
                         .tooltip("This is a switch"),
                 ),
+            )
+            .child(
+                section("Default Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
+                    |window, cx| {
+                        Tooltip::new("This is a default tooltip style by GPUI.")
+                            .action(&Info, Some("Tooltip"))
+                            .build(window, cx)
+                    },
+                )),
             )
     }
 }
