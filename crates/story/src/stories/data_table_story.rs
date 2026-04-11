@@ -882,7 +882,7 @@ impl DataTableStory {
                 println!("Double clicked cell: row={}, col={}", row_ix, col_ix)
             }
             TableEvent::DoubleClickedRow(ix) => println!("Double clicked row: {}", ix),
-            TableEvent::SelectRow(ix) => println!("Select row: {}", ix),
+            TableEvent::SelectRow(ix, _) => println!("Select row: {}", ix),
             TableEvent::MoveColumn(origin_idx, target_idx) => {
                 println!("Move col index: {} -> {}", origin_idx, target_idx);
             }
