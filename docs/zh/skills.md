@@ -1,5 +1,5 @@
 ---
-title: 技能
+title: Skills
 layout: home
 description: 适用于 GPUI Component 的开发技能与实践指南。
 ---

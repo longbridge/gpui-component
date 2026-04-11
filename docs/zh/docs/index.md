@@ -1,6 +1,6 @@
 ---
 title: 介绍
-description: 使用 GPUI 构建跨平台桌面应用的 Rust GUI 组件。
+description: 使用 GPUI 构建跨平台桌面应用的 Rust GPUI Component。
 ---
 
 # GPUI Component 简介
