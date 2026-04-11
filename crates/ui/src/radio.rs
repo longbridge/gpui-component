@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{
     ActiveTheme, AxisExt, FocusableExt as _, Sizable, Size, StyledExt,
-    checkbox::checkbox_check_icon, h_flex, text::Text, v_flex,
+    checkbox::checkbox_check_icon, h_flex, text::Text, tooltip::ComponentTooltip, v_flex,
 };
 use gpui::{
     AnyElement, App, Axis, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
@@ -26,6 +26,7 @@ pub struct Radio {
     tab_index: isize,
     size: Size,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+    component_tooltip: ComponentTooltip,
 }
 
 impl Radio {
@@ -43,7 +44,23 @@ impl Radio {
             tab_stop: true,
             size: Size::default(),
             on_click: None,
+            component_tooltip: ComponentTooltip::default(),
         }
+    }
+
+    /// Set tooltip text for the radio.
+    pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
+        self.component_tooltip.text = Some((tooltip.into(), None));
+        self
+    }
+
+    /// Set a custom tooltip view builder for the radio.
+    pub fn tooltip_fn(
+        mut self,
+        builder: impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static,
+    ) -> Self {
+        self.component_tooltip.builder = Some(Rc::new(builder));
+        self
     }
 
     /// Set the label of the Radio element.
@@ -226,7 +243,8 @@ impl RenderOnce for Radio {
                             Self::handle_click(&on_click, checked, window, cx);
                         }
                     })
-                }),
+                })
+                .map(|this| self.component_tooltip.apply(this)),
         )
     }
 }

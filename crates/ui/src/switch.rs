@@ -1,5 +1,8 @@
 use crate::{
-    h_flex, text::Text, tooltip::{ManagedTooltipExt as _, Tooltip}, ActiveTheme, Disableable, Side, Sizable, Size, StyledExt,
+    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt,
+    h_flex,
+    text::Text,
+    tooltip::ComponentTooltip,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, App, ElementId, Hsla,
@@ -20,7 +23,7 @@ pub struct Switch {
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     size: Size,
     color: Option<Hsla>,
-    tooltip: Option<SharedString>,
+    component_tooltip: ComponentTooltip,
 }
 
 impl Switch {
@@ -37,7 +40,7 @@ impl Switch {
             label_side: Side::Right,
             size: Size::Medium,
             color: None,
-            tooltip: None,
+            component_tooltip: ComponentTooltip::default(),
         }
     }
 
@@ -69,9 +72,18 @@ impl Switch {
         self
     }
 
-    /// Set tooltip for the switch.
+    /// Set tooltip text for the switch.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.tooltip = Some(tooltip.into());
+        self.component_tooltip.text = Some((tooltip.into(), None));
+        self
+    }
+
+    /// Set a custom tooltip view builder for the switch.
+    pub fn tooltip_fn(
+        mut self,
+        builder: impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static,
+    ) -> Self {
+        self.component_tooltip.builder = Some(Rc::new(builder));
         self
     }
 }
@@ -150,11 +162,7 @@ impl RenderOnce for Switch {
                         .border(inset)
                         .border_color(cx.theme().transparent)
                         .bg(bg)
-                        .when_some(self.tooltip.clone(), |this, tooltip| {
-                            this.managed_tooltip(move |window, cx| {
-                                Tooltip::new(tooltip.clone()).build(window, cx)
-                            })
-                        })
+                        .map(|this| self.component_tooltip.apply(this))
                         .child(
                             // Switch Toggle
                             div()

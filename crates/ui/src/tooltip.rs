@@ -338,21 +338,44 @@ impl Render for TooltipOverlay {
 
 // ── Extension trait for managed tooltips ─────────────────────────────────────
 
-/// Extension trait that replaces GPUI's native `.tooltip()` with managed tooltip
-/// behavior: slide-down enter animation and smooth position sliding when switching.
-///
-/// # Example
-///
-/// ```ignore
-/// use gpui_component::tooltip::ManagedTooltipExt;
-///
-/// div()
-///     .id("my-element")
-///     .managed_tooltip(Rc::new(|window, cx| {
-///         Tooltip::new("Hello").build(window, cx)
-///     }))
-/// ```
-pub trait ManagedTooltipExt: StatefulInteractiveElement + crate::ElementExt + Sized {
+// ── Shared tooltip state for components ─────────────────────────────────────
+
+/// Shared tooltip state that components (Button, Switch, Checkbox, Radio, etc.)
+/// can embed to get `.tooltip()` / `.tooltip_fn()` support with minimal boilerplate.
+#[derive(Default)]
+pub(crate) struct ComponentTooltip {
+    pub text: Option<(
+        SharedString,
+        Option<(Rc<Box<dyn Action>>, Option<SharedString>)>,
+    )>,
+    pub builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyView>>,
+}
+
+impl ComponentTooltip {
+    /// Apply this tooltip to a `Stateful<Div>` (or any `ManagedTooltipExt` element).
+    pub fn apply<E: ManagedTooltipExt>(self, el: E) -> E {
+        if let Some(builder) = self.builder {
+            el.managed_tooltip(move |window, cx| builder(window, cx))
+        } else if let Some((text, action)) = self.text {
+            el.managed_tooltip(move |window, cx| {
+                Tooltip::new(text.clone())
+                    .when_some(action.clone(), |this, (action, context)| {
+                        this.action(
+                            action.boxed_clone().as_ref(),
+                            context.as_ref().map(|c| c.as_ref()),
+                        )
+                    })
+                    .build(window, cx)
+            })
+        } else {
+            el
+        }
+    }
+}
+
+// ── Internal managed tooltip trait ──────────────────────────────────────────
+
+pub(crate) trait ManagedTooltipExt: StatefulInteractiveElement + crate::ElementExt + Sized {
     fn managed_tooltip(
         self,
         build_tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,

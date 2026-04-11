@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding, ParentElement,
-    Render, Styled, Window, actions, div,
+    Render, StatefulInteractiveElement as _, Styled, Window, actions, div,
 };
 
 use gpui_component::{
@@ -11,7 +11,7 @@ use gpui_component::{
     h_flex,
     radio::Radio,
     switch::Switch,
-    tooltip::{ManagedTooltipExt as _, Tooltip},
+    tooltip::Tooltip,
     v_flex,
 };
 
@@ -102,25 +102,20 @@ impl Render for TooltipStory {
                     ),
             )
             .child(
-                section("Label Tooltip").child(
-                    div()
-                        .child("Hover me")
-                        .id("tooltip-2")
-                        .managed_tooltip(|window, cx| {
-                            Tooltip::new("This is a Label")
-                                .action(&Info, Some("Tooltip"))
-                                .build(window, cx)
-                        }),
-                ),
+                section("Label Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
+                    |window, cx| {
+                        Tooltip::new("This is a Label")
+                            .action(&Info, Some("Tooltip"))
+                            .build(window, cx)
+                    },
+                )),
             )
             .child(
                 section("Checkbox Tooltip").child(
                     Checkbox::new("check")
                         .label("Remember me")
                         .checked(true)
-                        .managed_tooltip(|window, cx| {
-                            Tooltip::new("This is a checkbox").build(window, cx)
-                        }),
+                        .tooltip("This is a tooltip"),
                 ),
             )
             .child(
@@ -128,9 +123,7 @@ impl Render for TooltipStory {
                     Radio::new("radio")
                         .label("Radio with tooltip")
                         .checked(true)
-                        .managed_tooltip(|window, cx| {
-                            Tooltip::new("This is a radio button").build(window, cx)
-                        }),
+                        .tooltip("This is a radio button"),
                 ),
             )
             .child(
