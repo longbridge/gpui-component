@@ -42,6 +42,10 @@ impl Story for TooltipStory {
         "Tooltip"
     }
 
+    fn description() -> &'static str {
+        "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it."
+    }
+
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
         Self::view(window, cx)
     }
