@@ -21,7 +21,7 @@ pub struct Switch {
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     size: Size,
     color: Option<Hsla>,
-    component_tooltip: ComponentTooltip,
+    tooltip: ComponentTooltip,
 }
 
 impl Switch {
@@ -38,7 +38,7 @@ impl Switch {
             label_side: Side::Right,
             size: Size::Medium,
             color: None,
-            component_tooltip: ComponentTooltip::default(),
+            tooltip: ComponentTooltip::default(),
         }
     }
 
@@ -72,7 +72,7 @@ impl Switch {
 
     /// Set tooltip text for the switch.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.component_tooltip.text = Some((tooltip.into(), None));
+        self.tooltip.text = Some((tooltip.into(), None));
         self
     }
 }
@@ -151,7 +151,7 @@ impl RenderOnce for Switch {
                         .border(inset)
                         .border_color(cx.theme().transparent)
                         .bg(bg)
-                        .map(|this| self.component_tooltip.apply(this))
+                        .map(|this| self.tooltip.apply(this))
                         .child(
                             // Switch Toggle
                             div()

@@ -341,7 +341,7 @@ impl Render for TooltipOverlay {
 // ── Shared tooltip state for components ─────────────────────────────────────
 
 /// Shared tooltip state that components (Button, Switch, Checkbox, Radio, etc.)
-/// can embed to get `.tooltip()` / `.tooltip_fn()` support with minimal boilerplate.
+/// can embed to get `.tooltip()` support with minimal boilerplate.
 #[derive(Default)]
 pub(crate) struct ComponentTooltip {
     pub text: Option<(

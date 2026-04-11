@@ -26,7 +26,7 @@ pub struct Radio {
     tab_index: isize,
     size: Size,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
-    component_tooltip: ComponentTooltip,
+    tooltip: ComponentTooltip,
 }
 
 impl Radio {
@@ -44,13 +44,13 @@ impl Radio {
             tab_stop: true,
             size: Size::default(),
             on_click: None,
-            component_tooltip: ComponentTooltip::default(),
+            tooltip: ComponentTooltip::default(),
         }
     }
 
     /// Set tooltip text for the radio.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.component_tooltip.text = Some((tooltip.into(), None));
+        self.tooltip.text = Some((tooltip.into(), None));
         self
     }
 
@@ -235,7 +235,7 @@ impl RenderOnce for Radio {
                         }
                     })
                 })
-                .map(|this| self.component_tooltip.apply(this)),
+                .map(|this| self.tooltip.apply(this)),
         )
     }
 }

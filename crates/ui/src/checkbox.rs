@@ -24,7 +24,7 @@ pub struct Checkbox {
     tab_stop: bool,
     tab_index: isize,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
-    component_tooltip: ComponentTooltip,
+    tooltip: ComponentTooltip,
 }
 
 impl Checkbox {
@@ -42,13 +42,13 @@ impl Checkbox {
             on_click: None,
             tab_stop: true,
             tab_index: 0,
-            component_tooltip: ComponentTooltip::default(),
+            tooltip: ComponentTooltip::default(),
         }
     }
 
     /// Set tooltip text for the checkbox.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.component_tooltip.text = Some((tooltip.into(), None));
+        self.tooltip.text = Some((tooltip.into(), None));
         self
     }
 
@@ -313,7 +313,7 @@ impl RenderOnce for Checkbox {
                         }
                     })
                 })
-                .map(|this| self.component_tooltip.apply(this)),
+                .map(|this| self.tooltip.apply(this)),
         )
     }
 }
