@@ -386,7 +386,7 @@ impl Root {
     }
 
     /// Get the tooltip overlay entity for this window.
-    pub fn tooltip_overlay(window: &Window, cx: &App) -> Option<Entity<TooltipOverlay>> {
+    pub(crate) fn tooltip_overlay(window: &Window, cx: &App) -> Option<Entity<TooltipOverlay>> {
         let root = window.root::<Root>()??;
         Some(root.read(cx).tooltip_overlay.clone())
     }
