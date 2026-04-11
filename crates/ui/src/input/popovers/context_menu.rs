@@ -58,29 +58,33 @@ impl InputState {
         self.context_menu.update(cx, |this, cx| {
             this.mouse_position = event.position;
             this.menu.update(cx, |menu, cx| {
-                let new_menu = PopupMenu::new(cx)
-                    .when(is_code_editor, |m| {
-                        m.menu_with_enable(
-                            t!("Input.Go to Definition"),
-                            Box::new(input::GoToDefinition),
-                            has_goto_definition,
-                        )
+                let new_menu = if let Some(builder) = &self.context_menu_builder {
+                    builder(PopupMenu::new(cx), window, cx)
+                } else {
+                    PopupMenu::new(cx)
+                        .when(is_code_editor, |m| {
+                            m.menu_with_enable(
+                                t!("Input.Go to Definition"),
+                                Box::new(input::GoToDefinition),
+                                has_goto_definition,
+                            )
+                            .menu_with_enable(
+                                t!("Input.Show Code Actions"),
+                                Box::new(input::ToggleCodeActions),
+                                has_code_action,
+                            )
+                            .separator()
+                        })
                         .menu_with_enable(
-                            t!("Input.Show Code Actions"),
-                            Box::new(input::ToggleCodeActions),
-                            has_code_action,
+                            t!("Input.Cut"),
+                            Box::new(input::Cut),
+                            is_enable && is_selected,
                         )
+                        .menu_with_enable(t!("Input.Copy"), Box::new(input::Copy), is_selected)
+                        .menu_with_enable(t!("Input.Paste"), Box::new(input::Paste), has_paste)
                         .separator()
-                    })
-                    .menu_with_enable(
-                        t!("Input.Cut"),
-                        Box::new(input::Cut),
-                        is_enable && is_selected,
-                    )
-                    .menu_with_enable(t!("Input.Copy"), Box::new(input::Copy), is_selected)
-                    .menu_with_enable(t!("Input.Paste"), Box::new(input::Paste), has_paste)
-                    .separator()
-                    .menu(t!("Input.Select All"), Box::new(input::SelectAll));
+                        .menu(t!("Input.Select All"), Box::new(input::SelectAll))
+                };
 
                 menu.menu_items = new_menu.menu_items;
                 menu.action_context = Some(action_context);

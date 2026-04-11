@@ -37,6 +37,7 @@ use crate::input::{
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, InputContextMenu},
     search::{self, SearchPanel},
 };
+use crate::menu::PopupMenu;
 use crate::{Root, history::History};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -345,6 +346,16 @@ pub struct InputState {
     /// Completion/CodeAction context menu
     pub(super) context_menu_content: Option<ContextMenu>,
     pub(super) context_menu: Entity<InputContextMenu>,
+
+    /// An optional context menu builder to allow a custom context menu on the input.
+    ///
+    /// If set, this will override the built-in context menu and ignore the value set in [`Self::enable_context_menu`].
+    pub(super) context_menu_builder:
+        Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
+
+    /// Whether the context menu that shows on right-click is enabled.
+    ///
+    /// This value will be ignored if a context menu builder is defined in [`Self::context_menu_builder`].
     pub(super) enable_context_menu: bool,
 
     /// A flag to indicate if we are currently inserting a completion item.
@@ -443,6 +454,7 @@ impl InputState {
             diagnostic_popover: None,
             context_menu_content: None,
             context_menu: mouse_context_menu,
+            context_menu_builder: None,
             enable_context_menu: true,
             completion_inserting: false,
             hover_popover: None,
@@ -502,6 +514,7 @@ impl InputState {
     /// Sets whether the context menu that shows on right-click is enabled.
     ///
     /// The context menu is enabled by default.
+    /// This value will be ignored if a custom context menu is defined on the input.
     pub fn context_menu(mut self, enable: bool) -> Self {
         self.enable_context_menu = enable;
         self
@@ -1377,7 +1390,7 @@ impl InputState {
 
         // Show Mouse context menu
         if event.button == MouseButton::Right {
-            if self.enable_context_menu {
+            if self.enable_context_menu || self.context_menu_builder.is_some() {
                 self.handle_right_click_menu(event, offset, window, cx);
             }
             return;
