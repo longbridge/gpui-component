@@ -294,17 +294,6 @@ impl Button {
         self
     }
 
-    /// Set a managed tooltip with a custom view builder.
-    ///
-    /// The tooltip will be positioned relative to the button itself.
-    pub fn tooltip_fn(
-        mut self,
-        builder: impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static,
-    ) -> Self {
-        self.tooltip_builder = Some(Rc::new(builder));
-        self
-    }
-
     /// Set the tooltip of the button with action to show keybinding.
     pub fn tooltip_with_action(
         mut self,

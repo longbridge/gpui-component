@@ -4,11 +4,9 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, IconName,
     button::{Button, ButtonVariant, ButtonVariants},
     checkbox::Checkbox,
     dock::PanelControl,
-    h_flex,
     radio::Radio,
     switch::Switch,
     tooltip::Tooltip,
@@ -84,21 +82,7 @@ impl Render for TooltipStory {
                     .child(
                         Button::new("btn3")
                             .label("Hover me")
-                            .tooltip_fn(|window, cx| {
-                                Tooltip::element(|_, cx| {
-                                    h_flex()
-                                        .gap_x_1()
-                                        .child(IconName::Info)
-                                        .child(
-                                            div()
-                                                .child("Muted Foreground")
-                                                .text_color(cx.theme().muted_foreground),
-                                        )
-                                        .child(div().child("Danger").text_color(cx.theme().danger))
-                                        .child(IconName::ArrowUp)
-                                })
-                                .build(window, cx)
-                            }),
+                            .tooltip("This is tooltip 3"),
                     ),
             )
             .child(
