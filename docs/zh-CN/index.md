@@ -1,7 +1,7 @@
 ---
 title: GPUI Component
 layout: home
-description: 使用 GPUI 构建跨平台桌面应用的 Rust GPUI Component。
+description: 基于 Rust + GPUI 构建卓越的桌面应用程序
 ---
 
 <script setup>

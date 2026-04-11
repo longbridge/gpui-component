@@ -17,7 +17,7 @@ const currentLink = computed(
 );
 
 const localeItems = computed(() => {
-  const orderedKeys = ["root", "zh"] as const;
+  const orderedKeys = ["root", "zh-CN"] as const;
 
   return orderedKeys
     .map((key) => {

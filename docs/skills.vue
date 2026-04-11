@@ -21,11 +21,11 @@
 
 <script setup>
 import { computed, ref } from "vue";
-import { useRoute } from "vitepress";
+import { useData } from "vitepress";
 import { data } from "./data/skills.data";
 
-const route = useRoute();
-const isZh = computed(() => route.path.startsWith("/zh/"));
+const { localeIndex } = useData();
+const isZh = computed(() => localeIndex.value === "zh-CN");
 const skills = data;
 const expandedSkills = ref(new Set());
 const title = computed(() =>

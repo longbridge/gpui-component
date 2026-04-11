@@ -24,11 +24,11 @@ function createSidebar(scanStartPath: string, rootGroupText: string) {
 }
 
 const enSidebar = createSidebar("/docs/", "Introduction");
-const zhSidebar = createSidebar("/zh/docs/", "文档");
+const zhSidebar = createSidebar("/zh-CN/docs/", "文档");
 
 function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const contributorsText = locale === "zh" ? "贡献者" : "Contributors";
-  const skillsText = locale === "zh" ? "技能" : "Skills";
+  const skillsText = "Skills";
   const reportBugText = locale === "zh" ? "报告问题" : "Report Bug";
   const discussionText = locale === "zh" ? "讨论" : "Discussion";
   const message =
@@ -68,7 +68,7 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
   const resourcesText = locale === "zh" ? "资源" : "Resources";
   const contributorsText = locale === "zh" ? "贡献者" : "Contributors";
   const releasesText = locale === "zh" ? "版本发布" : "Releases";
-  const issuesText = locale === "zh" ? "问题" : "Issues";
+  const issuesText = "Issues";
   const discussionText = locale === "zh" ? "讨论" : "Discussion";
 
   return [
@@ -163,15 +163,15 @@ const config: UserConfig = {
         },
       },
     },
-    zh: {
+    "zh-CN": {
       label: "简体中文",
       lang: "zh-CN",
-      link: "/zh/",
+      link: "/zh-CN/",
       themeConfig: {
         ...sharedThemeConfig,
-        nav: createNav("/zh", "zh"),
+        nav: createNav("/zh-CN", "zh"),
         sidebar: zhSidebar,
-        footer: createFooter("/zh", "zh"),
+        footer: createFooter("/zh-CN", "zh"),
         langMenuLabel: "语言",
         returnToTopLabel: "返回顶部",
         sidebarMenuLabel: "菜单",

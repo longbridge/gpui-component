@@ -93,7 +93,7 @@
 
 <script setup>
 import { computed } from "vue";
-import { useRoute, withBase } from "vitepress";
+import { useData, withBase } from "vitepress";
 import {
     Blocks,
     Zap,
@@ -103,9 +103,9 @@ import {
     SquareCode,
 } from "lucide-vue-next";
 
-const route = useRoute();
-const localePrefix = computed(() => (route.path.startsWith("/zh/") ? "/zh" : ""));
-const isZh = computed(() => localePrefix.value === "/zh");
+const { localeIndex } = useData();
+const isZh = computed(() => localeIndex.value === "zh-CN");
+const localePrefix = computed(() => (isZh.value ? "/zh-CN" : ""));
 const gettingStartedHref = computed(
     () => withBase(`${localePrefix.value}/docs/getting-started`),
 );
@@ -114,11 +114,11 @@ const componentsHref = computed(() =>
 );
 const bannerPrefix = computed(() =>
     isZh.value
-        ? "使用 "
+        ? "基于 Rust + "
         : "Rust GUI components for building fantastic cross-platform desktop application by using ",
 );
 const bannerSuffix = computed(() =>
-    isZh.value ? " 构建出色的跨平台桌面应用。 " : "",
+    isZh.value ? " 构建卓越的桌面应用程序" : "",
 );
 const getStartedText = computed(() => (isZh.value ? "开始使用" : "Get Started"));
 const componentsText = computed(() => (isZh.value ? "组件" : "Components"));

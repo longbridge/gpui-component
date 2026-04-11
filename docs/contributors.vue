@@ -35,11 +35,11 @@
 
 <script setup>
 import { computed } from "vue";
-import { useRoute } from "vitepress";
+import { useData } from "vitepress";
 import { data } from "./data/contributors.data";
 
-const route = useRoute();
-const isZh = computed(() => route.path.startsWith("/zh/"));
+const { localeIndex } = useData();
+const isZh = computed(() => localeIndex.value === "zh-CN");
 const contributors = data;
 const title = computed(() => (isZh.value ? "贡献者" : "Contributors"));
 const description = computed(() =>
