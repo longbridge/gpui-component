@@ -5,6 +5,7 @@ use crate::{
     input::InputState,
     notification::{Notification, NotificationList},
     sheet::Sheet,
+    tooltip::TooltipOverlay,
     window_border,
 };
 use gpui::{
@@ -34,6 +35,7 @@ pub struct Root {
     pub(crate) active_dialogs: Vec<ActiveDialog>,
     pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
+    pub(crate) tooltip_overlay: Entity<TooltipOverlay>,
     sheet_size: Option<DefiniteLength>,
     window_shadow_size: Pixels,
     /// The focus handle that will be restored after a dialog is closed with animation.
@@ -82,6 +84,7 @@ impl Root {
             active_dialogs: Vec::new(),
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
+            tooltip_overlay: cx.new(|_| TooltipOverlay::new()),
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
             pending_focus_restore: None,
@@ -382,6 +385,12 @@ impl Root {
         cx.notify();
     }
 
+    /// Get the tooltip overlay entity for this window.
+    pub(crate) fn tooltip_overlay(window: &Window, cx: &App) -> Option<Entity<TooltipOverlay>> {
+        let root = window.root::<Root>()??;
+        Some(root.read(cx).tooltip_overlay.clone())
+    }
+
     /// Return the root view of the Root.
     pub fn view(&self) -> &AnyView {
         &self.view
@@ -480,7 +489,8 @@ impl Render for Root {
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
                 .refine_style(&self.style)
-                .child(self.view.clone()),
+                .child(self.view.clone())
+                .child(self.tooltip_overlay.clone()),
         )
     }
 }

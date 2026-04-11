@@ -1,10 +1,7 @@
 <template>
     <div class="skills-page">
-        <h1>GPUI Component Skills</h1>
-        <p class="description">
-            Skills available for working with GPUI Component. These skills
-            provide guidance and best practices for building GPUI applications.
-        </p>
+        <h1>{{ title }}</h1>
+        <p class="description">{{ description }}</p>
         <div class="skills-list">
             <div v-for="skill in skills" :key="skill.id" class="skill-card">
                 <a
@@ -23,11 +20,22 @@
 </template>
 
 <script setup>
+import { computed, ref } from "vue";
+import { useData } from "vitepress";
 import { data } from "./data/skills.data";
-import { ref } from "vue";
 
+const { localeIndex } = useData();
+const isZh = computed(() => localeIndex.value === "zh-CN");
 const skills = data;
 const expandedSkills = ref(new Set());
+const title = computed(() =>
+    isZh.value ? "GPUI Component 技能" : "GPUI Component Skills",
+);
+const description = computed(() =>
+    isZh.value
+        ? "这里汇总了适用于 GPUI Component 的开发技能、约定和最佳实践。"
+        : "Skills available for working with GPUI Component. These skills provide guidance and best practices for building GPUI applications.",
+);
 
 function toggleSkill(skillId) {
     if (expandedSkills.value.has(skillId)) {
