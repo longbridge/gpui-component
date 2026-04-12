@@ -28,16 +28,9 @@ GPUI and GPUI Component are under active development, recently GPUI have some ne
 
 The documentation on this site are based on the **Git main branch**, if you use the crates.io version, there may be some differences.
 
-```toml-vue
+```toml
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
-```
-
-If you prefer to use the versions on crates.io. Please visit [docs.rs](https://docs.rs/gpui-component/latest/gpui_component/) to check the API differences.
-
-```toml-vue
-gpui = "{{ GPUI_VERSION }}"
-gpui-component = "{{ VERSION }}"
 ```
 
 ## Hello World
@@ -68,9 +61,7 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = Application::new();
-
-    app.run(move |cx| {
+    gpui_platform::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
         gpui_component::init(cx);
 
