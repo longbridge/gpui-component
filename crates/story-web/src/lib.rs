@@ -1,5 +1,7 @@
+use std::borrow::Cow;
+
 use gpui::{prelude::*, *};
-use gpui_component::Root;
+use gpui_component::{theme::Theme, Root};
 use gpui_component_assets::Assets;
 use gpui_component_story::{Gallery, StoryRoot};
 use wasm_bindgen::prelude::*;
@@ -34,6 +36,22 @@ pub fn run() -> Result<(), JsValue> {
     ))
     .run(|cx: &mut App| {
         gpui_component_story::init(cx);
+
+        // Load fonts for WASM (system fonts are not available in the browser).
+        // - Noto Sans SC: subset covering GB2312 Level 1 (~3755 common Chinese characters) + Latin
+        // - Noto Emoji: monochrome emoji glyphs
+        let cjk_font = Cow::Borrowed(
+            include_bytes!("../fonts/NotoSansSC-Regular-subset.ttf").as_slice(),
+        );
+        let emoji_font = Cow::Borrowed(
+            include_bytes!("../fonts/NotoEmoji-Regular.ttf").as_slice(),
+        );
+        cx.text_system()
+            .add_fonts(vec![cjk_font, emoji_font])
+            .expect("Failed to load fonts");
+
+        // Use Noto Sans SC as the default font family for unified CJK + Latin rendering.
+        cx.global_mut::<Theme>().font_family = "Noto Sans SC".into();
 
         cx.open_window(WindowOptions::default(), |window, cx| {
             let view = Gallery::view(None, window, cx);
