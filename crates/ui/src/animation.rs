@@ -30,16 +30,19 @@ pub fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32) -> impl Fn(f32) -> f32 {
 
 /// Cubic ease-out — fast start, slow end. Good for enter animations.
 pub fn ease_out_cubic(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
     1.0 - (1.0 - t).powi(3)
 }
 
 /// Cubic ease-in — slow start, fast end. Good for exit animations.
 pub fn ease_in_cubic(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
     t * t * t
 }
 
 /// Cubic ease-in-out — slow start and end. Good for position transitions.
 pub fn ease_in_out_cubic(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
     if t < 0.5 {
         4.0 * t * t * t
     } else {
@@ -102,6 +105,8 @@ enum TransitionEffect {
     SlideY(Pixels, Pixels),
     SlideX(Pixels, Pixels),
     Fade(f32, f32),
+    Width(Pixels, Pixels),
+    Height(Pixels, Pixels),
 }
 
 impl Transition {
@@ -137,6 +142,18 @@ impl Transition {
         self
     }
 
+    /// Animate width from `from` to `to`.
+    pub fn width(mut self, from: Pixels, to: Pixels) -> Self {
+        self.effects.push(TransitionEffect::Width(from, to));
+        self
+    }
+
+    /// Animate height from `from` to `to`.
+    pub fn height(mut self, from: Pixels, to: Pixels) -> Self {
+        self.effects.push(TransitionEffect::Height(from, to));
+        self
+    }
+
     /// Apply this transition to a Styled element, returning an AnimationElement.
     pub fn apply<E: IntoElement + Styled + 'static>(
         self,
@@ -160,6 +177,12 @@ impl Transition {
                     }
                     TransitionEffect::Fade(from, to) => {
                         el = el.opacity(Lerp::lerp(from, to, delta));
+                    }
+                    TransitionEffect::Width(from, to) => {
+                        el = el.w(Lerp::lerp(from, to, delta));
+                    }
+                    TransitionEffect::Height(from, to) => {
+                        el = el.h(Lerp::lerp(from, to, delta));
                     }
                 }
             }
