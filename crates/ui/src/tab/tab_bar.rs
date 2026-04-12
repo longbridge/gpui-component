@@ -1,5 +1,5 @@
 use gpui::{
-    AnyElement, Animation, AnimationExt as _, App, Bounds, Corner, Div, Edges, ElementId,
+    Animation, AnimationExt as _, AnyElement, App, Bounds, Corner, Div, Edges, ElementId,
     InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString,
     Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px,
@@ -230,9 +230,8 @@ impl RenderOnce for TabBar {
         // Bounds tracking for tab indicator animation.
         // Uses Rc<RefCell> to avoid triggering re-renders from prepaint writes.
         let bounds_rc = if has_indicator && num_tabs > 0 {
-            let key = SharedString::from(format!("{}-tab-bounds", self.id));
             let rc: Rc<RefCell<TabIndicatorBounds>> = window
-                .use_keyed_state(key, cx, |_, _| {
+                .use_keyed_state(format!("{}-tab-bounds", self.id), cx, |_, _| {
                     Rc::new(RefCell::new(TabIndicatorBounds::new(num_tabs)))
                 })
                 .read(cx)
@@ -246,9 +245,9 @@ impl RenderOnce for TabBar {
         // Animation state for the sliding indicator.
         // Stored in keyed state so values remain stable during animation frames.
         let indicator_element = if has_indicator && num_tabs > 0 && selected_ix < num_tabs {
-            let prev_key = SharedString::from(format!("{}-tab-prev", self.id));
-            let anim_key = SharedString::from(format!("{}-tab-anim", self.id));
-            let init_key = SharedString::from(format!("{}-tab-init", self.id));
+            let prev_key = format!("{}-tab-prev", self.id);
+            let anim_key = format!("{}-tab-anim", self.id);
+            let init_key = format!("{}-tab-init", self.id);
 
             let prev_selected = window.use_keyed_state(prev_key, cx, |_, _| selected_ix);
             // (from_left, from_width, to_left, to_width, epoch)
@@ -284,8 +283,7 @@ impl RenderOnce for TabBar {
                             (None, Some(to_b)) => {
                                 let left = to_b.origin.x - container.origin.x;
                                 let width = to_b.size.width;
-                                anim_params
-                                    .update(cx, |v, _| *v = (left, width, left, width, v.4));
+                                anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
                             }
                             _ => {}
                         }
@@ -301,8 +299,7 @@ impl RenderOnce for TabBar {
                         if let Some(to_b) = bounds.tabs.get(selected_ix) {
                             let left = to_b.origin.x - container.origin.x;
                             let width = to_b.size.width;
-                            anim_params
-                                .update(cx, |v, _| *v = (left, width, left, width, v.4));
+                            anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
                         }
                     }
                 }
@@ -316,36 +313,30 @@ impl RenderOnce for TabBar {
                 let inner_height = variant.inner_height(size);
                 let inner_radius = variant.inner_radius(size, cx);
 
-                let indicator_div = div()
-                    .absolute()
-                    .top_0()
-                    .bottom_0()
-                    .map(|el| match variant {
-                        TabVariant::Segmented => el.flex().items_center().child(
-                            div()
-                                .w_full()
-                                .h(inner_height)
-                                .bg(cx.theme().background)
-                                .rounded(inner_radius)
-                                .shadow_xs(),
-                        ),
-                        TabVariant::Pill => el.flex().items_center().child(
-                            div()
-                                .size_full()
-                                .bg(cx.theme().primary)
-                                .rounded(px(99.)),
-                        ),
-                        TabVariant::Underline => el.child(
-                            div()
-                                .absolute()
-                                .left_0()
-                                .right_0()
-                                .bottom_0()
-                                .h(px(2.))
-                                .bg(cx.theme().primary),
-                        ),
-                        _ => el,
-                    });
+                let indicator_div = div().absolute().top_0().bottom_0().map(|el| match variant {
+                    TabVariant::Segmented => el.flex().items_center().child(
+                        div()
+                            .w_full()
+                            .h(inner_height)
+                            .bg(cx.theme().background)
+                            .rounded(inner_radius)
+                            .shadow_xs(),
+                    ),
+                    TabVariant::Pill => el
+                        .flex()
+                        .items_center()
+                        .child(div().size_full().bg(cx.theme().primary).rounded(px(99.))),
+                    TabVariant::Underline => el.child(
+                        div()
+                            .absolute()
+                            .left_0()
+                            .right_0()
+                            .bottom_0()
+                            .h(px(2.))
+                            .bg(cx.theme().primary),
+                    ),
+                    _ => el,
+                });
 
                 Some(
                     indicator_div
@@ -418,49 +409,40 @@ impl RenderOnce for TabBar {
                                 })
                             })
                             .when_some(indicator_element, |this, ind| this.child(ind))
-                            .children(
-                                self.children.into_iter().enumerate().map(|(ix, child)| {
-                                    item_labels.push((child.label.clone(), child.disabled));
-                                    let tab_bar_prefix = child.tab_bar_prefix.unwrap_or(true);
-                                    let mut tab = child
-                                        .ix(ix)
-                                        .tab_bar_prefix(tab_bar_prefix)
-                                        .with_variant(self.variant)
-                                        .with_size(self.size);
-                                    tab.indicator_active = has_indicator;
-                                    let tab = tab
-                                        .when_some(self.selected_index, |this, selected_ix| {
-                                            this.selected(selected_ix == ix)
+                            .children(self.children.into_iter().enumerate().map(|(ix, child)| {
+                                item_labels.push((child.label.clone(), child.disabled));
+                                let tab_bar_prefix = child.tab_bar_prefix.unwrap_or(true);
+                                let mut tab = child
+                                    .ix(ix)
+                                    .tab_bar_prefix(tab_bar_prefix)
+                                    .with_variant(self.variant)
+                                    .with_size(self.size);
+                                tab.indicator_active = has_indicator;
+                                let tab = tab
+                                    .when_some(self.selected_index, |this, selected_ix| {
+                                        this.selected(selected_ix == ix)
+                                    })
+                                    .when_some(self.on_click.clone(), move |this, on_click| {
+                                        this.on_click(move |_, window, cx| {
+                                            on_click(&ix, window, cx)
                                         })
-                                        .when_some(
-                                            self.on_click.clone(),
-                                            move |this, on_click| {
-                                                this.on_click(move |_, window, cx| {
-                                                    on_click(&ix, window, cx)
-                                                })
-                                            },
-                                        );
+                                    });
 
-                                    if let Some(ref rc) = bounds_rc {
-                                        let rc = rc.clone();
-                                        div()
-                                            .on_prepaint(move |bounds, _, _| {
-                                                if let Some(slot) =
-                                                    rc.borrow_mut().tabs.get_mut(ix)
-                                                {
-                                                    *slot = bounds;
-                                                }
-                                            })
-                                            .child(tab)
-                                            .into_any_element()
-                                    } else {
-                                        tab.into_any_element()
-                                    }
-                                }),
-                            )
-                            .when(has_suffix_or_menu, |this| {
-                                this.child(self.last_empty_space)
-                            }),
+                                if let Some(ref rc) = bounds_rc {
+                                    let rc = rc.clone();
+                                    div()
+                                        .on_prepaint(move |bounds, _, _| {
+                                            if let Some(slot) = rc.borrow_mut().tabs.get_mut(ix) {
+                                                *slot = bounds;
+                                            }
+                                        })
+                                        .child(tab)
+                                        .into_any_element()
+                                } else {
+                                    tab.into_any_element()
+                                }
+                            }))
+                            .when(has_suffix_or_menu, |this| this.child(self.last_empty_space)),
                     ),
             )
             .when(self.menu, |this| {
