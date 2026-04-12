@@ -21,10 +21,10 @@ GPUI Component 中的 [IconName] 和 [Icon] 提供了一套可直接在 GPUI 应
 
 如果要使用默认资源，需要在 `Cargo.toml` 中添加：
 
-```toml-vue
+```toml
 [dependencies]
-gpui-component = "{{ VERSION }}"
-gpui-component-assets = "{{ VERSION }}"
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
 ```
 
 然后在创建 GPUI 应用时，通过 `with_assets` 注册资源源：
