@@ -1,7 +1,7 @@
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, Corner, Div, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString,
-    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, Stateful,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
@@ -160,6 +160,157 @@ impl TabBar {
     }
 }
 
+impl TabBar {
+    /// Render the sliding indicator element for animated tab switching.
+    fn render_indicator(
+        &self,
+        bounds_rc: &Option<Rc<RefCell<TabIndicatorBounds>>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        let has_indicator = matches!(
+            self.variant,
+            TabVariant::Segmented | TabVariant::Pill | TabVariant::Underline
+        );
+        let num_tabs = self.children.len();
+        let selected_ix = self.selected_index.unwrap_or(usize::MAX);
+
+        if !(has_indicator && num_tabs > 0 && selected_ix < num_tabs) {
+            return None;
+        }
+
+        let prev_key = format!("{}-tab-prev", self.id);
+        let anim_key = format!("{}-tab-anim", self.id);
+        let init_key = format!("{}-tab-init", self.id);
+
+        let prev_selected = window.use_keyed_state(prev_key, cx, |_, _| selected_ix);
+        // (from_left, from_width, to_left, to_width, epoch)
+        let anim_params =
+            window.use_keyed_state(anim_key, cx, |_, _| (px(0.), px(0.), px(0.), px(0.), 0u64));
+        let initialized = window.use_keyed_state(init_key, cx, |_, _| false);
+
+        // First frame: trigger re-render to capture bounds via on_prepaint
+        if !*initialized.read(cx) {
+            initialized.update(cx, |v, _| *v = true);
+        }
+
+        self.update_anim_params(selected_ix, bounds_rc, &prev_selected, &anim_params, cx);
+
+        let (from_left, from_width, to_left, to_width, epoch) = *anim_params.read(cx);
+        if to_width <= px(0.) {
+            return None;
+        }
+
+        let variant = self.variant;
+        let size = self.size;
+        let inner_height = variant.inner_height(size);
+        let inner_radius = variant.inner_radius(size, cx);
+
+        let indicator = div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .map(|el| match variant {
+                TabVariant::Segmented => el.flex().items_center().child(
+                    div()
+                        .w_full()
+                        .h(inner_height)
+                        .bg(cx.theme().background)
+                        .rounded(inner_radius)
+                        .shadow_xs(),
+                ),
+                TabVariant::Pill => el
+                    .flex()
+                    .items_center()
+                    .child(div().size_full().bg(cx.theme().primary).rounded(px(99.))),
+                TabVariant::Underline => el.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(px(2.))
+                        .bg(cx.theme().primary),
+                ),
+                _ => el,
+            })
+            .with_animation(
+                ElementId::NamedInteger("tab-ind".into(), epoch),
+                Animation::new(Duration::from_millis(200)).with_easing(ease_in_out_cubic),
+                move |el, delta| {
+                    let left = Lerp::lerp(&from_left, &to_left, delta);
+                    let width = Lerp::lerp(&from_width, &to_width, delta);
+                    el.left(left).w(width)
+                },
+            );
+
+        Some(indicator.into_any_element())
+    }
+
+    /// Update animation parameters based on current and previous selection.
+    fn update_anim_params(
+        &self,
+        selected_ix: usize,
+        bounds_rc: &Option<Rc<RefCell<TabIndicatorBounds>>>,
+        prev_selected: &gpui::Entity<usize>,
+        anim_params: &gpui::Entity<(Pixels, Pixels, Pixels, Pixels, u64)>,
+        cx: &mut App,
+    ) {
+        let rc = match bounds_rc {
+            Some(rc) => rc,
+            None => return,
+        };
+
+        let prev_ix = *prev_selected.read(cx);
+        let bounds = rc.borrow();
+        let container = bounds.container;
+
+        if container.size.width == px(0.) {
+            if prev_ix != selected_ix {
+                prev_selected.update(cx, |v, _| *v = selected_ix);
+            }
+            return;
+        }
+
+        if prev_ix != selected_ix {
+            let from_b = bounds.tabs.get(prev_ix);
+            let to_b = bounds.tabs.get(selected_ix);
+            match (from_b, to_b) {
+                (Some(from_b), Some(to_b)) => {
+                    let from_left = from_b.origin.x - container.origin.x;
+                    let from_width = from_b.size.width;
+                    let to_left = to_b.origin.x - container.origin.x;
+                    let to_width = to_b.size.width;
+                    let epoch = anim_params.read(cx).4 + 1;
+                    anim_params.update(cx, |v, _| {
+                        *v = (from_left, from_width, to_left, to_width, epoch)
+                    });
+                }
+                (None, Some(to_b)) => {
+                    let left = to_b.origin.x - container.origin.x;
+                    let width = to_b.size.width;
+                    anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
+                }
+                _ => {}
+            }
+            drop(bounds);
+            prev_selected.update(cx, |v, _| *v = selected_ix);
+            return;
+        }
+
+        // Same selection, no bounds yet: initialize position
+        if anim_params.read(cx).3 != px(0.) {
+            return;
+        }
+
+        if let Some(to_b) = bounds.tabs.get(selected_ix) {
+            let left = to_b.origin.x - container.origin.x;
+            let width = to_b.size.width;
+            anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
+        }
+    }
+}
+
 impl Styled for TabBar {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
@@ -224,7 +375,6 @@ impl RenderOnce for TabBar {
             self.variant,
             TabVariant::Segmented | TabVariant::Pill | TabVariant::Underline
         );
-        let selected_ix = self.selected_index.unwrap_or(usize::MAX);
         let num_tabs = self.children.len();
 
         // Bounds tracking for tab indicator animation.
@@ -242,122 +392,7 @@ impl RenderOnce for TabBar {
             None
         };
 
-        // Animation state for the sliding indicator.
-        // Stored in keyed state so values remain stable during animation frames.
-        let indicator_element = if has_indicator && num_tabs > 0 && selected_ix < num_tabs {
-            let prev_key = format!("{}-tab-prev", self.id);
-            let anim_key = format!("{}-tab-anim", self.id);
-            let init_key = format!("{}-tab-init", self.id);
-
-            let prev_selected = window.use_keyed_state(prev_key, cx, |_, _| selected_ix);
-            // (from_left, from_width, to_left, to_width, epoch)
-            let anim_params =
-                window.use_keyed_state(anim_key, cx, |_, _| (px(0.), px(0.), px(0.), px(0.), 0u64));
-            let initialized = window.use_keyed_state(init_key, cx, |_, _| false);
-
-            // First frame: trigger re-render to capture bounds via on_prepaint
-            if !*initialized.read(cx) {
-                initialized.update(cx, |v, _| *v = true);
-            }
-
-            // Update animation params when selection changes
-            let prev_ix = *prev_selected.read(cx);
-            if prev_ix != selected_ix {
-                if let Some(ref rc) = bounds_rc {
-                    let bounds = rc.borrow();
-                    let container = bounds.container;
-                    if container.size.width > px(0.) {
-                        let from_b = bounds.tabs.get(prev_ix);
-                        let to_b = bounds.tabs.get(selected_ix);
-                        match (from_b, to_b) {
-                            (Some(from_b), Some(to_b)) => {
-                                let from_left = from_b.origin.x - container.origin.x;
-                                let from_width = from_b.size.width;
-                                let to_left = to_b.origin.x - container.origin.x;
-                                let to_width = to_b.size.width;
-                                let epoch = anim_params.read(cx).4 + 1;
-                                anim_params.update(cx, |v, _| {
-                                    *v = (from_left, from_width, to_left, to_width, epoch);
-                                });
-                            }
-                            (None, Some(to_b)) => {
-                                let left = to_b.origin.x - container.origin.x;
-                                let width = to_b.size.width;
-                                anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                prev_selected.update(cx, |v, _| *v = selected_ix);
-            } else if anim_params.read(cx).3 == px(0.) {
-                // Same selection, no bounds yet: initialize position
-                if let Some(ref rc) = bounds_rc {
-                    let bounds = rc.borrow();
-                    let container = bounds.container;
-                    if container.size.width > px(0.) {
-                        if let Some(to_b) = bounds.tabs.get(selected_ix) {
-                            let left = to_b.origin.x - container.origin.x;
-                            let width = to_b.size.width;
-                            anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
-                        }
-                    }
-                }
-            }
-
-            // Build indicator element
-            let (from_left, from_width, to_left, to_width, epoch) = *anim_params.read(cx);
-            if to_width > px(0.) {
-                let variant = self.variant;
-                let size = self.size;
-                let inner_height = variant.inner_height(size);
-                let inner_radius = variant.inner_radius(size, cx);
-
-                let indicator_div = div().absolute().top_0().bottom_0().map(|el| match variant {
-                    TabVariant::Segmented => el.flex().items_center().child(
-                        div()
-                            .w_full()
-                            .h(inner_height)
-                            .bg(cx.theme().background)
-                            .rounded(inner_radius)
-                            .shadow_xs(),
-                    ),
-                    TabVariant::Pill => el
-                        .flex()
-                        .items_center()
-                        .child(div().size_full().bg(cx.theme().primary).rounded(px(99.))),
-                    TabVariant::Underline => el.child(
-                        div()
-                            .absolute()
-                            .left_0()
-                            .right_0()
-                            .bottom_0()
-                            .h(px(2.))
-                            .bg(cx.theme().primary),
-                    ),
-                    _ => el,
-                });
-
-                Some(
-                    indicator_div
-                        .with_animation(
-                            ElementId::NamedInteger("tab-ind".into(), epoch),
-                            Animation::new(Duration::from_millis(200))
-                                .with_easing(ease_in_out_cubic),
-                            move |el, delta| {
-                                let left = Lerp::lerp(&from_left, &to_left, delta);
-                                let width = Lerp::lerp(&from_width, &to_width, delta);
-                                el.left(left).w(width)
-                            },
-                        )
-                        .into_any_element(),
-                )
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let indicator_element = self.render_indicator(&bounds_rc, window, cx);
 
         let has_suffix_or_menu = self.suffix.is_some() || self.menu;
         let mut item_labels = Vec::new();
