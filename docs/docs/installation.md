@@ -41,7 +41,7 @@ We use Rust programming language to build the `gpui-component` library. Make sur
 
 To install the `gpui-component` library, you can use Cargo, the Rust package manager. Add the following line to your `Cargo.toml` file under the `[dependencies]` section:
 
-```toml-vue
-gpui = "{{ GPUI_VERSION }}"
-gpui-component = "{{ VERSION }}"
+```toml
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```

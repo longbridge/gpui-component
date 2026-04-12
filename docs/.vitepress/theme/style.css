@@ -151,6 +151,10 @@
     @apply pt-32;
     background: url("/components.svg") no-repeat;
     background-position: top -45px right 320px;
+
+    .dark & {
+      background-image: url("/components-dark.svg");
+    }
   }
 }
 
@@ -164,6 +168,10 @@
   }
   [class*="language-"] pre {
     @apply rounded-md py-5 text-base font-mono;
+
+    .dark & {
+      background-color: #131313 !important;
+    }
   }
 
   [class*="language-"] pre code {
@@ -211,4 +219,9 @@
   [class*="language-"] > button.copy {
     right: 12px;
   }
+}
+
+#app .VPNavBarTranslations,
+#app .VPNavScreenTranslations {
+  display: none !important;
 }

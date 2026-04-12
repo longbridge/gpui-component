@@ -6,11 +6,14 @@ use crate::{
     v_flex,
 };
 use gpui::{
-    AnyElement, App, ClickEvent, EdgesRefinement, ElementId, InteractiveElement as _, IntoElement,
-    ListAlignment, ListState, ParentElement, Pixels, RenderOnce, SharedString, StyleRefinement,
-    Styled, Window, div, list, prelude::FluentBuilder, px,
+    AbsoluteLength, AnyElement, App, ClickEvent, DefiniteLength, EdgesRefinement, ElementId,
+    InteractiveElement as _, IntoElement, Length, ListAlignment, ListState, ParentElement, Pixels,
+    RenderOnce, SharedString, StyleRefinement, Styled, Window, div, list, prelude::FluentBuilder,
+    px,
 };
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
+
+use crate::animation::{Transition, ease_in_out_cubic};
 
 mod footer;
 mod group;
@@ -192,11 +195,12 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.style.padding = EdgesRefinement::default();
 
+        let id = self.id;
         let content_len = self.content.len();
         let overdraw = px(window.viewport_size().height.as_f32() * 0.3);
         let list_state = window
             .use_keyed_state(
-                SharedString::from(format!("{}-list-state", self.id)),
+                SharedString::from(format!("{}-list-state", id)),
                 cx,
                 |_, _| ListState::new(content_len, ListAlignment::Top, overdraw),
             )
@@ -206,8 +210,13 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
             list_state.reset(content_len);
         }
 
-        v_flex()
-            .id(self.id)
+        let collapsed = self.collapsed;
+
+        // Sidebar content renders at its target width immediately.
+        // A wrapper div animates clip-width for smooth transitions
+        // without re-laying out sidebar content each animation frame.
+        let sidebar = v_flex()
+            .id(id.clone())
             .w(DEFAULT_WIDTH)
             .flex_shrink_0()
             .h_full()
@@ -278,6 +287,66 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
                         .when(self.collapsed, |this| this.pt_2().px_2())
                         .child(footer),
                 )
+            });
+
+        if !self.collapsible {
+            return sidebar.into_any_element();
+        }
+
+        // Determine effective expanded width from user's custom style or default
+        let expanded_width = self
+            .style
+            .size
+            .width
+            .and_then(|w| {
+                if let Length::Definite(DefiniteLength::Absolute(AbsoluteLength::Pixels(px))) = w {
+                    Some(px)
+                } else {
+                    None
+                }
             })
+            .unwrap_or(DEFAULT_WIDTH);
+
+        // Store animation widths in keyed state so they remain stable across
+        // re-renders (GPUI re-renders the whole tree on each animation frame).
+        // Only update when `collapsed` actually changes.
+        let prev_collapsed =
+            window.use_keyed_state(format!("{}-prev-col", id), cx, |_, _| collapsed);
+        let anim_widths = window.use_keyed_state(format!("{}-anim-w", id), cx, |_, _| {
+            // First render: from == to, no visible animation
+            let w = if collapsed {
+                COLLAPSED_WIDTH
+            } else {
+                expanded_width
+            };
+            (w, w)
+        });
+
+        if *prev_collapsed.read(cx) != collapsed {
+            let (new_from, new_to) = if collapsed {
+                (expanded_width, COLLAPSED_WIDTH)
+            } else {
+                (COLLAPSED_WIDTH, expanded_width)
+            };
+            anim_widths.update(cx, |v, _| *v = (new_from, new_to));
+            prev_collapsed.update(cx, |v, _| *v = collapsed);
+        }
+        let (from_w, to_w) = *anim_widths.read(cx);
+
+        let wrapper = div()
+            .id(format!("{}-anim", id))
+            .h_full()
+            .flex_shrink_0()
+            .overflow_hidden()
+            .child(sidebar);
+
+        Transition::new(Duration::from_millis(200))
+            .ease(ease_in_out_cubic)
+            .width(from_w, to_w)
+            .apply(
+                wrapper,
+                ElementId::NamedInteger("sidebar-w".into(), collapsed as u64),
+            )
+            .into_any_element()
     }
 }

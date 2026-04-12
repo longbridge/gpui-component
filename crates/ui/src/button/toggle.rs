@@ -7,7 +7,9 @@ use gpui::{
 };
 use smallvec::{SmallVec, smallvec};
 
-use crate::{ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt, h_flex};
+use crate::{
+    ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt, h_flex, tooltip::ComponentTooltip,
+};
 
 #[derive(Default, Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToggleVariant {
@@ -39,6 +41,7 @@ pub struct Toggle {
     disabled: bool,
     children: SmallVec<[AnyElement; 1]>,
     on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+    tooltip: ComponentTooltip,
 }
 
 impl Toggle {
@@ -53,7 +56,14 @@ impl Toggle {
             disabled: false,
             children: smallvec![],
             on_click: None,
+            tooltip: ComponentTooltip::default(),
         }
+    }
+
+    /// Set tooltip text for the toggle.
+    pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
+        self.tooltip.text = Some((tooltip.into(), None));
+        self
     }
 
     /// Add a label to the toggle.
@@ -160,6 +170,7 @@ impl RenderOnce for Toggle {
                     this.on_click(move |_, window, cx| on_click(&!checked, window, cx))
                 })
             })
+            .map(|this| self.tooltip.apply(this))
     }
 }
 
