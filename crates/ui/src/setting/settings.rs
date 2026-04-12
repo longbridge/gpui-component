@@ -163,6 +163,7 @@ impl Settings {
             .w(relative(1.))
             .border_0()
             .refine_style(&self.sidebar_style)
+            .collapsible(false)
             .collapsed(false)
             .header(
                 div()
