@@ -43,7 +43,7 @@ order: -1
 
 安装库时，只需要在 `Cargo.toml` 的 `[dependencies]` 中加入：
 
-```toml-vue
-gpui = "{{ GPUI_VERSION }}"
-gpui-component = "{{ VERSION }}"
+```toml
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
