@@ -189,6 +189,12 @@ Uses `rust-i18n` crate.
 - Localization files are located in `crates/ui/locales/`.
 - Only add `en`, `zh-CN`, `zh-HK` by default.
 
+## Documentation
+
+- Documentation source files are in `docs/`.
+- Docs have two locales: English (`docs/docs/`) and Chinese (`docs/zh-CN/docs/`).
+- When modifying any documentation file, always sync changes to both `en` and `zh-CN` versions.
+
 ## Platform Support
 
 - macOS (aarch64, x86_64)

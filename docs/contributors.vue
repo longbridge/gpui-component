@@ -1,7 +1,7 @@
 <template>
     <div class="contributors-page">
-        <h1>Contributors</h1>
-        <p>Thanks to all the people who have contributed to this project!</p>
+        <h1>{{ title }}</h1>
+        <p>{{ description }}</p>
         <div class="contributors-list">
             <a
                 :href="contributor.html_url"
@@ -21,21 +21,39 @@
             </a>
         </div>
         <div class="mt-6 text-(--muted-foreground)">
-            More contributors not shown here. See the full
+            {{ moreText }}
             <a
                 href="https://github.com/longbridge/gpui-component/graphs/contributors"
                 target="_blank"
             >
-                Contributors</a
+                {{ contributorsLinkText }}</a
             >
-            on GitHub.
+            {{ suffixText }}
         </div>
     </div>
 </template>
 
 <script setup>
+import { computed } from "vue";
+import { useData } from "vitepress";
 import { data } from "./data/contributors.data";
+
+const { localeIndex } = useData();
+const isZh = computed(() => localeIndex.value === "zh-CN");
 const contributors = data;
+const title = computed(() => (isZh.value ? "贡献者" : "Contributors"));
+const description = computed(() =>
+    isZh.value
+        ? "感谢所有为这个项目做出贡献的开发者。"
+        : "Thanks to all the people who have contributed to this project!",
+);
+const moreText = computed(() =>
+    isZh.value ? "这里没有展示全部贡献者，完整列表请查看 GitHub 上的 " : "More contributors not shown here. See the full ",
+);
+const contributorsLinkText = computed(() =>
+    isZh.value ? "贡献者列表" : "Contributors",
+);
+const suffixText = computed(() => (isZh.value ? "。" : " on GitHub."));
 </script>
 
 <style lang="scss" scoped>
