@@ -158,9 +158,7 @@ impl TabBar {
         self.on_click = Some(Rc::new(on_click));
         self
     }
-}
 
-impl TabBar {
     /// Render the sliding indicator element for animated tab switching.
     fn render_indicator(
         &self,
