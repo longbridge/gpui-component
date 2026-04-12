@@ -41,7 +41,7 @@ impl TabVariant {
         }
     }
 
-    fn inner_height(&self, size: Size) -> Pixels {
+    pub(super) fn inner_height(&self, size: Size) -> Pixels {
         match size {
             Size::XSmall => match self {
                 TabVariant::Tab | TabVariant::Outline | TabVariant::Pill => px(18.),
@@ -354,7 +354,7 @@ impl TabVariant {
         }
     }
 
-    fn inner_radius(&self, size: Size, cx: &App) -> Pixels {
+    pub(super) fn inner_radius(&self, size: Size, cx: &App) -> Pixels {
         match self {
             TabVariant::Segmented => match size {
                 Size::Large => self.tab_bar_radius(size, cx) - px(3.),
@@ -403,6 +403,7 @@ pub struct Tab {
     size: Size,
     pub(super) disabled: bool,
     pub(super) selected: bool,
+    pub(super) indicator_active: bool,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
 }
 
@@ -447,6 +448,7 @@ impl Default for Tab {
             children: Vec::new(),
             disabled: false,
             selected: false,
+            indicator_active: false,
             prefix: None,
             suffix: None,
             variant: TabVariant::default(),
@@ -584,7 +586,18 @@ impl Sizable for Tab {
 
 impl RenderOnce for Tab {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut tab_style = if self.selected {
+        let indicator_selected = self.indicator_active && self.selected;
+        let mut tab_style = if indicator_selected {
+            // Indicator provides the selection visual (bg/border).
+            let mut s = self.variant.normal(cx);
+            // For Pill, selected fg is white (primary_foreground) which is invisible
+            // on transparent bg during the indicator slide animation.
+            // Keep normal fg so text stays readable throughout the transition.
+            if !matches!(self.variant, TabVariant::Pill) {
+                s.fg = self.variant.selected(cx).fg;
+            }
+            s
+        } else if self.selected {
             self.variant.selected(cx)
         } else {
             self.variant.normal(cx)
