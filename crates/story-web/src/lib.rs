@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use gpui::{prelude::*, *};
 use gpui_component::Root;
 use gpui_component_assets::Assets;
@@ -34,6 +36,15 @@ pub fn run() -> Result<(), JsValue> {
     ))
     .run(|cx: &mut App| {
         gpui_component_story::init(cx);
+
+        // Load Chinese font for WASM (system fonts are not available in the browser).
+        // This is a subset of Noto Sans SC covering GB2312 Level 1 (~3755 common characters).
+        let cjk_font = Cow::Borrowed(
+            include_bytes!("../fonts/NotoSansSC-Regular-subset.ttf").as_slice(),
+        );
+        cx.text_system()
+            .add_fonts(vec![cjk_font])
+            .expect("Failed to load CJK font");
 
         cx.open_window(WindowOptions::default(), |window, cx| {
             let view = Gallery::view(None, window, cx);
