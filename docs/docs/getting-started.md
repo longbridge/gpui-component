@@ -10,12 +10,13 @@ order: -2
 
 Add dependencies to your `Cargo.toml`:
 
-```toml-vue
+```toml
 [dependencies]
-gpui = "{{ GPUI_VERSION }}"
-gpui-component = "{{ VERSION }}"
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 # Optional, for default bundled assets
-gpui-component-assets = "{{ VERSION }}"
+gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }
 anyhow = "1.0"
 ```
 
