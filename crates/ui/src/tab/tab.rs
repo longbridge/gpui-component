@@ -586,18 +586,7 @@ impl Sizable for Tab {
 
 impl RenderOnce for Tab {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let indicator_selected = self.indicator_active && self.selected;
-        let mut tab_style = if indicator_selected {
-            // Indicator provides the selection visual (bg/border).
-            let mut s = self.variant.normal(cx);
-            // For Pill, selected fg is white (primary_foreground) which is invisible
-            // on transparent bg during the indicator slide animation.
-            // Keep normal fg so text stays readable throughout the transition.
-            if !matches!(self.variant, TabVariant::Pill) {
-                s.fg = self.variant.selected(cx).fg;
-            }
-            s
-        } else if self.selected {
+        let mut tab_style = if self.selected {
             self.variant.selected(cx)
         } else {
             self.variant.normal(cx)
