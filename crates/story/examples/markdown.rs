@@ -34,6 +34,13 @@ impl Example {
                 .default_value(EXAMPLE)
         });
 
+        // Focus the input on startup so that actions (e.g. Open) can bubble
+        // up through this view's element tree and reach their handlers.
+        let focus_handle = input_state.focus_handle(cx);
+        window.defer(cx, move |window, cx| {
+            focus_handle.focus(window, cx);
+        });
+
         let _subscriptions = vec![cx.subscribe(&input_state, |_, _, _: &InputEvent, _| {})];
 
         Self {

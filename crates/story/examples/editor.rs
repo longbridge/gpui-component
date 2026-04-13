@@ -713,6 +713,14 @@ impl Example {
 
             editor
         });
+
+        // Focus the editor on startup so that actions (e.g. Open) can bubble
+        // up through this view's element tree and reach their handlers.
+        let focus_handle = editor.focus_handle(cx);
+        window.defer(cx, move |window, cx| {
+            focus_handle.focus(window, cx);
+        });
+
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
 
         let tree_state = cx.new(|cx| TreeState::new(cx));
