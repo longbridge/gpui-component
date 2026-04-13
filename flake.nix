@@ -14,30 +14,51 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
+        build-dependencies = with pkgs; [
+          pkg-config # For dynamically linked libraries
+          makeWrapper # To provide LD_LIBRARY_PATH to the final binary
+          (rust-bin.beta.latest.default.override {
+            extensions = [ "rust-src" ];
+          })
+        ];
+        dynamic-libraries = with pkgs; [
+          wayland
+          
+          vulkan-headers
+          vulkan-loader
+          
+          libxcb
+          libxkbcommon
+          
+          atk
+          fontconfig
+          gio-sharp
+          glib
+          gtk3
+        ];
       in
       {
+        defaultPackage = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
+          pname = "gpui-component-story";
+          version = "0.5.1";
+          src = ./.;
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+            allowBuiltinFetchGit = true;
+          };
+          nativeBuildInputs = build-dependencies;
+          buildInputs = dynamic-libraries;
+          postFixup = ''
+            wrapProgram $out/bin/gpui-component-story \
+            --suffix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath dynamic-libraries}
+          '';
+        });
         devShells.default = with pkgs; mkShell {
-          buildInputs = [
-            openssl
-            pkg-config
-            xorg.libX11
-            glib
-            pango
-            atkmm
-            gdk-pixbuf
-            gtk3
-            libsoup_3
-            webkitgtk_4_1
-            libxkbcommon
-            vulkan-loader
-            (rust-bin.beta.latest.default.override {
-              extensions = [ "rust-src" ];
-            })
-          ];
+          buildInputs = build-dependencies ++ dynamic-libraries;
 
           env = {
             RUST_BACKTRACE = "1";
-            LD_LIBRARY_PATH = lib.makeLibraryPath [ vulkan-loader ];
+            LD_LIBRARY_PATH = lib.makeLibraryPath dynamic-libraries;
           };
         };
       }
