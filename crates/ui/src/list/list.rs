@@ -211,6 +211,14 @@ where
         self.mouse_right_clicked_index
     }
 
+    /// Set the query text of the search input, this will trigger a search.
+    pub fn set_query(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let query = query.to_string();
+        self.query_input.update(cx, |input, cx| {
+            input.set_value(query, window, cx);
+        });
+    }
+
     /// Set a specific list item for measurement.
     pub fn set_item_to_measure_index(
         &mut self,
