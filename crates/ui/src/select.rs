@@ -720,14 +720,12 @@ where
     fn escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         if !self.open {
             cx.propagate();
-        } else {
-            cx.stop_propagation();
+            return;
         }
 
+        cx.stop_propagation();
         self.set_open(false, cx);
-
         self.focus_handle.focus(window, cx);
-
         cx.notify();
     }
 
