@@ -100,12 +100,10 @@ impl RenderOnce for Avatar {
             .flex_shrink_0()
             .rounded_full()
             .overflow_hidden()
-            .bg(cx.theme().secondary)
             .text_color(cx.theme().background)
-            .border_1()
-            .border_color(cx.theme().border)
             .when(self.name.is_none() && self.src.is_none(), |this| {
-                this.text_size(avatar_size(self.size) * 0.6)
+                this.bg(cx.theme().secondary)
+                    .text_size(avatar_size(self.size) * 0.6)
                     .child(self.placeholder)
             })
             .map(|this| match self.src {
@@ -117,6 +115,9 @@ impl RenderOnce for Avatar {
                         .text_color(color)
                         .child(div().avatar_text_size(self.size).child(self.short_name))
                 }),
+                // When we have an image source, don't apply a background:
+                // with rounded_full + overflow_hidden, a bg can peek through
+                // the anti-aliased edge and read as a 1px hairline.
                 Some(src) => this.child(
                     img(src)
                         .avatar_size(self.size)
