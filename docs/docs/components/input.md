@@ -193,6 +193,25 @@ div()
     .child(Input::new(&input).appearance(false))
 ```
 
+### Context Menu
+
+```rust
+// The built-in context menu can be disabled.
+let input = cx.new(|cx| InputState::new(window, cx).context_menu(false));
+
+// Or you can define a custom context menu.
+Input::new(&input).context_menu(|menu, window, cx| {
+    // You can define your own actions and even utilize
+    // built-in actions (cut, copy, paste, etc.)
+    // to avoid having to re-implement that functionality.
+    menu.menu("Custom Action", Box::new(CustomAction))
+        .separator()
+        .menu("Cut", Box::new(input::Cut))
+        .menu("Copy", Box::new(input::Copy))
+        .menu("Paste", Box::new(input::Paste))
+})
+```
+
 ## Examples
 
 ### Search Input
