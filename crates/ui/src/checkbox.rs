@@ -278,7 +278,8 @@ impl RenderOnce for Checkbox {
                 .when(self.label.is_some() || !self.children.is_empty(), |this| {
                     this.child(
                         v_flex()
-                            .w_full()
+                            .flex_1()
+                            .overflow_hidden()
                             .line_height(relative(1.2))
                             .gap_1()
                             .map(|this| {
