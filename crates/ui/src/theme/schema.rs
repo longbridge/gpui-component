@@ -681,49 +681,35 @@ impl Theme {
             self.highlight_theme = highlight_theme.clone();
         }
 
-        let default_theme = if config.mode.is_dark() {
-            Self::from(ThemeColor::dark().as_ref())
+        let default_colors = if config.mode.is_dark() {
+            ThemeColor::dark()
         } else {
-            Self::from(ThemeColor::light().as_ref())
+            ThemeColor::light()
         };
 
         if let Some(font_size) = config.font_size {
             self.font_size = px(font_size);
-        } else {
-            self.font_size = default_theme.font_size;
         }
         if let Some(font_family) = &config.font_family {
             self.font_family = font_family.clone();
-        } else {
-            self.font_family = default_theme.font_family.clone();
         }
         if let Some(mono_font_family) = &config.mono_font_family {
             self.mono_font_family = mono_font_family.clone();
-        } else {
-            self.mono_font_family = default_theme.mono_font_family.clone();
         }
         if let Some(mono_font_size) = config.mono_font_size {
             self.mono_font_size = px(mono_font_size);
-        } else {
-            self.mono_font_size = default_theme.mono_font_size;
         }
         if let Some(radius) = config.radius {
             self.radius = px(radius as f32);
-        } else {
-            self.radius = default_theme.radius;
         }
         if let Some(radius_lg) = config.radius_lg {
             self.radius_lg = px(radius_lg as f32);
-        } else {
-            self.radius_lg = default_theme.radius_lg;
         }
         if let Some(shadow) = config.shadow {
             self.shadow = shadow;
-        } else {
-            self.shadow = default_theme.shadow;
         }
 
-        self.colors.apply_config(&config, &default_theme.colors);
+        self.colors.apply_config(&config, &default_colors);
         self.mode = config.mode;
     }
 }
