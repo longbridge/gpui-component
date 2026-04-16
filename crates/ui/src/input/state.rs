@@ -2211,7 +2211,9 @@ impl InputState {
                 }
 
                 // Trigger re-render so the new highlights are displayed.
-                _ = entity.update(cx, |_, cx| {
+                // Also update fold candidates now that the tree is ready.
+                _ = entity.update(cx, |state, cx| {
+                    state.update_fold_candidates();
                     cx.notify();
                 });
             }
