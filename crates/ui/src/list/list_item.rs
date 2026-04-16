@@ -32,7 +32,7 @@ pub struct ListItem {
     confirmed: bool,
     check_icon: Option<Icon>,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
-    on_mouse_down: Option<(
+    on_mouse_down: Vec<(
         MouseButton,
         Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>,
     )>,
@@ -53,7 +53,7 @@ impl ListItem {
             secondary_selected: false,
             confirmed: false,
             on_click: None,
-            on_mouse_down: None,
+            on_mouse_down: Vec::new(),
             on_mouse_enter: None,
             check_icon: None,
             suffix: None,
@@ -115,7 +115,7 @@ impl ListItem {
         button: MouseButton,
         handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_mouse_down = Some((button, Box::new(handler)));
+        self.on_mouse_down.push((button, Box::new(handler)));
         self
     }
 
@@ -190,8 +190,12 @@ impl RenderOnce for ListItem {
                     .when_some(self.on_mouse_enter, |this, on_mouse_enter| {
                         this.on_mouse_move(move |ev, window, cx| (on_mouse_enter)(ev, window, cx))
                     })
-                    .when_some(self.on_mouse_down, |this, (button, handler)| {
-                        this.on_mouse_down(button, handler)
+                    .map(|this| {
+                        self.on_mouse_down
+                            .into_iter()
+                            .fold(this, |this, (button, handler)| {
+                                this.on_mouse_down(button, handler)
+                            })
                     })
                     .when(!is_active, |this| {
                         this.hover(|this| this.bg(cx.theme().list_hover))
