@@ -1,4 +1,5 @@
 use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, h_flex};
+use std::collections::HashMap;
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseButton,
     MouseDownEvent, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
@@ -32,10 +33,7 @@ pub struct ListItem {
     confirmed: bool,
     check_icon: Option<Icon>,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
-    on_mouse_down: Vec<(
-        MouseButton,
-        Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>,
-    )>,
+    on_mouse_down: HashMap<MouseButton, Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>>,
     on_mouse_enter: Option<Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>>,
     suffix: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
     children: SmallVec<[AnyElement; 2]>,
@@ -53,7 +51,7 @@ impl ListItem {
             secondary_selected: false,
             confirmed: false,
             on_click: None,
-            on_mouse_down: Vec::new(),
+            on_mouse_down: HashMap::new(),
             on_mouse_enter: None,
             check_icon: None,
             suffix: None,
@@ -115,7 +113,7 @@ impl ListItem {
         button: MouseButton,
         handler: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_mouse_down.push((button, Box::new(handler)));
+        self.on_mouse_down.insert(button, Box::new(handler));
         self
     }
 
@@ -194,7 +192,9 @@ impl RenderOnce for ListItem {
                         self.on_mouse_down
                             .into_iter()
                             .fold(this, |this, (button, handler)| {
-                                this.on_mouse_down(button, handler)
+                                this.on_mouse_down(button, move |ev, window, cx| {
+                                    handler(ev, window, cx)
+                                })
                             })
                     })
                     .when(!is_active, |this| {
