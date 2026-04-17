@@ -117,7 +117,7 @@ impl ThemeColorsStory {
         let registry = ThemeRegistry::global(cx);
         let mut themes = registry.sorted_themes();
 
-        themes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        themes.sort_by_key(|a| a.name.to_lowercase());
 
         let active_theme_name = cx.theme().theme_name().clone();
         let items: Vec<ThemeItem> = themes
