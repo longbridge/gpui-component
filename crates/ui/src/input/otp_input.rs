@@ -99,6 +99,17 @@ impl OtpState {
         window.focus(&self.focus_handle, cx);
     }
 
+    /// Try to extract an ASCII digit char from a string.
+    /// Supports both half-width ('0'-'9') and full-width ('0'-'9') digits.
+    fn to_digit_char(s: &str) -> Option<char> {
+        let c = s.chars().next()?;
+        c.to_digit(10).map(|_| c).or_else(|| {
+            // Full-width digits: '0' (U+FF10)..='9' (U+FF19)
+            let digit = (c as u32).checked_sub('０' as u32)?;
+            char::from_digit(digit, 10)
+        })
+    }
+
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let mut chars: Vec<char> = self.value.chars().collect();
         let ix = chars.len();
@@ -116,10 +127,17 @@ impl OtpState {
                 cx.stop_propagation();
             }
             _ => {
-                let c = key.chars().next().unwrap();
-                if !matches!(c, '0'..='9') {
+                let c = Self::to_digit_char(key).or_else(|| {
+                    event
+                        .keystroke
+                        .key_char
+                        .as_deref()
+                        .and_then(Self::to_digit_char)
+                });
+
+                let Some(c) = c else {
                     return;
-                }
+                };
                 if ix >= self.length {
                     return;
                 }
