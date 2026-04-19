@@ -2518,7 +2518,6 @@ impl Focusable for InputState {
 
 impl Render for InputState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        println!("Rendering InputState");
         if self._pending_update {
             let bg = self
                 .mode
