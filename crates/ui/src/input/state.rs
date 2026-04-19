@@ -372,6 +372,8 @@ pub struct InputState {
     _pending_update: bool,
     /// A flag to indicate if we should ignore the next completion event.
     pub(super) silent_replace_text: bool,
+    /// A flag to indicate we should not emit InputEvents.
+    pub(super) suppress_events: bool,
 
     /// To remember the horizontal column (x-coordinate) of the cursor position for keep column for move up/down.
     ///
@@ -460,6 +462,7 @@ impl InputState {
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
+            suppress_events: false,
             size: Size::default(),
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
@@ -697,8 +700,10 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.history.ignore = true;
+        self.suppress_events = true;
         self.replace_text(value, window, cx);
         self.history.ignore = false;
+        self.suppress_events = false;
 
         // Ensure cursor to start when set text
         if self.mode.is_single_line() {
@@ -715,6 +720,7 @@ impl InputState {
         // Move scroll to top
         self.scroll_handle.set_offset(point(px(0.), px(0.)));
 
+        self.history.clear();
         cx.notify();
     }
 
@@ -2283,7 +2289,9 @@ impl EntityInputHandler for InputState {
             return;
         }
 
-        self.pause_blink_cursor(cx);
+        if self.blink_cursor.read(cx).visible() {
+            self.pause_blink_cursor(cx);
+        }
 
         let range = range_utf16
             .as_ref()
@@ -2344,7 +2352,9 @@ impl EntityInputHandler for InputState {
         if !self.silent_replace_text {
             self.handle_completion_trigger(&range, &new_text, window, cx);
         }
-        cx.emit(InputEvent::Change);
+        if !self.suppress_events {
+            cx.emit(InputEvent::Change);
+        }
         cx.notify();
     }
 
@@ -2508,6 +2518,7 @@ impl Focusable for InputState {
 
 impl Render for InputState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        println!("Rendering InputState");
         if self._pending_update {
             let bg = self
                 .mode
