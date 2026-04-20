@@ -433,7 +433,10 @@ impl LineLayout {
         for (i, line) in self.wrapped_lines.iter().enumerate() {
             let is_last = i + 1 == self.wrapped_lines.len();
 
-            let matches = if is_last || line_end_affinity {
+            let matches = if line.len == 0 {
+                // Empty visual lines still own their boundary offset.
+                offset == acc_len
+            } else if is_last || line_end_affinity {
                 // Inclusive: cursor can sit at end of this visual line.
                 offset >= acc_len && offset <= acc_len + line.len
             } else {
@@ -580,6 +583,8 @@ impl LineLayout {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::rc::Rc;
+
     use gpui::{Boundary, FontFeatures, FontStyle, FontWeight, px};
 
     #[test]
@@ -789,6 +794,36 @@ mod tests {
         line_layout.set_wrapped_lines(wrapped_lines);
         assert_eq!(line_layout.len(), 150);
         assert_eq!(line_layout.wrapped_lines.len(), 2);
+    }
+
+    #[test]
+    fn test_position_for_index_prefers_first_leading_empty_visual_line() {
+        let mut line_layout = LineLayout::new();
+        line_layout.set_wrapped_lines(smallvec::smallvec![
+            ShapedLine::default(),
+            ShapedLine::default(),
+            ShapedLine::default().with_len(3),
+        ]);
+
+        let last_layout = LastLayout {
+            visible_range: 0..1,
+            visible_buffer_lines: vec![0],
+            visible_line_byte_offsets: vec![0],
+            visible_top: px(0.),
+            visible_range_offset: 0..0,
+            lines: Rc::new(vec![]),
+            line_height: px(20.),
+            wrap_width: None,
+            line_number_width: px(0.),
+            cursor_bounds: None,
+            text_align: TextAlign::Left,
+            content_width: px(0.),
+        };
+
+        assert_eq!(
+            line_layout.position_for_index(0, &last_layout, false),
+            Some(point(px(0.), px(0.)))
+        );
     }
 
     #[test]
