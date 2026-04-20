@@ -372,8 +372,8 @@ pub struct InputState {
     _pending_update: bool,
     /// A flag to indicate if we should ignore the next completion event.
     pub(super) silent_replace_text: bool,
-    /// A flag to indicate we should not emit InputEvents.
-    pub(super) suppress_events: bool,
+    /// A flag to indicate if we should emit InputEvents.
+    pub(super) emit_events: bool,
 
     /// To remember the horizontal column (x-coordinate) of the cursor position for keep column for move up/down.
     ///
@@ -462,7 +462,7 @@ impl InputState {
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
-            suppress_events: false,
+            emit_events: true,
             size: Size::default(),
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
@@ -700,10 +700,10 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.history.ignore = true;
-        self.suppress_events = true;
+        self.emit_events = false;
         self.replace_text(value, window, cx);
         self.history.ignore = false;
-        self.suppress_events = false;
+        self.emit_events = true;
 
         // Ensure cursor to start when set text
         if self.mode.is_single_line() {
@@ -2352,7 +2352,7 @@ impl EntityInputHandler for InputState {
         if !self.silent_replace_text {
             self.handle_completion_trigger(&range, &new_text, window, cx);
         }
-        if !self.suppress_events {
+        if self.emit_events {
             cx.emit(InputEvent::Change);
         }
         cx.notify();
