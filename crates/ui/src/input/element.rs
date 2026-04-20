@@ -1925,6 +1925,9 @@ fn placeholder_line_runs<'a>(
     result
 }
 
+/// Get the runs for the given range.
+///
+/// The range is the byte range of the wrapped line.
 pub(super) fn runs_for_range(
     runs: &[TextRun],
     line_offset: usize,
