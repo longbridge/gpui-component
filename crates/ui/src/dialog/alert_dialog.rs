@@ -8,6 +8,7 @@ use crate::{
     dialog::{
         Dialog, DialogButtonProps, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
     },
+    h_flex, v_flex,
 };
 
 /// AlertDialog is a modal dialog that interrupts the user with important content
@@ -268,21 +269,32 @@ impl AlertDialog {
     /// Convert AlertDialog into a configured Dialog.
     pub(crate) fn into_dialog(self, window: &mut Window, cx: &mut App) -> Dialog {
         let button_props = self.button_props.clone();
+        let has_title = self.icon.is_some() || self.title.is_some();
+        let has_header = has_title || self.description.is_some();
         let has_footer = self.base.footer.is_some();
-        let has_header = self.icon.is_some() || self.title.is_some() || self.description.is_some();
 
         self.base
             .button_props(button_props.clone())
             .when(has_header, |this| {
                 this.header(
-                    DialogHeader::new()
-                        .when_some(self.icon, |this, icon| this.child(icon))
-                        .when_some(self.title, |this, title| {
-                            this.child(DialogTitle::new().child(title))
-                        })
-                        .when_some(self.description, |this, desc| {
-                            this.child(DialogDescription::new().child(desc))
-                        }),
+                    DialogHeader::new().child(
+                        h_flex()
+                            .gap_2()
+                            .items_start()
+                            .when_some(self.icon, |row, icon| row.child(icon))
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .gap_1()
+                                    .when_some(self.title, |this, title| {
+                                        this.child(DialogTitle::new().child(title))
+                                    })
+                                    .when_some(self.description, |this, desc| {
+                                        this.child(DialogDescription::new().child(desc))
+                                    }),
+                            ),
+                    ),
                 )
             })
             .children(self.children)
