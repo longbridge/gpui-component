@@ -217,7 +217,6 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
         // without re-laying out sidebar content each animation frame.
         let sidebar = v_flex()
             .id(id.clone())
-            .w(DEFAULT_WIDTH)
             .flex_shrink_0()
             .h_full()
             .overflow_hidden()
@@ -228,6 +227,9 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
             .map(|this| match self.side {
                 Side::Left => this.border_r_1(),
                 Side::Right => this.border_l_1(),
+            })
+            .when(self.style.size.width.is_none(), |this| {
+                this.w(DEFAULT_WIDTH)
             })
             .refine_style(&self.style)
             .when(self.collapsed, |this| this.w(COLLAPSED_WIDTH).gap_2())
@@ -293,19 +295,14 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
             return sidebar.into_any_element();
         }
 
-        // Determine effective expanded width from user's custom style or default
-        let expanded_width = self
-            .style
-            .size
-            .width
-            .and_then(|w| {
-                if let Length::Definite(DefiniteLength::Absolute(AbsoluteLength::Pixels(px))) = w {
-                    Some(px)
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(DEFAULT_WIDTH);
+        // Determine effective expanded width from user's custom style or default.
+        let expanded_width = match self.style.size.width {
+            Some(Length::Definite(DefiniteLength::Absolute(AbsoluteLength::Pixels(px)))) => px,
+            Some(_) => {
+                return sidebar.into_any_element();
+            }
+            None => DEFAULT_WIDTH,
+        };
 
         // Store animation widths in keyed state so they remain stable across
         // re-renders (GPUI re-renders the whole tree on each animation frame).
