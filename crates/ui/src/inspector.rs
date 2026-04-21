@@ -405,7 +405,7 @@ impl Render for DivInspector {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex().size_full().gap_y_4().text_sm().when_some(
             self.inspector_state.as_ref(),
-            |this, state| {
+            |_this, state| {
                 div().child(
                     DescriptionList::new()
                         .columns(1)
@@ -438,7 +438,7 @@ impl Render for DivInspector {
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
                                 .child(Input::new(&self.rust_state.state).h_full())
-                                .when_some(self.rust_state.error.clone(), |this, err: SharedString| {
+                                .when_some(self.rust_state.error.clone(), |_this, err: SharedString| {
                                     div().child(Alert::error("rust-error", err).text_xs())
                                 }),
                         ),
@@ -466,7 +466,7 @@ impl Render for DivInspector {
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
                                 .child(Input::new(&self.json_state.state).h_full())
-                                .when_some(self.json_state.error.clone(), |this, err: SharedString| {
+                                .when_some(self.json_state.error.clone(), |_this, err: SharedString| {
                                     div().child(Alert::error("json-error", err).text_xs())
                                 }),
                         ),
@@ -539,7 +539,7 @@ fn render_inspector(
                 .p_3()
                 .gap_y_3()
                 .text_sm()
-                .when_some(source_location, |this, source_location| {
+                .when_some(source_location, |_this, source_location| {
                     div().child(
                         h_flex()
                             .gap_x_2()

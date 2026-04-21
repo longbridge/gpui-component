@@ -1,6 +1,6 @@
 use gpui::{
-    Anchor, AnyElement, App, Axis, Bounds, Context, Deferred, DismissEvent, Div, ElementId,
-    EventEmitter, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
+    Anchor, AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement,
     Styled, Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
 };
@@ -171,18 +171,25 @@ impl Popover {
     }
 
     pub(crate) fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
-        let offset = if anchor.is_center() {
-            gpui::point(trigger_bounds.size.width.half(), px(0.))
-        } else {
-            Point::default()
-        };
-
-        trigger_bounds.corner(anchor.other_side_along(Axis::Vertical))
-            + offset
-            + Point {
-                x: px(0.),
-                y: -trigger_bounds.size.height,
-            }
+        match anchor {
+            Anchor::TopLeft => trigger_bounds.origin,
+            Anchor::TopCenter => trigger_bounds.top_center(),
+            Anchor::TopRight => trigger_bounds.top_right(),
+            Anchor::BottomLeft => Point {
+                x: trigger_bounds.origin.x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            Anchor::BottomCenter => Point {
+                x: trigger_bounds.top_center().x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            Anchor::BottomRight => Point {
+                x: trigger_bounds.top_right().x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            // Fallback for LeftCenter/RightCenter – adjust as needed.
+            _ => trigger_bounds.origin,
+        }
     }
 }
 
