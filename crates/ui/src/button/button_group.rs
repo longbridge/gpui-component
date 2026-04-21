@@ -1,7 +1,10 @@
 use gpui::Corners;
+use gpui::ParentElement;
+use crate::theme::ActiveTheme;
+use gpui::InteractiveElement;
+use gpui::{App, Axis, Edges, ElementId, IntoElement, Window};
 use gpui::{
-    Anchor, App, Axis, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, div,
     prelude::FluentBuilder as _,
 };
 use std::{cell::Cell, rc::Rc};

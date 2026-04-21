@@ -41,7 +41,7 @@ impl ActiveTheme for App {
 }
 
 /// The global theme configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct Theme {
     pub colors: ThemeColor,
     pub highlight_theme: Arc<HighlightTheme>,

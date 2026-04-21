@@ -1,11 +1,12 @@
 use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, rc::Rc, sync::OnceLock};
+use gpui::{ParentElement, Styled};
 
 use anyhow::Result;
 use gpui::{
     actions, div, inspector_reflection::FunctionReflection, prelude::FluentBuilder, px, AnyElement,
     App, AppContext, Context, DivInspectorState, Entity, Inspector, InspectorElementId,
     InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Refineable as _, Render,
-    SharedString, StyleRefinement, Styled, Subscription, Task, Window,
+    SharedString, StyleRefinement, Subscription, Task, Window,
 };
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, Diagnostic,
@@ -405,7 +406,7 @@ impl Render for DivInspector {
         v_flex().size_full().gap_y_4().text_sm().when_some(
             self.inspector_state.as_ref(),
             |this, state| {
-                this.child(
+                div().child(
                     DescriptionList::new()
                         .columns(1)
                         .label_width(px(110.))
@@ -437,8 +438,8 @@ impl Render for DivInspector {
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
                                 .child(Input::new(&self.rust_state.state).h_full())
-                                .when_some(self.rust_state.error.clone(), |this, err| {
-                                    this.child(Alert::error("rust-error", err).text_xs())
+                                .when_some(self.rust_state.error.clone(), |this, err: SharedString| {
+                                    div().child(Alert::error("rust-error", err).text_xs())
                                 }),
                         ),
                 )
@@ -465,8 +466,8 @@ impl Render for DivInspector {
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
                                 .child(Input::new(&self.json_state.state).h_full())
-                                .when_some(self.json_state.error.clone(), |this, err| {
-                                    this.child(Alert::error("json-error", err).text_xs())
+                                .when_some(self.json_state.error.clone(), |this, err: SharedString| {
+                                    div().child(Alert::error("json-error", err).text_xs())
                                 }),
                         ),
                 )
@@ -539,7 +540,7 @@ fn render_inspector(
                 .gap_y_3()
                 .text_sm()
                 .when_some(source_location, |this, source_location| {
-                    this.child(
+                    div().child(
                         h_flex()
                             .gap_x_2()
                             .text_sm()

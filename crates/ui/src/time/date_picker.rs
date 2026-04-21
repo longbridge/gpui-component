@@ -465,7 +465,7 @@ impl RenderOnce for DatePicker {
                                         .gap_3()
                                         .h_full()
                                         .items_start()
-                                        .when_some(self.presets.clone(), |this, presets| {
+                                        .when_some(self.presets.clone(), |this, presets: Vec<DateRangePreset>| {
                                             this.child(
                                                 v_flex().my_1().gap_2().justify_end().children(
                                                     presets.into_iter().enumerate().map(

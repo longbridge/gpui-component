@@ -1,13 +1,12 @@
-use gpui::Anchor;
 use gpui::{
-    AnyElement, App, Bounds, Context, ElementId, InteractiveElement as _, IntoElement,
+    Anchor, AnyElement, App, Bounds, Context, ElementId, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement, StyleRefinement, Styled,
     Task, Window, div, prelude::FluentBuilder as _,
 };
 use instant::Duration;
 use std::{cell::Cell, rc::Rc};
 
-use crate::{Anchor, ElementExt, StyledExt as _, popover::Popover};
+use crate::{ElementExt, StyledExt as _, popover::Popover};
 
 /// A hover card element that displays content when hovering over a trigger element.
 ///

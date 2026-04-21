@@ -1,10 +1,11 @@
-use gpui::Corners;
-use crate::ActiveTheme;
 use gpui::{
-    Anchor, App, BoxShadow, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
-    Refineable, StyleRefinement, Styled, Window, div, point, px,
+    AbsoluteLength, App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla,
+    ParentElement, Pixels, Refineable, StyleRefinement, Styled, Window, div, point, px, relative,
+    rems,
 };
 use serde::{Deserialize, Serialize};
+
+use crate::theme::ActiveTheme;
 
 /// Returns a `Div` as horizontal flex layout.
 #[inline(always)]
@@ -185,7 +186,7 @@ pub trait StyledExt: Styled + Sized {
     }
 
     /// Set corner radii for the element.
-    fn corner_radii(self, radius: Corners::<Pixels>) -> Self {
+    fn corner_radii(self, radius: Corners<Pixels>) -> Self {
         self.rounded_tl(radius.top_left)
             .rounded_tr(radius.top_right)
             .rounded_bl(radius.bottom_left)

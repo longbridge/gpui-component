@@ -1,4 +1,5 @@
 use std::{cell::Cell, ops::Deref, panic::Location, rc::Rc};
+use gpui::Half;
 
 use instant::{Duration, Instant};
 
