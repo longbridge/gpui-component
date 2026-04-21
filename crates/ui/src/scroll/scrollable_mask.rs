@@ -1,9 +1,9 @@
-use gpui::Corners;
 use gpui::{
     App, Axis, BorderStyle, Bounds, ContentMask, Edges, Element, ElementId, GlobalElementId,
     Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Point, Position, ScrollHandle,
     ScrollWheelEvent, Style, Window, px, relative,
 };
+use gpui::{Corners, Pixels};
 
 use crate::AxisExt;
 

@@ -1,4 +1,4 @@
-use gpui::{
+use gpui::{ Anchor,
     App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
     ParentElement, Render, Styled, Window,
 };
@@ -80,11 +80,11 @@ impl Render for NotificationStory {
                 h_flex().gap_3().child(
                     Button::new("placement")
                         .outline()
-                        .label(cx.theme().notification.placement.to_string())
+                        .label(format!("{:?}", cx.theme().notification.placement))
                         .dropdown_menu(move |menu, window, cx| {
                             let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
                                 menu.item(
-                                    PopupMenuItem::new(placement.to_string())
+                                    PopupMenuItem::new(format!("{:?}", placement))
                                         .checked(cx.theme().notification.placement == placement)
                                         .on_click(window.listener_for(
                                             &view,

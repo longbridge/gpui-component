@@ -1,8 +1,4 @@
-# Remove the extra arguments from the actions! macro
-sed -i '' 's/actions!(number_input, \[Increment, Decrement\], Window, Pixels);/actions!(number_input, [Increment, Decrement]);/' crates/ui/src/input/number_input.rs
-
-# Remove stray 'Window, Pixels' from the import block
-sed -i '' '/^use gpui::/,/)/ {
-    s/, Window//g
-    s/, Pixels//g
-}' crates/ui/src/input/number_input.rs
+sed -i '' \
+  -e 's/\.label(cx\.theme()\.notification\.placement\.to_string())/.label(format!("{:?}", cx.theme().notification.placement))/' \
+  -e 's/PopupMenuItem::new(placement\.to_string())/PopupMenuItem::new(format!("{:?}", placement))/' \
+  crates/story/src/stories/notification_story.rs

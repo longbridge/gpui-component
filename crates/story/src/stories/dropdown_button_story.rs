@@ -1,4 +1,4 @@
-use gpui::{
+use gpui::{ Anchor,
     Action, App, AppContext as _, Context, Entity, Focusable, IntoElement,
     ParentElement as _, Render, Styled as _, Window, prelude::FluentBuilder as _,
 };

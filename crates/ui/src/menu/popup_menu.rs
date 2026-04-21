@@ -1,4 +1,3 @@
-use gpui::{ClickEvent, Subscription, OwnedMenuItem, Point, MouseDownEvent, Half};
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
@@ -11,6 +10,7 @@ use gpui::{
     ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
     WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
 };
+use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Point, Subscription};
 
 use std::rc::Rc;
 
@@ -927,6 +927,8 @@ impl PopupMenu {
         match parent.read(cx).submenu_anchor.0 {
             Anchor::TopLeft | Anchor::BottomLeft => Side::Left,
             Anchor::TopRight | Anchor::BottomRight => Side::Right,
+            // Center anchors are not used for submenu positioning, but we must cover them.
+            _ => Side::Left,
         }
     }
 

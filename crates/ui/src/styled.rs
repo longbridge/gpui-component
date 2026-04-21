@@ -1,7 +1,6 @@
 use gpui::{
-    AbsoluteLength, App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla,
-    ParentElement, Pixels, Refineable, StyleRefinement, Styled, Window, div, point, px, relative,
-    rems,
+    App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
+    Refineable, StyleRefinement, Styled, Window, div, point, px, relative,
 };
 use serde::{Deserialize, Serialize};
 

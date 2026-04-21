@@ -58,7 +58,7 @@ impl RenderOnce for Checkerboard {
                                             origin,
                                             size: gpui::size(size, size),
                                         },
-                                        corner_radii: gpui::Anchor::default(),
+                                        corner_radii: gpui::Corners::default(),
                                         background: c2.into(),
                                         border_widths: gpui::Edges::default(),
                                         border_color: gpui::transparent_black(),

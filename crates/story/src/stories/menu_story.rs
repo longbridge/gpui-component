@@ -1,4 +1,4 @@
-use gpui::{
+use gpui::{ Anchor,
     Action, App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyBinding,
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
