@@ -89,25 +89,40 @@ impl EventEmitter<DatePickerEvent> for DatePickerState {}
 impl DatePickerState {
     /// Create a date state.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new_with_range(false, window, cx)
+        Self::new_with_range(false, None, window, cx)
     }
 
     /// Create a date state with range mode.
     pub fn range(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self::new_with_range(true, window, cx)
+        Self::new_with_range(true, None, window, cx)
     }
 
-    fn new_with_range(is_range: bool, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn calendar(
+        calendar: &Entity<CalendarState>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::new_with_range(false, Some(calendar), window, cx)
+    }
+
+    fn new_with_range(
+        is_range: bool,
+        calendar: Option<&Entity<CalendarState>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let date = if is_range {
             Date::Range(None, None)
         } else {
             Date::Single(None)
         };
 
-        let calendar = cx.new(|cx| {
-            let mut this = CalendarState::new(window, cx);
-            this.set_date(date, window, cx);
-            this
+        let calendar = calendar.cloned().unwrap_or_else(|| {
+            cx.new(|cx| {
+                let mut this = CalendarState::new(window, cx);
+                this.set_date(date, window, cx);
+                this
+            })
         });
 
         let _subscriptions = vec![cx.subscribe_in(
