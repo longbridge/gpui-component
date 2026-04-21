@@ -161,7 +161,7 @@ impl StoryWorkspace {
                                 )
                             }
                         })
-                        .anchor(Corners::TopRight)
+                        .anchor(Anchor::TopRight)
                 }
             })
         });

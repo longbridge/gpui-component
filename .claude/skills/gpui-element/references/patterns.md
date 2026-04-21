@@ -188,7 +188,7 @@ impl Element for InteractiveElement {
             if let Some(hover_style) = &self.hover_style {
                 window.paint_quad(paint_quad(
                     bounds,
-                    Corners::all(px(4.)),
+                    Anchor::all(px(4.)),
                     hover_style.background_color.unwrap_or(cx.theme().hover),
                 ));
             }
@@ -472,7 +472,7 @@ impl ScrollableElement {
                 point(bounds.right() - scrollbar_width, bounds.top()),
                 size(scrollbar_width, visible_height)
             ),
-            Corners::default(),
+            Anchor::default(),
             cx.theme().scrollbar_track,
         ));
 
@@ -482,7 +482,7 @@ impl ScrollableElement {
                 point(bounds.right() - scrollbar_width, bounds.top() + thumb_y),
                 size(scrollbar_width, thumb_height)
             ),
-            Corners::all(px(4.)),
+            Anchor::all(px(4.)),
             cx.theme().scrollbar_thumb,
         ));
     }

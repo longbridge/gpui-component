@@ -1,5 +1,5 @@
 use gpui::{
-    App, Context, Corners, Corners, Edges, ElementId, InteractiveElement as _, IntoElement,
+    Anchor, Anchor, App, Context, Edges, ElementId, InteractiveElement as _, IntoElement,
     ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder,
 };
@@ -28,7 +28,7 @@ pub struct DropdownButton {
     variant: ButtonVariant,
     size: Size,
     rounded: ButtonRounded,
-    anchor: Corners,
+    anchor: Anchor,
     tooltip: ComponentTooltip,
 }
 
@@ -48,7 +48,7 @@ impl DropdownButton {
             variant: ButtonVariant::default(),
             size: Size::default(),
             rounded: ButtonRounded::default(),
-            anchor: Corners::TopRight,
+            anchor: Anchor::TopRight,
             tooltip: ComponentTooltip::default(),
         }
     }
@@ -77,7 +77,7 @@ impl DropdownButton {
     /// Set the dropdown menu of the button with anchor corner.
     pub fn dropdown_menu_with_anchor(
         mut self,
-        anchor: impl Into<Corners>,
+        anchor: impl Into<Anchor>,
         menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
         self.menu = Some(Box::new(menu));
@@ -164,7 +164,7 @@ impl RenderOnce for DropdownButton {
                 this.child(
                     button
                         .rounded(self.rounded)
-                        .border_corners(Corners {
+                        .border_corners(Anchor {
                             top_left: true,
                             top_right: rounded,
                             bottom_left: true,
@@ -195,7 +195,7 @@ impl RenderOnce for DropdownButton {
                                 right: true,
                                 bottom: true,
                             })
-                            .border_corners(Corners {
+                            .border_corners(Anchor {
                                 top_left: rounded,
                                 top_right: true,
                                 bottom_left: rounded,
@@ -218,7 +218,7 @@ impl RenderOnce for DropdownButton {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::Corners;
+    use gpui::Anchor;
 
     #[gpui::test]
     fn test_dropdown_button_builder(_cx: &mut gpui::TestAppContext) {
@@ -233,7 +233,7 @@ mod tests {
             .disabled(false)
             .selected(false)
             .rounded(ButtonRounded::Medium)
-            .dropdown_menu_with_anchor(Corners::BottomLeft, |menu, _, _| menu);
+            .dropdown_menu_with_anchor(Anchor::BottomLeft, |menu, _, _| menu);
 
         assert!(dropdown.button.is_some());
         assert_eq!(dropdown.variant, ButtonVariant::Primary);
@@ -245,6 +245,6 @@ mod tests {
         assert!(!dropdown.selected);
         assert!(matches!(dropdown.rounded, ButtonRounded::Medium));
         assert!(dropdown.menu.is_some());
-        assert_eq!(dropdown.anchor, Corners::BottomLeft);
+        assert_eq!(dropdown.anchor, Anchor::BottomLeft);
     }
 }

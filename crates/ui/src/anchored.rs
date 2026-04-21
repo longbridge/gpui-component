@@ -3,13 +3,11 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Axis, Bounds, Display, Edges, Element, GlobalElementId, Half,
+    Anchor, AnyElement, App, Axis, Bounds, Display, Edges, Element, GlobalElementId, Half,
     InspectorElementId, IntoElement, LayoutId, ParentElement, Pixels, Point, Position, Size, Style,
     Window, point, px,
 };
 use smallvec::SmallVec;
-
-use crate::Anchor;
 
 /// The state that the anchored element element uses to track its children.
 pub struct AnchoredState {
@@ -180,22 +178,20 @@ impl Element for Anchored {
             let mut anchor_corner = self.anchor_corner;
 
             if desired.left() < limits.left() || desired.right() > limits.right() {
-                let switched = Bounds::from_corner_and_size(
-                    anchor_corner
-                        .other_side_corner_along(Axis::Horizontal)
-                        .into(),
+                let switched = Bounds::from_anchor_and_size(
+                    anchor_corner.other_side_along(Axis::Horizontal),
                     origin,
                     size,
                 );
                 if !(switched.left() < limits.left() || switched.right() > limits.right()) {
-                    anchor_corner = anchor_corner.other_side_corner_along(Axis::Horizontal);
+                    anchor_corner = anchor_corner.other_side_along(Axis::Horizontal);
                     desired = switched
                 }
             }
 
             if desired.top() < limits.top() || desired.bottom() > limits.bottom() {
-                let switched = Bounds::from_corner_and_size(
-                    anchor_corner.other_side_corner_along(Axis::Vertical).into(),
+                let switched = Bounds::from_anchor_and_size(
+                    anchor_corner.other_side_along(Axis::Vertical),
                     origin,
                     size,
                 );
@@ -301,12 +297,12 @@ impl AnchoredPositionMode {
             AnchoredPositionMode::Window => {
                 let anchor_position = anchor_position.unwrap_or(bounds.origin);
                 let bounds =
-                    Self::from_corner_and_size(anchor_corner, anchor_position + offset, size);
+                    Self::from_anchor_and_size(anchor_corner, anchor_position + offset, size);
                 (anchor_position, bounds)
             }
             AnchoredPositionMode::Local => {
                 let anchor_position = anchor_position.unwrap_or_default();
-                let bounds = Self::from_corner_and_size(
+                let bounds = Self::from_anchor_and_size(
                     anchor_corner,
                     bounds.origin + anchor_position + offset,
                     size,
@@ -317,7 +313,7 @@ impl AnchoredPositionMode {
     }
 
     // Ref https://github.com/zed-industries/zed/blob/b06f4088a3565c5e30663106ff79c1ced645d87a/crates/gpui/src/geometry.rs#L863
-    fn from_corner_and_size(
+    fn from_anchor_and_size(
         anchor: Anchor,
         origin: Point<Pixels>,
         size: Size<Pixels>,
@@ -343,6 +339,15 @@ impl AnchoredPositionMode {
             Anchor::BottomRight => Point {
                 x: origin.x - size.width,
                 y: origin.y - size.height,
+            },
+            // Fallback for LeftCenter/RightCenter if they are ever used here
+            Anchor::LeftCenter => Point {
+                x: origin.x,
+                y: origin.y - size.height.half(),
+            },
+            Anchor::RightCenter => Point {
+                x: origin.x - size.width,
+                y: origin.y - size.height.half(),
             },
         };
 

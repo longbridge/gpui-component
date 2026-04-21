@@ -1,14 +1,14 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId, EventEmitter,
-    FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement, Styled,
-    Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
+    Anchor, AnyElement, App, Axis, Bounds, Context, Deferred, DismissEvent, Div, ElementId,
+    EventEmitter, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
+    MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement,
+    Styled, Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::{cell::Cell, rc::Rc};
 
 use crate::{
-    Anchor, ElementExt, Selectable, StyledExt as _, actions::Cancel, anchored,
-    global_state::GlobalState, v_flex,
+    ElementExt, Selectable, StyledExt as _, actions::Cancel, anchored, global_state::GlobalState,
+    v_flex,
 };
 
 const CONTEXT: &str = "Popover";
@@ -63,10 +63,10 @@ impl Popover {
         }
     }
 
-    /// Set the anchor corner of the popover, default is `Corners::TopLeft`.
+    /// Set the anchor corner of the popover, default is `Anchor::TopLeft`.
     ///
-    /// This method is kept for backward compatibility with `Corners` type.
-    /// Internally, it converts `Corners` to `Anchor`.
+    /// This method is kept for backward compatibility with `Anchor` type.
+    /// Internally, it converts `Anchor` to `Anchor`.
     pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
         self.anchor = anchor.into();
         self
@@ -177,7 +177,7 @@ impl Popover {
             Point::default()
         };
 
-        trigger_bounds.corner(anchor.swap_vertical().into())
+        trigger_bounds.corner(anchor.other_side_along(Axis::Vertical))
             + offset
             + Point {
                 x: px(0.),
@@ -346,6 +346,7 @@ impl Popover {
             .map(|this| match anchor {
                 Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top_1(),
                 Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => this.bottom_1(),
+                Anchor::LeftCenter | Anchor::RightCenter => this.top_1(), // Fallback for centered
             })
     }
 }

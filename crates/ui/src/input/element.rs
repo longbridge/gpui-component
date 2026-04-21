@@ -1,7 +1,7 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
+    Anchor, App, Bounds, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
     MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
     Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative,
@@ -359,7 +359,7 @@ impl TextElement {
                 // Ensure at least 6px width for the selection for empty lines.
                 end_x = end_x.max(start.x + px(6.));
 
-                line_corners.push(Corners {
+                line_corners.push(Anchor {
                     top_left: line_origin + point(start.x, start.y),
                     top_right: line_origin + point(end_x, start.y),
                     bottom_left: line_origin + point(start.x, start.y + line_height),
@@ -374,7 +374,7 @@ impl TextElement {
                         end.x = line_size.width;
                     }
 
-                    line_corners.push(Corners {
+                    line_corners.push(Anchor {
                         top_left: line_origin + point(start.x, start.y),
                         top_right: line_origin + point(end.x, start.y),
                         bottom_left: line_origin + point(start.x, start.y + line_height),
@@ -1169,7 +1169,7 @@ impl IntoElement for TextElement {
 /// A debug function to print points as SVG path.
 #[allow(unused)]
 fn print_points_as_svg_path(
-    line_corners: &Vec<Corners<Point<Pixels>>>,
+    line_corners: &Vec<Anchor<Point<Pixels>>>,
     points: &Vec<Point<Pixels>>,
 ) {
     for corners in line_corners {

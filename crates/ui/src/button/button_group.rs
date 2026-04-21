@@ -1,13 +1,13 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, App, Axis, Corners, Edges, ElementId, InteractiveElement,
-    IntoElement, ParentElement, RenderOnce, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window,
+    Anchor, App, Axis, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use std::{cell::Cell, rc::Rc};
 
 use crate::{
-    button::{Button, ButtonVariant, ButtonVariants},
     Disableable, Sizable, Size, StyledExt,
+    button::{Button, ButtonVariant, ButtonVariants},
 };
 
 /// A ButtonGroup element, to wrap multiple buttons in a group.
@@ -177,7 +177,7 @@ impl RenderOnce for ButtonGroup {
                         } else if child_index == 0 {
                             // First
                             child
-                                .border_corners(Corners {
+                                .border_corners(Anchor {
                                     top_left: true,
                                     top_right: vertical,
                                     bottom_left: !vertical,
@@ -198,7 +198,7 @@ impl RenderOnce for ButtonGroup {
                                     right: true,
                                     bottom: true,
                                 })
-                                .border_corners(Corners {
+                                .border_corners(Anchor {
                                     top_left: false,
                                     top_right: !vertical,
                                     bottom_left: vertical,
@@ -207,7 +207,7 @@ impl RenderOnce for ButtonGroup {
                         } else {
                             // Middle
                             child
-                                .border_corners(Corners::all(false))
+                                .border_corners(Anchor::all(false))
                                 .border_edges(Edges {
                                     left: vertical,
                                     top: !vertical,

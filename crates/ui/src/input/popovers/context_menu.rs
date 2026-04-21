@@ -1,5 +1,5 @@
 use gpui::{
-    App, AppContext as _, Context, Corners, DismissEvent, Entity, IntoElement, MouseDownEvent,
+    Anchor, App, AppContext as _, Context, DismissEvent, Entity, IntoElement, MouseDownEvent,
     ParentElement as _, Pixels, Point, Render, Styled, Subscription, Window, anchored, deferred,
     div, prelude::FluentBuilder as _, px,
 };
@@ -146,7 +146,7 @@ impl Render for InputContextMenu {
         deferred(
             anchored()
                 .snap_to_window_with_margin(px(8.))
-                .anchor(Corners::TopLeft)
+                .anchor(Anchor::TopLeft)
                 .position(self.mouse_position)
                 .child(
                     div()
