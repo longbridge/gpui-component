@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window,
+    Render, Styled as _, Window, px,
 };
 
 use gpui_component::{
@@ -252,6 +252,41 @@ impl Render for ToggleStory {
                                 view.checked[2] = checkeds[2];
                                 view.checked[3] = checkeds[3];
                                 view.checked[4] = checkeds[4];
+                                cx.notify();
+                            })),
+                    ),
+            )
+            .child(
+                section("Toggle Group with Segmented Style")
+                    .v_flex()
+                    .gap_4()
+                    .child(
+                        ToggleGroup::new("toggle-button-group-segmented-outline")
+                            .segmented()
+                            .outline()
+                            .child(Toggle::new(0).label("Bold").checked(self.checked[5]))
+                            .child(Toggle::new(1).label("Italic").checked(self.checked[6]))
+                            .child(Toggle::new(2).label("Code").checked(self.checked[7]))
+                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
+                                for (offset, checked) in checkeds.iter().enumerate() {
+                                    view.checked[5 + offset] = *checked;
+                                }
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        ToggleGroup::new("toggle-button-group-segmented-gap")
+                            .segmented()
+                            .outline()
+                            .gap(px(8.))
+                            .small()
+                            .child(Toggle::new(0).label("Star").checked(self.checked[8]))
+                            .child(Toggle::new(1).label("Watch").checked(self.checked[9]))
+                            .child(Toggle::new(2).label("Pin").checked(self.checked[10]))
+                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
+                                for (offset, checked) in checkeds.iter().enumerate() {
+                                    view.checked[8 + offset] = *checked;
+                                }
                                 cx.notify();
                             })),
                     ),
