@@ -1,5 +1,4 @@
 use std::{panic::Location, rc::Rc};
-use gpui::Half;
 
 use crate::{StyledExt, scroll::ScrollbarHandle};
 

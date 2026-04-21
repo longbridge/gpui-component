@@ -1,7 +1,6 @@
 use gpui::Corners;
-use gpui::ParentElement;
-use crate::theme::ActiveTheme;
 use gpui::InteractiveElement;
+use gpui::ParentElement;
 use gpui::{App, Axis, Edges, ElementId, IntoElement, Window};
 use gpui::{
     RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, div,
@@ -211,7 +210,12 @@ impl RenderOnce for ButtonGroup {
                         } else {
                             // Middle
                             child
-                                .border_corners(Corners { top_left: false, top_right: false, bottom_left: false, bottom_right: false })
+                                .border_corners(Corners {
+                                    top_left: false,
+                                    top_right: false,
+                                    bottom_left: false,
+                                    bottom_right: false,
+                                })
                                 .border_edges(Edges {
                                     left: vertical,
                                     top: !vertical,

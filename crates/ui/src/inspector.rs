@@ -1,12 +1,12 @@
-use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, rc::Rc, sync::OnceLock};
 use gpui::{ParentElement, Styled};
+use std::{cell::OnceCell, collections::HashMap, fmt::Write as _, rc::Rc, sync::OnceLock};
 
 use anyhow::Result;
 use gpui::{
-    actions, div, inspector_reflection::FunctionReflection, prelude::FluentBuilder, px, AnyElement,
-    App, AppContext, Context, DivInspectorState, Entity, Inspector, InspectorElementId,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Refineable as _, Render,
-    SharedString, StyleRefinement, Subscription, Task, Window,
+    AnyElement, App, AppContext, Context, DivInspectorState, Entity, Inspector, InspectorElementId,
+    InteractiveElement as _, IntoElement, KeyBinding, Refineable as _, Render, SharedString,
+    StyleRefinement, Subscription, Task, Window, actions, div,
+    inspector_reflection::FunctionReflection, prelude::FluentBuilder, px,
 };
 use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionResponse, CompletionTextEdit, Diagnostic,
@@ -15,6 +15,7 @@ use lsp_types::{
 use ropey::Rope;
 
 use crate::{
+    ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
     alert::Alert,
     button::{Button, ButtonVariants},
     clipboard::Clipboard,
@@ -22,7 +23,7 @@ use crate::{
     h_flex,
     input::{CompletionProvider, Input, InputEvent, InputState, RopeExt, TabSize},
     link::Link,
-    v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
+    v_flex,
 };
 
 actions!(inspector, [ToggleInspector]);
@@ -406,71 +407,82 @@ impl Render for DivInspector {
         v_flex().size_full().gap_y_4().text_sm().when_some(
             self.inspector_state.as_ref(),
             |_this, state| {
-                div().child(
-                    DescriptionList::new()
-                        .columns(1)
-                        .label_width(px(110.))
-                        .bordered(false)
-                        .item("Origin", format!("{}", state.bounds.origin), 1)
-                        .item("Size", format!("{}", state.bounds.size), 1)
-                        .item("Content Size", format!("{}", state.content_size), 1),
-                )
-                .child(
-                    v_flex()
-                        .flex_1()
-                        .h_2_5()
-                        .gap_y_3()
-                        .child(
-                            h_flex()
-                                .justify_between()
-                                .gap_x_2()
-                                .child("Rust Styles")
-                                .child(Button::new("rust-reset").label("Reset").small().on_click(
-                                    cx.listener(|this, _, window, cx| {
-                                        this.reset_style(window, cx);
-                                    }),
-                                )),
-                        )
-                        .child(
-                            v_flex()
-                                .flex_1()
-                                .gap_y_1()
-                                .font_family(cx.theme().mono_font_family.clone())
-                                .text_size(cx.theme().mono_font_size)
-                                .child(Input::new(&self.rust_state.state).h_full())
-                                .when_some(self.rust_state.error.clone(), |_this, err: SharedString| {
-                                    div().child(Alert::error("rust-error", err).text_xs())
-                                }),
-                        ),
-                )
-                .child(
-                    v_flex()
-                        .flex_1()
-                        .gap_y_3()
-                        .h_2_5()
-                        .flex_shrink_0()
-                        .child(
-                            h_flex()
-                                .gap_x_2()
-                                .child(div().flex_1().child("JSON Styles"))
-                                .child(Button::new("json-reset").label("Reset").small().on_click(
-                                    cx.listener(|this, _, window, cx| {
-                                        this.reset_style(window, cx);
-                                    }),
-                                )),
-                        )
-                        .child(
-                            v_flex()
-                                .flex_1()
-                                .gap_y_1()
-                                .font_family(cx.theme().mono_font_family.clone())
-                                .text_size(cx.theme().mono_font_size)
-                                .child(Input::new(&self.json_state.state).h_full())
-                                .when_some(self.json_state.error.clone(), |_this, err: SharedString| {
-                                    div().child(Alert::error("json-error", err).text_xs())
-                                }),
-                        ),
-                )
+                div()
+                    .child(
+                        DescriptionList::new()
+                            .columns(1)
+                            .label_width(px(110.))
+                            .bordered(false)
+                            .item("Origin", format!("{}", state.bounds.origin), 1)
+                            .item("Size", format!("{}", state.bounds.size), 1)
+                            .item("Content Size", format!("{}", state.content_size), 1),
+                    )
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .h_2_5()
+                            .gap_y_3()
+                            .child(
+                                h_flex()
+                                    .justify_between()
+                                    .gap_x_2()
+                                    .child("Rust Styles")
+                                    .child(
+                                        Button::new("rust-reset").label("Reset").small().on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.reset_style(window, cx);
+                                            }),
+                                        ),
+                                    ),
+                            )
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .gap_y_1()
+                                    .font_family(cx.theme().mono_font_family.clone())
+                                    .text_size(cx.theme().mono_font_size)
+                                    .child(Input::new(&self.rust_state.state).h_full())
+                                    .when_some(
+                                        self.rust_state.error.clone(),
+                                        |_this, err: SharedString| {
+                                            div().child(Alert::error("rust-error", err).text_xs())
+                                        },
+                                    ),
+                            ),
+                    )
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .gap_y_3()
+                            .h_2_5()
+                            .flex_shrink_0()
+                            .child(
+                                h_flex()
+                                    .gap_x_2()
+                                    .child(div().flex_1().child("JSON Styles"))
+                                    .child(
+                                        Button::new("json-reset").label("Reset").small().on_click(
+                                            cx.listener(|this, _, window, cx| {
+                                                this.reset_style(window, cx);
+                                            }),
+                                        ),
+                                    ),
+                            )
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .gap_y_1()
+                                    .font_family(cx.theme().mono_font_family.clone())
+                                    .text_size(cx.theme().mono_font_size)
+                                    .child(Input::new(&self.json_state.state).h_full())
+                                    .when_some(
+                                        self.json_state.error.clone(),
+                                        |_this, err: SharedString| {
+                                            div().child(Alert::error("json-error", err).text_xs())
+                                        },
+                                    ),
+                            ),
+                    )
             },
         )
     }
@@ -633,7 +645,7 @@ impl CompletionProvider for LspProvider {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{rems, AbsoluteLength, DefiniteLength, Length};
+    use gpui::{AbsoluteLength, DefiniteLength, Length, rems};
     use indoc::indoc;
     use lsp_types::Position;
 
