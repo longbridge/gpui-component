@@ -1,4 +1,3 @@
-use gpui::Anchor;
 use gpui::Corners;
 use gpui::{
     Anchor, App, Bounds, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
