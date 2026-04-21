@@ -791,6 +791,7 @@ impl TextElement {
     /// Icons are created and prepainted here to avoid panics.
     fn layout_fold_icons(
         &self,
+        origin_x: Pixels,
         bounds: &Bounds<Pixels>,
         last_layout: &LastLayout,
         window: &mut Window,
@@ -806,7 +807,7 @@ impl TextElement {
 
         let line_number_hitbox = window.insert_hitbox(
             Bounds::new(
-                bounds.origin + point(px(0.), last_layout.visible_top),
+                point(origin_x, bounds.origin.y + last_layout.visible_top),
                 size(last_layout.line_number_width, bounds.size.height),
             ),
             HitboxBehavior::Normal,
@@ -850,7 +851,7 @@ impl TextElement {
         // Second pass: create and prepaint icons
         let line_height = last_layout.line_height;
         let line_number_width = last_layout.line_number_width
-            - LINE_NUMBER_RIGHT_MARGIN.half()
+            - LINE_NUMBER_RIGHT_MARGIN
             - FOLD_ICON_HITBOX_WIDTH;
         let icon_relative_pos = point(
             (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
@@ -858,9 +859,13 @@ impl TextElement {
         );
 
         for (ix, info) in fold_infos.iter().enumerate() {
-            // Position fold icon to the right of line numbers
+            // Position fold icon to the right of line numbers.
+            // Use origin_x (unscrolled) so icons stay fixed in the gutter during horizontal scroll.
             let fold_icon_bounds = Bounds::new(
-                bounds.origin + icon_relative_pos + point(line_number_width, info.offset_y),
+                point(
+                    origin_x + icon_relative_pos.x + line_number_width,
+                    bounds.origin.y + icon_relative_pos.y + info.offset_y,
+                ),
                 size(FOLD_ICON_HITBOX_WIDTH, line_height),
             );
 
@@ -1525,6 +1530,11 @@ impl Element for TextElement {
 
         // Calculate the scroll offset to keep the cursor in view
 
+        // Save the unscrolled x before layout_cursor modifies bounds.origin with scroll_offset.
+        // Fold icons and their hitboxes must use this value so they stay fixed in the gutter
+        // regardless of horizontal scroll position.
+        let original_x = bounds.origin.x;
+
         let (cursor_bounds, cursor_scroll_offset, current_row) =
             self.layout_cursor(&last_layout, &mut bounds, window, cx);
         last_layout.cursor_bounds = cursor_bounds;
@@ -1589,7 +1599,7 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-        let fold_icon_layout = self.layout_fold_icons(&bounds, &last_layout, window, cx);
+        let fold_icon_layout = self.layout_fold_icons(original_x, &bounds, &last_layout, window, cx);
 
         PrepaintState {
             bounds,
@@ -1837,7 +1847,14 @@ impl Element for TextElement {
                 if is_active {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
-                            Bounds::new(p, size(prepaint.last_layout.line_number_width, height)),
+                            Bounds::new(
+                                p,
+                                size(
+                                    prepaint.last_layout.line_number_width
+                                        - LINE_NUMBER_RIGHT_MARGIN,
+                                    height,
+                                ),
+                            ),
                             bg_color,
                         ));
                     }
