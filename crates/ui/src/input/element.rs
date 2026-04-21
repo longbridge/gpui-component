@@ -206,11 +206,12 @@ impl TextElement {
         {
             let selection_changed = state.last_selected_range != Some(selected_range);
             if selection_changed && !is_selected_all {
-                // Apart from left alignment, just leave enough space for the cursor size on the right side.
-                let safety_margin = if last_layout.text_align == TextAlign::Left {
-                    RIGHT_MARGIN
-                } else {
-                    CURSOR_WIDTH
+                // For Right alignment use 0 margin: cursor is clamped to bounds separately,
+                // so we never scroll the text for cursor-at-edge, avoiding a first-click jump.
+                let safety_margin = match last_layout.text_align {
+                    TextAlign::Left => RIGHT_MARGIN,
+                    TextAlign::Right => px(0.),
+                    TextAlign::Center => CURSOR_WIDTH,
                 };
 
                 scroll_offset.x = if scroll_offset.x + cursor_pos.x
@@ -269,9 +270,17 @@ impl TextElement {
                 _ => 0.85,
             } * line_height;
 
+            // For Right alignment, clamp cursor within the right edge of bounds so it
+            // stays visible without having to shift the text via scroll_offset.
+            let cursor_x = bounds.left() + cursor_pos.x + line_number_width + scroll_offset.x;
+            let cursor_x = if last_layout.text_align == TextAlign::Right {
+                cursor_x.min(bounds.right() - CURSOR_WIDTH)
+            } else {
+                cursor_x
+            };
             cursor_bounds = Some(Bounds::new(
                 point(
-                    bounds.left() + cursor_pos.x + line_number_width + scroll_offset.x,
+                    cursor_x,
                     bounds.top() + cursor_pos.y + ((line_height - cursor_height) / 2.),
                 ),
                 size(CURSOR_WIDTH, cursor_height),

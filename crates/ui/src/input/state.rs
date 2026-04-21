@@ -1554,11 +1554,12 @@ impl InputState {
             row_offset_y += line_height * visible_wrap_rows;
         }
 
-        // Apart from left alignment, just leave enough space for the cursor size on the right side.
-        let safety_margin = if last_layout.text_align == TextAlign::Left {
-            RIGHT_MARGIN
-        } else {
-            CURSOR_WIDTH
+        // For Right alignment use 0 margin: the cursor indicator is clamped inside bounds
+        // in layout_cursor, so shifting the text here would cause a first-click visual jump.
+        let safety_margin = match last_layout.text_align {
+            TextAlign::Left => RIGHT_MARGIN,
+            TextAlign::Right => px(0.),
+            TextAlign::Center => CURSOR_WIDTH,
         };
         if let Some(line) = last_layout
             .lines
