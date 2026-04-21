@@ -1,5 +1,5 @@
 use gpui::{
-    Action, Anchor, App, AppContext as _, Context, Entity, Focusable, IntoElement,
+    Action, App, AppContext as _, Context, Entity, Focusable, IntoElement,
     ParentElement as _, Render, Styled as _, Window, prelude::FluentBuilder as _,
 };
 use serde::Deserialize;

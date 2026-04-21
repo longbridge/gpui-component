@@ -4,7 +4,7 @@ use gpui::{
     Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme, Anchor, StyledExt, WindowExt,
+    ActiveTheme, StyledExt, WindowExt,
     button::{Button, ButtonVariants as _},
     divider::Divider,
     h_flex,

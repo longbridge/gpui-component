@@ -1,5 +1,5 @@
 use crate::{
-    ActiveTheme, Anchor, ElementExt, Placement, StyledExt,
+    ActiveTheme, ElementExt, Placement, StyledExt,
     dialog::{ANIMATION_DURATION, Dialog},
     focus_trap::FocusTrapManager,
     input::InputState,
@@ -8,6 +8,7 @@ use crate::{
     tooltip::TooltipOverlay,
     window_border,
 };
+use gpui::Anchor;
 use gpui::{
     AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
     IntoElement, KeyBinding, ParentElement as _, Pixels, Render, StyleRefinement, Styled,

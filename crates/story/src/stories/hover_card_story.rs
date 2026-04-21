@@ -3,7 +3,7 @@ use gpui::{
     Window, div, px, relative,
 };
 use gpui_component::{
-    ActiveTheme, Anchor, StyledExt, avatar::Avatar, button::Button, h_flex, hover_card::HoverCard,
+    ActiveTheme, StyledExt, avatar::Avatar, button::Button, h_flex, hover_card::HoverCard,
     v_flex,
 };
 use std::time::Duration;

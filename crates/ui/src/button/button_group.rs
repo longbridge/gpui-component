@@ -1,3 +1,4 @@
+use gpui::Corners;
 use gpui::{
     Anchor, App, Axis, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
     RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
@@ -177,7 +178,7 @@ impl RenderOnce for ButtonGroup {
                         } else if child_index == 0 {
                             // First
                             child
-                                .border_corners(Anchor {
+                                .border_corners(Corners {
                                     top_left: true,
                                     top_right: vertical,
                                     bottom_left: !vertical,
@@ -198,7 +199,7 @@ impl RenderOnce for ButtonGroup {
                                     right: true,
                                     bottom: true,
                                 })
-                                .border_corners(Anchor {
+                                .border_corners(Corners {
                                     top_left: false,
                                     top_right: !vertical,
                                     bottom_left: vertical,
@@ -207,7 +208,7 @@ impl RenderOnce for ButtonGroup {
                         } else {
                             // Middle
                             child
-                                .border_corners(Corners::all(false))
+                                .border_corners(Corners { top_left: false, top_right: false, bottom_left: false, bottom_right: false })
                                 .border_edges(Edges {
                                     left: vertical,
                                     top: !vertical,

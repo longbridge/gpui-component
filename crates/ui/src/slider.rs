@@ -1,8 +1,9 @@
+use gpui::Corners;
 use std::ops::Range;
 
 use crate::{ActiveTheme, AxisExt, ElementExt, StyledExt, h_flex};
 use gpui::{
-    Along, Anchor, App, AppContext as _, Axis, Background, Bounds, Context, DefiniteLength,
+    Along, App, AppContext as _, Axis, Background, Bounds, Context, DefiniteLength,
     DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla, InteractiveElement, IntoElement,
     IsZero, MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
@@ -420,7 +421,7 @@ impl Slider {
         is_start: bool,
         bar_color: Background,
         thumb_color: Hsla,
-        radius: gpui::Anchor,
+        radius: Corners<Pixels>,
         window: &mut Window,
         cx: &mut App,
     ) -> impl gpui::IntoElement {
@@ -518,7 +519,7 @@ impl RenderOnce for Slider {
             .unwrap_or_else(|| cx.theme().slider_thumb);
         let corner_radii = self.style.corner_radii.clone();
         let default_radius = px(999.);
-        let mut radius = Anchor {
+        let mut radius = Corners {
             top_left: corner_radii
                 .top_left
                 .map(|v| v.to_pixels(rem_size))

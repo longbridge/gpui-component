@@ -1,10 +1,11 @@
+use gpui::Anchor;
 use gpui::{
     AnyElement, App, Bounds, Context, ElementId, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement, StyleRefinement, Styled,
     Task, Window, div, prelude::FluentBuilder as _,
 };
-use std::{cell::Cell, rc::Rc};
 use instant::Duration;
+use std::{cell::Cell, rc::Rc};
 
 use crate::{Anchor, ElementExt, StyledExt as _, popover::Popover};
 

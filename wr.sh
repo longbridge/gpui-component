@@ -1,48 +1,50 @@
 #!/bin/bash
 set -e
 
-echo "Fixing Anchor import conflicts..."
+echo "=== Final Anchor import fixes ==="
 
-# 1. Remove duplicate Anchor import in dropdown_button.rs
-sed -i '' 's/Anchor, Anchor,/Anchor,/' crates/ui/src/button/dropdown_button.rs
+# 1. Add 'use gpui::Anchor;' to all files that currently lack it but use Anchor.
+#    We'll add it after the existing 'use gpui::...' lines, or at the top if none exist.
+for file in crates/ui/src/hover_card.rs \
+            crates/ui/src/root.rs \
+            crates/ui/src/menu/popup_menu.rs \
+            crates/ui/src/notification.rs \
+            crates/ui/src/tooltip.rs \
+            crates/ui/src/input/element.rs; do
+    if ! grep -q "use gpui::Anchor;" "$file"; then
+        # Insert after first 'use gpui::' line, or at line 1 if none
+        sed -i '' '/use gpui::/ {
+            h
+            s/.*/use gpui::Anchor;/
+            p
+            x
+            s/.*//
+        }' "$file"
+        # If no 'use gpui::' lines, put at top
+        if ! grep -q "use gpui::Anchor;" "$file"; then
+            sed -i '' '1i\
+use gpui::Anchor;
+' "$file"
+        fi
+    fi
+done
 
-# 2. Delete the local Anchor enum and its impl blocks (lines 61-199) from geometry.rs
-# Use a more precise range based on actual line numbers in the provided file snippet.
-# The local Anchor starts at line 61 and ends at line 199.
-sed -i '' '61,199d' crates/ui/src/geometry.rs
+# 2. Fix the border_corners call in button_group.rs: it expects Corners<bool> but we cannot use Corners::all because bool doesn't satisfy Half.
+#    Instead, use Corners { top_left: false, top_right: false, bottom_left: false, bottom_right: false }
+sed -i '' 's/\.border_corners(Corners::all(false))/\.border_corners(Corners { top_left: false, top_right: false, bottom_left: false, bottom_right: false })/g' \
+    crates/ui/src/button/button_group.rs
 
-# 3. Replace all 'crate::Anchor' with 'gpui::Anchor' in imports
-find crates -name "*.rs" -exec sed -i '' \
-    -e 's/use crate::Anchor;/use gpui::Anchor;/g' \
-    -e 's/crate::Anchor/gpui::Anchor/g' \
-    -e 's/use crate::geometry::Anchor;/use gpui::Anchor;/g' \
-    {} +
+# 3. In input/element.rs, the 'corners' variable is of type Vec<Anchor<Point<Pixels>>> (which is wrong; Anchor is an enum, not a struct).
+#    Actually the code is trying to store corner radii points, so it should be Vec<Corners<Point<Pixels>>>.
+#    Replace Anchor<Point<Pixels>> with Corners<Point<Pixels>>.
+sed -i '' 's/Anchor<Point<Pixels>>/Corners<Point<Pixels>>/g' crates/ui/src/input/element.rs
 
-# 4. Replace 'Anchor<Pixels>' and 'Anchor<Point<Pixels>>' with 'gpui::Anchor'
-find crates -name "*.rs" -exec sed -i '' \
-    -e 's/Anchor<Pixels>/gpui::Anchor/g' \
-    -e 's/Anchor<Point<Pixels>>/gpui::Anchor/g' \
-    {} +
+# 4. Ensure 'use gpui::Corners;' is present in input/element.rs
+if ! grep -q "use gpui::Corners" crates/ui/src/input/element.rs; then
+    sed -i '' '1s/^/use gpui::Corners;\n/' crates/ui/src/input/element.rs
+fi
 
-# 5. Replace 'Bounds::from_corner_and_size' with 'Bounds::from_anchor_and_size'
-find crates -name "*.rs" -exec sed -i '' \
-    -e 's/Bounds::from_corner_and_size/Bounds::from_anchor_and_size/g' \
-    {} +
+# 5. Remove any lingering 'use crate::Anchor;' statements (they cause errors)
+find crates -name "*.rs" -exec sed -i '' '/use crate::Anchor;/d' {} \;
 
-# 6. Replace 'Anchor::all' with 'Corners::all' (for corner radii)
-find crates -name "*.rs" -exec sed -i '' \
-    -e 's/Anchor::all/Corners::all/g' \
-    {} +
-
-# 7. Replace 'other_side_corner_along' with 'other_side_along' (gpui method)
-find crates -name "*.rs" -exec sed -i '' \
-    -e 's/other_side_corner_along/other_side_along/g' \
-    {} +
-
-# 8. Comment out the test module that uses the removed Anchor type
-# We'll comment out the entire `#[cfg(test)]` block that contains tests for Anchor.
-# The test module starts at line 201 (after deletion) and continues to the end.
-# Use a simple approach: replace the test block with an empty one.
-sed -i '' '/^#[cfg(test)]/,/^}$/ s/^/#/' crates/ui/src/geometry.rs
-
-echo "Core fixes applied. Now run 'cargo build' and address any remaining match errors manually."
+echo "=== All fixes applied. Now run 'cargo build' ==="

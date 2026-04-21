@@ -1,3 +1,4 @@
+use gpui::Corners;
 use gpui::{
     Anchor, AnyElement, App, Context, Edges, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
@@ -161,7 +162,7 @@ impl RenderOnce for NumberInput {
                     .tab_stop(false)
                     .disabled(self.disabled)
                     .border_color(cx.theme().input)
-                    .border_corners(Anchor {
+                    .border_corners(Corners {
                         top_left: true,
                         top_right: false,
                         bottom_right: false,
@@ -200,7 +201,7 @@ impl RenderOnce for NumberInput {
                     .tab_stop(false)
                     .disabled(self.disabled)
                     .border_color(cx.theme().input)
-                    .border_corners(Anchor {
+                    .border_corners(Corners {
                         top_left: false,
                         top_right: true,
                         bottom_right: true,

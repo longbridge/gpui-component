@@ -1,3 +1,4 @@
+use gpui::Corners;
 use gpui::{
     Anchor, App, Context, Edges, ElementId, InteractiveElement as _, IntoElement,
     ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
@@ -164,7 +165,7 @@ impl RenderOnce for DropdownButton {
                 this.child(
                     button
                         .rounded(self.rounded)
-                        .border_corners(Anchor {
+                        .border_corners(Corners {
                             top_left: true,
                             top_right: rounded,
                             bottom_left: true,
@@ -195,7 +196,7 @@ impl RenderOnce for DropdownButton {
                                 right: true,
                                 bottom: true,
                             })
-                            .border_corners(Anchor {
+                            .border_corners(Corners {
                                 top_left: rounded,
                                 top_right: true,
                                 bottom_left: rounded,
@@ -218,7 +219,6 @@ impl RenderOnce for DropdownButton {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::Anchor;
 
     #[gpui::test]
     fn test_dropdown_button_builder(_cx: &mut gpui::TestAppContext) {

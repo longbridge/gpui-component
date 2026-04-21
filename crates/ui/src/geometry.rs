@@ -1,7 +1,7 @@
 // crates/ui/src/geometry.rs
 use std::fmt::{self, Debug, Display, Formatter};
 
-use gpui::{AbsoluteLength, Anchor, Axis, Length, Pixels};
+use gpui::{AbsoluteLength, Axis, Length, Pixels};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

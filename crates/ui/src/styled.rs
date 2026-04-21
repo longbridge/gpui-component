@@ -1,3 +1,4 @@
+use gpui::Corners;
 use crate::ActiveTheme;
 use gpui::{
     Anchor, App, BoxShadow, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
@@ -184,7 +185,7 @@ pub trait StyledExt: Styled + Sized {
     }
 
     /// Set corner radii for the element.
-    fn corner_radii(self, radius: gpui::Anchor) -> Self {
+    fn corner_radii(self, radius: Corners::<Pixels>) -> Self {
         self.rounded_tl(radius.top_left)
             .rounded_tr(radius.top_right)
             .rounded_bl(radius.bottom_left)
@@ -578,7 +579,7 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
         };
 
         // Update the radius based on element's corner radii and the ring border width.
-        let radius = Anchor::<Pixels> {
+        let radius = Corners::<Pixels> {
             top_left: style
                 .corner_radii
                 .top_left
