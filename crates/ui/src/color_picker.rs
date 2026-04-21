@@ -1,8 +1,9 @@
 use gpui::{
-    App, AppContext, Context, Corner, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
-    Hsla, InteractiveElement as _, IntoElement, KeyBinding, ParentElement, Render, RenderOnce,
-    SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription,
-    TextAlign, Window, div, hsla, linear_color_stop, linear_gradient, prelude::FluentBuilder as _,
+    App, AppContext, Context, Corners, Div, ElementId, Entity, EventEmitter, FocusHandle,
+    Focusable, Hsla, InteractiveElement as _, IntoElement, KeyBinding, ParentElement, Render,
+    RenderOnce, SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Subscription, TextAlign, Window, div, hsla, linear_color_stop, linear_gradient,
+    prelude::FluentBuilder as _,
 };
 use rust_i18n::t;
 
@@ -336,7 +337,7 @@ pub struct ColorPicker {
     label: Option<SharedString>,
     icon: Option<Icon>,
     size: Size,
-    anchor: Corner,
+    anchor: Corners,
 }
 
 impl ColorPicker {
@@ -350,7 +351,7 @@ impl ColorPicker {
             size: Size::Medium,
             label: None,
             icon: None,
-            anchor: Corner::TopLeft,
+            anchor: Corners::TopLeft,
         }
     }
 
@@ -382,8 +383,8 @@ impl ColorPicker {
 
     /// Set the anchor corner of the color picker.
     ///
-    /// Default is `Corner::TopLeft`.
-    pub fn anchor(mut self, anchor: Corner) -> Self {
+    /// Default is `Corners::TopLeft`.
+    pub fn anchor(mut self, anchor: Corners) -> Self {
         self.anchor = anchor;
         self
     }

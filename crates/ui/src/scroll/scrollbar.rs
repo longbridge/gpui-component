@@ -1,15 +1,10 @@
-use std::{
-    cell::Cell,
-    ops::Deref,
-    panic::Location,
-    rc::Rc,
-};
+use std::{cell::Cell, ops::Deref, panic::Location, rc::Rc};
 
 use instant::{Duration, Instant};
 
 use crate::{ActiveTheme, AxisExt};
 use gpui::{
-    App, Axis, BorderStyle, Bounds, ContentMask, Corner, CursorStyle, Edges, Element, ElementId,
+    App, Axis, BorderStyle, Bounds, ContentMask, Corners, CursorStyle, Edges, Element, ElementId,
     GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, IsZero,
     LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
     Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window, fill,
@@ -672,13 +667,13 @@ impl Element for Scrollbar {
             let thumb_length = thumb_end - thumb_start - inset * 2;
             let thumb_bounds = if is_vertical {
                 Bounds::from_corner_and_size(
-                    Corner::TopRight,
+                    Corners::TopRight,
                     bounds.top_right() + point(-inset, inset + thumb_start),
                     size(WIDTH, thumb_length),
                 )
             } else {
                 Bounds::from_corner_and_size(
-                    Corner::BottomLeft,
+                    Corners::BottomLeft,
                     bounds.bottom_left() + point(inset + thumb_start, -inset),
                     size(thumb_length, WIDTH),
                 )
@@ -687,13 +682,13 @@ impl Element for Scrollbar {
             // The actual render area of the thumb
             let thumb_fill_bounds = if is_vertical {
                 Bounds::from_corner_and_size(
-                    Corner::TopRight,
+                    Corners::TopRight,
                     bounds.top_right() + point(-inset, inset + thumb_start),
                     size(thumb_width, thumb_length),
                 )
             } else {
                 Bounds::from_corner_and_size(
-                    Corner::BottomLeft,
+                    Corners::BottomLeft,
                     bounds.bottom_left() + point(inset + thumb_start, -inset),
                     size(thumb_length, thumb_width),
                 )

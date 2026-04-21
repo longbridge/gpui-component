@@ -877,7 +877,7 @@ impl Tiles {
                 .into_any_element(),
         );
 
-        // Corner resize handle
+        // Corners resize handle
         elements.push(
             div()
                 .child(

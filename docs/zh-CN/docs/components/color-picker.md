@@ -102,10 +102,10 @@ ColorPicker::new(&color_picker)
 ### 自定义锚点位置
 
 ```rust
-use gpui::Corner;
+use gpui::Corners;
 
 ColorPicker::new(&color_picker)
-    .anchor(Corner::TopRight)
+    .anchor(Corners::TopRight)
 ```
 
 ## 颜色选择界面
@@ -290,7 +290,7 @@ use gpui_component::{Sizable as _, IconName};
 ColorPicker::new(&text_color_picker)
     .icon(IconName::Type)
     .small()
-    .anchor(Corner::BottomLeft)
+    .anchor(Corners::BottomLeft)
 ```
 
 ### 调色板构建器

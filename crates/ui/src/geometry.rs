@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug, Display, Formatter};
 
-use gpui::{AbsoluteLength, Axis, Corner, Length, Pixels};
+use gpui::{AbsoluteLength, Axis, Corners, Length, Pixels};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -167,26 +167,26 @@ impl Anchor {
     }
 }
 
-impl From<Corner> for Anchor {
-    fn from(corner: Corner) -> Self {
+impl From<Corners> for Anchor {
+    fn from(corner: Corners) -> Self {
         match corner {
-            Corner::TopLeft => Anchor::TopLeft,
-            Corner::TopRight => Anchor::TopRight,
-            Corner::BottomLeft => Anchor::BottomLeft,
-            Corner::BottomRight => Anchor::BottomRight,
+            Corners::TopLeft => Anchor::TopLeft,
+            Corners::TopRight => Anchor::TopRight,
+            Corners::BottomLeft => Anchor::BottomLeft,
+            Corners::BottomRight => Anchor::BottomRight,
         }
     }
 }
 
-impl From<Anchor> for Corner {
+impl From<Anchor> for Corners {
     fn from(anchor: Anchor) -> Self {
         match anchor {
-            Anchor::TopLeft => Corner::TopLeft,
-            Anchor::TopRight => Corner::TopRight,
-            Anchor::BottomLeft => Corner::BottomLeft,
-            Anchor::BottomRight => Corner::BottomRight,
-            Anchor::TopCenter => Corner::TopLeft,
-            Anchor::BottomCenter => Corner::BottomLeft,
+            Anchor::TopLeft => Corners::TopLeft,
+            Anchor::TopRight => Corners::TopRight,
+            Anchor::BottomLeft => Corners::BottomLeft,
+            Anchor::BottomRight => Corners::BottomRight,
+            Anchor::TopCenter => Corners::TopLeft,
+            Anchor::BottomCenter => Corners::BottomLeft,
         }
     }
 }
@@ -528,46 +528,46 @@ mod tests {
     #[test]
     fn test_anchor_from_corner() {
         use super::Anchor;
-        use gpui::Corner;
+        use gpui::Corners;
 
-        // Test From<Corner> for Anchor
-        assert_eq!(Anchor::from(Corner::TopLeft), Anchor::TopLeft);
-        assert_eq!(Anchor::from(Corner::TopRight), Anchor::TopRight);
-        assert_eq!(Anchor::from(Corner::BottomLeft), Anchor::BottomLeft);
-        assert_eq!(Anchor::from(Corner::BottomRight), Anchor::BottomRight);
+        // Test From<Corners> for Anchor
+        assert_eq!(Anchor::from(Corners::TopLeft), Anchor::TopLeft);
+        assert_eq!(Anchor::from(Corners::TopRight), Anchor::TopRight);
+        assert_eq!(Anchor::from(Corners::BottomLeft), Anchor::BottomLeft);
+        assert_eq!(Anchor::from(Corners::BottomRight), Anchor::BottomRight);
 
         // Test using into()
-        let anchor: Anchor = Corner::TopLeft.into();
+        let anchor: Anchor = Corners::TopLeft.into();
         assert_eq!(anchor, Anchor::TopLeft);
 
-        let anchor: Anchor = Corner::BottomRight.into();
+        let anchor: Anchor = Corners::BottomRight.into();
         assert_eq!(anchor, Anchor::BottomRight);
     }
 
     #[test]
     fn test_anchor_to_corner() {
         use super::Anchor;
-        use gpui::Corner;
+        use gpui::Corners;
 
-        // Test From<Anchor> for Corner (i.e., Into<Corner>)
-        assert_eq!(Corner::from(Anchor::TopLeft), Corner::TopLeft);
-        assert_eq!(Corner::from(Anchor::TopRight), Corner::TopRight);
-        assert_eq!(Corner::from(Anchor::BottomLeft), Corner::BottomLeft);
-        assert_eq!(Corner::from(Anchor::BottomRight), Corner::BottomRight);
+        // Test From<Anchor> for Corners (i.e., Into<Corners>)
+        assert_eq!(Corners::from(Anchor::TopLeft), Corners::TopLeft);
+        assert_eq!(Corners::from(Anchor::TopRight), Corners::TopRight);
+        assert_eq!(Corners::from(Anchor::BottomLeft), Corners::BottomLeft);
+        assert_eq!(Corners::from(Anchor::BottomRight), Corners::BottomRight);
 
         // Test center anchors map to their respective corners
-        assert_eq!(Corner::from(Anchor::TopCenter), Corner::TopLeft);
-        assert_eq!(Corner::from(Anchor::BottomCenter), Corner::BottomLeft);
+        assert_eq!(Corners::from(Anchor::TopCenter), Corners::TopLeft);
+        assert_eq!(Corners::from(Anchor::BottomCenter), Corners::BottomLeft);
 
         // Test using into()
-        let corner: Corner = Anchor::TopLeft.into();
-        assert_eq!(corner, Corner::TopLeft);
+        let corner: Corners = Anchor::TopLeft.into();
+        assert_eq!(corner, Corners::TopLeft);
 
-        let corner: Corner = Anchor::TopCenter.into();
-        assert_eq!(corner, Corner::TopLeft);
+        let corner: Corners = Anchor::TopCenter.into();
+        assert_eq!(corner, Corners::TopLeft);
 
-        let corner: Corner = Anchor::BottomRight.into();
-        assert_eq!(corner, Corner::BottomRight);
+        let corner: Corners = Anchor::BottomRight.into();
+        assert_eq!(corner, Corners::BottomRight);
     }
 
     #[test]

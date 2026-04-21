@@ -63,10 +63,10 @@ impl Popover {
         }
     }
 
-    /// Set the anchor corner of the popover, default is `Corner::TopLeft`.
+    /// Set the anchor corner of the popover, default is `Corners::TopLeft`.
     ///
-    /// This method is kept for backward compatibility with `Corner` type.
-    /// Internally, it converts `Corner` to `Anchor`.
+    /// This method is kept for backward compatibility with `Corners` type.
+    /// Internally, it converts `Corners` to `Anchor`.
     pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
         self.anchor = anchor.into();
         self
@@ -381,7 +381,10 @@ impl RenderOnce for Popover {
 
         // Shared cell so the deferred Anchored element can read the real trigger bounds at
         // prepaint time (after trigger's on_prepaint has already fired with the correct bounds).
-        let position = Rc::new(Cell::new(Self::resolved_corner(self.anchor, trigger_bounds)));
+        let position = Rc::new(Cell::new(Self::resolved_corner(
+            self.anchor,
+            trigger_bounds,
+        )));
 
         let el = div()
             .id(self.id)

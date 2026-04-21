@@ -18,7 +18,7 @@ use gpui_component::button::{Button, DropdownButton};
 ## 用法
 
 ```rust
-use gpui::Corner;
+use gpui::Corners;
 
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))
@@ -48,7 +48,7 @@ DropdownButton::new("dropdown")
 ```rust
 DropdownButton::new("dropdown")
     .button(Button::new("btn").label("Click Me"))
-    .dropdown_menu_with_anchor(Corner::BottomRight, |menu, _, _| {
+    .dropdown_menu_with_anchor(Corners::BottomRight, |menu, _, _| {
         menu.menu("Option 1", Box::new(MyAction))
     })
 ```
