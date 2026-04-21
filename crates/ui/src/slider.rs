@@ -420,7 +420,7 @@ impl Slider {
         is_start: bool,
         bar_color: Background,
         thumb_color: Hsla,
-        radius: Anchor<Pixels>,
+        radius: gpui::Anchor,
         window: &mut Window,
         cx: &mut App,
     ) -> impl gpui::IntoElement {

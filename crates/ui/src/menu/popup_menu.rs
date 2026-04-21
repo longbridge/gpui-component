@@ -1043,7 +1043,7 @@ impl PopupMenu {
 
         let is_bottom_pos = bounds.origin.y + bounds.size.height > window.bounds().size.height;
         self.submenu_anchor = if is_bottom_pos {
-            (anchor.other_side_corner_along(gpui::Axis::Vertical), left)
+            (anchor.other_side_along(gpui::Axis::Vertical), left)
         } else {
             (anchor, left)
         };

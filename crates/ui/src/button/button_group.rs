@@ -207,7 +207,7 @@ impl RenderOnce for ButtonGroup {
                         } else {
                             // Middle
                             child
-                                .border_corners(Anchor::all(false))
+                                .border_corners(Corners::all(false))
                                 .border_edges(Edges {
                                     left: vertical,
                                     top: !vertical,

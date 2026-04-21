@@ -115,7 +115,7 @@ impl Element for ScrollableMask {
                     border_widths: Edges::all(px(1.0)),
                     border_color: color,
                     background: gpui::transparent_white().into(),
-                    corner_radii: Anchor::all(px(0.)),
+                    corner_radii: Corners::all(px(0.)),
                     border_style: BorderStyle::default(),
                 });
             }

@@ -184,7 +184,7 @@ pub trait StyledExt: Styled + Sized {
     }
 
     /// Set corner radii for the element.
-    fn corner_radii(self, radius: Anchor<Pixels>) -> Self {
+    fn corner_radii(self, radius: gpui::Anchor) -> Self {
         self.rounded_tl(radius.top_left)
             .rounded_tr(radius.top_right)
             .rounded_bl(radius.bottom_left)
