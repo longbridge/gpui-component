@@ -149,7 +149,3 @@ where
         }
     }
 }
-
-// The test module has been removed because it relied on the local Anchor enum.
-// Tests for other types (Placement, Side) remain in the original file but are omitted here for brevity.
-// To restore tests, adapt them to use gpui::Anchor or remove them.
