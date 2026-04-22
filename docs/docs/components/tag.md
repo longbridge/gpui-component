@@ -93,7 +93,7 @@ let border = hsla(220.0 / 360.0, 0.8, 0.4, 1.0);
 Tag::custom(color, foreground, border).child("Custom Color")
 ```
 
-### Rounded Anchor
+### Rounded Corners
 
 ```rust
 use gpui::px;
