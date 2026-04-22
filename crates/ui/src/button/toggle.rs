@@ -2,8 +2,8 @@ use std::{cell::Cell, rc::Rc};
 
 use gpui::{
     AnyElement, App, Corners, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
-    Pixels, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    div, prelude::FluentBuilder as _, px,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use smallvec::{SmallVec, smallvec};
 
@@ -212,7 +212,6 @@ pub struct ToggleGroup {
     variant: ToggleVariant,
     disabled: bool,
     segmented: bool,
-    gap: Option<Pixels>,
     items: Vec<Toggle>,
     on_click: Option<Rc<dyn Fn(&Vec<bool>, &mut Window, &mut App) + 'static>>,
 }
@@ -227,7 +226,6 @@ impl ToggleGroup {
             variant: ToggleVariant::default(),
             disabled: false,
             segmented: false,
-            gap: None,
             items: Vec::new(),
             on_click: None,
         }
@@ -264,16 +262,6 @@ impl ToggleGroup {
         self.segmented = true;
         self
     }
-
-    /// Set the spacing between toggles.
-    ///
-    /// `ToggleGroup` uses the existing separated spacing by default. In
-    /// segmented mode, a zero gap connects items, while a non-zero gap keeps
-    /// each item visually separated.
-    pub fn gap(mut self, gap: impl Into<Pixels>) -> Self {
-        self.gap = Some(gap.into());
-        self
-    }
 }
 
 impl Sizable for ToggleGroup {
@@ -306,10 +294,6 @@ impl Styled for ToggleGroup {
 impl RenderOnce for ToggleGroup {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let disabled = self.disabled;
-        let gap = self
-            .gap
-            .unwrap_or_else(|| if self.segmented { px(0.) } else { px(4.) });
-        let connected = self.segmented && gap == px(0.);
         let items_len = self.items.len();
         let checks = self
             .items
@@ -320,12 +304,12 @@ impl RenderOnce for ToggleGroup {
 
         h_flex()
             .id(self.id)
-            .gap(gap)
+            .when(!self.segmented, |this| this.gap_2())
             .refine_style(&self.style)
             .children(self.items.into_iter().enumerate().map({
                 |(ix, item)| {
                     let state = state.clone();
-                    let item = if !connected || items_len == 1 {
+                    let item = if !self.segmented || items_len == 1 {
                         item
                     } else if ix == 0 {
                         item.border_corners(Corners {

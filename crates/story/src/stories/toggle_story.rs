@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, px,
+    Render, Styled as _, Window,
 };
 
 use gpui_component::{
@@ -278,7 +278,6 @@ impl Render for ToggleStory {
                         ToggleGroup::new("toggle-button-group-segmented-gap")
                             .segmented()
                             .outline()
-                            .gap(px(8.))
                             .small()
                             .child(Toggle::new(0).label("Star").checked(self.checked[8]))
                             .child(Toggle::new(1).label("Watch").checked(self.checked[9]))
