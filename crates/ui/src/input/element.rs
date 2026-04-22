@@ -1169,8 +1169,6 @@ impl IntoElement for TextElement {
 
 /// A debug function to print points as SVG path.
 #[allow(unused)]
-
-#[allow(unused)]
 fn print_points_as_svg_path(line_corners: &Vec<gpui::Corners<Pixels>>, points: &Vec<Point<Pixels>>) {
     for corners in line_corners {
         println!(

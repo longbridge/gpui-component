@@ -383,20 +383,10 @@ impl Render for Notification {
                         }
                     } else {
                         let y_offset = match placement {
-                            placement
-                                if matches!(
-                                    placement,
-                                    Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter
-                                ) =>
-                            {
+                            Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
                                 px(-45.) + delta * px(45.)
                             }
-                            placement
-                                if matches!(
-                                    placement,
-                                    Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter
-                                ) =>
-                            {
+                            Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter => {
                                 px(45.) - delta * px(45.)
                             }
                             _ => px(0.),
