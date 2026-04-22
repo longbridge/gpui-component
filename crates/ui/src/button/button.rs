@@ -8,7 +8,7 @@ use crate::{
     tooltip::{ManagedTooltipExt as _, Tooltip},
 };
 use gpui::{
-    Action, AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
+    AnyElement, App, ClickEvent, Corners, Div, Edges, ElementId, Hsla, InteractiveElement,
     Interactivity, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, SharedString,
     Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px, relative, transparent_white,
@@ -200,7 +200,7 @@ pub struct Button {
     compact: bool,
     tooltip: Option<(
         SharedString,
-        Option<(Rc<Box<dyn Action>>, Option<SharedString>)>,
+        Option<(Rc<Box<dyn gpui::Action>>, Option<SharedString>)>,
     )>,
     tooltip_builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> gpui::AnyView>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
@@ -234,7 +234,12 @@ impl Button {
             selected: false,
             variant: ButtonVariant::default(),
             rounded: ButtonRounded::Medium,
-            border_corners: Corners::all(true),
+            border_corners: Corners {
+                top_left: true,
+                top_right: true,
+                bottom_right: true,
+                bottom_left: true,
+            },
             border_edges: Edges::all(true),
             size: Size::Medium,
             tooltip: None,
@@ -298,7 +303,7 @@ impl Button {
     pub fn tooltip_with_action(
         mut self,
         tooltip: impl Into<SharedString>,
-        action: &dyn Action,
+        action: &dyn gpui::Action,
         context: Option<&str>,
     ) -> Self {
         self.tooltip = Some((

@@ -301,7 +301,7 @@ impl SelectableText {
                     point(bounds.left() + rect.origin.x, bounds.top() + rect.origin.y),
                     rect.size
                 ),
-                Corners::default(),
+                Anchor::default(),
                 cx.theme().selection_background,
             ));
         }
@@ -475,7 +475,7 @@ impl Element for ComplexElement {
         // Paint background
         window.paint_quad(paint_quad(
             bounds,
-            Corners::all(px(4.)),
+            Anchor::all(px(4.)),
             cx.theme().background,
         ));
 
@@ -562,7 +562,7 @@ impl ComplexElement {
         );
         window.paint_quad(paint_quad(
             track_bounds,
-            Corners::default(),
+            Anchor::default(),
             cx.theme().scrollbar_track,
         ));
 
@@ -573,7 +573,7 @@ impl ComplexElement {
         );
         window.paint_quad(paint_quad(
             thumb_bounds,
-            Corners::all(px(4.)),
+            Anchor::all(px(4.)),
             cx.theme().scrollbar_thumb,
         ));
     }

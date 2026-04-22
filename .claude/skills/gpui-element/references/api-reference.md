@@ -276,7 +276,7 @@ fn paint(
     // 2. Paint own content
     window.paint_quad(paint_quad(
         bounds,
-        Corners::all(px(4.)),
+        Anchor::all(px(4.)),
         cx.theme().background,
     ));
 

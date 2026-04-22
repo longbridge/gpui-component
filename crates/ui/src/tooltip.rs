@@ -1,14 +1,14 @@
 use std::{cell::Cell, rc::Rc, time::Duration};
 
 use gpui::{
-    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, ElementId, Half, IntoElement,
-    ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Task, Window, deferred, div, point, prelude::FluentBuilder, px,
+    Action, Anchor, AnyElement, AnyView, App, AppContext, Bounds, Context, ElementId, Half,
+    IntoElement, ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Task, Window, anchored, deferred, div, point,
+    prelude::FluentBuilder, px,
 };
 
 use crate::{
-    ActiveTheme, Anchor, StyledExt,
-    anchored::anchored,
+    ActiveTheme, StyledExt,
     animation::{Transition, ease_in_out_cubic, ease_out_cubic},
     h_flex,
     kbd::Kbd,
@@ -375,7 +375,9 @@ impl ComponentTooltip {
 
 // ── Internal managed tooltip trait ──────────────────────────────────────────
 
-pub(crate) trait ManagedTooltipExt: StatefulInteractiveElement + crate::ElementExt + Sized {
+pub(crate) trait ManagedTooltipExt:
+    StatefulInteractiveElement + crate::ElementExt + Sized
+{
     fn managed_tooltip(
         self,
         build_tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,

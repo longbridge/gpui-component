@@ -1,14 +1,13 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId, EventEmitter,
-    FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
-    ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement, Styled,
-    Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
+    Anchor, AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
+    MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement,
+    Styled, Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::{cell::Cell, rc::Rc};
 
 use crate::{
-    Anchor, ElementExt, Selectable, StyledExt as _, actions::Cancel, anchored,
-    global_state::GlobalState, v_flex,
+    ElementExt, Selectable, StyledExt as _, actions::Cancel, global_state::GlobalState, v_flex,
 };
 
 const CONTEXT: &str = "Popover";
@@ -63,10 +62,10 @@ impl Popover {
         }
     }
 
-    /// Set the anchor corner of the popover, default is `Corner::TopLeft`.
+    /// Set the anchor corner of the popover, default is `Anchor::TopLeft`.
     ///
-    /// This method is kept for backward compatibility with `Corner` type.
-    /// Internally, it converts `Corner` to `Anchor`.
+    /// This method is kept for backward compatibility with `Anchor` type.
+    /// Internally, it converts `Anchor` to `Anchor`.
     pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
         self.anchor = anchor.into();
         self
@@ -171,18 +170,25 @@ impl Popover {
     }
 
     pub(crate) fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
-        let offset = if anchor.is_center() {
-            gpui::point(trigger_bounds.size.width.half(), px(0.))
-        } else {
-            Point::default()
-        };
-
-        trigger_bounds.corner(anchor.swap_vertical().into())
-            + offset
-            + Point {
-                x: px(0.),
-                y: -trigger_bounds.size.height,
-            }
+        match anchor {
+            Anchor::TopLeft => trigger_bounds.origin,
+            Anchor::TopCenter => trigger_bounds.top_center(),
+            Anchor::TopRight => trigger_bounds.top_right(),
+            Anchor::BottomLeft => Point {
+                x: trigger_bounds.origin.x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            Anchor::BottomCenter => Point {
+                x: trigger_bounds.top_center().x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            Anchor::BottomRight => Point {
+                x: trigger_bounds.top_right().x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            // Fallback for LeftCenter/RightCenter – adjust as needed.
+            _ => trigger_bounds.origin,
+        }
     }
 }
 
@@ -326,7 +332,7 @@ impl Popover {
             anchored()
                 .snap_to_window_with_margin(px(8.))
                 .anchor(anchor)
-                .position_fn(move || position.get())
+                .position(position.get())
                 .child(div().relative().child(content)),
         )
         .with_priority(1)
@@ -346,6 +352,7 @@ impl Popover {
             .map(|this| match anchor {
                 Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight => this.top_1(),
                 Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => this.bottom_1(),
+                Anchor::LeftCenter | Anchor::RightCenter => this.top_1(), // Fallback for centered
             })
     }
 }
@@ -381,7 +388,10 @@ impl RenderOnce for Popover {
 
         // Shared cell so the deferred Anchored element can read the real trigger bounds at
         // prepaint time (after trigger's on_prepaint has already fired with the correct bounds).
-        let position = Rc::new(Cell::new(Self::resolved_corner(self.anchor, trigger_bounds)));
+        let position = Rc::new(Cell::new(Self::resolved_corner(
+            self.anchor,
+            trigger_bounds,
+        )));
 
         let el = div()
             .id(self.id)

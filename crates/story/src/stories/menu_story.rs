@@ -1,5 +1,5 @@
-use gpui::{
-    Action, App, AppContext, Context, Corner, Entity, InteractiveElement, IntoElement, KeyBinding,
+use gpui::{ Anchor,
+    Action, App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyBinding,
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
@@ -335,7 +335,7 @@ impl Render for MenuStory {
                         Button::new("dropdown-menu-scrollable-1")
                             .outline()
                             .label("Scrollable Menu (100 items)")
-                            .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Anchor::TopRight, move |this, _, _| {
                                 let mut this = this
                                     .scrollable(true)
                                     .max_h(px(300.))
@@ -357,7 +357,7 @@ impl Render for MenuStory {
                         Button::new("dropdown-menu-scrollable-2")
                             .outline()
                             .label("Scrollable Menu (5 items)")
-                            .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Anchor::TopRight, move |this, _, _| {
                                 let mut this = this
                                     .scrollable(true)
                                     .max_h(px(300.))

@@ -1,3 +1,4 @@
+use gpui::Corners;
 use std::{
     ops::Range,
     rc::Rc,
@@ -82,7 +83,7 @@ impl Inline {
         window.paint_quad(gpui::PaintQuad {
             bounds,
             background: cx.theme().blue.alpha(0.01).into(),
-            corner_radii: gpui::Corners::default(),
+            corner_radii: Corners::default(),
             border_color: gpui::transparent_black(),
             border_style: BorderStyle::default(),
             border_widths: gpui::Edges::all(px(0.)),
