@@ -1,11 +1,16 @@
+use gpui::{Window};
+use gpui::Corners;
+use crate::theme::ActiveTheme;
 use gpui::{
-    AnyElement, App, Context, Corners, Edges, Entity, EventEmitter, FocusHandle, Focusable,
+    App, AnyElement, Context, Edges, Entity, EventEmitter, FocusHandle, Focusable,
+};
+use gpui::{
     InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
-    StyleRefinement, Styled, TextAlign, Window, actions, prelude::FluentBuilder as _,
+    StyleRefinement, Styled, TextAlign, actions, prelude::FluentBuilder as _,
 };
 
 use crate::{
-    ActiveTheme, Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex,
+    Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex,
 };
 
 use super::{Input, InputState};

@@ -1,7 +1,7 @@
-use std::{ops::Range, rc::Rc};
-
+use gpui::Corners;
+use gpui::Half;
+use gpui::{App, Bounds, Element, ElementId, ElementInputHandler, Entity, GlobalElementId};
 use gpui::{
-    App, Bounds, Corners, Element, ElementId, ElementInputHandler, Entity, GlobalElementId, Half,
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
     MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
     Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative,
@@ -9,6 +9,7 @@ use gpui::{
 };
 use ropey::Rope;
 use smallvec::SmallVec;
+use std::{ops::Range, rc::Rc};
 
 use crate::{
     ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _,
@@ -1168,21 +1169,18 @@ impl IntoElement for TextElement {
 
 /// A debug function to print points as SVG path.
 #[allow(unused)]
-fn print_points_as_svg_path(
-    line_corners: &Vec<Corners<Point<Pixels>>>,
-    points: &Vec<Point<Pixels>>,
-) {
+fn print_points_as_svg_path(line_corners: &Vec<gpui::Corners<Pixels>>, points: &Vec<Point<Pixels>>) {
     for corners in line_corners {
         println!(
             "tl: ({}, {}), tr: ({}, {}), bl: ({}, {}), br: ({}, {})",
-            corners.top_left.x.as_f32() as i32,
-            corners.top_left.y.as_f32() as i32,
-            corners.top_right.x.as_f32() as i32,
-            corners.top_right.y.as_f32() as i32,
-            corners.bottom_left.x.as_f32() as i32,
-            corners.bottom_left.y.as_f32() as i32,
-            corners.bottom_right.x.as_f32() as i32,
-            corners.bottom_right.y.as_f32() as i32,
+            corners.top_left.as_f32() as i32,
+            corners.top_left.as_f32() as i32,
+            corners.top_right.as_f32() as i32,
+            corners.top_right.as_f32() as i32,
+            corners.bottom_left.as_f32() as i32,
+            corners.bottom_left.as_f32() as i32,
+            corners.bottom_right.as_f32() as i32,
+            corners.bottom_right.as_f32() as i32,
         );
     }
 
@@ -1197,7 +1195,6 @@ fn print_points_as_svg_path(
         }
     }
 }
-
 impl Element for TextElement {
     type RequestLayoutState = ();
     type PrepaintState = PrepaintState;

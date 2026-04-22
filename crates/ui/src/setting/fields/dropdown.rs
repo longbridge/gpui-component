@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Corner, IntoElement, SharedString, StyleRefinement, Styled, Window,
+    Anchor, AnyElement, App, IntoElement, SharedString, StyleRefinement, Styled, Window,
     prelude::FluentBuilder as _,
 };
 
@@ -58,7 +58,7 @@ where
             .outline()
             .with_size(options.size)
             .refine_style(style)
-            .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
+            .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, _, _| {
                 let set_value = set_value.clone();
                 let menu = dropdown_options.iter().fold(menu, |menu, (value, label)| {
                     let old_value: SharedString = old_value.clone().into();
