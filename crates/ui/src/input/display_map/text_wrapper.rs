@@ -1,7 +1,8 @@
 use std::ops::Range;
+use gpui::Half;
 
 use gpui::{
-    App, Font, Half, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
+    App, Font, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
     size,
 };
 use ropey::Rope;

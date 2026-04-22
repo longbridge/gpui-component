@@ -1,10 +1,10 @@
-use gpui::{
+use gpui::{ Anchor,
     Action, App, AppContext, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
     Half, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement as _, Render,
     Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
-    ActiveTheme, Anchor, StyledExt, WindowExt,
+    ActiveTheme, StyledExt, WindowExt,
     button::{Button, ButtonVariants as _},
     divider::Divider,
     h_flex,
