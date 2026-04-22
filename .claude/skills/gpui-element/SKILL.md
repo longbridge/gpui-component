@@ -54,7 +54,7 @@ impl Element for MyElement {
     fn paint(&mut self, .., bounds: Bounds<Pixels>, layout: &mut Self::RequestLayoutState,
              paint_state: &mut Self::PrepaintState, window: &mut Window, cx: &mut App)
     {
-        window.paint_quad(paint_quad(bounds, Corners::all(px(4.)), cx.theme().background));
+        window.paint_quad(paint_quad(bounds, Anchor::all(px(4.)), cx.theme().background));
 
         window.on_mouse_event({
             let hitbox = paint_state.hitbox.clone();

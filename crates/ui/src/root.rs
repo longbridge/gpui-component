@@ -1,5 +1,5 @@
 use crate::{
-    ActiveTheme, Anchor, ElementExt, Placement, StyledExt,
+    ActiveTheme, ElementExt, Placement, StyledExt,
     dialog::{ANIMATION_DURATION, Dialog},
     focus_trap::FocusTrapManager,
     input::InputState,
@@ -9,9 +9,9 @@ use crate::{
     window_border,
 };
 use gpui::{
-    AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle, InteractiveElement,
-    IntoElement, KeyBinding, ParentElement as _, Pixels, Render, StyleRefinement, Styled,
-    WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
+    Anchor, AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
+    StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, rc::Rc};
 

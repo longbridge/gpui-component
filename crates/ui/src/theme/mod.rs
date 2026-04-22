@@ -72,6 +72,7 @@ pub struct Theme {
     /// Show the scrollbar mode, default: Scrolling
     pub scrollbar_show: ScrollbarShow,
     /// The notification setting.
+    #[serde(skip)]
     pub notification: NotificationSettings,
     /// Tile grid size, default is 4px.
     pub tile_grid_size: Pixels,

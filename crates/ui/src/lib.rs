@@ -1,7 +1,6 @@
 use gpui::{App, SharedString};
 use std::ops::Deref;
 
-mod anchored;
 mod async_util;
 mod element_ext;
 mod event;
@@ -76,7 +75,6 @@ pub mod tooltip;
 pub mod tree;
 
 pub use crate::Disableable;
-pub(crate) use anchored::*;
 pub use element_ext::*;
 pub use event::InteractiveElementExt;
 pub use focus_trap::FocusTrapElement;

@@ -9,10 +9,10 @@ use gpui_component::{
 
 use gpui_component_assets::Assets;
 use gpui_component_story::{
-    AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DialogStory, FormStory,
-    IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
+    AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DataTableStory, DialogStory,
+    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollbarStory, SelectStory, SidebarStory,
-    StoryContainer, SwitchStory, DataTableStory, TooltipStory,
+    StoryContainer, SwitchStory, TooltipStory,
 };
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
@@ -161,7 +161,7 @@ impl StoryWorkspace {
                                 )
                             }
                         })
-                        .anchor(Corner::TopRight)
+                        .anchor(Anchor::TopRight)
                 }
             })
         });

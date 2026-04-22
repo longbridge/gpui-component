@@ -1,5 +1,5 @@
-use gpui::{
-    Action, App, AppContext as _, Context, Corner, Entity, Focusable, IntoElement,
+use gpui::{ Anchor,
+    Action, App, AppContext as _, Context, Entity, Focusable, IntoElement,
     ParentElement as _, Render, Styled as _, Window, prelude::FluentBuilder as _,
 };
 use serde::Deserialize;
@@ -134,7 +134,7 @@ impl Render for DropdownButtonStory {
                         .loading(self.loading)
                         .disabled(self.disabled)
                         .selected(selected)
-                        .dropdown_menu_with_anchor(Corner::BottomRight, move |this, _, _| {
+                        .dropdown_menu_with_anchor(Anchor::BottomRight, move |this, _, _| {
                             this.menu_with_check(
                                 "Disabled",
                                 disabled,

@@ -19,6 +19,7 @@ pub struct DatePickerStory {
     date_picker_value: Option<String>,
     date_range_picker: Entity<DatePickerState>,
     default_range_mode_picker: Entity<DatePickerState>,
+    birthday_picker: Entity<DatePickerState>,
     without_appearance_picker: Entity<DatePickerState>,
     _subscriptions: Vec<Subscription>,
 }
@@ -88,6 +89,12 @@ impl DatePickerStory {
 
         let default_range_mode_picker = cx.new(|cx| DatePickerState::range(window, cx));
 
+        let birthday_picker = cx.new(|cx| {
+            let mut picker = DatePickerState::new(window, cx);
+            picker.set_year_range((1927, now.year() + 1), cx);
+            picker
+        });
+
         let without_appearance_picker = cx.new(|cx| DatePickerState::new(window, cx));
 
         let _subscriptions = vec![
@@ -115,6 +122,7 @@ impl DatePickerStory {
             data_picker_custom,
             date_range_picker,
             default_range_mode_picker,
+            birthday_picker,
             without_appearance_picker,
             date_picker_value: None,
             _subscriptions,
@@ -211,6 +219,16 @@ impl Render for DatePickerStory {
                 section("Date Picker Value").max_w_128().child(
                     format!("Date picker value: {:?}", self.date_picker_value).into_element(),
                 ),
+            )
+            .child(
+                section("Custom Year Range (birthday, 1900 to current)")
+                    .max_w_128()
+                    .child(
+                        DatePicker::new(&self.birthday_picker)
+                            .number_of_months(1)
+                            .cleanable(true)
+                            .placeholder("Select birthday"),
+                    ),
             )
             .child(
                 section("Without Appearance").max_w_128().child(
