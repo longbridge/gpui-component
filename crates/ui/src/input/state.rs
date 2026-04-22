@@ -1704,6 +1704,22 @@ impl InputState {
         }
     }
 
+    /// Visible row range in the last laid-out viewport, `None` before first layout.
+    pub fn visible_row_range(&self) -> Option<std::ops::Range<usize>> {
+        self.last_layout.as_ref().map(|l| l.visible_range.clone())
+    }
+
+    /// Current scroll offset of the editor viewport.
+    pub fn scroll_offset(&self) -> gpui::Point<gpui::Pixels> {
+        self.scroll_handle.offset()
+    }
+
+    /// Laid-out line height; `None` before first layout.
+    pub fn line_height(&self) -> Option<gpui::Pixels> {
+        self.last_layout.as_ref().map(|l| l.line_height)
+    }
+
+
     pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
         // If the text is empty, always return 0
         if self.text.len() == 0 {
