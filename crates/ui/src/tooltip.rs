@@ -3,12 +3,12 @@ use std::{cell::Cell, rc::Rc, time::Duration};
 use gpui::{
     Action, Anchor, AnyElement, AnyView, App, AppContext, Bounds, Context, ElementId, Half,
     IntoElement, ParentElement, Pixels, Render, SharedString, StatefulInteractiveElement,
-    StyleRefinement, Styled, Task, Window, deferred, div, point, prelude::FluentBuilder, px,
+    StyleRefinement, Styled, Task, Window, anchored, deferred, div, point,
+    prelude::FluentBuilder, px,
 };
 
 use crate::{
     ActiveTheme, StyledExt,
-    anchored::anchored,
     animation::{Transition, ease_in_out_cubic, ease_out_cubic},
     h_flex,
     kbd::Kbd,
