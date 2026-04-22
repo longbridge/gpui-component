@@ -196,6 +196,31 @@ let date_picker = cx.new(|cx| {
 });
 ```
 
+## Custom Year Range
+
+By default, the date picker shows 50 years before and after the current year in year selection mode. Use `set_year_range` to configure a different range — for example, a birthday picker that goes back to 1900.
+
+The `range` argument uses a **half-open interval** `(start, end)` where `end` is **exclusive**. Pass `(1900, current_year + 1)` to include `current_year`.
+
+```rust
+use chrono::Datelike;
+
+// Birthday picker: allow years from 1900 to the current year (inclusive)
+let birthday_picker = cx.new(|cx| {
+    let current_year = chrono::Local::now().year();
+    let mut picker = DatePickerState::new(window, cx)
+        .date_format("%Y-%m-%d");
+    picker.set_year_range((1900, current_year + 1), window, cx);
+    picker
+});
+
+DatePicker::new(&birthday_picker)
+    .cleanable(true)
+    .placeholder("Select birthday")
+```
+
+`set_year_range` works for both single-date and range-mode pickers.
+
 ## Preset Ranges
 
 ### Single Date Presets

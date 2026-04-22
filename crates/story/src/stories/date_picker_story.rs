@@ -4,8 +4,7 @@ use gpui::{
     Styled as _, Subscription, Window, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Sizable as _,
-    calendar::{self, CalendarState},
+    ActiveTheme as _, Sizable as _, calendar,
     date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
     v_flex,
 };
@@ -20,7 +19,7 @@ pub struct DatePickerStory {
     date_picker_value: Option<String>,
     date_range_picker: Entity<DatePickerState>,
     default_range_mode_picker: Entity<DatePickerState>,
-    date_range_custom_calendar: Entity<DatePickerState>,
+    birthday_picker: Entity<DatePickerState>,
     without_appearance_picker: Entity<DatePickerState>,
     _subscriptions: Vec<Subscription>,
 }
@@ -90,11 +89,9 @@ impl DatePickerStory {
 
         let default_range_mode_picker = cx.new(|cx| DatePickerState::range(window, cx));
 
-        let calendar = cx
-            .new(|cx| CalendarState::new(window, cx).year_range((now.year() - 99, now.year() + 1)));
-        let date_range_custom_calendar = cx.new(|cx| {
-            let mut picker = DatePickerState::calendar(&calendar, window, cx);
-            picker.set_date(now, window, cx);
+        let birthday_picker = cx.new(|cx| {
+            let mut picker = DatePickerState::new(window, cx);
+            picker.set_year_range((1927, now.year() + 1), cx);
             picker
         });
 
@@ -116,11 +113,6 @@ impl DatePickerStory {
                     this.date_picker_value = date.format("%Y-%m-%d").map(|s| s.to_string());
                 }
             }),
-            cx.subscribe(&date_range_custom_calendar, |this, _, ev, _| match ev {
-                DatePickerEvent::Change(date) => {
-                    this.date_picker_value = date.format("%Y-%m-%d").map(|s| s.to_string());
-                }
-            }),
         ];
 
         Self {
@@ -130,7 +122,7 @@ impl DatePickerStory {
             data_picker_custom,
             date_range_picker,
             default_range_mode_picker,
-            date_range_custom_calendar,
+            birthday_picker,
             without_appearance_picker,
             date_picker_value: None,
             _subscriptions,
@@ -224,17 +216,19 @@ impl Render for DatePickerStory {
                 ),
             )
             .child(
-                section("Custom Calendar Year Range").max_w_128().child(
-                    DatePicker::new(&self.date_range_custom_calendar)
-                        .placeholder("Custom Year Range Picker")
-                        .number_of_months(1)
-                        .cleanable(true),
-                ),
-            )
-            .child(
                 section("Date Picker Value").max_w_128().child(
                     format!("Date picker value: {:?}", self.date_picker_value).into_element(),
                 ),
+            )
+            .child(
+                section("Custom Year Range (birthday, 1900 to current)")
+                    .max_w_128()
+                    .child(
+                        DatePicker::new(&self.birthday_picker)
+                            .number_of_months(1)
+                            .cleanable(true)
+                            .placeholder("Select birthday"),
+                    ),
             )
             .child(
                 section("Without Appearance").max_w_128().child(
