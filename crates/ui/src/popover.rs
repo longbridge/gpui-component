@@ -2,13 +2,12 @@ use gpui::{
     Anchor, AnyElement, App, Bounds, Context, Deferred, DismissEvent, Div, ElementId,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     MouseButton, ParentElement, Pixels, Point, Render, RenderOnce, Stateful, StyleRefinement,
-    Styled, Subscription, Window, deferred, div, prelude::FluentBuilder as _, px,
+    Styled, Subscription, Window, anchored, deferred, div, prelude::FluentBuilder as _, px,
 };
 use std::{cell::Cell, rc::Rc};
 
 use crate::{
-    ElementExt, Selectable, StyledExt as _, actions::Cancel, anchored, global_state::GlobalState,
-    v_flex,
+    ElementExt, Selectable, StyledExt as _, actions::Cancel, global_state::GlobalState, v_flex,
 };
 
 const CONTEXT: &str = "Popover";
@@ -333,7 +332,7 @@ impl Popover {
             anchored()
                 .snap_to_window_with_margin(px(8.))
                 .anchor(anchor)
-                .position_fn(move || position.get())
+                .position(position.get())
                 .child(div().relative().child(content)),
         )
         .with_priority(1)
