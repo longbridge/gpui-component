@@ -190,6 +190,31 @@ let date_picker = cx.new(|cx| {
 });
 ```
 
+## 自定义年份范围
+
+默认情况下，日期选择器在年份选择模式下会显示以今天为中心前后各 50 年。可通过 `set_year_range` 配置更大的范围——例如用于生日选择，需要回溯到 1900 年。
+
+`range` 参数使用**半开区间** `(start, end)`，`end` **不包含**在内。若要包含当前年份，传入 `(1900, current_year + 1)`。
+
+```rust
+use chrono::Datelike;
+
+// 生日选择器：允许选择 1900 年到当前年（含）
+let birthday_picker = cx.new(|cx| {
+    let current_year = chrono::Local::now().year();
+    let mut picker = DatePickerState::new(window, cx)
+        .date_format("%Y-%m-%d");
+    picker.set_year_range((1900, current_year + 1), window, cx);
+    picker
+});
+
+DatePicker::new(&birthday_picker)
+    .cleanable(true)
+    .placeholder("选择生日")
+```
+
+`set_year_range` 对单日期和范围两种模式均有效。
+
 ## 预设范围
 
 ### 单日期预设

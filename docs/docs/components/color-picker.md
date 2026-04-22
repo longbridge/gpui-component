@@ -112,10 +112,10 @@ ColorPicker::new(&color_picker)
 ### Custom Anchor Position
 
 ```rust
-use gpui::Corner;
+use gpui::Anchor;
 
 ColorPicker::new(&color_picker)
-    .anchor(Corner::TopRight) // Dropdown opens to top-right
+    .anchor(Anchor::TopRight) // Dropdown opens to top-right
 ```
 
 ## Color Selection Interface
@@ -306,7 +306,7 @@ use gpui_component::{Sizable as _, IconName);
 ColorPicker::new(&text_color_picker)
     .icon(IconName::Type)
     .small()
-    .anchor(Corner::BottomLeft)
+    .anchor(Anchor::BottomLeft)
 ```
 
 ### Color Palette Builder

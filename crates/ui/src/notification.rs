@@ -6,16 +6,14 @@ use std::{
 };
 
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent,
-    ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    Subscription, Window, div, prelude::FluentBuilder, px,
+    Anchor, Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context,
+    DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement,
+    Styled, Subscription, Window, div, prelude::FluentBuilder, px,
 };
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActiveTheme as _, Anchor, Edges, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
+    ActiveTheme as _, Edges, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
@@ -243,7 +241,9 @@ impl Notification {
 
         // Dismiss the notification after 0.15s to show the animation.
         cx.spawn(async move |view, cx| {
-            cx.background_executor().timer(Duration::from_secs_f32(0.15)).await;
+            cx.background_executor()
+                .timer(Duration::from_secs_f32(0.15))
+                .await;
             cx.update(|cx| {
                 if let Some(view) = view.upgrade() {
                     view.update(cx, |view, cx| {
@@ -265,6 +265,7 @@ impl Notification {
         self
     }
 }
+
 impl EventEmitter<DismissEvent> for Notification {}
 impl FluentBuilder for Notification {}
 impl Styled for Notification {
@@ -272,6 +273,7 @@ impl Styled for Notification {
         &mut self.style
     }
 }
+
 impl Render for Notification {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content = self
@@ -377,11 +379,16 @@ impl Render for Notification {
                                 let y_offset = px(0.) + delta * px(45.);
                                 that.top(px(0.) + y_offset)
                             }
+                            _ => that,
                         }
                     } else {
                         let y_offset = match placement {
-                            placement if placement.is_top() => px(-45.) + delta * px(45.),
-                            placement if placement.is_bottom() => px(45.) - delta * px(45.),
+                            Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
+                                px(-45.) + delta * px(45.)
+                            }
+                            Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter => {
+                                px(45.) - delta * px(45.)
+                            }
                             _ => px(0.),
                         };
                         let opacity = delta;
@@ -395,7 +402,7 @@ impl Render for Notification {
 }
 
 /// The settings for notifications.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct NotificationSettings {
     /// The placement of the notification, default: [`Anchor::TopRight`]
     pub placement: Anchor,

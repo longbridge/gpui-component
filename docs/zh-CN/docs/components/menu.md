@@ -76,11 +76,11 @@ Button::new("menu-btn")
 控制下拉菜单相对触发器的显示位置：
 
 ```rust
-use gpui::Corner;
+use gpui::Anchor;
 
 Button::new("menu-btn")
     .label("Options")
-    .dropdown_menu_with_anchor(Corner::TopRight, |menu, window, cx| {
+    .dropdown_menu_with_anchor(Anchor::TopRight, |menu, window, cx| {
         menu.menu("Option 1", Box::new(Action1))
             .menu("Option 2", Box::new(Action2))
     })

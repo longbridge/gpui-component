@@ -35,13 +35,13 @@ Popover::new("basic-popover")
 
 ### 自定义定位
 
-`anchor` 方法用于指定 Popover 相对于触发器的位置，支持 `Corner` 和 `Anchor` 两种类型。
+`anchor` 方法用于指定 Popover 相对于触发器的位置，支持 `Anchor` 和 `Anchor` 两种类型。
 
 ```rust
-use gpui::Corner;
+use gpui::Anchor;
 
 Popover::new("positioned-popover")
-    .anchor(Corner::TopRight)
+    .anchor(Anchor::TopRight)
     .trigger(Button::new("top-right").label("Top Right").outline())
     .child("This popover appears at the top right")
 ```
@@ -63,7 +63,7 @@ Popover::new("top-center")
 let view = cx.new(|_| MyView::new());
 
 Popover::new("form-popover")
-    .anchor(Corner::BottomLeft)
+    .anchor(Anchor::BottomLeft)
     .trigger(Button::new("show-form").label("Open Form").outline())
     .child(view.clone())
 ```
@@ -77,7 +77,7 @@ use gpui::ParentElement as _;
 use gpui_component::popover::Popover;
 
 Popover::new("complex-popover")
-    .anchor(Corner::BottomLeft)
+    .anchor(Anchor::BottomLeft)
     .trigger(Button::new("complex").label("Complex Content").outline())
     .content(|_, _, _| {
         div()
@@ -102,7 +102,7 @@ Popover::new("complex-popover")
 use gpui::MouseButton;
 
 Popover::new("context-menu")
-    .anchor(Corner::BottomRight)
+    .anchor(Anchor::BottomRight)
     .mouse_button(MouseButton::Right)
     .trigger(Button::new("right-click").label("Right Click Me").outline())
     .child("Context Menu")

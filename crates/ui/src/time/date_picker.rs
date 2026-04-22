@@ -161,6 +161,16 @@ impl DatePickerState {
         self
     }
 
+    /// Set the year range for the internal calendar.
+    ///
+    /// Default is 50 years before and after the current year.
+    /// `range` uses a half-open interval `(start, end)` where `end` is exclusive.
+    pub fn set_year_range(&mut self, range: (i32, i32), cx: &mut Context<Self>) {
+        self.calendar.update(cx, |state, cx| {
+            state.set_year_range(range, cx);
+        });
+    }
+
     fn update_date(&mut self, date: Date, emit: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.date = date;
         self.calendar.update(cx, |view, cx| {

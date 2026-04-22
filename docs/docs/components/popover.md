@@ -35,15 +35,15 @@ Popover::new("basic-popover")
 
 ### Popover with Custom Positioning
 
-The `anchor` method allows you to specify where the popover appears relative to the trigger element. It accepts both `Corner` and `Anchor` types.
+The `anchor` method allows you to specify where the popover appears relative to the trigger element. It accepts both `Anchor` and `Anchor` types.
 
-**Using `Corner` type** (4 corner positions):
+**Using `Anchor` type** (4 corner positions):
 
 ```rust
-use gpui::Corner;
+use gpui::Anchor;
 
 Popover::new("positioned-popover")
-    .anchor(Corner::TopRight)
+    .anchor(Anchor::TopRight)
     .trigger(Button::new("top-right").label("Top Right").outline())
     .child("This popover appears at the top right")
 ```
@@ -96,7 +96,7 @@ You can add any `Entity<T>` that implemented [Render] as the popover content.
 let view = cx.new(|_| MyView::new());
 
 Popover::new("form-popover")
-    .anchor(Corner::BottomLeft)
+    .anchor(Anchor::BottomLeft)
     .trigger(Button::new("show-form").label("Open Form").outline())
     .child(view.clone())
 ```
@@ -122,7 +122,7 @@ use gpui::ParentElement as _;
 use gpui_component::popover::Popover;
 
 Popover::new("complex-popover")
-    .anchor(Corner::BottomLeft)
+    .anchor(Anchor::BottomLeft)
     .trigger(Button::new("complex").label("Complex Content").outline())
     .content(|_, _, _| {
         div()
@@ -143,7 +143,7 @@ Sometimes you may want to show a popover on right-click, for example, to create 
 use gpui::MouseButton;
 
 Popover::new("context-menu")
-    .anchor(Corner::BottomRight)
+    .anchor(Anchor::BottomRight)
     .mouse_button(MouseButton::Right)
     .trigger(Button::new("right-click").label("Right Click Me").outline())
     .child("Context Menu")
