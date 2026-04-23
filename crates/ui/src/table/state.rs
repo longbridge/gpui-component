@@ -1379,6 +1379,64 @@ where
             })
     }
 
+    /// Compute the visible non-fixed leaf-column range for header rendering.
+    ///
+    /// Returns `(visible_range, left_spacer_width)` where:
+    /// - `visible_range` is the column-index range that should be rendered.
+    /// - `left_spacer_width` is the total width of the off-screen left columns,
+    ///   used as a spacer div to keep visible columns at the correct position.
+    ///
+    /// On the first frame `self.bounds` is zero, so a fallback that covers all
+    /// columns is returned to avoid a blank header on initial paint.
+    fn calculate_visible_leaf_col_range(
+        &self,
+        left_columns_count: usize,
+    ) -> (Range<usize>, Pixels) {
+        let total_cols = self.col_groups.len();
+
+        if self.bounds.size.width == px(0.) {
+            return (left_columns_count..total_cols, px(0.));
+        }
+
+        let fixed_width = self.fixed_head_cols_bounds.size.width;
+        let available_width = (self.bounds.size.width - fixed_width).max(px(0.));
+        // The scroll handle offset is negative when scrolled right; negate it
+        // to obtain a positive distance from the left edge of the scroll area.
+        let scroll_x = (-self.horizontal_scroll_handle.offset().x).max(px(0.));
+
+        // Walk left-to-right through non-fixed columns to find the first one
+        // whose right edge enters the viewport. The accumulated width of the
+        // skipped columns becomes the left spacer width.
+        let mut range_start = left_columns_count;
+        let mut left_spacer = px(0.);
+        let mut cumulative = px(0.);
+        for i in left_columns_count..total_cols {
+            let right_edge = cumulative + self.col_groups[i].width;
+            if right_edge > scroll_x {
+                range_start = i;
+                left_spacer = cumulative;
+                break;
+            }
+            cumulative = right_edge;
+        }
+
+        // Continue from `range_start` (skipping already-scanned columns) to
+        // find the last column still within the viewport. The 200 px overdraw
+        // buffer prevents a visible flash when the user scrolls quickly.
+        let right_bound = scroll_x + available_width + px(200.);
+        let mut range_end = total_cols;
+        let mut cumulative = left_spacer; // already summed widths before `range_start`
+        for i in range_start..total_cols {
+            cumulative += self.col_groups[i].width;
+            if cumulative > right_bound {
+                range_end = (i + 1).min(total_cols);
+                break;
+            }
+        }
+
+        (range_start..range_end, left_spacer)
+    }
+
     fn render_table_header(
         &mut self,
         left_columns_count: usize,
@@ -1388,44 +1446,22 @@ where
         let view = cx.entity().clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
-        // Compute the visible leaf-column range to avoid rendering off-screen columns.
-        // On the first frame bounds are zero, so we fall back to rendering everything.
+        // Header leaf-column virtualization.
+        //
+        // `render_th` creates interactive elements with resize-handle listeners.
+        // Calling it for every column every frame is O(n) in column count; with
+        // 1000+ columns this alone drops FPS below 60 even in release mode.
+        //
+        // We restrict rendering to the columns currently visible inside the
+        // overflow-scroll viewport, surrounding them with inert spacer divs:
+        //
+        //   [left_spacer] [visible columns…] [right_spacer] [last_empty_col]
+        //
+        // The spacers preserve the flex container's total content width so that
+        // the scrollbar range stays correct.
         let total_cols = self.col_groups.len();
-        let (vis_start, vis_end, left_spacer) = if self.bounds.size.width > px(0.) {
-            let fixed_width = self.fixed_head_cols_bounds.size.width;
-            let available_width = (self.bounds.size.width - fixed_width).max(px(0.));
-            let scroll_x = (-self.horizontal_scroll_handle.offset().x).max(px(0.));
-
-            // Find the first visible non-fixed column.
-            let mut start = left_columns_count;
-            let mut spacer = px(0.);
-            let mut cumulative = px(0.);
-            for i in left_columns_count..total_cols {
-                let next = cumulative + self.col_groups[i].width;
-                if next > scroll_x {
-                    start = i;
-                    spacer = cumulative;
-                    break;
-                }
-                cumulative = next;
-            }
-
-            // Find the last visible non-fixed column (with a small buffer).
-            let right_bound = scroll_x + available_width + px(200.);
-            let mut end = total_cols;
-            let mut cumulative = px(0.);
-            for i in left_columns_count..total_cols {
-                cumulative += self.col_groups[i].width;
-                if cumulative > right_bound {
-                    end = (i + 1).min(total_cols);
-                    break;
-                }
-            }
-
-            (start, end, spacer)
-        } else {
-            (left_columns_count, total_cols, px(0.))
-        };
+        let (visible_col_range, left_spacer) =
+            self.calculate_visible_leaf_col_range(left_columns_count);
 
         let layout_len = self.header_layout.len();
 
@@ -1526,47 +1562,35 @@ where
                                 .border_color(cx.theme().border)
                                 .map(|this| {
                                     if is_leaf_row {
-                                        // Leaf row: only render columns within the visible range.
-                                        // A left spacer fills the space of off-screen left columns
-                                        // so remaining cells are positioned correctly inside the
-                                        // CSS overflow-scroll container.
+                                        // Leaf row: apply the spacer virtualization pattern.
+                                        // Only columns in `visible_range` are rendered; the two
+                                        // spacer divs preserve the container's total content width
+                                        // so the scrollbar range stays correct.
                                         this.when(left_spacer > px(0.), |r| {
-                                            r.child(
-                                                div()
-                                                    .w(left_spacer)
-                                                    .h_full()
-                                                    .flex_shrink_0(),
-                                            )
+                                            r.child(div().w(left_spacer).h_full().flex_shrink_0())
                                         })
                                         .children(row_cells.iter().filter_map(|cell| {
                                             if cell.is_leaf {
                                                 let ix = cell.leaf_col_ix?;
-                                                if ix < vis_start || ix >= vis_end {
+                                                if !visible_col_range.contains(&ix) {
                                                     return None;
                                                 }
-                                                return Some(
-                                                    self.render_th(ix, window, cx)
-                                                        .into_any_element(),
-                                                );
+                                                Some(self.render_th(ix, window, cx).into_any_element())
+                                            } else {
+                                                None
                                             }
-                                            None
                                         }))
-                                        .when(vis_end < total_cols, |r| {
-                                            let right_spacer: Pixels = self.col_groups
-                                                [vis_end..total_cols]
+                                        .when(visible_col_range.end < total_cols, |r| {
+                                            let right_spacer: Pixels = self.col_groups[visible_col_range.end..total_cols]
                                                 .iter()
                                                 .map(|g| g.width)
                                                 .sum();
-                                            r.child(
-                                                div()
-                                                    .w(right_spacer)
-                                                    .h_full()
-                                                    .flex_shrink_0(),
-                                            )
+                                            r.child(div().w(right_spacer).h_full().flex_shrink_0())
                                         })
                                         .child(self.delegate.render_last_empty_col(window, cx))
                                     } else {
-                                        // Group header rows: few cells, render all.
+                                        // Group header rows have far fewer cells (one per group),
+                                        // so the cost of rendering all of them is negligible.
                                         this.children(row_cells.iter().filter_map(|cell| {
                                             if cell.start_leaf_col_ix >= left_columns_count {
                                                 if cell.is_leaf {
@@ -2089,15 +2113,15 @@ where
                                 render_rows_count,
                                 cx.processor(
                                     move |table, visible_range: Range<usize>, window, cx| {
+                                        // Use `col.width` (always up-to-date) rather than
+                                        // `col.bounds.size.width`, which is only set after
+                                        // prepaint and is therefore zero on the first frame.
                                         let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
                                             table
                                                 .col_groups
                                                 .iter()
                                                 .skip(left_columns_count)
-                                                .map(|col| gpui::Size {
-                                                    width: col.width,
-                                                    height: px(0.),
-                                                })
+                                                .map(|col| gpui::Size { width: col.width, height: px(0.) })
                                                 .collect(),
                                         );
 
