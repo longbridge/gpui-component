@@ -158,6 +158,45 @@ impl Render for FilterView {
 }
 ```
 
+### 分段样式 ToggleGroup
+
+使用 `segmented()` 可以把一组 Toggle 渲染成贴合的分段控件。这个样式只影响外观，
+交互语义仍然是当前的多选模型：`on_click` 会收到每一项最新状态组成的 `Vec<bool>`。
+
+```rust
+ToggleGroup::new("formatting")
+    .segmented()
+    .outline()
+    .child(Toggle::new(0).label("Bold").checked(self.bold))
+    .child(Toggle::new(1).label("Italic").checked(self.italic))
+    .child(Toggle::new(2).label("Code").checked(self.code))
+    .on_click(cx.listener(|view, states, _, cx| {
+        view.bold = states[0];
+        view.italic = states[1];
+        view.code = states[2];
+        cx.notify();
+    }))
+```
+
+分段样式默认使用 `0px` 间距，相邻项会共享一个连续边框。需要保留间距时可以传入
+非零 `gap`：
+
+```rust
+use gpui::px;
+
+ToggleGroup::new("quick-actions")
+    .segmented()
+    .outline()
+    .gap(px(8.))
+    .small()
+    .child(Toggle::new(0).label("Star"))
+    .child(Toggle::new(1).label("Watch"))
+    .child(Toggle::new(2).label("Pin"))
+```
+
+如果业务需要互斥选择，请继续在视图状态中自行保证只有一项 `checked(true)`，
+直到后续提供专门的单选 API。
+
 ## 最佳实践
 
 1. 需要按钮式反馈时优先使用 Toggle，而不是 Switch。
