@@ -56,7 +56,12 @@ impl Toggle {
             size: Size::default(),
             variant: ToggleVariant::default(),
             disabled: false,
-            border_corners: Corners::all(true),
+            border_corners: Corners {
+                top_left: true,
+                top_right: true,
+                bottom_left: true,
+                bottom_right: true,
+            },
             border_edges: Edges::all(true),
             children: smallvec![],
             on_click: None,
@@ -338,13 +343,18 @@ impl RenderOnce for ToggleGroup {
                             bottom: true,
                         })
                     } else {
-                        item.border_corners(Corners::all(false))
-                            .border_edges(Edges {
-                                left: false,
-                                top: true,
-                                right: true,
-                                bottom: true,
-                            })
+                        item.border_corners(Corners {
+                            top_left: false,
+                            top_right: false,
+                            bottom_left: false,
+                            bottom_right: false,
+                        })
+                        .border_edges(Edges {
+                            left: false,
+                            top: true,
+                            right: true,
+                            bottom: true,
+                        })
                     };
 
                     item.disabled(disabled)
@@ -402,7 +412,6 @@ mod tests {
             .outline()
             .large()
             .segmented()
-            .gap(px(8.))
             .disabled(false)
             .on_click(|_, _, _| {});
 
@@ -410,7 +419,6 @@ mod tests {
         assert_eq!(group.variant, ToggleVariant::Outline);
         assert_eq!(group.size, Size::Large);
         assert!(group.segmented);
-        assert_eq!(group.gap, Some(px(8.)));
         assert!(!group.disabled);
         assert!(group.on_click.is_some());
     }
