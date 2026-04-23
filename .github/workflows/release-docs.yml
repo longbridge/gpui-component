@@ -28,7 +28,7 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-bindgen-cli
-        run: cargo install -f wasm-bindgen-cli --version 0.2.113
+        run: cargo install -f wasm-bindgen-cli --version 0.2.118
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
