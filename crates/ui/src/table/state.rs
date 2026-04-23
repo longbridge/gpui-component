@@ -1388,6 +1388,47 @@ where
         let view = cx.entity().clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
+        // Compute the visible leaf-column range to avoid rendering off-screen columns.
+        // On the first frame bounds are zero, so we fall back to rendering everything.
+        let total_cols = self.col_groups.len();
+        let (vis_start, vis_end, left_spacer) = if self.bounds.size.width > px(0.) {
+            let fixed_width = self.fixed_head_cols_bounds.size.width;
+            let available_width = (self.bounds.size.width - fixed_width).max(px(0.));
+            let scroll_x = (-self.horizontal_scroll_handle.offset().x).max(px(0.));
+
+            // Find the first visible non-fixed column.
+            let mut start = left_columns_count;
+            let mut spacer = px(0.);
+            let mut cumulative = px(0.);
+            for i in left_columns_count..total_cols {
+                let next = cumulative + self.col_groups[i].width;
+                if next > scroll_x {
+                    start = i;
+                    spacer = cumulative;
+                    break;
+                }
+                cumulative = next;
+            }
+
+            // Find the last visible non-fixed column (with a small buffer).
+            let right_bound = scroll_x + available_width + px(200.);
+            let mut end = total_cols;
+            let mut cumulative = px(0.);
+            for i in left_columns_count..total_cols {
+                cumulative += self.col_groups[i].width;
+                if cumulative > right_bound {
+                    end = (i + 1).min(total_cols);
+                    break;
+                }
+            }
+
+            (start, end, spacer)
+        } else {
+            (left_columns_count, total_cols, px(0.))
+        };
+
+        let layout_len = self.header_layout.len();
+
         // Reset fixed head columns bounds, if no fixed columns are present
         if left_columns_count == 0 {
             self.fixed_head_cols_bounds = Bounds::default();
@@ -1476,38 +1517,84 @@ where
                     .track_scroll(&horizontal_scroll_handle)
                     .bg(cx.theme().table_head)
                     .child(
-                        v_flex().min_w_full().flex_shrink_0().children(layout.iter().enumerate().map(|(_row_ix, row_cells)| {
+                        v_flex().min_w_full().flex_shrink_0().children(layout.iter().enumerate().map(|(row_ix, row_cells)| {
+                            let is_leaf_row = row_ix + 1 == layout_len;
                             h_flex()
                                 .min_w_full()
                                 .h(self.options.size.table_row_height())
                                 .border_b_1()
                                 .border_color(cx.theme().border)
-                                .children(row_cells.iter().filter_map(|cell| {
-                                    if cell.start_leaf_col_ix >= left_columns_count {
-                                        if cell.is_leaf {
-                                            if let Some(ix) = cell.leaf_col_ix {
+                                .map(|this| {
+                                    if is_leaf_row {
+                                        // Leaf row: only render columns within the visible range.
+                                        // A left spacer fills the space of off-screen left columns
+                                        // so remaining cells are positioned correctly inside the
+                                        // CSS overflow-scroll container.
+                                        this.when(left_spacer > px(0.), |r| {
+                                            r.child(
+                                                div()
+                                                    .w(left_spacer)
+                                                    .h_full()
+                                                    .flex_shrink_0(),
+                                            )
+                                        })
+                                        .children(row_cells.iter().filter_map(|cell| {
+                                            if cell.is_leaf {
+                                                let ix = cell.leaf_col_ix?;
+                                                if ix < vis_start || ix >= vis_end {
+                                                    return None;
+                                                }
                                                 return Some(
                                                     self.render_th(ix, window, cx)
                                                         .into_any_element(),
                                                 );
                                             }
-                                        } else {
-                                            return Some(
-                                                self.delegate_mut()
-                                                    .render_group_th(
-                                                        &cell.label,
-                                                        cell.col_span,
-                                                        cell.width,
-                                                        window,
-                                                        cx,
-                                                    )
-                                                    .into_any_element(),
-                                            );
-                                        }
+                                            None
+                                        }))
+                                        .when(vis_end < total_cols, |r| {
+                                            let right_spacer: Pixels = self.col_groups
+                                                [vis_end..total_cols]
+                                                .iter()
+                                                .map(|g| g.width)
+                                                .sum();
+                                            r.child(
+                                                div()
+                                                    .w(right_spacer)
+                                                    .h_full()
+                                                    .flex_shrink_0(),
+                                            )
+                                        })
+                                        .child(self.delegate.render_last_empty_col(window, cx))
+                                    } else {
+                                        // Group header rows: few cells, render all.
+                                        this.children(row_cells.iter().filter_map(|cell| {
+                                            if cell.start_leaf_col_ix >= left_columns_count {
+                                                if cell.is_leaf {
+                                                    if let Some(ix) = cell.leaf_col_ix {
+                                                        return Some(
+                                                            self.render_th(ix, window, cx)
+                                                                .into_any_element(),
+                                                        );
+                                                    }
+                                                } else {
+                                                    return Some(
+                                                        self.delegate_mut()
+                                                            .render_group_th(
+                                                                &cell.label,
+                                                                cell.col_span,
+                                                                cell.width,
+                                                                window,
+                                                                cx,
+                                                            )
+                                                            .into_any_element(),
+                                                    );
+                                                }
+                                            }
+                                            None
+                                        }))
+                                        .child(self.delegate.render_last_empty_col(window, cx))
                                     }
-                                    None
-                                }))
-                                .child(self.delegate.render_last_empty_col(window, cx))
+                                })
                         }))
                     ),
             )
@@ -2002,14 +2089,15 @@ where
                                 render_rows_count,
                                 cx.processor(
                                     move |table, visible_range: Range<usize>, window, cx| {
-                                        // We must calculate the col sizes here, because the col sizes
-                                        // need render_th first, then that method will set the bounds of each col.
                                         let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
                                             table
                                                 .col_groups
                                                 .iter()
                                                 .skip(left_columns_count)
-                                                .map(|col| col.bounds.size)
+                                                .map(|col| gpui::Size {
+                                                    width: col.width,
+                                                    height: px(0.),
+                                                })
                                                 .collect(),
                                         );
 
