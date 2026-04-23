@@ -13,7 +13,7 @@ order: -2
 ```toml
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }
-gpui_platform = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 # 可选：使用内置默认资源
 gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }

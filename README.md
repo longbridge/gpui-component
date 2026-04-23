@@ -31,8 +31,9 @@ Here is the first application: [Longbridge Pro](https://longbridge.com/desktop),
 ## Usage
 
 ```toml
-gpui = "0.2.2"
-gpui-component = "0.5.1"
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
 
 ### Basic Example
@@ -61,9 +62,7 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = Application::new();
-
-    app.run(move |cx| {
+    gpui_platform::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
         gpui_component::init(cx);
 

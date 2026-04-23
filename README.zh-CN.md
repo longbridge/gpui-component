@@ -31,8 +31,9 @@ https://longbridge.github.io/gpui-component/gallery/
 ## Usage
 
 ```toml
-gpui = "0.2.2"
-gpui-component = "0.5.1"
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
 
 ### Examples
@@ -61,9 +62,7 @@ impl Render for HelloWorld {
 }
 
 fn main() {
-    let app = Application::new();
-
-    app.run(move |cx| {
+    gpui_platform::application().run(move |cx| {
         // 使用任何 GPUI Component 功能之前必须先调用此函数。
         gpui_component::init(cx);
 

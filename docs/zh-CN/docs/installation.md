@@ -45,5 +45,6 @@ order: -1
 
 ```toml
 gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
