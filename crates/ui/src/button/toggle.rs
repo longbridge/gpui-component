@@ -1,8 +1,8 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-    AnyElement, App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    AnyElement, App, Corners, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
 };
 use smallvec::{SmallVec, smallvec};
@@ -39,6 +39,8 @@ pub struct Toggle {
     size: Size,
     variant: ToggleVariant,
     disabled: bool,
+    border_corners: Corners<bool>,
+    border_edges: Edges<bool>,
     children: SmallVec<[AnyElement; 1]>,
     on_click: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
     tooltip: ComponentTooltip,
@@ -54,6 +56,8 @@ impl Toggle {
             size: Size::default(),
             variant: ToggleVariant::default(),
             disabled: false,
+            border_corners: Corners { top_left: true, top_right: true, bottom_left: true, bottom_right: true },
+            border_edges: Edges::all(true),
             children: smallvec![],
             on_click: None,
             tooltip: ComponentTooltip::default(),
@@ -91,6 +95,16 @@ impl Toggle {
     /// The `&bool` parameter represents the new checked state of the toggle.
     pub fn on_click(mut self, handler: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Box::new(handler));
+        self
+    }
+
+    pub(crate) fn border_corners(mut self, corners: impl Into<Corners<bool>>) -> Self {
+        self.border_corners = corners.into();
+        self
+    }
+
+    pub(crate) fn border_edges(mut self, edges: impl Into<Edges<bool>>) -> Self {
+        self.border_edges = edges.into();
         self
     }
 }
@@ -133,6 +147,7 @@ impl RenderOnce for Toggle {
         let checked = self.checked;
         let disabled = self.disabled;
         let hoverable = !disabled && !checked;
+        let rounding = cx.theme().radius;
 
         div()
             .id(self.id)
@@ -146,9 +161,23 @@ impl RenderOnce for Toggle {
                 Size::Large => this.min_w_9().h_9().px_3().text_lg(),
                 _ => this.min_w_8().h_8().px_2(),
             })
-            .rounded(cx.theme().radius)
+            .when(self.border_corners.top_left, |this| {
+                this.rounded_tl(rounding)
+            })
+            .when(self.border_corners.top_right, |this| {
+                this.rounded_tr(rounding)
+            })
+            .when(self.border_corners.bottom_left, |this| {
+                this.rounded_bl(rounding)
+            })
+            .when(self.border_corners.bottom_right, |this| {
+                this.rounded_br(rounding)
+            })
             .when(self.variant == ToggleVariant::Outline, |this| {
-                this.border_1()
+                this.when(self.border_edges.left, |this| this.border_l_1())
+                    .when(self.border_edges.right, |this| this.border_r_1())
+                    .when(self.border_edges.top, |this| this.border_t_1())
+                    .when(self.border_edges.bottom, |this| this.border_b_1())
                     .border_color(cx.theme().border)
                     .bg(cx.theme().background)
                     .when(cx.theme().shadow, |this| this.shadow_xs())
@@ -182,6 +211,7 @@ pub struct ToggleGroup {
     size: Size,
     variant: ToggleVariant,
     disabled: bool,
+    segmented: bool,
     items: Vec<Toggle>,
     on_click: Option<Rc<dyn Fn(&Vec<bool>, &mut Window, &mut App) + 'static>>,
 }
@@ -195,6 +225,7 @@ impl ToggleGroup {
             size: Size::default(),
             variant: ToggleVariant::default(),
             disabled: false,
+            segmented: false,
             items: Vec::new(),
             on_click: None,
         }
@@ -220,6 +251,15 @@ impl ToggleGroup {
         on_click: impl Fn(&Vec<bool>, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_click = Some(Rc::new(on_click));
+        self
+    }
+
+    /// Render the group as a connected segmented control.
+    ///
+    /// This keeps the existing multi-toggle behavior, but removes the default
+    /// gap and joins adjacent item borders into a single segmented outline.
+    pub fn segmented(mut self) -> Self {
+        self.segmented = true;
         self
     }
 }
@@ -254,6 +294,7 @@ impl Styled for ToggleGroup {
 impl RenderOnce for ToggleGroup {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let disabled = self.disabled;
+        let items_len = self.items.len();
         let checks = self
             .items
             .iter()
@@ -263,11 +304,49 @@ impl RenderOnce for ToggleGroup {
 
         h_flex()
             .id(self.id)
-            .gap_1()
+            .when(!self.segmented, |this| this.gap_2())
             .refine_style(&self.style)
             .children(self.items.into_iter().enumerate().map({
                 |(ix, item)| {
                     let state = state.clone();
+                    let item = if !self.segmented || items_len == 1 {
+                        item
+                    } else if ix == 0 {
+                        item.border_corners(Corners {
+                            top_left: true,
+                            top_right: false,
+                            bottom_left: true,
+                            bottom_right: false,
+                        })
+                        .border_edges(Edges {
+                            left: true,
+                            top: true,
+                            right: true,
+                            bottom: true,
+                        })
+                    } else if ix == items_len - 1 {
+                        item.border_corners(Corners {
+                            top_left: false,
+                            top_right: true,
+                            bottom_left: false,
+                            bottom_right: true,
+                        })
+                        .border_edges(Edges {
+                            left: false,
+                            top: true,
+                            right: true,
+                            bottom: true,
+                        })
+                    } else {
+                        item.border_corners(Corners { top_left: false, top_right: false, bottom_left: false, bottom_right: false })
+                            .border_edges(Edges {
+                                left: false,
+                                top: true,
+                                right: true,
+                                bottom: true,
+                            })
+                    };
+
                     item.disabled(disabled)
                         .with_size(self.size)
                         .with_variant(self.variant)
@@ -322,12 +401,14 @@ mod tests {
             .child(Toggle::new("toggle3").label("Option 3"))
             .outline()
             .large()
+            .segmented()
             .disabled(false)
             .on_click(|_, _, _| {});
 
         assert_eq!(group.items.len(), 3);
         assert_eq!(group.variant, ToggleVariant::Outline);
         assert_eq!(group.size, Size::Large);
+        assert!(group.segmented);
         assert!(!group.disabled);
         assert!(group.on_click.is_some());
     }
