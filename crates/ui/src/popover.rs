@@ -209,6 +209,7 @@ pub struct PopoverState {
     pub(crate) tracked_focus_handle: Option<FocusHandle>,
     previous_focus_handle: Option<FocusHandle>,
     trigger_bounds: Bounds<Pixels>,
+    trigger_bounds_captured: bool,
     open: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 
@@ -222,6 +223,7 @@ impl PopoverState {
             tracked_focus_handle: None,
             previous_focus_handle: None,
             trigger_bounds: Bounds::default(),
+            trigger_bounds_captured: false,
             open: default_open,
             on_open_change: None,
             _dismiss_subscription: None,
@@ -379,6 +381,7 @@ impl RenderOnce for Popover {
         let open = state.read(cx).open;
         let focus_handle = state.read(cx).focus_handle.clone();
         let trigger_bounds = state.read(cx).trigger_bounds;
+        let trigger_bounds_captured = state.read(cx).trigger_bounds_captured;
 
         let Some(trigger) = self.trigger else {
             return div().id("empty");
@@ -413,17 +416,23 @@ impl RenderOnce for Popover {
                 let state = state.clone();
                 let position = position.clone();
                 let anchor = self.anchor;
-                move |bounds, _, cx| {
-                    // Update the shared cell so the deferred Anchored element reads the correct
-                    // position when its prepaint runs (deferred prepaint happens after this).
+                move |bounds, window, cx| {
                     position.set(Self::resolved_corner(anchor, bounds));
-                    state.update(cx, |state, _| {
+                    let first_capture = state.update(cx, |state, _| {
+                        let first = !state.trigger_bounds_captured;
                         state.trigger_bounds = bounds;
+                        state.trigger_bounds_captured = true;
+                        first
                     });
+                    // On the very first bounds capture, request a new frame so the popover
+                    // renders at the correct position (outside the current paint cycle).
+                    if first_capture {
+                        window.request_animation_frame();
+                    }
                 }
             });
 
-        if !open {
+        if !open || !trigger_bounds_captured {
             return el;
         }
 
