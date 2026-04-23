@@ -1719,6 +1719,14 @@ impl InputState {
         self.last_layout.as_ref().map(|l| l.line_height)
     }
 
+    /// Returns the current selection as a byte range into the text.
+    ///
+    /// The range is empty (`start == end`) when no text is selected; in
+    /// that case the offset equals `cursor()`. Byte offsets are measured
+    /// in the underlying rope's byte units.
+    pub fn selected_range(&self) -> std::ops::Range<usize> {
+        self.selected_range.into()
+    }
 
     pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
         // If the text is empty, always return 0
