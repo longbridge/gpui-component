@@ -13,7 +13,7 @@ pub struct Stepper {
     id: ElementId,
     style: StyleRefinement,
     items: Vec<StepperItem>,
-    step: usize,
+    step: Option<usize>,
     layout: Axis,
     disabled: bool,
     size: Size,
@@ -24,13 +24,13 @@ pub struct Stepper {
 impl Stepper {
     /// Creates a new stepper with the given ID.
     ///
-    /// Default use is horizontal layout with step 0 selected.
+    /// Default use is horizontal layout with no step selected.
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
             style: StyleRefinement::default(),
             items: Vec::new(),
-            step: 0,
+            step: None,
             layout: Axis::Horizontal,
             disabled: false,
             size: Size::default(),
@@ -57,9 +57,9 @@ impl Stepper {
         self
     }
 
-    /// Sets the selected index of the stepper, default is 0.
+    /// Sets the selected index of the stepper. By default no step is selected.
     pub fn selected_index(mut self, index: usize) -> Self {
-        self.step = index;
+        self.step = Some(index);
         self
     }
 
