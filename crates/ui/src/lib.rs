@@ -63,6 +63,7 @@ pub mod sheet;
 pub mod sidebar;
 pub mod skeleton;
 pub mod slider;
+pub mod sortable;
 pub mod spinner;
 pub mod stepper;
 pub mod switch;
@@ -112,6 +113,7 @@ pub fn init(cx: &mut App) {
     dock::init(cx);
     sheet::init(cx);
     select::init(cx);
+    sortable::init(cx);
     input::init(cx);
     list::init(cx);
     dialog::init(cx);
