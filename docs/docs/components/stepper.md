@@ -44,7 +44,7 @@ Stepper::new("my-stepper")
         StepperItem::new().child("Step 3"),
     ])
     .on_click(cx.listener(|this, step, _, cx| {
-        this.current_step = Some(*step);
+        this.active_step = Some(*step);
         cx.notify();
     }))
 ```
