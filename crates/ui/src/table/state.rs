@@ -2,6 +2,7 @@ use std::{ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     ActiveTheme, ElementExt, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
+    deferred_foreground,
     actions::{
         Cancel, SelectDown, SelectFirst, SelectLast, SelectNextColumn, SelectPageDown,
         SelectPageUp, SelectPrevColumn, SelectUp,
@@ -1693,7 +1694,7 @@ where
                                                         row_ix, col_ix, window, cx,
                                                     ))
                                                     .when(is_cell_selected, |this| {
-                                                        this.child(
+                                                        this.child(deferred_foreground(
                                                             div()
                                                                 .absolute()
                                                                 .inset_0()
@@ -1702,12 +1703,12 @@ where
                                                                 .border_color(
                                                                     cx.theme().table_active_border,
                                                                 ),
-                                                        )
+                                                        ))
                                                     })
                                                     .when(
                                                         is_cell_right_clicked && !is_cell_selected,
                                                         |this| {
-                                                            this.child(
+                                                            this.child(deferred_foreground(
                                                                 div()
                                                                     .absolute()
                                                                     .inset_0()
@@ -1717,7 +1718,7 @@ where
                                                                             .table_active_border
                                                                             .opacity(0.5),
                                                                     ),
-                                                            )
+                                                            ))
                                                         },
                                                     )
                                                     .when(self.cell_selectable, |this| {
@@ -1812,7 +1813,7 @@ where
                                                             row_ix, col_ix, window, cx,
                                                         ))
                                                         .when(is_cell_selected, |this| {
-                                                            this.child(
+                                                            this.child(deferred_foreground(
                                                                 div()
                                                                     .absolute()
                                                                     .inset_0()
@@ -1822,13 +1823,13 @@ where
                                                                         cx.theme()
                                                                             .table_active_border,
                                                                     ),
-                                                            )
+                                                            ))
                                                         })
                                                         .when(
                                                             is_cell_right_clicked
                                                                 && !is_cell_selected,
                                                             |this| {
-                                                                this.child(
+                                                                this.child(deferred_foreground(
                                                                     div()
                                                                         .absolute()
                                                                         .inset_0()
@@ -1838,7 +1839,7 @@ where
                                                                                 .table_active_border
                                                                                 .opacity(0.5),
                                                                         ),
-                                                                )
+                                                                ))
                                                             },
                                                         )
                                                         .when(table.cell_selectable, |this| {
@@ -1883,15 +1884,17 @@ where
                         this.map(|this| {
                             if cx.theme().list.active_highlight {
                                 this.border_color(gpui::transparent_white()).child(
-                                    div()
-                                        .top(if row_ix == 0 { px(0.) } else { px(-1.) })
-                                        .left(px(0.))
-                                        .right(px(0.))
-                                        .bottom(px(-1.))
-                                        .absolute()
-                                        .bg(cx.theme().table_active)
-                                        .border_1()
-                                        .border_color(cx.theme().table_active_border),
+                                    deferred_foreground(
+                                        div()
+                                            .top(if row_ix == 0 { px(0.) } else { px(-1.) })
+                                            .left(px(0.))
+                                            .right(px(0.))
+                                            .bottom(px(-1.))
+                                            .absolute()
+                                            .bg(cx.theme().table_active)
+                                            .border_1()
+                                            .border_color(cx.theme().table_active_border),
+                                    ),
                                 )
                             } else {
                                 this.bg(cx.theme().accent)
@@ -1902,14 +1905,16 @@ where
                 // Row right click row style
                 .when(self.right_clicked_row == Some(row_ix), |this| {
                     this.border_color(gpui::transparent_white()).child(
-                        div()
-                            .top(if row_ix == 0 { px(0.) } else { px(-1.) })
-                            .left(px(0.))
-                            .right(px(0.))
-                            .bottom(px(-1.))
-                            .absolute()
-                            .border_1()
-                            .border_color(cx.theme().selection),
+                        deferred_foreground(
+                            div()
+                                .top(if row_ix == 0 { px(0.) } else { px(-1.) })
+                                .left(px(0.))
+                                .right(px(0.))
+                                .bottom(px(-1.))
+                                .absolute()
+                                .border_1()
+                                .border_color(cx.theme().selection),
+                        ),
                     )
                 })
                 .on_mouse_down(

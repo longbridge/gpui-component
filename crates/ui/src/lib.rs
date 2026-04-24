@@ -2,6 +2,7 @@ use gpui::{App, SharedString};
 use std::ops::Deref;
 
 mod async_util;
+mod deferred_foreground;
 mod element_ext;
 mod event;
 mod focus_trap;
@@ -75,6 +76,7 @@ pub mod tooltip;
 pub mod tree;
 
 pub use crate::Disableable;
+pub use deferred_foreground::deferred_foreground;
 pub use element_ext::*;
 pub use event::InteractiveElementExt;
 pub use focus_trap::FocusTrapElement;

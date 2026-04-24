@@ -1,5 +1,6 @@
 use crate::{
     ActiveTheme, ElementExt, Placement, StyledExt,
+    deferred_foreground::ForegroundLayer,
     dialog::{ANIMATION_DURATION, Dialog},
     focus_trap::FocusTrapManager,
     input::InputState,
@@ -9,7 +10,7 @@ use crate::{
     window_border,
 };
 use gpui::{
-    Anchor, AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle,
+    Anchor, AnyElement, AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle,
     InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
     StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
@@ -119,116 +120,78 @@ impl Root {
             .read(cx)
     }
 
-    // Render Notification layer.
+    /// Render the Notification layer.
+    ///
+    /// Deprecated: Root now renders the notification layer internally in the correct stacking
+    /// order (above ForegroundLayer). Calling this method is a no-op.
+    #[allow(unused_variables)]
     pub fn render_notification_layer(
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Option<impl IntoElement + use<>> {
-        let root = window.root::<Root>()??;
-
-        let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
-
-        let sheet_size = root.read(cx).sheet_size;
-        let (mt, mr, mb, ml) = match active_sheet_placement {
-            Some(Placement::Top) => (sheet_size, None, None, None),
-            Some(Placement::Right) => (None, sheet_size, None, None),
-            Some(Placement::Bottom) => (None, None, sheet_size, None),
-            Some(Placement::Left) => (None, None, None, sheet_size),
-            _ => (None, None, None, None),
-        };
-
-        let placement = cx.theme().notification.placement;
-
-        Some(
-            div()
-                .absolute()
-                .when(matches!(placement, Anchor::TopRight), |this| {
-                    this.top_0().right_0()
-                })
-                .when(matches!(placement, Anchor::TopLeft), |this| {
-                    this.top_0().left_0()
-                })
-                .when(matches!(placement, Anchor::TopCenter), |this| {
-                    this.top_0().mx_auto()
-                })
-                .when(matches!(placement, Anchor::BottomRight), |this| {
-                    this.bottom_0().right_0()
-                })
-                .when(matches!(placement, Anchor::BottomLeft), |this| {
-                    this.bottom_0().left_0()
-                })
-                .when(matches!(placement, Anchor::BottomCenter), |this| {
-                    this.bottom_0().mx_auto()
-                })
-                .when_some(mt, |this, offset| this.mt(offset))
-                .when_some(mr, |this, offset| this.mr(offset))
-                .when_some(mb, |this, offset| this.mb(offset))
-                .when_some(ml, |this, offset| this.ml(offset))
-                .child(root.read(cx).notification.clone()),
-        )
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Option<AnyElement> {
+        None
     }
 
     /// Render the Sheet layer.
-    pub fn render_sheet_layer(
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Option<impl IntoElement + use<>> {
-        let root = window.root::<Root>()??;
-
-        if let Some(active_sheet) = root.read(cx).active_sheet.clone() {
-            let mut sheet = Sheet::new(window, cx);
-            sheet = (active_sheet.builder)(sheet, window, cx);
-            sheet.focus_handle = active_sheet.focus_handle.clone();
-            sheet.placement = active_sheet.placement;
-
-            let size = sheet.size;
-
-            return Some(
-                div()
-                    .relative()
-                    .child(sheet)
-                    .on_prepaint(move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size))),
-            );
-        }
-
+    ///
+    /// Deprecated: Root now renders the sheet layer internally. Calling this method is a no-op.
+    #[allow(unused_variables)]
+    pub fn render_sheet_layer(_window: &mut Window, _cx: &mut App) -> Option<AnyElement> {
         None
     }
 
     /// Render the Dialog layer.
-    pub fn render_dialog_layer(
+    ///
+    /// Deprecated: Root now renders the dialog layer internally. Calling this method is a no-op.
+    #[allow(unused_variables)]
+    pub fn render_dialog_layer(_window: &mut Window, _cx: &mut App) -> Option<AnyElement> {
+        None
+    }
+
+    fn build_sheet_layer(
+        &self,
         window: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<Self>,
     ) -> Option<impl IntoElement + use<>> {
-        let root = window.root::<Root>()??;
+        let active_sheet = self.active_sheet.clone()?;
+        let root = window.root::<Root>().flatten()?;
 
-        let active_dialogs = root.read(cx).active_dialogs.clone();
+        let mut sheet = Sheet::new(window, cx);
+        sheet = (active_sheet.builder)(sheet, window, cx);
+        sheet.focus_handle = active_sheet.focus_handle.clone();
+        sheet.placement = active_sheet.placement;
 
-        if active_dialogs.is_empty() {
+        let size = sheet.size;
+        Some(
+            div()
+                .relative()
+                .child(sheet)
+                .on_prepaint(move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size))),
+        )
+    }
+
+    fn build_dialog_layer(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<impl IntoElement + use<>> {
+        if self.active_dialogs.is_empty() {
             return None;
         }
 
         let mut show_overlay_ix = None;
-
-        let mut dialogs = active_dialogs
+        let mut dialogs = self
+            .active_dialogs
             .iter()
             .enumerate()
             .map(|(i, active_dialog)| {
                 let mut dialog = Dialog::new(cx);
-
                 dialog = (active_dialog.builder)(dialog, window, cx);
-
-                // Give the dialog the focus handle, because `dialog` is a temporary value, is not possible to
-                // keep the focus handle in the dialog.
-                //
-                // So we keep the focus handle in the `active_dialog`, this is owned by the `Root`.
                 dialog.focus_handle = active_dialog.focus_handle.clone();
-
                 dialog.layer_ix = i;
-                // Find the dialog which one needs to show overlay.
                 if dialog.has_overlay() {
                     show_overlay_ix = Some(i);
                 }
-
                 dialog
             })
             .collect::<Vec<_>>();
@@ -240,6 +203,46 @@ impl Root {
         }
 
         Some(div().children(dialogs))
+    }
+
+    fn build_notification_layer(&self, cx: &Context<Self>) -> impl IntoElement + use<> {
+        let active_sheet_placement = self.active_sheet.clone().map(|d| d.placement);
+        let sheet_size = self.sheet_size;
+        let (mt, mr, mb, ml) = match active_sheet_placement {
+            Some(Placement::Top) => (sheet_size, None, None, None),
+            Some(Placement::Right) => (None, sheet_size, None, None),
+            Some(Placement::Bottom) => (None, None, sheet_size, None),
+            Some(Placement::Left) => (None, None, None, sheet_size),
+            _ => (None, None, None, None),
+        };
+
+        let placement = cx.theme().notification.placement;
+
+        div()
+            .absolute()
+            .when(matches!(placement, Anchor::TopRight), |this| {
+                this.top_0().right_0()
+            })
+            .when(matches!(placement, Anchor::TopLeft), |this| {
+                this.top_0().left_0()
+            })
+            .when(matches!(placement, Anchor::TopCenter), |this| {
+                this.top_0().mx_auto()
+            })
+            .when(matches!(placement, Anchor::BottomRight), |this| {
+                this.bottom_0().right_0()
+            })
+            .when(matches!(placement, Anchor::BottomLeft), |this| {
+                this.bottom_0().left_0()
+            })
+            .when(matches!(placement, Anchor::BottomCenter), |this| {
+                this.bottom_0().mx_auto()
+            })
+            .when_some(mt, |this, offset| this.mt(offset))
+            .when_some(mr, |this, offset| this.mr(offset))
+            .when_some(mb, |this, offset| this.mb(offset))
+            .when_some(ml, |this, offset| this.ml(offset))
+            .child(self.notification.clone())
     }
 
     pub fn open_dialog<F>(&mut self, build: F, window: &mut Window, cx: &mut Context<'_, Root>)
@@ -477,6 +480,10 @@ impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
 
+        let sheet_layer = self.build_sheet_layer(window, cx);
+        let dialog_layer = self.build_dialog_layer(window, cx);
+        let notification_layer = self.build_notification_layer(cx);
+
         window_border().shadow_size(self.window_shadow_size).child(
             div()
                 .id("root")
@@ -490,6 +497,10 @@ impl Render for Root {
                 .text_color(cx.theme().foreground)
                 .refine_style(&self.style)
                 .child(self.view.clone())
+                .child(ForegroundLayer)
+                .children(sheet_layer)
+                .children(dialog_layer)
+                .child(notification_layer)
                 .child(self.tooltip_overlay.clone()),
         )
     }
