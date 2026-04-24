@@ -13,7 +13,7 @@ use crate::{
 #[derive(IntoElement)]
 pub struct StepperItem {
     step: usize,
-    checked_step: usize,
+    checked_step: Option<usize>,
     style: StyleRefinement,
     icon: Option<Icon>,
     children: Vec<AnyElement>,
@@ -29,7 +29,7 @@ impl StepperItem {
     pub fn new() -> Self {
         Self {
             step: 0,
-            checked_step: 0,
+            checked_step: None,
             style: StyleRefinement::default(),
             icon: None,
             layout: Axis::Horizontal,
@@ -68,7 +68,7 @@ impl StepperItem {
         self
     }
 
-    pub(super) fn checked_step(mut self, checked_step: usize) -> Self {
+    pub(super) fn checked_step(mut self, checked_step: Option<usize>) -> Self {
         self.checked_step = checked_step;
         self
     }
@@ -113,7 +113,7 @@ impl Styled for StepperItem {
 
 impl RenderOnce for StepperItem {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let is_passed = self.step < self.checked_step;
+        let is_passed = self.checked_step.map_or(false, |cs| self.step < cs);
         let icon_size = match self.size {
             Size::XSmall => px(8.),
             Size::Small => px(18.),
