@@ -10,7 +10,7 @@ use crate::{ActiveTheme as _, AxisExt, Icon, Size, StyleSized, StyledExt as _};
 #[derive(IntoElement)]
 pub(super) struct StepperTrigger {
     step: usize,
-    checked_step: usize,
+    checked_step: Option<usize>,
     style: StyleRefinement,
     icon: Option<Icon>,
     icon_size: Pixels,
@@ -26,7 +26,7 @@ impl StepperTrigger {
     pub(super) fn new() -> Self {
         Self {
             step: 0,
-            checked_step: 0,
+            checked_step: None,
             icon: None,
             icon_size: px(24.),
             layout: Axis::Horizontal,
@@ -44,7 +44,7 @@ impl StepperTrigger {
         self
     }
 
-    pub(super) fn checked_step(mut self, checked_step: usize) -> Self {
+    pub(super) fn checked_step(mut self, checked_step: Option<usize>) -> Self {
         self.checked_step = checked_step;
         self
     }
@@ -102,7 +102,7 @@ impl ParentElement for StepperTrigger {
 
 impl RenderOnce for StepperTrigger {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let is_checked = self.step <= self.checked_step;
+        let is_checked = self.checked_step.map_or(false, |cs| self.step <= cs);
 
         div()
             .id(("trigger", self.step))
