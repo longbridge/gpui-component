@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Subscription, Window,
+    Subscription, Window, prelude::FluentBuilder as _,
 };
 use gpui_component::{
     IconName, Selectable as _, Sizable, Size, StyledExt,
@@ -20,6 +20,7 @@ pub struct StepperStory {
     stepper1_step: usize,
     stepper2_step: usize,
     stepper3_step: usize,
+    stepper_none_step: Option<usize>,
     disabled: bool,
     _subscritions: Vec<Subscription>,
 }
@@ -51,6 +52,7 @@ impl StepperStory {
             stepper1_step: 0,
             stepper2_step: 2,
             stepper3_step: 0,
+            stepper_none_step: None,
             disabled: false,
             _subscritions: vec![],
         }
@@ -216,6 +218,30 @@ impl Render for StepperStory {
                         ])
                         .on_click(cx.listener(|this, step, _, cx| {
                             this.stepper3_step = *step;
+                            cx.notify();
+                        })),
+                ),
+            )
+            .child(
+                section("No Selection (None)").max_w_md().v_flex().child(
+                    Stepper::new("stepper-none")
+                        .w_full()
+                        .with_size(self.size)
+                        .disabled(self.disabled)
+                        .map(|this| {
+                            if let Some(step) = self.stepper_none_step {
+                                this.selected_index(step)
+                            } else {
+                                this
+                            }
+                        })
+                        .items([
+                            StepperItem::new().child("Step 1"),
+                            StepperItem::new().child("Step 2"),
+                            StepperItem::new().child("Step 3"),
+                        ])
+                        .on_click(cx.listener(|this, step, _, cx| {
+                            this.stepper_none_step = Some(*step);
                             cx.notify();
                         })),
                 ),
