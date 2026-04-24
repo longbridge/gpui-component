@@ -17,7 +17,7 @@ use gpui_component::stepper::{Stepper, StepperItem};
 
 ### Basic Stepper
 
-Use `selected_index` method to set current active step by index (0-based), default is `0`.
+Use `selected_index` method to set current active step by index (0-based). By default no step is selected, showing all steps as "not started".
 
 ```rust
 Stepper::new("my-stepper")
@@ -30,6 +30,23 @@ Stepper::new("my-stepper")
     .on_click(|step, _, _| {
         println!("Clicked step: {}", step);
     })
+```
+
+### No Selection (Not Started)
+
+Omit `selected_index` to start with no step active. All steps appear as "not started". Useful for initial states before a workflow begins.
+
+```rust
+Stepper::new("my-stepper")
+    .items([
+        StepperItem::new().child("Step 1"),
+        StepperItem::new().child("Step 2"),
+        StepperItem::new().child("Step 3"),
+    ])
+    .on_click(cx.listener(|this, step, _, cx| {
+        this.current_step = Some(*step);
+        cx.notify();
+    }))
 ```
 
 ### With Icons

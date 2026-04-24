@@ -17,7 +17,7 @@ use gpui_component::stepper::{Stepper, StepperItem};
 
 ### 基础 Stepper
 
-使用 `selected_index` 设置当前步骤，索引从 `0` 开始，默认值也是 `0`。
+使用 `selected_index` 设置当前步骤，索引从 `0` 开始。默认不选中任何步骤，所有步骤显示为"未开始"状态。
 
 ```rust
 Stepper::new("my-stepper")
@@ -30,6 +30,23 @@ Stepper::new("my-stepper")
     .on_click(|step, _, _| {
         println!("Clicked step: {}", step);
     })
+```
+
+### 无选中（未开始）
+
+不调用 `selected_index` 时，所有步骤呈"未开始"状态，适用于流程尚未启动的初始场景。
+
+```rust
+Stepper::new("my-stepper")
+    .items([
+        StepperItem::new().child("Step 1"),
+        StepperItem::new().child("Step 2"),
+        StepperItem::new().child("Step 3"),
+    ])
+    .on_click(cx.listener(|this, step, _, cx| {
+        this.current_step = Some(*step);
+        cx.notify();
+    }))
 ```
 
 ### 带图标的 Stepper
