@@ -4,12 +4,16 @@ use gpui::{
 };
 use gpui_component::{
     ActiveTheme,
+    button::Button,
+    h_flex,
     resizable::{h_resizable, resizable_panel, v_resizable},
     v_flex,
 };
 
 pub struct ResizableStory {
     focus_handle: FocusHandle,
+    show_left: bool,
+    use_flex_none: bool,
 }
 
 impl super::Story for ResizableStory {
@@ -40,6 +44,8 @@ impl ResizableStory {
     fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            show_left: true,
+            use_flex_none: true,
         }
     }
 }
@@ -106,6 +112,83 @@ impl Render for ResizableStory {
                                     .child(panel_box("Left 2", cx)),
                             )
                             .child(panel_box("Right (Grow)", cx)),
+                    ),
+            )
+            // Demonstrates `.flex_none()`. Toggle the left panel's
+            // visibility while watching the right panel's width:
+            //
+            // - `Use flex_none = true` (default): right panel holds
+            //   its width; the center flex panel absorbs the freed
+            //   space.
+            // - `Use flex_none = false`: right panel inherits the
+            //   internal `flex_grow: 1` and absorbs half of the
+            //   freed slack alongside the center.
+            //
+            // Use the two buttons to record before/after for the same
+            // layout in a single session.
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Button::new("toggle-left")
+                                    .outline()
+                                    .label(if self.show_left {
+                                        "Hide Left"
+                                    } else {
+                                        "Show Left"
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.show_left = !this.show_left;
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("toggle-flex-none")
+                                    .outline()
+                                    .label(if self.use_flex_none {
+                                        "Use flex_none: ON"
+                                    } else {
+                                        "Use flex_none: OFF"
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.use_flex_none = !this.use_flex_none;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .h(px(200.))
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .child(
+                                h_resizable("resizable-flex-none")
+                                    .child({
+                                        let mut p = resizable_panel()
+                                            .visible(self.show_left)
+                                            .size(px(200.))
+                                            .size_range(px(150.)..px(400.))
+                                            .child(panel_box("Left", cx));
+                                        if self.use_flex_none {
+                                            p = p.flex_none();
+                                        }
+                                        p
+                                    })
+                                    .child(panel_box("Center", cx))
+                                    .child({
+                                        let mut p = resizable_panel()
+                                            .size(px(280.))
+                                            .size_range(px(200.)..px(400.))
+                                            .child(panel_box("Right", cx));
+                                        if self.use_flex_none {
+                                            p = p.flex_none();
+                                        }
+                                        p
+                                    }),
+                            ),
                     ),
             )
     }
