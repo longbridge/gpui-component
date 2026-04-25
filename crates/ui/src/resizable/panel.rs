@@ -417,12 +417,18 @@ impl Element for ResizePanelGroupElement {
                     let panel = state.panels.get(ix).expect("BUG: invalid panel index");
 
                     match axis {
-                        Axis::Horizontal => {
-                            state.resize_panel(ix, e.position.x - panel.bounds.left(), window, cx)
-                        }
-                        Axis::Vertical => {
-                            state.resize_panel(ix, e.position.y - panel.bounds.top(), window, cx);
-                        }
+                        Axis::Horizontal => state.resize_panel_at_handle(
+                            ix,
+                            e.position.x - panel.bounds.left(),
+                            window,
+                            cx,
+                        ),
+                        Axis::Vertical => state.resize_panel_at_handle(
+                            ix,
+                            e.position.y - panel.bounds.top(),
+                            window,
+                            cx,
+                        ),
                     }
                     cx.notify();
                 })

@@ -3,10 +3,10 @@ use gpui::{
     ParentElement as _, Pixels, Render, SharedString, Styled, Window, div, px,
 };
 use gpui_component::{
-    ActiveTheme,
+    ActiveTheme, Sizable as _,
     button::Button,
     h_flex,
-    resizable::{h_resizable, resizable_panel, v_resizable},
+    resizable::{ResizableState, h_resizable, resizable_panel, v_resizable},
     v_flex,
 };
 
@@ -14,6 +14,7 @@ pub struct ResizableStory {
     focus_handle: FocusHandle,
     show_left: bool,
     use_flex_none: bool,
+    programmatic_state: Entity<ResizableState>,
 }
 
 impl super::Story for ResizableStory {
@@ -46,6 +47,7 @@ impl ResizableStory {
             focus_handle: cx.focus_handle(),
             show_left: true,
             use_flex_none: true,
+            programmatic_state: cx.new(|_| ResizableState::default()),
         }
     }
 }
@@ -188,6 +190,79 @@ impl Render for ResizableStory {
                                         }
                                         p
                                     }),
+                            ),
+                    ),
+            )
+            // Programmatic resize: drive panel sizes via
+            // `ResizableState::resize_panel(ix, size, window, cx)`. Buttons
+            // mutate the shared state; subscribers (none here) would observe
+            // a `ResizablePanelEvent::Resized` just like a drag-finish.
+            .child(
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Button::new("compact-left")
+                                    .small()
+                                    .label("Compact left → 100")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.programmatic_state.update(cx, |state, cx| {
+                                            state.resize_panel(0, px(100.), window, cx);
+                                        });
+                                    })),
+                            )
+                            .child(
+                                Button::new("reset-left")
+                                    .small()
+                                    .label("Reset left → 200")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.programmatic_state.update(cx, |state, cx| {
+                                            state.resize_panel(0, px(200.), window, cx);
+                                        });
+                                    })),
+                            )
+                            .child(
+                                Button::new("compact-right")
+                                    .small()
+                                    .label("Compact right → 80")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.programmatic_state.update(cx, |state, cx| {
+                                            state.resize_panel(2, px(80.), window, cx);
+                                        });
+                                    })),
+                            )
+                            .child(
+                                Button::new("reset-right")
+                                    .small()
+                                    .label("Reset right → 200")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.programmatic_state.update(cx, |state, cx| {
+                                            state.resize_panel(2, px(200.), window, cx);
+                                        });
+                                    })),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .h(px(200.))
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .child(
+                                h_resizable("resizable-programmatic")
+                                    .with_state(&self.programmatic_state)
+                                    .child(
+                                        resizable_panel()
+                                            .size(px(200.))
+                                            .child(panel_box("Left", cx)),
+                                    )
+                                    .child(panel_box("Center (grow)", cx))
+                                    .child(
+                                        resizable_panel()
+                                            .size(px(200.))
+                                            .child(panel_box("Right", cx)),
+                                    ),
                             ),
                     ),
             )
