@@ -15,6 +15,7 @@ members = [
     "examples/webview",
     "examples/system_monitor",
     "examples/focus_trap",
+    "examples/tooltip_top_edge",
 ]
 resolver = "2"
 

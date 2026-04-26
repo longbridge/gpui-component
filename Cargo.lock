@@ -8200,6 +8200,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
+name = "tooltip_top_edge"
+version = "0.5.1"
+dependencies = [
+ "anyhow",
+ "gpui",
+ "gpui-component",
+ "gpui_platform",
+]
+
+[[package]]
 name = "tower"
 version = "0.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
