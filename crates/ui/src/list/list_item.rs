@@ -1,12 +1,15 @@
-use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, h_flex};
-use std::collections::HashMap;
+use crate::{
+    ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, h_flex,
+    menu::{ContextMenuExt, PopupMenu},
+};
 use gpui::{
-    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
+    AnyElement, App, ClickEvent, Context, Div, ElementId, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
+use std::{collections::HashMap, rc::Rc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum ListItemMode {
@@ -32,8 +35,14 @@ pub struct ListItem {
     secondary_selected: bool,
     confirmed: bool,
     check_icon: Option<Icon>,
+
+    /// An optional context menu builder to allow a context menu on the list item.
+    context_menu_builder:
+        Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
+
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
-    on_mouse_down: HashMap<MouseButton, Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>>,
+    on_mouse_down:
+        HashMap<MouseButton, Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>>,
     on_mouse_enter: Option<Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static>>,
     suffix: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
     children: SmallVec<[AnyElement; 2]>,
@@ -50,6 +59,7 @@ impl ListItem {
             selected: false,
             secondary_selected: false,
             confirmed: false,
+            context_menu_builder: None,
             on_click: None,
             on_mouse_down: HashMap::new(),
             on_mouse_enter: None,
@@ -97,6 +107,15 @@ impl ListItem {
         self.suffix = Some(Box::new(move |window, cx| {
             builder(window, cx).into_any_element()
         }));
+        self
+    }
+
+    /// Sets the context menu for the list item.
+    pub fn context_menu(
+        mut self,
+        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        self.context_menu_builder = Some(Rc::new(f));
         self
     }
 
@@ -246,6 +265,14 @@ impl RenderOnce for ListItem {
                     })
                 } else {
                     this
+                }
+            })
+            .map(|this| {
+                if is_selectable && let Some(builder) = self.context_menu_builder {
+                    this.context_menu(move |menu, window, cx| builder(menu, window, cx))
+                        .into_any_element()
+                } else {
+                    this.into_any_element()
                 }
             })
     }
