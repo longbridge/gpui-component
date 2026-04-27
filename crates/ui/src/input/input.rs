@@ -15,6 +15,7 @@ use crate::scroll::Scrollbar;
 use crate::spinner::Spinner;
 use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
+use crate::styled::FocusableExt as _;
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
@@ -413,6 +414,7 @@ impl RenderOnce for Input {
                             .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(focused && self.focus_bordered, |this| {
                                 this.focused_border(cx)
+                                    .focus_ring(true, px(0.), window, cx)
                             })
                     })
             })

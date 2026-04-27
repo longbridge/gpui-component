@@ -1,7 +1,7 @@
 use crate::{ActiveTheme, deferred_foreground};
 use gpui::{
-    App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
-    Refineable, StyleRefinement, Styled, Window, div, point, px,
+    AbsoluteLength, App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla,
+    ParentElement, Pixels, Refineable, StyleRefinement, Styled, Window, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
@@ -577,7 +577,7 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
                 .unwrap_or_default(),
         };
 
-        // Update the radius based on element's corner radii and the ring border width.
+        // Outer radius = element's corner radius + ring border width.
         let radius = Corners::<Pixels> {
             top_left: style
                 .corner_radii
@@ -602,26 +602,29 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
         }
         .map(|v| *v + RING_BORDER_WIDTH);
 
-        let mut inner_style = StyleRefinement::default();
-        inner_style.corner_radii.top_left = Some(radius.top_left.into());
-        inner_style.corner_radii.top_right = Some(radius.top_right.into());
-        inner_style.corner_radii.bottom_left = Some(radius.bottom_left.into());
-        inner_style.corner_radii.bottom_right = Some(radius.bottom_right.into());
+        let abs_radius = Corners {
+            top_left: AbsoluteLength::from(radius.top_left),
+            top_right: AbsoluteLength::from(radius.top_right),
+            bottom_right: AbsoluteLength::from(radius.bottom_right),
+            bottom_left: AbsoluteLength::from(radius.bottom_left),
+        };
 
         let inset = RING_BORDER_WIDTH + margins;
 
-        self.child(deferred_foreground(
-            div()
-                .flex_none()
-                .absolute()
-                .top(-(inset + border_widths.top))
-                .left(-(inset + border_widths.left))
-                .right(-(inset + border_widths.right))
-                .bottom(-(inset + border_widths.bottom))
-                .border(RING_BORDER_WIDTH)
-                .border_color(cx.theme().ring.alpha(0.1))
-                .refine_style(&inner_style),
-        ))
+        self.child(
+            deferred_foreground(
+                div()
+                    .flex_none()
+                    .absolute()
+                    .top(-(inset + border_widths.top))
+                    .left(-(inset + border_widths.left))
+                    .right(-(inset + border_widths.right))
+                    .bottom(-(inset + border_widths.bottom)),
+            )
+            .border_color(cx.theme().ring)
+            .border_width(RING_BORDER_WIDTH)
+            .corner_radii(abs_radius),
+        )
     }
 }
 

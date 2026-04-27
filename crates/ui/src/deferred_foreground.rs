@@ -1,6 +1,7 @@
 use gpui::{
-    AnyElement, App, Bounds, ContentMask, Element, Global, GlobalElementId, InspectorElementId,
-    IntoElement, LayoutId, Pixels, Point, Window,
+    AbsoluteLength, AnyElement, App, BorderStyle, Bounds, ContentMask, Corners, Element, Global,
+    GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId, Pixels, Window, px, quad,
+    transparent_black,
 };
 
 #[derive(Default)]
@@ -9,30 +10,67 @@ pub(crate) struct ForegroundDrawQueue {
 }
 
 pub(crate) struct ForegroundDraw {
-    child: AnyElement,
-    offset: Point<Pixels>,
+    bounds: Bounds<Pixels>,
+    corner_radii: Corners<Pixels>,
+    border_color: Hsla,
+    border_width: Pixels,
     content_mask: ContentMask<Pixels>,
 }
 
 impl Global for ForegroundDrawQueue {}
 
-/// Draw a child on the foreground layer — above all content, below all floating UI
-/// (popups, popovers, tooltips). The child participates in normal layout but its
-/// painting is deferred until after all sibling content has been painted.
+/// Draw a border overlay on the foreground layer — above all content,
+/// below all floating UI (popups, popovers, tooltips).
 ///
-/// The current scroll clip is preserved, so the border is correctly clipped when
-/// inside a scroll container.
+/// The `child` element participates in normal layout to determine the border position
+/// and size, but is not painted. Instead a quad border is painted directly in the
+/// foreground layer, avoiding GPUI arena lifetime issues.
 ///
-/// Use this for focus rings, active selection borders, and similar widget decorations
-/// that must not be clipped by sibling elements.
+/// Use this for focus rings, active selection borders, and similar decorations that
+/// must not be clipped by sibling elements.
 pub fn deferred_foreground(child: impl IntoElement) -> DeferredForeground {
     DeferredForeground {
         child: Some(child.into_any_element()),
+        border_color: transparent_black(),
+        border_width: px(1.),
+        corner_radii: None,
     }
 }
 
 pub struct DeferredForeground {
     child: Option<AnyElement>,
+    border_color: Hsla,
+    border_width: Pixels,
+    /// Stored as AbsoluteLength so we can convert to pixels in prepaint using rem_size.
+    corner_radii: Option<Corners<AbsoluteLength>>,
+}
+
+impl DeferredForeground {
+    pub fn border_color(mut self, color: impl Into<Hsla>) -> Self {
+        self.border_color = color.into();
+        self
+    }
+
+    pub fn border_width(mut self, width: impl Into<Pixels>) -> Self {
+        self.border_width = width.into();
+        self
+    }
+
+    pub fn corner_radii(mut self, radii: Corners<AbsoluteLength>) -> Self {
+        self.corner_radii = Some(radii);
+        self
+    }
+
+    pub fn corner_radius(mut self, radius: impl Into<AbsoluteLength>) -> Self {
+        let r = radius.into();
+        self.corner_radii = Some(Corners {
+            top_left: r,
+            top_right: r,
+            bottom_right: r,
+            bottom_left: r,
+        });
+        self
+    }
 }
 
 impl IntoElement for DeferredForeground {
@@ -62,6 +100,7 @@ impl Element for DeferredForeground {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, ()) {
+        // Use the child only to establish layout bounds; it is never painted.
         let layout_id = self.child.as_mut().unwrap().request_layout(window, cx);
         (layout_id, ())
     }
@@ -70,19 +109,29 @@ impl Element for DeferredForeground {
         &mut self,
         _id: Option<&GlobalElementId>,
         _inspector_id: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
+        bounds: Bounds<Pixels>,
         _request_layout: &mut (),
         window: &mut Window,
         cx: &mut App,
     ) {
-        let child = self.child.take().unwrap();
-        let offset = window.element_offset();
+        // Drop the arena-backed child; we only needed it for layout bounds.
+        self.child = None;
+
+        let rem_size = window.rem_size();
+        let corner_radii = self
+            .corner_radii
+            .unwrap_or_default()
+            .to_pixels(rem_size)
+            .clamp_radii_for_quad_size(bounds.size);
+
         let content_mask = window.content_mask();
         cx.default_global::<ForegroundDrawQueue>()
             .draws
             .push(ForegroundDraw {
-                child,
-                offset,
+                bounds,
+                corner_radii,
+                border_color: self.border_color,
+                border_width: self.border_width,
                 content_mask,
             });
     }
@@ -141,20 +190,10 @@ impl Element for ForegroundLayer {
         _inspector_id: Option<&InspectorElementId>,
         _bounds: Bounds<Pixels>,
         _request_layout: &mut (),
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut App,
     ) -> Vec<ForegroundDraw> {
-        let draws = std::mem::take(&mut cx.default_global::<ForegroundDrawQueue>().draws);
-        let mut prepainted = Vec::new();
-        for mut draw in draws {
-            window.with_content_mask(Some(draw.content_mask.clone()), |window| {
-                window.with_absolute_element_offset(draw.offset, |window| {
-                    draw.child.prepaint(window, cx);
-                });
-            });
-            prepainted.push(draw);
-        }
-        prepainted
+        std::mem::take(&mut cx.default_global::<ForegroundDrawQueue>().draws)
     }
 
     fn paint(
@@ -165,11 +204,18 @@ impl Element for ForegroundLayer {
         _request_layout: &mut (),
         prepaint: &mut Vec<ForegroundDraw>,
         window: &mut Window,
-        cx: &mut App,
+        _cx: &mut App,
     ) {
-        for draw in prepaint.iter_mut() {
+        for draw in prepaint.iter() {
             window.with_content_mask(Some(draw.content_mask.clone()), |window| {
-                draw.child.paint(window, cx);
+                window.paint_quad(quad(
+                    draw.bounds,
+                    draw.corner_radii,
+                    transparent_black(),
+                    draw.border_width,
+                    draw.border_color,
+                    BorderStyle::default(),
+                ));
             });
         }
     }

@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, deferred_foreground, h_flex};
 use std::collections::HashMap;
 use gpui::{
-    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
+    AnyElement, App, ClickEvent, Corners, Div, ElementId, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
 };
@@ -232,17 +232,20 @@ impl RenderOnce for ListItem {
                     };
 
                     this.bg(bg).when(cx.theme().list.active_highlight, |this| {
-                        this.child(deferred_foreground(
-                            div()
-                                .absolute()
-                                .top_0()
-                                .left_0()
-                                .right_0()
-                                .bottom_0()
-                                .border_1()
-                                .border_color(cx.theme().list_active_border)
-                                .refine_style(&selected_style),
-                        ))
+                        let cr = &selected_style.corner_radii;
+                        let corner_radii = Corners {
+                            top_left: cr.top_left.unwrap_or_default(),
+                            top_right: cr.top_right.unwrap_or_default(),
+                            bottom_right: cr.bottom_right.unwrap_or_default(),
+                            bottom_left: cr.bottom_left.unwrap_or_default(),
+                        };
+                        this.child(
+                            deferred_foreground(
+                                div().absolute().top_0().left_0().right_0().bottom_0(),
+                            )
+                            .border_color(cx.theme().list_active_border)
+                            .corner_radii(corner_radii),
+                        )
                     })
                 } else {
                     this
