@@ -8,9 +8,10 @@ use gpui::{
 };
 
 use crate::{
-    StyledExt,
+    Selectable as _, StyledExt,
     actions::{Confirm, SelectDown, SelectLeft, SelectRight, SelectUp},
     list::ListItem,
+    menu::{ContextMenuExt as _, PopupMenu},
     scroll::ScrollableElement,
 };
 
@@ -196,7 +197,10 @@ pub struct TreeState {
     entries: Vec<TreeEntry>,
     scroll_handle: UniformListScrollHandle,
     selected_ix: Option<usize>,
+    right_clicked_ix: Option<usize>,
     render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
+    context_menu_builder:
+        Option<Rc<dyn Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<TreeState>) -> PopupMenu>>,
 }
 
 impl TreeState {
@@ -204,10 +208,12 @@ impl TreeState {
     pub fn new(cx: &mut App) -> Self {
         Self {
             selected_ix: None,
+            right_clicked_ix: None,
             focus_handle: cx.focus_handle(),
             scroll_handle: UniformListScrollHandle::default(),
             entries: Vec::new(),
             render_item: Rc::new(|_, _, _, _, _| ListItem::new(0)),
+            context_menu_builder: None,
         }
     }
 
@@ -229,6 +235,7 @@ impl TreeState {
             self.add_entry(item, 0);
         }
         self.selected_ix = None;
+        self.right_clicked_ix = None;
         cx.notify();
     }
 
@@ -414,42 +421,86 @@ impl TreeState {
 impl Render for TreeState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let render_item = self.render_item.clone();
+        let entity = cx.entity().clone();
 
-        div().id("tree-state").size_full().relative().child(
-            uniform_list("entries", self.entries.len(), {
-                cx.processor(move |state, visible_range: Range<usize>, window, cx| {
-                    let mut items = Vec::with_capacity(visible_range.len());
-                    for ix in visible_range {
-                        let entry = &state.entries[ix];
-                        let selected = Some(ix) == state.selected_ix;
-                        let item = (render_item)(ix, entry, selected, window, cx);
+        let right_clicked_ix = self.right_clicked_ix;
 
-                        let el = div()
-                            .id(ix)
-                            .child(item.disabled(entry.item().is_disabled()).selected(selected))
-                            .when(!entry.item().is_disabled(), |this| {
-                                this.on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener({
-                                        move |this, _, window, cx| {
-                                            this.on_entry_click(ix, window, cx);
-                                        }
-                                    }),
-                                )
-                            });
-
-                        items.push(el)
-                    }
-
-                    items
-                })
-            })
-            .flex_grow()
+        div()
+            .id("tree-state")
             .size_full()
-            .track_scroll(&self.scroll_handle)
-            .with_sizing_behavior(ListSizingBehavior::Auto)
-            .into_any_element(),
-        )
+            .relative()
+            .context_menu({
+                let entity = entity.clone();
+                move |menu, window, cx: &mut Context<PopupMenu>| {
+                    if entity.read(cx).context_menu_builder.is_none() {
+                        return menu;
+                    }
+                    let (ix, entry) = {
+                        let state = entity.read(cx);
+                        let ix = state.right_clicked_ix;
+                        let entry = ix.and_then(|ix| state.entries.get(ix).cloned());
+                        (ix, entry)
+                    };
+                    if let (Some(ix), Some(entry)) = (ix, entry) {
+                        entity.update(cx, |state, cx| {
+                            if let Some(cm) = state.context_menu_builder.clone() {
+                                cm(ix, &entry, menu, window, cx)
+                            } else {
+                                menu
+                            }
+                        })
+                    } else {
+                        menu
+                    }
+                }
+            })
+            .child(
+                uniform_list("entries", self.entries.len(), {
+                    cx.processor(move |state, visible_range: Range<usize>, window, cx| {
+                        let mut items = Vec::with_capacity(visible_range.len());
+                        for ix in visible_range {
+                            let entry = &state.entries[ix];
+                            let selected = Some(ix) == state.selected_ix;
+                            let right_clicked = right_clicked_ix == Some(ix);
+                            let item = (render_item)(ix, entry, selected, window, cx);
+
+                            let el = div()
+                                .id(ix)
+                                .child(
+                                    item.disabled(entry.item().is_disabled())
+                                        .selected(selected)
+                                        .secondary_selected(right_clicked),
+                                )
+                                .when(!entry.item().is_disabled(), |this| {
+                                    this.on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener({
+                                            move |this, _, window, cx| {
+                                                this.on_entry_click(ix, window, cx);
+                                            }
+                                        }),
+                                    )
+                                    .on_mouse_down(
+                                        MouseButton::Right,
+                                        cx.listener(move |this, _, _, cx| {
+                                            this.right_clicked_ix = Some(ix);
+                                            cx.notify();
+                                        }),
+                                    )
+                                });
+
+                            items.push(el)
+                        }
+
+                        items
+                    })
+                })
+                .flex_grow()
+                .size_full()
+                .track_scroll(&self.scroll_handle)
+                .with_sizing_behavior(ListSizingBehavior::Auto)
+                .into_any_element(),
+            )
     }
 }
 
@@ -460,6 +511,8 @@ pub struct Tree {
     state: Entity<TreeState>,
     style: StyleRefinement,
     render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
+    context_menu_builder:
+        Option<Rc<dyn Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<TreeState>) -> PopupMenu>>,
 }
 
 impl Tree {
@@ -474,7 +527,23 @@ impl Tree {
             render_item: Rc::new(move |ix, item, selected, window, app| {
                 render_item(ix, item, selected, window, app)
             }),
+            context_menu_builder: None,
         }
+    }
+
+    /// Add a context menu to the tree.
+    ///
+    /// The closure receives:
+    /// - `ix`: the index of the right-clicked entry
+    /// - `entry`: the right-clicked tree entry
+    /// - `menu`: the popup menu builder
+    pub fn context_menu<F>(mut self, f: F) -> Self
+    where
+        F: Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<TreeState>) -> PopupMenu
+            + 'static,
+    {
+        self.context_menu_builder = Some(Rc::new(f));
+        self
     }
 }
 
@@ -489,8 +558,10 @@ impl RenderOnce for Tree {
         let focus_handle = self.state.read(cx).focus_handle.clone();
         let scroll_handle = self.state.read(cx).scroll_handle.clone();
 
-        self.state
-            .update(cx, |state, _| state.render_item = self.render_item);
+        self.state.update(cx, |state, _| {
+            state.render_item = self.render_item;
+            state.context_menu_builder = self.context_menu_builder;
+        });
 
         div()
             .id(self.id)

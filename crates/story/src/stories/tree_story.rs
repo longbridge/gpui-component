@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use autocorrect::ignorer::Ignorer;
 use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, KeyBinding, ParentElement, Render,
-    Styled, Window, actions, px,
+    Styled, Window, actions, prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
@@ -20,7 +20,7 @@ use rand::seq::SliceRandom as _;
 
 use crate::{Story, section};
 
-actions!(story, [Rename]);
+actions!(story, [Rename, OpenFile, Delete]);
 
 const CONTEXT: &str = "TreeStory";
 pub(crate) fn init(cx: &mut App) {
@@ -101,7 +101,20 @@ impl TreeStory {
         if let Some(entry) = self.tree_state.read(cx).selected_entry() {
             let item = entry.item();
             println!("Renaming item: {} ({})", item.label, item.id);
-            // Here you could implement actual renaming logic
+        }
+    }
+
+    fn on_action_open(&mut self, _: &OpenFile, _: &mut Window, cx: &mut gpui::Context<Self>) {
+        if let Some(entry) = self.tree_state.read(cx).selected_entry() {
+            let item = entry.item();
+            println!("Opening item: {} ({})", item.label, item.id);
+        }
+    }
+
+    fn on_action_delete(&mut self, _: &Delete, _: &mut Window, cx: &mut gpui::Context<Self>) {
+        if let Some(entry) = self.tree_state.read(cx).selected_entry() {
+            let item = entry.item();
+            println!("Deleting item: {} ({})", item.label, item.id);
         }
     }
 }
@@ -133,6 +146,8 @@ impl Render for TreeStory {
             .id("tree-story")
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_rename))
+            .on_action(cx.listener(Self::on_action_open))
+            .on_action(cx.listener(Self::on_action_delete))
             .child(
                 h_flex().gap_3().child(
                     Button::new("select-item")
@@ -149,7 +164,7 @@ impl Render for TreeStory {
             )
             .child(
                 section("File tree")
-                    .sub_title("Press `space` to select, `enter` to rename.")
+                    .sub_title("Press `enter` to rename. Right-click for context menu.")
                     .v_flex()
                     .max_w_md()
                     .child(
@@ -186,6 +201,13 @@ impl Render for TreeStory {
                                 })
                             },
                         )
+                        .context_menu(|_ix, entry, menu, _window, _cx| {
+                            let is_folder = entry.is_folder();
+                            menu.when(!is_folder, |m| m.menu("Open", Box::new(OpenFile)))
+                                .menu("Rename", Box::new(Rename))
+                                .separator()
+                                .menu("Delete", Box::new(Delete))
+                        })
                         .p_1()
                         .border_1()
                         .border_color(cx.theme().border)
