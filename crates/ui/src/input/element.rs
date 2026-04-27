@@ -1,6 +1,9 @@
 use gpui::Corners;
 use gpui::Half;
-use gpui::{App, Bounds, Element, ElementId, ElementInputHandler, Entity, GlobalElementId};
+use gpui::{
+    AnyElement, App, Bounds, Edges, Element, ElementId, ElementInputHandler, Entity,
+    GlobalElementId,
+};
 use gpui::{
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
     MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
@@ -15,6 +18,7 @@ use crate::{
     ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _,
     button::{Button, ButtonVariants as _},
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
+    scroll::Scrollbar,
 };
 
 use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
@@ -25,6 +29,55 @@ pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 const FOLD_ICON_WIDTH: Pixels = px(14.);
 const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
 const MAX_HIGHLIGHT_LINE_LENGTH: usize = 10_000;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct EditorScrollbarLayout {
+    bounds: Bounds<Pixels>,
+    scroll_size: Size<Pixels>,
+}
+
+fn editor_scrollbar_layout(
+    input_bounds: Bounds<Pixels>,
+    line_number_width: Pixels,
+    scroll_size: Size<Pixels>,
+    paddings: Edges<Pixels>,
+) -> EditorScrollbarLayout {
+    let left = if line_number_width == px(0.) {
+        px(0.)
+    } else {
+        paddings.left + line_number_width - LINE_NUMBER_RIGHT_MARGIN
+    };
+
+    EditorScrollbarLayout {
+        bounds: Bounds::new(
+            point(
+                input_bounds.origin.x + left,
+                input_bounds.origin.y - paddings.top,
+            ),
+            size(
+                input_bounds.size.width - left + paddings.right,
+                input_bounds.size.height + paddings.top + paddings.bottom,
+            ),
+        ),
+        scroll_size: size(
+            scroll_size.width - left + paddings.right + RIGHT_MARGIN,
+            scroll_size.height,
+        ),
+    }
+}
+
+fn clamp_auto_grow_vertical_scroll_offset(
+    mode: &InputMode,
+    scroll_top: Pixels,
+    scroll_height: Pixels,
+    input_height: Pixels,
+) -> Pixels {
+    if mode.is_auto_grow() {
+        scroll_top.clamp((input_height - scroll_height).min(px(0.)), px(0.))
+    } else {
+        scroll_top
+    }
+}
 
 use super::MASK_CHAR;
 
@@ -89,6 +142,7 @@ impl TextElement {
         &self,
         last_layout: &LastLayout,
         bounds: &mut Bounds<Pixels>,
+        scroll_size: Size<Pixels>,
         _: &mut Window,
         cx: &mut App,
     ) -> (Option<Bounds<Pixels>>, Point<Pixels>, Option<usize>) {
@@ -291,6 +345,12 @@ impl TextElement {
         if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
             scroll_offset = deferred_scroll_offset;
         }
+        scroll_offset.y = clamp_auto_grow_vertical_scroll_offset(
+            &state.mode,
+            scroll_offset.y,
+            scroll_size.height,
+            bounds.size.height,
+        );
 
         bounds.origin = bounds.origin + scroll_offset;
 
@@ -565,13 +625,19 @@ impl TextElement {
         }
 
         let total_lines = state.display_map.wrap_row_count();
-        let scroll_top = if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
+        let mut scroll_top = if let Some(deferred_scroll_offset) = state.deferred_scroll_offset {
             deferred_scroll_offset.y
         } else {
             state.scroll_handle.offset().y
         };
 
         let mut visible_range = 0..total_lines;
+        scroll_top = clamp_auto_grow_vertical_scroll_offset(
+            &state.mode,
+            scroll_top,
+            line_height * total_lines,
+            input_height,
+        );
         let mut line_bottom = px(0.);
         for (ix, _line) in state.display_map.lines().iter().enumerate() {
             let visible_wrap_rows = state.display_map.visible_wrap_row_count_for_buffer_line(ix);
@@ -860,9 +926,8 @@ impl TextElement {
 
         // Second pass: create and prepaint icons
         let line_height = last_layout.line_height;
-        let line_number_width = last_layout.line_number_width
-            - LINE_NUMBER_RIGHT_MARGIN
-            - FOLD_ICON_HITBOX_WIDTH;
+        let line_number_width =
+            last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN - FOLD_ICON_HITBOX_WIDTH;
         let icon_relative_pos = point(
             (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
             (line_height - FOLD_ICON_WIDTH).half(),
@@ -1142,6 +1207,7 @@ pub(super) struct PrepaintState {
     line_numbers: Option<Vec<SmallVec<[ShapedLine; 1]>>>,
     /// Size of the scrollable area by entire lines.
     scroll_size: Size<Pixels>,
+    editor_scrollbar: Option<AnyElement>,
     cursor_bounds: Option<Bounds<Pixels>>,
     cursor_scroll_offset: Point<Pixels>,
     /// row index (zero based), no wrap, same line as the cursor.
@@ -1183,7 +1249,10 @@ impl IntoElement for TextElement {
 
 /// A debug function to print points as SVG path.
 #[allow(unused)]
-fn print_points_as_svg_path(line_corners: &Vec<gpui::Corners<Pixels>>, points: &Vec<Point<Pixels>>) {
+fn print_points_as_svg_path(
+    line_corners: &Vec<gpui::Corners<Pixels>>,
+    points: &Vec<Point<Pixels>>,
+) {
     for corners in line_corners {
         println!(
             "tl: ({}, {}), tr: ({}, {}), bl: ({}, {}), br: ({}, {})",
@@ -1539,10 +1608,11 @@ impl Element for TextElement {
         // Save the unscrolled x before layout_cursor modifies bounds.origin with scroll_offset.
         // Fold icons and their hitboxes must use this value so they stay fixed in the gutter
         // regardless of horizontal scroll position.
+        let input_bounds = bounds;
         let original_x = bounds.origin.x;
 
         let (cursor_bounds, cursor_scroll_offset, current_row) =
-            self.layout_cursor(&last_layout, &mut bounds, window, cx);
+            self.layout_cursor(&last_layout, &mut bounds, scroll_size, window, cx);
         last_layout.cursor_bounds = cursor_bounds;
 
         let search_match_paths = self.layout_search_matches(&last_layout, &mut bounds, cx);
@@ -1605,12 +1675,43 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-        let fold_icon_layout = self.layout_fold_icons(original_x, &bounds, &last_layout, window, cx);
+        let editor_scrollbar_paddings = state.editor_scrollbar_paddings.clone();
+        let soft_wrap = state.soft_wrap;
+        let scroll_handle = state.scroll_handle.clone();
+        if scroll_handle.offset() != cursor_scroll_offset {
+            scroll_handle.set_offset(cursor_scroll_offset);
+        }
+        let fold_icon_layout =
+            self.layout_fold_icons(original_x, &bounds, &last_layout, window, cx);
+        let editor_scrollbar = {
+            let scrollbar_layout = editor_scrollbar_layout(
+                input_bounds,
+                last_layout.line_number_width,
+                scroll_size,
+                editor_scrollbar_paddings,
+            );
+            let mut scrollbar = if !soft_wrap {
+                Scrollbar::new(&scroll_handle)
+            } else {
+                Scrollbar::vertical(&scroll_handle)
+            }
+            .scroll_size(scrollbar_layout.scroll_size)
+            .into_any_element();
+
+            scrollbar.prepaint_as_root(
+                scrollbar_layout.bounds.origin,
+                scrollbar_layout.bounds.size.into(),
+                window,
+                cx,
+            );
+            Some(scrollbar)
+        };
 
         PrepaintState {
             bounds,
             last_layout,
             scroll_size,
+            editor_scrollbar,
             line_numbers,
             cursor_bounds,
             cursor_scroll_offset,
@@ -1922,6 +2023,10 @@ impl Element for TextElement {
             }
         }
 
+        if let Some(scrollbar) = prepaint.editor_scrollbar.as_mut() {
+            scrollbar.paint(window, cx);
+        }
+
         self.paint_mouse_listeners(window, cx);
     }
 }
@@ -2052,6 +2157,59 @@ fn split_runs_by_bg_segments(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_editor_scrollbar_layout_uses_current_scroll_size() {
+        let input_bounds = Bounds::new(point(px(10.), px(20.)), size(px(300.), px(80.)));
+        let paddings = Edges {
+            top: px(2.),
+            right: px(3.),
+            bottom: px(5.),
+            left: px(7.),
+        };
+
+        let layout =
+            editor_scrollbar_layout(input_bounds, px(40.), size(px(1000.), px(200.)), paddings);
+
+        assert_eq!(
+            layout.bounds,
+            Bounds::new(point(px(47.), px(18.)), size(px(266.), px(87.)))
+        );
+        assert_eq!(layout.scroll_size, size(px(976.), px(200.)));
+
+        let layout_without_gutter =
+            editor_scrollbar_layout(input_bounds, px(0.), size(px(500.), px(120.)), paddings);
+
+        assert_eq!(
+            layout_without_gutter.bounds,
+            Bounds::new(point(px(10.), px(18.)), size(px(303.), px(87.)))
+        );
+        assert_eq!(layout_without_gutter.scroll_size, size(px(513.), px(120.)));
+    }
+
+    #[test]
+    fn test_auto_grow_scroll_offset_is_clamped_to_current_viewport() {
+        let mode = InputMode::auto_grow(3, 8);
+
+        assert_eq!(
+            clamp_auto_grow_vertical_scroll_offset(&mode, px(-260.), px(340.), px(160.)),
+            px(-180.)
+        );
+        assert_eq!(
+            clamp_auto_grow_vertical_scroll_offset(&mode, px(-40.), px(340.), px(160.)),
+            px(-40.)
+        );
+        assert_eq!(
+            clamp_auto_grow_vertical_scroll_offset(&mode, px(20.), px(340.), px(160.)),
+            px(0.)
+        );
+
+        let plain_text = InputMode::plain_text().multi_line(true);
+        assert_eq!(
+            clamp_auto_grow_vertical_scroll_offset(&plain_text, px(-260.), px(340.), px(160.)),
+            px(-260.)
+        );
+    }
 
     #[test]
     fn test_runs_for_range() {
