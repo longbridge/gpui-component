@@ -199,8 +199,9 @@ pub struct TreeState {
     selected_ix: Option<usize>,
     right_clicked_ix: Option<usize>,
     render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
-    context_menu_builder:
-        Option<Rc<dyn Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<TreeState>) -> PopupMenu>>,
+    context_menu_builder: Option<
+        Rc<dyn Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<TreeState>) -> PopupMenu>,
+    >,
 }
 
 impl TreeState {
@@ -421,7 +422,7 @@ impl TreeState {
 impl Render for TreeState {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let render_item = self.render_item.clone();
-        let entity = cx.entity().clone();
+        let state = cx.entity().clone();
 
         let right_clicked_ix = self.right_clicked_ix;
 
@@ -430,21 +431,23 @@ impl Render for TreeState {
             .size_full()
             .relative()
             .context_menu({
-                let entity = entity.clone();
+                let state = state.clone();
                 move |menu, window, cx: &mut Context<PopupMenu>| {
-                    if entity.read(cx).context_menu_builder.is_none() {
+                    if state.read(cx).context_menu_builder.is_none() {
                         return menu;
                     }
+
                     let (ix, entry) = {
-                        let state = entity.read(cx);
+                        let state = state.read(cx);
                         let ix = state.right_clicked_ix;
                         let entry = ix.and_then(|ix| state.entries.get(ix).cloned());
                         (ix, entry)
                     };
+
                     if let (Some(ix), Some(entry)) = (ix, entry) {
-                        entity.update(cx, |state, cx| {
-                            if let Some(cm) = state.context_menu_builder.clone() {
-                                cm(ix, &entry, menu, window, cx)
+                        state.update(cx, |state, cx| {
+                            if let Some(build) = state.context_menu_builder.clone() {
+                                build(ix, &entry, menu, window, cx)
                             } else {
                                 menu
                             }
@@ -511,8 +514,9 @@ pub struct Tree {
     state: Entity<TreeState>,
     style: StyleRefinement,
     render_item: Rc<dyn Fn(usize, &TreeEntry, bool, &mut Window, &mut App) -> ListItem>,
-    context_menu_builder:
-        Option<Rc<dyn Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<TreeState>) -> PopupMenu>>,
+    context_menu_builder: Option<
+        Rc<dyn Fn(usize, &TreeEntry, PopupMenu, &mut Window, &mut Context<TreeState>) -> PopupMenu>,
+    >,
 }
 
 impl Tree {
