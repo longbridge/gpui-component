@@ -424,8 +424,6 @@ impl Render for TreeState {
         let render_item = self.render_item.clone();
         let state = cx.entity().clone();
 
-        let right_clicked_ix = self.right_clicked_ix;
-
         div()
             .id("tree-state")
             .size_full()
@@ -439,9 +437,10 @@ impl Render for TreeState {
 
                     let (ix, entry) = {
                         let state = state.read(cx);
-                        let ix = state.right_clicked_ix;
-                        let entry = ix.and_then(|ix| state.entries.get(ix).cloned());
-                        (ix, entry)
+                        let entry = state
+                            .right_clicked_ix
+                            .and_then(|ix| state.entries.get(ix).cloned());
+                        (state.right_clicked_ix, entry)
                     };
 
                     if let (Some(ix), Some(entry)) = (ix, entry) {
@@ -464,7 +463,7 @@ impl Render for TreeState {
                         for ix in visible_range {
                             let entry = &state.entries[ix];
                             let selected = Some(ix) == state.selected_ix;
-                            let right_clicked = right_clicked_ix == Some(ix);
+                            let right_clicked = Some(ix) == state.right_clicked_ix;
                             let item = (render_item)(ix, entry, selected, window, cx);
 
                             let el = div()
