@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme as _, IconName, StyledExt as _,
+    ActiveTheme as _, IconName,
     button::Button,
     dock::PanelControl,
     h_flex,
@@ -165,71 +165,74 @@ impl Render for TreeStory {
             .child(
                 section("File tree")
                     .sub_title("Press `enter` to rename. Right-click for context menu.")
-                    .v_flex()
                     .max_w_md()
                     .child(
-                        tree(
-                            &self.tree_state,
-                            move |ix, entry, _selected, _window, cx| {
-                                view.update(cx, |_, cx| {
-                                    let item = entry.item();
-                                    let icon = if !entry.is_folder() {
-                                        IconName::File
-                                    } else if entry.is_expanded() {
-                                        IconName::FolderOpen
-                                    } else {
-                                        IconName::Folder
-                                    };
+                        v_flex()
+                            .gap_4()
+                            .child(
+                                tree(
+                                    &self.tree_state,
+                                    move |ix, entry, _selected, _window, cx| {
+                                        view.update(cx, |_, cx| {
+                                            let item = entry.item();
+                                            let icon = if !entry.is_folder() {
+                                                IconName::File
+                                            } else if entry.is_expanded() {
+                                                IconName::FolderOpen
+                                            } else {
+                                                IconName::Folder
+                                            };
 
-                                    ListItem::new(ix)
-                                        .w_full()
-                                        .rounded(cx.theme().radius)
-                                        .px_3()
-                                        .pl(px(16.) * entry.depth() + px(12.))
-                                        .child(
-                                            h_flex().gap_2().child(icon).child(item.label.clone()),
-                                        )
-                                        .on_click(cx.listener({
-                                            let item = item.clone();
-                                            move |_, _, _window, _| {
-                                                println!(
-                                                    "Clicked on item: {} ({})",
-                                                    item.label, item.id
-                                                );
-                                            }
-                                        }))
+                                            ListItem::new(ix)
+                                                .w_full()
+                                                .rounded(cx.theme().radius)
+                                                .px_3()
+                                                .pl(px(16.) * entry.depth() + px(12.))
+                                                .child(
+                                                    h_flex()
+                                                        .gap_2()
+                                                        .child(icon)
+                                                        .child(item.label.clone()),
+                                                )
+                                                .on_click(cx.listener({
+                                                    let item = item.clone();
+                                                    move |_, _, _window, _| {
+                                                        println!(
+                                                            "Clicked on item: {} ({})",
+                                                            item.label, item.id
+                                                        );
+                                                    }
+                                                }))
+                                        })
+                                    },
+                                )
+                                .context_menu(|_ix, entry, menu, _window, _cx| {
+                                    let is_folder = entry.is_folder();
+                                    menu.when(!is_folder, |m| m.menu("Open", Box::new(OpenFile)))
+                                        .menu("Rename", Box::new(Rename))
+                                        .separator()
+                                        .menu("Delete", Box::new(Delete))
                                 })
-                            },
-                        )
-                        .context_menu(|_ix, entry, menu, _window, _cx| {
-                            let is_folder = entry.is_folder();
-                            menu.when(!is_folder, |m| m.menu("Open", Box::new(OpenFile)))
-                                .menu("Rename", Box::new(Rename))
-                                .separator()
-                                .menu("Delete", Box::new(Delete))
-                        })
-                        .p_1()
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .rounded(cx.theme().radius)
-                        .h(px(540.)),
-                    )
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .justify_between()
-                            .gap_3()
-                            .children(
-                                self.tree_state
-                                    .read(cx)
-                                    .selected_index()
-                                    .map(|ix| format!("Selected Index: {}", ix)),
+                                .p_1()
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded(cx.theme().radius)
+                                .h(px(540.)),
                             )
-                            .children(
-                                self.tree_state
-                                    .read(cx)
-                                    .selected_item()
-                                    .map(|item| Label::new("Selected:").secondary(item.id.clone())),
+                            .child(
+                                h_flex()
+                                    .w_full()
+                                    .justify_between()
+                                    .gap_3()
+                                    .children(
+                                        self.tree_state
+                                            .read(cx)
+                                            .selected_index()
+                                            .map(|ix| format!("Selected Index: {}", ix)),
+                                    )
+                                    .children(self.tree_state.read(cx).selected_item().map(
+                                        |item| Label::new("Selected:").secondary(item.id.clone()),
+                                    )),
                             ),
                     ),
             )
