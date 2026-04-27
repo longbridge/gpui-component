@@ -1,4 +1,4 @@
-use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, h_flex};
+use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, deferred_foreground, h_flex};
 use std::collections::HashMap;
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseButton,
@@ -232,7 +232,7 @@ impl RenderOnce for ListItem {
                     };
 
                     this.bg(bg).when(cx.theme().list.active_highlight, |this| {
-                        this.child(
+                        this.child(deferred_foreground(
                             div()
                                 .absolute()
                                 .top_0()
@@ -242,7 +242,7 @@ impl RenderOnce for ListItem {
                                 .border_1()
                                 .border_color(cx.theme().list_active_border)
                                 .refine_style(&selected_style),
-                        )
+                        ))
                     })
                 } else {
                     this

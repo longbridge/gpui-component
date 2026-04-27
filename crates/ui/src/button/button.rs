@@ -638,7 +638,7 @@ impl RenderOnce for Button {
                     this
                 }
             })
-            .focus_ring(is_focused, px(0.), window, cx)
+            .focus_ring(is_focused, px(1.), window, cx)
     }
 }
 
