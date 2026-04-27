@@ -168,6 +168,7 @@ impl Render for TreeStory {
                     .max_w_md()
                     .child(
                         v_flex()
+                            .w_full()
                             .gap_4()
                             .child(
                                 tree(
