@@ -60,6 +60,8 @@ GPUI Component's `InputState` supports a code editor mode with syntax highlighti
 It design for high performance and can handle large files efficiently. We
 used [tree-sitter](https://tree-sitter.github.io/tree-sitter/) for syntax highlighting, and [ropey](https://github.com/cessen/ropey) for text storage and manipulation.
 
+Enable `gpui-component/tree-sitter-languages` to include all built-in Tree-sitter grammars, or enable only the grammars you need, such as `gpui-component/tree-sitter-markdown` or `gpui-component/tree-sitter-rust`, to reduce downstream bundle size.
+
 ```rust
 let state = cx.new(|cx|
     InputState::new(window, cx)

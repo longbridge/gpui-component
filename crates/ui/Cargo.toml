@@ -20,40 +20,78 @@ inspector = ["gpui_macros/inspector", "gpui/inspector"]
 
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
-    "dep:tree-sitter-astro-next",
-    "dep:tree-sitter-bash",
-    "dep:tree-sitter-c",
-    "dep:tree-sitter-c-sharp",
-    "dep:tree-sitter-cmake",
-    "dep:tree-sitter-cpp",
-    "dep:tree-sitter-css",
-    "dep:tree-sitter-diff",
-    "dep:tree-sitter-elixir",
-    "dep:tree-sitter-embedded-template",
-    "dep:tree-sitter-go",
-    "dep:tree-sitter-graphql",
-    "dep:tree-sitter-html",
-    "dep:tree-sitter-java",
-    "dep:tree-sitter-javascript",
-    "dep:tree-sitter-jsdoc",
-    "dep:tree-sitter-kotlin-sg",
-    "dep:tree-sitter-lua",
-    "dep:tree-sitter-make",
-    "dep:tree-sitter-md",
-    "dep:tree-sitter-php",
-    "dep:tree-sitter-proto",
-    "dep:tree-sitter-python",
-    "dep:tree-sitter-ruby",
-    "dep:tree-sitter-rust",
-    "dep:tree-sitter-scala",
-    "dep:tree-sitter-sequel",
-    "dep:tree-sitter-swift",
-    "dep:tree-sitter-toml-ng",
-    "dep:tree-sitter-typescript",
-    "dep:tree-sitter-svelte-next",
-    "dep:tree-sitter-yaml",
-    "dep:tree-sitter-zig",
+    "tree-sitter-astro",
+    "tree-sitter-bash",
+    "tree-sitter-c",
+    "tree-sitter-cmake",
+    "tree-sitter-cpp",
+    "tree-sitter-csharp",
+    "tree-sitter-css",
+    "tree-sitter-diff",
+    "tree-sitter-ejs",
+    "tree-sitter-elixir",
+    "tree-sitter-erb",
+    "tree-sitter-go",
+    "tree-sitter-graphql",
+    "tree-sitter-html",
+    "tree-sitter-java",
+    "tree-sitter-javascript",
+    "tree-sitter-jsdoc",
+    "tree-sitter-kotlin",
+    "tree-sitter-lua",
+    "tree-sitter-make",
+    "tree-sitter-markdown",
+    "tree-sitter-php",
+    "tree-sitter-proto",
+    "tree-sitter-python",
+    "tree-sitter-ruby",
+    "tree-sitter-rust",
+    "tree-sitter-scala",
+    "tree-sitter-sql",
+    "tree-sitter-svelte",
+    "tree-sitter-swift",
+    "tree-sitter-toml",
+    "tree-sitter-tsx",
+    "tree-sitter-typescript",
+    "tree-sitter-yaml",
+    "tree-sitter-zig",
 ]
+tree-sitter-astro = ["dep:tree-sitter-astro-next"]
+tree-sitter-bash = ["dep:tree-sitter-bash"]
+tree-sitter-c = ["dep:tree-sitter-c"]
+tree-sitter-cmake = ["dep:tree-sitter-cmake"]
+tree-sitter-cpp = ["dep:tree-sitter-cpp"]
+tree-sitter-csharp = ["dep:tree-sitter-c-sharp"]
+tree-sitter-css = ["dep:tree-sitter-css"]
+tree-sitter-diff = ["dep:tree-sitter-diff"]
+tree-sitter-ejs = ["dep:tree-sitter-embedded-template"]
+tree-sitter-elixir = ["dep:tree-sitter-elixir"]
+tree-sitter-erb = ["dep:tree-sitter-embedded-template"]
+tree-sitter-go = ["dep:tree-sitter-go"]
+tree-sitter-graphql = ["dep:tree-sitter-graphql"]
+tree-sitter-html = ["dep:tree-sitter-html"]
+tree-sitter-java = ["dep:tree-sitter-java"]
+tree-sitter-javascript = ["dep:tree-sitter-javascript"]
+tree-sitter-jsdoc = ["dep:tree-sitter-jsdoc"]
+tree-sitter-kotlin = ["dep:tree-sitter-kotlin-sg"]
+tree-sitter-lua = ["dep:tree-sitter-lua"]
+tree-sitter-make = ["dep:tree-sitter-make"]
+tree-sitter-markdown = ["dep:tree-sitter-md"]
+tree-sitter-markdown-inline = ["tree-sitter-markdown"]
+tree-sitter-php = ["dep:tree-sitter-php"]
+tree-sitter-proto = ["dep:tree-sitter-proto"]
+tree-sitter-python = ["dep:tree-sitter-python"]
+tree-sitter-ruby = ["dep:tree-sitter-ruby"]
+tree-sitter-rust = ["dep:tree-sitter-rust"]
+tree-sitter-scala = ["dep:tree-sitter-scala"]
+tree-sitter-sql = ["dep:tree-sitter-sequel"]
+tree-sitter-svelte = ["dep:tree-sitter-svelte-next"]
+tree-sitter-swift = ["dep:tree-sitter-swift"]
+tree-sitter-toml = ["dep:tree-sitter-toml-ng"]
+tree-sitter-tsx = ["dep:tree-sitter-typescript"]
+tree-sitter-typescript = ["dep:tree-sitter-typescript"]
+tree-sitter-yaml = ["dep:tree-sitter-yaml"]
+tree-sitter-zig = ["dep:tree-sitter-zig"]
 
 [dependencies]
 anyhow.workspace = true
