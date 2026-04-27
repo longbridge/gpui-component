@@ -330,6 +330,7 @@ impl TreeState {
         }
 
         entry.item.state.borrow_mut().expanded = !entry.is_expanded();
+        self.right_clicked_ix = None;
         self.rebuild_entries();
     }
 
