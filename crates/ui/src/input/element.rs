@@ -1675,7 +1675,7 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-        let editor_scrollbar_paddings = state.editor_scrollbar_paddings.clone();
+        let editor_scrollbar_paddings = state.editor_scrollbar_paddings;
         let soft_wrap = state.soft_wrap;
         let scroll_handle = state.scroll_handle.clone();
         if scroll_handle.offset() != cursor_scroll_offset {
