@@ -137,11 +137,17 @@ impl SettingItem {
             t if t == TypeId::of::<String>() && field_type.is_input() => {
                 Box::new(StringField::<String>::new())
             }
-            t if t == TypeId::of::<SharedString>() && field_type.is_dropdown() => Box::new(
-                DropdownField::<SharedString>::new(field_type.dropdown_options()),
-            ),
+            t if t == TypeId::of::<SharedString>() && field_type.is_dropdown() => {
+                Box::new(DropdownField::<SharedString>::new(
+                    field_type.dropdown_options(),
+                    field_type.dropdown_scrollable(),
+                ))
+            }
             t if t == TypeId::of::<String>() && field_type.is_dropdown() => {
-                Box::new(DropdownField::<String>::new(field_type.dropdown_options()))
+                Box::new(DropdownField::<String>::new(
+                    field_type.dropdown_options(),
+                    field_type.dropdown_scrollable(),
+                ))
             }
             _ if field_type.is_element() => Box::new(ElementField::new(field_type.element())),
             _ => unimplemented!("Unsupported setting type: {}", field.deref().type_name()),
