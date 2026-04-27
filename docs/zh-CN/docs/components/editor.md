@@ -59,6 +59,8 @@ GPUI Component 的 `InputState` 支持代码编辑器模式，可提供语法高
 
 它面向高性能场景，能够高效处理大文件。语法高亮基于 [tree-sitter](https://tree-sitter.github.io/tree-sitter/)，文本存储和编辑基于 [ropey](https://github.com/cessen/ropey)。
 
+启用 `gpui-component/tree-sitter-languages` 可包含所有内置 Tree-sitter 语法；如果只需要少量语言，可以只启用 `gpui-component/tree-sitter-markdown` 或 `gpui-component/tree-sitter-rust` 等单语言 feature，以减少下游应用体积。
+
 ```rust
 let state = cx.new(|cx|
     InputState::new(window, cx)
