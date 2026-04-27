@@ -55,6 +55,37 @@ impl ResizableState {
         &self.sizes
     }
 
+    /// Programmatically resize the panel at `ix` to `size`, redistributing
+    /// space among siblings using the same logic as a drag.
+    ///
+    /// Sizes are clamped to the panel's `size_range` and to the container.
+    /// Emits `ResizablePanelEvent::Resized` so subscribers (e.g. preference
+    /// persistence) see the change just as if the user had dragged a handle.
+    ///
+    /// Out-of-range indices are a no-op. For the last panel, space is taken
+    /// from the previous sibling (the last panel has no handle of its own).
+    pub fn resize_panel(
+        &mut self,
+        ix: usize,
+        size: Pixels,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if ix >= self.sizes.len() {
+            return;
+        }
+        if ix + 1 < self.sizes.len() {
+            self.resize_panel_at_handle(ix, size, window, cx);
+        } else if ix > 0 {
+            // Last panel: drive its size by resizing the previous sibling so
+            // the freed space lands here.
+            let delta = self.sizes[ix] - size;
+            let prev = self.sizes[ix - 1];
+            self.resize_panel_at_handle(ix - 1, prev + delta, window, cx);
+        }
+        self.done_resizing(cx);
+    }
+
     pub(crate) fn insert_panel(
         &mut self,
         size: Option<Pixels>,
@@ -192,9 +223,19 @@ impl ResizableState {
         }
     }
 
-    /// The `ix`` is the index of the panel to resize,
-    /// and the `size` is the new size for the panel.
-    fn resize_panel(&mut self, ix: usize, size: Pixels, _: &mut Window, cx: &mut Context<Self>) {
+    /// Resize the panel at `ix` by treating `ix` as the drag-handle position
+    /// (the handle that sits between panel `ix` and panel `ix + 1`). Returns
+    /// early on the last panel since there is no handle below it.
+    ///
+    /// This is the worker behind drag interactions and the public
+    /// [`Self::resize_panel`] API.
+    fn resize_panel_at_handle(
+        &mut self,
+        ix: usize,
+        size: Pixels,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let old_sizes = self.sizes.clone();
 
         let mut ix = ix;
