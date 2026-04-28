@@ -7,36 +7,37 @@ use num_traits::{Num, ToPrimitive};
 use crate::{
     ActiveTheme,
     plot::{
-        AXIS_GAP, Grid, Plot, PlotAxis,
+        AXIS_GAP, AxisLabelSide, Grid, Plot, PlotAxis,
         label::Text,
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
-        shape::Bar,
+        shape::{Bar, BarAlignment},
     },
 };
 
-use super::build_band_x_labels;
+use super::build_band_labels;
 
 #[derive(IntoPlot)]
-pub struct BarChart<T, X, Y>
+pub struct BarChart<T, B, V>
 where
     T: 'static,
-    X: PartialEq + Into<SharedString> + 'static,
-    Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+    B: PartialEq + Into<SharedString> + 'static,
+    V: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     data: Vec<T>,
-    x: Option<Rc<dyn Fn(&T) -> X>>,
-    y: Option<Rc<dyn Fn(&T) -> Y>>,
+    band: Option<Rc<dyn Fn(&T) -> B>>,
+    value: Option<Rc<dyn Fn(&T) -> V>>,
     fill: Option<Rc<dyn Fn(&T) -> Hsla>>,
     tick_margin: usize,
     label: Option<Rc<dyn Fn(&T) -> SharedString>>,
-    x_axis: bool,
+    label_axis: bool,
     grid: bool,
+    alignment: BarAlignment,
 }
 
-impl<T, X, Y> BarChart<T, X, Y>
+impl<T, B, V> BarChart<T, B, V>
 where
-    X: PartialEq + Into<SharedString> + 'static,
-    Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+    B: PartialEq + Into<SharedString> + 'static,
+    V: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     pub fn new<I>(data: I) -> Self
     where
@@ -44,23 +45,26 @@ where
     {
         Self {
             data: data.into_iter().collect(),
-            x: None,
-            y: None,
+            band: None,
+            value: None,
             fill: None,
             tick_margin: 1,
             label: None,
-            x_axis: true,
+            label_axis: true,
             grid: true,
+            alignment: BarAlignment::default(),
         }
     }
 
-    pub fn x(mut self, x: impl Fn(&T) -> X + 'static) -> Self {
-        self.x = Some(Rc::new(x));
+    /// Map each datum to its band-axis value (the categorical/ordinal axis).
+    pub fn band(mut self, band: impl Fn(&T) -> B + 'static) -> Self {
+        self.band = Some(Rc::new(band));
         self
     }
 
-    pub fn y(mut self, y: impl Fn(&T) -> Y + 'static) -> Self {
-        self.y = Some(Rc::new(y));
+    /// Map each datum to its numeric value along the value axis.
+    pub fn value(mut self, value: impl Fn(&T) -> V + 'static) -> Self {
+        self.value = Some(Rc::new(value));
         self
     }
 
@@ -85,11 +89,11 @@ where
         self
     }
 
-    /// Show or hide the x-axis line and labels.
+    /// Show or hide the band-axis line and labels.
     ///
     /// Default is true.
-    pub fn x_axis(mut self, x_axis: bool) -> Self {
-        self.x_axis = x_axis;
+    pub fn label_axis(mut self, label_axis: bool) -> Self {
+        self.label_axis = label_axis;
         self
     }
 
@@ -97,81 +101,155 @@ where
         self.grid = grid;
         self
     }
+
+    /// Set the bar alignment.
+    ///
+    /// Default is [`BarAlignment::Bottom`].
+    pub fn alignment(mut self, alignment: BarAlignment) -> Self {
+        self.alignment = alignment;
+        self
+    }
 }
 
-impl<T, X, Y> Plot for BarChart<T, X, Y>
+impl<T, B, V> Plot for BarChart<T, B, V>
 where
-    X: PartialEq + Into<SharedString> + 'static,
-    Y: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
+    B: PartialEq + Into<SharedString> + 'static,
+    V: Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
-        let (Some(x_fn), Some(y_fn)) = (self.x.as_ref(), self.y.as_ref()) else {
+        let (Some(band_fn), Some(value_fn)) = (self.band.as_ref(), self.value.as_ref()) else {
             return;
         };
 
-        let width = bounds.size.width.as_f32();
-        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
-        let height = bounds.size.height.as_f32() - axis_gap;
+        let total_width = bounds.size.width.as_f32();
+        let total_height = bounds.size.height.as_f32();
+        let axis_gap = if self.label_axis { AXIS_GAP } else { 0. };
+        let alignment = self.alignment;
+        let is_horizontal = alignment.is_horizontal();
 
-        // X scale
-        let x = ScaleBand::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width])
-            .padding_inner(0.4)
-            .padding_outer(0.2);
-        let band_width = x.band_width();
+        // Band scale spans the full extent perpendicular to the value axis.
+        let band_extent = if is_horizontal {
+            total_height
+        } else {
+            total_width
+        };
+        let band_scale = ScaleBand::new(
+            self.data.iter().map(|v| band_fn(v)).collect(),
+            vec![0., band_extent],
+        )
+        .padding_inner(0.4)
+        .padding_outer(0.2);
+        let band_width = band_scale.band_width();
 
-        // Y scale, ensure start from 0.
-        let y = ScaleLinear::new(
+        // Reserve `axis_gap` on the side of the value axis where the band-axis
+        // labels render so labels don't overflow the plot bounds.
+        let value_dim = if is_horizontal {
+            total_width
+        } else {
+            total_height
+        };
+        let value_padding = 10.;
+        let (range, baseline) = match alignment {
+            BarAlignment::Bottom => {
+                let baseline = value_dim - axis_gap;
+                (vec![baseline, value_padding], baseline)
+            }
+            BarAlignment::Top => {
+                let baseline = axis_gap;
+                (vec![baseline, value_dim - value_padding], baseline)
+            }
+            BarAlignment::Left => {
+                let baseline = axis_gap;
+                (vec![baseline, value_dim - value_padding], baseline)
+            }
+            BarAlignment::Right => {
+                let baseline = value_dim - axis_gap;
+                (vec![baseline, value_padding], baseline)
+            }
+        };
+        let value_scale = ScaleLinear::new(
             self.data
                 .iter()
-                .map(|v| y_fn(v))
-                .chain(Some(Y::zero()))
+                .map(|v| value_fn(v))
+                .chain(Some(V::zero()))
                 .collect(),
-            vec![height, 10.],
+            range,
         );
 
-        // Draw X axis
+        // Draw band axis (with categorical labels).
         let mut axis = PlotAxis::new().stroke(cx.theme().border);
-        if self.x_axis {
-            let labels = build_band_x_labels(
+        if self.label_axis {
+            let labels = build_band_labels(
                 &self.data,
-                x_fn.as_ref(),
-                &x,
+                band_fn.as_ref(),
+                &band_scale,
                 band_width,
                 self.tick_margin,
                 cx.theme().muted_foreground,
             );
-            axis = axis.x(height).x_label(labels);
+            axis = match alignment {
+                BarAlignment::Bottom => axis.x(baseline).x_label(labels),
+                BarAlignment::Top => axis
+                    .x(baseline)
+                    .x_label_side(AxisLabelSide::Start)
+                    .x_label(labels),
+                BarAlignment::Left => axis
+                    .y(baseline)
+                    .y_label_side(AxisLabelSide::Start)
+                    .y_label(labels.into_iter().map(|t| t.align(TextAlign::Right))),
+                BarAlignment::Right => axis
+                    .y(baseline)
+                    .y_label(labels.into_iter().map(|t| t.align(TextAlign::Left))),
+            };
         }
         axis.paint(&bounds, window, cx);
 
-        // Draw grid
+        // Draw grid: lines perpendicular to the value axis, evenly spaced
+        // across the value range and excluding the line at the baseline.
         if self.grid {
-            Grid::new()
-                .y((0..=3).map(|i| height * i as f32 / 4.0).collect())
+            let far = match alignment {
+                BarAlignment::Bottom | BarAlignment::Right => value_padding,
+                BarAlignment::Top | BarAlignment::Left => value_dim - value_padding,
+            };
+            let grid_steps: Vec<f32> = (0..4)
+                .map(|i| far + (baseline - far) * i as f32 / 4.0)
+                .collect();
+            let grid = Grid::new()
                 .stroke(cx.theme().border)
-                .dash_array(&[px(4.), px(2.)])
-                .paint(&bounds, window);
+                .dash_array(&[px(4.), px(2.)]);
+            let grid = if is_horizontal {
+                grid.x(grid_steps)
+            } else {
+                grid.y(grid_steps)
+            };
+            grid.paint(&bounds, window);
         }
 
-        // Draw bars
-        let x_fn = x_fn.clone();
-        let y_fn = y_fn.clone();
+        // Draw bars.
+        let band_fn_cloned = band_fn.clone();
+        let value_fn_cloned = value_fn.clone();
         let default_fill = cx.theme().chart_2;
         let fill = self.fill.clone();
         let label_color = cx.theme().foreground;
+
         let mut bar = Bar::new()
             .data(&self.data)
+            .alignment(alignment)
             .band_width(band_width)
-            .x(move |d| x.tick(&x_fn(d)))
-            .y0(move |_| height)
-            .y1(move |d| y.tick(&y_fn(d)))
+            .cross(move |d| band_scale.tick(&band_fn_cloned(d)))
+            .base(move |_| baseline)
+            .value(move |d| value_scale.tick(&value_fn_cloned(d)))
             .fill(move |d| fill.as_ref().map(|f| f(d)).unwrap_or(default_fill));
 
         if let Some(label) = self.label.as_ref() {
             let label = label.clone();
-            bar = bar.label(move |d, p| {
-                vec![Text::new(label(d), p, label_color).align(TextAlign::Center)]
-            });
+            let text_align = match alignment {
+                BarAlignment::Bottom | BarAlignment::Top => TextAlign::Center,
+                BarAlignment::Left => TextAlign::Left,
+                BarAlignment::Right => TextAlign::Right,
+            };
+            bar =
+                bar.label(move |d, p| vec![Text::new(label(d), p, label_color).align(text_align)]);
         }
 
         bar.paint(&bounds, window, cx);

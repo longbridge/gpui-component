@@ -52,11 +52,13 @@ where
         .collect()
 }
 
-/// Build x-axis labels for band-based scales (`BarChart`, `CandlestickChart`).
+/// Build axis labels for band-based scales (`BarChart`, `CandlestickChart`).
 ///
-/// Band scales place items in evenly sized bands. Labels are always
-/// center-aligned within their band.
-pub(crate) fn build_band_x_labels<T, X>(
+/// Band scales place items in evenly sized bands. The returned `tick`
+/// coordinate is the centre of each band along the band axis; the caller
+/// decides whether to feed the result to `PlotAxis::x_label` (vertical
+/// charts) or `PlotAxis::y_label` (horizontal charts).
+pub(crate) fn build_band_labels<T, X>(
     data: &[T],
     x_fn: &dyn Fn(&T) -> X,
     x_scale: &ScaleBand<X>,

@@ -3,9 +3,22 @@ use gpui::{
     point, px,
 };
 
-use super::{label::PlotLabel, label::TEXT_GAP, label::TEXT_SIZE, label::Text, origin_point};
+use super::{
+    label::PlotLabel, label::TEXT_GAP, label::TEXT_HEIGHT, label::TEXT_SIZE, label::Text,
+    origin_point,
+};
 
 pub const AXIS_GAP: f32 = 18.;
+
+/// Which side of an axis line the tick labels render on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum AxisLabelSide {
+    /// X-axis: labels below the line. Y-axis: labels right of the line. (Default.)
+    #[default]
+    End,
+    /// X-axis: labels above the line. Y-axis: labels left of the line.
+    Start,
+}
 
 pub struct AxisText {
     pub text: SharedString,
@@ -42,9 +55,11 @@ pub struct PlotAxis {
     x: Option<Pixels>,
     x_label: PlotLabel,
     x_axis: bool,
+    x_label_side: AxisLabelSide,
     y: Option<Pixels>,
     y_label: PlotLabel,
     y_axis: bool,
+    y_label_side: AxisLabelSide,
     stroke: Hsla,
 }
 
@@ -73,18 +88,31 @@ impl PlotAxis {
     /// Set the x-label of the Axis.
     pub fn x_label(mut self, label: impl IntoIterator<Item = AxisText>) -> Self {
         if let Some(x) = self.x {
+            let side = self.x_label_side;
             self.x_label = label
                 .into_iter()
-                .map(|t| Text {
-                    text: t.text,
-                    origin: point(t.tick, x + px(TEXT_GAP * 3.)),
-                    color: t.color,
-                    font_size: t.font_size,
-                    font_weight: FontWeight::NORMAL,
-                    align: t.align,
+                .map(|t| {
+                    let y = match side {
+                        AxisLabelSide::End => x + px(TEXT_GAP * 3.),
+                        AxisLabelSide::Start => x - px(TEXT_GAP + TEXT_HEIGHT),
+                    };
+                    Text {
+                        text: t.text,
+                        origin: point(t.tick, y),
+                        color: t.color,
+                        font_size: t.font_size,
+                        font_weight: FontWeight::NORMAL,
+                        align: t.align,
+                    }
                 })
                 .into();
         }
+        self
+    }
+
+    /// Set which side of the x-axis line tick labels render on.
+    pub fn x_label_side(mut self, side: AxisLabelSide) -> Self {
+        self.x_label_side = side;
         self
     }
 
@@ -105,18 +133,31 @@ impl PlotAxis {
     /// Set the y-label of the Axis.
     pub fn y_label(mut self, label: impl IntoIterator<Item = AxisText>) -> Self {
         if let Some(y) = self.y {
+            let side = self.y_label_side;
             self.y_label = label
                 .into_iter()
-                .map(|t| Text {
-                    text: t.text,
-                    origin: point(y + px(TEXT_GAP), t.tick),
-                    color: t.color,
-                    font_size: t.font_size,
-                    font_weight: FontWeight::NORMAL,
-                    align: t.align,
+                .map(|t| {
+                    let x = match side {
+                        AxisLabelSide::End => y + px(TEXT_GAP),
+                        AxisLabelSide::Start => y - px(TEXT_GAP),
+                    };
+                    Text {
+                        text: t.text,
+                        origin: point(x, t.tick - px(TEXT_SIZE / 2.)),
+                        color: t.color,
+                        font_size: t.font_size,
+                        font_weight: FontWeight::NORMAL,
+                        align: t.align,
+                    }
                 })
                 .into();
         }
+        self
+    }
+
+    /// Set which side of the y-axis line tick labels render on.
+    pub fn y_label_side(mut self, side: AxisLabelSide) -> Self {
+        self.y_label_side = side;
         self
     }
 
