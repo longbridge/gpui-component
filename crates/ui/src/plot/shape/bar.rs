@@ -1,5 +1,5 @@
 use gpui::{
-    App, Bounds, Corners, Hsla, PaintQuad, Pixels, Point, Window, fill, point, px,
+    App, Background, Bounds, Corners, PaintQuad, Pixels, Point, Size, Window, fill, point, px,
 };
 
 use crate::plot::{
@@ -30,6 +30,20 @@ impl BarAlignment {
     pub fn is_vertical(self) -> bool {
         !self.is_horizontal()
     }
+
+    /// Linear-gradient angle (in degrees) that runs from the bar's base to its
+    /// tip for this alignment.
+    ///
+    /// gpui convention: `0°` points upward (stop-0 at bottom, stop-1 at top);
+    /// angles increase clockwise.
+    pub fn gradient_angle(self) -> f32 {
+        match self {
+            Self::Bottom => 0.,
+            Self::Top => 180.,
+            Self::Left => 90.,
+            Self::Right => 270.,
+        }
+    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -40,7 +54,7 @@ pub struct Bar<T> {
     band_width: f32,
     base: Box<dyn Fn(&T) -> f32>,
     value: Box<dyn Fn(&T) -> Option<f32>>,
-    fill: Box<dyn Fn(&T) -> Hsla>,
+    fill: Box<dyn Fn(&T, Bounds<f32>, BarAlignment) -> Background>,
     label: Option<Box<dyn Fn(&T, Point<Pixels>) -> Vec<Text>>>,
     corner_radii: Corners<Pixels>,
 }
@@ -54,7 +68,7 @@ impl<T> Default for Bar<T> {
             band_width: 0.,
             base: Box::new(|_| 0.),
             value: Box::new(|_| None),
-            fill: Box::new(|_| gpui::black()),
+            fill: Box::new(|_, _, _| gpui::black().into()),
             label: None,
             corner_radii: Corners::all(px(0.)),
         }
@@ -119,13 +133,23 @@ impl<T> Bar<T> {
         self
     }
 
-    /// Set the fill color of the Bar.
-    pub fn fill<F, C>(mut self, fill: F) -> Self
+    /// Set the fill of each bar.
+    ///
+    /// The closure receives the datum, the bar's painted frame (`Bounds<f32>`)
+    /// in raw pixel coordinates relative to the plot bounds origin, and the
+    /// bar's [`BarAlignment`] (so callers can branch on orientation, e.g. flip
+    /// a gradient angle). Callers wishing to derive normalized or chart-relative
+    /// coordinates from this frame should do so themselves.
+    ///
+    /// Accepts any type convertible to [`Background`], including solid colors and
+    /// fully-specified [`gpui::linear_gradient`] values. The background is used
+    /// verbatim — the gradient angle is not adjusted for bar orientation.
+    pub fn fill<F, B>(mut self, fill: F) -> Self
     where
-        F: Fn(&T) -> C + 'static,
-        C: Into<Hsla>,
+        F: Fn(&T, Bounds<f32>, BarAlignment) -> B + 'static,
+        B: Into<Background>,
     {
-        self.fill = Box::new(move |v| fill(v).into());
+        self.fill = Box::new(move |v, frame, alignment| fill(v, frame, alignment).into());
         self
     }
 
@@ -162,12 +186,17 @@ impl<T> Bar<T> {
             let base = (self.base)(v);
 
             let bw = self.band_width;
-            let (p1, p2) = if self.alignment.is_vertical() {
+            let (frame, p1, p2) = if self.alignment.is_vertical() {
                 let x0 = cross;
                 let x1 = cross + bw;
                 let y_min = value.min(base);
                 let y_max = value.max(base);
+                let frame = Bounds {
+                    origin: Point::new(x0, y_min),
+                    size: Size::new(x1 - x0, y_max - y_min),
+                };
                 (
+                    frame,
                     origin_point(px(x0), px(y_min), origin),
                     origin_point(px(x1), px(y_max), origin),
                 )
@@ -176,14 +205,19 @@ impl<T> Bar<T> {
                 let y1 = cross + bw;
                 let x_min = value.min(base);
                 let x_max = value.max(base);
+                let frame = Bounds {
+                    origin: Point::new(x_min, y0),
+                    size: Size::new(x_max - x_min, y1 - y0),
+                };
                 (
+                    frame,
                     origin_point(px(x_min), px(y0), origin),
                     origin_point(px(x_max), px(y1), origin),
                 )
             };
 
-            let color = (self.fill)(v);
-            graph.push(fill(Bounds::from_corners(p1, p2), color).corner_radii(self.corner_radii));
+            let bg = (self.fill)(v, frame, self.alignment);
+            graph.push(fill(Bounds::from_corners(p1, p2), bg).corner_radii(self.corner_radii));
 
             if let Some(label) = &self.label {
                 let label_origin = label_origin(self.alignment, cross, base, value, bw);

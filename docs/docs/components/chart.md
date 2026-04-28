@@ -104,10 +104,15 @@ BarChart::new(data)
 
 ```rust
 // Custom fill colors
+//
+// The `fill` closure receives the datum, the bar's bounds (in pixel space,
+// relative to the chart), the chart's bounds, and the bar's `BarAlignment`.
+// Any value convertible to `Background` may be returned (solid color, gradient,
+// pattern, etc.).
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
-    .fill(|d| d.color)
+    .fill(|d, _bar_bounds, _chart_bounds, _alignment| d.color)
 
 // With value labels on bars
 BarChart::new(data)
@@ -127,6 +132,43 @@ BarChart::new(data)
     .value(|d| d.value)
     .label_axis(false)
 ```
+
+#### Bar Chart Gradient Fills
+
+For gradient fills aligned to the bar's orientation, use `fill_gradient`. The closure receives the datum, the chart's full data range, and a `chart_to_bar` helper that maps a chart-value coordinate to a bar-local gradient position (`0.0` is the bar's base, `1.0` is its tip). The gradient angle is derived from the bar's `BarAlignment` so stop-0 sits at the base and stop-1 at the tip.
+
+```rust
+use gpui::linear_color_stop;
+
+// Per-bar gradient: every bar fades from a translucent base to its full color
+// at the tip, regardless of its value.
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .fill_gradient(|d, _chart_range, _chart_to_bar| {
+        let c = d.color;
+        [
+            linear_color_stop(c.opacity(0.3), 0.0),
+            linear_color_stop(c, 1.0),
+        ]
+    })
+
+// Chart-wide gradient: each bar shows the slice of a single gradient
+// spanning the chart's full data range. Stops outside `[0, 1]` are clipped
+// to the bar with colors interpolated at the clip points.
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .fill_gradient(|d, chart_range, chart_to_bar| {
+        let c = d.color;
+        [
+            linear_color_stop(c.opacity(0.3), chart_to_bar(*chart_range.start())),
+            linear_color_stop(c,              chart_to_bar(*chart_range.end())),
+        ]
+    })
+```
+
+`fill` and `fill_gradient` are mutually exclusive — setting one clears the other.
 
 #### Bar Chart Alignment
 
@@ -499,7 +541,7 @@ fn sales_dashboard(data: Vec<SalesData>, cx: &mut Context<Self>) -> impl IntoEle
                 BarChart::new(data)
                     .band(|d| d.region.clone())
                     .value(|d| d.revenue)
-                    .fill(|d| match d.region.as_str() {
+                    .fill(|d, _, _, _| match d.region.as_str() {
                         "North" => cx.theme().chart_1,
                         "South" => cx.theme().chart_2,
                         "East" => cx.theme().chart_3,
@@ -613,7 +655,7 @@ fn stock_chart(ohlc_data: Vec<StockOHLC>, price_data: Vec<StockData>, cx: &mut C
                 BarChart::new(price_data)
                     .band(|d| d.date.clone())
                     .value(|d| d.volume as f64)
-                    .fill(|d| {
+                    .fill(|d, _, _, _| {
                         if d.volume > 1000000 {
                             cx.theme().chart_1
                         } else {
@@ -651,7 +693,7 @@ let colors = [
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
-    .fill(|d| colors[d.category_index % colors.len()])
+    .fill(|d, _, _, _| colors[d.category_index % colors.len()])
 ```
 
 ### Responsive Design

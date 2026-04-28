@@ -234,7 +234,7 @@ impl Render for ChartStory {
                         BarChart::new(self.monthly_devices.clone())
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
-                            .fill(move |d| d.color(color)),
+                            .fill(move |d, _, _, _| d.color(color)),
                         false,
                         cx,
                     ))
@@ -258,7 +258,7 @@ impl Render for ChartStory {
                         cx,
                     ))
                     .child(chart_container(
-                        "Bar Chart - Label",
+                        "Bar Chart - Bottom aligned",
                         BarChart::new(self.monthly_devices.clone())
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
@@ -295,7 +295,150 @@ impl Render for ChartStory {
                             .alignment(BarAlignment::Right),
                         false,
                         cx,
-                    )),
+                    ))
+                    .child({
+                        let c = cx.theme().chart_1;
+                        chart_container(
+                            "Bar Chart - Gradient (Bottom)",
+                            BarChart::new(self.monthly_devices.clone())
+                                .band(|d| d.month.clone())
+                                .value(|d| d.desktop)
+                                .label(|d| d.desktop.to_string())
+                                .fill_gradient(move |_, chart_range, chart_to_bar| {
+                                    [
+                                        linear_color_stop(
+                                            c.opacity(0.3),
+                                            chart_to_bar(*chart_range.start()),
+                                        ),
+                                        linear_color_stop(c, chart_to_bar(*chart_range.end())),
+                                    ]
+                                }),
+                            false,
+                            cx,
+                        )
+                    })
+                    .child({
+                        let c = cx.theme().chart_1;
+                        chart_container(
+                            "Bar Chart - Gradient (Top)",
+                            BarChart::new(self.monthly_devices.clone())
+                                .band(|d| d.month.clone())
+                                .value(|d| d.desktop)
+                                .label(|d| d.desktop.to_string())
+                                .alignment(BarAlignment::Top)
+                                .fill_gradient(move |_, chart_range, chart_to_bar| {
+                                    [
+                                        linear_color_stop(
+                                            c.opacity(0.3),
+                                            chart_to_bar(*chart_range.start()),
+                                        ),
+                                        linear_color_stop(c, chart_to_bar(*chart_range.end())),
+                                    ]
+                                }),
+                            false,
+                            cx,
+                        )
+                    })
+                    .child({
+                        let c = cx.theme().chart_1;
+                        chart_container(
+                            "Bar Chart - Gradient (Left)",
+                            BarChart::new(self.monthly_devices.clone())
+                                .band(|d| d.month.clone())
+                                .value(|d| d.desktop)
+                                .label(|d| d.desktop.to_string())
+                                .alignment(BarAlignment::Left)
+                                .fill_gradient(move |_, chart_range, chart_to_bar| {
+                                    [
+                                        linear_color_stop(
+                                            c.opacity(0.3),
+                                            chart_to_bar(*chart_range.start()),
+                                        ),
+                                        linear_color_stop(c, chart_to_bar(*chart_range.end())),
+                                    ]
+                                }),
+                            false,
+                            cx,
+                        )
+                    })
+                    .child({
+                        let c = cx.theme().chart_1;
+                        chart_container(
+                            "Bar Chart - Gradient (Right)",
+                            BarChart::new(self.monthly_devices.clone())
+                                .band(|d| d.month.clone())
+                                .value(|d| d.desktop)
+                                .label(|d| d.desktop.to_string())
+                                .alignment(BarAlignment::Right)
+                                .fill_gradient(move |_, chart_range, chart_to_bar| {
+                                    [
+                                        linear_color_stop(
+                                            c.opacity(0.3),
+                                            chart_to_bar(*chart_range.start()),
+                                        ),
+                                        linear_color_stop(c, chart_to_bar(*chart_range.end())),
+                                    ]
+                                }),
+                            false,
+                            cx,
+                        )
+                    })
+                    .child({
+                        let c = cx.theme().chart_1;
+                        chart_container(
+                            "Bar Chart - Gradient (Per-bar)",
+                            BarChart::new(self.monthly_devices.clone())
+                                .band(|d| d.month.clone())
+                                .value(|d| d.desktop)
+                                .label(|d| d.desktop.to_string())
+                                .fill_gradient(move |_, _, _| {
+                                    [
+                                        linear_color_stop(c.opacity(0.3), 0.),
+                                        linear_color_stop(c, 1.),
+                                    ]
+                                }),
+                            false,
+                            cx,
+                        )
+                    })
+                    .child({
+                        let c1 = cx.theme().chart_1;
+                        let c2 = cx.theme().chart_5;
+                        chart_container(
+                            "Bar Chart - Gradient (Diagonal, across bars)",
+                            BarChart::new(self.monthly_devices.clone())
+                                .band(|d| d.month.clone())
+                                .value(|d| d.desktop)
+                                .label(|d| d.desktop.to_string())
+                                .fill(move |_, bar, chart, _| {
+                                    // Project the bar's corners onto the chart's
+                                    // bottom-left → top-right diagonal so each bar
+                                    // shows the slice of a chart-wide diagonal
+                                    // gradient corresponding to its own footprint.
+                                    let w = chart.size.width.max(f32::EPSILON);
+                                    let h = chart.size.height.max(f32::EPSILON);
+                                    let denom = w * w + h * h;
+                                    let project = |x: f32, y: f32| -> f32 {
+                                        (x * w + (h - y) * h) / denom
+                                    };
+                                    let lo = project(bar.origin.x, bar.origin.y + bar.size.height);
+                                    let hi = project(bar.origin.x + bar.size.width, bar.origin.y);
+                                    let lerp = |t: f32| Hsla {
+                                        h: c1.h + (c2.h - c1.h) * t,
+                                        s: c1.s + (c2.s - c1.s) * t,
+                                        l: c1.l + (c2.l - c1.l) * t,
+                                        a: c1.a + (c2.a - c1.a) * t,
+                                    };
+                                    linear_gradient(
+                                        45.,
+                                        linear_color_stop(lerp(lo), 0.),
+                                        linear_color_stop(lerp(hi), 1.),
+                                    )
+                                }),
+                            false,
+                            cx,
+                        )
+                    }),
             )
             .child(Divider::horizontal())
             .child(

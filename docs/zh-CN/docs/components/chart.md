@@ -97,10 +97,14 @@ BarChart::new(data)
 
 ```rust
 // 自定义填充颜色
+//
+// `fill` 闭包接收四个参数：数据项、柱子的像素边界（相对于图表原点）、
+// 图表的像素边界，以及柱子的 `BarAlignment`。返回值可以是任何能转换为
+// `Background` 的类型（纯色、渐变、图案等）。
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
-    .fill(|d| d.color)
+    .fill(|d, _bar_bounds, _chart_bounds, _alignment| d.color)
 
 // 显示数值标签
 BarChart::new(data)
@@ -120,6 +124,43 @@ BarChart::new(data)
     .value(|d| d.value)
     .label_axis(false)
 ```
+
+#### 柱状图渐变填充
+
+如需让渐变方向跟随柱子方向，请使用 `fill_gradient`。闭包接收三个参数：数据项、图表的完整数据范围（`chart_range`），以及一个 `chart_to_bar` 辅助函数（将图表数值坐标映射为柱子局部的渐变位置，其中 `0.0` 表示柱子的基线端，`1.0` 表示尖端）。渐变方向由柱子的 `BarAlignment` 推导，使 stop-0 始终位于基线端、stop-1 位于尖端。
+
+```rust
+use gpui::linear_color_stop;
+
+// 单柱渐变：每个柱子都从半透明基线渐变到完全不透明的尖端，
+// 与该柱子的具体数值无关。
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .fill_gradient(|d, _chart_range, _chart_to_bar| {
+        let c = d.color;
+        [
+            linear_color_stop(c.opacity(0.3), 0.0),
+            linear_color_stop(c, 1.0),
+        ]
+    })
+
+// 跨图表渐变：每根柱子展示同一条覆盖整个图表数值范围的渐变中
+// 对应自身值域的那一段。超出 `[0, 1]` 的 stop 会被裁剪到柱子内，
+// 颜色会在裁剪点处插值，使整体效果保持连续。
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .fill_gradient(|d, chart_range, chart_to_bar| {
+        let c = d.color;
+        [
+            linear_color_stop(c.opacity(0.3), chart_to_bar(*chart_range.start())),
+            linear_color_stop(c,              chart_to_bar(*chart_range.end())),
+        ]
+    })
+```
+
+`fill` 与 `fill_gradient` 互斥——设置其中一个会清空另一个。
 
 #### 柱状图对齐方式
 
@@ -470,7 +511,7 @@ fn sales_dashboard(data: Vec<SalesData>, cx: &mut Context<Self>) -> impl IntoEle
                 BarChart::new(data)
                     .band(|d| d.region.clone())
                     .value(|d| d.revenue)
-                    .fill(|d| match d.region.as_str() {
+                    .fill(|d, _, _, _| match d.region.as_str() {
                         "North" => cx.theme().chart_1,
                         "South" => cx.theme().chart_2,
                         "East" => cx.theme().chart_3,
@@ -584,7 +625,7 @@ fn stock_chart(ohlc_data: Vec<StockOHLC>, price_data: Vec<StockData>, cx: &mut C
                 BarChart::new(price_data)
                     .band(|d| d.date.clone())
                     .value(|d| d.volume as f64)
-                    .fill(|d| {
+                    .fill(|d, _, _, _| {
                         if d.volume > 1000000 {
                             cx.theme().chart_1
                         } else {
@@ -620,7 +661,7 @@ let colors = [
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
-    .fill(|d| colors[d.category_index % colors.len()])
+    .fill(|d, _, _, _| colors[d.category_index % colors.len()])
 ```
 
 ### 响应式容器
