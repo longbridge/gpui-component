@@ -1,17 +1,21 @@
+use std::{cell::RefCell, rc::Rc, time::Duration};
+
 use gpui::{
     Anchor, Animation, AnimationExt as _, AnyElement, App, Bounds, Div, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, Stateful,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString,
+    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px,
 };
+use rust_i18n::t;
 use smallvec::SmallVec;
-use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use super::{Tab, TabVariant};
 use crate::animation::{Lerp, ease_in_out_cubic};
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
-use crate::{ActiveTheme, ElementExt, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
+use crate::{
+    ActiveTheme, ElementExt, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex,
+};
 
 struct TabIndicatorBounds {
     container: Bounds<Pixels>,
@@ -393,7 +397,7 @@ impl RenderOnce for TabBar {
         let indicator_element = self.render_indicator(&bounds_rc, window, cx);
 
         let has_suffix_or_menu = self.suffix.is_some() || self.menu;
-        let mut item_labels = Vec::new();
+        let mut item_metas: Vec<(Option<SharedString>, Option<Icon>, bool)> = Vec::new();
         let selected_index = self.selected_index;
         let on_click = self.on_click.clone();
 
@@ -443,7 +447,11 @@ impl RenderOnce for TabBar {
                             })
                             .when_some(indicator_element, |this, ind| this.child(ind))
                             .children(self.children.into_iter().enumerate().map(|(ix, child)| {
-                                item_labels.push((child.label.clone(), child.disabled));
+                                item_metas.push((
+                                    child.label.clone(),
+                                    child.icon.clone(),
+                                    child.disabled,
+                                ));
                                 let tab_bar_prefix = child.tab_bar_prefix.unwrap_or(true);
                                 let mut tab = child
                                     .ix(ix)
@@ -486,17 +494,23 @@ impl RenderOnce for TabBar {
                         .icon(IconName::ChevronDown)
                         .dropdown_menu(move |mut this, _, _| {
                             this = this.scrollable(true);
-                            for (ix, (label, disabled)) in item_labels.iter().enumerate() {
+                            for (ix, (label, icon, disabled)) in item_metas.iter().enumerate() {
+                                let base = if let Some(label) = label.clone() {
+                                    PopupMenuItem::new(label)
+                                } else if let Some(icon) = icon.clone() {
+                                    PopupMenuItem::element(move |_, _| icon.clone())
+                                } else {
+                                    PopupMenuItem::new(t!("Dock.Unnamed"))
+                                };
                                 this = this.item(
-                                    PopupMenuItem::new(label.clone().unwrap_or_default())
-                                        .checked(selected_index == Some(ix))
+                                    base.checked(selected_index == Some(ix))
                                         .disabled(*disabled)
                                         .when_some(on_click.clone(), |this, on_click| {
                                             this.on_click(move |_, window, cx| {
                                                 on_click(&ix, window, cx)
                                             })
                                         }),
-                                )
+                                );
                             }
 
                             this
