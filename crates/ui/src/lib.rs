@@ -33,6 +33,7 @@ pub mod checkbox;
 pub mod clipboard;
 pub mod collapsible;
 pub mod color_picker;
+pub mod combo_box;
 pub mod description_list;
 pub mod dialog;
 pub mod dock;
@@ -112,6 +113,7 @@ pub fn init(cx: &mut App) {
     date_picker::init(cx);
     dock::init(cx);
     sheet::init(cx);
+    combo_box::init(cx);
     select::init(cx);
     input::init(cx);
     list::init(cx);

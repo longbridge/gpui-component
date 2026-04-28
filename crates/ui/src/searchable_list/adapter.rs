@@ -1,6 +1,4 @@
-use gpui::{
-    AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window, div,
-};
+use gpui::{AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window, div};
 
 use crate::{
     ActiveTheme, Disableable as _, Icon, IconName, IndexPath, Sizable as _, Size, StyleSized as _,
@@ -114,6 +112,16 @@ impl<D: SearchableListDelegate + 'static> ListDelegate for SearchableListAdapter
             .is_item_checked(ix, item, &self.selection_snapshot, cx);
         let disabled = !self.delegate.is_item_enabled(ix, item, cx);
         let size = self.size;
+
+        if let Some(el) = self.delegate.render_item(ix, item, is_checked, window, cx) {
+            return Some(
+                SearchableListItemEl::new(ix.row)
+                    .disabled(disabled)
+                    .with_size(size)
+                    .child(el),
+            );
+        }
+
         let check_icon = self
             .check_icon
             .clone()
