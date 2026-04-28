@@ -1,7 +1,4 @@
-use gpui::{
-    px, App, IntoElement, RenderOnce, Styled, StyleRefinement, Window, div,
-    prelude::FluentBuilder as _,
-};
+use gpui::{App, IntoElement, RenderOnce, StyleRefinement, Styled, Window, div, px};
 
 use crate::{ActiveTheme, StyledExt};
 
@@ -49,7 +46,7 @@ impl RenderOnce for Separator {
         let color = cx.theme().border;
         let base = match self.orientation {
             Orientation::Horizontal => div().w_full().h(px(1.)).bg(color),
-            Orientation::Vertical   => div().h_full().w(px(1.)).bg(color),
+            Orientation::Vertical => div().h_full().w(px(1.)).bg(color),
         };
         base.refine_style(&self.style)
     }
