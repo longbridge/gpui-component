@@ -8,6 +8,7 @@ index.scip
 node_modules/
 .claude/worktrees/
 docs/superpowers/
+wr.sh
 
 # WASM build artifacts
 crates/story-web/www/src/wasm/*.js
