@@ -1,4 +1,6 @@
-use gpui::{App, Bounds, Hsla, PaintQuad, Pixels, Point, Window, fill, point, px};
+use gpui::{
+    App, Bounds, Corners, Hsla, PaintQuad, Pixels, Point, Window, fill, point, px,
+};
 
 use crate::plot::{
     label::{PlotLabel, TEXT_GAP, TEXT_HEIGHT, TEXT_SIZE, Text},
@@ -40,6 +42,7 @@ pub struct Bar<T> {
     value: Box<dyn Fn(&T) -> Option<f32>>,
     fill: Box<dyn Fn(&T) -> Hsla>,
     label: Option<Box<dyn Fn(&T, Point<Pixels>) -> Vec<Text>>>,
+    corner_radii: Corners<Pixels>,
 }
 
 impl<T> Default for Bar<T> {
@@ -53,6 +56,7 @@ impl<T> Default for Bar<T> {
             value: Box::new(|_| None),
             fill: Box::new(|_| gpui::black()),
             label: None,
+            corner_radii: Corners::all(px(0.)),
         }
     }
 }
@@ -134,6 +138,15 @@ impl<T> Bar<T> {
         self
     }
 
+    /// Set the corner radii applied to every bar rectangle.
+    ///
+    /// Use [`Corners::all`] for uniform rounding, or construct `Corners` manually to
+    /// round only specific corners (e.g. just the tip end of each bar).
+    pub fn corner_radii(mut self, corner_radii: impl Into<Corners<Pixels>>) -> Self {
+        self.corner_radii = corner_radii.into();
+        self
+    }
+
     fn path(&self, bounds: &Bounds<Pixels>) -> (Vec<PaintQuad>, PlotLabel) {
         let origin = bounds.origin;
         let mut graph = vec![];
@@ -170,7 +183,7 @@ impl<T> Bar<T> {
             };
 
             let color = (self.fill)(v);
-            graph.push(fill(Bounds::from_corners(p1, p2), color));
+            graph.push(fill(Bounds::from_corners(p1, p2), color).corner_radii(self.corner_radii));
 
             if let Some(label) = &self.label {
                 let label_origin = label_origin(self.alignment, cross, base, value, bw);

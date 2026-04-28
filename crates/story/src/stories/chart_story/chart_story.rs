@@ -248,6 +248,16 @@ impl Render for ChartStory {
                         )
                     })
                     .child(chart_container(
+                        "Bar Chart - Rounded corners",
+                        BarChart::new(self.monthly_devices.clone())
+                            .band(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .label(|d| d.desktop.to_string())
+                            .corner_radii(px(8.)),
+                        false,
+                        cx,
+                    ))
+                    .child(chart_container(
                         "Bar Chart - Label",
                         BarChart::new(self.monthly_devices.clone())
                             .band(|d| d.month.clone())

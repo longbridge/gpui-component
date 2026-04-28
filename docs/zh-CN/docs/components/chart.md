@@ -153,6 +153,33 @@ BarChart::new(data)
     .alignment(BarAlignment::Right)
 ```
 
+#### 柱状图圆角
+
+为柱状条形设置圆角。可传入任意可转换为 `Corners<Pixels>` 的值——
+使用单个 `px(..)` 表示四角统一圆角，或手动构造 `Corners`
+仅对特定角进行圆角处理（例如仅对柱顶一端进行圆角）。
+
+```rust
+use gpui::{px, Corners};
+
+// 所有柱条统一 4px 圆角
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .corner_radii(px(4.))
+
+// 仅顶部圆角（适用于底部对齐柱状图的柱顶一端）
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .corner_radii(Corners {
+        top_left: px(4.),
+        top_right: px(4.),
+        bottom_left: px(0.),
+        bottom_right: px(0.),
+    })
+```
+
 ### AreaChart
 
 面积图类似折线图，但会填充曲线下方的区域。

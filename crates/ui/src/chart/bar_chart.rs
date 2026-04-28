@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{App, Bounds, Hsla, Pixels, SharedString, TextAlign, Window, px};
+use gpui::{App, Bounds, Corners, Hsla, Pixels, SharedString, TextAlign, Window, px};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
@@ -32,6 +32,7 @@ where
     label_axis: bool,
     grid: bool,
     alignment: BarAlignment,
+    corner_radii: Corners<Pixels>,
 }
 
 impl<T, B, V> BarChart<T, B, V>
@@ -53,6 +54,7 @@ where
             label_axis: true,
             grid: true,
             alignment: BarAlignment::default(),
+            corner_radii: Corners::all(px(0.)),
         }
     }
 
@@ -107,6 +109,15 @@ where
     /// Default is [`BarAlignment::Bottom`].
     pub fn alignment(mut self, alignment: BarAlignment) -> Self {
         self.alignment = alignment;
+        self
+    }
+
+    /// Set the corner radii applied to every bar rectangle.
+    ///
+    /// Use [`Corners::all`] for uniform rounding, or construct [`Corners`] manually
+    /// to round only specific corners (e.g. just the tip end of each bar).
+    pub fn corner_radii(mut self, corner_radii: impl Into<Corners<Pixels>>) -> Self {
+        self.corner_radii = corner_radii.into();
         self
     }
 }
@@ -273,6 +284,7 @@ where
             .cross(move |d| band_scale.tick(&band_fn_cloned(d)))
             .base(move |_| baseline)
             .value(move |d| value_scale.tick(&value_fn_cloned(d)))
+            .corner_radii(self.corner_radii)
             .fill(move |d| fill.as_ref().map(|f| f(d)).unwrap_or(default_fill));
 
         if let Some(label) = self.label.as_ref() {

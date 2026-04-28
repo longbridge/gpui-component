@@ -160,6 +160,33 @@ BarChart::new(data)
     .alignment(BarAlignment::Right)
 ```
 
+#### Bar Chart Corner Radii
+
+Round the bar rectangles. Pass any value convertible into `Corners<Pixels>` —
+use a single `px(..)` for uniform rounding, or construct `Corners` manually to
+round only specific corners (e.g. just the tip end of each bar).
+
+```rust
+use gpui::{px, Corners};
+
+// Uniform 4px rounded corners on every bar
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .corner_radii(px(4.))
+
+// Round only the top corners (tip end for bottom-aligned bars)
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .corner_radii(Corners {
+        top_left: px(4.),
+        top_right: px(4.),
+        bottom_left: px(0.),
+        bottom_right: px(0.),
+    })
+```
+
 ### AreaChart
 
 An area chart displays quantitative data visually, similar to a line chart but with the area below the line filled.
