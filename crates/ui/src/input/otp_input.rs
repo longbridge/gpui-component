@@ -5,7 +5,8 @@ use gpui::{
     prelude::FluentBuilder, px,
 };
 
-use super::{InputEvent, blink_cursor::BlinkCursor, input::input_style};
+use super::{InputEvent, blink_cursor::BlinkCursor, input::input_style, state::InputState};
+use crate::Root;
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 
 pub struct OtpState {
@@ -14,6 +15,10 @@ pub struct OtpState {
     blink_cursor: Entity<BlinkCursor>,
     masked: bool,
     length: usize,
+    // Shadow InputState written into Root::focused_input while this OTP has focus.
+    // Never rendered, so its FocusHandle stays out of the focus tree and tab order.
+    // Its value mirrors self.value.
+    input_state: Entity<InputState>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -22,6 +27,7 @@ impl OtpState {
     pub fn new(length: usize, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let blink_cursor = cx.new(|_| BlinkCursor::new());
+        let input_state = cx.new(|cx| InputState::new(window, cx));
 
         let _subscriptions = vec![
             // Observe the blink cursor to repaint the view when it changes.
@@ -47,6 +53,7 @@ impl OtpState {
             value: SharedString::default(),
             blink_cursor: blink_cursor.clone(),
             masked: false,
+            input_state,
             _subscriptions,
         }
     }
@@ -61,11 +68,19 @@ impl OtpState {
     pub fn set_value(
         &mut self,
         value: impl Into<SharedString>,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.value = value.into();
+        self.sync_to_input_state(window, cx);
         cx.notify();
+    }
+
+    fn sync_to_input_state(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let value = self.value.clone();
+        self.input_state.update(cx, |state, cx| {
+            state.set_value(value, window, cx);
+        });
     }
 
     /// Return the value of the OTP Input.
@@ -151,6 +166,7 @@ impl OtpState {
 
         self.pause_blink_cursor(cx);
         self.value = SharedString::from(chars.iter().collect::<String>());
+        self.sync_to_input_state(window, cx);
 
         if self.value.chars().count() == self.length {
             cx.emit(InputEvent::Change);
@@ -158,17 +174,37 @@ impl OtpState {
         cx.notify()
     }
 
-    fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.sync_to_input_state(window, cx);
+
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });
+
+        let input_state = self.input_state.clone();
+        Root::update(window, cx, |root, _, cx| {
+            if root.focused_input.as_ref() != Some(&input_state) {
+                root.focused_input = Some(input_state);
+                cx.notify();
+            }
+        });
+
         cx.emit(InputEvent::Focus);
     }
 
-    fn on_blur(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });
+
+        let input_state = self.input_state.clone();
+        Root::update(window, cx, |root, _, cx| {
+            if root.focused_input.as_ref() == Some(&input_state) {
+                root.focused_input = None;
+                cx.notify();
+            }
+        });
+
         cx.emit(InputEvent::Blur);
     }
 

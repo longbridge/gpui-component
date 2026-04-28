@@ -496,10 +496,9 @@ impl LanguageRegistry {
         // Try to get by name first, there may have a custom language registered
         // Then try to get built-in language to support short language names, e.g. "js" for "javascript"
         let languages = self.languages.lock().unwrap();
-        languages
-            .get(name)
-            .or_else(|| languages.get(Language::from_str(name).name()))
-            .cloned()
+        languages.get(name).cloned().or_else(|| {
+            Language::from_name(name).and_then(|language| languages.get(language.name()).cloned())
+        })
     }
 }
 
@@ -518,9 +517,30 @@ mod tests {
         );
 
         assert!(registry.language("foo").is_some());
-        assert!(registry.language("rust").is_some());
-        assert!(registry.language("rs").is_some());
-        assert!(registry.language("javascript").is_some());
-        assert!(registry.language("js").is_some());
+        assert!(registry.language("json").is_some());
+        assert!(registry.language("text").is_some());
+        assert!(registry.language("unknown").is_none());
+
+        #[cfg(feature = "tree-sitter-rust")]
+        {
+            assert!(registry.language("rust").is_some());
+            assert!(registry.language("rs").is_some());
+        }
+        #[cfg(not(feature = "tree-sitter-rust"))]
+        {
+            assert!(registry.language("rust").is_none());
+            assert!(registry.language("rs").is_none());
+        }
+
+        #[cfg(feature = "tree-sitter-javascript")]
+        {
+            assert!(registry.language("javascript").is_some());
+            assert!(registry.language("js").is_some());
+        }
+        #[cfg(not(feature = "tree-sitter-javascript"))]
+        {
+            assert!(registry.language("javascript").is_none());
+            assert!(registry.language("js").is_none());
+        }
     }
 }

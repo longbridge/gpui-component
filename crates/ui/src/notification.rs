@@ -73,6 +73,7 @@ pub struct Notification {
     action_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> Button>>,
     content_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> AnyElement>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+    on_close: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
     closing: bool,
 }
 
@@ -127,6 +128,7 @@ impl Notification {
             action_builder: None,
             content_builder: None,
             on_click: None,
+            on_close: None,
             closing: false,
         }
     }
@@ -219,6 +221,18 @@ impl Notification {
         self
     }
 
+    /// Set the close callback of the notification.
+    ///
+    /// Triggered when the notification is closed by any means
+    /// (close button, middle-click, autohide, click handler, or programmatic close).
+    pub fn on_close(
+        mut self,
+        on_close: impl Fn(&mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_close = Some(Rc::new(on_close));
+        self
+    }
+
     /// Set the action button of the notification.
     ///
     /// When an action is set, the notification will not autohide.
@@ -232,26 +246,26 @@ impl Notification {
     }
 
     /// Dismiss the notification.
-    pub fn dismiss(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.closing {
             return;
         }
         self.closing = true;
         cx.notify();
 
+        let on_close = self.on_close.clone();
         // Dismiss the notification after 0.15s to show the animation.
-        cx.spawn(async move |view, cx| {
+        cx.spawn_in(window, async move |view, cx| {
             cx.background_executor()
                 .timer(Duration::from_secs_f32(0.15))
                 .await;
-            cx.update(|cx| {
-                if let Some(view) = view.upgrade() {
-                    view.update(cx, |view, cx| {
-                        view.closing = false;
-                        cx.emit(DismissEvent);
-                    });
-                }
-            })
+            _ = view.update_in(cx, |view, _, cx| {
+                view.closing = false;
+                cx.emit(DismissEvent);
+            });
+            if let Some(on_close) = on_close {
+                _ = cx.update(|window, cx| on_close(window, cx));
+            }
         })
         .detach();
     }

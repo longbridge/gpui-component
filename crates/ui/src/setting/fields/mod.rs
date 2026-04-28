@@ -60,6 +60,7 @@ pub enum SettingFieldType {
     Input,
     Dropdown {
         options: Vec<(SharedString, SharedString)>,
+        scrollable: bool,
     },
     Element {
         element: Rc<dyn SettingFieldElement<Element = AnyElement>>,
@@ -95,8 +96,16 @@ impl SettingFieldType {
     #[inline]
     pub(super) fn dropdown_options(&self) -> Option<&Vec<(SharedString, SharedString)>> {
         match self {
-            SettingFieldType::Dropdown { options } => Some(options),
+            SettingFieldType::Dropdown { options, .. } => Some(options),
             _ => None,
+        }
+    }
+
+    #[inline]
+    pub(super) fn dropdown_scrollable(&self) -> bool {
+        match self {
+            SettingFieldType::Dropdown { scrollable, .. } => *scrollable,
+            _ => false,
         }
     }
 
@@ -159,6 +168,9 @@ impl SettingField<SharedString> {
     }
 
     /// Create a new Dropdown field with the given options.
+    ///
+    /// The popup menu does not scroll. For long option lists that may exceed
+    /// the viewport, use [`Self::scrollable_dropdown`] instead.
     pub fn dropdown<V, S>(
         options: Vec<(SharedString, SharedString)>,
         value: V,
@@ -168,7 +180,36 @@ impl SettingField<SharedString> {
         V: Fn(&App) -> SharedString + 'static,
         S: Fn(SharedString, &mut App) + 'static,
     {
-        Self::new(SettingFieldType::Dropdown { options }, value, set_value)
+        Self::new(
+            SettingFieldType::Dropdown {
+                options,
+                scrollable: false,
+            },
+            value,
+            set_value,
+        )
+    }
+
+    /// Create a new Dropdown field whose popup menu scrolls when its content
+    /// exceeds the viewport. Use this for long option lists where the
+    /// non-scrolling [`Self::dropdown`] would push items below the fold.
+    pub fn scrollable_dropdown<V, S>(
+        options: Vec<(SharedString, SharedString)>,
+        value: V,
+        set_value: S,
+    ) -> Self
+    where
+        V: Fn(&App) -> SharedString + 'static,
+        S: Fn(SharedString, &mut App) + 'static,
+    {
+        Self::new(
+            SettingFieldType::Dropdown {
+                options,
+                scrollable: true,
+            },
+            value,
+            set_value,
+        )
     }
 
     /// Create a new setting field with the given custom element that implements [`SettingFieldElement`] trait.

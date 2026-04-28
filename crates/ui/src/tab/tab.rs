@@ -394,7 +394,7 @@ pub struct Tab {
     ix: usize,
     base: Div,
     pub(super) label: Option<SharedString>,
-    icon: Option<Icon>,
+    pub(super) icon: Option<Icon>,
     prefix: Option<AnyElement>,
     pub(super) tab_bar_prefix: Option<bool>,
     suffix: Option<AnyElement>,

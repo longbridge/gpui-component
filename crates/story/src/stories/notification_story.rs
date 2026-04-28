@@ -1,6 +1,6 @@
-use gpui::{ Anchor,
-    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    ParentElement, Render, Styled, Window,
+use gpui::{
+    Anchor, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
+    IntoElement, ParentElement, Render, Styled, Window,
 };
 
 use gpui_component::{
@@ -179,7 +179,10 @@ impl Render for NotificationStory {
                             window.push_notification(
                                 Notification::info("This is a unique notification.")
                                     .id::<NotificationStory>()
-                                    .message("This is a unique notification."),
+                                    .message("This is a unique notification.")
+                                    .on_close(|_, _| {
+                                        println!("Notification closed");
+                                    }),
                                 cx,
                             )
                         })),
