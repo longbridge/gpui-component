@@ -8,7 +8,7 @@ use crate::{
     ActiveTheme,
     plot::{
         AXIS_GAP, AxisLabelSide, Grid, Plot, PlotAxis,
-        label::Text,
+        label::{Text, TEXT_GAP, TEXT_SIZE, measure_text_width},
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::{Bar, BarAlignment},
     },
@@ -141,30 +141,62 @@ where
         .padding_outer(0.2);
         let band_width = band_scale.band_width();
 
-        // Reserve `axis_gap` on the side of the value axis where the band-axis
-        // labels render so labels don't overflow the plot bounds.
         let value_dim = if is_horizontal {
             total_width
         } else {
             total_height
         };
-        let value_padding = 10.;
+        // For horizontal charts the band labels (category names) are rendered
+        // along the value axis and can be arbitrarily wide, so we measure the
+        // actual maximum label width instead of using a fixed constant.
+        // Similarly, value labels (numbers) at the bar ends are measured so the
+        // scale range is always shrunk by exactly the right amount.
+        let (band_gap, value_end_gap) = if is_horizontal {
+            let font_size = px(TEXT_SIZE);
+            let band_gap = if self.label_axis {
+                let max_w = self
+                    .data
+                    .iter()
+                    .map(|v| {
+                        let s: SharedString = band_fn(v).into();
+                        measure_text_width(&s, font_size, window)
+                    })
+                    .fold(0f32, f32::max);
+                // TEXT_GAP: space between axis line and label start/end.
+                max_w + TEXT_GAP * 2.
+            } else {
+                0.
+            };
+            let value_end_gap = if let Some(label_fn) = self.label.as_ref() {
+                let max_w = self
+                    .data
+                    .iter()
+                    .map(|v| measure_text_width(&label_fn(v), font_size, window))
+                    .fold(0f32, f32::max);
+                max_w + TEXT_GAP * 2.
+            } else {
+                TEXT_GAP * 4.
+            };
+            (band_gap, value_end_gap)
+        } else {
+            (axis_gap, 10.)
+        };
         let (range, baseline) = match alignment {
             BarAlignment::Bottom => {
                 let baseline = value_dim - axis_gap;
-                (vec![baseline, value_padding], baseline)
+                (vec![baseline, 10.], baseline)
             }
             BarAlignment::Top => {
                 let baseline = axis_gap;
-                (vec![baseline, value_dim - value_padding], baseline)
+                (vec![baseline, value_dim - 10.], baseline)
             }
             BarAlignment::Left => {
-                let baseline = axis_gap;
-                (vec![baseline, value_dim - value_padding], baseline)
+                let baseline = band_gap;
+                (vec![baseline, value_dim - value_end_gap], baseline)
             }
             BarAlignment::Right => {
-                let baseline = value_dim - axis_gap;
-                (vec![baseline, value_padding], baseline)
+                let baseline = value_dim - band_gap;
+                (vec![baseline, value_end_gap], baseline)
             }
         };
         let value_scale = ScaleLinear::new(
@@ -208,8 +240,10 @@ where
         // across the value range and excluding the line at the baseline.
         if self.grid {
             let far = match alignment {
-                BarAlignment::Bottom | BarAlignment::Right => value_padding,
-                BarAlignment::Top | BarAlignment::Left => value_dim - value_padding,
+                BarAlignment::Bottom => 10.,
+                BarAlignment::Top => value_dim - 10.,
+                BarAlignment::Left => value_dim - value_end_gap,
+                BarAlignment::Right => value_end_gap,
             };
             let grid_steps: Vec<f32> = (0..4)
                 .map(|i| far + (baseline - far) * i as f32 / 4.0)

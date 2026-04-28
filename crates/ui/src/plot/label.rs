@@ -11,6 +11,33 @@ pub const TEXT_SIZE: f32 = 10.;
 pub const TEXT_GAP: f32 = 2.;
 pub const TEXT_HEIGHT: f32 = TEXT_SIZE + TEXT_GAP;
 
+/// Returns the rendered width of `text` at `font_size` using the window's
+/// current text style.  Used for layout calculations that need to reserve
+/// space for labels before the scale ranges are fixed.
+pub fn measure_text_width(text: &SharedString, font_size: Pixels, window: &mut Window) -> f32 {
+    if text.is_empty() {
+        return 0.;
+    }
+    let text_run = TextRun {
+        len: text.len(),
+        font: window.text_style().font(),
+        color: Hsla {
+            h: 0.,
+            s: 0.,
+            l: 0.,
+            a: 1.,
+        },
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    window
+        .text_system()
+        .shape_line(text.clone(), font_size, &[text_run], None)
+        .width()
+        .as_f32()
+}
+
 pub struct Text {
     pub text: SharedString,
     pub origin: Point<Pixels>,
