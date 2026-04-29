@@ -90,14 +90,14 @@ LineChart::new(data)
 
 ### BarChart
 
-A bar chart uses rectangular bars to show comparisons among categories.
+A bar chart uses rectangular bars to show comparisons among categories. Bars can be oriented vertically or horizontally via the `alignment` option.
 
 #### Basic Bar Chart
 
 ```rust
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
 ```
 
 #### Bar Chart Customization
@@ -105,21 +105,59 @@ BarChart::new(data)
 ```rust
 // Custom fill colors
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .fill(|d| d.color)
 
-// With labels on bars
+// With value labels on bars
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .label(|d| format!("{}", d.value))
 
 // Custom tick spacing
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .tick_margin(2)
+
+// Hide the band-axis line and labels
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .label_axis(false)
+```
+
+#### Bar Chart Alignment
+
+`BarAlignment` controls the bar orientation and the side where the baseline sits. Import it from `gpui_component::plot::shape`.
+
+```rust
+use gpui_component::plot::shape::BarAlignment;
+
+// Default: vertical bars growing upward from the bottom
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Bottom)
+
+// Vertical bars growing downward from the top
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Top)
+
+// Horizontal bars growing rightward from the left
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Left)
+
+// Horizontal bars growing leftward from the right
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Right)
 ```
 
 ### AreaChart
@@ -432,8 +470,8 @@ fn sales_dashboard(data: Vec<SalesData>, cx: &mut Context<Self>) -> impl IntoEle
             chart_container(
                 "Regional Performance",
                 BarChart::new(data)
-                    .x(|d| d.region.clone())
-                    .y(|d| d.revenue)
+                    .band(|d| d.region.clone())
+                    .value(|d| d.revenue)
                     .fill(|d| match d.region.as_str() {
                         "North" => cx.theme().chart_1,
                         "South" => cx.theme().chart_2,
@@ -546,8 +584,8 @@ fn stock_chart(ohlc_data: Vec<StockOHLC>, price_data: Vec<StockData>, cx: &mut C
             chart_container(
                 "Trading Volume",
                 BarChart::new(price_data)
-                    .x(|d| d.date.clone())
-                    .y(|d| d.volume as f64)
+                    .band(|d| d.date.clone())
+                    .value(|d| d.volume as f64)
                     .fill(|d| {
                         if d.volume > 1000000 {
                             cx.theme().chart_1
@@ -584,8 +622,8 @@ let colors = [
 ];
 
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .fill(|d| colors[d.category_index % colors.len()])
 ```
 
@@ -660,8 +698,8 @@ impl ChartComponent {
                 .y(|d| d.value)
                 .into_any_element(),
             ChartType::Bar => BarChart::new(self.filtered_data())
-                .x(|d| d.date.clone())
-                .y(|d| d.value)
+                .band(|d| d.date.clone())
+                .value(|d| d.value)
                 .into_any_element(),
             ChartType::Area => AreaChart::new(self.filtered_data())
                 .x(|d| d.date.clone())

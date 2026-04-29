@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-use super::build_band_x_labels;
+use super::build_band_labels;
 
 #[derive(IntoPlot)]
 pub struct CandlestickChart<T, X, Y>
@@ -142,7 +142,7 @@ where
         // Draw X axis
         let mut axis = PlotAxis::new().stroke(cx.theme().border);
         if self.x_axis {
-            let labels = build_band_x_labels(
+            let labels = build_band_labels(
                 &self.data,
                 x_fn.as_ref(),
                 &x,

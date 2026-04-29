@@ -11,7 +11,7 @@ use std::{fmt::Debug, ops::Add};
 
 use gpui::{App, Bounds, IntoElement, Path, PathBuilder, Pixels, Point, Window, point, px};
 
-pub use axis::{AXIS_GAP, AxisText, PlotAxis};
+pub use axis::{AXIS_GAP, AxisLabelSide, AxisText, PlotAxis};
 pub use grid::Grid;
 pub use label::PlotLabel;
 

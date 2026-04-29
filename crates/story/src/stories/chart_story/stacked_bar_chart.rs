@@ -105,9 +105,9 @@ impl Plot for StackedBarChart {
             Bar::new()
                 .data(&series.points)
                 .band_width(band_width)
-                .x(move |d| x.tick(&d.data.date.clone()))
-                .y0(move |d| y0.tick(&(d.y0 as f64)).unwrap_or(height))
-                .y1(move |d| y1.tick(&(d.y1 as f64)))
+                .cross(move |d| x.tick(&d.data.date.clone()))
+                .base(move |d| y0.tick(&(d.y0 as f64)).unwrap_or(height))
+                .value(move |d| y1.tick(&(d.y1 as f64)))
                 .fill(move |_| fill)
                 .paint(&bounds, window, cx);
         }

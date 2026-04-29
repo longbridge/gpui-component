@@ -83,33 +83,74 @@ LineChart::new(data)
 
 ### BarChart
 
-柱状图适合用来比较不同类别的数值。
+柱状图通过矩形条形对比不同类别的数据，并可通过 `alignment` 选项切换垂直或水平方向。
 
 #### 基础柱状图
 
 ```rust
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
 ```
 
-#### 自定义
+#### 自定义柱状图
 
 ```rust
+// 自定义填充颜色
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .fill(|d| d.color)
 
+// 显示数值标签
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .label(|d| format!("{}", d.value))
 
+// 自定义刻度间距
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .tick_margin(2)
+
+// 隐藏分类轴的轴线和标签
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .label_axis(false)
+```
+
+#### 柱状图对齐方式
+
+`BarAlignment` 用于控制柱子的方向以及基线所在的一侧，需从 `gpui_component::plot::shape` 导入。
+
+```rust
+use gpui_component::plot::shape::BarAlignment;
+
+// 默认：垂直方向 - 向上
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Bottom)
+
+// 垂直方向 - 向下
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Top)
+
+// 水平方向 - 向右
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Left)
+
+// 水平方向 - 向左
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Right)
 ```
 
 ### AreaChart
@@ -400,8 +441,8 @@ fn sales_dashboard(data: Vec<SalesData>, cx: &mut Context<Self>) -> impl IntoEle
             chart_container(
                 "Regional Performance",
                 BarChart::new(data)
-                    .x(|d| d.region.clone())
-                    .y(|d| d.revenue)
+                    .band(|d| d.region.clone())
+                    .value(|d| d.revenue)
                     .fill(|d| match d.region.as_str() {
                         "North" => cx.theme().chart_1,
                         "South" => cx.theme().chart_2,
@@ -514,8 +555,8 @@ fn stock_chart(ohlc_data: Vec<StockOHLC>, price_data: Vec<StockData>, cx: &mut C
             chart_container(
                 "Trading Volume",
                 BarChart::new(price_data)
-                    .x(|d| d.date.clone())
-                    .y(|d| d.volume as f64)
+                    .band(|d| d.date.clone())
+                    .value(|d| d.volume as f64)
                     .fill(|d| {
                         if d.volume > 1000000 {
                             cx.theme().chart_1
@@ -550,8 +591,8 @@ let colors = [
 ];
 
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .fill(|d| colors[d.category_index % colors.len()])
 ```
 
@@ -623,8 +664,8 @@ impl ChartComponent {
                 .y(|d| d.value)
                 .into_any_element(),
             ChartType::Bar => BarChart::new(self.filtered_data())
-                .x(|d| d.date.clone())
-                .y(|d| d.value)
+                .band(|d| d.date.clone())
+                .value(|d| d.value)
                 .into_any_element(),
             ChartType::Area => AreaChart::new(self.filtered_data())
                 .x(|d| d.date.clone())

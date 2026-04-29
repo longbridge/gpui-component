@@ -8,7 +8,9 @@ use gpui_component::{
     chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart},
     divider::Divider,
     dock::PanelControl,
-    h_flex, v_flex,
+    h_flex,
+    plot::shape::BarAlignment,
+    v_flex,
 };
 use serde::Deserialize;
 
@@ -222,16 +224,16 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart",
                         BarChart::new(self.monthly_devices.clone())
-                            .x(|d| d.month.clone())
-                            .y(|d| d.desktop),
+                            .band(|d| d.month.clone())
+                            .value(|d| d.desktop),
                         false,
                         cx,
                     ))
                     .child(chart_container(
                         "Bar Chart - Mixed",
                         BarChart::new(self.monthly_devices.clone())
-                            .x(|d| d.month.clone())
-                            .y(|d| d.desktop)
+                            .band(|d| d.month.clone())
+                            .value(|d| d.desktop)
                             .fill(move |d| d.color(color)),
                         false,
                         cx,
@@ -248,9 +250,39 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Label",
                         BarChart::new(self.monthly_devices.clone())
-                            .x(|d| d.month.clone())
-                            .y(|d| d.desktop)
+                            .band(|d| d.month.clone())
+                            .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string()),
+                        false,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Bar Chart - Top aligned",
+                        BarChart::new(self.monthly_devices.clone())
+                            .band(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .label(|d| d.desktop.to_string())
+                            .alignment(BarAlignment::Top),
+                        false,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Bar Chart - Left aligned",
+                        BarChart::new(self.monthly_devices.clone())
+                            .band(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .label(|d| d.desktop.to_string())
+                            .alignment(BarAlignment::Left),
+                        false,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Bar Chart - Right aligned",
+                        BarChart::new(self.monthly_devices.clone())
+                            .band(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .label(|d| d.desktop.to_string())
+                            .alignment(BarAlignment::Right),
                         false,
                         cx,
                     )),
