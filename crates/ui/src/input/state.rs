@@ -370,6 +370,28 @@ pub struct InputState {
     pub(super) clean_on_escape: bool,
     pub(super) submit_on_enter: bool,
     pub(super) soft_wrap: bool,
+    /// Number of empty rows the editor reserves below the last line of
+    /// content in code-editor mode (the "scroll past last line" affordance).
+    ///
+    /// `None` (default) preserves the historical heuristic: roughly half
+    /// the viewport, never less than [`BOTTOM_MARGIN_ROWS`] line-heights.
+    /// `Some(n)` overrides with exactly `n` line-heights. Has no effect
+    /// outside [`InputMode::CodeEditor`].
+    ///
+    /// See [`Self::scroll_past_last_line_rows`] for usage and the
+    /// trade-offs for typical values.
+    pub(super) scroll_past_last_line_rows: Option<usize>,
+    /// Minimum number of lines the cursor is kept clear of the viewport
+    /// edges when the cursor moves toward the top or bottom — used by
+    /// the auto-scroll-into-view computation in
+    /// [`TextElement::layout_cursor`].
+    ///
+    /// `None` (default) preserves the historical heuristic:
+    /// [`BOTTOM_MARGIN_ROWS`] for normal viewports, falls back to one
+    /// line when the viewport is small. `Some(n)` overrides with
+    /// exactly `n` lines. See
+    /// [`Self::cursor_surrounding_lines`] for usage notes.
+    pub(super) cursor_surrounding_lines: Option<usize>,
     pub(super) show_whitespaces: bool,
     /// This flag tells the renderer to prefer the end of the current visual line.
     pub(crate) cursor_line_end_affinity: bool,
@@ -486,6 +508,8 @@ impl InputState {
             clean_on_escape: false,
             submit_on_enter: false,
             soft_wrap: true,
+            scroll_past_last_line_rows: None,
+            cursor_surrounding_lines: None,
             show_whitespaces: false,
             loading: false,
             pattern: None,
@@ -913,6 +937,150 @@ impl InputState {
     /// Update whether to show whitespace characters.
     pub fn set_show_whitespaces(&mut self, show: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.show_whitespaces = show;
+        cx.notify();
+    }
+
+    /// Number of empty rows reserved below the last line of content
+    /// ("scroll past last line"). Code-editor mode only.
+    ///
+    /// # What this controls
+    ///
+    /// In a multi-line code editor, the scrollable region is normally a
+    /// little taller than the document so the cursor can sit anywhere in
+    /// the viewport without ever being painted at the very bottom edge.
+    /// That extra height is what makes scrolling "past" the last line
+    /// possible — empty rows appear under the document and the cursor
+    /// can be parked there. JetBrains IDEs (WebStorm, IntelliJ) and
+    /// VSCode both expose the same behaviour via settings (Editor →
+    /// "Show empty space at the end of the file" / `editor.
+    /// scrollBeyondLastLine`).
+    ///
+    /// # Why this matters
+    ///
+    /// 1. **Cursor placement.** Without bottom padding the cursor at the
+    ///    last line is glued to the viewport edge — uncomfortable for
+    ///    long sessions.
+    /// 2. **Visual taste.** Some surfaces (full-pane editors with no
+    ///    chrome below) feel "broken" when half the viewport is empty
+    ///    after the last line. Embedded editors (chunked into a form
+    ///    layout) usually want zero or minimal empty rows.
+    /// 3. **Matching IDE conventions.** Different editors set different
+    ///    defaults. Exposing the value lets a host pick the right one
+    ///    for the surface without reaching into upstream.
+    ///
+    /// # Values
+    ///
+    /// - `None` (default): preserves historical behaviour — roughly
+    ///   half the viewport, floored at [`BOTTOM_MARGIN_ROWS`]
+    ///   line-heights. Good for traditional file-tree-plus-editor IDE
+    ///   layouts where the editor is one panel among many.
+    /// - `Some(0)`: clamps `max_scroll = max(0, content_height −
+    ///   viewport_height)` exactly. The cursor sits flush with the last
+    ///   content row when scrolled to the bottom.
+    /// - `Some(1..=2)`: minimal trailing empty space, similar to
+    ///   GitHub's web diff viewer. Cursor padding still adequate.
+    /// - `Some(3..=8)`: WebStorm-ish — small but visible empty band
+    ///   below the document. Recommended sweet spot for full-pane
+    ///   editors.
+    /// - `Some(n)` for large `n`: explicit half-viewport-equivalent —
+    ///   normally not needed because `None` already gives that.
+    ///
+    /// Outside [`InputMode::CodeEditor`] this value is ignored.
+    pub fn scroll_past_last_line_rows(mut self, rows: Option<usize>) -> Self {
+        self.scroll_past_last_line_rows = rows;
+        self
+    }
+
+    /// Update [`Self::scroll_past_last_line_rows`] after construction.
+    pub fn set_scroll_past_last_line_rows(
+        &mut self,
+        rows: Option<usize>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.scroll_past_last_line_rows == rows {
+            return;
+        }
+        self.scroll_past_last_line_rows = rows;
+        cx.notify();
+    }
+
+    /// Minimum number of lines the cursor is kept clear of the viewport
+    /// edges. Code-editor mode primarily; other multi-line modes also
+    /// honor it via [`TextElement::layout_cursor`].
+    ///
+    /// # What this controls
+    ///
+    /// Different from [`Self::scroll_past_last_line_rows`]. That
+    /// controls how much *empty space* exists below the document.
+    /// `cursor_surrounding_lines` controls how close the cursor is
+    /// allowed to get to the viewport's top or bottom edge before the
+    /// editor auto-scrolls. When you press `Enter` at the end of a
+    /// buffer, the new cursor position is computed first, and then
+    /// the scroll offset is adjusted so the cursor sits at least this
+    /// many lines from the edge — which is what makes JetBrains'
+    /// behaviour of "Enter keeps adding rows AND keeps a trailing
+    /// empty row visible" possible without the cursor disappearing
+    /// into the bottom edge.
+    ///
+    /// # Why both are needed
+    ///
+    /// The two settings answer different questions:
+    ///
+    /// - `scroll_past_last_line_rows` answers "how far below the last
+    ///   line can the user scroll?" — about the *scrollable region*.
+    /// - `cursor_surrounding_lines` answers "where in the viewport
+    ///   does the cursor stay as it moves?" — about the *cursor's
+    ///   relative position*.
+    ///
+    /// A short file with `scroll_past_last_line_rows = Some(8)` but
+    /// `cursor_surrounding_lines = Some(1)` lets the user scroll into
+    /// 8 empty rows manually but keeps the cursor itself 1 line clear
+    /// of edges during normal typing — VSCode and JetBrains both
+    /// expose them as separate settings (`editor.scrollBeyondLastLine`
+    /// + `editor.cursorSurroundingLines` in VSCode).
+    ///
+    /// # Values
+    ///
+    /// - `None` (default): preserves historical behaviour —
+    ///   [`BOTTOM_MARGIN_ROWS`] lines for normal viewports, one line
+    ///   on small viewports (less than `BOTTOM_MARGIN_ROWS × 8` rows
+    ///   tall).
+    /// - `Some(0)`: cursor can sit on the very edge row of the
+    ///   viewport. Tight; useful when paired with a non-zero
+    ///   `scroll_past_last_line_rows` so the cursor visually has
+    ///   room "below" it via the trailing empty space.
+    /// - `Some(1..=2)`: JetBrains-ish — the cursor stays 1–2 rows
+    ///   clear of edges; pressing `Enter` at end-of-buffer keeps a
+    ///   small visible band below the cursor as new lines are added.
+    /// - `Some(3..=8)`: more generous; common in editors that want
+    ///   the cursor visually centred in the viewport's lower half
+    ///   during long bursts of typing.
+    ///
+    /// # Saturation
+    ///
+    /// The effective padding is clamped against half the visible
+    /// region. An aggressive override on a small viewport (e.g.
+    /// `Some(20)` on a 10-line viewport) is capped at half-viewport
+    /// rather than producing a degenerate auto-scroll feedback loop.
+    /// Hosts shouldn't rely on this — pick a value that fits — but it
+    /// keeps misconfiguration recoverable instead of crashing.
+    pub fn cursor_surrounding_lines(mut self, lines: Option<usize>) -> Self {
+        self.cursor_surrounding_lines = lines;
+        self
+    }
+
+    /// Update [`Self::cursor_surrounding_lines`] after construction.
+    pub fn set_cursor_surrounding_lines(
+        &mut self,
+        lines: Option<usize>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.cursor_surrounding_lines == lines {
+            return;
+        }
+        self.cursor_surrounding_lines = lines;
         cx.notify();
     }
 
@@ -1662,9 +1830,22 @@ impl InputState {
         }
 
         // Check if row_offset_y is out of the viewport
-        // If row offset is not in the viewport, scroll to make it visible
+        // If row offset is not in the viewport, scroll to make it visible.
+        // For code-editor moves with a direction, honor the configured
+        // `cursor_surrounding_lines` (default heuristic = `BOTTOM_MARGIN_ROWS`
+        // lines) — same helper `TextElement::layout_cursor` uses, so the two
+        // scroll-into-view computations agree on the edge clearance. Without
+        // this, state-side demanded a hardcoded 3 lines of clearance while
+        // element-side honored the override, and the mismatched targets at
+        // end-of-buffer with small overrides (e.g. `Some(1)`) produced the
+        // jump-then-snap-back flicker on `Down`.
         let edge_height = if direction.is_some() && self.mode.is_code_editor() {
-            3 * line_height
+            super::element::cursor_surrounding_padding(
+                self.mode.is_auto_grow(),
+                self.cursor_surrounding_lines,
+                last_layout.visible_range.len(),
+                line_height,
+            )
         } else {
             line_height
         };
@@ -1683,8 +1864,15 @@ impl InputState {
             scroll_offset.y = scroll_offset.y.min(was_offset.y);
         }
 
+        // Defense-in-depth: clamp the deferred target into the same safe
+        // range that `update_scroll_offset` enforces on persist. Without
+        // this, an over-aggressive demand here paints one frame at the
+        // unclamped position before the post-paint clamp pulls
+        // `scroll_handle` back, producing the same flicker the helper
+        // unification above prevents at the source.
+        let safe_y_min = (-self.scroll_size.height + self.input_bounds.size.height).min(px(0.));
         scroll_offset.x = scroll_offset.x.min(px(0.));
-        scroll_offset.y = scroll_offset.y.min(px(0.));
+        scroll_offset.y = scroll_offset.y.clamp(safe_y_min, px(0.));
         self.deferred_scroll_offset = Some(scroll_offset);
         cx.notify();
     }
@@ -2839,5 +3027,83 @@ ORDER BY id
              Before: {:?}\nAfter: {:?}",
             colored_before, colored_after
         );
+    }
+
+    /// Regression test for "scroll flicker on `Down` at end-of-buffer" with
+    /// a small `cursor_surrounding_lines` override. Pairs with the pure-helper
+    /// coverage in `element.rs::test_cursor_surrounding_padding_*` — those
+    /// assert the helper saturates correctly; this asserts the state-side
+    /// `scroll_to` consumer of the helper produces a deferred scroll target
+    /// that lies within the safe scroll range, so the painted frame matches
+    /// what `update_scroll_offset` would persist (no jitter).
+    ///
+    /// Before the Bug C fix, `scroll_to` hardcoded `edge_height = 3 * line_height`
+    /// regardless of `cursor_surrounding_lines`, and the deferred target was
+    /// only capped at `min(px(0.))` — not against `safe_y_min`. With
+    /// `scroll_past_last_line_rows = Some(1)` + `cursor_surrounding_lines = Some(1)`,
+    /// the demanded target landed two line-heights below the safe range, so
+    /// paint used the unclamped value before the post-paint clamp pulled
+    /// `scroll_handle` back — visible as a one-line jump-then-snap-back.
+    #[gpui::test]
+    fn test_scroll_to_eob_does_not_overshoot_safe_range(cx: &mut TestAppContext) {
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // JB-style: 1 trailing empty row + 1-line cursor surrounding.
+        // Mismatched against the historical 3-line edge_height in `scroll_to`
+        // — the exact configuration that surfaced Bug C in the heretic showcase.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_scroll_past_last_line_rows(Some(1), window, cx);
+                state.set_cursor_surrounding_lines(Some(1), window, cx);
+                let text: String = (1..=50)
+                    .map(|i| format!("line {i}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                state.set_value(text, window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        // Sanity: paint populated `scroll_size` and `input_bounds` — without
+        // these, `safe_y_min` below collapses to 0 and the assertion is vacuous.
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert!(
+                    state.scroll_size.height > px(0.),
+                    "scroll_size not populated by initial paint"
+                );
+                assert!(
+                    state.input_bounds.size.height > px(0.),
+                    "input_bounds not populated by initial paint"
+                );
+            });
+        });
+
+        // Move cursor to end with downward direction — same code path as a
+        // `Down` keystroke at EOB. `scroll_to` runs synchronously inside
+        // `move_to`; inspect `deferred_scroll_offset` in the same closure
+        // before the next paint consumes and clears it.
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                let end = state.text.len();
+                state.move_to(end, Some(MoveDirection::Down), cx);
+
+                let deferred = state
+                    .deferred_scroll_offset
+                    .expect("scroll_to should populate deferred_scroll_offset");
+                let safe_y_min =
+                    (-state.scroll_size.height + state.input_bounds.size.height).min(px(0.));
+
+                assert!(
+                    deferred.y >= safe_y_min,
+                    "deferred_scroll_offset.y = {:?} below safe_y_min = {:?} \
+                     — paint would jitter (Bug C regression)",
+                    deferred.y,
+                    safe_y_min,
+                );
+            });
+        });
     }
 }

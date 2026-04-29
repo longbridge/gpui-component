@@ -217,6 +217,91 @@ fn masked_display_offset(text: &Rope, original_offset: usize) -> usize {
     text.offset_to_char_index(original_offset) * MASK_CHAR.len_utf8()
 }
 
+/// Minimum pixel padding the cursor is kept clear of the viewport's top
+/// and bottom edges before auto-scroll engages — the "cursor
+/// surrounding lines" setting.
+///
+/// Auto-grow input always uses one line. For other modes:
+///
+/// - `override_lines = None` (the historical default): on small
+///   viewports (less than [`BOTTOM_MARGIN_ROWS`] × 8 lines tall) the
+///   editor falls back to one line so the cursor isn't stranded;
+///   otherwise [`BOTTOM_MARGIN_ROWS`] lines.
+/// - `override_lines = Some(n)`: exactly `n × line_height`, regardless
+///   of viewport size. Caller is trusted to pick a sensible value for
+///   the surface (e.g. `Some(1)` for JetBrains-style "keep one trailing
+///   row visible" behaviour).
+///
+/// In all cases the result is saturated against half the visible
+/// region so the auto-scroll-into-view computation always has room
+/// — without this clamp, an aggressive override on a small viewport
+/// (e.g. `Some(20)` on a 10-line viewport) yields a bottom-edge
+/// threshold below the top edge, sending the per-frame scroll-offset
+/// adjustment into a feedback loop.
+///
+/// See [`InputState::cursor_surrounding_lines`] for caller-facing
+/// documentation.
+pub(super) fn cursor_surrounding_padding(
+    is_auto_grow: bool,
+    override_lines: Option<usize>,
+    visible_lines: usize,
+    line_height: Pixels,
+) -> Pixels {
+    if is_auto_grow {
+        return line_height;
+    }
+    let raw = match override_lines {
+        Some(lines) => lines as f32 * line_height,
+        None => {
+            if visible_lines < BOTTOM_MARGIN_ROWS * 8 {
+                line_height
+            } else {
+                BOTTOM_MARGIN_ROWS * line_height
+            }
+        }
+    };
+    // Saturate against half the viewport so top + bottom margins can
+    // always coexist with at least one cursor-line of clear space
+    // between them.
+    let viewport_half = (visible_lines as f32 * line_height).half();
+    raw.min(viewport_half)
+}
+
+/// Pixel height of the empty area below the last line in the editor's
+/// scrollable region — the "scroll past last line" affordance.
+///
+/// Outside code-editor mode the result is always `0`. Inside code-editor
+/// mode the height is determined by the host-provided override:
+///
+/// - `override_rows = None` (the historical default): roughly half the
+///   viewport, never less than [`BOTTOM_MARGIN_ROWS`] line-heights —
+///   matches the prior behavior and JetBrains IDEs / VSCode default.
+///   The cursor can sit anywhere in the viewport without being painted
+///   at the very edge.
+/// - `override_rows = Some(n)`: exactly `n` line-heights. `Some(0)`
+///   produces the tightest possible scroll bounds (`max_scroll =
+///   max(0, content_height − viewport_height)`) but, with the current
+///   per-frame scroll-into-view calculation, can flicker on `Down` at
+///   end-of-buffer. `Some(3..=8)` is the recommended sweet spot for
+///   full-pane editors that don't want the half-viewport affordance.
+///
+/// See [`InputState::scroll_past_last_line_rows`] for caller-facing
+/// documentation.
+fn empty_bottom_height(
+    is_code_editor: bool,
+    override_rows: Option<usize>,
+    viewport_height: Pixels,
+    line_height: Pixels,
+) -> Pixels {
+    if !is_code_editor {
+        return px(0.);
+    }
+    match override_rows {
+        Some(rows) => rows as f32 * line_height,
+        None => viewport_height.half().max(BOTTOM_MARGIN_ROWS * line_height),
+    }
+}
+
 /// Layout information for fold icons.
 struct FoldIconLayout {
     /// Hitbox for the line number area (used for hover detection)
@@ -313,14 +398,18 @@ impl TextElement {
         let mut scroll_offset = state.scroll_handle.offset();
         let mut cursor_bounds = None;
 
-        // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
-        let top_bottom_margin = if state.mode.is_auto_grow() {
-            line_height
-        } else if visible_range.len() < BOTTOM_MARGIN_ROWS * 8 {
-            line_height
-        } else {
-            BOTTOM_MARGIN_ROWS * line_height
-        };
+        // Minimum padding kept between the cursor and the viewport's
+        // top/bottom edges. The auto-scroll-into-view computation below
+        // uses this to decide when to advance the scroll offset as the
+        // cursor moves toward an edge. Honors
+        // `state.cursor_surrounding_lines` if set; otherwise falls back
+        // to the historical heuristic.
+        let top_bottom_margin = cursor_surrounding_padding(
+            state.mode.is_auto_grow(),
+            state.cursor_surrounding_lines,
+            visible_range.len(),
+            line_height,
+        );
 
         // The cursor corresponds to the current cursor position in the text no only the line.
         let mut cursor_pos = None;
@@ -1709,24 +1798,28 @@ impl Element for TextElement {
         let ghost_lines_height = ghost_line_count as f32 * line_height;
 
         let total_wrapped_lines = state.display_map.wrap_row_count();
-        let empty_bottom_height = if state.mode.is_code_editor() {
-            bounds
-                .size
-                .height
-                .half()
-                .max(BOTTOM_MARGIN_ROWS * line_height)
-        } else {
-            px(0.)
-        };
+        let empty_bottom_height = empty_bottom_height(
+            state.mode.is_code_editor(),
+            state.scroll_past_last_line_rows,
+            bounds.size.height,
+            line_height,
+        );
 
+        // Empty bottom and ghost lines both describe extra height past
+        // the last real content row; they should not stack. Taking the
+        // max produces a tight `max_scroll` so the cursor can reach
+        // every empty pixel of the scrollable region. Summing them
+        // (the prior behavior) left a band of unreachable empty space
+        // below the cursor-traversable area visible at scroll-max.
         let mut scroll_size = size(
             if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
                 longest_line_width + line_number_width + RIGHT_MARGIN
             } else {
                 longest_line_width
             },
-            (total_wrapped_lines as f32 * line_height + empty_bottom_height + ghost_lines_height)
-                .max(bounds.size.height),
+            (total_wrapped_lines as f32 * line_height
+                + empty_bottom_height.max(ghost_lines_height))
+            .max(bounds.size.height),
         );
 
         // TODO: should be add some gap to right, to convenient to focus on boundary position
@@ -2481,5 +2574,154 @@ mod tests {
         assert_eq!(result[3].color, gpui::black());
         assert_eq!(result[4].color, gpui::black());
         assert_eq!(result[5].color, gpui::blue());
+    }
+
+    #[test]
+    fn test_empty_bottom_height_outside_code_editor() {
+        // Single-line / plain-text / auto-grow modes never reserve empty
+        // bottom space, regardless of any override.
+        for override_rows in [None, Some(0), Some(3), Some(99)] {
+            assert_eq!(
+                empty_bottom_height(false, override_rows, px(800.), px(20.)),
+                px(0.),
+            );
+        }
+    }
+
+    #[test]
+    fn test_empty_bottom_height_code_editor_default() {
+        // `None`: roughly half the viewport, floored at
+        // `BOTTOM_MARGIN_ROWS * line_height` so the empty area never
+        // collapses to "less than a few lines" on tiny viewports.
+        let line_height = px(20.);
+
+        // Viewport much taller than the floor → half-viewport wins.
+        assert_eq!(
+            empty_bottom_height(true, None, px(800.), line_height),
+            px(400.),
+        );
+
+        // Viewport shorter than 2 × floor → floor wins.
+        let floor = BOTTOM_MARGIN_ROWS * line_height;
+        assert_eq!(empty_bottom_height(true, None, px(40.), line_height), floor);
+    }
+
+    #[test]
+    fn test_empty_bottom_height_explicit_row_count() {
+        // `Some(n)`: exactly `n` line-heights. Caller fully controls
+        // the trailing empty space; viewport size doesn't amplify it.
+        let line_height = px(20.);
+
+        for rows in [0_usize, 1, 3, 8, 64] {
+            let expected = rows as f32 * line_height;
+            assert_eq!(
+                empty_bottom_height(true, Some(rows), px(800.), line_height),
+                expected,
+            );
+            // Tiny viewport: still exactly `n × line_height`, no floor
+            // applied when caller supplied an explicit count.
+            assert_eq!(
+                empty_bottom_height(true, Some(rows), px(20.), line_height),
+                expected,
+            );
+        }
+    }
+
+    #[test]
+    fn test_cursor_surrounding_padding_auto_grow() {
+        // Auto-grow inputs always pad by one line, regardless of any
+        // override or visible-lines count.
+        let line_height = px(20.);
+        for override_lines in [None, Some(0), Some(3), Some(99)] {
+            for visible_lines in [0_usize, 1, 8, 64] {
+                assert_eq!(
+                    cursor_surrounding_padding(true, override_lines, visible_lines, line_height,),
+                    line_height,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_cursor_surrounding_padding_default() {
+        // `None`: historical heuristic — `BOTTOM_MARGIN_ROWS` for normal
+        // viewports, falls back to one line on small viewports (less
+        // than `BOTTOM_MARGIN_ROWS × 8` rows tall).
+        let line_height = px(20.);
+
+        // Small viewport → 1-line fallback.
+        let small = BOTTOM_MARGIN_ROWS * 8 - 1;
+        assert_eq!(
+            cursor_surrounding_padding(false, None, small, line_height),
+            line_height,
+        );
+
+        // Boundary at `BOTTOM_MARGIN_ROWS × 8` flips to the full margin.
+        let boundary = BOTTOM_MARGIN_ROWS * 8;
+        assert_eq!(
+            cursor_surrounding_padding(false, None, boundary, line_height),
+            BOTTOM_MARGIN_ROWS * line_height,
+        );
+
+        // Comfortably-large viewport.
+        assert_eq!(
+            cursor_surrounding_padding(false, None, 100, line_height),
+            BOTTOM_MARGIN_ROWS * line_height,
+        );
+    }
+
+    #[test]
+    fn test_cursor_surrounding_padding_explicit() {
+        // `Some(n)`: exactly `n × line_height` when the viewport has
+        // room for it; saturated against half the viewport when it
+        // doesn't.
+        let line_height = px(20.);
+
+        for lines in [0_usize, 1, 2, 5, 50] {
+            let raw = lines as f32 * line_height;
+            for visible_lines in [0_usize, 1, 8, 100] {
+                let viewport_half = (visible_lines as f32 * line_height).half();
+                assert_eq!(
+                    cursor_surrounding_padding(false, Some(lines), visible_lines, line_height,),
+                    raw.min(viewport_half),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_cursor_surrounding_padding_saturates_against_viewport() {
+        // An aggressive override on a small viewport must not produce a
+        // padding larger than half the visible region — otherwise the
+        // bottom-edge auto-scroll-into-view threshold sinks below the
+        // top-edge threshold and the per-frame scroll adjustment loses
+        // a stable fixed point.
+        let line_height = px(20.);
+
+        // Override much larger than viewport → clamped to half.
+        let visible_lines = 10;
+        let viewport_half = (visible_lines as f32 * line_height).half();
+        assert_eq!(
+            cursor_surrounding_padding(false, Some(50), visible_lines, line_height),
+            viewport_half,
+        );
+
+        // Override that fits → returned unchanged.
+        let visible_lines = 40;
+        assert_eq!(
+            cursor_surrounding_padding(false, Some(3), visible_lines, line_height),
+            3.0 * line_height,
+        );
+
+        // Default heuristic still saturates if BOTTOM_MARGIN_ROWS would
+        // exceed the half-viewport bound (only possible at extreme
+        // sizes — kept for defensive completeness).
+        let visible_lines = BOTTOM_MARGIN_ROWS * 8;
+        let half = (visible_lines as f32 * line_height).half();
+        let raw = BOTTOM_MARGIN_ROWS * line_height;
+        assert_eq!(
+            cursor_surrounding_padding(false, None, visible_lines, line_height),
+            raw.min(half),
+        );
     }
 }
