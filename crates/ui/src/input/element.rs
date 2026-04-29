@@ -36,33 +36,65 @@ struct EditorScrollbarLayout {
     scroll_size: Size<Pixels>,
 }
 
-fn editor_scrollbar_layout(
+struct EditorScrollbarContext {
     input_bounds: Bounds<Pixels>,
     line_number_width: Pixels,
     scroll_size: Size<Pixels>,
+    cursor_scroll_offset: Point<Pixels>,
     paddings: Edges<Pixels>,
-) -> EditorScrollbarLayout {
-    let left = if line_number_width == px(0.) {
-        px(0.)
-    } else {
-        paddings.left + line_number_width - LINE_NUMBER_RIGHT_MARGIN
-    };
+    soft_wrap: bool,
+    scroll_handle: gpui::ScrollHandle,
+}
 
-    EditorScrollbarLayout {
-        bounds: Bounds::new(
-            point(
-                input_bounds.origin.x + left,
-                input_bounds.origin.y - paddings.top,
+impl EditorScrollbarContext {
+    fn new(
+        input_bounds: Bounds<Pixels>,
+        last_layout: &LastLayout,
+        scroll_size: Size<Pixels>,
+        cursor_scroll_offset: Point<Pixels>,
+        state: &InputState,
+    ) -> Self {
+        Self {
+            input_bounds,
+            line_number_width: last_layout.line_number_width,
+            scroll_size,
+            cursor_scroll_offset,
+            paddings: state.editor_scrollbar_paddings.get(),
+            soft_wrap: state.soft_wrap,
+            scroll_handle: state.scroll_handle.clone(),
+        }
+    }
+}
+
+impl EditorScrollbarLayout {
+    fn new(
+        input_bounds: Bounds<Pixels>,
+        line_number_width: Pixels,
+        scroll_size: Size<Pixels>,
+        paddings: Edges<Pixels>,
+    ) -> Self {
+        let left = if line_number_width == px(0.) {
+            px(0.)
+        } else {
+            paddings.left + line_number_width - LINE_NUMBER_RIGHT_MARGIN
+        };
+
+        Self {
+            bounds: Bounds::new(
+                point(
+                    input_bounds.origin.x + left,
+                    input_bounds.origin.y - paddings.top,
+                ),
+                size(
+                    input_bounds.size.width - left + paddings.right,
+                    input_bounds.size.height + paddings.top + paddings.bottom,
+                ),
             ),
-            size(
-                input_bounds.size.width - left + paddings.right,
-                input_bounds.size.height + paddings.top + paddings.bottom,
+            scroll_size: size(
+                scroll_size.width - left + paddings.right + RIGHT_MARGIN,
+                scroll_size.height,
             ),
-        ),
-        scroll_size: size(
-            scroll_size.width - left + paddings.right + RIGHT_MARGIN,
-            scroll_size.height,
-        ),
+        }
     }
 }
 
@@ -129,6 +161,41 @@ impl TextElement {
                 }
             }
         });
+    }
+
+    fn layout_editor_scrollbar(
+        &self,
+        context: EditorScrollbarContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        if context.scroll_handle.offset() != context.cursor_scroll_offset {
+            context
+                .scroll_handle
+                .set_offset(context.cursor_scroll_offset);
+        }
+
+        let scrollbar_layout = EditorScrollbarLayout::new(
+            context.input_bounds,
+            context.line_number_width,
+            context.scroll_size,
+            context.paddings,
+        );
+        let mut scrollbar = if !context.soft_wrap {
+            Scrollbar::new(&context.scroll_handle)
+        } else {
+            Scrollbar::vertical(&context.scroll_handle)
+        }
+        .scroll_size(scrollbar_layout.scroll_size)
+        .into_any_element();
+
+        scrollbar.prepaint_as_root(
+            scrollbar_layout.bounds.origin,
+            scrollbar_layout.bounds.size.into(),
+            window,
+            cx,
+        );
+        scrollbar
     }
 
     /// Returns the:
@@ -1675,37 +1742,17 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-        let editor_scrollbar_paddings = state.editor_scrollbar_paddings;
-        let soft_wrap = state.soft_wrap;
-        let scroll_handle = state.scroll_handle.clone();
-        if scroll_handle.offset() != cursor_scroll_offset {
-            scroll_handle.set_offset(cursor_scroll_offset);
-        }
+        let editor_scrollbar_context = EditorScrollbarContext::new(
+            input_bounds,
+            &last_layout,
+            scroll_size,
+            cursor_scroll_offset,
+            state,
+        );
         let fold_icon_layout =
             self.layout_fold_icons(original_x, &bounds, &last_layout, window, cx);
-        let editor_scrollbar = {
-            let scrollbar_layout = editor_scrollbar_layout(
-                input_bounds,
-                last_layout.line_number_width,
-                scroll_size,
-                editor_scrollbar_paddings,
-            );
-            let mut scrollbar = if !soft_wrap {
-                Scrollbar::new(&scroll_handle)
-            } else {
-                Scrollbar::vertical(&scroll_handle)
-            }
-            .scroll_size(scrollbar_layout.scroll_size)
-            .into_any_element();
-
-            scrollbar.prepaint_as_root(
-                scrollbar_layout.bounds.origin,
-                scrollbar_layout.bounds.size.into(),
-                window,
-                cx,
-            );
-            Some(scrollbar)
-        };
+        let editor_scrollbar =
+            Some(self.layout_editor_scrollbar(editor_scrollbar_context, window, cx));
 
         PrepaintState {
             bounds,
@@ -2169,7 +2216,7 @@ mod tests {
         };
 
         let layout =
-            editor_scrollbar_layout(input_bounds, px(40.), size(px(1000.), px(200.)), paddings);
+            EditorScrollbarLayout::new(input_bounds, px(40.), size(px(1000.), px(200.)), paddings);
 
         assert_eq!(
             layout.bounds,
@@ -2178,7 +2225,7 @@ mod tests {
         assert_eq!(layout.scroll_size, size(px(976.), px(200.)));
 
         let layout_without_gutter =
-            editor_scrollbar_layout(input_bounds, px(0.), size(px(500.), px(120.)), paddings);
+            EditorScrollbarLayout::new(input_bounds, px(0.), size(px(500.), px(120.)), paddings);
 
         assert_eq!(
             layout_without_gutter.bounds,

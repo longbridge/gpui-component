@@ -14,6 +14,7 @@ use gpui::{
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
+use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
@@ -335,7 +336,7 @@ pub struct InputState {
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
-    pub(super) editor_scrollbar_paddings: Edges<Pixels>,
+    pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
     pub(super) text_align: TextAlign,
 
     /// The mask pattern for formatting the input text
@@ -448,12 +449,12 @@ impl InputState {
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
             scroll_size: gpui::size(px(0.), px(0.)),
-            editor_scrollbar_paddings: Edges {
+            editor_scrollbar_paddings: Cell::new(Edges {
                 top: px(0.),
                 right: px(0.),
                 bottom: px(0.),
                 left: px(0.),
-            },
+            }),
             deferred_scroll_offset: None,
             preferred_column: None,
             placeholder: SharedString::default(),
