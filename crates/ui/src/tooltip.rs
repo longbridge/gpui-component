@@ -289,7 +289,7 @@ impl Element for TooltipOverlayPositioner {
         &mut self,
         _id: Option<&GlobalElementId>,
         _inspector_id: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
+        bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         window: &mut Window,
         cx: &mut App,
@@ -315,7 +315,7 @@ impl Element for TooltipOverlayPositioner {
             TOOLTIP_WINDOW_MARGIN + client_inset,
         );
 
-        let offset = tooltip_position.bounds.origin - child_min;
+        let offset = tooltip_position.bounds.origin - bounds.origin;
         let offset = point(offset.x.round(), offset.y.round());
 
         window.with_element_offset(offset, |window| {
