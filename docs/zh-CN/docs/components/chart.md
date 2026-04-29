@@ -83,7 +83,7 @@ LineChart::new(data)
 
 ### BarChart
 
-柱状图适合用来比较不同类别的数值，支持垂直和水平两种方向。
+柱状图通过矩形条形对比不同类别的数据，并可通过 `alignment` 选项切换垂直或水平方向。
 
 #### 基础柱状图
 
@@ -93,7 +93,7 @@ BarChart::new(data)
     .value(|d| d.value)
 ```
 
-#### 自定义
+#### 自定义柱状图
 
 ```rust
 // 自定义填充颜色
@@ -114,39 +114,39 @@ BarChart::new(data)
     .value(|d| d.value)
     .tick_margin(2)
 
-// 隐藏分类轴
+// 隐藏分类轴的轴线和标签
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
     .label_axis(false)
 ```
 
-#### 柱状图方向
+#### 柱状图对齐方式
 
-通过 `alignment` 控制柱子的方向和基线位置，需从 `gpui_component::plot::shape` 导入 `BarAlignment`。
+`BarAlignment` 用于控制柱子的方向以及基线所在的一侧，需从 `gpui_component::plot::shape` 导入。
 
 ```rust
 use gpui_component::plot::shape::BarAlignment;
 
-// 默认：竖向，柱子从底部向上生长
+// 默认：垂直方向 - 向上
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
     .alignment(BarAlignment::Bottom)
 
-// 竖向，柱子从顶部向下生长
+// 垂直方向 - 向下
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
     .alignment(BarAlignment::Top)
 
-// 横向，柱子从左侧向右生长
+// 水平方向 - 向右
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
     .alignment(BarAlignment::Left)
 
-// 横向，柱子从右侧向左生长
+// 水平方向 - 向左
 BarChart::new(data)
     .band(|d| d.category.clone())
     .value(|d| d.value)
