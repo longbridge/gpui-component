@@ -9,7 +9,7 @@ use crate::{
     window_border,
 };
 use gpui::{
-    Anchor, AnyView, App, AppContext, Context, DefiniteLength, Entity, FocusHandle,
+    Anchor, AnyView, App, AppContext, Context, DefiniteLength, ElementId, Entity, FocusHandle,
     InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
     StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
@@ -367,14 +367,29 @@ impl Root {
         cx.notify();
     }
 
+    /// Removes all notifications whose id matches `T`, including ones registered with
+    /// either [`Notification::id`] or [`Notification::id1`] (any key).
     pub fn remove_notification<T: Sized + 'static>(
         &mut self,
         window: &mut Window,
         cx: &mut Context<'_, Root>,
     ) {
         self.notification.update(cx, |view, cx| {
-            let id = TypeId::of::<T>();
-            view.close(id, window, cx);
+            view.close_by_type(TypeId::of::<T>(), window, cx);
+        });
+        cx.notify();
+    }
+
+    /// Removes the notification matching the given type and element id (paired with [`Notification::id1`]).
+    pub fn remove_notification1<T: Sized + 'static>(
+        &mut self,
+        key: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut Context<'_, Root>,
+    ) {
+        let key = key.into();
+        self.notification.update(cx, |view, cx| {
+            view.close((TypeId::of::<T>(), key), window, cx);
         });
         cx.notify();
     }
