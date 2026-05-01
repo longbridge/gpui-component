@@ -1056,12 +1056,17 @@ impl TextElement {
         let text = &state.text;
         let is_multi_line = state.mode.is_multi_line();
 
-        let (mut highlighter, diagnostics) = match &state.mode {
+        let (mut highlighter, diagnostics, custom_highlighter) = match &state.mode {
             InputMode::CodeEditor {
                 highlighter,
                 diagnostics,
+                custom_highlighter,
                 ..
-            } => (highlighter.borrow_mut(), diagnostics),
+            } => (
+                highlighter.borrow_mut(),
+                diagnostics,
+                custom_highlighter.clone(),
+            ),
             _ => return None,
         };
         let highlighter = highlighter.as_mut()?;
@@ -1121,12 +1126,23 @@ impl TextElement {
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
 
+        // Custom highlighter styles, layered between tree-sitter (base) and
+        // diagnostics (top). Empty Vec when no custom highlighter is set, so
+        // `combine_highlights` short-circuits.
+        let custom_styles = match &custom_highlighter {
+            Some(h) => h.styles(visible_byte_range.clone(), cx),
+            None => Vec::new(),
+        };
+
         // hover definition style
         if let Some(hover_style) = self.layout_hover_definition(cx) {
             styles.push(hover_style);
         }
 
-        // Combine marker styles
+        // Compose order: tree-sitter (base) -> custom (overlay) -> diagnostics (top).
+        // Diagnostics keep highest priority so errors remain visible regardless
+        // of language coloring.
+        styles = gpui::combine_highlights(custom_styles, styles).collect();
         styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
 
         Some(styles)

@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{cell::RefCell, ops::Range};
 
@@ -6,6 +7,7 @@ use gpui::{App, SharedString, Task};
 use ropey::Rope;
 
 use super::display_map::DisplayMap;
+use crate::highlighter::CustomHighlighter;
 use crate::highlighter::DiagnosticSet;
 use crate::highlighter::SyntaxHighlighter;
 use crate::input::{InputEdit, RopeExt as _, TabSize};
@@ -45,6 +47,12 @@ pub(crate) enum InputMode {
         highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
         diagnostics: DiagnosticSet,
         parse_task: Rc<RefCell<Option<Task<()>>>>,
+        /// Optional consumer-supplied highlighter whose output is composed
+        /// alongside the tree-sitter highlighter and diagnostics.
+        ///
+        /// See [`CustomHighlighter`] for composition order and threading
+        /// semantics.
+        custom_highlighter: Option<Arc<dyn CustomHighlighter>>,
     },
 }
 
@@ -78,6 +86,7 @@ impl InputMode {
             folding: true,
             diagnostics: DiagnosticSet::new(&Rope::new()),
             parse_task: Rc::new(RefCell::new(None)),
+            custom_highlighter: None,
         }
     }
 
@@ -352,6 +361,7 @@ mod tests {
             highlighter: Default::default(),
             diagnostics: DiagnosticSet::new(&Rope::new()),
             parse_task: Default::default(),
+            custom_highlighter: None,
         };
         assert_eq!(mode.is_code_editor(), true);
         assert_eq!(mode.is_multi_line(), false);
