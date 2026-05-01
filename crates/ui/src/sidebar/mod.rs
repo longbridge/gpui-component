@@ -201,8 +201,11 @@ fn sidebar_expanded_width(style: &StyleRefinement) -> Option<Pixels> {
     }
 }
 
-fn sidebar_animation_id(from: Pixels, to: Pixels) -> ElementId {
-    ElementId::Name(format!("sidebar-w-{}-{}", from.as_f32(), to.as_f32()).into())
+fn sidebar_animation_id(id: &ElementId, from: Pixels, to: Pixels) -> ElementId {
+    ElementId::NamedInteger(
+        format!("{id}-anim-w").into(),
+        (from.as_f32().to_bits() as u64) << 32 | to.as_f32().to_bits() as u64,
+    )
 }
 
 pub trait SidebarItem: Collapsible + Clone {
@@ -537,7 +540,7 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
         Transition::new(SIDEBAR_TRANSITION_DURATION)
             .ease(ease_in_out_cubic)
             .width(from_w, to_w)
-            .apply(wrapper, sidebar_animation_id(from_w, to_w))
+            .apply(wrapper, sidebar_animation_id(&id, from_w, to_w))
             .into_any_element()
     }
 }
@@ -588,6 +591,15 @@ mod tests {
                 target_width: px(240.),
             }
         );
+    }
+
+    #[test]
+    fn icon_expanded_with_non_pixel_width_should_keep_original_layout() {
+        let layout = layout(SidebarCollapsible::Icon, false, None, Side::Left);
+
+        assert!(!layout.icon_collapsed);
+        assert!(!layout.offcanvas_collapsed);
+        assert_eq!(layout.wrapper, SidebarWrapperLayout::None);
     }
 
     #[test]
@@ -677,6 +689,17 @@ mod tests {
 
         assert!(left.align_child_to_end);
         assert!(!right.align_child_to_end);
+    }
+
+    #[test]
+    fn animation_id_should_be_scoped_to_sidebar_id() {
+        let from = px(240.);
+        let to = COLLAPSED_WIDTH;
+
+        assert_ne!(
+            sidebar_animation_id(&ElementId::Name("sidebar-a".into()), from, to),
+            sidebar_animation_id(&ElementId::Name("sidebar-b".into()), from, to)
+        );
     }
 
     #[test]

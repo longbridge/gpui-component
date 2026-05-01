@@ -42,14 +42,15 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let icon_collapsed = self.collapsed;
+        let collapsible = SidebarCollapsible::Icon;
+        let icon_collapsed = self.collapsed && collapsible == SidebarCollapsible::Icon;
 
         h_flex()
             .size_full()
             .bg(cx.theme().background)
             .child(
                 Sidebar::new("sidebar-icon-example")
-                    .collapsible(SidebarCollapsible::Icon)
+                    .collapsible(collapsible)
                     .collapsed(self.collapsed)
                     .w(px(240.))
                     .header(
@@ -103,7 +104,7 @@ impl Render for Example {
                             .items_center()
                             .gap_3()
                             .child(
-                                SidebarToggleButton::new().collapsed(self.collapsed).on_click(
+                                SidebarToggleButton::new().collapsed(icon_collapsed).on_click(
                                     cx.listener(|this, _, _, cx| {
                                         this.collapsed = !this.collapsed;
                                         cx.notify();
