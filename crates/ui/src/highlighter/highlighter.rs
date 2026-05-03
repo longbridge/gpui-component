@@ -991,7 +991,7 @@ fn markdown_inline_range_has_trigger(text: &Rope, range: Range<usize>) -> bool {
     text.slice(range).bytes().any(|byte| {
         matches!(
             byte,
-            b'*' | b'_' | b'`' | b'[' | b']' | b'(' | b')' | b'<' | b'>' | b'!' | b'~'
+            b'*' | b'_' | b'`' | b'[' | b']' | b'(' | b')' | b'<' | b'>' | b'!' | b'~' | b'$'
         )
     })
 }
@@ -1345,6 +1345,18 @@ $x = 1;
 
     #[test]
     #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_latex_marker_creates_injection_layer() {
+        let markdown = "This has $x^2$ text.";
+
+        assert_eq!(
+            markdown_injection_layer_count(markdown),
+            1,
+            "Markdown inline LaTeX markers should create a markdown_inline layer"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
     fn test_markdown_inline_nested_emphasis_uses_default_bold_italic_style() {
         let markdown = "This has _**bold**_ text.";
         let rope = Rope::from_str(markdown);
@@ -1388,6 +1400,18 @@ $x = 1;
         assert!(
             has_highlight_covering(&highlights, markdown, "`code`", "text.literal"),
             "inline code spans should be highlighted as literal text"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_latex_span() {
+        let markdown = "This has $x^2 + y^2 = z^2$ text.";
+        let highlights = markdown_highlights(markdown);
+
+        assert!(
+            has_highlight_covering(&highlights, markdown, "$x^2 + y^2 = z^2$", "text.literal"),
+            "inline LaTeX spans should be highlighted as literal text"
         );
     }
 
