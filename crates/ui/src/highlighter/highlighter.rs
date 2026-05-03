@@ -974,11 +974,26 @@ fn ranges_byte_range(ranges: &[tree_sitter::Range]) -> Option<Range<usize>> {
 }
 
 fn should_parse_injection_layer(
-    _language_name: &SharedString,
-    _ranges: &[tree_sitter::Range],
-    _text: &Rope,
+    language_name: &SharedString,
+    ranges: &[tree_sitter::Range],
+    text: &Rope,
 ) -> bool {
-    true
+    if language_name.as_ref() != "markdown_inline" {
+        return true;
+    }
+
+    ranges
+        .iter()
+        .any(|range| markdown_inline_range_has_trigger(text, range.start_byte..range.end_byte))
+}
+
+fn markdown_inline_range_has_trigger(text: &Rope, range: Range<usize>) -> bool {
+    text.slice(range).bytes().any(|byte| {
+        matches!(
+            byte,
+            b'*' | b'_' | b'`' | b'[' | b']' | b'(' | b')' | b'<' | b'>' | b'!' | b'~'
+        )
+    })
 }
 
 /// Merge other style (Other on top)
@@ -1017,6 +1032,14 @@ mod tests {
         let mut style = HighlightStyle::default();
         style.color = Some(color);
         style
+    }
+
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn markdown_injection_layer_count(markdown: &str) -> usize {
+        let rope = Rope::from_str(markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        highlighter.update(None, &rope, None);
+        highlighter.injection_layers.len()
     }
 
     fn has_highlight_covering(
@@ -1176,6 +1199,30 @@ $x = 1;
                 tag, pos
             );
         }
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_plain_inline_skips_injection_layer() {
+        let markdown = "およびコードのスタイルなどを試すことができます。";
+
+        assert_eq!(
+            markdown_injection_layer_count(markdown),
+            0,
+            "plain Markdown text should not create a markdown_inline layer"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_markers_create_injection_layer() {
+        let markdown = "This has _italic_ text.";
+
+        assert_eq!(
+            markdown_injection_layer_count(markdown),
+            1,
+            "Markdown inline markers should create a markdown_inline layer"
+        );
     }
 
     #[test]
