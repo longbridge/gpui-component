@@ -1035,6 +1035,14 @@ mod tests {
     }
 
     #[cfg(feature = "tree-sitter-markdown")]
+    fn markdown_highlights(markdown: &str) -> Vec<HighlightItem> {
+        let rope = Rope::from_str(markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        highlighter.update(None, &rope, None);
+        highlighter.match_styles(0..markdown.len())
+    }
+
+    #[cfg(feature = "tree-sitter-markdown")]
     fn markdown_injection_layer_count(markdown: &str) -> usize {
         let rope = Rope::from_str(markdown);
         let mut highlighter = SyntaxHighlighter::new("markdown");
@@ -1042,6 +1050,14 @@ mod tests {
         highlighter.injection_layers.len()
     }
 
+    #[cfg(any(
+        all(
+            feature = "tree-sitter-html",
+            feature = "tree-sitter-javascript",
+            feature = "tree-sitter-css"
+        ),
+        feature = "tree-sitter-markdown"
+    ))]
     fn has_highlight_covering(
         highlights: &[HighlightItem],
         source: &str,
@@ -1055,6 +1071,28 @@ mod tests {
                 && item.range.start <= start
                 && item.range.end >= end
         })
+    }
+
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_highlight_theme() -> HighlightTheme {
+        serde_json::from_value(serde_json::json!({
+            "name": "test",
+            "appearance": "dark",
+            "style": {
+                "syntax": {
+                    "emphasis": {
+                        "font_style": "italic"
+                    },
+                    "strikethrough": {
+                        "font_style": "strikethrough"
+                    },
+                    "text.literal": {
+                        "color": "#6F42C1"
+                    }
+                }
+            }
+        }))
+        .expect("test theme should parse")
     }
 
     #[track_caller]
@@ -1203,6 +1241,86 @@ $x = 1;
 
     #[test]
     #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_strong_emphasis() {
+        let markdown = "This has **bold** text.";
+        let highlights = markdown_highlights(markdown);
+
+        assert!(
+            has_highlight_covering(&highlights, markdown, "bold", "emphasis.strong"),
+            "bold text should be highlighted as strong emphasis"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_emphasis() {
+        let markdown = "This has _italic_ text.";
+        let highlights = markdown_highlights(markdown);
+
+        assert!(
+            has_highlight_covering(&highlights, markdown, "italic", "emphasis"),
+            "italic text should be highlighted as emphasis"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_strikethrough() {
+        let markdown = "This has ~~deleted~~ text.";
+        let highlights = markdown_highlights(markdown);
+
+        assert!(
+            has_highlight_covering(&highlights, markdown, "deleted", "strikethrough"),
+            "strikethrough text should be highlighted"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_emphasis_style_depends_on_theme() {
+        let markdown = "This has _italic_ text.";
+        let rope = Rope::from_str(markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        highlighter.update(None, &rope, None);
+        let theme = test_highlight_theme();
+
+        let styles = highlighter.styles(&(0..markdown.len()), &theme);
+        let start = markdown.find("italic").unwrap();
+        let end = start + "italic".len();
+
+        assert!(
+            styles.iter().any(|(range, style)| {
+                range.start <= start
+                    && range.end >= end
+                    && style.font_style == Some(gpui::FontStyle::Italic)
+            }),
+            "italic Markdown should use the theme's emphasis font style"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_strikethrough_style_depends_on_theme() {
+        let markdown = "This has ~~deleted~~ text.";
+        let rope = Rope::from_str(markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        highlighter.update(None, &rope, None);
+        let theme = test_highlight_theme();
+
+        let styles = highlighter.styles(&(0..markdown.len()), &theme);
+        let start = markdown.find("deleted").unwrap();
+        let end = start + "deleted".len();
+
+        assert!(
+            styles.iter().any(|(range, style)| {
+                range.start <= start && range.end >= end && style.strikethrough.is_some()
+            }),
+            "strikethrough Markdown should use the theme's strikethrough style"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
     fn test_markdown_plain_inline_skips_injection_layer() {
         let markdown = "およびコードのスタイルなどを試すことができます。";
 
@@ -1222,6 +1340,70 @@ $x = 1;
             markdown_injection_layer_count(markdown),
             1,
             "Markdown inline markers should create a markdown_inline layer"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_nested_emphasis_uses_default_bold_italic_style() {
+        let markdown = "This has _**bold**_ text.";
+        let rope = Rope::from_str(markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        highlighter.update(None, &rope, None);
+        let theme = HighlightTheme::default_dark();
+
+        let styles = highlighter.styles(&(0..markdown.len()), &theme);
+        let start = markdown.find("bold").unwrap();
+        let end = start + "bold".len();
+
+        assert!(
+            styles.iter().any(|(range, style)| {
+                range.start <= start
+                    && range.end >= end
+                    && style.font_weight == Some(gpui::FontWeight::BOLD)
+                    && style.font_style == Some(gpui::FontStyle::Italic)
+            }),
+            "strong emphasis nested in emphasis should be bold and italic by default"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_link_text() {
+        let markdown = "This has a [link](https://example.com).";
+        let highlights = markdown_highlights(markdown);
+
+        assert!(
+            has_highlight_covering(&highlights, markdown, "link", "link_text"),
+            "link text should be highlighted"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_code_span() {
+        let markdown = "This has `code` text.";
+        let highlights = markdown_highlights(markdown);
+
+        assert!(
+            has_highlight_covering(&highlights, markdown, "`code`", "text.literal"),
+            "inline code spans should be highlighted as literal text"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_regions_do_not_combine_across_paragraphs() {
+        let markdown = "first **open\n\nclose** second";
+        let highlights = markdown_highlights(markdown);
+
+        assert!(
+            !has_highlight_covering(&highlights, markdown, "open", "emphasis.strong"),
+            "unclosed strong emphasis should not highlight text before the paragraph break"
+        );
+        assert!(
+            !has_highlight_covering(&highlights, markdown, "close", "emphasis.strong"),
+            "unclosed strong emphasis should not highlight text after the paragraph break"
         );
     }
 
