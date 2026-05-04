@@ -128,20 +128,6 @@ impl Render for NotificationStory {
                             })),
                     )
                     .child(
-                        Button::new("show-notify-error")
-                            .danger()
-                            .label("Error")
-                            .on_click(cx.listener(|_, _, window, cx| {
-                                window.push_notification(
-                                    (
-                                        NotificationType::Error,
-                                        "There have some error occurred. Please try again later.",
-                                    ),
-                                    cx,
-                                )
-                            })),
-                    )
-                    .child(
                         Button::new("show-notify-success")
                             .success()
                             .label("Success")
@@ -165,6 +151,83 @@ impl Render for NotificationStory {
                                         NotificationType::Warning,
                                         "The network is not stable, please check your connection.",
                                     ),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-notify-error")
+                            .danger()
+                            .label("Error")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    (
+                                        NotificationType::Error,
+                                        "There have some error occurred. Please try again later.",
+                                    ),
+                                    cx,
+                                )
+                            })),
+                    ),
+            )
+            .child(
+                section("Type with Title and Description")
+                    .child(
+                        Button::new("show-typed-info")
+                            .info()
+                            .label("Info")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::info(
+                                        "Your changes have been saved to the cloud \
+                                        and will sync across all of your devices.",
+                                    )
+                                    .title("All changes saved"),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-typed-success")
+                            .success()
+                            .label("Success")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::success(
+                                        "Your payment of $99.00 was processed and a \
+                                        receipt has been emailed to you.",
+                                    )
+                                    .title("Payment received"),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-typed-warning")
+                            .warning()
+                            .label("Warning")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::warning(
+                                        "Your network connection is unstable. \
+                                        Some changes may take longer to save.",
+                                    )
+                                    .title("Connection unstable"),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-typed-error")
+                            .danger()
+                            .label("Error")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::error(
+                                        "We couldn't reach the server. Check your \
+                                        internet connection and try again.",
+                                    )
+                                    .title("Request failed"),
                                     cx,
                                 )
                             })),
