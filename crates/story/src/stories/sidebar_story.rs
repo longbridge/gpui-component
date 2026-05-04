@@ -9,9 +9,9 @@ use gpui_component::{
     ActiveTheme, Icon, IconName, Side, Sizable,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
-    divider::Divider,
     h_flex,
     menu::DropdownMenu,
+    separator::Separator,
     sidebar::{
         Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem,
         SidebarToggleButton,
@@ -477,7 +477,7 @@ impl Render for SidebarStory {
                                         cx.notify();
                                     })),
                             )
-                            .child(Divider::vertical().h_4())
+                            .child(Separator::vertical().h_4())
                             .child(
                                 Breadcrumb::new()
                                     .child("Breadcrumb")
