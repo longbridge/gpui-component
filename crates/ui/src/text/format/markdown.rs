@@ -379,7 +379,7 @@ fn ast_to_node(
             paragraph.span = new_span(val.position, cx);
             BlockNode::Paragraph(paragraph)
         }
-        Node::ThematicBreak(val) => BlockNode::Divider {
+        Node::ThematicBreak(val) => BlockNode::HorizontalRule {
             span: new_span(val.position, cx),
         },
         Node::Table(val) => {

@@ -1,6 +1,6 @@
 use gpui::{App, AppContext as _, Context, Entity, IntoElement, Render, Styled, Window};
 
-use gpui_component::input::*;
+use gpui_component::{input::*, ActiveTheme};
 
 const EXAMPLE_CODE: &str = include_str!("./editor_story.rs");
 
@@ -48,7 +48,10 @@ impl EditorStory {
 }
 
 impl Render for EditorStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        Input::new(&self.editor_state).size_full()
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        Input::new(&self.editor_state)
+            .font_family(cx.theme().mono_font_family.clone())
+            .text_size(cx.theme().mono_font_size)
+            .size_full()
     }
 }

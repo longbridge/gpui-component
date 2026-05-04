@@ -4,27 +4,27 @@ use gpui::{
     StyleRefinement, Styled, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };
 
-/// The style of the divider line.
+/// The style of the separator line.
 #[derive(Clone, Copy, PartialEq, Default)]
-pub enum DividerStyle {
+pub enum SeparatorStyle {
     #[default]
     Solid,
     Dashed,
 }
 
-/// A divider that can be either vertical or horizontal.
+/// A separator that can be either vertical or horizontal.
 #[derive(IntoElement)]
-pub struct Divider {
+pub struct Separator {
     base: Div,
     style: StyleRefinement,
     label: Option<SharedString>,
     axis: Axis,
     color: Option<Hsla>,
-    line_style: DividerStyle,
+    line_style: SeparatorStyle,
 }
 
-impl Divider {
-    /// Creates a vertical divider.
+impl Separator {
+    /// Creates a vertical separator.
     pub fn vertical() -> Self {
         Self {
             base: div().h_full(),
@@ -32,11 +32,11 @@ impl Divider {
             label: None,
             color: None,
             style: StyleRefinement::default(),
-            line_style: DividerStyle::Solid,
+            line_style: SeparatorStyle::Solid,
         }
     }
 
-    /// Creates a horizontal divider.
+    /// Creates a horizontal separator.
     pub fn horizontal() -> Self {
         Self {
             base: div(),
@@ -44,35 +44,35 @@ impl Divider {
             label: None,
             color: None,
             style: StyleRefinement::default(),
-            line_style: DividerStyle::Solid,
+            line_style: SeparatorStyle::Solid,
         }
     }
 
-    /// Creates a vertical dashed divider.
+    /// Creates a vertical dashed separator.
     pub fn vertical_dashed() -> Self {
         Self::vertical().dashed()
     }
 
-    /// Creates a horizontal dashed divider.
+    /// Creates a horizontal dashed separator.
     pub fn horizontal_dashed() -> Self {
         Self::horizontal().dashed()
     }
 
-    /// Sets the label for the divider.
+    /// Sets the label for the separator.
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
         self
     }
 
-    /// Sets the color for the divider line.
+    /// Sets the color for the separator line.
     pub fn color(mut self, color: impl Into<Hsla>) -> Self {
         self.color = Some(color.into());
         self
     }
 
-    /// Sets the style of the divider to dashed.
+    /// Sets the style of the separator to dashed.
     pub fn dashed(mut self) -> Self {
-        self.line_style = DividerStyle::Dashed;
+        self.line_style = SeparatorStyle::Dashed;
         self
     }
 
@@ -117,13 +117,13 @@ impl Divider {
     }
 }
 
-impl Styled for Divider {
+impl Styled for Separator {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl RenderOnce for Divider {
+impl RenderOnce for Separator {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let color = self.color.unwrap_or(cx.theme().border);
         let axis = self.axis;
@@ -136,8 +136,8 @@ impl RenderOnce for Divider {
             .justify_center()
             .refine_style(&self.style)
             .child(match line_style {
-                DividerStyle::Solid => Self::render_solid(axis, color).into_any_element(),
-                DividerStyle::Dashed => Self::render_dashed(axis, color).into_any_element(),
+                SeparatorStyle::Solid => Self::render_solid(axis, color).into_any_element(),
+                SeparatorStyle::Dashed => Self::render_dashed(axis, color).into_any_element(),
             })
             .when_some(self.label, |this, label| {
                 this.child(

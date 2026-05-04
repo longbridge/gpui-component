@@ -502,7 +502,7 @@ impl StoryState {
             "InputStory" => story!(InputStory),
             "ListStory" => story!(ListStory),
             "DialogStory" => story!(DialogStory),
-            "DividerStory" => story!(DividerStory),
+            "SeparatorStory" => story!(SeparatorStory),
             "PopoverStory" => story!(PopoverStory),
             "ProgressStory" => story!(ProgressStory),
             "ResizableStory" => story!(ResizableStory),

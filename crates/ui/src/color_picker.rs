@@ -9,10 +9,10 @@ use rust_i18n::t;
 use crate::{
     ActiveTheme as _, Colorize as _, Icon, Selectable, Sizable, Size, StyleSized,
     actions::Confirm,
-    divider::Divider,
     h_flex,
     input::{Input, InputEvent, InputState},
     popover::Popover,
+    separator::Separator,
     slider::{Slider, SliderEvent, SliderState},
     tab::{Tab, TabBar},
     tooltip::{ManagedTooltipExt as _, Tooltip},
@@ -470,7 +470,7 @@ impl ColorPicker {
                     .into_any_element(),
             })
             .when_some(hovered_color, |this, hovered_color| {
-                this.child(Divider::horizontal()).child(
+                this.child(Separator::horizontal()).child(
                     h_flex()
                         .gap_2()
                         .items_center()
@@ -513,7 +513,7 @@ impl ColorPicker {
                         .map(|color| self.render_item(*color, true, window, cx)),
                 ),
             )
-            .child(Divider::horizontal())
+            .child(Separator::horizontal())
             .child(
                 v_flex()
                     .gap_1()

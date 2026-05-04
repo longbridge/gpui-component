@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{button::*, checkbox::*, divider::*, input::*, select::*, *};
+use gpui_component::{button::*, checkbox::*, input::*, select::*, separator::*, *};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
@@ -283,7 +283,7 @@ impl Render for SelectStory {
                                     .pl_3(),
                             ),
                         )
-                        .child(Divider::vertical())
+                        .child(Separator::vertical())
                         .child(
                             div().flex_1().child(
                                 Input::new(&self.input_state)
