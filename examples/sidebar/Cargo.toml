@@ -1,6 +1,6 @@
 [package]
-name = "sidebar_none"
-description = "Example demonstrating a shadcn-style non-collapsible sidebar."
+name = "sidebar"
+description = "Example demonstrating shadcn-style sidebar collapsible modes (icon, offcanvas, none)."
 version = "0.5.1"
 publish = false
 edition.workspace = true

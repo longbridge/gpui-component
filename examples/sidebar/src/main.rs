@@ -1,7 +1,8 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme, Icon, IconName,
+    ActiveTheme, Icon, IconName, Selectable,
+    button::Button,
     sidebar::{
         Sidebar, SidebarCollapsible, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,
         SidebarMenuItem, SidebarToggleButton,
@@ -11,12 +12,16 @@ use gpui_component::{
 use gpui_component_assets::Assets;
 
 pub struct Example {
+    collapsible: SidebarCollapsible,
     collapsed: bool,
 }
 
 impl Example {
     fn new() -> Self {
-        Self { collapsed: false }
+        Self {
+            collapsible: SidebarCollapsible::Icon,
+            collapsed: false,
+        }
     }
 
     fn menu() -> SidebarMenu {
@@ -38,19 +43,50 @@ impl Example {
             SidebarMenuItem::new("Settings").icon(IconName::Settings),
         ])
     }
+
+    fn description(&self) -> &'static str {
+        match self.collapsible {
+            SidebarCollapsible::Icon => {
+                "The sidebar collapses to icon width, matching shadcn's collapsible=\"icon\" behavior."
+            }
+            SidebarCollapsible::Offcanvas => {
+                "The sidebar releases its layout width when collapsed and keeps hidden controls out of keyboard navigation, matching shadcn's collapsible=\"offcanvas\" behavior."
+            }
+            SidebarCollapsible::None => {
+                "The sidebar ignores the collapsed state and remains expanded, matching shadcn's collapsible=\"none\" behavior."
+            }
+        }
+    }
+
+    fn mode_button(
+        &self,
+        id: &'static str,
+        label: &'static str,
+        mode: SidebarCollapsible,
+        cx: &mut Context<Self>,
+    ) -> Button {
+        Button::new(id)
+            .label(label)
+            .small()
+            .selected(self.collapsible == mode)
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.collapsible = mode;
+                cx.notify();
+            }))
+    }
 }
 
 impl Render for Example {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let collapsible = SidebarCollapsible::Icon;
-        let icon_collapsed = self.collapsed && collapsible == SidebarCollapsible::Icon;
+        let icon_collapsed = self.collapsed && self.collapsible == SidebarCollapsible::Icon;
+        let show_toggle = self.collapsible != SidebarCollapsible::None;
 
         h_flex()
             .size_full()
             .bg(cx.theme().background)
             .child(
-                Sidebar::new("sidebar-icon-example")
-                    .collapsible(collapsible)
+                Sidebar::new("sidebar-example")
+                    .collapsible(self.collapsible)
                     .collapsed(self.collapsed)
                     .w(px(240.))
                     .header(
@@ -103,15 +139,41 @@ impl Render for Example {
                         h_flex()
                             .items_center()
                             .gap_3()
-                            .child(
-                                SidebarToggleButton::new().collapsed(icon_collapsed).on_click(
-                                    cx.listener(|this, _, _, cx| {
-                                        this.collapsed = !this.collapsed;
-                                        cx.notify();
-                                    }),
-                                ),
-                            )
-                            .child(div().font_bold().child("Icon collapsible sidebar")),
+                            .when(show_toggle, |this| {
+                                this.child(
+                                    SidebarToggleButton::new()
+                                        .collapsed(icon_collapsed)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.collapsed = !this.collapsed;
+                                            cx.notify();
+                                        })),
+                                )
+                            })
+                            .child(div().font_bold().child("Sidebar collapsible modes")),
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(div().text_sm().child("Mode:"))
+                            .child(self.mode_button(
+                                "mode-icon",
+                                "Icon",
+                                SidebarCollapsible::Icon,
+                                cx,
+                            ))
+                            .child(self.mode_button(
+                                "mode-offcanvas",
+                                "Offcanvas",
+                                SidebarCollapsible::Offcanvas,
+                                cx,
+                            ))
+                            .child(self.mode_button(
+                                "mode-none",
+                                "None",
+                                SidebarCollapsible::None,
+                                cx,
+                            )),
                     )
                     .child(
                         div()
@@ -120,7 +182,7 @@ impl Render for Example {
                             .border_1()
                             .border_color(cx.theme().border)
                             .p_5()
-                            .child("The sidebar collapses to icon width, matching shadcn's collapsible=\"icon\" behavior."),
+                            .child(self.description()),
                     ),
             )
     }

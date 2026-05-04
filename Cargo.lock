@@ -7240,29 +7240,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
-name = "sidebar_icon"
-version = "0.5.1"
-dependencies = [
- "anyhow",
- "gpui",
- "gpui-component",
- "gpui-component-assets",
- "gpui_platform",
-]
-
-[[package]]
-name = "sidebar_none"
-version = "0.5.1"
-dependencies = [
- "anyhow",
- "gpui",
- "gpui-component",
- "gpui-component-assets",
- "gpui_platform",
-]
-
-[[package]]
-name = "sidebar_offcanvas"
+name = "sidebar"
 version = "0.5.1"
 dependencies = [
  "anyhow",
