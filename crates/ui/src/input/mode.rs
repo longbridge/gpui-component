@@ -224,6 +224,7 @@ impl InputMode {
     pub(super) fn update_highlighter(
         &mut self,
         selected_range: &Range<usize>,
+        old_text: &Rope,
         text: &Rope,
         new_text: &str,
         force: bool,
@@ -250,29 +251,7 @@ impl InputMode {
                     return None;
                 };
 
-                // When full text changed, the selected_range may be out of bound (The before version).
-                let mut selected_range = selected_range.clone();
-                selected_range.end = selected_range.end.min(text.len());
-
-                // If insert a chart, this is 1.
-                // If backspace or delete, this is -1.
-                // If selected to delete, this is the length of the selected text.
-                // let changed_len = new_text.len() as isize - selected_range.len() as isize;
-                let changed_len = new_text.len() as isize - selected_range.len() as isize;
-                let new_end = (selected_range.end as isize + changed_len) as usize;
-
-                let start_pos = text.offset_to_point(selected_range.start);
-                let old_end_pos = text.offset_to_point(selected_range.end);
-                let new_end_pos = text.offset_to_point(new_end);
-
-                let edit = InputEdit {
-                    start_byte: selected_range.start,
-                    old_end_byte: selected_range.end,
-                    new_end_byte: new_end,
-                    start_position: start_pos,
-                    old_end_position: old_end_pos,
-                    new_end_position: new_end_pos,
-                };
+                let edit = replacement_input_edit(old_text, text, selected_range, new_text);
 
                 const SYNC_PARSE_TIMEOUT: Duration = Duration::from_millis(2);
                 let completed = h.update(Some(edit), text, Some(SYNC_PARSE_TIMEOUT));
@@ -320,14 +299,53 @@ impl InputMode {
     }
 }
 
+/// Builds the tree-sitter edit for a text replacement.
+///
+/// Byte offsets and old positions are measured in `old_text`, while the new
+/// end position is measured in `text`.
+fn replacement_input_edit(
+    old_text: &Rope,
+    text: &Rope,
+    selected_range: &Range<usize>,
+    new_text: &str,
+) -> InputEdit {
+    let start_byte = selected_range.start.min(old_text.len());
+    let old_end_byte = selected_range.end.min(old_text.len()).max(start_byte);
+    let new_end_byte = (start_byte + new_text.len()).min(text.len());
+
+    InputEdit {
+        start_byte,
+        old_end_byte,
+        new_end_byte,
+        start_position: old_text.offset_to_point(start_byte),
+        old_end_position: old_text.offset_to_point(old_end_byte),
+        new_end_position: text.offset_to_point(new_end_byte),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ropey::Rope;
 
+    use super::replacement_input_edit;
     use crate::{
         highlighter::DiagnosticSet,
-        input::{TabSize, mode::InputMode},
+        input::{Point, TabSize, mode::InputMode},
     };
+
+    #[test]
+    fn test_replacement_input_edit_backspace_at_end_uses_old_range() {
+        let old_text = Rope::from_str("-=");
+        let text = Rope::from_str("-");
+        let edit = replacement_input_edit(&old_text, &text, &(1..2), "");
+
+        assert_eq!(edit.start_byte, 1);
+        assert_eq!(edit.old_end_byte, 2);
+        assert_eq!(edit.new_end_byte, 1);
+        assert_eq!(edit.start_position, Point::new(0, 1));
+        assert_eq!(edit.old_end_position, Point::new(0, 2));
+        assert_eq!(edit.new_end_position, Point::new(0, 1));
+    }
 
     #[test]
     fn test_code_editor() {

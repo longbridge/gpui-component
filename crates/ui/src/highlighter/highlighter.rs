@@ -988,7 +988,15 @@ fn should_parse_injection_layer(
 }
 
 fn markdown_inline_range_has_trigger(text: &Rope, range: Range<usize>) -> bool {
-    text.slice(range).bytes().any(|byte| {
+    if range.start > range.end || range.end > text.len() {
+        return false;
+    }
+
+    let Ok(slice) = text.try_slice(range) else {
+        return false;
+    };
+
+    slice.bytes().any(|byte| {
         matches!(
             byte,
             b'*' | b'_' | b'`' | b'[' | b']' | b'(' | b')' | b'<' | b'>' | b'!' | b'~' | b'$'
@@ -1353,6 +1361,35 @@ $x = 1;
             1,
             "Markdown inline LaTeX markers should create a markdown_inline layer"
         );
+    }
+
+    #[test]
+    fn test_markdown_inline_trigger_rejects_out_of_bounds_range() {
+        let text = Rope::from_str("-");
+
+        assert!(
+            !markdown_inline_range_has_trigger(&text, 0..2),
+            "stale markdown inline ranges should not panic"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-markdown")]
+    fn test_markdown_inline_stale_edit_range_does_not_panic() {
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        highlighter.update(None, &Rope::from_str("-="), None);
+
+        let text = Rope::from_str("-");
+        let stale_edit = InputEdit {
+            start_byte: 1,
+            old_end_byte: 1,
+            new_end_byte: 1,
+            start_position: Point::new(0, 1),
+            old_end_position: Point::new(0, 1),
+            new_end_position: Point::new(0, 1),
+        };
+
+        highlighter.update(Some(stale_edit), &text, None);
     }
 
     #[test]
