@@ -144,6 +144,12 @@
           "embedded": {
             "color": "#333333"
           },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
+          },
           "function": {
             "color": "#0000A2"
           },
@@ -175,6 +181,9 @@
           },
           "string.special.symbol": {
             "color": "#d21f07"
+          },
+          "strikethrough": {
+            "font_style": "strikethrough"
           },
           "tag": {
             "color": "#0433ff"
@@ -345,6 +354,12 @@
           "embedded": {
             "color": "#CACCCA"
           },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
+          },
           "function": {
             "color": "#fdd888"
           },
@@ -376,6 +391,9 @@
           },
           "string.special.symbol": {
             "color": "#E1D797"
+          },
+          "strikethrough": {
+            "font_style": "strikethrough"
           },
           "tag": {
             "color": "#b5af9a"
