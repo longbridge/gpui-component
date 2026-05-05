@@ -47,11 +47,6 @@ impl FoldRange {
 /// classes, blocks, etc.), so named nodes naturally correspond to meaningful
 /// foldable regions across all languages without a per-language node-type list.
 fn is_foldable_node(node: &Node) -> bool {
-    // Skip root node (e.g. `source_file`) and unnamed tokens
-    if !node.is_named() || node.parent().is_none() {
-        return false;
-    }
-
     let start = node.start_position().row;
     let end = node.end_position().row;
     end.saturating_sub(start) >= MIN_FOLD_LINES
@@ -61,7 +56,12 @@ fn is_foldable_node(node: &Node) -> bool {
 /// Extract fold ranges from a tree-sitter syntax tree (full traversal).
 pub fn extract_fold_ranges(tree: &Tree) -> Vec<FoldRange> {
     let mut ranges = Vec::new();
-    collect_foldable_nodes(tree.root_node(), &mut ranges);
+    let root = tree.root_node();
+    let mut cursor = root.walk();
+    // Skip the root, it's not foldable. Use named_children to skip literal tokens.
+    for child in root.named_children(&mut cursor) {
+        collect_foldable_nodes(child, &mut ranges);
+    }
 
     ranges.sort_by_key(|r| r.start_line);
     ranges.dedup_by_key(|r| r.start_line);
@@ -75,7 +75,12 @@ pub fn extract_fold_ranges(tree: &Tree) -> Vec<FoldRange> {
 /// instead of O(all nodes in tree).
 pub fn extract_fold_ranges_in_range(tree: &Tree, byte_range: Range<usize>) -> Vec<FoldRange> {
     let mut ranges = Vec::new();
-    collect_foldable_nodes_in_range(tree.root_node(), &byte_range, &mut ranges);
+    let root = tree.root_node();
+    let mut cursor = root.walk();
+    // Skip the root, it's not foldable. Use named_children to skip literal tokens.
+    for child in root.named_children(&mut cursor) {
+        collect_foldable_nodes_in_range(child, &byte_range, &mut ranges);
+    }
 
     ranges.sort_by_key(|r| r.start_line);
     ranges.dedup_by_key(|r| r.start_line);
@@ -93,15 +98,17 @@ fn collect_foldable_nodes_in_range(
         return;
     }
 
-    if is_foldable_node(&node) {
-        ranges.push(FoldRange {
-            start_line: node.start_position().row,
-            end_line: node.end_position().row,
-        });
+    if !is_foldable_node(&node) {
+        return;
     }
 
+    ranges.push(FoldRange {
+        start_line: node.start_position().row,
+        end_line: node.end_position().row,
+    });
+
     let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
+    for child in node.named_children(&mut cursor) {
         collect_foldable_nodes_in_range(child, byte_range, ranges);
     }
 }
@@ -109,15 +116,17 @@ fn collect_foldable_nodes_in_range(
 #[cfg(not(target_family = "wasm"))]
 /// Recursively collect foldable nodes from the syntax tree (full traversal).
 fn collect_foldable_nodes(node: Node, ranges: &mut Vec<FoldRange>) {
-    if is_foldable_node(&node) {
-        ranges.push(FoldRange {
-            start_line: node.start_position().row,
-            end_line: node.end_position().row,
-        });
+    if !is_foldable_node(&node) {
+        return;
     }
 
+    ranges.push(FoldRange {
+        start_line: node.start_position().row,
+        end_line: node.end_position().row,
+    });
+
     let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
+    for child in node.named_children(&mut cursor) {
         collect_foldable_nodes(child, ranges);
     }
 }
