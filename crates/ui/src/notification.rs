@@ -225,10 +225,7 @@ impl Notification {
     ///
     /// Triggered when the notification is closed by any means
     /// (close button, middle-click, autohide, click handler, or programmatic close).
-    pub fn on_close(
-        mut self,
-        on_close: impl Fn(&mut Window, &mut App) + 'static,
-    ) -> Self {
+    pub fn on_close(mut self, on_close: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.on_close = Some(Rc::new(on_close));
         self
     }
@@ -323,7 +320,7 @@ impl Render for Notification {
             .gap_3()
             .refine_style(&self.style)
             .when_some(icon, |this, icon| {
-                this.child(div().absolute().py_3p5().left_4().child(icon))
+                this.child(div().absolute().top(px(18.)).left_4().child(icon))
             })
             .child(
                 v_flex()
@@ -698,7 +695,11 @@ mod tests {
         });
 
         list.update_in(cx, |list, window, cx| {
-            list.close((TypeId::of::<FooKind>(), ElementId::from(1usize)), window, cx);
+            list.close(
+                (TypeId::of::<FooKind>(), ElementId::from(1usize)),
+                window,
+                cx,
+            );
         });
         flush_dismiss(cx);
 

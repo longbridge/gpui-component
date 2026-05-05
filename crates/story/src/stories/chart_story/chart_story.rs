@@ -6,10 +6,10 @@ use gpui::{
 use gpui_component::{
     ActiveTheme, StyledExt,
     chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart},
-    divider::Divider,
     dock::PanelControl,
     h_flex,
     plot::shape::BarAlignment,
+    separator::Separator,
     v_flex,
 };
 use serde::Deserialize;
@@ -216,7 +216,7 @@ impl Render for ChartStory {
                         cx,
                     )),
             )
-            .child(Divider::horizontal())
+            .child(Separator::horizontal())
             .child(
                 h_flex()
                     .flex_wrap()
@@ -418,9 +418,8 @@ impl Render for ChartStory {
                                     let w = chart.size.width.max(f32::EPSILON);
                                     let h = chart.size.height.max(f32::EPSILON);
                                     let denom = w * w + h * h;
-                                    let project = |x: f32, y: f32| -> f32 {
-                                        (x * w + (h - y) * h) / denom
-                                    };
+                                    let project =
+                                        |x: f32, y: f32| -> f32 { (x * w + (h - y) * h) / denom };
                                     let lo = project(bar.origin.x, bar.origin.y + bar.size.height);
                                     let hi = project(bar.origin.x + bar.size.width, bar.origin.y);
                                     let lerp = |t: f32| Hsla {
@@ -440,7 +439,7 @@ impl Render for ChartStory {
                         )
                     }),
             )
-            .child(Divider::horizontal())
+            .child(Separator::horizontal())
             .child(
                 h_flex()
                     .flex_wrap()
@@ -482,7 +481,7 @@ impl Render for ChartStory {
                         cx,
                     )),
             )
-            .child(Divider::horizontal())
+            .child(Separator::horizontal())
             .child(
                 h_flex()
                     .flex_wrap()
@@ -527,7 +526,7 @@ impl Render for ChartStory {
                         cx,
                     )),
             )
-            .child(Divider::horizontal())
+            .child(Separator::horizontal())
             .child(
                 h_flex()
                     .flex_wrap()

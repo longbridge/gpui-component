@@ -88,7 +88,7 @@ impl LanguageConfig {
 
 /// Theme for Tree-sitter Highlight
 ///
-/// https://docs.rs/tree-sitter-highlight/0.25.4/tree_sitter_highlight/
+/// https://docs.rs/tree-sitter-highlight/0.26.8/tree_sitter_highlight/
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct SyntaxColors {
     pub attribute: Option<ThemeStyle>,

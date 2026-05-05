@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{
     collections::{BTreeSet, HashMap},
-    ops::Range,
+    ops::{ControlFlow, Range},
     usize,
 };
 use tree_sitter::{
@@ -216,7 +216,7 @@ impl SyntaxHighlighter {
 
     /// Build the combined injections query for the given language.
     ///
-    /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
+    /// https://github.com/tree-sitter/tree-sitter/blob/v0.26.8/crates/highlight/src/highlight.rs#L339
     fn build_combined_injections_query(lang: &str) -> Result<Self> {
         let Some(config) = LanguageRegistry::singleton().language(&lang) else {
             return Err(anyhow!(
@@ -416,17 +416,17 @@ impl SyntaxHighlighter {
 
         let mut timed_out = false;
         let start = Instant::now();
-        let mut progress = |_: &tree_sitter::ParseState| -> bool {
+        let mut progress = |_: &tree_sitter::ParseState| -> ControlFlow<()> {
             let Some(budget) = timeout else {
-                return false;
+                return ControlFlow::Continue(());
             };
 
             if start.elapsed() > budget {
                 timed_out = true;
-                return true; // Cancel execution
+                return ControlFlow::Break(()); // Cancel execution
             }
 
-            false
+            ControlFlow::Continue(())
         };
 
         let options = ParseOptions::new().progress_callback(&mut progress);

@@ -16,6 +16,7 @@ members = [
     "examples/system_monitor",
     "examples/focus_trap",
     "examples/tooltip_top_edge",
+    "examples/sidebar",
 ]
 resolver = "2"
 
@@ -24,7 +25,7 @@ publish = false
 edition = "2024"
 
 [workspace.dependencies]
-gpui-component = { path = "crates/ui", version = "0.5.1" }
+gpui-component = { path = "crates/ui", version = "0.5.2" }
 gpui-component-macros = { path = "crates/macros", version = "0.5.1" }
 gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 story = { path = "crates/story" }
@@ -125,3 +126,4 @@ ignored = ["log", "anyhow", "serde"]
 [patch.crates-io]
 # Use stacker's psm version which may have better WASM support
 psm = { git = "https://github.com/rust-lang/stacker", branch = "master" }
+tree-sitter-navi = { git = "https://github.com/navi-language/tree-sitter-navi" }

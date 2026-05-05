@@ -324,7 +324,7 @@ v_form()
             .label("Profile")
             .label_indent(false)
             .col_span(2)
-            .child(Divider::horizontal())
+            .child(Separator::horizontal())
     )
     .child(
         field()

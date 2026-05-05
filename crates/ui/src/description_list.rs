@@ -1,9 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder as _, px, AnyElement, App, Axis, DefiniteLength, IntoElement,
-    ParentElement, relative, RenderOnce, SharedString, Styled, Window
+    AnyElement, App, Axis, DefiniteLength, IntoElement, ParentElement, RenderOnce, SharedString,
+    Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
-use crate::{h_flex, text::Text, v_flex, ActiveTheme as _, AxisExt, Sizable, Size};
+use crate::{ActiveTheme as _, AxisExt, Sizable, Size, h_flex, text::Text, v_flex};
 
 /// A description list.
 #[derive(IntoElement)]
@@ -23,7 +23,7 @@ pub enum DescriptionItem {
         value: DescriptionText,
         span: usize,
     },
-    Divider,
+    Separator,
 }
 
 /// Text for the label or value in the [`DescriptionList`].
@@ -205,9 +205,9 @@ impl DescriptionList {
         self
     }
 
-    /// Add a divider to the list.
-    pub fn divider(mut self) -> Self {
-        self.items.push(DescriptionItem::Divider);
+    /// Add a separator to the list.
+    pub fn separator(mut self) -> Self {
+        self.items.push(DescriptionItem::Separator);
         self
     }
 

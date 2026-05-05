@@ -89,9 +89,9 @@ impl Kbd {
     /// Windows: https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec
     pub fn format(key: &Keystroke) -> String {
         #[cfg(target_os = "macos")]
-        const DIVIDER: &str = "";
+        const SEPARATOR: &str = "";
         #[cfg(not(target_os = "macos"))]
-        const DIVIDER: &str = "+";
+        const SEPARATOR: &str = "+";
 
         let mut parts = vec![];
 
@@ -204,7 +204,7 @@ impl Kbd {
         }
 
         parts.push(&keys);
-        parts.join(DIVIDER)
+        parts.join(SEPARATOR)
     }
 }
 

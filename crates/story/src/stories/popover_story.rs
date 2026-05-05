@@ -1,16 +1,16 @@
-use gpui::{ Anchor,
-    Action, App, AppContext, Context, DismissEvent, Entity, EventEmitter, FocusHandle, Focusable,
-    Half, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement as _, Render,
-    Styled as _, Window, actions, div, px,
+use gpui::{
+    Action, Anchor, App, AppContext, Context, DismissEvent, Entity, EventEmitter, FocusHandle,
+    Focusable, Half, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement as _,
+    Render, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
     ActiveTheme, StyledExt, WindowExt,
     button::{Button, ButtonVariants as _},
-    divider::Divider,
     h_flex,
     input::{Input, InputState},
     list::{List, ListDelegate, ListItem, ListState},
     popover::Popover,
+    separator::Separator,
     v_flex,
 };
 use serde::Deserialize;
@@ -242,7 +242,7 @@ impl Render for PopoverStory {
                         .text_sm()
                         .w(px(400.))
                         .child("Hello, this is a Popover.")
-                        .child(Divider::horizontal())
+                        .child(Separator::horizontal())
                         .child(
                             "You can put any content here, including text,\
                             buttons, forms, and more.",
@@ -292,7 +292,7 @@ impl Render for PopoverStory {
                             v_flex()
                                 .gap_2()
                                 .child("Hello, this is a Popover on the Bottom Right.")
-                                .child(Divider::horizontal())
+                                .child(Separator::horizontal())
                                 .child(
                                     Button::new("info1")
                                         .primary()
