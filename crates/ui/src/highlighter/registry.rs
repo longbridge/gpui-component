@@ -1,6 +1,4 @@
-use gpui::{
-    App, FontWeight, HighlightStyle, Hsla, SharedString, StrikethroughStyle, UnderlineStyle, px,
-};
+use gpui::{App, FontWeight, HighlightStyle, Hsla, SharedString};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -15,7 +13,7 @@ use crate::{
     highlighter::{Language, languages},
 };
 
-pub(super) const HIGHLIGHT_NAMES: [&str; 41] = [
+pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
     "attribute",
     "boolean",
     "comment",
@@ -48,7 +46,6 @@ pub(super) const HIGHLIGHT_NAMES: [&str; 41] = [
     "string.regex",
     "string.special",
     "string.special.symbol",
-    "strikethrough",
     "tag",
     "tag.doctype",
     "text.literal",
@@ -138,7 +135,6 @@ pub struct SyntaxColors {
     pub string_special: Option<ThemeStyle>,
     #[serde(rename = "string.special.symbol")]
     pub string_special_symbol: Option<ThemeStyle>,
-    pub strikethrough: Option<ThemeStyle>,
     pub tag: Option<ThemeStyle>,
     #[serde(rename = "tag.doctype")]
     pub tag_doctype: Option<ThemeStyle>,
@@ -159,7 +155,6 @@ pub enum FontStyle {
     Normal,
     Italic,
     Underline,
-    Strikethrough,
 }
 
 impl From<FontStyle> for gpui::FontStyle {
@@ -168,7 +163,6 @@ impl From<FontStyle> for gpui::FontStyle {
             FontStyle::Normal => gpui::FontStyle::Normal,
             FontStyle::Italic => gpui::FontStyle::Italic,
             FontStyle::Underline => gpui::FontStyle::Normal,
-            FontStyle::Strikethrough => gpui::FontStyle::Normal,
         }
     }
 }
@@ -212,30 +206,12 @@ pub struct ThemeStyle {
 
 impl From<ThemeStyle> for HighlightStyle {
     fn from(style: ThemeStyle) -> Self {
-        let mut highlight = HighlightStyle {
+        HighlightStyle {
             color: style.color,
             font_weight: style.font_weight.map(Into::into),
             font_style: style.font_style.map(Into::into),
             ..Default::default()
-        };
-
-        match style.font_style {
-            Some(FontStyle::Underline) => {
-                highlight.underline = Some(UnderlineStyle {
-                    thickness: px(1.),
-                    ..Default::default()
-                });
-            }
-            Some(FontStyle::Strikethrough) => {
-                highlight.strikethrough = Some(StrikethroughStyle {
-                    thickness: px(1.),
-                    ..Default::default()
-                });
-            }
-            _ => {}
         }
-
-        highlight
     }
 }
 
@@ -278,7 +254,6 @@ impl SyntaxColors {
             "string.regex" => self.string_regex,
             "string.special" => self.string_special,
             "string.special.symbol" => self.string_special_symbol,
-            "strikethrough" => self.strikethrough,
             "tag" => self.tag,
             "tag.doctype" => self.tag_doctype,
             "text.literal" => self.text_literal,
