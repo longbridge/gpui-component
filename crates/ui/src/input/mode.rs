@@ -16,6 +16,7 @@ pub(super) struct PendingBackgroundParse {
     pub parse_task: Rc<RefCell<Option<Task<()>>>>,
     pub language: SharedString,
     pub text: Rope,
+    pub is_folding: bool,
 }
 
 #[derive(Clone)]
@@ -234,6 +235,7 @@ impl InputMode {
                 language,
                 highlighter,
                 parse_task,
+                folding,
                 ..
             } => {
                 if !force && highlighter.borrow().is_some() {
@@ -287,6 +289,7 @@ impl InputMode {
                         text: text.clone(),
                         highlighter: highlighter.clone(),
                         parse_task: parse_task.clone(),
+                        is_folding: *folding,
                     };
                     drop(highlighter_ref);
                     Some(pending)

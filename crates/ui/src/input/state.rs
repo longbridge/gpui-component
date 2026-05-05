@@ -2182,6 +2182,7 @@ impl InputState {
         let parse_task_rc = pending.parse_task;
         let language = pending.language;
         let text = pending.text;
+        let is_folding = pending.is_folding;
 
         let old_tree = highlighter_rc
             .borrow()
@@ -2232,19 +2233,28 @@ impl InputState {
                         Default::default()
                     };
 
-                    Some((new_tree, injection_layers))
+                    // Walk the syntax tree to extract fold ranges off the main thread.
+                    let fold_ranges = if is_folding {
+                        crate::input::display_map::extract_fold_ranges(&new_tree)
+                    } else {
+                        Vec::new()
+                    };
+
+                    Some((new_tree, injection_layers, fold_ranges))
                 })
                 .await;
 
-            if let Some((new_tree, injection_layers)) = result {
+            if let Some((new_tree, injection_layers, fold_ranges)) = result {
                 if let Some(h) = highlighter_rc.borrow_mut().as_mut() {
                     h.apply_background_tree(new_tree, &text_for_apply, injection_layers);
                 }
 
-                // Trigger re-render so the new highlights are displayed.
-                // Also update fold candidates now that the tree is ready.
+                // Trigger re-render so the new highlights are displayed and
+                // apply the fold candidates extracted in the background.
                 _ = entity.update(cx, |state, cx| {
-                    state.update_fold_candidates();
+                    if is_folding {
+                        state.display_map.set_fold_candidates(fold_ranges);
+                    }
                     cx.notify();
                 });
             }
