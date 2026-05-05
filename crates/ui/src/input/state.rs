@@ -625,11 +625,14 @@ impl InputState {
         cx.notify();
     }
 
-    /// Set a custom highlighter that contributes additional styles to the
-    /// render pipeline alongside the built-in tree-sitter highlighter.
+    /// Set a custom highlighter that contributes additional named token
+    /// ranges to the render pipeline alongside the built-in tree-sitter
+    /// highlighter.
     ///
     /// The custom highlighter does **not** replace the built-in. Both run
-    /// (when set), and their outputs are combined via
+    /// (when set); the custom output is resolved against the active
+    /// [`HighlightTheme`](crate::highlighter::HighlightTheme) and combined
+    /// with the tree-sitter and diagnostic styles via
     /// [`gpui::combine_highlights`]. Pass `None` to remove a previously-set
     /// custom highlighter.
     ///
@@ -2755,32 +2758,19 @@ ORDER BY id
     fn test_custom_highlighter_composes_with_tree_sitter(cx: &mut TestAppContext) {
         use crate::highlighter::{CustomHighlighter, HighlightTheme};
         use crate::input::mode::InputMode;
-        use gpui::{HighlightStyle, Hsla};
+        use gpui::{HighlightStyle, SharedString};
         use std::ops::Range;
         use std::sync::Arc;
 
-        // Custom highlighter that paints a single bright-red range.
-        struct RedRange {
+        // Custom highlighter that tags a fixed byte range with a token name
+        // resolvable by the active highlight theme. Picking "keyword" guarantees
+        // a non-default style on the default themes.
+        struct KeywordRange {
             range: Range<usize>,
         }
-        impl CustomHighlighter for RedRange {
-            fn styles(
-                &self,
-                _range: Range<usize>,
-                _cx: &App,
-            ) -> Vec<(Range<usize>, HighlightStyle)> {
-                vec![(
-                    self.range.clone(),
-                    HighlightStyle {
-                        color: Some(Hsla {
-                            h: 0.0,
-                            s: 1.0,
-                            l: 0.5,
-                            a: 1.0,
-                        }),
-                        ..Default::default()
-                    },
-                )]
+        impl CustomHighlighter for KeywordRange {
+            fn tokens(&self, _range: Range<usize>) -> Vec<(Range<usize>, SharedString)> {
+                vec![(self.range.clone(), "keyword".into())]
             }
         }
 
@@ -2797,8 +2787,8 @@ ORDER BY id
         });
         cx.run_until_parked();
 
-        // Custom highlighter paints bytes [0..6) (covers "SELECT").
-        let custom: Arc<dyn CustomHighlighter> = Arc::new(RedRange { range: 0..6 });
+        // Custom highlighter tags bytes [0..6) (covers "SELECT") as "keyword".
+        let custom: Arc<dyn CustomHighlighter> = Arc::new(KeywordRange { range: 0..6 });
         cx.update(|_, cx| {
             input.update(cx, |state, cx| {
                 state.set_custom_highlighter(Some(custom), cx);
@@ -2806,11 +2796,12 @@ ORDER BY id
         });
         cx.run_until_parked();
 
-        // Mirror element.rs::highlight_lines: pull both sources from state.mode
-        // and combine them in the documented order.
+        // Mirror element.rs::highlight_lines: pull both sources from state.mode,
+        // resolve the custom tokens against the highlight theme, and combine
+        // in the documented order.
         let theme = HighlightTheme::default_dark();
-        let combined: Vec<(Range<usize>, HighlightStyle)> = cx.update(|_, cx| {
-            input.read_with(cx, |state, cx| {
+        let combined: Vec<(Range<usize>, HighlightStyle)> = cx.update(|_, _cx| {
+            input.read_with(_cx, |state, _| {
                 let visible_range = 0..text.len();
 
                 let (ts_styles, custom_styles) = match &state.mode {
@@ -2824,9 +2815,16 @@ ORDER BY id
                             .as_ref()
                             .map(|h| h.styles(&visible_range, &theme))
                             .unwrap_or_default();
-                        let custom_styles = custom_highlighter
+                        let custom_styles: Vec<(Range<usize>, HighlightStyle)> = custom_highlighter
                             .as_ref()
-                            .map(|h| h.styles(visible_range.clone(), cx))
+                            .map(|h| {
+                                h.tokens(visible_range.clone())
+                                    .into_iter()
+                                    .map(|(r, name)| {
+                                        (r, theme.style(name.as_ref()).unwrap_or_default())
+                                    })
+                                    .collect()
+                            })
                             .unwrap_or_default();
                         (ts_styles, custom_styles)
                     }
@@ -2841,6 +2839,15 @@ ORDER BY id
                 assert!(
                     !custom_styles.is_empty(),
                     "custom highlighter produced no styles"
+                );
+
+                // The custom "keyword" token should resolve to a non-default
+                // style on the default-dark theme — proves theme integration.
+                assert!(
+                    custom_styles
+                        .iter()
+                        .any(|(_, s)| *s != HighlightStyle::default()),
+                    "custom token name 'keyword' did not resolve to a styled output"
                 );
 
                 // Compose in the same order as element.rs::highlight_lines.
@@ -2865,19 +2872,15 @@ ORDER BY id
     fn test_set_custom_highlighter_round_trip(cx: &mut TestAppContext) {
         use crate::highlighter::CustomHighlighter;
         use crate::input::mode::InputMode;
-        use gpui::HighlightStyle;
+        use gpui::SharedString;
         use std::ops::Range;
         use std::sync::Arc;
 
         struct DummyHighlighter;
 
         impl CustomHighlighter for DummyHighlighter {
-            fn styles(
-                &self,
-                range: Range<usize>,
-                _cx: &App,
-            ) -> Vec<(Range<usize>, HighlightStyle)> {
-                vec![(range, HighlightStyle::default())]
+            fn tokens(&self, range: Range<usize>) -> Vec<(Range<usize>, SharedString)> {
+                vec![(range, "keyword".into())]
             }
         }
 

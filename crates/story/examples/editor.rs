@@ -13,7 +13,10 @@ use gpui_component::{
     ActiveTheme, IconName, Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
-    highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
+    highlighter::{
+        CustomHighlighter, Diagnostic, DiagnosticSeverity, Language, LanguageConfig,
+        LanguageRegistry,
+    },
     input::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
         HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
@@ -66,6 +69,57 @@ fn init() {
     );
 }
 
+/// Example consumer of [`CustomHighlighter`]: tags `TODO` / `FIXME` / `XXX`
+/// / `HACK` / `NOTE` markers anywhere in the buffer with the
+/// `keyword.special` token so they stand out against the tree-sitter
+/// comment colour.
+///
+/// Demonstrates the stateful pattern the trait expects — heavy work happens
+/// off the render thread (here: in response to `InputEvent::Change`) and
+/// the per-frame [`CustomHighlighter::tokens`] call is a pure read of
+/// pre-computed state. A real consumer plugging in syntect or a language
+/// server would follow the same shape with a different parser inside
+/// [`refresh`](MarkerHighlighter::refresh).
+#[derive(Default)]
+struct MarkerHighlighter {
+    tokens: RwLock<Vec<(Range<usize>, SharedString)>>,
+}
+
+impl MarkerHighlighter {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn refresh(&self, text: &Rope) {
+        const MARKERS: &[&str] = &["TODO", "FIXME", "XXX", "HACK", "NOTE"];
+        let token: SharedString = "keyword.special".into();
+        let s = text.to_string();
+        let mut new_tokens: Vec<(Range<usize>, SharedString)> = Vec::new();
+        for marker in MARKERS {
+            let mut start = 0usize;
+            while let Some(rel) = s[start..].find(marker) {
+                let abs = start + rel;
+                new_tokens.push((abs..abs + marker.len(), token.clone()));
+                start = abs + marker.len();
+            }
+        }
+        new_tokens.sort_by_key(|(r, _)| r.start);
+        *self.tokens.write().unwrap() = new_tokens;
+    }
+}
+
+impl CustomHighlighter for MarkerHighlighter {
+    fn tokens(&self, range: Range<usize>) -> Vec<(Range<usize>, SharedString)> {
+        self.tokens
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(r, _)| r.start >= range.start && r.end <= range.end)
+            .cloned()
+            .collect()
+    }
+}
+
 pub struct Example {
     editor: Entity<InputState>,
     tree_state: Entity<TreeState>,
@@ -77,6 +131,7 @@ pub struct Example {
     show_whitespaces: bool,
     folding: bool,
     lsp_store: ExampleLspStore,
+    marker_highlighter: Arc<MarkerHighlighter>,
     _subscriptions: Vec<Subscription>,
     _lint_task: Task<()>,
 }
@@ -690,6 +745,7 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = Lang::BuiltIn(Language::Rust);
         let lsp_store = ExampleLspStore::new();
+        let marker_highlighter = Arc::new(MarkerHighlighter::new());
 
         let editor = cx.new(|cx| {
             let mut editor = InputState::new(window, cx)
@@ -711,6 +767,14 @@ impl Example {
             editor.lsp.definition_provider = Some(lsp_store.clone());
             editor.lsp.document_color_provider = Some(lsp_store.clone());
 
+            // Install the example custom highlighter and seed it from the
+            // initial buffer text so markers are tagged on first paint.
+            marker_highlighter.refresh(editor.text());
+            editor.set_custom_highlighter(
+                Some(marker_highlighter.clone() as Arc<dyn CustomHighlighter>),
+                cx,
+            );
+
             editor
         });
 
@@ -726,7 +790,9 @@ impl Example {
         let tree_state = cx.new(|cx| TreeState::new(cx));
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
-        let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
+        let _subscriptions = vec![cx.subscribe(&editor, |this, editor, _: &InputEvent, cx| {
+            let text = editor.read(cx).text().clone();
+            this.marker_highlighter.refresh(&text);
             this.lint_document(cx);
         })];
 
@@ -741,6 +807,7 @@ impl Example {
             show_whitespaces: false,
             folding: true,
             lsp_store,
+            marker_highlighter,
             _subscriptions,
             _lint_task: Task::ready(()),
         }
