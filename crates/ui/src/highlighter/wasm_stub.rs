@@ -3,7 +3,7 @@
 //!
 //! Note: diagnostics.rs is available in WASM, only syntax highlighting requires stubs.
 
-use gpui::{HighlightStyle, SharedString};
+use gpui::{HighlightStyle, SharedString, StrikethroughStyle, UnderlineStyle, px};
 use std::ops::Range;
 use std::time::Duration;
 
@@ -99,6 +99,7 @@ pub enum FontStyle {
     Normal,
     Italic,
     Underline,
+    Strikethrough,
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -124,7 +125,7 @@ pub struct ThemeStyle {
 
 impl From<ThemeStyle> for HighlightStyle {
     fn from(style: ThemeStyle) -> Self {
-        HighlightStyle {
+        let mut highlight = HighlightStyle {
             color: style.color,
             font_weight: style.font_weight.map(|w| match w {
                 FontWeightContent::Thin => gpui::FontWeight::THIN,
@@ -141,9 +142,28 @@ impl From<ThemeStyle> for HighlightStyle {
                 FontStyle::Normal => gpui::FontStyle::Normal,
                 FontStyle::Italic => gpui::FontStyle::Italic,
                 FontStyle::Underline => gpui::FontStyle::Normal,
+                FontStyle::Strikethrough => gpui::FontStyle::Normal,
             }),
             ..Default::default()
+        };
+
+        match style.font_style {
+            Some(FontStyle::Underline) => {
+                highlight.underline = Some(UnderlineStyle {
+                    thickness: px(1.),
+                    ..Default::default()
+                });
+            }
+            Some(FontStyle::Strikethrough) => {
+                highlight.strikethrough = Some(StrikethroughStyle {
+                    thickness: px(1.),
+                    ..Default::default()
+                });
+            }
+            _ => {}
         }
+
+        highlight
     }
 }
 

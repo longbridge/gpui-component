@@ -2364,7 +2364,7 @@ impl EntityInputHandler for InputState {
 
         let bg = self
             .mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
         if let Some(bg) = bg {
             Self::dispatch_background_parse(bg, window, cx);
         }
@@ -2431,7 +2431,7 @@ impl EntityInputHandler for InputState {
 
         let bg = self
             .mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
         if let Some(bg) = bg {
             Self::dispatch_background_parse(bg, window, cx);
         }
@@ -2548,7 +2548,7 @@ impl Render for InputState {
         if self._pending_update {
             let bg = self
                 .mode
-                .update_highlighter(&(0..0), &self.text, "", false, cx);
+                .update_highlighter(&(0..0), &self.text, &self.text, "", false, cx);
             if let Some(bg) = bg {
                 Self::dispatch_background_parse(bg, window, cx);
             }
