@@ -919,6 +919,22 @@ mod tests {
         style
     }
 
+    #[cfg(feature = "tree-sitter-languages")]
+    fn has_highlight_covering(
+        highlights: &[HighlightItem],
+        source: &str,
+        text: &str,
+        highlight_name: &str,
+    ) -> bool {
+        let start = source.find(text).expect("text should exist in source");
+        let end = start + text.len();
+        highlights.iter().any(|item| {
+            item.name.as_ref() == highlight_name
+                && item.range.start <= start
+                && item.range.end >= end
+        })
+    }
+
     #[track_caller]
     fn assert_unique_styles(
         range: Range<usize>,
@@ -962,6 +978,55 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_html_style_injects_css_highlights() {
+        let html = r#"<style>
+.card { color: #336699; }
+</style>
+"#;
+
+        let rope = Rope::from_str(html);
+        let mut highlighter = SyntaxHighlighter::new("html");
+        highlighter.update(None, &rope, None);
+
+        let highlights = highlighter.match_styles(0..html.len());
+
+        assert!(
+            has_highlight_covering(&highlights, html, "color", "property"),
+            "CSS property names inside style elements should be highlighted"
+        );
+        assert!(
+            has_highlight_covering(&highlights, html, "#336699", "string.special"),
+            "CSS color values inside style elements should be highlighted"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_html_script_injects_javascript_highlights() {
+        let html = r#"<script>
+const answer = 42;
+console.log(answer);
+</script>
+"#;
+
+        let rope = Rope::from_str(html);
+        let mut highlighter = SyntaxHighlighter::new("html");
+        highlighter.update(None, &rope, None);
+
+        let highlights = highlighter.match_styles(0..html.len());
+
+        assert!(
+            has_highlight_covering(&highlights, html, "const", "keyword"),
+            "JavaScript keywords inside script elements should be highlighted"
+        );
+        assert!(
+            has_highlight_covering(&highlights, html, "answer", "variable"),
+            "JavaScript identifiers inside script elements should be highlighted"
+        );
     }
 
     #[test]
