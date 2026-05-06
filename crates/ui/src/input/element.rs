@@ -6,9 +6,9 @@ use gpui::{
 };
 use gpui::{
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, MouseMoveEvent, Path, Pixels, Point, ShapedLine, SharedString, Size, Style,
-    Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px, relative,
-    size,
+    MouseButton, MouseMoveEvent, Path, Pixels, Point, Position, ShapedLine, SharedString, Size,
+    Style, Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px,
+    relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -36,17 +36,14 @@ struct EditorScrollbarLayout {
     scroll_size: Size<Pixels>,
 }
 
-struct EditorScrollbarContext {
-    input_bounds: Bounds<Pixels>,
-    line_number_width: Pixels,
-    scroll_size: Size<Pixels>,
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct EditorScrollbarSnapshot {
+    layout: EditorScrollbarLayout,
     cursor_scroll_offset: Point<Pixels>,
-    paddings: Edges<Pixels>,
     soft_wrap: bool,
-    scroll_handle: gpui::ScrollHandle,
 }
 
-impl EditorScrollbarContext {
+impl EditorScrollbarSnapshot {
     fn new(
         input_bounds: Bounds<Pixels>,
         last_layout: &LastLayout,
@@ -55,13 +52,14 @@ impl EditorScrollbarContext {
         state: &InputState,
     ) -> Self {
         Self {
-            input_bounds,
-            line_number_width: last_layout.line_number_width,
-            scroll_size,
+            layout: EditorScrollbarLayout::new(
+                input_bounds,
+                last_layout.line_number_width,
+                scroll_size,
+                state.editor_scrollbar_paddings.get(),
+            ),
             cursor_scroll_offset,
-            paddings: state.editor_scrollbar_paddings.get(),
             soft_wrap: state.soft_wrap,
-            scroll_handle: state.scroll_handle.clone(),
         }
     }
 }
@@ -94,6 +92,103 @@ impl EditorScrollbarLayout {
                 scroll_size.width - left + paddings.right + RIGHT_MARGIN,
                 scroll_size.height,
             ),
+        }
+    }
+}
+
+pub(super) struct EditorScrollbar {
+    state: Entity<InputState>,
+}
+
+impl EditorScrollbar {
+    pub(super) fn new(state: Entity<InputState>) -> Self {
+        Self { state }
+    }
+}
+
+impl IntoElement for EditorScrollbar {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for EditorScrollbar {
+    type RequestLayoutState = ();
+    type PrepaintState = Option<AnyElement>;
+
+    fn id(&self) -> Option<ElementId> {
+        Some("editor-scrollbar".into())
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let mut style = Style::default();
+        style.position = Position::Absolute;
+        style.size.width = relative(1.).into();
+        style.size.height = relative(1.).into();
+
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        let state = self.state.read(cx);
+        let Some(snapshot) = state.editor_scrollbar_snapshot.get() else {
+            return None;
+        };
+        let scroll_handle = state.scroll_handle.clone();
+
+        if scroll_handle.offset() != snapshot.cursor_scroll_offset {
+            scroll_handle.set_offset(snapshot.cursor_scroll_offset);
+        }
+
+        let mut scrollbar = if !snapshot.soft_wrap {
+            Scrollbar::new(&scroll_handle)
+        } else {
+            Scrollbar::vertical(&scroll_handle)
+        }
+        .scroll_size(snapshot.layout.scroll_size)
+        .into_any_element();
+
+        scrollbar.prepaint_as_root(
+            snapshot.layout.bounds.origin,
+            snapshot.layout.bounds.size.into(),
+            window,
+            cx,
+        );
+        Some(scrollbar)
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&gpui::InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if let Some(scrollbar) = prepaint.as_mut() {
+            scrollbar.paint(window, cx);
         }
     }
 }
@@ -161,41 +256,6 @@ impl TextElement {
                 }
             }
         });
-    }
-
-    fn layout_editor_scrollbar(
-        &self,
-        context: EditorScrollbarContext,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> AnyElement {
-        if context.scroll_handle.offset() != context.cursor_scroll_offset {
-            context
-                .scroll_handle
-                .set_offset(context.cursor_scroll_offset);
-        }
-
-        let scrollbar_layout = EditorScrollbarLayout::new(
-            context.input_bounds,
-            context.line_number_width,
-            context.scroll_size,
-            context.paddings,
-        );
-        let mut scrollbar = if !context.soft_wrap {
-            Scrollbar::new(&context.scroll_handle)
-        } else {
-            Scrollbar::vertical(&context.scroll_handle)
-        }
-        .scroll_size(scrollbar_layout.scroll_size)
-        .into_any_element();
-
-        scrollbar.prepaint_as_root(
-            scrollbar_layout.bounds.origin,
-            scrollbar_layout.bounds.size.into(),
-            window,
-            cx,
-        );
-        scrollbar
     }
 
     /// Returns the:
@@ -1274,7 +1334,6 @@ pub(super) struct PrepaintState {
     line_numbers: Option<Vec<SmallVec<[ShapedLine; 1]>>>,
     /// Size of the scrollable area by entire lines.
     scroll_size: Size<Pixels>,
-    editor_scrollbar: Option<AnyElement>,
     cursor_bounds: Option<Bounds<Pixels>>,
     cursor_scroll_offset: Point<Pixels>,
     /// row index (zero based), no wrap, same line as the cursor.
@@ -1742,23 +1801,22 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-        let editor_scrollbar_context = EditorScrollbarContext::new(
-            input_bounds,
-            &last_layout,
-            scroll_size,
-            cursor_scroll_offset,
-            state,
-        );
+        state
+            .editor_scrollbar_snapshot
+            .set(Some(EditorScrollbarSnapshot::new(
+                input_bounds,
+                &last_layout,
+                scroll_size,
+                cursor_scroll_offset,
+                state,
+            )));
         let fold_icon_layout =
             self.layout_fold_icons(original_x, &bounds, &last_layout, window, cx);
-        let editor_scrollbar =
-            Some(self.layout_editor_scrollbar(editor_scrollbar_context, window, cx));
 
         PrepaintState {
             bounds,
             last_layout,
             scroll_size,
-            editor_scrollbar,
             line_numbers,
             cursor_bounds,
             cursor_scroll_offset,
@@ -2068,10 +2126,6 @@ impl Element for TextElement {
                     _ = first_line.paint(p, line_height, text_align, None, window, cx);
                 }
             }
-        }
-
-        if let Some(scrollbar) = prepaint.editor_scrollbar.as_mut() {
-            scrollbar.paint(window, cx);
         }
 
         self.paint_mouse_listeners(window, cx);

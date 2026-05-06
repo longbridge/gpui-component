@@ -21,8 +21,13 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DisplayMap, MASK_CHAR, blink_cursor::BlinkCursor, change::Change, element::TextElement,
-    mask_pattern::MaskPattern, mode::InputMode, number_input,
+    DisplayMap, MASK_CHAR,
+    blink_cursor::BlinkCursor,
+    change::Change,
+    element::{EditorScrollbarSnapshot, TextElement},
+    mask_pattern::MaskPattern,
+    mode::InputMode,
+    number_input,
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
@@ -337,6 +342,7 @@ pub struct InputState {
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
     pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
+    pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) text_align: TextAlign,
 
     /// The mask pattern for formatting the input text
@@ -455,6 +461,7 @@ impl InputState {
                 bottom: px(0.),
                 left: px(0.),
             }),
+            editor_scrollbar_snapshot: Cell::new(None),
             deferred_scroll_offset: None,
             preferred_column: None,
             placeholder: SharedString::default(),

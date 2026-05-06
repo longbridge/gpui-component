@@ -16,7 +16,7 @@ use crate::{IconName, Size};
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
-use super::InputState;
+use super::{InputState, element::EditorScrollbar};
 
 /// Returns `(background, foreground)` colors for input-like components.
 pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
@@ -219,11 +219,18 @@ impl Input {
         };
 
         state.editor_scrollbar_paddings.set(paddings);
+        state.editor_scrollbar_snapshot.set(None);
 
         v_flex()
             .size_full()
             .children(state.search_panel.clone())
-            .child(div().flex_1().child(input_state.clone()))
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .child(input_state.clone())
+                    .child(EditorScrollbar::new(input_state.clone())),
+            )
     }
 }
 
