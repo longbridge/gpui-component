@@ -16,6 +16,7 @@ use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
 use std::ops::Range;
 use std::rc::Rc;
+use std::sync::Arc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
 
@@ -25,6 +26,7 @@ use super::{
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::highlighter::CustomHighlighter;
 use crate::highlighter::DiagnosticSet;
 #[cfg(not(target_family = "wasm"))]
 use crate::highlighter::LanguageRegistry;
@@ -619,6 +621,32 @@ impl InputState {
                 parse_task.borrow_mut().take();
             }
             _ => {}
+        }
+        cx.notify();
+    }
+
+    /// Set a custom highlighter that contributes additional named token
+    /// ranges to the render pipeline alongside the built-in tree-sitter
+    /// highlighter.
+    ///
+    /// The custom highlighter does **not** replace the built-in. Both run
+    /// (when set); the custom output is resolved against the active
+    /// [`HighlightTheme`](crate::highlighter::HighlightTheme) and combined
+    /// with the tree-sitter and diagnostic styles via
+    /// [`gpui::combine_highlights`]. Pass `None` to remove a previously-set
+    /// custom highlighter.
+    ///
+    /// No-op if the input is not in [`InputMode::CodeEditor`] mode.
+    pub fn set_custom_highlighter(
+        &mut self,
+        highlighter: Option<Arc<dyn CustomHighlighter>>,
+        cx: &mut Context<Self>,
+    ) {
+        if let InputMode::CodeEditor {
+            custom_highlighter, ..
+        } = &mut self.mode
+        {
+            *custom_highlighter = highlighter;
         }
         cx.notify();
     }
@@ -2734,5 +2762,189 @@ ORDER BY id
              Before: {:?}\nAfter: {:?}",
             colored_before, colored_after
         );
+    }
+
+    #[gpui::test]
+    fn test_custom_highlighter_composes_with_tree_sitter(cx: &mut TestAppContext) {
+        use crate::highlighter::{CustomHighlighter, HighlightTheme};
+        use crate::input::mode::InputMode;
+        use gpui::{HighlightStyle, SharedString};
+        use std::ops::Range;
+        use std::sync::Arc;
+
+        // Custom highlighter that tags a fixed byte range with a token name
+        // resolvable by the active highlight theme. Picking "keyword" guarantees
+        // a non-default style on the default themes.
+        struct KeywordRange {
+            range: Range<usize>,
+        }
+        impl CustomHighlighter for KeywordRange {
+            fn tokens(&self, _range: Range<usize>) -> Vec<(Range<usize>, SharedString)> {
+                vec![(self.range.clone(), "keyword".into())]
+            }
+        }
+
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Use SQL — a language the built-in tree-sitter highlighter knows about.
+        let text = "SELECT * FROM users WHERE id = 1\n";
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value(text, window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        // Custom highlighter tags bytes [0..6) (covers "SELECT") as "keyword".
+        let custom: Arc<dyn CustomHighlighter> = Arc::new(KeywordRange { range: 0..6 });
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                state.set_custom_highlighter(Some(custom), cx);
+            });
+        });
+        cx.run_until_parked();
+
+        // Mirror element.rs::highlight_lines: pull both sources from state.mode,
+        // resolve the custom tokens against the highlight theme, and combine
+        // in the documented order.
+        let theme = HighlightTheme::default_dark();
+        let combined: Vec<(Range<usize>, HighlightStyle)> = cx.update(|_, _cx| {
+            input.read_with(_cx, |state, _| {
+                let visible_range = 0..text.len();
+
+                let (ts_styles, custom_styles) = match &state.mode {
+                    InputMode::CodeEditor {
+                        highlighter,
+                        custom_highlighter,
+                        ..
+                    } => {
+                        let ts_styles = highlighter
+                            .borrow()
+                            .as_ref()
+                            .map(|h| h.styles(&visible_range, &theme))
+                            .unwrap_or_default();
+                        let custom_styles: Vec<(Range<usize>, HighlightStyle)> = custom_highlighter
+                            .as_ref()
+                            .map(|h| {
+                                h.tokens(visible_range.clone())
+                                    .into_iter()
+                                    .map(|(r, name)| {
+                                        (r, theme.style(name.as_ref()).unwrap_or_default())
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        (ts_styles, custom_styles)
+                    }
+                    _ => panic!("expected CodeEditor mode"),
+                };
+
+                // Both sources should have produced at least one style.
+                assert!(
+                    !ts_styles.is_empty(),
+                    "tree-sitter highlighter produced no styles for SQL input"
+                );
+                assert!(
+                    !custom_styles.is_empty(),
+                    "custom highlighter produced no styles"
+                );
+
+                // The custom "keyword" token should resolve to a non-default
+                // style on the default-dark theme — proves theme integration.
+                assert!(
+                    custom_styles
+                        .iter()
+                        .any(|(_, s)| *s != HighlightStyle::default()),
+                    "custom token name 'keyword' did not resolve to a styled output"
+                );
+
+                // Compose in the same order as element.rs::highlight_lines.
+                gpui::combine_highlights(custom_styles, ts_styles).collect()
+            })
+        });
+
+        // The combined output should be non-empty and well-formed (ranges in
+        // ascending order, no panics from combine_highlights resolving overlaps).
+        assert!(!combined.is_empty());
+        let mut last_end = 0usize;
+        for (range, _) in &combined {
+            assert!(
+                range.start >= last_end,
+                "combine_highlights produced overlapping/out-of-order ranges: {range:?} after end {last_end}"
+            );
+            last_end = range.end;
+        }
+    }
+
+    #[gpui::test]
+    fn test_set_custom_highlighter_round_trip(cx: &mut TestAppContext) {
+        use crate::highlighter::CustomHighlighter;
+        use crate::input::mode::InputMode;
+        use gpui::SharedString;
+        use std::ops::Range;
+        use std::sync::Arc;
+
+        struct DummyHighlighter;
+
+        impl CustomHighlighter for DummyHighlighter {
+            fn tokens(&self, range: Range<usize>) -> Vec<(Range<usize>, SharedString)> {
+                vec![(range, "keyword".into())]
+            }
+        }
+
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Default: no custom highlighter installed.
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| match &state.mode {
+                InputMode::CodeEditor {
+                    custom_highlighter, ..
+                } => {
+                    assert!(custom_highlighter.is_none());
+                }
+                _ => panic!("expected CodeEditor mode"),
+            });
+        });
+
+        // Install a custom highlighter.
+        let dummy: Arc<dyn CustomHighlighter> = Arc::new(DummyHighlighter);
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                state.set_custom_highlighter(Some(dummy.clone()), cx);
+            });
+        });
+
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| match &state.mode {
+                InputMode::CodeEditor {
+                    custom_highlighter, ..
+                } => {
+                    assert!(custom_highlighter.is_some());
+                }
+                _ => panic!("expected CodeEditor mode"),
+            });
+        });
+
+        // Clear it again.
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                state.set_custom_highlighter(None, cx);
+            });
+        });
+
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| match &state.mode {
+                InputMode::CodeEditor {
+                    custom_highlighter, ..
+                } => {
+                    assert!(custom_highlighter.is_none());
+                }
+                _ => panic!("expected CodeEditor mode"),
+            });
+        });
     }
 }

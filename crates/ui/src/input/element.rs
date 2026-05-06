@@ -860,9 +860,8 @@ impl TextElement {
 
         // Second pass: create and prepaint icons
         let line_height = last_layout.line_height;
-        let line_number_width = last_layout.line_number_width
-            - LINE_NUMBER_RIGHT_MARGIN
-            - FOLD_ICON_HITBOX_WIDTH;
+        let line_number_width =
+            last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN - FOLD_ICON_HITBOX_WIDTH;
         let icon_relative_pos = point(
             (FOLD_ICON_HITBOX_WIDTH - FOLD_ICON_WIDTH).half(),
             (line_height - FOLD_ICON_WIDTH).half(),
@@ -1056,12 +1055,17 @@ impl TextElement {
         let text = &state.text;
         let is_multi_line = state.mode.is_multi_line();
 
-        let (mut highlighter, diagnostics) = match &state.mode {
+        let (mut highlighter, diagnostics, custom_highlighter) = match &state.mode {
             InputMode::CodeEditor {
                 highlighter,
                 diagnostics,
+                custom_highlighter,
                 ..
-            } => (highlighter.borrow_mut(), diagnostics),
+            } => (
+                highlighter.borrow_mut(),
+                diagnostics,
+                custom_highlighter.clone(),
+            ),
             _ => return None,
         };
         let highlighter = highlighter.as_mut()?;
@@ -1121,12 +1125,35 @@ impl TextElement {
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
 
+        // Custom highlighter tokens, resolved through the active highlight
+        // theme so the custom source shares the same colour vocabulary as
+        // the tree-sitter path. Empty Vec when no custom highlighter is set,
+        // so `combine_highlights` short-circuits.
+        let custom_styles = match &custom_highlighter {
+            Some(h) => {
+                let highlight_theme = &cx.theme().highlight_theme;
+                h.tokens(visible_byte_range.clone())
+                    .into_iter()
+                    .map(|(range, name)| {
+                        (
+                            range,
+                            highlight_theme.style(name.as_ref()).unwrap_or_default(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            }
+            None => Vec::new(),
+        };
+
         // hover definition style
         if let Some(hover_style) = self.layout_hover_definition(cx) {
             styles.push(hover_style);
         }
 
-        // Combine marker styles
+        // Compose order: tree-sitter (base) -> custom (overlay) -> diagnostics (top).
+        // Diagnostics keep highest priority so errors remain visible regardless
+        // of language coloring.
+        styles = gpui::combine_highlights(custom_styles, styles).collect();
         styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
 
         Some(styles)
@@ -1183,7 +1210,10 @@ impl IntoElement for TextElement {
 
 /// A debug function to print points as SVG path.
 #[allow(unused)]
-fn print_points_as_svg_path(line_corners: &Vec<gpui::Corners<Pixels>>, points: &Vec<Point<Pixels>>) {
+fn print_points_as_svg_path(
+    line_corners: &Vec<gpui::Corners<Pixels>>,
+    points: &Vec<Point<Pixels>>,
+) {
     for corners in line_corners {
         println!(
             "tl: ({}, {}), tr: ({}, {}), bl: ({}, {}), br: ({}, {})",
@@ -1605,7 +1635,8 @@ impl Element for TextElement {
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
-        let fold_icon_layout = self.layout_fold_icons(original_x, &bounds, &last_layout, window, cx);
+        let fold_icon_layout =
+            self.layout_fold_icons(original_x, &bounds, &last_layout, window, cx);
 
         PrepaintState {
             bounds,

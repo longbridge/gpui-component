@@ -2,6 +2,10 @@
 mod diagnostics;
 pub use diagnostics::*;
 
+// Custom highlighter trait - works on all platforms (no tree-sitter dependency)
+mod custom;
+pub use custom::*;
+
 // Native implementation with full tree-sitter support
 #[cfg(not(target_family = "wasm"))]
 mod highlighter;
