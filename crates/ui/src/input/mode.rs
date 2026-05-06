@@ -225,8 +225,8 @@ impl InputMode {
         &mut self,
         selected_range: &Range<usize>,
         old_text: &Rope,
-        text: &Rope,
-        new_text: &str,
+        new_text: &Rope,
+        change_text: &str,
         force: bool,
         cx: &mut App,
     ) -> Option<PendingBackgroundParse> {
@@ -251,10 +251,10 @@ impl InputMode {
                     return None;
                 };
 
-                let edit = replacement_input_edit(old_text, text, selected_range, new_text);
+                let edit = replacement_input_edit(old_text, new_text, selected_range, change_text);
 
                 const SYNC_PARSE_TIMEOUT: Duration = Duration::from_millis(2);
-                let completed = h.update(Some(edit), text, Some(SYNC_PARSE_TIMEOUT));
+                let completed = h.update(Some(edit), new_text, Some(SYNC_PARSE_TIMEOUT));
                 if completed {
                     // Sync parse succeeded, cancel any pending background parse.
                     parse_task.borrow_mut().take();
@@ -263,7 +263,7 @@ impl InputMode {
                     // Timed out. Return the data needed for background parsing.
                     let pending = PendingBackgroundParse {
                         language: h.language().clone(),
-                        text: text.clone(),
+                        text: new_text.clone(),
                         highlighter: highlighter.clone(),
                         parse_task: parse_task.clone(),
                     };
@@ -305,13 +305,13 @@ impl InputMode {
 /// `new_end` byte/position come from the post-edit `text`.
 fn replacement_input_edit(
     old_text: &Rope,
-    text: &Rope,
+    new_text: &Rope,
     selected_range: &Range<usize>,
-    new_text: &str,
+    change_text: &str,
 ) -> InputEdit {
     let start_byte = selected_range.start.min(old_text.len());
     let old_end_byte = selected_range.end.min(old_text.len()).max(start_byte);
-    let new_end_byte = (start_byte + new_text.len()).min(text.len());
+    let new_end_byte = (start_byte + change_text.len()).min(new_text.len());
 
     InputEdit {
         start_byte,
@@ -319,7 +319,7 @@ fn replacement_input_edit(
         new_end_byte,
         start_position: old_text.offset_to_point(start_byte),
         old_end_position: old_text.offset_to_point(old_end_byte),
-        new_end_position: text.offset_to_point(new_end_byte),
+        new_end_position: new_text.offset_to_point(new_end_byte),
     }
 }
 
