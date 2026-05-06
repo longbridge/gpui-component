@@ -332,7 +332,7 @@ h_flex()
                 .pl_3()
         )
     )
-    .child(Divider::vertical())
+    .child(Separator::vertical())
     .child(
         div().flex_1().child(
             Input::new(&phone_input)

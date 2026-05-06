@@ -108,7 +108,7 @@ impl Plot for StackedBarChart {
                 .cross(move |d| x.tick(&d.data.date.clone()))
                 .base(move |d| y0.tick(&(d.y0 as f64)).unwrap_or(height))
                 .value(move |d| y1.tick(&(d.y1 as f64)))
-                .fill(move |_| fill)
+                .fill(move |_, _, _| fill)
                 .paint(&bounds, window, cx);
         }
     }

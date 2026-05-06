@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
 use gpui::{
-    point, px, App, Bounds, FontWeight, Hsla, Pixels, Point, SharedString, TextAlign, TextRun,
-    Window,
+    App, Bounds, FontWeight, Hsla, Pixels, Point, ShapedLine, SharedString, TextAlign, TextRun,
+    Window, point, px,
 };
 
 use super::origin_point;
@@ -11,22 +11,16 @@ pub const TEXT_SIZE: f32 = 10.;
 pub const TEXT_GAP: f32 = 2.;
 pub const TEXT_HEIGHT: f32 = TEXT_SIZE + TEXT_GAP;
 
-/// Returns the rendered width of `text` at `font_size` using the window's
-/// current text style.  Used for layout calculations that need to reserve
-/// space for labels before the scale ranges are fixed.
-pub fn measure_text_width(text: &SharedString, font_size: Pixels, window: &mut Window) -> f32 {
-    if text.is_empty() {
-        return 0.;
-    }
+fn shape_label(
+    text: &SharedString,
+    font_size: Pixels,
+    color: Hsla,
+    window: &mut Window,
+) -> ShapedLine {
     let text_run = TextRun {
         len: text.len(),
         font: window.text_style().font(),
-        color: Hsla {
-            h: 0.,
-            s: 0.,
-            l: 0.,
-            a: 1.,
-        },
+        color,
         background_color: None,
         underline: None,
         strikethrough: None,
@@ -34,8 +28,28 @@ pub fn measure_text_width(text: &SharedString, font_size: Pixels, window: &mut W
     window
         .text_system()
         .shape_line(text.clone(), font_size, &[text_run], None)
-        .width()
-        .as_f32()
+}
+
+/// Returns the rendered width of `text` at `font_size` using the window's
+/// current text style.  Used for layout calculations that need to reserve
+/// space for labels before the scale ranges are fixed.
+pub fn measure_text_width(text: &SharedString, font_size: Pixels, window: &mut Window) -> f32 {
+    if text.is_empty() {
+        return 0.;
+    }
+    shape_label(
+        text,
+        font_size,
+        Hsla {
+            h: 0.,
+            s: 0.,
+            l: 0.,
+            a: 1.,
+        },
+        window,
+    )
+    .width()
+    .as_f32()
 }
 
 pub struct Text {
@@ -107,36 +121,19 @@ impl PlotLabel {
             origin,
             color,
             font_size,
-            font_weight,
+            font_weight: _,
             align,
         } in self.0.iter()
         {
             let origin = origin_point(origin.x, origin.y, bounds.origin);
 
-            let text_run = TextRun {
-                len: text.len(),
-                font: window.text_style().highlight(*font_weight).font(),
-                color: *color,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
+            let line = shape_label(text, *font_size, *color, window);
+            let origin = match align {
+                TextAlign::Left => origin,
+                TextAlign::Right => origin - point(line.width(), px(0.)),
+                _ => origin - point(line.width() / 2., px(0.)),
             };
-
-            if let Ok(text) =
-                window
-                    .text_system()
-                    .shape_text(text.clone(), *font_size, &[text_run], None, None)
-            {
-                for line in text {
-                    let origin = match align {
-                        TextAlign::Left => origin,
-                        TextAlign::Right => origin - point(line.size(*font_size).width, px(0.)),
-                        _ => origin - point(line.size(*font_size).width / 2., px(0.)),
-                    };
-
-                    let _ = line.paint(origin, *font_size, *align, None, window, cx);
-                }
-            }
+            let _ = line.paint(origin, *font_size, *align, None, window, cx);
         }
     }
 }

@@ -84,6 +84,7 @@ fn pascal_case(filename: &str) -> String {
 ///
 /// Accepts an enum name, a path relative to the calling crate's `CARGO_MANIFEST_DIR`,
 /// and optionally a list of additional derive traits.
+/// Each `.svg` file becomes an enum variant using PascalCase conversion.
 ///
 /// # Example
 ///
@@ -150,6 +151,7 @@ pub fn icon_named(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #derive_attrs
+
         pub enum #enum_name {
             #(#variants,)*
         }

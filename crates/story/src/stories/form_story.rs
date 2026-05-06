@@ -8,11 +8,11 @@ use gpui_component::{
     checkbox::Checkbox,
     color_picker::{ColorPicker, ColorPickerState},
     date_picker::{DatePicker, DatePickerState},
-    divider::Divider,
     form::{field, v_form},
     h_flex,
     input::{Input, InputState},
     select::{Select, SelectState},
+    separator::Separator,
     switch::Switch,
     v_flex,
 };
@@ -181,7 +181,7 @@ impl Render for FormStory {
                             })),
                     ),
             )
-            .child(Divider::horizontal())
+            .child(Separator::horizontal())
             .child(
                 v_form()
                     .layout(self.layout)

@@ -147,7 +147,7 @@ Popover::new("context-menu")
     .mouse_button(MouseButton::Right)
     .trigger(Button::new("right-click").label("Right Click Me").outline())
     .child("Context Menu")
-    .child(Divider::horizontal())
+    .child(Separator::horizontal())
     .child("This is a custom context menu.")
 ```
 

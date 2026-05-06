@@ -7,7 +7,7 @@ documentation = "https://docs.rs/gpui-component"
 homepage = "https://longbridge.github.io/gpui-component"
 repository = "https://github.com/longbridge/gpui-component"
 readme = "../../README.md"
-version = "0.5.1"
+version = "0.5.2"
 publish = true
 edition.workspace = true
 
@@ -146,7 +146,7 @@ instant = { version = "0.1", features = ["wasm-bindgen"] }
 # Native-only dependencies (not available on WASM)
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 smol.workspace = true
-tree-sitter = "0.25.4"
+tree-sitter = "0.26"
 tree-sitter-astro-next = { version="0.1.1", optional = true }
 tree-sitter-bash = { version = "0.23.3", optional = true }
 tree-sitter-c = { version = "0.24.1", optional = true }

@@ -5,7 +5,7 @@ use crate::{
     notification::Notification,
     sheet::Sheet,
 };
-use gpui::{App, Entity, Window};
+use gpui::{App, ElementId, Entity, Window};
 use std::rc::Rc;
 
 /// Extension trait for [`Window`] to add dialog, sheet .. functionality.
@@ -64,8 +64,12 @@ pub trait WindowExt: Sized {
     /// Pushes a notification to the notification list.
     fn push_notification(&mut self, note: impl Into<Notification>, cx: &mut App);
 
-    /// Removes the notification with the given id.
+    /// Removes all notifications whose id matches `T`, including ones registered with
+    /// either `Notification::id` or `Notification::id1` (any key).
     fn remove_notification<T: Sized + 'static>(&mut self, cx: &mut App);
+
+    /// Removes a single notification matching the given type `T` and `key` (paired with `Notification::id1`).
+    fn remove_notification1<T: Sized + 'static>(&mut self, key: impl Into<ElementId>, cx: &mut App);
 
     /// Clears all notifications.
     fn clear_notifications(&mut self, cx: &mut App);
@@ -161,6 +165,18 @@ impl WindowExt for Window {
     fn remove_notification<T: Sized + 'static>(&mut self, cx: &mut App) {
         Root::update(self, cx, |root, window, cx| {
             root.remove_notification::<T>(window, cx);
+        })
+    }
+
+    #[inline]
+    fn remove_notification1<T: Sized + 'static>(
+        &mut self,
+        key: impl Into<ElementId>,
+        cx: &mut App,
+    ) {
+        let key = key.into();
+        Root::update(self, cx, |root, window, cx| {
+            root.remove_notification1::<T>(key, window, cx);
         })
     }
 

@@ -1,5 +1,5 @@
-use gpui::{ Anchor,
-    Action, App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyBinding,
+use gpui::{
+    Action, Anchor, App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyBinding,
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
@@ -135,7 +135,8 @@ impl Render for MenuStory {
                             .outline()
                             .label("Edit")
                             .dropdown_menu(move |this, window, cx| {
-                                this.link("About", "https://github.com/longbridge/gpui-component")
+                                this.min_w(250.)
+                                    .link("About", "https://github.com/longbridge/gpui-component")
                                     .check_side(check_side.unwrap_or(Side::Left))
                                     .separator()
                                     .item(PopupMenuItem::new("Handle Click").on_click(

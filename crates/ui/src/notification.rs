@@ -225,10 +225,7 @@ impl Notification {
     ///
     /// Triggered when the notification is closed by any means
     /// (close button, middle-click, autohide, click handler, or programmatic close).
-    pub fn on_close(
-        mut self,
-        on_close: impl Fn(&mut Window, &mut App) + 'static,
-    ) -> Self {
+    pub fn on_close(mut self, on_close: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.on_close = Some(Rc::new(on_close));
         self
     }
@@ -323,7 +320,7 @@ impl Render for Notification {
             .gap_3()
             .refine_style(&self.style)
             .when_some(icon, |this, icon| {
-                this.child(div().absolute().py_3p5().left_4().child(icon))
+                this.child(div().absolute().top(px(18.)).left_4().child(icon))
             })
             .child(
                 v_flex()
@@ -512,6 +509,28 @@ impl NotificationList {
         cx.notify();
     }
 
+    /// Close all notifications whose id matches the given [`TypeId`], regardless of
+    /// whether they were registered via [`Notification::id`] or [`Notification::id1`].
+    pub(crate) fn close_by_type(
+        &mut self,
+        type_id: TypeId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let matched: Vec<_> = self
+            .notifications
+            .iter()
+            .filter(|n| match &n.read(cx).id {
+                NotificationId::Id(t) | NotificationId::IdAndElementId(t, _) => *t == type_id,
+            })
+            .cloned()
+            .collect();
+        for n in matched {
+            n.update(cx, |note, cx| note.dismiss(window, cx));
+        }
+        cx.notify();
+    }
+
     pub fn clear(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.notifications.clear();
         cx.notify();
@@ -564,5 +583,183 @@ impl Render for NotificationList {
                 cx.notify()
             }))
             .children(items)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::Theme;
+    use gpui::{TestAppContext, VisualTestContext};
+
+    struct FooKind;
+    struct BarKind;
+
+    struct TestRoot {
+        list: Entity<NotificationList>,
+    }
+
+    impl Render for TestRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.list.clone()
+        }
+    }
+
+    fn ids(list: &Entity<NotificationList>, cx: &mut VisualTestContext) -> Vec<NotificationId> {
+        list.read_with(cx, |l, cx| {
+            l.notifications
+                .iter()
+                .map(|n| n.read(cx).id.clone())
+                .collect()
+        })
+    }
+
+    /// Drive the dismiss animation timer + propagate the resulting `DismissEvent`
+    /// so that closed notifications are removed from the list.
+    fn flush_dismiss(cx: &mut VisualTestContext) {
+        cx.background_executor
+            .advance_clock(Duration::from_millis(200));
+        cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn close_by_type_removes_id_and_all_id1_of_same_type(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("plain").id::<FooKind>().autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("a").id1::<FooKind>(1).autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("b").id1::<FooKind>(2).autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("bar").id::<BarKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        assert_eq!(ids(&list, cx).len(), 4);
+
+        list.update_in(cx, |list, window, cx| {
+            list.close_by_type(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        let remaining = ids(&list, cx);
+        assert_eq!(
+            remaining,
+            vec![NotificationId::Id(TypeId::of::<BarKind>())],
+            "only the BarKind notification should survive"
+        );
+    }
+
+    #[gpui::test]
+    fn close_with_id_and_element_id_removes_only_matching_key(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("a").id1::<FooKind>(1).autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("b").id1::<FooKind>(2).autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("plain").id::<FooKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        list.update_in(cx, |list, window, cx| {
+            list.close(
+                (TypeId::of::<FooKind>(), ElementId::from(1usize)),
+                window,
+                cx,
+            );
+        });
+        flush_dismiss(cx);
+
+        let remaining = ids(&list, cx);
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.contains(&NotificationId::IdAndElementId(
+            TypeId::of::<FooKind>(),
+            ElementId::from(2usize),
+        )));
+        assert!(remaining.contains(&NotificationId::Id(TypeId::of::<FooKind>())));
+    }
+
+    #[gpui::test]
+    fn close_with_only_type_id_does_not_match_id1_entries(cx: &mut TestAppContext) {
+        // The plain `close(TypeId)` form (used by the legacy code path) must keep
+        // its narrow semantics: it only matches `NotificationId::Id`, not
+        // `NotificationId::IdAndElementId`. The new `close_by_type` is the broad form.
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("a").id1::<FooKind>(1).autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        assert_eq!(ids(&list, cx).len(), 1, "id1 entry should remain untouched");
+    }
+
+    #[gpui::test]
+    fn close_by_type_with_no_match_is_noop(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("bar").id::<BarKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        list.update_in(cx, |list, window, cx| {
+            list.close_by_type(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        assert_eq!(ids(&list, cx).len(), 1);
     }
 }
