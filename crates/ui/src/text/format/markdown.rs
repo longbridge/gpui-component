@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use gpui::SharedString;
 use markdown::{
     ParseOptions,
@@ -53,6 +55,75 @@ fn parse_table_cell(row: &mut node::TableRow, node: &mdast::TableCell, cx: &mut 
     row.children.push(table_cell);
 }
 
+fn push_merged(
+    paragraph: &mut Paragraph,
+    text: String,
+    marks: Vec<(Range<usize>, TextMark)>,
+    new_mark: TextMark,
+) {
+    if text.is_empty() {
+        return;
+    }
+
+    let mut node = InlineNode::new(text).marks(marks);
+    let len = node.text.len();
+    if let Some(last) = node.marks.last_mut()
+        && last.0.start == 0
+        && last.0.end == len
+    {
+        last.1.merge(new_mark);
+    } else {
+        node.marks.push((0..len, new_mark));
+    }
+    paragraph.push(node);
+}
+
+fn merge_children_with_mark(
+    paragraph: &mut Paragraph,
+    children: &[mdast::Node],
+    mark: TextMark,
+    cx: &mut NodeContext,
+) -> String {
+    let mut text = String::new();
+    let mut merged_text = String::new();
+    let mut merged_marks = Vec::new();
+
+    for child in children {
+        let mut child_paragraph = Paragraph::default();
+        let child_text = parse_paragraph(&mut child_paragraph, child, cx);
+        text.push_str(&child_text);
+
+        for node in child_paragraph.children {
+            let merged_offset = merged_text.len();
+            merged_text.push_str(&node.text);
+
+            for (range, child_mark) in node.marks {
+                merged_marks.push((
+                    range.start + merged_offset..range.end + merged_offset,
+                    child_mark,
+                ));
+            }
+
+            if let Some(mut image) = node.image {
+                if let Some(link_mark) = mark.link.clone() {
+                    image.link = Some(link_mark);
+                }
+
+                push_merged(
+                    paragraph,
+                    std::mem::take(&mut merged_text),
+                    std::mem::take(&mut merged_marks),
+                    mark.clone(),
+                );
+                paragraph.push(InlineNode::image(image));
+            }
+        }
+    }
+
+    push_merged(paragraph, merged_text, merged_marks, mark);
+    text
+}
+
 fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeContext) -> String {
     let span = node.position().map(|pos| Span {
         start: cx.offset + pos.start.offset,
@@ -75,31 +146,27 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
             paragraph.push_str(&val.value)
         }
         Node::Emphasis(val) => {
-            let mut child_paragraph = Paragraph::default();
-            for child in val.children.iter() {
-                text.push_str(&parse_paragraph(&mut child_paragraph, &child, cx));
-            }
-            paragraph.push(
-                InlineNode::new(&text).marks(vec![(0..text.len(), TextMark::default().italic())]),
+            text = merge_children_with_mark(
+                paragraph,
+                &val.children,
+                TextMark::default().italic(),
+                cx,
             );
         }
         Node::Strong(val) => {
-            let mut child_paragraph = Paragraph::default();
-            for child in val.children.iter() {
-                text.push_str(&parse_paragraph(&mut child_paragraph, &child, cx));
-            }
-            paragraph.push(
-                InlineNode::new(&text).marks(vec![(0..text.len(), TextMark::default().bold())]),
+            text = merge_children_with_mark(
+                paragraph,
+                &val.children,
+                TextMark::default().bold(),
+                cx,
             );
         }
         Node::Delete(val) => {
-            let mut child_paragraph = Paragraph::default();
-            for child in val.children.iter() {
-                text.push_str(&parse_paragraph(&mut child_paragraph, &child, cx));
-            }
-            paragraph.push(
-                InlineNode::new(&text)
-                    .marks(vec![(0..text.len(), TextMark::default().strikethrough())]),
+            text = merge_children_with_mark(
+                paragraph,
+                &val.children,
+                TextMark::default().strikethrough(),
+                cx,
             );
         }
         Node::InlineCode(val) => {
@@ -115,28 +182,15 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
                 ..Default::default()
             });
 
-            let mut child_paragraph = Paragraph::default();
-            for child in val.children.iter() {
-                text.push_str(&parse_paragraph(&mut child_paragraph, &child, cx));
-            }
-
-            // FIXME: GPUI InteractiveText does not support inline images yet.
-            // So here we push images to the paragraph directly.
-            for child in child_paragraph.children.iter_mut() {
-                if let Some(image) = child.image.as_mut() {
-                    image.link = link_mark.clone();
-                }
-
-                child.marks.push((
-                    0..child.text.len(),
-                    TextMark {
-                        link: link_mark.clone(),
-                        ..Default::default()
-                    },
-                ));
-            }
-
-            paragraph.merge(child_paragraph);
+            text = merge_children_with_mark(
+                paragraph,
+                &val.children,
+                TextMark {
+                    link: link_mark,
+                    ..Default::default()
+                },
+                cx,
+            );
         }
         Node::Image(raw) => {
             paragraph.push_image(ImageNode {
@@ -439,5 +493,39 @@ fn ast_to_node(
             }
             BlockNode::Unknown
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nested_emphasis_merges_text_marks() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            "This has **_bold and italic_** text.",
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+            panic!("expected paragraph");
+        };
+
+        let bold_italic = paragraph
+            .children
+            .iter()
+            .find(|child| child.text.as_ref() == "bold and italic")
+            .expect("expected emphasized text");
+
+        assert!(
+            bold_italic
+                .marks
+                .iter()
+                .any(|(_, mark)| mark.bold && mark.italic),
+            "nested emphasis should produce a bold and italic mark"
+        );
     }
 }
