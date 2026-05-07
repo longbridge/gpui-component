@@ -483,6 +483,21 @@ impl SyntaxHighlighter {
         tree: &Tree,
         text: &Rope,
     ) -> Vec<InjectionLayer> {
+        fn sort_ranges(ranges: &mut [tree_sitter::Range]) {
+            ranges.sort_unstable_by(|a, b| {
+                a.start_byte
+                    .cmp(&b.start_byte)
+                    .then_with(|| a.end_byte.cmp(&b.end_byte))
+            });
+        }
+
+        fn ranges_cache_key(ranges: &[tree_sitter::Range]) -> Vec<(usize, usize)> {
+            ranges
+                .iter()
+                .map(|r| (r.start_byte, r.end_byte))
+                .collect()
+        }
+
         let root_node = tree.root_node();
         let mut cursor = QueryCursor::new();
         let mut matches = cursor.matches(&data.query, root_node, TextProvider(text));
@@ -493,7 +508,7 @@ impl SyntaxHighlighter {
             .iter()
             .map(|layer| {
                 (
-                    (layer.language_name.clone(), range_key(&layer.ranges)),
+                    (layer.language_name.clone(), ranges_cache_key(&layer.ranges)),
                     &layer.tree,
                 )
             })
@@ -549,7 +564,7 @@ impl SyntaxHighlighter {
                     .extend(ranges);
             } else {
                 let old_tree = old_layer_trees
-                    .get(&(language_name.clone(), range_key(&ranges)))
+                    .get(&(language_name.clone(), ranges_cache_key(&ranges)))
                     .copied();
                 if let Some(layer) =
                     Self::parse_injection_layer(&language_name, ranges, old_tree, text)
@@ -565,7 +580,7 @@ impl SyntaxHighlighter {
             }
             sort_ranges(&mut ranges);
             let old_tree = old_layer_trees
-                .get(&(language_name.clone(), range_key(&ranges)))
+                .get(&(language_name.clone(), ranges_cache_key(&ranges)))
                 .copied();
             if let Some(layer) = Self::parse_injection_layer(&language_name, ranges, old_tree, text)
             {
@@ -584,6 +599,11 @@ impl SyntaxHighlighter {
         old_tree: Option<&Tree>,
         text: &Rope,
     ) -> Option<InjectionLayer> {
+        fn bounding_byte_range(ranges: &[tree_sitter::Range]) -> Option<Range<usize>> {
+            let start = ranges.iter().map(|r| r.start_byte).min()?;
+            let end = ranges.iter().map(|r| r.end_byte).max()?;
+            Some(start..end)
+        }
         let config = LanguageRegistry::singleton().language(language_name)?;
         let mut parser = Parser::new();
         parser.set_language(&config.language).ok()?;
@@ -602,7 +622,7 @@ impl SyntaxHighlighter {
             None,
         )?;
 
-        let byte_range = ranges_byte_range(&ranges)?;
+        let byte_range = bounding_byte_range(&ranges)?;
         Some(InjectionLayer {
             language_name: language_name.clone(),
             ranges,
@@ -960,26 +980,6 @@ fn collect_query_nodes_inner<'a>(
     out.push(node);
 }
 
-fn sort_ranges(ranges: &mut [tree_sitter::Range]) {
-    ranges.sort_unstable_by(|a, b| {
-        a.start_byte
-            .cmp(&b.start_byte)
-            .then_with(|| a.end_byte.cmp(&b.end_byte))
-    });
-}
-
-fn range_key(ranges: &[tree_sitter::Range]) -> Vec<(usize, usize)> {
-    ranges
-        .iter()
-        .map(|range| (range.start_byte, range.end_byte))
-        .collect()
-}
-
-fn ranges_byte_range(ranges: &[tree_sitter::Range]) -> Option<Range<usize>> {
-    let start = ranges.iter().map(|range| range.start_byte).min()?;
-    let end = ranges.iter().map(|range| range.end_byte).max()?;
-    Some(start..end)
-}
 
 /// Merge other style (Other on top)
 fn merge_highlight_style(style: &mut HighlightStyle, other: &HighlightStyle) {
