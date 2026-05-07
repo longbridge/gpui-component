@@ -705,15 +705,22 @@ impl SyntaxHighlighter {
 
             let mut last_end = 0usize;
             while let Some(m) = matches.next() {
+                let allow_overlapping_captures = query
+                    .property_settings(m.pattern_index)
+                    .iter()
+                    .any(|prop| prop.key.as_ref() == "highlight.allow-overlap");
+
                 for cap in m.captures {
                     let node_range = cap.node.start_byte()..cap.node.end_byte();
 
-                    if node_range.start < last_end {
+                    if !allow_overlapping_captures && node_range.start < last_end {
                         continue;
                     }
 
                     if let Some(highlight_name) = query.capture_names().get(cap.index as usize) {
-                        last_end = node_range.end;
+                        if !allow_overlapping_captures {
+                            last_end = node_range.end;
+                        }
                         highlights.push(HighlightItem::new(
                             node_range,
                             SharedString::from(highlight_name.to_string()),
@@ -1171,6 +1178,44 @@ $x = 1;
                 tag, pos
             );
         }
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_highlight_allow_overlap_property_combines_nested_captures() {
+        let markdown = "This has ***bold and italic*** and **bold _with_ italic** text.";
+        let rope = Rope::from_str(markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        highlighter.update(None, &rope, None);
+
+        let styles = highlighter.styles(&(0..markdown.len()), &HighlightTheme::default_dark());
+        for text in ["bold and italic", "with"] {
+            let start = markdown.find(text).unwrap();
+            let end = start + text.len();
+
+            assert!(
+                styles.iter().any(|(range, style)| {
+                    range.start <= start
+                        && range.end >= end
+                        && style.font_weight == Some(gpui::FontWeight::BOLD)
+                        && style.font_style == Some(gpui::FontStyle::Italic)
+                }),
+                "{text:?} should combine bold and italic styles"
+            );
+        }
+
+        let highlights = highlighter.match_styles(0..markdown.len());
+        let delimiter_start = markdown.find("_with_").unwrap();
+        let delimiter_end = delimiter_start + "_".len();
+
+        assert!(
+            highlights.iter().any(|item| {
+                item.name.as_ref() == "punctuation.delimiter"
+                    && item.range.start <= delimiter_start
+                    && item.range.end >= delimiter_end
+            }),
+            "overlap-enabled captures should not hide nested delimiter highlights"
+        );
     }
 
     #[test]

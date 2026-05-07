@@ -144,6 +144,12 @@
           "embedded": {
             "color": "#333333"
           },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
+          },
           "function": {
             "color": "#0000A2"
           },
@@ -344,6 +350,12 @@
           },
           "embedded": {
             "color": "#CACCCA"
+          },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
           },
           "function": {
             "color": "#fdd888"
