@@ -261,25 +261,21 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
             )]));
         }
         Node::LinkReference(link) => {
-            let mut child_paragraph = Paragraph::default();
-            let mut child_text = String::new();
-            for child in link.children.iter() {
-                child_text.push_str(&parse_paragraph(&mut child_paragraph, child, cx));
-            }
-
             let link_mark = LinkMark {
                 url: "".into(),
                 title: link.label.clone().map(Into::into),
                 identifier: Some(link.identifier.clone().into()),
             };
 
-            paragraph.push(InlineNode::new(&child_text).marks(vec![(
-                0..child_text.len(),
+            text = merge_children_with_mark(
+                paragraph,
+                &link.children,
                 TextMark {
                     link: Some(link_mark),
                     ..Default::default()
                 },
-            )]));
+                cx,
+            );
         }
         _ => {
             if cfg!(debug_assertions) {
