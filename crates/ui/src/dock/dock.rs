@@ -306,9 +306,18 @@ impl Dock {
                 cx.new(|_| info.deref().clone())
             })
     }
-    fn resize(&mut self, mouse_position: Point<Pixels>, _: &mut Window, cx: &mut Context<Self>) {
+    fn resize(
+        &mut self,
+        mouse_position: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !self.resizing {
             return;
+        }
+
+        if !self.open {
+            self.set_open(true, window, cx);
         }
 
         let dock_area = self
