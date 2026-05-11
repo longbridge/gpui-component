@@ -29,7 +29,10 @@ impl Render for DragSlider {
 
 /// Events emitted by the [`SliderState`].
 pub enum SliderEvent {
+    /// Emitted continuously while the slider value is being changed by the user.
     Change(SliderValue),
+    /// Emitted once when the user releases the slider after a drag or click.
+    Release(SliderValue),
 }
 
 /// The value of the slider, can be a single value or a range of values.
@@ -190,6 +193,9 @@ pub struct SliderState {
     /// The bounds of the slider after rendered.
     bounds: Bounds<Pixels>,
     scale: SliderScale,
+    /// Tracks whether the user is currently interacting with the slider so we
+    /// only emit [`SliderEvent::Release`] after a real press/drag.
+    dragging: bool,
 }
 
 impl SliderState {
@@ -203,6 +209,7 @@ impl SliderState {
             percentage: (0.0..0.0),
             bounds: Bounds::default(),
             scale: SliderScale::default(),
+            dragging: false,
         }
     }
 
@@ -341,6 +348,7 @@ impl SliderState {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.dragging = true;
         let bounds = self.bounds;
         let step = self.step;
 
@@ -370,6 +378,16 @@ impl SliderState {
         }
         cx.emit(SliderEvent::Change(self.value));
         cx.notify();
+    }
+
+    /// Emit [`SliderEvent::Release`] if the user was actively interacting
+    /// with the slider. Called on mouse-up both inside and outside the slider.
+    fn handle_release(&mut self, cx: &mut Context<Self>) {
+        if !self.dragging {
+            return;
+        }
+        self.dragging = false;
+        cx.emit(SliderEvent::Release(self.value));
     }
 }
 
@@ -554,6 +572,20 @@ impl RenderOnce for Slider {
             .refine_style(&self.style)
             .bg(cx.theme().transparent)
             .text_color(cx.theme().foreground)
+            .when(!self.disabled, |this| {
+                this.on_mouse_up(
+                    MouseButton::Left,
+                    window.listener_for(&self.state, |state, _, _, cx| {
+                        state.handle_release(cx);
+                    }),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    window.listener_for(&self.state, |state, _, _, cx| {
+                        state.handle_release(cx);
+                    }),
+                )
+            })
             .child(
                 h_flex()
                     .id("slider-bar-container")
