@@ -201,9 +201,19 @@ pub struct TableState<D: TableDelegate> {
     /// When enabled:
     /// - Users can click on individual cells to select them
     /// - A row selector column appears on the left for selecting entire rows
+    ///   (can be hidden via [`Self::row_selector`])
     /// - Keyboard navigation works at the cell level (arrow keys move between cells)
     /// - Right-click and double-click events are supported for cells
     pub cell_selectable: bool,
+    /// Whether the row selector column is visible when `cell_selectable` is enabled,
+    /// default is `true`.
+    ///
+    /// Set to `false` to hide the narrow leftmost selector column while keeping cell
+    /// selection — useful when you want to put your own content (e.g. a row index
+    /// column) on the left. When hidden, clicking the already-selected cell again
+    /// escalates the selection to the whole row so users can still pick rows; row
+    /// escalation requires `row_selectable` to be enabled.
+    pub row_selector: bool,
     /// Whether the table can sort.
     pub sortable: bool,
     /// Whether the table can resize columns.
@@ -261,6 +271,7 @@ where
             col_selectable: true,
             row_selectable: true,
             cell_selectable: false,
+            row_selector: true,
             sortable: true,
             col_movable: true,
             col_resizable: true,
@@ -323,7 +334,7 @@ where
     ///
     /// When enabled:
     /// - Individual cells become selectable by clicking
-    /// - A row selector column appears on the left side
+    /// - A row selector column appears on the left side (can be hidden via [`Self::row_selector`])
     /// - Keyboard navigation operates at the cell level
     /// - Cell-specific events (SelectCell, DoubleClickedCell, RightClickedCell) are emitted
     ///
@@ -338,6 +349,21 @@ where
     /// ```
     pub fn cell_selectable(mut self, cell_selectable: bool) -> Self {
         self.cell_selectable = cell_selectable;
+        self
+    }
+
+    /// Set whether the row selector column is shown, default is `true`.
+    ///
+    /// Only effective when `cell_selectable` is `true` — otherwise the row selector
+    /// column is never rendered. Hide it when you want to use the leftmost column
+    /// for your own content (e.g. a row index column).
+    ///
+    /// When hidden, the first click on a cell selects the cell; clicking the
+    /// already-selected cell again escalates to selecting the whole row, so users
+    /// can still pick rows without the dedicated selector column. The row escalation
+    /// requires `row_selectable` to be enabled.
+    pub fn row_selector(mut self, row_selector: bool) -> Self {
+        self.row_selector = row_selector;
         self
     }
 
@@ -663,9 +689,28 @@ where
         }
 
         cx.stop_propagation();
+
+        let is_double_click = e.click_count() == 2;
+
+        // When the row selector column is hidden, a single click on the
+        // already-selected cell escalates the selection to the entire row —
+        // giving users a way to pick rows without the dedicated selector column.
+        // Double-clicks are passed through to `DoubleClickedCell` and never
+        // trigger the escalation.
+        let is_reselect = self.selection_mode.is_cell()
+            && self.selected_cell == Some((row_ix, col_ix));
+        let should_escalate_to_row = !self.row_selector
+            && self.row_selectable
+            && is_reselect
+            && !is_double_click;
+        if should_escalate_to_row {
+            self.set_selected_row(row_ix, cx);
+            return;
+        }
+
         self.set_selected_cell(row_ix, col_ix, cx);
 
-        if e.click_count() == 2 {
+        if is_double_click {
             cx.emit(TableEvent::DoubleClickedCell(row_ix, col_ix));
         }
     }
@@ -1481,7 +1526,7 @@ where
             .bg(cx.theme().table_head)
             .text_color(cx.theme().table_head_foreground)
             .refine_style(&style)
-            .when(self.cell_selectable, |this| {
+            .when(self.cell_selectable && self.row_selector, |this| {
                 this.child(self.render_row_selector_cell(0, true, cx))
             })
             .when(left_columns_count > 0, |this| {
@@ -1664,7 +1709,7 @@ where
                         this.bg(cx.theme().table_hover)
                     }
                 })
-                .when(self.cell_selectable, |this| {
+                .when(self.cell_selectable && self.row_selector, |this| {
                     this.child(self.render_row_selector_cell(row_ix, false, cx))
                 })
                 .when(left_columns_count > 0, |this| {
@@ -1931,7 +1976,7 @@ where
                 .border_b_1()
                 .border_color(cx.theme().table_row_border)
                 .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
-                .when(self.cell_selectable, |this| {
+                .when(self.cell_selectable && self.row_selector, |this| {
                     // Render empty row selector cell for fake rows
                     this.child(
                         div()

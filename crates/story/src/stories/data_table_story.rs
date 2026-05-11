@@ -952,6 +952,13 @@ impl DataTableStory {
         });
     }
 
+    fn toggle_row_selector(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.row_selector = *checked;
+            cx.notify();
+        });
+    }
+
     fn toggle_stripe(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.stripe = *checked;
         cx.notify();
@@ -1118,6 +1125,12 @@ impl Render for DataTableStory {
                             .label("Cell Selectable")
                             .selected(table.cell_selectable)
                             .on_click(cx.listener(Self::toggle_cell_selection)),
+                    )
+                    .child(
+                        Checkbox::new("row-selector")
+                            .label("Row Selector")
+                            .selected(table.row_selector)
+                            .on_click(cx.listener(Self::toggle_row_selector)),
                     )
                     .child(
                         Checkbox::new("fixed")
