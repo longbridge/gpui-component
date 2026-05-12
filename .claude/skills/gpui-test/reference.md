@@ -198,6 +198,125 @@ async fn test_external_io(cx: &mut TestAppContext) {
 }
 ```
 
+## Testing Crash-Free State Management (Re-entrancy)
+
+The most dangerous class of GPUI bugs is **entity re-entrancy**: code that tries to update or read an entity while it is already locked in a render/update pass. These bugs are invisible at compile time — they only panic at runtime, typically when the user clicks something in a list or dropdown.
+
+**Key properties of re-entrancy panics:**
+- Triggered by user interaction (click, key press), not during static rendering.
+- `#[should_panic]` only confirms the bug exists — tests must pass *without* panicking.
+- `cx.run_until_parked()` is required after the triggering action to let deferred callbacks (`defer_in`) execute.
+
+### Pattern: Drive `confirm` / `cancel` through the real delegate
+
+```rust
+#[gpui::test]
+fn test_confirm_does_not_panic(cx: &mut TestAppContext) {
+    // Build the component state the same way the real app does.
+    let state = cx.new(|cx| {
+        SelectState::new(MyDelegate::default(), None, &mut cx.window_handle(), cx)
+    });
+
+    // Simulate the user clicking the first item — this exercises on_confirm
+    // and its deferred callback, which is where re-entrancy bugs hide.
+    state.update(cx, |this, cx| {
+        this.state.list.update(cx, |list, cx| {
+            list.delegate_mut().set_selected_index(Some(IndexPath::new(0)), window, cx);
+            list.delegate_mut().confirm(false, window, cx);
+        });
+    });
+
+    // Let defer_in callbacks execute — required to trigger the crash.
+    cx.run_until_parked();
+
+    // If we reach here without panicking, the re-entrancy is fixed.
+    let selected = state.read_with(cx, |s, _| s.selected_value().cloned());
+    assert!(selected.is_some());
+}
+```
+
+### Pattern: Verify `on_will_change` and `on_confirm` hooks are called correctly
+
+Use a recording delegate to assert that hooks fire with the right arguments and in the right order:
+
+```rust
+#[derive(Default)]
+struct RecordingDelegate {
+    items: Vec<MyItem>,
+    will_change_calls: Vec<Vec<IndexPath>>,
+    confirm_calls: Vec<Vec<IndexPath>>,
+}
+
+impl SearchableListDelegate for RecordingDelegate {
+    // … required impls …
+
+    fn on_will_change(
+        &mut self,
+        change: &mut SearchableListChange<Self>,
+        _current: &[(IndexPath, Self::Item)],
+    ) {
+        self.will_change_calls.push(
+            change.select_queue.iter().map(|(ix, _)| *ix).collect()
+        );
+    }
+
+    fn on_confirm(&mut self, final_selection: &[(IndexPath, Self::Item)]) {
+        self.confirm_calls.push(
+            final_selection.iter().map(|(ix, _)| *ix).collect()
+        );
+    }
+}
+
+#[gpui::test]
+fn test_hooks_fire_in_correct_order(cx: &mut TestAppContext) {
+    let state = cx.new(|cx| SelectState::new(RecordingDelegate::with_items(3), None, window, cx));
+
+    // Simulate confirm on item 0
+    state.update(cx, |this, cx| {
+        // … trigger confirm …
+    });
+    cx.run_until_parked();
+
+    state.read_with(cx, |s, cx| {
+        let delegate = s.state.list.read(cx).delegate().delegate;
+        assert_eq!(delegate.will_change_calls.len(), 1);
+        assert_eq!(delegate.confirm_calls.len(), 1);
+        assert_eq!(delegate.confirm_calls[0], vec![IndexPath::new(0)]);
+    });
+}
+```
+
+### Pattern: Rapid multiple confirms (snapshot consistency)
+
+```rust
+#[gpui::test]
+fn test_rapid_confirms_keep_consistent_snapshot(cx: &mut TestAppContext) {
+    let state = cx.new(|cx| SelectState::new(MyDelegate::with_items(5), None, window, cx));
+
+    for i in 0..5 {
+        state.update(cx, |this, cx| {
+            // trigger confirm on item i
+        });
+        cx.run_until_parked();
+
+        state.read_with(cx, |s, cx| {
+            let snapshot = s.state.list.read(cx).delegate().selection_snapshot.clone();
+            let selection = s.state.selection.clone();
+            assert_eq!(snapshot, selection, "snapshot out of sync after confirm {i}");
+        });
+    }
+}
+```
+
+### Checklist: What to test for each component that uses `defer_in`
+
+- [ ] `confirm` path: no panic, correct final selection, snapshot matches selection
+- [ ] `cancel` path: no panic, selection unchanged, popover closed
+- [ ] `on_will_change` veto: selection not changed, `on_confirm` not called
+- [ ] `on_will_change` mutating the change: final selection reflects delegate's modification
+- [ ] Rapid consecutive confirms: each one leaves snapshot consistent with selection
+- [ ] `render_item` never panics even when called immediately after a mutation
+
 ## Property Testing
 
 Use random data to test edge cases:
