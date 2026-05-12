@@ -357,15 +357,17 @@ impl Dock {
         };
         match self.placement {
             DockPlacement::Left => {
-                let max_size = area_bounds.size.width - PANEL_MIN_SIZE - right_dock_size;
+                let max_size = (area_bounds.size.width - PANEL_MIN_SIZE - right_dock_size)
+                    .max(PANEL_MIN_SIZE);
                 self.size = size.clamp(PANEL_MIN_SIZE, max_size);
             }
             DockPlacement::Right => {
-                let max_size = area_bounds.size.width - PANEL_MIN_SIZE - left_dock_size;
+                let max_size = (area_bounds.size.width - PANEL_MIN_SIZE - left_dock_size)
+                    .max(PANEL_MIN_SIZE);
                 self.size = size.clamp(PANEL_MIN_SIZE, max_size);
             }
             DockPlacement::Bottom => {
-                let max_size = area_bounds.size.height - PANEL_MIN_SIZE;
+                let max_size = (area_bounds.size.height - PANEL_MIN_SIZE).max(PANEL_MIN_SIZE);
                 self.size = size.clamp(PANEL_MIN_SIZE, max_size);
             }
             DockPlacement::Center => unreachable!(),
