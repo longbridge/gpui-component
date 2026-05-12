@@ -8604,7 +8604,8 @@ dependencies = [
 [[package]]
 name = "tree-sitter-navi"
 version = "0.2.3"
-source = "git+https://github.com/navi-language/tree-sitter-navi#0abb11ca9afafd932b277467371c3c7158f7aa88"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62c777d08084bb1a049365dc69e0afecce54468ceaa01b503da0f22d685c61e6"
 dependencies = [
  "cc",
  "tree-sitter",

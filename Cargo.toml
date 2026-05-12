@@ -126,4 +126,3 @@ ignored = ["log", "anyhow", "serde"]
 [patch.crates-io]
 # Use stacker's psm version which may have better WASM support
 psm = { git = "https://github.com/rust-lang/stacker", branch = "master" }
-tree-sitter-navi = { git = "https://github.com/navi-language/tree-sitter-navi" }
