@@ -4,34 +4,87 @@ Guidelines and best practices for effective entity management in GPUI.
 
 ## Avoiding Common Pitfalls
 
-### Avoid Entity Borrowing Conflicts
+### Avoid Re-entrant Entity Access (Same Entity)
 
-**Problem:** Nested updates can cause borrow checker panics.
+**Problem:** GPUI locks an entity for the entire duration of its render or update pass. Any attempt to `read` or `update` that *same* entity while the lock is held panics:
+
+```
+cannot update … while it is already being updated
+```
 
 ```rust
-// ❌ Bad: Nested updates can panic
-entity1.update(cx, |_, cx| {
-    entity2.update(cx, |_, cx| {
-        // This may panic if entities are related
-    });
+// ❌ Panic: entity_a updated from within entity_a's own update
+entity_a.update(cx, |_, cx| {
+    entity_a.update(cx, |_, _| {}); // PANIC
+});
+
+// ✅ Fine: updating a *different* entity from within an update
+entity_a.update(cx, |_, cx| {
+    entity_b.update(cx, |_, _| {}); // OK — different lock
 });
 ```
 
-**Solution:** Perform updates sequentially.
+**Note:** Updating two *different* entities in a nested fashion is safe. The restriction is strictly about re-entering the *same* entity's lock.
+
+### `defer_in` Re-locks the Entity — Same Rules Apply
+
+`cx.defer_in(window, callback)` schedules `callback` to run *on the entity the context refers to*. GPUI re-acquires that entity's lock to execute the deferred callback, so the re-entrancy rules apply equally inside it:
 
 ```rust
-// ✅ Good: Sequential updates
-entity1.update(cx, |state1, cx| {
-    // Update entity1
-    state1.value = 42;
-    cx.notify();
-});
+// ❌ Panic: defer_in runs with ListState locked; calling list.update re-enters
+fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
+    cx.defer_in(window, |list_state, window, cx| {
+        // list_state IS locked for this entire callback!
+        parent.update(cx, |this, cx| {
+            this.list.update(cx, |_, _| {}); // PANIC — re-enters ListState lock
+        });
+    });
+}
+```
 
-entity2.update(cx, |state2, cx| {
-    // Update entity2
-    state2.value = 100;
-    cx.notify();
-});
+**Fix:** Use the direct `&mut` reference the callback provides instead of going through the entity handle:
+
+```rust
+// ✅ Correct: direct mutable access — no lock needed
+fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
+    cx.defer_in(window, |list_state, window, cx| {
+        // Step 1: call hooks directly through list_state (no entity lock)
+        list_state.delegate_mut().on_will_change(&mut op, &snapshot);
+
+        // Step 2: update the parent entity — different lock, safe
+        let new_sel = parent.update(cx, |this, cx| {
+            this.state.apply_change(op);
+            cx.notify();
+            this.state.selection.clone() // return data needed for step 3
+        });
+
+        // Step 3: sync list state directly — no entity lock
+        if let Ok(sel) = new_sel {
+            list_state.delegate_mut().update_snapshot(sel.clone());
+            list_state.delegate_mut().on_confirm(&sel);
+        }
+    });
+}
+```
+
+### Render Callbacks Must Not Access External Entities
+
+`render_item` and any other rendering hook runs inside the entity's render pass. Calling `entity.read(cx)` or `entity.update(cx, …)` on an external entity (which may itself be in a render/update pass) panics with the same re-entrancy error.
+
+**Fix:** Keep a plain `snapshot` field updated eagerly from outside render after every mutation:
+
+```rust
+// ❌ Panic — called during ListState render; external entity access re-enters
+fn render_item(&mut self, ix: IndexPath, …) -> … {
+    let checked = parent.read(cx).selection.contains(&ix); // PANIC
+}
+
+// ✅ Read from snapshot field — no entity access at all
+fn render_item(&mut self, ix: IndexPath, …) -> … {
+    let checked = self.selection_snapshot.iter().any(|(sel_ix, _)| sel_ix == &ix);
+}
+// After every mutation from outside render:
+list.update(cx, |l, _| l.delegate_mut().update_snapshot(new_snapshot));
 ```
 
 ### Use Weak References in Closures

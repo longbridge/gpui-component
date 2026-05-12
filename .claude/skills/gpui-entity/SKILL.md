@@ -120,17 +120,87 @@ entity.update(cx, |state, inner_cx| {
 });
 ```
 
-### Avoid Nested Updates
+### Avoid Nested Entity Updates
+
+Nested `entity.update(cx, …)` calls are dangerous. The default posture is: **do not nest them**. The sub-cases below clarify when a panic is guaranteed vs. merely possible.
+
+**Same entity → always panics.**  
+GPUI locks an entity for the entire duration of its update or render pass. Re-entering that same lock panics immediately:
+
+```
+cannot update … while it is already being updated
+```
 
 ```rust
-// ✅ Good: Sequential updates
-entity1.update(cx, |state, cx| { /* ... */ });
-entity2.update(cx, |state, cx| { /* ... */ });
-
-// ❌ Bad: Nested updates (may panic)
-entity1.update(cx, |_, cx| {
-    entity2.update(cx, |_, cx| { /* ... */ });
+// ❌ Panic: updating entity_a from inside entity_a's own update
+entity_a.update(cx, |state, cx| {
+    entity_a.update(cx, |_, _| {}); // PANIC — same lock
 });
+```
+
+**Different entity → generally safe, but indirect cycles still panic.**  
+Each entity has its own lock, so updating `entity_b` from within `entity_a`'s update normally succeeds. However, if `entity_b`'s callback reaches back into `entity_a` — directly or through a chain — GPUI will attempt to re-acquire `entity_a`'s lock and panic.
+
+```rust
+// ✅ Usually fine: different entities, no cycle
+entity_a.update(cx, |_, cx| {
+    entity_b.update(cx, |_, _| {}); // OK — different lock
+});
+
+// ❌ Panic: indirect cycle back to entity_a
+entity_a.update(cx, |_, cx| {
+    entity_b.update(cx, |_, cx| {
+        entity_a.update(cx, |_, _| {}); // PANIC — entity_a is still locked
+    });
+});
+```
+
+When in doubt, flatten the call sequence rather than nesting: finish the outer update, then update the second entity from outside.
+
+**`defer_in` does not bypass the lock.** `cx.defer_in(window, callback)` schedules `callback` to run on the current entity — meaning GPUI re-acquires the entity's lock to execute it. The re-entrancy rules apply equally inside the deferred callback:
+
+```rust
+// ❌ Panic: defer_in re-locks entity_a; calling entity_a.update inside re-enters
+impl SomeDelegate for MyAdapter {
+    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
+        cx.defer_in(window, |list_state, window, cx| {
+            // list_state is locked for this callback!
+            parent.update(cx, |this, cx| {
+                this.list.update(cx, |_, _| {}); // PANIC — list is already locked above
+            });
+        });
+    }
+}
+
+// ✅ Fix: use the direct &mut reference the callback provides
+impl SomeDelegate for MyAdapter {
+    fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
+        cx.defer_in(window, |list_state, window, cx| {
+            // Access list data directly — no entity lock needed
+            list_state.delegate_mut().some_hook();
+
+            // Update the *parent* entity — different lock, safe
+            parent.update(cx, |this, cx| { /* … */ });
+
+            // Sync list state directly after parent update
+            list_state.delegate_mut().update_snapshot(new_val);
+        });
+    }
+}
+```
+
+**Snapshot pattern for render callbacks.** `render_item` (and any other rendering hook) runs inside the entity's render pass. It must never call `entity.read(cx)` or `entity.update(cx, …)` on any external entity. Instead, keep a plain `snapshot` field updated eagerly from *outside* render after every mutation:
+
+```rust
+// ❌ Panic in render_item — ListState is already locked
+fn render_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<ListState<Self>>) -> … {
+    let checked = parent_entity.read(cx).selection.contains(&ix); // PANIC
+}
+
+// ✅ Read from a plain snapshot field — no entity access
+fn render_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<ListState<Self>>) -> … {
+    let checked = self.selection_snapshot.iter().any(|(sel_ix, _)| sel_ix == &ix);
+}
 ```
 
 ## Common Use Cases

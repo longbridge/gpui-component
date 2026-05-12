@@ -133,6 +133,43 @@ Tasks are automatically cancelled when dropped. Store in struct to keep alive.
 
 ## Common Pitfalls
 
+### ❌ Don't: Use `defer_in` and then update the same entity through its handle
+
+`cx.defer_in(window, callback)` schedules `callback` to run **on the current entity** — GPUI re-acquires that entity's lock to execute it. Calling `entity.update(cx, …)` on the *same* entity from within the deferred callback re-enters the lock and panics:
+
+```
+cannot update … while it is already being updated
+```
+
+```rust
+// ❌ Panic: list entity is locked for the defer_in; calling list.update re-enters
+fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
+    cx.defer_in(window, |list_state, window, cx| {
+        parent.update(cx, |this, cx| {
+            this.inner_list.update(cx, |_, _| {}); // PANIC if inner_list == the deferred entity
+        });
+    });
+}
+```
+
+```rust
+// ✅ Correct: use the direct &mut reference — no lock needed
+fn confirm(&mut self, _: bool, window: &mut Window, cx: &mut Context<ListState<Self>>) {
+    cx.defer_in(window, |list_state, window, cx| {
+        // Access list data directly through the &mut reference
+        list_state.delegate_mut().some_method();
+
+        // Update a *different* entity — fine, different lock
+        parent.update(cx, |this, cx| { /* … */ });
+
+        // Sync list state directly after parent update — no lock needed
+        list_state.delegate_mut().update_snapshot(new_val);
+    });
+}
+```
+
+The rule: inside a `defer_in` callback, **never call `entity.update(cx, …)` or `entity.read(cx)` on the entity the `defer_in` was scheduled on**. Use the `&mut Entity` direct reference the callback provides instead.
+
 ### ❌ Don't: Update entities from background tasks
 
 ```rust
