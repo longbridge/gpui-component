@@ -9,8 +9,9 @@ use gpui_component_assets::Assets;
 
 pub struct Example {
     markdown_state: Entity<TextViewState>,
-    tx: smol::channel::Sender<String>,
+    tx: smol::channel::Sender<(usize, String)>,
     scroll_handle: ScrollHandle,
+    replay_id: usize,
     _task: Task<()>,
     _update_task: Task<()>,
 }
@@ -23,17 +24,21 @@ impl Example {
             cx.new(|cx| TextViewState::markdown("# Streaming Markdown Parse\n\n", cx));
         let scroll_handle = ScrollHandle::new();
 
-        let (tx, rx) = smol::channel::unbounded::<String>();
+        let (tx, rx) = smol::channel::unbounded::<(usize, String)>();
         let _task = cx.spawn({
-            let scroll_handle = scroll_handle.clone();
-            let weak_state = markdown_state.downgrade();
-            async move |_, cx| {
-                while let Ok(chunk) = rx.recv().await {
-                    _ = weak_state.update(cx, |state, cx| {
+            async move |weak_self, cx| {
+                while let Ok((replay_id, chunk)) = rx.recv().await {
+                    _ = weak_self.update(cx, |this, cx| {
+                        if replay_id != this.replay_id {
+                            return;
+                        }
+
                         // Push the new chunk to the markdown state,
                         // it will reparse and re-render automatically.
-                        state.push_str(&chunk, cx);
-                        scroll_handle.scroll_to_bottom();
+                        this.markdown_state.update(cx, |state, cx| {
+                            state.push_str(&chunk, cx);
+                        });
+                        this.scroll_handle.scroll_to_bottom();
                     });
                 }
             }
@@ -43,6 +48,7 @@ impl Example {
             markdown_state,
             scroll_handle,
             tx,
+            replay_id: 0,
             _task,
             _update_task: Task::ready(()),
         }
@@ -56,6 +62,8 @@ impl Example {
     /// 50ms for a iteration, every time adding about 5 - 20 characters
     /// This is just for demonstration; in a real app, you'd stream from a source.
     fn replay(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.replay_id = self.replay_id.wrapping_add(1);
+        let replay_id = self.replay_id;
         let tx = self.tx.clone();
         let mut current = 0;
         self.markdown_state.update(cx, |state, cx| {
@@ -67,7 +75,7 @@ impl Example {
             while current < chars.len() {
                 let chunk_size = (5 + rand::random::<usize>() % 15).min(chars.len() - current);
                 let chunk: String = chars[current..current + chunk_size].iter().collect();
-                _ = tx.try_send(chunk);
+                _ = tx.try_send((replay_id, chunk));
                 current += chunk_size;
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }

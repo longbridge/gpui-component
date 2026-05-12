@@ -1,8 +1,5 @@
-use std::{
-    pin::Pin,
-    task::Poll,
-};
 use futures::Stream as _;
+use std::{pin::Pin, task::Poll};
 
 use gpui::{
     App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, IntoElement, KeyBinding,
@@ -12,7 +9,7 @@ use gpui::{
 
 use crate::{
     ActiveTheme, ElementExt,
-    async_util::{Sender, Receiver, unbounded},
+    async_util::{Receiver, Sender, unbounded},
     highlighter::HighlightTheme,
     input::{self, Copy},
     text::{
@@ -61,7 +58,7 @@ pub struct TextViewState {
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
 
     pub(super) parsed_content: ParsedContent,
-    text: SharedString,
+    text: String,
     parsed_error: Option<SharedString>,
     tx: Sender<UpdateOptions>,
     _parse_task: Task<()>,
@@ -119,7 +116,7 @@ impl TextViewState {
             is_selecting: false,
             parsed_content: Default::default(),
             parsed_error: None,
-            text: text.to_string().into(),
+            text: text.to_string(),
             tx,
             _parse_task,
             _receive_task,
@@ -163,7 +160,8 @@ impl TextViewState {
             return;
         }
 
-        self.text = text.to_string().into();
+        self.text.clear();
+        self.text.push_str(text);
         self.parsed_error = None;
         self.increment_update(text, false, cx);
     }
@@ -173,6 +171,7 @@ impl TextViewState {
         if new_text.is_empty() {
             return;
         }
+        self.text.push_str(new_text);
         self.increment_update(new_text, true, cx);
     }
 
@@ -184,7 +183,6 @@ impl TextViewState {
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
         let update_options = UpdateOptions {
             append,
-            content: self.parsed_content.clone(),
             pending_text: text.to_string(),
             highlight_theme: cx.theme().highlight_theme.clone(),
         };
@@ -316,6 +314,7 @@ pub(crate) struct ParsedContent {
 
 struct UpdateFuture {
     format: TextViewFormat,
+    content: ParsedContent,
     options: UpdateOptions,
     pending_text: String,
     rx: Pin<Box<Receiver<UpdateOptions>>>,
@@ -331,11 +330,11 @@ impl UpdateFuture {
     ) -> Self {
         Self {
             format,
+            content: Default::default(),
             pending_text: String::new(),
             options: UpdateOptions {
                 append: false,
                 pending_text: String::new(),
-                content: Default::default(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
             },
             rx: Box::pin(rx),
@@ -360,13 +359,14 @@ impl Future for UpdateFuture {
 
                     // Process immediately without debounce
                     let pending_text = std::mem::take(&mut self.pending_text);
-                    let res = parse_content(
-                        self.format,
-                        &UpdateOptions {
-                            pending_text,
-                            ..self.options.clone()
-                        },
-                    );
+                    let options = UpdateOptions {
+                        pending_text,
+                        ..self.options.clone()
+                    };
+                    let res = parse_content(self.format, self.content.clone(), &options);
+                    if let Ok(content) = &res {
+                        self.content = content.clone();
+                    }
                     _ = self.tx_result.try_send(res);
                     continue;
                 }
@@ -379,18 +379,20 @@ impl Future for UpdateFuture {
 
 #[derive(Clone)]
 struct UpdateOptions {
-    content: ParsedContent,
     pending_text: String,
     append: bool,
     highlight_theme: std::sync::Arc<HighlightTheme>,
 }
 
-fn parse_content(format: TextViewFormat, options: &UpdateOptions) -> Result<ParsedContent, SharedString> {
+fn parse_content(
+    format: TextViewFormat,
+    mut content: ParsedContent,
+    options: &UpdateOptions,
+) -> Result<ParsedContent, SharedString> {
     let mut node_cx = NodeContext {
         ..NodeContext::default()
     };
 
-    let mut content = options.content.clone();
     let mut source = String::new();
     if options.append
         && let Some(last_block) = content.document.blocks.pop()
@@ -441,7 +443,36 @@ fn selection_points(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::point;
+    use gpui::{TestAppContext, point};
+
+    #[gpui::test]
+    fn set_text_then_push_str_appends_to_replaced_content(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown("old", cx)));
+        cx.run_until_parked();
+
+        state.update(cx, |state, cx| {
+            state.set_text("", cx);
+            state.push_str("new", cx);
+            state.push_str(" text", cx);
+        });
+        cx.run_until_parked();
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.text.as_str(), "new text");
+            assert_eq!(state.source().as_str(), "new text");
+        });
+
+        state.update(cx, |state, cx| {
+            state.set_text("", cx);
+        });
+        cx.run_until_parked();
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.text.as_str(), "");
+            assert_eq!(state.source().as_str(), "");
+        });
+    }
 
     #[test]
     fn test_text_view_state_selection_points() {
