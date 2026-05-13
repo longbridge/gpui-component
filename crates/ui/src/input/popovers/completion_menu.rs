@@ -8,7 +8,11 @@ use gpui::{
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
-const MAX_MENU_WIDTH: Pixels = px(320.);
+/// Default maximum width of the completion popover.
+///
+/// Can be overridden per editor with
+/// [`super::super::InputState::completion_menu_max_width`].
+pub(crate) const DEFAULT_MAX_MENU_WIDTH: Pixels = px(320.);
 const MAX_MENU_HEIGHT: Pixels = px(240.);
 const POPOVER_GAP: Pixels = px(4.);
 
@@ -173,6 +177,7 @@ pub struct CompletionMenu {
     editor: Entity<InputState>,
     list: Entity<ListState<ContextMenuDelegate>>,
     open: bool,
+    max_width: Pixels,
 
     /// The offset of the first character that triggered the completion.
     pub(crate) trigger_start_offset: Option<usize>,
@@ -186,6 +191,7 @@ impl CompletionMenu {
     /// NOTE: This element should not call from InputState::new, unless that will stack overflow.
     pub(crate) fn new(
         editor: Entity<InputState>,
+        max_width: Pixels,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -218,11 +224,21 @@ impl CompletionMenu {
                 editor,
                 list,
                 open: false,
+                max_width,
                 trigger_start_offset: None,
                 query: SharedString::default(),
                 _subscriptions,
             }
         })
+    }
+
+    /// Update the maximum width of the popover at runtime.
+    pub(crate) fn set_max_width(&mut self, max_width: Pixels, cx: &mut Context<Self>) {
+        if self.max_width == max_width {
+            return;
+        }
+        self.max_width = max_width;
+        cx.notify();
     }
 
     fn select_item(&mut self, item: &CompletionItem, window: &mut Window, cx: &mut Context<Self>) {
@@ -408,10 +424,11 @@ impl Render for CompletionMenu {
             .selected_item()
             .and_then(|item| item.documentation.clone());
 
-        let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
+        let configured_max = self.max_width;
+        let max_width = configured_max.min(window.bounds().size.width - pos.x);
         let abs_pos = self.editor.read(cx).input_bounds.origin + pos;
         let vertical_layout =
-            abs_pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
+            abs_pos.x + configured_max + POPOVER_GAP + configured_max + POPOVER_GAP
                 > window.bounds().size.width;
 
         deferred(
@@ -442,7 +459,7 @@ impl Render for CompletionMenu {
                     this.child(
                         div().child(
                             editor_popover("completion-menu", cx)
-                                .w(MAX_MENU_WIDTH)
+                                .w(configured_max)
                                 .px_2()
                                 .child(render_markdown("doc", doc, window, cx)),
                         ),

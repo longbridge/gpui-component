@@ -40,7 +40,9 @@ use crate::input::{
     HoverDefinition, InlineCompletion, Lsp, Position, RopeExt as _, Selection,
     display_map::LineLayout,
     element::RIGHT_MARGIN,
-    popovers::{ContextMenu, DiagnosticPopover, HoverPopover, InputContextMenu},
+    popovers::{
+        ContextMenu, DEFAULT_MAX_MENU_WIDTH, DiagnosticPopover, HoverPopover, InputContextMenu,
+    },
     search::{self, SearchPanel},
 };
 use crate::menu::PopupMenu;
@@ -368,6 +370,10 @@ pub struct InputState {
 
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
+    /// Maximum width of the completion popover. Defaults to
+    /// [`DEFAULT_MAX_MENU_WIDTH`] and can be overridden with
+    /// [`Self::completion_menu_max_width`] / [`Self::set_completion_menu_max_width`].
+    pub(super) completion_menu_max_width: Pixels,
     pub(super) hover_popover: Option<Entity<HoverPopover>>,
     /// The LSP definitions locations for "Go to Definition" feature.
     pub(super) hover_definition: HoverDefinition,
@@ -474,6 +480,7 @@ impl InputState {
             context_menu_builder: None,
             enable_context_menu: true,
             completion_inserting: false,
+            completion_menu_max_width: DEFAULT_MAX_MENU_WIDTH,
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
@@ -536,6 +543,37 @@ impl InputState {
     pub fn context_menu(mut self, enable: bool) -> Self {
         self.enable_context_menu = enable;
         self
+    }
+
+    /// Set the maximum width of the LSP completion popover.
+    ///
+    /// Defaults to 320 px, which is fine for most identifiers but can truncate
+    /// long names (for example database table identifiers like
+    /// `tbl_verification_tracking`). Use this builder to widen the popover when
+    /// hosting an editor that surfaces longer labels.
+    pub fn completion_menu_max_width(mut self, width: Pixels) -> Self {
+        self.completion_menu_max_width = width;
+        self
+    }
+
+    /// Set the maximum width of the LSP completion popover at runtime.
+    ///
+    /// Applies to a popover that is already open as well as subsequent ones.
+    pub fn set_completion_menu_max_width(
+        &mut self,
+        width: Pixels,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.completion_menu_max_width == width {
+            return;
+        }
+        self.completion_menu_max_width = width;
+        if let Some(ContextMenu::Completion(menu)) = self.context_menu_content.as_ref() {
+            let menu = menu.clone();
+            menu.update(cx, |menu, cx| menu.set_max_width(width, cx));
+        }
+        cx.notify();
     }
 
     /// Set this input is searchable, default is false (Default true for Code Editor).

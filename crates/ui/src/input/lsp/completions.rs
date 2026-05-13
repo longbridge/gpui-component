@@ -139,7 +139,8 @@ impl InputState {
         let menu = match menu {
             Some(menu) => menu.clone(),
             None => {
-                let menu = CompletionMenu::new(cx.entity(), window, cx);
+                let menu =
+                    CompletionMenu::new(cx.entity(), self.completion_menu_max_width, window, cx);
                 self.context_menu_content = Some(ContextMenu::Completion(menu.clone()));
                 menu
             }
