@@ -952,9 +952,9 @@ impl DataTableStory {
         });
     }
 
-    fn toggle_row_selector(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+    fn toggle_row_header(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.table.update(cx, |table, cx| {
-            table.row_selector = *checked;
+            table.row_header = *checked;
             cx.notify();
         });
     }
@@ -1127,10 +1127,10 @@ impl Render for DataTableStory {
                             .on_click(cx.listener(Self::toggle_cell_selection)),
                     )
                     .child(
-                        Checkbox::new("row-selector")
-                            .label("Row Selector")
-                            .selected(table.row_selector)
-                            .on_click(cx.listener(Self::toggle_row_selector)),
+                        Checkbox::new("row-header")
+                            .label("Row Header")
+                            .selected(table.row_header)
+                            .on_click(cx.listener(Self::toggle_row_header)),
                     )
                     .child(
                         Checkbox::new("fixed")

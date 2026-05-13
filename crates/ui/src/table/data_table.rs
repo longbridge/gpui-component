@@ -66,8 +66,8 @@ impl Default for TableOptions {
 ///
 /// When cell selection is enabled via [`TableState::cell_selectable()`]:
 /// - Click on cells to select them
-/// - A row selector column appears on the left for selecting entire rows
-///   (use [`TableState::row_selector()`] to hide it)
+/// - A row header column appears on the left for selecting entire rows
+///   (use [`TableState::row_header()`] to hide it)
 /// - Keyboard navigation (arrow keys, Tab, Home, End, PageUp, PageDown) works at cell level
 /// - Right-click and double-click events are supported
 ///
