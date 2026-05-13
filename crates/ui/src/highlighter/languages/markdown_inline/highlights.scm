@@ -1,4 +1,8 @@
 [
+  (code_span)
+] @text.code.span
+
+[
   (emphasis_delimiter)
   (code_span_delimiter)
 ] @punctuation.delimiter

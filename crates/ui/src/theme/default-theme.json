@@ -188,6 +188,9 @@
           "text.literal": {
             "color": "#6F42C1"
           },
+          "text.code.span": {
+            "color": "#6F42C1"
+          },
           "title": {
             "color": "#0433FF"
           },
@@ -393,6 +396,9 @@
             "color": "#b5af9a"
           },
           "text.literal": {
+            "color": "#E1D797"
+          },
+          "text.code.span": {
             "color": "#E1D797"
           },
           "title": {
