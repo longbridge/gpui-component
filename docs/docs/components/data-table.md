@@ -79,7 +79,7 @@ impl TableDelegate for MyTableDelegate {
     }
 
     fn column(&self, col_ix: usize, _: &App) -> Column {
-        &self.columns[col_ix].clone()
+        self.columns[col_ix].clone()
     }
 
     fn render_td(&mut self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<TableState<Self>>) -> impl IntoElement {
@@ -412,10 +412,10 @@ let state = cx.new(|cx| {
 
 // In render
 DataTable::new(&state)
-    .with_size(px(48.))    // Custom uniform row height
-    .stripe(true)           // Alternating row colors
-    .bordered(true)           // Border around table
-    .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
+    .with_size(px(48.))             // Custom uniform row height
+    .stripe(true)                   // Alternating row colors
+    .bordered(true)                 // Border around table
+    .scrollbar_visible(true, true)  // Vertical, horizontal scrollbars
 ```
 
 ## Examples
