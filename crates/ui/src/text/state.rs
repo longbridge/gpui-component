@@ -59,6 +59,7 @@ pub struct TextViewState {
 
     pub(super) parsed_content: ParsedContent,
     text: String,
+    revision: usize,
     parsed_error: Option<SharedString>,
     tx: Sender<UpdateOptions>,
     _parse_task: Task<()>,
@@ -81,12 +82,16 @@ impl TextViewState {
         let focus_handle = cx.focus_handle();
 
         let (tx, rx) = unbounded::<UpdateOptions>();
-        let (tx_result, rx_result) = unbounded::<Result<ParsedContent, SharedString>>();
+        let (tx_result, rx_result) = unbounded::<ParsedUpdate>();
         let _receive_task = cx.spawn({
             async move |weak_self, cx| {
-                while let Ok(parsed_result) = rx_result.recv().await {
+                while let Ok(parsed_update) = rx_result.recv().await {
                     _ = weak_self.update(cx, |state, cx| {
-                        match parsed_result {
+                        if parsed_update.revision != state.revision {
+                            return;
+                        }
+
+                        match parsed_update.result {
                             Ok(content) => {
                                 state.parsed_content = content;
                                 state.parsed_error = None;
@@ -102,7 +107,7 @@ impl TextViewState {
             }
         });
 
-        let _parse_task = cx.background_spawn(UpdateFuture::new(format, rx, tx_result, cx));
+        let _parse_task = cx.background_spawn(UpdateFuture::new(format, rx, tx_result));
 
         let mut this = Self {
             focus_handle,
@@ -117,6 +122,7 @@ impl TextViewState {
             parsed_content: Default::default(),
             parsed_error: None,
             text: text.to_string(),
+            revision: 0,
             tx,
             _parse_task,
             _receive_task,
@@ -181,7 +187,9 @@ impl TextViewState {
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
+        self.revision += 1;
         let update_options = UpdateOptions {
+            revision: self.revision,
             append,
             pending_text: text.to_string(),
             highlight_theme: cx.theme().highlight_theme.clone(),
@@ -315,28 +323,19 @@ pub(crate) struct ParsedContent {
 struct UpdateFuture {
     format: TextViewFormat,
     content: ParsedContent,
-    options: UpdateOptions,
-    pending_text: String,
     rx: Pin<Box<Receiver<UpdateOptions>>>,
-    tx_result: Sender<Result<ParsedContent, SharedString>>,
+    tx_result: Sender<ParsedUpdate>,
 }
 
 impl UpdateFuture {
     fn new(
         format: TextViewFormat,
         rx: Receiver<UpdateOptions>,
-        tx_result: Sender<Result<ParsedContent, SharedString>>,
-        cx: &App,
+        tx_result: Sender<ParsedUpdate>,
     ) -> Self {
         Self {
             format,
             content: Default::default(),
-            pending_text: String::new(),
-            options: UpdateOptions {
-                append: false,
-                pending_text: String::new(),
-                highlight_theme: cx.theme().highlight_theme.clone(),
-            },
             rx: Box::pin(rx),
             tx_result,
         }
@@ -349,25 +348,19 @@ impl Future for UpdateFuture {
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         loop {
             match self.rx.as_mut().poll_next(cx) {
-                Poll::Ready(Some(options)) => {
-                    if options.append {
-                        self.pending_text.push_str(options.pending_text.as_str());
-                    } else {
-                        self.pending_text = options.pending_text.clone();
+                Poll::Ready(Some(mut options)) => {
+                    while let Ok(next_options) = self.rx.as_ref().get_ref().try_recv() {
+                        options.merge(next_options);
                     }
-                    self.options = options;
 
-                    // Process immediately without debounce
-                    let pending_text = std::mem::take(&mut self.pending_text);
-                    let options = UpdateOptions {
-                        pending_text,
-                        ..self.options.clone()
-                    };
                     let res = parse_content(self.format, self.content.clone(), &options);
                     if let Ok(content) = &res {
                         self.content = content.clone();
                     }
-                    _ = self.tx_result.try_send(res);
+                    _ = self.tx_result.try_send(ParsedUpdate {
+                        revision: options.revision,
+                        result: res,
+                    });
                     continue;
                 }
                 Poll::Ready(None) => return Poll::Ready(()),
@@ -379,9 +372,27 @@ impl Future for UpdateFuture {
 
 #[derive(Clone)]
 struct UpdateOptions {
+    revision: usize,
     pending_text: String,
     append: bool,
     highlight_theme: std::sync::Arc<HighlightTheme>,
+}
+
+impl UpdateOptions {
+    fn merge(&mut self, next: UpdateOptions) {
+        if next.append {
+            self.pending_text.push_str(&next.pending_text);
+            self.revision = next.revision;
+            self.highlight_theme = next.highlight_theme;
+        } else {
+            *self = next;
+        }
+    }
+}
+
+struct ParsedUpdate {
+    revision: usize,
+    result: Result<ParsedContent, SharedString>,
 }
 
 fn parse_content(
@@ -472,6 +483,34 @@ mod tests {
             assert_eq!(state.text.as_str(), "");
             assert_eq!(state.source().as_str(), "");
         });
+    }
+
+    #[test]
+    fn update_options_merge_keeps_latest_full_text() {
+        let theme = HighlightTheme::default_light();
+        let mut options = UpdateOptions {
+            revision: 1,
+            pending_text: "old".to_string(),
+            append: true,
+            highlight_theme: theme.clone(),
+        };
+
+        options.merge(UpdateOptions {
+            revision: 2,
+            pending_text: "new".to_string(),
+            append: false,
+            highlight_theme: theme.clone(),
+        });
+        options.merge(UpdateOptions {
+            revision: 3,
+            pending_text: " text".to_string(),
+            append: true,
+            highlight_theme: theme,
+        });
+
+        assert_eq!(options.revision, 3);
+        assert_eq!(options.pending_text, "new text");
+        assert!(!options.append);
     }
 
     #[test]
