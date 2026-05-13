@@ -226,6 +226,7 @@ impl Size {
     #[inline]
     pub fn table_row_height(&self) -> Pixels {
         match self {
+            Size::Size(size) => *size,
             Size::XSmall => px(26.),
             Size::Small => px(30.),
             Size::Large => px(40.),
@@ -605,6 +606,15 @@ mod tests {
         assert_eq!(Size::Medium.as_str(), "md");
         assert_eq!(Size::Large.as_str(), "lg");
         assert_eq!(Size::Size(px(15.)).as_str(), "custom");
+    }
+
+    #[test]
+    fn test_table_row_height() {
+        assert_eq!(Size::XSmall.table_row_height(), px(26.));
+        assert_eq!(Size::Small.table_row_height(), px(30.));
+        assert_eq!(Size::Medium.table_row_height(), px(32.));
+        assert_eq!(Size::Large.table_row_height(), px(40.));
+        assert_eq!(Size::Size(px(48.)).table_row_height(), px(48.));
     }
 
     #[test]
