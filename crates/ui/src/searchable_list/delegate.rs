@@ -83,7 +83,7 @@ pub trait SearchableListDelegate: Sized + 'static {
 
     /// Override the row content for the item at `ix`.
     ///
-    /// When `Some(_)` is returned, the adapter suppresses its default `SearchableListItemEl`
+    /// When `Some(_)` is returned, the adapter suppresses its default `SearchableListItemElement`
     /// layout (including the automatic trailing check icon) — the returned element is rendered
     /// as-is. Return `None` to fall back to the standard rendering.
     ///

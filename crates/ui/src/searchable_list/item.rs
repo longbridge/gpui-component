@@ -15,7 +15,7 @@ use crate::{
 /// - `checked` — controls the visibility of the trailing check icon; set by the adapter based on
 ///   the current selection state and NOT overwritten by the `List`.
 #[derive(IntoElement)]
-pub struct SearchableListItemEl {
+pub struct SearchableListItemElement {
     id: ElementId,
     size: Size,
     style: StyleRefinement,
@@ -29,7 +29,7 @@ pub struct SearchableListItemEl {
     check_icon: Option<Icon>,
 }
 
-impl SearchableListItemEl {
+impl SearchableListItemElement {
     pub fn new(ix: usize) -> Self {
         Self {
             id: ("searchable-list-item", ix).into(),
@@ -56,20 +56,20 @@ impl SearchableListItemEl {
     }
 }
 
-impl ParentElement for SearchableListItemEl {
+impl ParentElement for SearchableListItemElement {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
     }
 }
 
-impl Disableable for SearchableListItemEl {
+impl Disableable for SearchableListItemElement {
     fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
     }
 }
 
-impl Selectable for SearchableListItemEl {
+impl Selectable for SearchableListItemElement {
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -80,20 +80,20 @@ impl Selectable for SearchableListItemEl {
     }
 }
 
-impl Sizable for SearchableListItemEl {
+impl Sizable for SearchableListItemElement {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
     }
 }
 
-impl Styled for SearchableListItemEl {
+impl Styled for SearchableListItemElement {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl RenderOnce for SearchableListItemEl {
+impl RenderOnce for SearchableListItemElement {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .id(self.id)

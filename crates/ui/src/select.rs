@@ -28,8 +28,8 @@ pub use crate::searchable_list::SearchableGroup as SelectGroup;
 pub use crate::searchable_list::SearchableListDelegate as SelectDelegate;
 /// Re-exported for backward compatibility. New code should prefer [`SearchableListItem`].
 pub use crate::searchable_list::SearchableListItem as SelectItem;
-/// Re-exported for backward compatibility. New code should prefer [`SearchableListItemEl`].
-pub use crate::searchable_list::SearchableListItemEl as SelectListItem;
+/// Re-exported for backward compatibility. New code should prefer [`SearchableListItemElement`].
+pub use crate::searchable_list::SearchableListItemElement as SelectListItem;
 /// Re-exported for backward compatibility.
 pub use crate::searchable_list::SearchableVec;
 

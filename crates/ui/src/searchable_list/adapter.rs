@@ -5,7 +5,7 @@ use crate::{
     list::{ListDelegate, ListState},
 };
 
-use super::{delegate::{SearchableListDelegate, SearchableListItem as _}, item::SearchableListItemEl};
+use super::{delegate::{SearchableListDelegate, SearchableListItem as _}, item::SearchableListItemElement};
 
 /// Bridges a [`SearchableListDelegate`] into the [`ListDelegate`] protocol.
 ///
@@ -61,7 +61,7 @@ impl<D: SearchableListDelegate + 'static> SearchableListAdapter<D> {
 }
 
 impl<D: SearchableListDelegate + 'static> ListDelegate for SearchableListAdapter<D> {
-    type Item = SearchableListItemEl;
+    type Item = SearchableListItemElement;
 
     fn sections_count(&self, cx: &App) -> usize {
         self.delegate.sections_count(cx)
@@ -115,7 +115,7 @@ impl<D: SearchableListDelegate + 'static> ListDelegate for SearchableListAdapter
 
         if let Some(el) = self.delegate.render_item(ix, item, is_checked, window, cx) {
             return Some(
-                SearchableListItemEl::new(ix.row)
+                SearchableListItemElement::new(ix.row)
                     .disabled(disabled)
                     .with_size(size)
                     .child(el),
@@ -132,7 +132,7 @@ impl<D: SearchableListDelegate + 'static> ListDelegate for SearchableListAdapter
             .child(item.render(window, cx).into_any_element());
 
         Some(
-            SearchableListItemEl::new(ix.row)
+            SearchableListItemElement::new(ix.row)
                 .checked(is_checked)
                 .check_icon(check_icon)
                 .disabled(disabled)
