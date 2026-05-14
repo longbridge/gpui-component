@@ -35,7 +35,9 @@ jobs:
         run: script/bootstrap
       - name: Machete
         if: ${{ matrix.run_on == 'macos-latest' }}
-        uses: bnjbvr/cargo-machete@v0.9.1
+        run: |
+          cargo install cargo-machete --quiet
+          cargo machete
       - name: Setup | Cache Cargo
         uses: actions/cache@v4
         with:
