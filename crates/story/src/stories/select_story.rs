@@ -263,7 +263,6 @@ impl Render for SelectStory {
                                 .justify_center()
                                 .text_color(cx.theme().muted_foreground)
                                 .child("No Data")
-                                .into_any_element()
                         }),
                 ),
             )

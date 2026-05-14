@@ -657,8 +657,11 @@ where
     }
 
     /// Set a custom closure that renders the empty-state element.
-    pub fn empty(mut self, builder: impl Fn(&mut Window, &App) -> AnyElement + 'static) -> Self {
-        self.empty = Some(Box::new(builder));
+    pub fn empty<E: IntoElement + 'static>(
+        mut self,
+        builder: impl Fn(&mut Window, &App) -> E + 'static,
+    ) -> Self {
+        self.empty = Some(Box::new(move |window, cx| builder(window, cx).into_any_element()));
         self
     }
 

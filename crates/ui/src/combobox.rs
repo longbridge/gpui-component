@@ -786,8 +786,11 @@ where
     }
 
     /// Set a custom closure that renders the empty-state element.
-    pub fn empty(mut self, builder: impl Fn(&mut Window, &App) -> AnyElement + 'static) -> Self {
-        self.empty = Some(Box::new(builder));
+    pub fn empty<E: IntoElement + 'static>(
+        mut self,
+        builder: impl Fn(&mut Window, &App) -> E + 'static,
+    ) -> Self {
+        self.empty = Some(Box::new(move |window, cx| builder(window, cx).into_any_element()));
         self
     }
 
@@ -798,17 +801,22 @@ where
     }
 
     /// Override the entire trigger element.
-    pub fn render_trigger(
+    pub fn render_trigger<E: IntoElement + 'static>(
         mut self,
-        f: impl Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static,
+        f: impl Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> E + 'static,
     ) -> Self {
-        self.render_trigger = Some(Box::new(f));
+        self.render_trigger = Some(Box::new(move |ctx, window, cx| {
+            f(ctx, window, cx).into_any_element()
+        }));
         self
     }
 
     /// Render an element below a separator at the bottom of the dropdown.
-    pub fn footer(mut self, f: impl Fn(&mut Window, &mut App) -> AnyElement + 'static) -> Self {
-        self.footer = Some(Box::new(f));
+    pub fn footer<E: IntoElement + 'static>(
+        mut self,
+        f: impl Fn(&mut Window, &mut App) -> E + 'static,
+    ) -> Self {
+        self.footer = Some(Box::new(move |window, cx| f(window, cx).into_any_element()));
         self
     }
 }
