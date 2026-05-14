@@ -23,7 +23,7 @@ use crate::{
     v_flex,
 };
 
-const CONTEXT: &str = "ComboBox";
+const CONTEXT: &str = "Combobox";
 
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
@@ -39,10 +39,10 @@ pub(crate) fn init(cx: &mut App) {
     ])
 }
 
-// MARK: ComboBoxTriggerCtx
+// MARK: ComboboxTriggerCtx
 
-/// Context passed to the `render_trigger` closure on [`ComboBox`].
-pub struct ComboBoxTriggerCtx<'a, D: SearchableListDelegate + 'static> {
+/// Context passed to the `render_trigger` closure on [`Combobox`].
+pub struct ComboboxTriggerCtx<'a, D: SearchableListDelegate + 'static> {
     pub selection: &'a [(IndexPath, D::Item)],
     pub placeholder: Option<&'a SharedString>,
     pub open: bool,
@@ -50,29 +50,16 @@ pub struct ComboBoxTriggerCtx<'a, D: SearchableListDelegate + 'static> {
     pub size: Size,
 }
 
-// MARK: ComboBoxChange
+// MARK: ComboboxChange
 
 /// Back-compat alias — new code should use [`SearchableListChange`] directly.
-pub type ComboBoxChange = SearchableListChange;
+pub type ComboboxChange = SearchableListChange;
 
-// MARK: ComboBoxMode
+// MARK: ComboboxOptions
 
-/// Selection semantics for a [`ComboBox`].
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
-pub enum ComboBoxMode {
-    /// Clicking an item replaces the entire selection and closes the popover.
-    #[default]
-    Single,
-    /// Clicking an item toggles it in the selection; the popover stays open.
-    Multi,
-}
-
-// MARK: ComboBoxOptions
-
-struct ComboBoxOptions {
+struct ComboboxOptions {
     style: StyleRefinement,
     size: Size,
-    close_on_select: bool,
     cleanable: bool,
     placeholder: Option<SharedString>,
     search_placeholder: Option<SharedString>,
@@ -84,12 +71,11 @@ struct ComboBoxOptions {
     check_icon: Option<Icon>,
 }
 
-impl Default for ComboBoxOptions {
+impl Default for ComboboxOptions {
     fn default() -> Self {
         Self {
             style: StyleRefinement::default(),
             size: Size::default(),
-            close_on_select: true,
             cleanable: false,
             placeholder: None,
             search_placeholder: None,
@@ -103,28 +89,27 @@ impl Default for ComboBoxOptions {
     }
 }
 
-// MARK: ComboBoxState
+// MARK: ComboboxState
 
-/// State of the [`ComboBox`] component.
-pub struct ComboBoxState<D: SearchableListDelegate + 'static>
+/// State of the [`Combobox`] component.
+pub struct ComboboxState<D: SearchableListDelegate + 'static>
 where
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
 {
     pub(crate) state: SearchableListState<D>,
 
-    // ComboBox-specific fields
-    mode: ComboBoxMode,
+    // Combobox-specific fields
+    multiple: bool,
     searchable: bool,
-    close_on_select: bool,
     trigger_icon: Option<Icon>,
     check_icon: Option<Icon>,
     render_trigger:
-        Option<Box<dyn Fn(&ComboBoxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
+        Option<Box<dyn Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
     footer: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
 }
 
-/// Events emitted by [`ComboBoxState`].
-pub enum ComboBoxEvent<D: SearchableListDelegate + 'static>
+/// Events emitted by [`ComboboxState`].
+pub enum ComboboxEvent<D: SearchableListDelegate + 'static>
 where
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
 {
@@ -134,12 +119,12 @@ where
     Confirm(Vec<<D::Item as SearchableListItem>::Value>),
 }
 
-impl<D> ComboBoxState<D>
+impl<D> ComboboxState<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
 {
-    /// Create a new `ComboBox` state.
+    /// Create a new `Combobox` state.
     pub fn new(
         delegate: D,
         selected_indices: Vec<IndexPath>,
@@ -174,30 +159,27 @@ where
                             return;
                         };
 
-                        let (mode, close_on_select, mut selection) = {
+                        let (multiple, mut selection) = {
                             let s = weak.read(cx);
-                            (s.mode, s.close_on_select, s.state.selection.clone())
+                            (s.multiple, s.state.selection.clone())
                         };
 
                         let is_selected = selection.iter().any(|(cur_ix, _)| cur_ix == &ix);
-                        let changes: Vec<SearchableListChange> = match mode {
-                            ComboBoxMode::Single => {
-                                let mut changes: Vec<SearchableListChange> = selection
-                                    .iter()
-                                    .map(|(cur_ix, _)| SearchableListChange::Deselect {
-                                        index: *cur_ix,
-                                    })
-                                    .collect();
-                                changes.push(SearchableListChange::Select { index: ix });
-                                changes
+                        let changes: Vec<SearchableListChange> = if multiple {
+                            if is_selected {
+                                vec![SearchableListChange::Deselect { index: ix }]
+                            } else {
+                                vec![SearchableListChange::Select { index: ix }]
                             }
-                            ComboBoxMode::Multi => {
-                                if is_selected {
-                                    vec![SearchableListChange::Deselect { index: ix }]
-                                } else {
-                                    vec![SearchableListChange::Select { index: ix }]
-                                }
-                            }
+                        } else {
+                            let mut changes: Vec<SearchableListChange> = selection
+                                .iter()
+                                .map(|(cur_ix, _)| SearchableListChange::Deselect {
+                                    index: *cur_ix,
+                                })
+                                .collect();
+                            changes.push(SearchableListChange::Select { index: ix });
+                            changes
                         };
 
                         let before_indices: Vec<IndexPath> =
@@ -213,18 +195,18 @@ where
                         let after_indices: Vec<IndexPath> =
                             selection.iter().map(|(ix, _)| *ix).collect();
                         let changed = before_indices != after_indices;
-                        let should_close = changed && close_on_select;
+                        let should_close = changed && !multiple;
 
                         let new_selection = weak_confirm.update(cx, |this, cx| {
                             this.state.selection = selection;
 
                             if changed {
-                                cx.emit(ComboBoxEvent::Change(this.selected_values()));
+                                cx.emit(ComboboxEvent::Change(this.selected_values()));
                                 cx.notify();
                             }
 
                             if should_close {
-                                cx.emit(ComboBoxEvent::Confirm(this.selected_values()));
+                                cx.emit(ComboboxEvent::Confirm(this.selected_values()));
                                 this.set_open(false, cx);
                                 this.focus(window, cx);
                             }
@@ -254,7 +236,7 @@ where
                     let weak_cancel = weak_cancel.clone();
                     move |_list_state, window, cx| {
                         _ = weak_cancel.update(cx, |this, cx| {
-                            cx.emit(ComboBoxEvent::Confirm(this.selected_values()));
+                            cx.emit(ComboboxEvent::Confirm(this.selected_values()));
                             this.set_open(false, cx);
                             this.focus(window, cx);
                         });
@@ -284,9 +266,8 @@ where
 
         Self {
             state,
-            mode: ComboBoxMode::default(),
+            multiple: false,
             searchable: false,
-            close_on_select: true,
             trigger_icon: None,
             check_icon: None,
             render_trigger: None,
@@ -294,12 +275,12 @@ where
         }
     }
 
-    /// Set the selection mode.
+    /// Enable multi-select mode.
     ///
-    /// - [`ComboBoxMode::Single`] — clicking an item replaces the selection and closes the popover.
-    /// - [`ComboBoxMode::Multi`] — clicking an item toggles it; the popover stays open.
-    pub fn mode(mut self, mode: ComboBoxMode) -> Self {
-        self.mode = mode;
+    /// When `true`, clicking an item toggles it in the selection and the popover stays open.
+    /// When `false` (default), clicking an item replaces the selection and closes the popover.
+    pub fn multiple(mut self, multiple: bool) -> Self {
+        self.multiple = multiple;
         self
     }
 
@@ -357,7 +338,7 @@ where
     pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
         self.state.selection.clear();
         self.state.sync_snapshot(cx);
-        cx.emit(ComboBoxEvent::Change(self.selected_values()));
+        cx.emit(ComboboxEvent::Change(self.selected_values()));
         cx.notify();
     }
 
@@ -373,10 +354,7 @@ where
         self.state.focus_handle.focus(window, cx);
     }
 
-    /// Process an item click, applying mode-specific selection semantics.
-    ///
-    /// - `Single`: replaces the entire selection with the clicked item, then closes.
-    /// - `Multi`: toggles the clicked item; respects `close_on_select`.
+    /// Process an item click: single-select replaces the selection and closes; multi-select toggles.
     ///
     /// Calls `delegate.on_will_change` before committing and `delegate.on_confirm` when closing.
     pub fn handle_item_select(
@@ -385,27 +363,23 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let close_on_select = self.close_on_select;
         let is_selected = self.state.selection.iter().any(|(cur_ix, _)| cur_ix == &ix);
 
-        let changes: Vec<SearchableListChange> = match self.mode {
-            ComboBoxMode::Single => {
-                let mut changes: Vec<SearchableListChange> = self
-                    .state
-                    .selection
-                    .iter()
-                    .map(|(cur_ix, _)| SearchableListChange::Deselect { index: *cur_ix })
-                    .collect();
-                changes.push(SearchableListChange::Select { index: ix });
-                changes
+        let changes: Vec<SearchableListChange> = if self.multiple {
+            if is_selected {
+                vec![SearchableListChange::Deselect { index: ix }]
+            } else {
+                vec![SearchableListChange::Select { index: ix }]
             }
-            ComboBoxMode::Multi => {
-                if is_selected {
-                    vec![SearchableListChange::Deselect { index: ix }]
-                } else {
-                    vec![SearchableListChange::Select { index: ix }]
-                }
-            }
+        } else {
+            let mut changes: Vec<SearchableListChange> = self
+                .state
+                .selection
+                .iter()
+                .map(|(cur_ix, _)| SearchableListChange::Deselect { index: *cur_ix })
+                .collect();
+            changes.push(SearchableListChange::Select { index: ix });
+            changes
         };
 
         let mut selection = self.state.selection.clone();
@@ -419,13 +393,13 @@ where
 
         let after_indices: Vec<IndexPath> = selection.iter().map(|(ix, _)| *ix).collect();
         let changed = before_indices != after_indices;
-        let should_close = changed && close_on_select;
+        let should_close = changed && !self.multiple;
 
         self.state.selection = selection;
         self.state.sync_snapshot(cx);
 
         if changed {
-            cx.emit(ComboBoxEvent::Change(self.selected_values()));
+            cx.emit(ComboboxEvent::Change(self.selected_values()));
             cx.notify();
         }
 
@@ -435,7 +409,7 @@ where
                 list.delegate_mut().delegate.on_confirm(&final_selection);
             });
 
-            cx.emit(ComboBoxEvent::Confirm(self.selected_values()));
+            cx.emit(ComboboxEvent::Confirm(self.selected_values()));
             self.set_open(false, cx);
             self.focus(window, cx);
         }
@@ -500,7 +474,7 @@ where
         }
 
         cx.stop_propagation();
-        cx.emit(ComboBoxEvent::Confirm(self.selected_values()));
+        cx.emit(ComboboxEvent::Confirm(self.selected_values()));
 
         self.set_open(false, cx);
         self.focus(window, cx);
@@ -529,7 +503,7 @@ where
             .state
             .placeholder
             .clone()
-            .unwrap_or_else(|| t!("ComboBox.placeholder").into());
+            .unwrap_or_else(|| t!("Combobox.placeholder").into());
 
         if self.state.selection.is_empty() {
             return div()
@@ -538,44 +512,41 @@ where
                 .into_any_element();
         }
 
-        match self.mode {
-            ComboBoxMode::Single => {
-                let title = self
-                    .state
-                    .selection
-                    .first()
-                    .map(|(_, i)| i.title())
-                    .unwrap_or_default();
+        if self.multiple {
+            let items: Vec<SharedString> = self
+                .state
+                .selection
+                .iter()
+                .map(|(_, i)| i.title())
+                .collect();
 
-                div()
-                    .w_full()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .truncate()
-                    .child(title)
-                    .into_any_element()
-            }
-            ComboBoxMode::Multi => {
-                let items: Vec<SharedString> = self
-                    .state
-                    .selection
-                    .iter()
-                    .map(|(_, i)| i.title())
-                    .collect();
+            div()
+                .w_full()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .truncate()
+                .child(items.join(", "))
+                .into_any_element()
+        } else {
+            let title = self
+                .state
+                .selection
+                .first()
+                .map(|(_, i)| i.title())
+                .unwrap_or_default();
 
-                div()
-                    .w_full()
-                    .overflow_hidden()
-                    .whitespace_nowrap()
-                    .truncate()
-                    .child(items.join(", "))
-                    .into_any_element()
-            }
+            div()
+                .w_full()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .truncate()
+                .child(title)
+                .into_any_element()
         }
     }
 }
 
-impl<D> Render for ComboBoxState<D>
+impl<D> Render for ComboboxState<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
@@ -609,7 +580,7 @@ where
             .unwrap_or_else(|| Icon::new(IconName::ChevronDown));
 
         let trigger_body = if let Some(render_trigger) = &self.render_trigger {
-            let ctx = ComboBoxTriggerCtx {
+            let ctx = ComboboxTriggerCtx {
                 selection,
                 placeholder,
                 open,
@@ -695,20 +666,20 @@ where
     }
 }
 
-impl<D> EventEmitter<ComboBoxEvent<D>> for ComboBoxState<D>
+impl<D> EventEmitter<ComboboxEvent<D>> for ComboboxState<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
 {
 }
-impl<D> EventEmitter<DismissEvent> for ComboBoxState<D>
+impl<D> EventEmitter<DismissEvent> for ComboboxState<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
 {
 }
 
-impl<D> Focusable for ComboBoxState<D>
+impl<D> Focusable for ComboboxState<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
@@ -722,36 +693,36 @@ where
     }
 }
 
-// MARK: ComboBox element
+// MARK: Combobox element
 
 /// A combo box with support for single and multi-select.
 ///
 /// Clicking an item toggles it in the selection; the dropdown stays open until the user
 /// presses Escape or clicks outside.
 #[derive(IntoElement)]
-pub struct ComboBox<D: SearchableListDelegate + 'static>
+pub struct Combobox<D: SearchableListDelegate + 'static>
 where
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
 {
     id: ElementId,
-    state: Entity<ComboBoxState<D>>,
-    options: ComboBoxOptions,
+    state: Entity<ComboboxState<D>>,
+    options: ComboboxOptions,
     render_trigger:
-        Option<Box<dyn Fn(&ComboBoxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
+        Option<Box<dyn Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
     footer: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
     empty: Option<Box<dyn Fn(&mut Window, &App) -> AnyElement + 'static>>,
 }
 
-impl<D> ComboBox<D>
+impl<D> Combobox<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
 {
-    pub fn new(state: &Entity<ComboBoxState<D>>) -> Self {
+    pub fn new(state: &Entity<ComboboxState<D>>) -> Self {
         Self {
             id: ("multi-combo-box", state.entity_id()).into(),
             state: state.clone(),
-            options: ComboBoxOptions::default(),
+            options: ComboboxOptions::default(),
             render_trigger: None,
             footer: None,
             empty: None,
@@ -806,14 +777,6 @@ where
         self
     }
 
-    /// Control whether the popover closes after an item is selected (default: `true`).
-    ///
-    /// For [`ComboBoxMode::Multi`] you typically want `false` to allow batch selection.
-    pub fn close_on_select(mut self, close: bool) -> Self {
-        self.options.close_on_select = close;
-        self
-    }
-
     /// Set a custom closure that renders the empty-state element.
     pub fn empty(mut self, builder: impl Fn(&mut Window, &App) -> AnyElement + 'static) -> Self {
         self.empty = Some(Box::new(builder));
@@ -829,7 +792,7 @@ where
     /// Override the entire trigger element.
     pub fn render_trigger(
         mut self,
-        f: impl Fn(&ComboBoxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static,
+        f: impl Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static,
     ) -> Self {
         self.render_trigger = Some(Box::new(f));
         self
@@ -842,7 +805,7 @@ where
     }
 }
 
-impl<D> Sizable for ComboBox<D>
+impl<D> Sizable for Combobox<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
@@ -853,7 +816,7 @@ where
     }
 }
 
-impl<D> Styled for ComboBox<D>
+impl<D> Styled for Combobox<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
@@ -863,7 +826,7 @@ where
     }
 }
 
-impl<D> RenderOnce for ComboBox<D>
+impl<D> RenderOnce for Combobox<D>
 where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
@@ -886,7 +849,6 @@ where
             this.state.menu_max_h = opts.menu_max_h;
             this.state.disabled = opts.disabled;
             this.state.appearance = opts.appearance;
-            this.close_on_select = opts.close_on_select;
             this.trigger_icon = opts.trigger_icon;
             this.check_icon = opts.check_icon;
             this.render_trigger = render_trigger;
@@ -903,10 +865,10 @@ where
             .when(!disabled, |this| {
                 this.track_focus(&focus_handle.tab_stop(true))
             })
-            .on_action(window.listener_for(&self.state, ComboBoxState::up))
-            .on_action(window.listener_for(&self.state, ComboBoxState::down))
-            .on_action(window.listener_for(&self.state, ComboBoxState::enter))
-            .on_action(window.listener_for(&self.state, ComboBoxState::escape))
+            .on_action(window.listener_for(&self.state, ComboboxState::up))
+            .on_action(window.listener_for(&self.state, ComboboxState::down))
+            .on_action(window.listener_for(&self.state, ComboboxState::enter))
+            .on_action(window.listener_for(&self.state, ComboboxState::escape))
             .size_full()
             .child(self.state)
     }
@@ -1041,7 +1003,7 @@ mod tests {
 
     use crate::{
         IndexPath,
-        combo_box::{ComboBox, ComboBoxMode, ComboBoxState},
+        combobox::{Combobox, ComboboxState},
         searchable_list::{
             SearchableListChange, SearchableListDelegate, SearchableListItem, SearchableListState,
             SearchableVec,
@@ -1054,9 +1016,9 @@ mod tests {
         let cx = cx.add_empty_window();
         cx.update(|window, cx| {
             let items = SearchableVec::new(vec!["Rust", "Go", "C++"]);
-            let state = cx.new(|cx| ComboBoxState::new(items, vec![], window, cx).searchable(true));
+            let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx).searchable(true));
 
-            let _cb = ComboBox::new(&state)
+            let _cb = Combobox::new(&state)
                 .placeholder("Select language")
                 .search_placeholder("Search...")
                 .menu_width(gpui::px(300.))
@@ -1073,7 +1035,7 @@ mod tests {
         let cx = cx.add_empty_window();
         cx.update(|window, cx| {
             let items = SearchableVec::new(vec!["Rust", "Go", "C++"]);
-            let state = cx.new(|cx| ComboBoxState::new(items, vec![], window, cx).searchable(true));
+            let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx).searchable(true));
 
             let count_before = state
                 .read(cx)
@@ -1113,17 +1075,16 @@ mod tests {
         cx.update(|window, cx| {
             let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
             let state = cx.new(|cx| {
-                ComboBoxState::new(items, vec![IndexPath::new(0)], window, cx)
-                    .mode(ComboBoxMode::Multi)
+                ComboboxState::new(items, vec![IndexPath::new(0)], window, cx)
+                    .multiple(true)
                     .searchable(true)
             });
 
-            let _cb = ComboBox::new(&state)
+            let _cb = Combobox::new(&state)
                 .placeholder("Select frameworks")
                 .search_placeholder("Search...")
                 .menu_width(gpui::px(300.))
                 .cleanable(true)
-                .close_on_select(false)
                 .disabled(false);
 
             assert_eq!(state.read(cx).selected_values(), vec!["React"]);
@@ -1137,7 +1098,7 @@ mod tests {
         cx.update(|window, cx| {
             let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
             let state = cx
-                .new(|cx| ComboBoxState::new(items, vec![], window, cx).mode(ComboBoxMode::Multi));
+                .new(|cx| ComboboxState::new(items, vec![], window, cx).multiple(true));
 
             state.update(cx, |s, cx| s.add_selected_index(IndexPath::new(0), cx));
             assert_eq!(state.read(cx).selected_values(), &["React"]);
@@ -1157,13 +1118,13 @@ mod tests {
         cx.update(|window, cx| {
             let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
             let state = cx.new(|cx| {
-                ComboBoxState::new(
+                ComboboxState::new(
                     items,
                     vec![IndexPath::new(0), IndexPath::new(1)],
                     window,
                     cx,
                 )
-                .mode(ComboBoxMode::Multi)
+                .multiple(true)
             });
 
             assert_eq!(state.read(cx).selected_values().len(), 2);
@@ -1178,7 +1139,7 @@ mod tests {
         let cx = cx.add_empty_window();
         cx.update(|window, cx| {
             let items = SearchableVec::new(vec!["Rust", "Go", "C++"]);
-            let state = cx.new(|cx| ComboBoxState::new(items, vec![], window, cx));
+            let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx));
 
             // Default mode is Single.
             state.update(cx, |s, cx| s.add_selected_index(IndexPath::new(0), cx));
@@ -1228,7 +1189,7 @@ mod tests {
         let cx = cx.add_empty_window();
         cx.update(|window, cx| {
             let delegate = VetoDelegate(SearchableVec::new(vec!["Rust", "Go", "C++"]));
-            let state = cx.new(|cx| ComboBoxState::new(delegate, vec![], window, cx));
+            let state = cx.new(|cx| ComboboxState::new(delegate, vec![], window, cx));
 
             // Pre-select an item directly so we can verify veto prevents changes.
             state.update(cx, |s, cx| s.add_selected_index(IndexPath::new(0), cx));

@@ -3,7 +3,7 @@ use gpui_component::{
     ActiveTheme, Icon, IconName, IndexPath, Sizable as _,
     button::Button,
     button::ButtonVariants as _,
-    combo_box::*,
+    combobox::*,
     h_flex,
     searchable_list::{
         SearchableGroup, SearchableListChange, SearchableListDelegate, SearchableListItem,
@@ -274,40 +274,40 @@ impl SearchableListDelegate for FeaturedDelegate {
 
 // MARK: Story
 
-pub struct ComboBoxStory {
+pub struct ComboboxStory {
     // 01 basic single-select
-    basic: Entity<ComboBoxState<SearchableVec<&'static str>>>,
+    basic: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 02 basic multi-select
-    basic_multi: Entity<ComboBoxState<SearchableVec<&'static str>>>,
+    basic_multi: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 03 grouped single-select
-    grouped: Entity<ComboBoxState<SearchableVec<SearchableGroup<FoodItem>>>>,
+    grouped: Entity<ComboboxState<SearchableVec<SearchableGroup<FoodItem>>>>,
     // 03 disabled items (single)
-    disabled_items: Entity<ComboBoxState<SearchableVec<FoodItem>>>,
+    disabled_items: Entity<ComboboxState<SearchableVec<FoodItem>>>,
     // 04 item icon (single)
-    with_icon: Entity<ComboBoxState<SearchableVec<Industry>>>,
+    with_icon: Entity<ComboboxState<SearchableVec<Industry>>>,
     // 05 custom check icon (single)
-    custom_check: Entity<ComboBoxState<SearchableVec<&'static str>>>,
+    custom_check: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 06 footer button (single)
-    with_footer: Entity<ComboBoxState<SearchableVec<&'static str>>>,
+    with_footer: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 07 custom trigger (single)
-    custom_trigger: Entity<ComboBoxState<SearchableVec<&'static str>>>,
+    custom_trigger: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 08 multi badges
-    multi_badges: Entity<ComboBoxState<SearchableVec<&'static str>>>,
+    multi_badges: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 09 on_will_change — max 2 items
-    custom_max2: Entity<ComboBoxState<Max2Delegate>>,
+    custom_max2: Entity<ComboboxState<Max2Delegate>>,
     // 10 is_item_checked — externally pinned items
-    pinned: Entity<ComboBoxState<PinnedDelegate>>,
+    pinned: Entity<ComboboxState<PinnedDelegate>>,
     // 11 render_item delegate hook — custom row renderer
-    featured: Entity<ComboBoxState<FeaturedDelegate>>,
+    featured: Entity<ComboboxState<FeaturedDelegate>>,
     // 12 multi expandable
-    multi_expand: Entity<ComboBoxState<SearchableVec<&'static str>>>,
+    multi_expand: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 12 multi count-badge
-    multi_count: Entity<ComboBoxState<SearchableVec<&'static str>>>,
+    multi_count: Entity<ComboboxState<SearchableVec<&'static str>>>,
 }
 
-impl super::Story for ComboBoxStory {
+impl super::Story for ComboboxStory {
     fn title() -> &'static str {
-        "ComboBox"
+        "Combobox"
     }
 
     fn description() -> &'static str {
@@ -319,7 +319,7 @@ impl super::Story for ComboBoxStory {
     }
 }
 
-impl Focusable for ComboBoxStory {
+impl Focusable for ComboboxStory {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.basic.focus_handle(cx)
     }
@@ -361,24 +361,22 @@ fn industries() -> SearchableVec<Industry> {
     ])
 }
 
-impl ComboBoxStory {
+impl ComboboxStory {
     fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let basic = cx.new(|cx| {
-            ComboBoxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                .mode(ComboBoxMode::Single)
-                .searchable(true)
+            ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
+                                .searchable(true)
         });
 
         let basic_multi = cx.new(|cx| {
-            ComboBoxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                .mode(ComboBoxMode::Multi)
+            ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
+                .multiple(true)
                 .searchable(true)
         });
 
         let grouped = cx.new(|cx| {
-            ComboBoxState::new(food_groups(), vec![IndexPath::default()], window, cx)
-                .mode(ComboBoxMode::Single)
-                .searchable(true)
+            ComboboxState::new(food_groups(), vec![IndexPath::default()], window, cx)
+                                .searchable(true)
         });
 
         let disabled_items = cx.new(|cx| {
@@ -389,83 +387,76 @@ impl ComboBoxStory {
                 FoodItem::new("Carrots"),
                 FoodItem::new("Broccoli").disabled(),
             ]);
-            ComboBoxState::new(items, vec![], window, cx)
-                .mode(ComboBoxMode::Single)
-                .searchable(true)
+            ComboboxState::new(items, vec![], window, cx)
+                                .searchable(true)
         });
 
         let with_icon = cx.new(|cx| {
-            ComboBoxState::new(industries(), vec![], window, cx)
-                .mode(ComboBoxMode::Single)
-                .searchable(true)
+            ComboboxState::new(industries(), vec![], window, cx)
+                                .searchable(true)
         });
 
         let custom_check = cx.new(|cx| {
-            ComboBoxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                .mode(ComboBoxMode::Single)
-                .searchable(true)
+            ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
+                                .searchable(true)
         });
 
         let with_footer = cx.new(|cx| {
             let items =
                 SearchableVec::new(vec!["Harvard University", "MIT", "Stanford", "Cambridge"]);
-            ComboBoxState::new(items, vec![IndexPath::default()], window, cx)
-                .mode(ComboBoxMode::Single)
-                .searchable(true)
+            ComboboxState::new(items, vec![IndexPath::default()], window, cx)
+                                .searchable(true)
         });
 
         let custom_trigger = cx.new(|cx| {
-            ComboBoxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                .mode(ComboBoxMode::Single)
-                .searchable(true)
+            ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
+                                .searchable(true)
         });
 
         let multi_badges = cx.new(|cx| {
-            ComboBoxState::new(
+            ComboboxState::new(
                 SearchableVec::new(MULTI_FRAMEWORKS.to_vec()),
                 vec![IndexPath::new(0), IndexPath::new(2)],
                 window,
                 cx,
             )
-            .mode(ComboBoxMode::Multi)
+            .multiple(true)
             .searchable(true)
         });
 
         let custom_max2 = cx.new(|cx| {
-            ComboBoxState::new(
+            ComboboxState::new(
                 Max2Delegate::new(SearchableVec::new(MULTI_FRAMEWORKS.to_vec())),
                 vec![],
                 window,
                 cx,
             )
-            .mode(ComboBoxMode::Multi)
+            .multiple(true)
             .searchable(true)
         });
 
         let pinned = cx.new(|cx| {
-            ComboBoxState::new(
+            ComboboxState::new(
                 PinnedDelegate(SearchableVec::new(FRAMEWORKS.to_vec())),
                 vec![],
                 window,
                 cx,
             )
-            .mode(ComboBoxMode::Single)
-            .searchable(true)
+                        .searchable(true)
         });
 
         let featured = cx.new(|cx| {
-            ComboBoxState::new(
+            ComboboxState::new(
                 FeaturedDelegate(SearchableVec::new(FRAMEWORKS.to_vec())),
                 vec![],
                 window,
                 cx,
             )
-            .mode(ComboBoxMode::Single)
-            .searchable(true)
+                        .searchable(true)
         });
 
         let multi_expand = cx.new(|cx| {
-            ComboBoxState::new(
+            ComboboxState::new(
                 SearchableVec::new(MULTI_FRAMEWORKS.to_vec()),
                 vec![
                     IndexPath::new(0),
@@ -477,12 +468,12 @@ impl ComboBoxStory {
                 window,
                 cx,
             )
-            .mode(ComboBoxMode::Multi)
+            .multiple(true)
             .searchable(true)
         });
 
         let multi_count = cx.new(|cx| {
-            ComboBoxState::new(
+            ComboboxState::new(
                 SearchableVec::new(MULTI_FRAMEWORKS.to_vec()),
                 vec![
                     IndexPath::new(0),
@@ -495,7 +486,7 @@ impl ComboBoxStory {
                 window,
                 cx,
             )
-            .mode(ComboBoxMode::Multi)
+            .multiple(true)
             .searchable(true)
         });
 
@@ -522,7 +513,7 @@ impl ComboBoxStory {
     }
 }
 
-impl Render for ComboBoxStory {
+impl Render for ComboboxStory {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let multi_badges_state = self.multi_badges.clone();
 
@@ -531,7 +522,7 @@ impl Render for ComboBoxStory {
             .gap_4()
             .child(
                 section("Basic Single-Select").max_w_md().child(
-                    ComboBox::new(&self.basic)
+                    Combobox::new(&self.basic)
                         .placeholder("Select framework...")
                         .search_placeholder("Search framework...")
                         .w_full(),
@@ -539,16 +530,15 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Basic Multi-Select").max_w_md().child(
-                    ComboBox::new(&self.basic_multi)
+                    Combobox::new(&self.basic_multi)
                         .placeholder("Select frameworks...")
                         .search_placeholder("Search framework...")
-                        .close_on_select(false)
                         .w_full(),
                 ),
             )
             .child(
                 section("Grouped Items").max_w_md().child(
-                    ComboBox::new(&self.grouped)
+                    Combobox::new(&self.grouped)
                         .placeholder("Select item...")
                         .search_placeholder("Search item...")
                         .w_full(),
@@ -556,7 +546,7 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Disabled Items").max_w_md().child(
-                    ComboBox::new(&self.disabled_items)
+                    Combobox::new(&self.disabled_items)
                         .placeholder("Select item...")
                         .search_placeholder("Search item...")
                         .w_full(),
@@ -564,7 +554,7 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Item with Icon").max_w_md().child(
-                    ComboBox::new(&self.with_icon)
+                    Combobox::new(&self.with_icon)
                         .placeholder("Select industry category")
                         .search_placeholder("Search industries...")
                         .render_trigger(|ctx, _, cx| {
@@ -613,7 +603,7 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Custom Check Icon").max_w_md().child(
-                    ComboBox::new(&self.custom_check)
+                    Combobox::new(&self.custom_check)
                         .placeholder("Select framework...")
                         .search_placeholder("Search framework...")
                         .check_icon(Icon::new(IconName::CircleCheck))
@@ -622,7 +612,7 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Footer Action Button").max_w_md().child(
-                    ComboBox::new(&self.with_footer)
+                    Combobox::new(&self.with_footer)
                         .placeholder("Select university")
                         .search_placeholder("Find university")
                         .footer(|_, cx| {
@@ -640,7 +630,7 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Custom Trigger").max_w_md().child(
-                    ComboBox::new(&self.custom_trigger)
+                    Combobox::new(&self.custom_trigger)
                         .placeholder("Select framework")
                         .search_placeholder("Search framework...")
                         .render_trigger(|ctx, _, cx| {
@@ -698,10 +688,9 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Multi-Select with Badges").max_w_md().child(
-                    ComboBox::new(&self.multi_badges)
+                    Combobox::new(&self.multi_badges)
                         .placeholder("Select frameworks")
                         .search_placeholder("Search framework...")
-                        .close_on_select(false)
                         .render_trigger(move |ctx, _, cx| {
                             let items = ctx.selection;
 
@@ -749,16 +738,15 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Max 2 Selections").max_w_md().child(
-                    ComboBox::new(&self.custom_max2)
+                    Combobox::new(&self.custom_max2)
                         .placeholder("Select up to 2 frameworks")
                         .search_placeholder("Search framework...")
-                        .close_on_select(false)
                         .w_full(),
                 ),
             )
             .child(
                 section("Pinned Items").max_w_md().child(
-                    ComboBox::new(&self.pinned)
+                    Combobox::new(&self.pinned)
                         .placeholder("Select framework...")
                         .search_placeholder("Search framework...")
                         .w_full(),
@@ -766,7 +754,7 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Custom Row Renderer").max_w_md().child(
-                    ComboBox::new(&self.featured)
+                    Combobox::new(&self.featured)
                         .placeholder("Select framework...")
                         .search_placeholder("Search framework...")
                         .w_full(),
@@ -774,10 +762,9 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Multi-Select Expandable").max_w_md().child(
-                    ComboBox::new(&self.multi_expand)
+                    Combobox::new(&self.multi_expand)
                         .placeholder("Select frameworks")
                         .search_placeholder("Search framework...")
-                        .close_on_select(false)
                         .render_trigger(|ctx, _, cx| {
                             const MAX_SHOWN: usize = 2;
 
@@ -823,10 +810,9 @@ impl Render for ComboBoxStory {
             )
             .child(
                 section("Multi-Select with Count Badge").max_w_md().child(
-                    ComboBox::new(&self.multi_count)
+                    Combobox::new(&self.multi_count)
                         .placeholder("Select frameworks")
                         .search_placeholder("Search framework...")
-                        .close_on_select(false)
                         .render_trigger(|ctx, _, cx| {
                             let count = ctx.selection.len();
 
