@@ -292,7 +292,7 @@
         "title_bar.border": "#262626",
         "warning.background": "yellow-400",
         "warning.foreground": "yellow-600",
-        "overlay": "#ffffff08",
+        "overlay": "#00000033",
         "window.border": "#262626",
         "base.red": "red-400",
         "base.red.light": "red-300",
