@@ -239,7 +239,7 @@ cx.subscribe_in(&state, window, |view, _, event, window, cx| {
 ```rust
 // 替换整个选中集合
 state.update(cx, |s, cx| {
-    s.set_selected_indices(vec![IndexPath::new(0), IndexPath::new(2)], cx);
+    s.set_selected_indices(vec![IndexPath::new(0), IndexPath::new(2)], window, cx);
 });
 
 // 增加 / 移除单个选项
@@ -253,8 +253,11 @@ state.update(cx, |s, cx| {
     s.clear_selection(cx);
 });
 
-// 读取当前值
+// 读取所有选中值（多选）
 let values = state.read(cx).selected_values(); // Vec<Value>
+
+// 读取第一个选中值（单选便利方法）
+let value = state.read(cx).selected_value(); // Option<Value>
 ```
 
 ## 键盘快捷键

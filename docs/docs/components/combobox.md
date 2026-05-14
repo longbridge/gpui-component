@@ -239,7 +239,7 @@ cx.subscribe_in(&state, window, |view, _, event, window, cx| {
 ```rust
 // Replace the entire selection
 state.update(cx, |s, cx| {
-    s.set_selected_indices(vec![IndexPath::new(0), IndexPath::new(2)], cx);
+    s.set_selected_indices(vec![IndexPath::new(0), IndexPath::new(2)], window, cx);
 });
 
 // Add / remove individual items
@@ -253,8 +253,11 @@ state.update(cx, |s, cx| {
     s.clear_selection(cx);
 });
 
-// Read current values
+// Read all selected values (multi-select)
 let values = state.read(cx).selected_values(); // Vec<Value>
+
+// Read the first selected value (single-select convenience)
+let value = state.read(cx).selected_value(); // Option<Value>
 ```
 
 ## Keyboard Shortcuts

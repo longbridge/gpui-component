@@ -139,7 +139,6 @@ where
         let state = SearchableListState::new(
             delegate,
             selected_indices,
-            // on_confirm — delegate to handle_item_select for mode-specific semantics
             move |selected_index, _secondary, window, cx| {
                 cx.defer_in(window, {
                     let weak_confirm = weak_confirm.clone();
@@ -295,6 +294,13 @@ where
         self.state.selected_values()
     }
 
+    /// Return the first selected value, or `None` when nothing is selected.
+    ///
+    /// Convenience for single-select mode (`.multiple(false)`).
+    pub fn selected_value(&self) -> Option<<D::Item as SearchableListItem>::Value> {
+        self.state.selected_values().into_iter().next()
+    }
+
     /// Return the currently selected `(IndexPath, Item)` pairs.
     pub fn selection(&self) -> &[(IndexPath, D::Item)] {
         self.state.selection()
@@ -304,6 +310,7 @@ where
     pub fn set_selected_indices(
         &mut self,
         indices: impl IntoIterator<Item = IndexPath>,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.state.set_selected_indices(indices, cx);
@@ -357,7 +364,8 @@ where
     /// Process an item click: single-select replaces the selection and closes; multi-select toggles.
     ///
     /// Calls `delegate.on_will_change` before committing and `delegate.on_confirm` when closing.
-    pub fn handle_item_select(
+    #[allow(dead_code)]
+    pub(crate) fn handle_item_select(
         &mut self,
         ix: IndexPath,
         window: &mut Window,
@@ -748,7 +756,7 @@ where
     }
 
     /// Override the trigger chevron icon.
-    pub fn trigger_icon(mut self, icon: impl Into<Icon>) -> Self {
+    pub fn icon(mut self, icon: impl Into<Icon>) -> Self {
         self.options.trigger_icon = Some(icon.into());
         self
     }
@@ -1145,8 +1153,6 @@ mod tests {
             state.update(cx, |s, cx| s.add_selected_index(IndexPath::new(0), cx));
             assert_eq!(state.read(cx).selected_values(), &["Rust"]);
 
-            // Adding a second index manually (bypasses mode logic) is still possible via
-            // the public API; mode only governs clicks routed through handle_item_select.
             state.update(cx, |s, cx| s.add_selected_index(IndexPath::new(1), cx));
             assert_eq!(state.read(cx).selected_values(), &["Rust", "Go"]);
         });
