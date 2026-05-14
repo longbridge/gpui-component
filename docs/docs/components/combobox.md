@@ -5,19 +5,25 @@ description: An autocomplete input paired with a searchable dropdown list.
 
 # Combobox
 
-A combobox component that allows users to select one (or many) values from a searchable list.
+A searchable dropdown for selecting one or multiple values from a list.
 
-Compared to [Select](select), `ComboBox` adds support for custom trigger rendering and custom item rendering, making it easy to build rich selection UIs without forking the underlying list behaviour.
+## Select vs Combobox
 
-`MultiComboBox` is the multi-select variant — it toggles items in the selection and keeps the dropdown open until the user dismisses it.
+| Feature | Select | Combobox |
+| --- | --- | --- |
+| Searchable | ✓ (optional) | ✓ (optional) |
+| Multi-select | — | ✓ (`.multiple(true)`) |
+| Custom trigger rendering | — | ✓ |
+| Custom item rendering | — | ✓ |
+| Footer action slot | — | ✓ |
+
+Use `Select` for simple single-value picking. Use `Combobox` when you need multi-select, a fully custom trigger, or custom item rendering.
 
 ## Import
 
 ```rust
-use gpui_component::combo_box::{
-    ComboBox, ComboBoxState, ComboBoxEvent,
-    MultiComboBox, MultiComboBoxState, MultiComboBoxEvent,
-    TriggerCtx, MultiTriggerCtx,
+use gpui_component::combobox::{
+    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerCtx,
 };
 use gpui_component::searchable_list::{
     SearchableListItem, SearchableVec, SearchableGroup,
@@ -30,28 +36,47 @@ use gpui_component::searchable_list::{
 
 ```rust
 let state = cx.new(|cx| {
-    ComboBoxState::new(
+    ComboboxState::new(
         SearchableVec::new(vec!["Next.js", "SvelteKit", "Nuxt.js"]),
-        None, // no initial selection
+        vec![], // no initial selection
         window,
         cx,
     )
     .searchable(true)
 });
 
-ComboBox::new(&state)
+Combobox::new(&state)
     .placeholder("Select framework...")
     .search_placeholder("Search...")
     .w_full()
 ```
 
-### Pre-selected Item
+### Multi-Select
 
-Pass the index path of the item to pre-select:
+Pass `.multiple(true)` to enable multi-select mode. Clicking an item toggles it; the dropdown stays open until the user presses Escape or clicks outside.
 
 ```rust
 let state = cx.new(|cx| {
-    ComboBoxState::new(items, Some(IndexPath::default()), window, cx)
+    ComboboxState::new(
+        SearchableVec::new(vec!["React", "Vue", "Angular"]),
+        vec![IndexPath::new(0)], // pre-selected
+        window,
+        cx,
+    )
+    .multiple(true)
+    .searchable(true)
+});
+
+Combobox::new(&state).placeholder("Select frameworks")
+```
+
+### Pre-selected Item
+
+Pass index paths of items to pre-select:
+
+```rust
+let state = cx.new(|cx| {
+    ComboboxState::new(items, vec![IndexPath::new(0)], window, cx)
 });
 ```
 
@@ -72,15 +97,15 @@ let grouped = SearchableVec::new(vec![
 ]);
 
 let state = cx.new(|cx| {
-    ComboBoxState::new(grouped, None, window, cx).searchable(true)
+    ComboboxState::new(grouped, vec![], window, cx).searchable(true)
 });
 
-ComboBox::new(&state)
+Combobox::new(&state)
 ```
 
 ### Implementing `SearchableListItem`
 
-Built-in implementations of `SearchableListItem` exist for `String`, `SharedString`, and `&'static str`. For custom types implement the trait:
+Built-in implementations exist for `String`, `SharedString`, and `&'static str`. For custom types implement the trait:
 
 ```rust
 #[derive(Clone)]
@@ -123,7 +148,7 @@ impl SearchableListItem for MyItem {
 ### Custom Check Icon
 
 ```rust
-ComboBox::new(&state)
+Combobox::new(&state)
     .check_icon(Icon::new(IconName::CircleCheck))
 ```
 
@@ -132,7 +157,7 @@ ComboBox::new(&state)
 Render a persistent action at the bottom of the dropdown (e.g. an "Add new" button):
 
 ```rust
-ComboBox::new(&state)
+Combobox::new(&state)
     .footer(|_, cx| {
         Button::new("add-new")
             .ghost()
@@ -146,47 +171,28 @@ ComboBox::new(&state)
 
 ### Custom Trigger
 
-Override the entire trigger element. You control the label, icons, and layout. `TriggerCtx` exposes selection state, open/disabled flags, and the current size:
+Override the entire trigger element. `ComboboxTriggerCtx` exposes the current selection, open/disabled flags, and size:
 
 ```rust
-ComboBox::new(&state)
+Combobox::new(&state)
     .render_trigger(|ctx, _, cx| {
         h_flex()
             .w_full()
             .items_center()
             .gap_2()
-            .when_some(ctx.selected_item, |this, item| {
-                this.child(
-                    div()
-                        .bg(cx.theme().accent)
-                        .rounded_sm()
-                        .px_1p5()
-                        .py_0p5()
-                        .text_sm()
-                        .child(item.title()),
-                )
-            })
-            .when(ctx.selected_item.is_none(), |this| {
+            .when(ctx.selection.is_empty(), |this| {
                 this.text_color(cx.theme().muted_foreground)
                     .child("Select...")
             })
-            .into_any_element()
-    })
-```
-
-### Custom Item Renderer
-
-Override how each item row is drawn. When set, the automatic trailing check icon is suppressed — your closure controls the full row:
-
-```rust
-ComboBox::new(&state)
-    .render_item(|item: &MyItem, is_selected, _, cx| {
-        h_flex()
-            .w_full()
-            .gap_2()
-            .items_center()
-            .child(Icon::new(item.icon.clone()).small())
-            .child(div().child(item.title()))
+            .children(ctx.selection.iter().map(|(_, item)| {
+                div()
+                    .bg(cx.theme().accent)
+                    .rounded_sm()
+                    .px_1p5()
+                    .py_0p5()
+                    .text_sm()
+                    .child(item.title())
+            }))
             .into_any_element()
     })
 ```
@@ -194,130 +200,61 @@ ComboBox::new(&state)
 ### Sizes
 
 ```rust
-ComboBox::new(&state).large()
-ComboBox::new(&state)  // medium (default)
-ComboBox::new(&state).small()
+Combobox::new(&state).large()
+Combobox::new(&state)  // medium (default)
+Combobox::new(&state).small()
 ```
 
 ### Cleanable
 
 ```rust
-ComboBox::new(&state).cleanable(true) // show clear button when value is selected
+Combobox::new(&state).cleanable(true) // show clear button when a value is selected
 ```
 
 ### Disabled
 
 ```rust
-ComboBox::new(&state).disabled(true)
+Combobox::new(&state).disabled(true)
 ```
 
 ### Events
 
-```rust
-cx.subscribe_in(&state, window, |view, _, event, window, cx| {
-    match event {
-        ComboBoxEvent::Confirm(value) => {
-            // value is Option<Value>
-        }
-    }
-});
-```
-
-### Mutating
-
-```rust
-// Set by index
-state.update(cx, |s, cx| {
-    s.set_selected_index(Some(IndexPath::default()), window, cx);
-});
-
-// Set by value (requires Value: PartialEq)
-state.update(cx, |s, cx| {
-    s.set_selected_value(&"my-value".into(), window, cx);
-});
-
-// Read current value
-let value = state.read(cx).selected_value(); // Option<&Value>
-```
-
-## Multi-Select
-
-### Basic Multi-Select
-
-`MultiComboBoxState` holds a `Vec<Value>` selection. Selecting an item toggles it; the dropdown stays open until dismissed.
-
-```rust
-let state = cx.new(|cx| {
-    MultiComboBoxState::new(
-        SearchableVec::new(vec!["React", "Vue", "Angular"]),
-        vec!["React"], // pre-selected
-        window,
-        cx,
-    )
-    .searchable(true)
-});
-
-MultiComboBox::new(&state)
-    .placeholder("Select frameworks")
-```
-
-### Custom Multi-Select Trigger
-
-`MultiTriggerCtx` exposes `selected_values: &[Value]`:
-
-```rust
-MultiComboBox::new(&state)
-    .render_trigger(|ctx, _, cx| {
-        if ctx.selected_values.is_empty() {
-            return div()
-                .text_color(cx.theme().muted_foreground)
-                .child("Select...")
-                .into_any_element();
-        }
-
-        h_flex()
-            .flex_wrap()
-            .gap_1()
-            .children(ctx.selected_values.iter().map(|val| {
-                div()
-                    .rounded_sm()
-                    .border_1()
-                    .border_color(cx.theme().border)
-                    .px_1p5()
-                    .py_0p5()
-                    .text_sm()
-                    .child(*val)
-            }))
-            .into_any_element()
-    })
-```
-
-### Multi-Select Events
+Both `Change` (fired on every toggle) and `Confirm` (fired when the dropdown closes) carry the full selection as `Vec<Value>`.
 
 ```rust
 cx.subscribe_in(&state, window, |view, _, event, window, cx| {
     match event {
-        MultiComboBoxEvent::Change(values) => {
+        ComboboxEvent::Change(values) => {
             // fired on every toggle
         }
-        MultiComboBoxEvent::Confirm(values) => {
+        ComboboxEvent::Confirm(values) => {
             // fired when the dropdown closes
         }
     }
 });
 ```
 
-### Mutating Multi-Select
+### Mutating Programmatically
 
 ```rust
+// Replace the entire selection
 state.update(cx, |s, cx| {
-    s.add_value("Vue", cx);
-    s.remove_value(&"React", cx);
-    s.clear_selection(cx);
-    s.set_selected_values(vec!["Angular", "Svelte"], cx);
+    s.set_selected_indices(vec![IndexPath::new(0), IndexPath::new(2)], cx);
 });
 
-let values = state.read(cx).selected_values(); // &[Value]
+// Add / remove individual items
+state.update(cx, |s, cx| {
+    s.add_selected_index(IndexPath::new(1), cx);
+    s.remove_selected_index(IndexPath::new(0), cx);
+});
+
+// Clear all selections
+state.update(cx, |s, cx| {
+    s.clear_selection(cx);
+});
+
+// Read current values
+let values = state.read(cx).selected_values(); // Vec<Value>
 ```
 
 ## Keyboard Shortcuts
