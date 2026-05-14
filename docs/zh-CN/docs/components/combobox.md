@@ -1,17 +1,17 @@
 ---
-title: ComboBox
-description: An autocomplete input paired with a searchable dropdown list.
+title: Combobox
+description: 带有可搜索下拉列表的自动补全输入组件。
 ---
 
-# ComboBox
+# Combobox
 
-A combobox component that allows users to select one (or many) values from a searchable list.
+ComboBox 允许用户从可搜索的列表中选择一个（或多个）值。
 
-Compared to [Select](select), `ComboBox` adds support for custom trigger rendering and custom item rendering, making it easy to build rich selection UIs without forking the underlying list behaviour.
+与 [Select](select) 相比，`ComboBox` 额外支持自定义触发器渲染和自定义列表项渲染，便于构建富交互的选择 UI。
 
-`MultiComboBox` is the multi-select variant — it toggles items in the selection and keeps the dropdown open until the user dismisses it.
+`MultiComboBox` 是多选变体——点击列表项会切换其选中状态，下拉菜单保持展开直到用户主动关闭。
 
-## Import
+## 导入
 
 ```rust
 use gpui_component::combo_box::{
@@ -24,15 +24,15 @@ use gpui_component::searchable_list::{
 };
 ```
 
-## Usage
+## 用法
 
-### Basic Single-Select
+### 基础单选
 
 ```rust
 let state = cx.new(|cx| {
     ComboBoxState::new(
         SearchableVec::new(vec!["Next.js", "SvelteKit", "Nuxt.js"]),
-        None, // no initial selection
+        None, // 无初始选中
         window,
         cx,
     )
@@ -40,14 +40,14 @@ let state = cx.new(|cx| {
 });
 
 ComboBox::new(&state)
-    .placeholder("Select framework...")
-    .search_placeholder("Search...")
+    .placeholder("选择框架...")
+    .search_placeholder("搜索...")
     .w_full()
 ```
 
-### Pre-selected Item
+### 预选项
 
-Pass the index path of the item to pre-select:
+通过索引路径指定预选的列表项：
 
 ```rust
 let state = cx.new(|cx| {
@@ -55,19 +55,19 @@ let state = cx.new(|cx| {
 });
 ```
 
-### Grouped Items
+### 分组列表项
 
-Use `SearchableGroup` to group items under a heading:
+使用 `SearchableGroup` 对列表项进行分组：
 
 ```rust
 let grouped = SearchableVec::new(vec![
-    SearchableGroup::new("Fruits").items(vec![
-        FoodItem::new("Apples"),
-        FoodItem::new("Bananas"),
+    SearchableGroup::new("水果").items(vec![
+        FoodItem::new("苹果"),
+        FoodItem::new("香蕉"),
     ]),
-    SearchableGroup::new("Vegetables").items(vec![
-        FoodItem::new("Carrots"),
-        FoodItem::new("Spinach"),
+    SearchableGroup::new("蔬菜").items(vec![
+        FoodItem::new("胡萝卜"),
+        FoodItem::new("菠菜"),
     ]),
 ]);
 
@@ -78,9 +78,9 @@ let state = cx.new(|cx| {
 ComboBox::new(&state)
 ```
 
-### Implementing `SearchableListItem`
+### 实现 `SearchableListItem`
 
-Built-in implementations of `SearchableListItem` exist for `String`, `SharedString`, and `&'static str`. For custom types implement the trait:
+`String`、`SharedString` 和 `&'static str` 已内置实现了 `SearchableListItem`。自定义类型需手动实现该 trait：
 
 ```rust
 #[derive(Clone)]
@@ -107,9 +107,9 @@ impl SearchableListItem for Country {
 }
 ```
 
-### Disabled Items
+### 禁用列表项
 
-Return `true` from `disabled()` on items that should not be selectable:
+在列表项的 `disabled()` 方法中返回 `true` 即可将该项设为不可选：
 
 ```rust
 impl SearchableListItem for MyItem {
@@ -120,23 +120,23 @@ impl SearchableListItem for MyItem {
 }
 ```
 
-### Custom Check Icon
+### 自定义勾选图标
 
 ```rust
 ComboBox::new(&state)
     .check_icon(Icon::new(IconName::CircleCheck))
 ```
 
-### Footer Action
+### 底部操作按钮
 
-Render a persistent action at the bottom of the dropdown (e.g. an "Add new" button):
+在下拉菜单底部渲染一个固定操作项（如"新建"按钮）：
 
 ```rust
 ComboBox::new(&state)
     .footer(|_, cx| {
         Button::new("add-new")
             .ghost()
-            .label("New item")
+            .label("新建项目")
             .icon(Icon::new(IconName::Plus))
             .w_full()
             .justify_start()
@@ -144,9 +144,9 @@ ComboBox::new(&state)
     })
 ```
 
-### Custom Trigger
+### 自定义触发器
 
-Override the entire trigger element. You control the label, icons, and layout. `TriggerCtx` exposes selection state, open/disabled flags, and the current size:
+完全覆盖触发器元素的渲染。`TriggerCtx` 包含当前选中状态、开关标志和尺寸信息：
 
 ```rust
 ComboBox::new(&state)
@@ -168,15 +168,15 @@ ComboBox::new(&state)
             })
             .when(ctx.selected_item.is_none(), |this| {
                 this.text_color(cx.theme().muted_foreground)
-                    .child("Select...")
+                    .child("请选择...")
             })
             .into_any_element()
     })
 ```
 
-### Custom Item Renderer
+### 自定义列表项渲染
 
-Override how each item row is drawn. When set, the automatic trailing check icon is suppressed — your closure controls the full row:
+覆盖每行列表项的渲染方式。设置后自动隐藏默认的尾部勾选图标，由闭包完全控制行内容：
 
 ```rust
 ComboBox::new(&state)
@@ -191,66 +191,66 @@ ComboBox::new(&state)
     })
 ```
 
-### Sizes
+### 尺寸
 
 ```rust
 ComboBox::new(&state).large()
-ComboBox::new(&state)  // medium (default)
+ComboBox::new(&state)  // 默认（medium）
 ComboBox::new(&state).small()
 ```
 
-### Cleanable
+### 可清除
 
 ```rust
-ComboBox::new(&state).cleanable(true) // show clear button when value is selected
+ComboBox::new(&state).cleanable(true) // 有选中值时显示清除按钮
 ```
 
-### Disabled
+### 禁用状态
 
 ```rust
 ComboBox::new(&state).disabled(true)
 ```
 
-### Events
+### 事件监听
 
 ```rust
 cx.subscribe_in(&state, window, |view, _, event, window, cx| {
     match event {
         ComboBoxEvent::Confirm(value) => {
-            // value is Option<Value>
+            // value 为 Option<Value>
         }
     }
 });
 ```
 
-### Mutating
+### 程序化操控
 
 ```rust
-// Set by index
+// 通过索引设置
 state.update(cx, |s, cx| {
     s.set_selected_index(Some(IndexPath::default()), window, cx);
 });
 
-// Set by value (requires Value: PartialEq)
+// 通过值设置（需要 Value: PartialEq）
 state.update(cx, |s, cx| {
     s.set_selected_value(&"my-value".into(), window, cx);
 });
 
-// Read current value
+// 读取当前值
 let value = state.read(cx).selected_value(); // Option<&Value>
 ```
 
-## Multi-Select
+## 多选
 
-### Basic Multi-Select
+### 基础多选
 
-`MultiComboBoxState` holds a `Vec<Value>` selection. Selecting an item toggles it; the dropdown stays open until dismissed.
+`MultiComboBoxState` 保存 `Vec<Value>` 的选中集合。点击列表项切换其选中状态，下拉菜单保持展开直到关闭。
 
 ```rust
 let state = cx.new(|cx| {
     MultiComboBoxState::new(
         SearchableVec::new(vec!["React", "Vue", "Angular"]),
-        vec!["React"], // pre-selected
+        vec!["React"], // 预选项
         window,
         cx,
     )
@@ -258,12 +258,12 @@ let state = cx.new(|cx| {
 });
 
 MultiComboBox::new(&state)
-    .placeholder("Select frameworks")
+    .placeholder("选择框架")
 ```
 
-### Custom Multi-Select Trigger
+### 自定义多选触发器
 
-`MultiTriggerCtx` exposes `selected_values: &[Value]`:
+`MultiTriggerCtx` 提供 `selected_values: &[Value]`：
 
 ```rust
 MultiComboBox::new(&state)
@@ -271,7 +271,7 @@ MultiComboBox::new(&state)
         if ctx.selected_values.is_empty() {
             return div()
                 .text_color(cx.theme().muted_foreground)
-                .child("Select...")
+                .child("请选择...")
                 .into_any_element();
         }
 
@@ -292,22 +292,22 @@ MultiComboBox::new(&state)
     })
 ```
 
-### Multi-Select Events
+### 多选事件
 
 ```rust
 cx.subscribe_in(&state, window, |view, _, event, window, cx| {
     match event {
         MultiComboBoxEvent::Change(values) => {
-            // fired on every toggle
+            // 每次切换时触发
         }
         MultiComboBoxEvent::Confirm(values) => {
-            // fired when the dropdown closes
+            // 下拉菜单关闭时触发
         }
     }
 });
 ```
 
-### Mutating Multi-Select
+### 程序化操控多选
 
 ```rust
 state.update(cx, |s, cx| {
@@ -320,20 +320,20 @@ state.update(cx, |s, cx| {
 let values = state.read(cx).selected_values(); // &[Value]
 ```
 
-## Keyboard Shortcuts
+## 键盘快捷键
 
-| Key       | Action                                   |
-| --------- | ---------------------------------------- |
-| `Tab`     | Focus trigger                            |
-| `Enter`   | Open menu or confirm highlighted item    |
-| `Up/Down` | Navigate options (opens menu if closed)  |
-| `Escape`  | Close menu                               |
+| 按键       | 操作                             |
+| ---------- | -------------------------------- |
+| `Tab`      | 聚焦触发器                       |
+| `Enter`    | 打开菜单或确认当前高亮项         |
+| `↑ / ↓`   | 在选项间导航（未打开时自动打开） |
+| `Escape`   | 关闭菜单                         |
 
-## Theming
+## 主题样式
 
-- `background` — Dropdown input background
-- `input` — Trigger border color
-- `foreground` — Text color
-- `muted_foreground` — Placeholder and disabled text
-- `border` — Menu border
-- `radius` — Border radius
+- `background` — 触发器背景
+- `input` — 触发器边框颜色
+- `foreground` — 文字颜色
+- `muted_foreground` — 占位符和禁用文字颜色
+- `border` — 菜单边框颜色
+- `radius` — 圆角

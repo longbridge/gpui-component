@@ -311,7 +311,7 @@ impl super::Story for ComboboxStory {
     }
 
     fn description() -> &'static str {
-        "Autocomplete input with a list of suggestions."
+        "An autocomplete input paired with a searchable dropdown list."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
