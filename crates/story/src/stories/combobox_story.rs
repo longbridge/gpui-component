@@ -5,10 +5,6 @@ use gpui_component::{
     button::ButtonVariants as _,
     combobox::*,
     h_flex,
-    searchable_list::{
-        SearchableGroup, SearchableListChange, SearchableListDelegate, SearchableListItem,
-        SearchableVec,
-    },
     v_flex, white,
 };
 

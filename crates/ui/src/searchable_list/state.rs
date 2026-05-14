@@ -137,14 +137,6 @@ where
             .collect()
     }
 
-    pub fn is_open(&self) -> bool {
-        self.open
-    }
-
-    pub fn focus_handle(&self) -> &FocusHandle {
-        &self.focus_handle
-    }
-
     // MARK: Mutation (no cx — callers emit events and notify)
 
     /// Add an index+item pair to the selection; no-op if already present.

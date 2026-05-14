@@ -23,9 +23,7 @@ Use `Select` for simple single-value picking. Use `Combobox` when you need multi
 
 ```rust
 use gpui_component::combobox::{
-    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerCtx,
-};
-use gpui_component::searchable_list::{
+    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerContext,
     SearchableListItem, SearchableVec, SearchableGroup,
 };
 ```
@@ -171,7 +169,7 @@ Combobox::new(&state)
 
 ### Custom Trigger
 
-Override the entire trigger element. `ComboboxTriggerCtx` exposes the current selection, open/disabled flags, and size:
+Override the entire trigger element. `ComboboxTriggerContext` exposes the current selection, open/disabled flags, and size:
 
 ```rust
 Combobox::new(&state)

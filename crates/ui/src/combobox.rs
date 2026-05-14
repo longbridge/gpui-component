@@ -16,11 +16,13 @@ use crate::{
     h_flex,
     input::{clear_button, input_style},
     list::{List, ListState},
-    searchable_list::{
-        SearchableListAdapter, SearchableListChange, SearchableListDelegate, SearchableListItem,
-        SearchableListState,
-    },
+    searchable_list::{SearchableListAdapter, SearchableListState},
     v_flex,
+};
+
+// Re-export searchable_list types needed by users of this module.
+pub use crate::searchable_list::{
+    SearchableGroup, SearchableListChange, SearchableListDelegate, SearchableListItem, SearchableVec,
 };
 
 const CONTEXT: &str = "Combobox";
@@ -39,10 +41,10 @@ pub(crate) fn init(cx: &mut App) {
     ])
 }
 
-// MARK: ComboboxTriggerCtx
+// MARK: ComboboxTriggerContext
 
 /// Context passed to the `render_trigger` closure on [`Combobox`].
-pub struct ComboboxTriggerCtx<'a, D: SearchableListDelegate + 'static> {
+pub struct ComboboxTriggerContext<'a, D: SearchableListDelegate + 'static> {
     pub selection: &'a [(IndexPath, D::Item)],
     pub placeholder: Option<&'a SharedString>,
     pub open: bool,
@@ -104,7 +106,7 @@ where
     trigger_icon: Option<Icon>,
     check_icon: Option<Icon>,
     render_trigger:
-        Option<Box<dyn Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
+        Option<Box<dyn Fn(&ComboboxTriggerContext<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
     footer: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
 }
 
@@ -588,7 +590,7 @@ where
             .unwrap_or_else(|| Icon::new(IconName::ChevronDown));
 
         let trigger_body = if let Some(render_trigger) = &self.render_trigger {
-            let ctx = ComboboxTriggerCtx {
+            let ctx = ComboboxTriggerContext {
                 selection,
                 placeholder,
                 open,
@@ -716,7 +718,7 @@ where
     state: Entity<ComboboxState<D>>,
     options: ComboboxOptions,
     render_trigger:
-        Option<Box<dyn Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
+        Option<Box<dyn Fn(&ComboboxTriggerContext<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
     footer: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
     empty: Option<Box<dyn Fn(&mut Window, &App) -> AnyElement + 'static>>,
 }
@@ -803,7 +805,7 @@ where
     /// Override the entire trigger element.
     pub fn render_trigger<E: IntoElement + 'static>(
         mut self,
-        f: impl Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> E + 'static,
+        f: impl Fn(&ComboboxTriggerContext<D>, &mut Window, &mut App) -> E + 'static,
     ) -> Self {
         self.render_trigger = Some(Box::new(move |ctx, window, cx| {
             f(ctx, window, cx).into_any_element()

@@ -23,9 +23,7 @@ description: 带有可搜索下拉列表的自动补全输入组件。
 
 ```rust
 use gpui_component::combobox::{
-    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerCtx,
-};
-use gpui_component::searchable_list::{
+    Combobox, ComboboxState, ComboboxEvent, ComboboxTriggerContext,
     SearchableListItem, SearchableVec, SearchableGroup,
 };
 ```
@@ -171,7 +169,7 @@ Combobox::new(&state)
 
 ### 自定义触发器
 
-完全覆盖触发器元素的渲染。`ComboboxTriggerCtx` 包含当前选中状态、开关标志和尺寸信息：
+完全覆盖触发器元素的渲染。`ComboboxTriggerContext` 包含当前选中状态、开关标志和尺寸信息：
 
 ```rust
 Combobox::new(&state)
