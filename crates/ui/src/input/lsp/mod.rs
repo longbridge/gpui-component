@@ -32,6 +32,9 @@ pub struct Lsp {
     /// The document color provider.
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
 
+    /// Display options for the completion popover.
+    pub completion_menu: CompletionMenuOptions,
+
     document_colors: Vec<(lsp_types::Range, Hsla)>,
     _hover_task: Task<Result<()>>,
     _document_color_task: Task<()>,
@@ -45,6 +48,7 @@ impl Default for Lsp {
             hover_provider: None,
             definition_provider: None,
             document_color_provider: None,
+            completion_menu: CompletionMenuOptions::default(),
             document_colors: vec![],
             _hover_task: Task::ready(Ok(())),
             _document_color_task: Task::ready(()),

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use gpui::{Context, EntityInputHandler, Task, Window};
+use gpui::{Context, EntityInputHandler, Pixels, Task, Window, px};
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionResponse, InlineCompletionContext,
     InlineCompletionItem, InlineCompletionResponse, InlineCompletionTriggerKind,
@@ -15,6 +15,28 @@ use crate::input::{
 
 /// Default debounce duration for inline completions.
 const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(300);
+
+/// Display options for the LSP completion popover.
+///
+/// Accessed through [`super::Lsp::completion_menu`] so embedders can tweak the
+/// popover without growing the [`InputState`] API.
+#[derive(Debug, Clone, Copy)]
+pub struct CompletionMenuOptions {
+    /// Maximum width of the popover.
+    ///
+    /// Defaults to 320 px, which is fine for most identifiers but can
+    /// truncate longer labels. Widen this when hosting an editor that
+    /// surfaces long completion labels.
+    pub max_width: Pixels,
+}
+
+impl Default for CompletionMenuOptions {
+    fn default() -> Self {
+        Self {
+            max_width: px(320.),
+        }
+    }
+}
 
 /// A trait for providing code completions based on the current input state and context.
 pub trait CompletionProvider {
@@ -139,8 +161,7 @@ impl InputState {
         let menu = match menu {
             Some(menu) => menu.clone(),
             None => {
-                let menu =
-                    CompletionMenu::new(cx.entity(), self.completion_menu_max_width, window, cx);
+                let menu = CompletionMenu::new(cx.entity(), window, cx);
                 self.context_menu_content = Some(ContextMenu::Completion(menu.clone()));
                 menu
             }
