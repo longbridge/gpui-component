@@ -13,7 +13,7 @@ use gpui::{
     InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
     StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
-use std::{any::TypeId, rc::Rc};
+use std::{any::TypeId, cell::Cell, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
@@ -58,6 +58,7 @@ pub(crate) struct ActiveDialog {
     /// The previous focused handle before opening the Dialog.
     previous_focused_handle: Option<WeakFocusHandle>,
     builder: Rc<dyn Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static>,
+    focus_first_descendant: Rc<Cell<bool>>,
 }
 
 impl ActiveDialog {
@@ -70,7 +71,12 @@ impl ActiveDialog {
             focus_handle,
             previous_focused_handle,
             builder: Rc::new(builder),
+            focus_first_descendant: Rc::new(Cell::new(true)),
         }
+    }
+
+    fn take_focus_first_descendant(&self) -> bool {
+        self.focus_first_descendant.replace(false)
     }
 }
 
@@ -222,6 +228,7 @@ impl Root {
                 //
                 // So we keep the focus handle in the `active_dialog`, this is owned by the `Root`.
                 dialog.focus_handle = active_dialog.focus_handle.clone();
+                dialog.focus_first_descendant = active_dialog.take_focus_first_descendant();
 
                 dialog.layer_ix = i;
                 // Find the dialog which one needs to show overlay.
@@ -263,6 +270,31 @@ impl Root {
             build,
         ));
         cx.notify();
+    }
+
+    pub(crate) fn focus_first_descendant(
+        container_focus_handle: &FocusHandle,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if !container_focus_handle.is_focused(window) {
+            return;
+        }
+
+        let previous_focus = window.focused(cx);
+        // The dialog container is in the focus tree but is not a tab stop, so advancing once
+        // lands on the first keyboard-focusable descendant when one exists.
+        window.focus_next(cx);
+
+        if container_focus_handle.contains_focused(window, cx)
+            && !container_focus_handle.is_focused(window)
+        {
+            return;
+        }
+
+        if let Some(previous_focus) = previous_focus {
+            window.focus(&previous_focus, cx);
+        }
     }
 
     fn close_dialog_internal(&mut self) -> Option<FocusHandle> {
@@ -507,5 +539,90 @@ impl Render for Root {
                 .child(self.view.clone())
                 .child(self.tooltip_overlay.clone()),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{WindowExt as _, input::Input, theme::Theme};
+    use gpui::{Focusable as _, TestAppContext, VisualTestContext};
+
+    struct DialogFocusTest {
+        focus_handle: FocusHandle,
+    }
+
+    impl Render for DialogFocusTest {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .track_focus(&self.focus_handle)
+                .size_full()
+                .children(Root::render_dialog_layer(window, cx))
+        }
+    }
+
+    fn window_with_root(cx: &mut TestAppContext) -> &mut VisualTestContext {
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            cx.set_global(Theme::default());
+            crate::init(cx);
+
+            let view = cx.new(|cx| DialogFocusTest {
+                focus_handle: cx.focus_handle(),
+            });
+
+            Root::new(view, window, cx)
+        });
+
+        cx
+    }
+
+    #[gpui::test]
+    fn open_dialog_focuses_first_input(cx: &mut TestAppContext) {
+        let cx = window_with_root(cx);
+        let input = cx.update(|window, cx| cx.new(|cx| InputState::new(window, cx)));
+
+        cx.update(|window, cx| {
+            let input = input.clone();
+            window.open_dialog(cx, move |dialog, _, _| {
+                dialog.title("Initial focus").child(Input::new(&input))
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|window, cx| {
+            assert!(input.read(cx).focus_handle(cx).is_focused(window));
+        });
+
+        cx.simulate_input("abc");
+
+        cx.update(|_, cx| {
+            assert_eq!(input.read(cx).value().as_ref(), "abc");
+        });
+    }
+
+    #[gpui::test]
+    fn open_dialog_does_not_override_explicit_focus(cx: &mut TestAppContext) {
+        let cx = window_with_root(cx);
+        let first_input = cx.update(|window, cx| cx.new(|cx| InputState::new(window, cx)));
+        let explicit_input = cx.update(|window, cx| cx.new(|cx| InputState::new(window, cx)));
+
+        cx.update(|window, cx| {
+            let first_input = first_input.clone();
+            let explicit_input = explicit_input.clone();
+            window.open_dialog(cx, move |dialog, window, cx| {
+                explicit_input.update(cx, |input, cx| input.focus(window, cx));
+
+                dialog
+                    .title("Initial focus")
+                    .child(Input::new(&first_input))
+                    .child(Input::new(&explicit_input))
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|window, cx| {
+            assert!(!first_input.read(cx).focus_handle(cx).is_focused(window));
+            assert!(explicit_input.read(cx).focus_handle(cx).is_focused(window));
+        });
     }
 }
