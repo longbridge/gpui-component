@@ -764,3 +764,50 @@ where
             .child(self.state)
     }
 }
+
+// MARK: Tests
+
+#[cfg(test)]
+mod tests {
+    use gpui::{AppContext as _, TestAppContext};
+
+    use crate::{
+        IndexPath,
+        searchable_list::SearchableVec,
+        select::{SelectGroup, SelectState},
+    };
+
+    #[gpui::test]
+    fn test_select_initial_selection_seeds_cursor(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["Rust", "Go", "C++"]);
+            let state = cx.new(|cx| SelectState::new(items, Some(IndexPath::new(1)), window, cx));
+
+            assert_eq!(
+                state.read(cx).selected_index(cx),
+                Some(IndexPath::new(1)),
+                "initial cursor should be seeded on ListState so display_title can read it",
+            );
+            assert_eq!(state.read(cx).selected_value(), Some(&"Go"));
+        });
+    }
+
+    #[gpui::test]
+    fn test_select_initial_grouped_selection_seeds_cursor(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let mut groups: SearchableVec<SelectGroup<&'static str>> = SearchableVec::new(vec![]);
+            groups.push(SelectGroup::new("A").items(["Apple", "Avocado"]));
+            groups.push(SelectGroup::new("B").items(["Banana", "Blueberry", "Blackberry"]));
+
+            let initial = IndexPath::new(1).section(1);
+            let state = cx.new(|cx| SelectState::new(groups, Some(initial), window, cx));
+
+            assert_eq!(state.read(cx).selected_index(cx), Some(initial));
+            assert_eq!(state.read(cx).selected_value(), Some(&"Blueberry"));
+        });
+    }
+}

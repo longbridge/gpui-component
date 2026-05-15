@@ -1108,6 +1108,26 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_combo_box_initial_selection_seeds_cursor(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            let state = cx.new(|cx| {
+                ComboboxState::new(items, vec![IndexPath::new(1)], window, cx).multiple(true)
+            });
+
+            let state_ref = state.read(cx);
+            assert_eq!(
+                state_ref.state.list.read(cx).selected_index(),
+                Some(IndexPath::new(1)),
+                "initial selected_indices should seed ListState.selected_index, not just the snapshot",
+            );
+            assert_eq!(state_ref.selected_values(), vec!["Vue"]);
+        });
+    }
+
+    #[gpui::test]
     fn test_multi_combo_box_toggle(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let cx = cx.add_empty_window();

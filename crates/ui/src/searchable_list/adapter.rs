@@ -35,7 +35,6 @@ pub(crate) struct SearchableListAdapter<D: SearchableListDelegate + 'static> {
 impl<D: SearchableListDelegate + 'static> SearchableListAdapter<D> {
     pub(crate) fn new(
         delegate: D,
-        selected_index: Option<IndexPath>,
         on_confirm: impl Fn(Option<IndexPath>, bool, &mut Window, &mut Context<ListState<Self>>)
         + 'static,
         on_cancel: impl Fn(Option<IndexPath>, &mut Window, &mut Context<ListState<Self>>) + 'static,
@@ -43,7 +42,7 @@ impl<D: SearchableListDelegate + 'static> SearchableListAdapter<D> {
     ) -> Self {
         Self {
             delegate,
-            selected_index,
+            selected_index: None,
             selection_snapshot: Vec::new(),
             on_confirm: Box::new(on_confirm),
             on_cancel: Box::new(on_cancel),

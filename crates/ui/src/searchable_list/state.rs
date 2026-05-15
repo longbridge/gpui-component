@@ -52,16 +52,16 @@ where
         delegate: D,
         selected_indices: Vec<IndexPath>,
         on_confirm: impl Fn(
-                Option<IndexPath>,
-                bool,
-                &mut Window,
-                &mut Context<ListState<SearchableListAdapter<D>>>,
-            ) + 'static,
+            Option<IndexPath>,
+            bool,
+            &mut Window,
+            &mut Context<ListState<SearchableListAdapter<D>>>,
+        ) + 'static,
         on_cancel: impl Fn(
-                Option<IndexPath>,
-                &mut Window,
-                &mut Context<ListState<SearchableListAdapter<D>>>,
-            ) + 'static,
+            Option<IndexPath>,
+            &mut Window,
+            &mut Context<ListState<SearchableListAdapter<D>>>,
+        ) + 'static,
         on_render_empty: impl Fn(&mut Window, &mut App) -> AnyElement + 'static,
         on_blur: fn(&mut P, &mut Window, &mut Context<P>),
         window: &mut Window,
@@ -69,14 +69,7 @@ where
     ) -> Self {
         let focus_handle = cx.focus_handle();
 
-        let initial_cursor = selected_indices.first().copied();
-        let adapter = SearchableListAdapter::new(
-            delegate,
-            initial_cursor,
-            on_confirm,
-            on_cancel,
-            on_render_empty,
-        );
+        let adapter = SearchableListAdapter::new(delegate, on_confirm, on_cancel, on_render_empty);
         let list = cx.new(|cx| ListState::new(adapter, window, cx).reset_on_cancel(false));
 
         let list_focus_handle = list.read(cx).focus_handle.clone();
@@ -91,6 +84,12 @@ where
                 .filter_map(|ix| delegate.item(ix).map(|i| (ix, i.clone())))
                 .collect::<Vec<_>>()
         };
+
+        if let Some(cursor) = selected_indices.first().copied() {
+            list.update(cx, |l, cx| {
+                l.set_selected_index(Some(cursor), window, cx);
+            });
+        }
 
         // Prime the adapter's snapshot so the very first render pass sees correct check state.
         let initial_snapshot = selection.clone();
