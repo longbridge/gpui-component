@@ -212,6 +212,7 @@ pub struct Dialog {
 
     /// This will be change when open the dialog, the focus handle is create when open the dialog.
     pub(crate) focus_handle: FocusHandle,
+    pub(crate) focus_first_descendant: bool,
     pub(crate) layer_ix: usize,
 }
 
@@ -236,6 +237,7 @@ impl Dialog {
             content_builder: None,
             props: DialogProps::default(),
             children: Vec::new(),
+            focus_first_descendant: false,
             layer_ix: 0,
             button_props: DialogButtonProps::default(),
         }
@@ -445,6 +447,12 @@ impl RenderOnce for Dialog {
         let on_close = self.button_props.on_close.clone();
         let on_ok = self.button_props.on_ok.clone();
         let on_cancel = self.button_props.on_cancel.clone();
+        if self.focus_first_descendant {
+            let focus_handle = self.focus_handle.clone();
+            window.defer(cx, move |window, cx| {
+                Root::focus_first_descendant(&focus_handle, window, cx);
+            });
+        }
 
         let window_paddings = crate::window_border::window_paddings(window);
         let view_size = window.viewport_size()
