@@ -6,7 +6,7 @@ use super::change::SearchableListChange;
 
 /// An item that can appear in a searchable list (Select, ComboBox).
 pub trait SearchableListItem: Clone {
-    type Value: Clone;
+    type Value: Clone + PartialEq;
 
     /// Short display label shown in the dropdown row and in the trigger by default.
     fn title(&self) -> SharedString;
@@ -129,15 +129,17 @@ pub trait SearchableListDelegate: Sized + 'static {
     ///
     /// `current_selection` is the slice of currently selected `(IndexPath, Item)` pairs.
     ///
-    /// Default: checks whether `ix` is present in `current_selection`.
+    /// Default: checks whether the item's value is present in `current_selection`.
     fn is_item_checked(
         &self,
-        ix: IndexPath,
-        _item: &Self::Item,
+        _ix: IndexPath,
+        item: &Self::Item,
         current_selection: &[(IndexPath, Self::Item)],
         _cx: &App,
     ) -> bool {
-        current_selection.iter().any(|(sel_ix, _)| sel_ix == &ix)
+        current_selection
+            .iter()
+            .any(|(_, selected_item)| selected_item.value() == item.value())
     }
 
     // MARK: Lifecycle / selection hooks
@@ -162,14 +164,31 @@ pub trait SearchableListDelegate: Sized + 'static {
         for change in changes {
             match change {
                 SearchableListChange::Select { index } => {
-                    if !selection.iter().any(|(ix, _)| ix == index) {
-                        if let Some(item) = self.item(*index) {
-                            selection.push((*index, item.clone()));
-                        }
+                    let Some(item) = self.item(*index) else {
+                        continue;
+                    };
+
+                    if !selection
+                        .iter()
+                        .any(|(_, selected_item)| selected_item.value() == item.value())
+                    {
+                        selection.push((*index, item.clone()));
                     }
                 }
                 SearchableListChange::Deselect { index } => {
-                    selection.retain(|(ix, _)| ix != index);
+                    if let Some(item) = self.item(*index) {
+                        let has_value = selection
+                            .iter()
+                            .any(|(_, selected_item)| selected_item.value() == item.value());
+
+                        if has_value {
+                            selection
+                                .retain(|(_, selected_item)| selected_item.value() != item.value());
+                            continue;
+                        }
+                    }
+
+                    selection.retain(|(selected_ix, _)| selected_ix != index);
                 }
             }
         }
