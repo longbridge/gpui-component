@@ -74,6 +74,7 @@ where
             .read(cx);
 
         Input::new(&state.input)
+            .disabled(options.disabled)
             .with_size(options.size)
             .map(|this| {
                 if options.layout.is_horizontal() {
