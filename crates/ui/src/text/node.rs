@@ -1086,6 +1086,7 @@ impl BlockNode {
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
+                        .overflow_hidden()
                         .children({
                             let mut rows = Vec::with_capacity(table.children.len());
                             for (row_ix, row) in table.children.iter().enumerate() {
