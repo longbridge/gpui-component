@@ -461,7 +461,7 @@ impl TooltipOverlay {
         }));
     }
 
-    pub(crate) fn hide_now(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn hide(&mut self, cx: &mut Context<Self>) {
         if self.clear_state() {
             cx.notify();
         }
@@ -624,7 +624,7 @@ pub(crate) trait ManagedTooltipExt:
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             if let Some(overlay) = Root::tooltip_overlay(window, cx) {
                 overlay.update(cx, |overlay, cx| {
-                    overlay.hide_now(cx);
+                    overlay.hide(cx);
                 });
             }
         })
