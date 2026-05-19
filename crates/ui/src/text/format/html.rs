@@ -299,6 +299,9 @@ fn parse_paragraph(
             local_name!("del") | local_name!("s") => {
                 merge_children_with_mark(node, paragraph, Some(TextMark::default().strikethrough()));
             }
+            local_name!("u") => {
+                merge_children_with_mark(node, paragraph, Some(TextMark::default().underline()));
+            }
             local_name!("code") => {
                 merge_children_with_mark(node, paragraph, Some(TextMark::default().code()));
             }

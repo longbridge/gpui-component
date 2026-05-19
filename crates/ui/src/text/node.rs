@@ -211,6 +211,7 @@ pub struct TextMark {
     pub bold: bool,
     pub italic: bool,
     pub strikethrough: bool,
+    pub underline: bool,
     pub code: bool,
     pub link: Option<LinkMark>,
 }
@@ -231,6 +232,11 @@ impl TextMark {
         self
     }
 
+    pub fn underline(mut self) -> Self {
+        self.underline = true;
+        self
+    }
+
     pub fn code(mut self) -> Self {
         self.code = true;
         self
@@ -245,6 +251,7 @@ impl TextMark {
         self.bold |= other.bold;
         self.italic |= other.italic;
         self.strikethrough |= other.strikethrough;
+        self.underline |= other.underline;
         self.code |= other.code;
         if let Some(link) = other.link {
             self.link = Some(link);
@@ -693,6 +700,12 @@ impl Paragraph {
                     }
                     if style.strikethrough {
                         highlight.strikethrough = Some(gpui::StrikethroughStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.underline {
+                        highlight.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
                         });
