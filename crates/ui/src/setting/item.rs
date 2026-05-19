@@ -23,10 +23,12 @@ pub enum SettingItem {
         title: SharedString,
         description: Option<Text>,
         layout: Axis,
+        disabled: bool,
         field: Rc<dyn AnySettingField>,
     },
     /// A full custom element to render.
     Element {
+        disabled: bool,
         render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static>,
     },
 }
@@ -41,6 +43,7 @@ impl SettingItem {
             title: title.into(),
             description: None,
             layout: Axis::Horizontal,
+            disabled: false,
             field: Rc::new(field),
         }
     }
@@ -52,10 +55,26 @@ impl SettingItem {
         R: Fn(&RenderOptions, &mut Window, &mut App) -> E + 'static,
     {
         SettingItem::Element {
+            disabled: false,
             render: Rc::new(move |options, window, cx| {
                 render(options, window, cx).into_any_element()
             }),
         }
+    }
+
+    /// Set whether the setting item is disabled, default is false.
+    ///
+    /// A disabled item is rendered with reduced opacity. For
+    /// [`SettingItem::Item`] the underlying field is also rendered in a
+    /// non-interactive state. For [`SettingItem::Element`] the `disabled` flag
+    /// is forwarded via [`RenderOptions::disabled`] so the custom renderer can
+    /// disable its interactive controls.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        match &mut self {
+            SettingItem::Item { disabled: d, .. } => *d = disabled,
+            SettingItem::Element { disabled: d, .. } => *d = disabled,
+        }
+        self
     }
 
     /// Set the description of the setting item.
@@ -170,10 +189,12 @@ impl SettingItem {
                     title,
                     description,
                     layout,
+                    disabled,
                     field,
                 } => div()
                     .w_full()
                     .overflow_hidden()
+                    .when(disabled, |this| this.opacity(0.5))
                     .map(|this| {
                         if layout.is_horizontal() {
                             this.h_flex().justify_between().items_start()
@@ -205,14 +226,27 @@ impl SettingItem {
                     )
                     .child(div().id("field").child(Self::render_field(
                         field,
-                        RenderOptions { layout, ..*options },
+                        RenderOptions {
+                            layout,
+                            disabled,
+                            ..*options
+                        },
                         window,
                         cx,
                     )))
                     .into_any_element(),
-                SettingItem::Element { render } => {
-                    (render)(&options, window, cx).into_any_element()
-                }
+                SettingItem::Element { disabled, render } => div()
+                    .w_full()
+                    .when(disabled, |this| this.opacity(0.5))
+                    .child((render)(
+                        &RenderOptions {
+                            disabled,
+                            ..*options
+                        },
+                        window,
+                        cx,
+                    ))
+                    .into_any_element(),
             })
     }
 }

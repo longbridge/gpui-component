@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use crate::{
-    AxisExt, Sizable, StyledExt,
+    AxisExt, Disableable, Sizable, StyledExt,
     input::{InputEvent, InputState, NumberInput, NumberInputEvent, StepAction},
     setting::{
         AnySettingField, RenderOptions,
@@ -137,6 +137,7 @@ impl SettingFieldRender for NumberField {
             .read(cx);
 
         NumberInput::new(&state.input)
+            .disabled(options.disabled)
             .with_size(options.size)
             .map(|this| {
                 if options.layout.is_horizontal() {
