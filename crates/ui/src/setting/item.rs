@@ -64,9 +64,11 @@ impl SettingItem {
 
     /// Set whether the setting item is disabled, default is false.
     ///
-    /// A disabled item renders its field in a non-interactive state. For
-    /// [`SettingItem::Element`] items the flag is forwarded via
-    /// [`RenderOptions::disabled`] so the custom renderer can honor it.
+    /// A disabled item is rendered with reduced opacity. For
+    /// [`SettingItem::Item`] the underlying field is also rendered in a
+    /// non-interactive state. For [`SettingItem::Element`] the `disabled` flag
+    /// is forwarded via [`RenderOptions::disabled`] so the custom renderer can
+    /// disable its interactive controls.
     pub fn disabled(mut self, disabled: bool) -> Self {
         match &mut self {
             SettingItem::Item { disabled: d, .. } => *d = disabled,
@@ -233,15 +235,18 @@ impl SettingItem {
                         cx,
                     )))
                     .into_any_element(),
-                SettingItem::Element { disabled, render } => (render)(
-                    &RenderOptions {
-                        disabled,
-                        ..*options
-                    },
-                    window,
-                    cx,
-                )
-                .into_any_element(),
+                SettingItem::Element { disabled, render } => div()
+                    .w_full()
+                    .when(disabled, |this| this.opacity(0.5))
+                    .child((render)(
+                        &RenderOptions {
+                            disabled,
+                            ..*options
+                        },
+                        window,
+                        cx,
+                    ))
+                    .into_any_element(),
             })
     }
 }

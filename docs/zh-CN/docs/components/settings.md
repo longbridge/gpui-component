@@ -221,6 +221,38 @@ SettingItem::new(
 .description(markdown("Rust doc for the `gpui-component` crate."))
 ```
 
+### 禁用状态
+
+通过 `disabled(true)` 可以将设置项置为不可交互状态：整行会变暗，内置字段
+（Switch、Checkbox、Input、Dropdown、NumberInput）也会被自动禁用。
+
+```rust
+SettingItem::new(
+    "Dark Mode",
+    SettingField::switch(...)
+)
+.description("Switch between light and dark themes.")
+.disabled(true)
+```
+
+对于 [SettingItem::render] 自定义项，整行同样会自动变暗，但其中可交互的控件
+需要渲染闭包通过 `options.disabled` 自行处理：
+
+```rust
+SettingItem::render(|options, _, _| {
+    h_flex()
+        .child("Custom content")
+        .child(
+            Button::new("action")
+                .label("Action")
+                .with_size(options.size)
+                .disabled(options.disabled)
+        )
+        .into_any_element()
+})
+.disabled(true)
+```
+
 ## Setting Fields
 
 [SettingField] 枚举提供了多种常见字段类型。
