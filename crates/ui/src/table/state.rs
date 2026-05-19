@@ -1337,21 +1337,23 @@ where
             ColumnSort::Default => (IconName::ChevronsUpDown, false),
         };
 
+        let icon_color = if is_on {
+            cx.theme().secondary_foreground
+        } else {
+            cx.theme().secondary_foreground.opacity(0.5)
+        };
+
         Some(
             div()
                 .id(("icon-sort", col_ix))
                 .p(px(2.))
                 .rounded(cx.theme().radius / 2.)
-                .map(|this| match is_on {
-                    true => this,
-                    false => this.opacity(0.5),
-                })
-                .hover(|this| this.bg(cx.theme().secondary).opacity(7.))
-                .active(|this| this.bg(cx.theme().secondary_active).opacity(1.))
+                .hover(|this| this.bg(cx.theme().secondary))
+                .active(|this| this.bg(cx.theme().secondary_active))
                 .on_click(
                     cx.listener(move |table, _, window, cx| table.perform_sort(col_ix, window, cx)),
                 )
-                .child(Icon::new(icon).size_3().text_color(cx.theme().secondary_foreground)),
+                .child(Icon::new(icon).size_3().text_color(icon_color)),
         )
     }
 
