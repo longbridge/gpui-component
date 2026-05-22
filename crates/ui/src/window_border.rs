@@ -1,7 +1,7 @@
 // From:
 // https://github.com/zed-industries/zed/blob/56daba28d40301ee4c05546fadb691d070b7b2b6/crates/gpui/examples/window_shadow.rs
 use gpui::{
-    AnyElement, App, Bounds, CursorStyle, Decorations, Edges, HitboxBehavior, Hsla,
+    AnyElement, App, Bounds, CursorStyle, Decorations, Edges, Hitbox, HitboxBehavior, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce,
     ResizeEdge, Size, Styled as _, Window, canvas, div, point, prelude::FluentBuilder as _, px,
 };
@@ -112,34 +112,8 @@ impl RenderOnce for WindowBorder {
                                 )
                             },
                             move |_bounds, hitbox, window, _| {
-                                let mouse = window.mouse_position();
-                                let size = window.window_bounds().get_bounds().size;
-                                let Decorations::Client { tiling } = window.window_decorations() else {
-                                    return;
-                                };
-                                if tiling.top && tiling.bottom && tiling.left && tiling.right {
-                                    return;
-                                }
-                                let Some(edge) = resize_edge(mouse, shadow_size, size) else {
-                                    return;
-                                };
-                                window.set_cursor_style(
-                                    match edge {
-                                        ResizeEdge::Top | ResizeEdge::Bottom => {
-                                            CursorStyle::ResizeUpDown
-                                        }
-                                        ResizeEdge::Left | ResizeEdge::Right => {
-                                            CursorStyle::ResizeLeftRight
-                                        }
-                                        ResizeEdge::TopLeft | ResizeEdge::BottomRight => {
-                                            CursorStyle::ResizeUpLeftDownRight
-                                        }
-                                        ResizeEdge::TopRight | ResizeEdge::BottomLeft => {
-                                            CursorStyle::ResizeUpRightDownLeft
-                                        }
-                                    },
-                                    &hitbox,
-                                );
+                                // set_cursor_style is paint-phase only; reset when leaving edges.
+                                update_resize_cursor(window, shadow_size, &hitbox);
                             },
                         )
                         .size_full()
@@ -155,6 +129,10 @@ impl RenderOnce for WindowBorder {
                     .when(!tiling.bottom, |div| div.pb(shadow_size))
                     .when(!tiling.left, |div| div.pl(shadow_size))
                     .when(!tiling.right, |div| div.pr(shadow_size))
+                    .on_mouse_move(move |_, window, _| {
+                        // Padding hit zone sits under the content layer; refresh to repaint cursors.
+                        window.refresh();
+                    })
                     .on_mouse_down(MouseButton::Left, move |_, window, _| {
                         let Decorations::Client { tiling } = window.window_decorations() else {
                             return;
@@ -211,6 +189,32 @@ impl RenderOnce for WindowBorder {
                     .children(self.children),
             )
     }
+}
+
+fn cursor_style_for_resize_edge(edge: ResizeEdge) -> CursorStyle {
+    match edge {
+        ResizeEdge::Top | ResizeEdge::Bottom => CursorStyle::ResizeUpDown,
+        ResizeEdge::Left | ResizeEdge::Right => CursorStyle::ResizeLeftRight,
+        ResizeEdge::TopLeft | ResizeEdge::BottomRight => CursorStyle::ResizeUpLeftDownRight,
+        ResizeEdge::TopRight | ResizeEdge::BottomLeft => CursorStyle::ResizeUpRightDownLeft,
+    }
+}
+
+/// Update the resize cursor from the current pointer position; reset to default off edges.
+fn update_resize_cursor(window: &mut Window, shadow_size: Pixels, hitbox: &Hitbox) {
+    let Decorations::Client { tiling } = window.window_decorations() else {
+        return;
+    };
+    if tiling.top && tiling.bottom && tiling.left && tiling.right {
+        return;
+    }
+
+    let mouse = window.mouse_position();
+    let size = window.window_bounds().get_bounds().size;
+    let style = resize_edge(mouse, shadow_size, size)
+        .map(cursor_style_for_resize_edge)
+        .unwrap_or(CursorStyle::default());
+    window.set_cursor_style(style, hitbox);
 }
 
 fn resize_edge(pos: Point<Pixels>, shadow_size: Pixels, size: Size<Pixels>) -> Option<ResizeEdge> {
