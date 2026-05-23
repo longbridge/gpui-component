@@ -254,7 +254,7 @@ fn resize_edge(
     let inner_top = insets.top;
     let inner_bottom = size.height - insets.bottom;
 
-    // 每条边只在内框对应线段附近生效，不向阴影 padding 的「延长线」上延伸。
+    // Each edge only applies along its corresponding inner-frame segment; it does not extend along the "extension lines" of the shadow padding.
     let on_left = pos.x >= inner_left - hit_size
         && pos.x <= inner_left + hit_size
         && pos.y >= inner_top - hit_size
