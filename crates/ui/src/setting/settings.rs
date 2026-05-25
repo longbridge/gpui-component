@@ -11,7 +11,7 @@ use gpui::{
     RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 use rust_i18n::t;
-use std::sync::Arc;
+use std::rc::Rc;
 
 /// The settings structure containing multiple pages for app settings.
 ///
@@ -35,7 +35,7 @@ pub struct Settings {
     sidebar_style: StyleRefinement,
     default_selected_index: SelectIndex,
     header_style: StyleRefinement,
-    on_page_change: Option<Arc<dyn Fn(usize, &mut App) + 'static>>,
+    on_page_change: Option<Rc<dyn Fn(usize, &mut App) + 'static>>,
 }
 
 impl Settings {
@@ -103,7 +103,7 @@ impl Settings {
     /// The first argument is the zero-based page index. This is useful for persisting
     /// the last-visited page so it can be restored via [`Self::default_selected_index`].
     pub fn on_page_change(mut self, f: impl Fn(usize, &mut App) + 'static) -> Self {
-        self.on_page_change = Some(Arc::new(f));
+        self.on_page_change = Some(Rc::new(f));
         self
     }
 
@@ -165,7 +165,7 @@ impl Settings {
         &self,
         state: &Entity<SettingsState>,
         pages: &Vec<SettingPage>,
-        on_page_change: Option<Arc<dyn Fn(usize, &mut App) + 'static>>,
+        on_page_change: Option<Rc<dyn Fn(usize, &mut App) + 'static>>,
         _: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -271,6 +271,31 @@ pub struct RenderOptions {
 pub struct SelectIndex {
     pub page_ix: usize,
     pub group_ix: Option<usize>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::px;
+
+    #[test]
+    fn test_settings_builder() {
+        let settings = Settings::new("test-settings")
+            .sidebar_width(px(200.0))
+            .default_selected_index(SelectIndex {
+                page_ix: 1,
+                group_ix: None,
+            })
+            .on_page_change(|_, _| {})
+            .page(SettingPage::new("General"))
+            .page(SettingPage::new("Advanced"));
+
+        assert_eq!(settings.sidebar_width, px(200.0));
+        assert_eq!(settings.default_selected_index.page_ix, 1);
+        assert!(settings.default_selected_index.group_ix.is_none());
+        assert!(settings.on_page_change.is_some());
+        assert_eq!(settings.pages.len(), 2);
+    }
 }
 
 impl RenderOnce for Settings {
