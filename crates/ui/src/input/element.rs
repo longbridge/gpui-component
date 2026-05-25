@@ -1260,7 +1260,8 @@ impl TextElement {
 
         let mut styles = Vec::with_capacity(visible_buffer_lines.len());
 
-        // Helper to flush a contiguous range of lines
+        // Helper to flush a contiguous range of lines. These ranges are disjoint,
+        // so appending avoids repeatedly cloning and recombining prior styles.
         let flush_range = |start_line: usize, end_line: usize, skip: bool, styles: &mut Vec<_>| {
             let byte_start = text.line_start_offset(start_line);
             let byte_end = if is_multi_line {
@@ -1275,7 +1276,7 @@ impl TextElement {
                 highlighter.styles(&(byte_start..byte_end), &cx.theme().highlight_theme)
             };
 
-            *styles = gpui::combine_highlights(styles.clone(), range_styles).collect();
+            styles.extend(range_styles);
         };
 
         // Group contiguous visible lines into ranges and call styles() once per range
