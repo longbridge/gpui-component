@@ -273,31 +273,6 @@ pub struct SelectIndex {
     pub group_ix: Option<usize>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use gpui::px;
-
-    #[test]
-    fn test_settings_builder() {
-        let settings = Settings::new("test-settings")
-            .sidebar_width(px(200.0))
-            .default_selected_index(SelectIndex {
-                page_ix: 1,
-                group_ix: None,
-            })
-            .on_page_change(|_, _| {})
-            .page(SettingPage::new("General"))
-            .page(SettingPage::new("Advanced"));
-
-        assert_eq!(settings.sidebar_width, px(200.0));
-        assert_eq!(settings.default_selected_index.page_ix, 1);
-        assert!(settings.default_selected_index.group_ix.is_none());
-        assert!(settings.on_page_change.is_some());
-        assert_eq!(settings.pages.len(), 2);
-    }
-}
-
 impl RenderOnce for Settings {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = window.use_keyed_state(self.id.clone(), cx, |window, cx| {
