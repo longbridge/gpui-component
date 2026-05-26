@@ -1,10 +1,9 @@
 // From:
 // https://github.com/zed-industries/zed/blob/56daba28d40301ee4c05546fadb691d070b7b2b6/crates/gpui/examples/window_shadow.rs
 use gpui::{
-    AnyElement, App, Bounds, CursorStyle, Decorations, Edges, Hitbox, HitboxBehavior, Hsla,
-    InteractiveElement as _, IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce,
-    ResizeEdge, Size, Styled as _, Tiling, Window, canvas, div, point, prelude::FluentBuilder as _,
-    px,
+    AnyElement, App, CursorStyle, Decorations, Edges, Hsla, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce, ResizeEdge, Size,
+    Styled as _, Tiling, Window, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::ActiveTheme;
@@ -109,6 +108,7 @@ impl RenderOnce for WindowBorder {
         };
         let resize_hit_size = self.resize_hit_size;
         window.set_client_inset(shadow_size);
+        let window_size = window.window_bounds().get_bounds().size;
 
         div()
             .id("window-backdrop")
@@ -117,25 +117,12 @@ impl RenderOnce for WindowBorder {
                 Decorations::Server => div,
                 Decorations::Client { tiling, .. } => div
                     .bg(gpui::transparent_black())
-                    .child(
-                        canvas(
-                            |_bounds, window, _| {
-                                window.insert_hitbox(
-                                    Bounds::new(
-                                        point(px(0.0), px(0.0)),
-                                        window.window_bounds().get_bounds().size,
-                                    ),
-                                    HitboxBehavior::Normal,
-                                )
-                            },
-                            move |_bounds, hitbox, window, _| {
-                                // set_cursor_style is paint-phase only; reset when leaving edges.
-                                update_resize_cursor(window, shadow_size, resize_hit_size, &hitbox);
-                            },
-                        )
-                        .size_full()
-                        .absolute(),
-                    )
+                    .children(resize_hit_zones(
+                        window_size,
+                        shadow_size,
+                        resize_hit_size,
+                        &tiling,
+                    ))
                     .when(!(tiling.top || tiling.right), |div| {
                         div.rounded_tr(BORDER_RADIUS)
                     })
@@ -146,10 +133,6 @@ impl RenderOnce for WindowBorder {
                     .when(!tiling.bottom, |div| div.pb(shadow_size))
                     .when(!tiling.left, |div| div.pl(shadow_size))
                     .when(!tiling.right, |div| div.pr(shadow_size))
-                    .on_mouse_move(move |_, window, _| {
-                        // Padding sits under the content layer; refresh to repaint cursors.
-                        window.refresh();
-                    })
                     .on_mouse_down(MouseButton::Left, move |_, window, _| {
                         let Decorations::Client { tiling } = window.window_decorations() else {
                             return;
@@ -218,27 +201,106 @@ fn cursor_style_for_resize_edge(edge: ResizeEdge) -> CursorStyle {
     }
 }
 
-/// Update the resize cursor from the current pointer position; reset to default off edges.
-fn update_resize_cursor(
-    window: &mut Window,
+/// Builds a separate hit layer for each resize edge/corner. `.cursor()` lets GPUI update the
+/// cursor immediately on hitbox changes, avoiding the one-frame lag from canvas +
+/// `window.refresh()` (PR #617).
+fn resize_hit_zones(
+    window_size: Size<Pixels>,
     shadow_size: Pixels,
-    resize_hit_size: Pixels,
-    hitbox: &Hitbox,
-) {
-    let Decorations::Client { tiling } = window.window_decorations() else {
-        return;
-    };
+    hit_size: Pixels,
+    tiling: &Tiling,
+) -> Vec<AnyElement> {
     if tiling.top && tiling.bottom && tiling.left && tiling.right {
-        return;
+        return Vec::new();
     }
 
-    let mouse = window.mouse_position();
-    let size = window.window_bounds().get_bounds().size;
-    let insets = client_frame_insets(shadow_size, &tiling);
-    let style = resize_edge(mouse, size, insets, &tiling, resize_hit_size)
-        .map(cursor_style_for_resize_edge)
-        .unwrap_or(CursorStyle::default());
-    window.set_cursor_style(style, hitbox);
+    let insets = client_frame_insets(shadow_size, tiling);
+    let inner_left = insets.left;
+    let inner_right = window_size.width - insets.right;
+    let inner_top = insets.top;
+    let inner_bottom = window_size.height - insets.bottom;
+    let band = hit_size + hit_size;
+    let span_x = inner_right - inner_left + band;
+    let span_y = inner_bottom - inner_top + band;
+
+    let mut zones: Vec<AnyElement> = Vec::new();
+
+    let mut push_zone = |edge: ResizeEdge, origin: Point<Pixels>, zone_size: Size<Pixels>| {
+        zones.push(
+            div()
+                .absolute()
+                .left(origin.x)
+                .top(origin.y)
+                .w(zone_size.width)
+                .h(zone_size.height)
+                .cursor(cursor_style_for_resize_edge(edge))
+                .on_mouse_down(MouseButton::Left, move |_, window, _| {
+                    window.start_window_resize(edge);
+                })
+                .into_any_element(),
+        );
+    };
+
+    if !tiling.top {
+        push_zone(
+            ResizeEdge::Top,
+            point(inner_left - hit_size, inner_top - hit_size),
+            Size::new(span_x, band),
+        );
+    }
+    if !tiling.bottom {
+        push_zone(
+            ResizeEdge::Bottom,
+            point(inner_left - hit_size, inner_bottom - hit_size),
+            Size::new(span_x, band),
+        );
+    }
+    if !tiling.left {
+        push_zone(
+            ResizeEdge::Left,
+            point(inner_left - hit_size, inner_top - hit_size),
+            Size::new(band, span_y),
+        );
+    }
+    if !tiling.right {
+        push_zone(
+            ResizeEdge::Right,
+            point(inner_right - hit_size, inner_top - hit_size),
+            Size::new(band, span_y),
+        );
+    }
+
+    // Corners are pushed after edge strips so hit-testing prefers them over adjacent edges.
+    if !tiling.top && !tiling.left {
+        push_zone(
+            ResizeEdge::TopLeft,
+            point(inner_left - hit_size, inner_top - hit_size),
+            Size::new(band, band),
+        );
+    }
+    if !tiling.top && !tiling.right {
+        push_zone(
+            ResizeEdge::TopRight,
+            point(inner_right - hit_size, inner_top - hit_size),
+            Size::new(band, band),
+        );
+    }
+    if !tiling.bottom && !tiling.left {
+        push_zone(
+            ResizeEdge::BottomLeft,
+            point(inner_left - hit_size, inner_bottom - hit_size),
+            Size::new(band, band),
+        );
+    }
+    if !tiling.bottom && !tiling.right {
+        push_zone(
+            ResizeEdge::BottomRight,
+            point(inner_right - hit_size, inner_bottom - hit_size),
+            Size::new(band, band),
+        );
+    }
+
+    zones
 }
 
 /// Hit-test resize edges on a narrow band around the visible inner frame, not the full shadow padding.
