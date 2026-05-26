@@ -4,11 +4,11 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
     InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div, px,
+    MouseUpEvent, ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
 };
 
 use crate::StyledExt;
-use crate::scroll::ScrollableElement;
+use crate::scroll::{AutoScroll, ScrollableElement};
 use crate::text::TextViewFormat;
 use crate::text::node::CodeBlock;
 use crate::text::state::TextViewState;
@@ -292,32 +292,10 @@ impl Element for TextView {
                             state.update_selection(event.position);
 
                             if scrollable {
-                                // Within DEAD_ZONE px of the edge: no scroll.
-                                // Past the trigger line: start at MIN_SPEED and ramp
-                                // linearly to MAX_SPEED over RAMP_DISTANCE px, so the
-                                // further the mouse is from the viewport, the faster it
-                                // scrolls. MIN_SPEED equals the old formula's ~50px speed
-                                // so there is no jarring jump at the trigger line.
-                                const DEAD_ZONE: f32 = 16.0;
-                                const MIN_SPEED: f32 = 15.0;
-                                const MAX_SPEED: f32 = 80.0;
-                                const RAMP_DISTANCE: f32 = 200.0;
-                                let y = event.position.y;
-                                let top_trigger = viewport_bounds.top() + px(DEAD_ZONE);
-                                let bottom_trigger = viewport_bounds.bottom() - px(DEAD_ZONE);
-
-                                let delta = if y > bottom_trigger {
-                                    let dist = y - bottom_trigger;
-                                    let t = (dist / px(RAMP_DISTANCE)).min(1.0);
-                                    Some(px(MIN_SPEED + t * (MAX_SPEED - MIN_SPEED)))
-                                } else if y < top_trigger {
-                                    let dist = top_trigger - y;
-                                    let t = (dist / px(RAMP_DISTANCE)).min(1.0);
-                                    Some(px(-(MIN_SPEED + t * (MAX_SPEED - MIN_SPEED))))
-                                } else {
-                                    None
-                                };
-
+                                let delta = AutoScroll::compute_delta(
+                                    event.position.y,
+                                    viewport_bounds,
+                                );
                                 state.set_auto_scroll(delta, cx);
                             }
                         });
