@@ -300,15 +300,19 @@ impl TabBar {
             return;
         }
 
-        // Same selection, no bounds yet: initialize position
-        if anim_params.read(cx).3 != px(0.) {
-            return;
-        }
-
         if let Some(to_b) = bounds.tabs.get(selected_ix) {
             let left = to_b.origin.x - container.origin.x;
             let width = to_b.size.width;
-            anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
+            let (_, _, to_left, to_width, epoch) = *anim_params.read(cx);
+
+            if to_width == px(0.) {
+                anim_params.update(cx, |v, _| *v = (left, width, left, width, epoch));
+                return;
+            }
+
+            if left != to_left || width != to_width {
+                anim_params.update(cx, |v, _| *v = (left, width, left, width, epoch));
+            }
         }
     }
 }
@@ -395,6 +399,7 @@ impl RenderOnce for TabBar {
         };
 
         let indicator_element = self.render_indicator(&bounds_rc, window, cx);
+        let indicator_ready = indicator_element.is_some();
 
         let has_suffix_or_menu = self.suffix.is_some() || self.menu;
         let mut item_metas: Vec<(Option<SharedString>, Option<Icon>, bool)> = Vec::new();
@@ -456,6 +461,7 @@ impl RenderOnce for TabBar {
                                 .with_variant(self.variant)
                                 .with_size(self.size);
                             tab.indicator_active = has_indicator;
+                            tab.indicator_ready = indicator_ready;
                             let tab = tab
                                 .when_some(self.selected_index, |this, selected_ix| {
                                     this.selected(selected_ix == ix)
