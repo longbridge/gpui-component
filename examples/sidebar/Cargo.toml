@@ -7,8 +7,8 @@ edition.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-gpui.workspace = true
-gpui_platform.workspace = true
+gpui-unofficial.workspace = true
+gpui-platform-gpui-unofficial.workspace = true
 gpui-component.workspace = true
 gpui-component-assets.workspace = true
 

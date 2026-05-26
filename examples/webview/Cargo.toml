@@ -10,8 +10,8 @@ inspector = []
 
 [dependencies]
 anyhow.workspace = true
-gpui.workspace = true
-gpui_platform.workspace = true
+gpui-unofficial.workspace = true
+gpui-platform-gpui-unofficial.workspace = true
 gpui-component = { workspace = true }
 
 # WebView dependencies

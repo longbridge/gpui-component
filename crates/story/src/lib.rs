@@ -188,7 +188,7 @@ pub fn init(cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
     {
         let http_client =
-            reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap();
+            reqwest_client_gpui_unofficial::ReqwestClient::user_agent("gpui-component/story").unwrap();
         cx.set_http_client(std::sync::Arc::new(http_client));
     }
 

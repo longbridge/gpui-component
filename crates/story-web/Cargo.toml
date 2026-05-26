@@ -8,8 +8,8 @@ edition.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-gpui.workspace = true
-gpui_platform.workspace = true
+gpui-unofficial.workspace = true
+gpui-platform-gpui-unofficial.workspace = true
 gpui-component = { path = "../ui", default-features = false }
 gpui-component-assets.workspace = true
 gpui-component-story = { path = "../story", default-features = false }

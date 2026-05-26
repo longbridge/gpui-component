@@ -16,7 +16,7 @@ doctest = false
 
 [features]
 decimal = ["dep:rust_decimal"]
-inspector = ["gpui_macros/inspector", "gpui/inspector"]
+inspector = []
 
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
@@ -95,8 +95,8 @@ tree-sitter-zig = ["dep:tree-sitter-zig"]
 
 [dependencies]
 anyhow.workspace = true
-gpui = { workspace = true }
-gpui_macros.workspace = true
+gpui-unofficial = { workspace = true }
+gpui-macros-gpui-unofficial.workspace = true
 gpui-component-macros = { workspace = true }
 notify.workspace = true
 ropey.workspace = true
@@ -186,7 +186,7 @@ tree-sitter-zig = { version = "1.1.2", optional = true }
 core-text = "=21.0.0"
 
 [dev-dependencies]
-gpui = { workspace = true, features = ["test-support"] }
+gpui-unofficial = { workspace = true, features = ["test-support"] }
 indoc = "2"
 
 [lints]
