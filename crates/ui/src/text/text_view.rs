@@ -292,23 +292,28 @@ impl Element for TextView {
                             state.update_selection(event.position);
 
                             if scrollable {
-                                // Scroll speed ramps up the further the mouse is past the
-                                // viewport edge. A 16px dead-band inside the edge prevents
-                                // accidental scrolling; beyond the edge the speed grows
-                                // linearly, capping at MAX_SPEED at RAMP_DISTANCE px outside.
+                                // Within DEAD_ZONE px of the edge: no scroll.
+                                // Past the trigger line: start at MIN_SPEED and ramp
+                                // linearly to MAX_SPEED over RAMP_DISTANCE px, so the
+                                // further the mouse is from the viewport, the faster it
+                                // scrolls. MIN_SPEED equals the old formula's ~50px speed
+                                // so there is no jarring jump at the trigger line.
                                 const DEAD_ZONE: f32 = 16.0;
-                                const MAX_SPEED: f32 = 24.0;
-                                const RAMP_DISTANCE: f32 = 180.0;
+                                const MIN_SPEED: f32 = 7.0;
+                                const MAX_SPEED: f32 = 40.0;
+                                const RAMP_DISTANCE: f32 = 200.0;
                                 let y = event.position.y;
                                 let top_trigger = viewport_bounds.top() + px(DEAD_ZONE);
                                 let bottom_trigger = viewport_bounds.bottom() - px(DEAD_ZONE);
 
                                 let delta = if y > bottom_trigger {
                                     let dist = y - bottom_trigger;
-                                    Some(px((dist / px(RAMP_DISTANCE)).min(1.0) * MAX_SPEED))
+                                    let t = (dist / px(RAMP_DISTANCE)).min(1.0);
+                                    Some(px(MIN_SPEED + t * (MAX_SPEED - MIN_SPEED)))
                                 } else if y < top_trigger {
                                     let dist = top_trigger - y;
-                                    Some(px(-(dist / px(RAMP_DISTANCE)).min(1.0) * MAX_SPEED))
+                                    let t = (dist / px(RAMP_DISTANCE)).min(1.0);
+                                    Some(px(-(MIN_SPEED + t * (MAX_SPEED - MIN_SPEED))))
                                 } else {
                                     None
                                 };

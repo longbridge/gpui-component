@@ -98,7 +98,12 @@ impl TextViewState {
                                 state.parsed_error = Some(err);
                             }
                         }
-                        state.clear_selection();
+                        // Don't interrupt an active drag-selection; the stored
+                        // positions remain valid for append-only updates and will
+                        // self-correct on the next mouse-move event.
+                        if !state.is_selecting {
+                            state.clear_selection();
+                        }
                         cx.notify();
                     });
                 }
@@ -155,6 +160,9 @@ impl TextViewState {
 
     /// Set whether the text is selectable, default false.
     pub fn set_scrollable(&mut self, scrollable: bool, cx: &mut Context<Self>) {
+        if !scrollable {
+            self.clear_selection();
+        }
         self.scrollable = scrollable;
         cx.notify();
     }
