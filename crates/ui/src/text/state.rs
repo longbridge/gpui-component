@@ -12,6 +12,7 @@ use crate::{
     async_util::{Receiver, Sender, unbounded},
     highlighter::HighlightTheme,
     input::{self, Copy},
+    scroll::AutoScroll,
     text::{
         CodeBlockActionsFn, TextViewStyle,
         document::ParsedDocument,
@@ -56,6 +57,7 @@ pub struct TextViewState {
     pub(super) is_selecting: bool,
     /// The local (in TextView) position of the selection.
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
+    pub(super) auto_scroll: AutoScroll,
 
     pub(super) parsed_content: ParsedContent,
     text: String,
@@ -95,7 +97,12 @@ impl TextViewState {
                                 state.parsed_error = Some(err);
                             }
                         }
-                        state.clear_selection();
+                        // Don't interrupt an active drag-selection; the stored
+                        // positions remain valid for append-only updates and will
+                        // self-correct on the next mouse-move event.
+                        if !state.is_selecting {
+                            state.clear_selection();
+                        }
                         cx.notify();
                     });
                 }
@@ -114,6 +121,7 @@ impl TextViewState {
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
             is_selecting: false,
+            auto_scroll: AutoScroll::default(),
             parsed_content: Default::default(),
             parsed_error: None,
             text: text.to_string(),
@@ -150,6 +158,9 @@ impl TextViewState {
 
     /// Set whether the text is selectable, default false.
     pub fn set_scrollable(&mut self, scrollable: bool, cx: &mut Context<Self>) {
+        if !scrollable {
+            self.clear_selection();
+        }
         self.scrollable = scrollable;
         cx.notify();
     }
@@ -201,6 +212,7 @@ impl TextViewState {
     pub(super) fn clear_selection(&mut self) {
         self.selection_positions = (None, None);
         self.is_selecting = false;
+        self.auto_scroll.stop();
     }
 
     pub(super) fn start_selection(&mut self, pos: Point<Pixels>) {
@@ -229,6 +241,14 @@ impl TextViewState {
 
     pub(super) fn end_selection(&mut self) {
         self.is_selecting = false;
+        self.auto_scroll.stop();
+    }
+
+    pub(super) fn set_auto_scroll(&mut self, delta: Option<Pixels>, cx: &mut Context<Self>) {
+        self.auto_scroll.set(delta, cx, |delta, state, cx| {
+            state.list_state.scroll_by(delta);
+            cx.notify();
+        });
     }
 
     pub(crate) fn has_selection(&self) -> bool {
