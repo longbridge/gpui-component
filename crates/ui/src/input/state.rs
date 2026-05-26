@@ -31,6 +31,7 @@ use super::{
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::scroll::AutoScroll;
 use crate::highlighter::DiagnosticSet;
 #[cfg(not(target_family = "wasm"))]
 use crate::highlighter::LanguageRegistry;
@@ -430,6 +431,8 @@ pub struct InputState {
 
     pub(super) _context_menu_task: Task<Result<()>>,
     pub(super) inline_completion: InlineCompletion,
+
+    pub(super) auto_scroll: AutoScroll,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -523,6 +526,7 @@ impl InputState {
             _pending_update: false,
             inline_completion: InlineCompletion::default(),
             cursor_line_end_affinity: false,
+            auto_scroll: AutoScroll::default(),
         }
     }
 
@@ -1491,6 +1495,7 @@ impl InputState {
         }
         self.selecting = false;
         self.selected_word_range = None;
+        self.auto_scroll.stop();
     }
 
     pub(super) fn on_mouse_move(
@@ -2060,8 +2065,23 @@ impl InputState {
             return;
         }
 
+        self.auto_scroll.last_drag_position = Some(event.position);
         let offset = self.index_for_mouse_position(event.position);
         self.select_to(offset, cx);
+
+        if !self.mode.is_single_line() {
+            let delta = AutoScroll::compute_delta(event.position.y, self.input_bounds);
+            // Input's ScrollHandle uses negative-y-is-down; negate the positive-towards-bottom delta.
+            let scroll_delta = delta.map(|d| -d);
+            self.auto_scroll.set(scroll_delta, cx, |delta, state, cx| {
+                let current = state.scroll_handle.offset();
+                state.update_scroll_offset(Some(point(current.x, current.y + delta)), cx);
+                if let Some(pos) = state.auto_scroll.last_drag_position {
+                    let offset = state.index_for_mouse_position(pos);
+                    state.select_to(offset, cx);
+                }
+            });
+        }
     }
 
     fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {

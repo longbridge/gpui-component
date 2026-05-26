@@ -6,7 +6,8 @@ use gpui::{
 };
 use gpui::{
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, MouseMoveEvent, Path, Pixels, Point, Position, ShapedLine, SharedString, Size,
+    MouseButton, MouseMoveEvent, MouseUpEvent, Path, Pixels, Point, Position, ShapedLine,
+    SharedString, Size,
     Style, Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px,
     relative, size,
 };
@@ -256,6 +257,19 @@ impl TextElement {
                 }
             }
         });
+
+        window.on_mouse_event({
+            let state = self.state.clone();
+
+            move |_: &MouseUpEvent, phase, _, cx| {
+                if !phase.bubble() {
+                    return;
+                }
+                state.update(cx, |state, _| {
+                    state.auto_scroll.stop();
+                });
+            }
+        });
     }
 
     /// Returns the:
@@ -387,7 +401,7 @@ impl TextElement {
             (cursor_pos, cursor_start, cursor_end)
         {
             let selection_changed = state.last_selected_range != Some(selected_range);
-            if selection_changed && !is_selected_all {
+            if selection_changed && !is_selected_all && !state.auto_scroll.is_active() {
                 // For Right alignment use 0 margin: cursor is clamped to bounds separately,
                 // so we never scroll the text for cursor-at-edge, avoiding a first-click jump.
                 let safety_margin = match last_layout.text_align {

@@ -1,5 +1,5 @@
 use futures::Stream as _;
-use std::{pin::Pin, task::Poll, time::Duration};
+use std::{pin::Pin, task::Poll};
 
 use gpui::{
     App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, IntoElement, KeyBinding,
@@ -12,6 +12,7 @@ use crate::{
     async_util::{Receiver, Sender, unbounded},
     highlighter::HighlightTheme,
     input::{self, Copy},
+    scroll::AutoScroll,
     text::{
         CodeBlockActionsFn, TextViewStyle,
         document::ParsedDocument,
@@ -56,9 +57,7 @@ pub struct TextViewState {
     pub(super) is_selecting: bool,
     /// The local (in TextView) position of the selection.
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
-    /// Scroll speed/direction when auto-scrolling during selection drag (px per frame).
-    auto_scroll_delta: Option<Pixels>,
-    auto_scroll_task: Option<Task<()>>,
+    pub(super) auto_scroll: AutoScroll,
 
     pub(super) parsed_content: ParsedContent,
     text: String,
@@ -122,8 +121,7 @@ impl TextViewState {
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
             is_selecting: false,
-            auto_scroll_delta: None,
-            auto_scroll_task: None,
+            auto_scroll: AutoScroll::default(),
             parsed_content: Default::default(),
             parsed_error: None,
             text: text.to_string(),
@@ -214,8 +212,7 @@ impl TextViewState {
     pub(super) fn clear_selection(&mut self) {
         self.selection_positions = (None, None);
         self.is_selecting = false;
-        self.auto_scroll_delta = None;
-        self.auto_scroll_task = None;
+        self.auto_scroll.stop();
     }
 
     pub(super) fn start_selection(&mut self, pos: Point<Pixels>) {
@@ -244,41 +241,14 @@ impl TextViewState {
 
     pub(super) fn end_selection(&mut self) {
         self.is_selecting = false;
-        self.auto_scroll_delta = None;
-        self.auto_scroll_task = None;
+        self.auto_scroll.stop();
     }
 
-    /// Start or stop auto-scrolling during selection drag.
-    /// `delta` is pixels per frame (positive = scroll down, negative = scroll up).
     pub(super) fn set_auto_scroll(&mut self, delta: Option<Pixels>, cx: &mut Context<Self>) {
-        self.auto_scroll_delta = delta;
-        if delta.is_some() && self.auto_scroll_task.is_none() {
-            self.auto_scroll_task = Some(cx.spawn({
-                async move |this, cx| {
-                    loop {
-                        cx.background_executor()
-                            .timer(Duration::from_millis(16))
-                            .await;
-                        let running = this
-                            .update(cx, |state, cx| {
-                                if let Some(delta) = state.auto_scroll_delta {
-                                    state.list_state.scroll_by(delta);
-                                    cx.notify();
-                                    true
-                                } else {
-                                    false
-                                }
-                            })
-                            .unwrap_or(false);
-                        if !running {
-                            break;
-                        }
-                    }
-                }
-            }));
-        } else if delta.is_none() {
-            self.auto_scroll_task = None;
-        }
+        self.auto_scroll.set(delta, cx, |delta, state, cx| {
+            state.list_state.scroll_by(delta);
+            cx.notify();
+        });
     }
 
     pub(crate) fn has_selection(&self) -> bool {
