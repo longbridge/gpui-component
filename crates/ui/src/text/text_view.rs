@@ -299,8 +299,8 @@ impl Element for TextView {
                                 // scrolls. MIN_SPEED equals the old formula's ~50px speed
                                 // so there is no jarring jump at the trigger line.
                                 const DEAD_ZONE: f32 = 16.0;
-                                const MIN_SPEED: f32 = 7.0;
-                                const MAX_SPEED: f32 = 40.0;
+                                const MIN_SPEED: f32 = 10.5;
+                                const MAX_SPEED: f32 = 60.0;
                                 const RAMP_DISTANCE: f32 = 200.0;
                                 let y = event.position.y;
                                 let top_trigger = viewport_bounds.top() + px(DEAD_ZONE);
