@@ -4,7 +4,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
     InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
+    MouseUpEvent, ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div, px,
 };
 
 use crate::StyledExt;
@@ -277,7 +277,10 @@ impl Element for TextView {
             });
 
             if is_selecting {
-                // move to update end position.
+                let scrollable = self.scrollable;
+                let viewport_bounds = hitbox.bounds;
+
+                // move to update end position, auto-scroll when dragging near edges.
                 window.on_mouse_event({
                     let state = state.clone();
                     move |event: &MouseMoveEvent, phase, _, cx| {
@@ -285,8 +288,33 @@ impl Element for TextView {
                             return;
                         }
 
-                        state.update(cx, |state, _| {
+                        state.update(cx, |state, cx| {
                             state.update_selection(event.position);
+
+                            if scrollable {
+                                // Scroll speed ramps up the further the mouse is past the
+                                // viewport edge. A 16px dead-band inside the edge prevents
+                                // accidental scrolling; beyond the edge the speed grows
+                                // linearly, capping at MAX_SPEED at RAMP_DISTANCE px outside.
+                                const DEAD_ZONE: f32 = 16.0;
+                                const MAX_SPEED: f32 = 24.0;
+                                const RAMP_DISTANCE: f32 = 180.0;
+                                let y = event.position.y;
+                                let top_trigger = viewport_bounds.top() + px(DEAD_ZONE);
+                                let bottom_trigger = viewport_bounds.bottom() - px(DEAD_ZONE);
+
+                                let delta = if y > bottom_trigger {
+                                    let dist = y - bottom_trigger;
+                                    Some(px((dist / px(RAMP_DISTANCE)).min(1.0) * MAX_SPEED))
+                                } else if y < top_trigger {
+                                    let dist = top_trigger - y;
+                                    Some(px(-(dist / px(RAMP_DISTANCE)).min(1.0) * MAX_SPEED))
+                                } else {
+                                    None
+                                };
+
+                                state.set_auto_scroll(delta, cx);
+                            }
                         });
                         cx.notify(parent_view_id);
                     }
