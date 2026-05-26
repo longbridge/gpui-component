@@ -34,22 +34,29 @@ impl AutoScroll {
     /// Compute the scroll delta for a mouse Y position within the given viewport bounds.
     /// Returns positive when near the bottom edge, negative near the top, `None` in the dead zone.
     pub fn compute_delta(y: Pixels, bounds: Bounds<Pixels>) -> Option<Pixels> {
-        const DEAD_ZONE: f32 = 16.0;
-        const MIN_SPEED: f32 = 15.0;
-        const MAX_SPEED: f32 = 80.0;
-        const RAMP_DISTANCE: f32 = 200.0;
+        const MIN_SPEED: f32 = 12.0;
+        const MAX_SPEED: f32 = 64.0;
+        // Outside the bounds: ramp MIN → MAX over this distance.
+        // Kept short so full-screen windows (where the mouse can only travel
+        // ~50-60 px past the edge) can still reach near-maximum speed.
+        const RAMP_DISTANCE: f32 = 60.0;
+        // Guarantee zone inside bounds: scroll at MIN_SPEED when within this
+        // many pixels of the edge, so dragging works even when the mouse can't
+        // exit the bounds at all.
+        const INNER_ZONE: f32 = 16.0;
 
-        let top_trigger = bounds.top() + px(DEAD_ZONE);
-        let bottom_trigger = bounds.bottom() - px(DEAD_ZONE);
-
-        if y > bottom_trigger {
-            let dist = y - bottom_trigger;
+        if y > bounds.bottom() {
+            let dist = y - bounds.bottom();
             let t = (dist / px(RAMP_DISTANCE)).min(1.0);
             Some(px(MIN_SPEED + t * (MAX_SPEED - MIN_SPEED)))
-        } else if y < top_trigger {
-            let dist = top_trigger - y;
+        } else if y > bounds.bottom() - px(INNER_ZONE) {
+            Some(px(MIN_SPEED))
+        } else if y < bounds.top() {
+            let dist = bounds.top() - y;
             let t = (dist / px(RAMP_DISTANCE)).min(1.0);
             Some(px(-(MIN_SPEED + t * (MAX_SPEED - MIN_SPEED))))
+        } else if y < bounds.top() + px(INNER_ZONE) {
+            Some(px(-MIN_SPEED))
         } else {
             None
         }
