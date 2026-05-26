@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::StyledExt;
-use crate::scroll::ScrollableElement;
+use crate::scroll::{AutoScroll, ScrollableElement};
 use crate::text::TextViewFormat;
 use crate::text::node::CodeBlock;
 use crate::text::state::TextViewState;
@@ -277,7 +277,10 @@ impl Element for TextView {
             });
 
             if is_selecting {
-                // move to update end position.
+                let scrollable = self.scrollable;
+                let viewport_bounds = hitbox.bounds;
+
+                // move to update end position, auto-scroll when dragging near edges.
                 window.on_mouse_event({
                     let state = state.clone();
                     move |event: &MouseMoveEvent, phase, _, cx| {
@@ -285,8 +288,16 @@ impl Element for TextView {
                             return;
                         }
 
-                        state.update(cx, |state, _| {
+                        state.update(cx, |state, cx| {
                             state.update_selection(event.position);
+
+                            if scrollable {
+                                let delta = AutoScroll::compute_delta(
+                                    event.position.y,
+                                    viewport_bounds,
+                                );
+                                state.set_auto_scroll(delta, cx);
+                            }
                         });
                         cx.notify(parent_view_id);
                     }

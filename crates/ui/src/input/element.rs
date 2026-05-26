@@ -6,9 +6,9 @@ use gpui::{
 };
 use gpui::{
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, MouseMoveEvent, Path, Pixels, Point, Position, ShapedLine, SharedString, Size,
-    Style, Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px,
-    relative, size,
+    MouseButton, MouseMoveEvent, MouseUpEvent, Path, Pixels, Point, Position, ShapedLine,
+    SharedString, Size, Style, Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window,
+    fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -256,6 +256,21 @@ impl TextElement {
                 }
             }
         });
+
+        window.on_mouse_event({
+            let state = self.state.clone();
+            move |_: &MouseUpEvent, phase, _, cx| {
+                if !phase.bubble() {
+                    return;
+                }
+
+                // Stop auto-scroll when mouse up, and also stop selecting.
+                state.update(cx, |state, _| {
+                    state.auto_scroll.stop();
+                    state.selecting = false;
+                });
+            }
+        });
     }
 
     /// Returns the:
@@ -387,6 +402,7 @@ impl TextElement {
             (cursor_pos, cursor_start, cursor_end)
         {
             let selection_changed = state.last_selected_range != Some(selected_range);
+            let auto_scrolling = state.auto_scroll.is_active();
             if selection_changed && !is_selected_all {
                 // For Right alignment use 0 margin: cursor is clamped to bounds separately,
                 // so we never scroll the text for cursor-at-edge, avoiding a first-click jump.
@@ -408,10 +424,14 @@ impl TextElement {
                     scroll_offset.x
                 };
 
-                // If we change the scroll_offset.y, GPUI will render and trigger the next run loop.
-                // So, here we just adjust offset by `line_height` for move smooth.
-                scroll_offset.y =
-                    if scroll_offset.y + cursor_pos.y > bounds.size.height - top_bottom_margin {
+                // Vertical cursor-follow is suppressed while auto-scroll manages the y axis,
+                // to prevent fighting the background scroll task.
+                if !auto_scrolling {
+                    // If we change the scroll_offset.y, GPUI will render and trigger the next run loop.
+                    // So, here we just adjust offset by `line_height` for move smooth.
+                    scroll_offset.y = if scroll_offset.y + cursor_pos.y
+                        > bounds.size.height - top_bottom_margin
+                    {
                         // cursor is out of bottom
                         scroll_offset.y - line_height
                     } else if scroll_offset.y + cursor_pos.y < top_bottom_margin {
@@ -420,6 +440,7 @@ impl TextElement {
                     } else {
                         scroll_offset.y
                     };
+                }
 
                 // For selection to move scroll
                 if state.selection_reversed {
@@ -427,7 +448,7 @@ impl TextElement {
                         // selection start is out of left
                         scroll_offset.x = -cursor_start.x;
                     }
-                    if scroll_offset.y + cursor_start.y < px(0.) {
+                    if !auto_scrolling && scroll_offset.y + cursor_start.y < px(0.) {
                         // selection start is out of top
                         scroll_offset.y = -cursor_start.y;
                     }
@@ -438,7 +459,7 @@ impl TextElement {
                         // selection end is out of left
                         scroll_offset.x = -cursor_end.x;
                     }
-                    if scroll_offset.y + cursor_end.y <= px(0.) {
+                    if !auto_scrolling && scroll_offset.y + cursor_end.y <= px(0.) {
                         // selection end is out of top
                         scroll_offset.y = -cursor_end.y;
                     }
