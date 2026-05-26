@@ -616,7 +616,7 @@ impl RenderOnce for Tab {
             self.variant == TabVariant::Segmented && self.indicator_active;
         let has_inline_inner_bg =
             self.selected && segmented_indicator_active && !self.indicator_ready;
-        let inline_inner_bg = cx.theme().background;
+        let inline_inner_bg = tab_style.inner_bg;
         let (inner_bg, hover_inner_bg) = if segmented_indicator_active && self.indicator_ready {
             (cx.theme().transparent, cx.theme().transparent)
         } else if has_inline_inner_bg {
@@ -624,8 +624,7 @@ impl RenderOnce for Tab {
         } else {
             (tab_style.inner_bg, hover_style.inner_bg)
         };
-        let inner_shadow =
-            tab_style.shadow && !(segmented_indicator_active && self.indicator_ready);
+        let inner_shadow = tab_style.shadow && !segmented_indicator_active;
 
         self.base
             .id(self.ix)
