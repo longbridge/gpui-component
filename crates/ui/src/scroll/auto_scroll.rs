@@ -36,27 +36,23 @@ impl AutoScroll {
     pub fn compute_delta(y: Pixels, bounds: Bounds<Pixels>) -> Option<Pixels> {
         const MIN_SPEED: f32 = 12.0;
         const MAX_SPEED: f32 = 64.0;
-        // Outside the bounds: ramp MIN → MAX over this distance.
-        // Kept short so full-screen windows (where the mouse can only travel
-        // ~50-60 px past the edge) can still reach near-maximum speed.
-        const RAMP_DISTANCE: f32 = 60.0;
-        // Guarantee zone inside bounds: scroll at MIN_SPEED when within this
-        // many pixels of the edge, so dragging works even when the mouse can't
-        // exit the bounds at all.
+        // Trigger starts this far inside the bounds so scrolling works even in
+        // full-screen where the mouse can't travel far outside the element.
         const INNER_ZONE: f32 = 16.0;
+        // Distance from the bounds edge to reach MAX_SPEED.
+        // Total ramp = INNER_ZONE + OUTER_RAMP, giving a single smooth curve
+        // with no flat sections or discontinuities.
+        const OUTER_RAMP: f32 = 80.0;
 
-        if y > bounds.bottom() {
-            let dist = y - bounds.bottom();
-            let t = (dist / px(RAMP_DISTANCE)).min(1.0);
+        let bottom_trigger = bounds.bottom() - px(INNER_ZONE);
+        let top_trigger = bounds.top() + px(INNER_ZONE);
+
+        if y > bottom_trigger {
+            let t = ((y - bottom_trigger) / px(INNER_ZONE + OUTER_RAMP)).min(1.0);
             Some(px(MIN_SPEED + t * (MAX_SPEED - MIN_SPEED)))
-        } else if y > bounds.bottom() - px(INNER_ZONE) {
-            Some(px(MIN_SPEED))
-        } else if y < bounds.top() {
-            let dist = bounds.top() - y;
-            let t = (dist / px(RAMP_DISTANCE)).min(1.0);
+        } else if y < top_trigger {
+            let t = ((top_trigger - y) / px(INNER_ZONE + OUTER_RAMP)).min(1.0);
             Some(px(-(MIN_SPEED + t * (MAX_SPEED - MIN_SPEED))))
-        } else if y < bounds.top() + px(INNER_ZONE) {
-            Some(px(-MIN_SPEED))
         } else {
             None
         }

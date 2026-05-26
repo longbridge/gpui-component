@@ -2070,7 +2070,21 @@ impl InputState {
         self.select_to(offset, cx);
 
         if !self.mode.is_single_line() {
-            let delta = AutoScroll::compute_delta(event.position.y, self.input_bounds);
+            // Expand input_bounds by the CSS padding so the bounds reflect the full
+            // visible element. Without this, mouse positions in the padding area
+            // (visually inside the input) would appear outside bounds and trigger max speed.
+            let pad = self.editor_scrollbar_paddings.get();
+            let scroll_bounds = gpui::Bounds::new(
+                point(
+                    self.input_bounds.origin.x - pad.left,
+                    self.input_bounds.origin.y - pad.top,
+                ),
+                gpui::size(
+                    self.input_bounds.size.width + pad.left + pad.right,
+                    self.input_bounds.size.height + pad.top + pad.bottom,
+                ),
+            );
+            let delta = AutoScroll::compute_delta(event.position.y, scroll_bounds);
             // Input's ScrollHandle uses negative-y-is-down; negate the positive-towards-bottom delta.
             let scroll_delta = delta.map(|d| -d);
             self.auto_scroll.set(scroll_delta, cx, |delta, state, cx| {
