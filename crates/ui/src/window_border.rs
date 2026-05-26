@@ -116,6 +116,9 @@ impl RenderOnce for WindowBorder {
             .map(|div| match decorations {
                 Decorations::Server => div,
                 Decorations::Client { tiling, .. } => div
+                    .flex()
+                    .flex_col()
+                    .overflow_hidden()
                     .bg(gpui::transparent_black())
                     .children(resize_hit_zones(
                         window_size,
@@ -155,8 +158,12 @@ impl RenderOnce for WindowBorder {
                 div()
                     .cursor(CursorStyle::default())
                     .map(|div| match decorations {
-                        Decorations::Server => div,
+                        Decorations::Server => div.size_full(),
                         Decorations::Client { tiling } => div
+                            .flex_1()
+                            .min_h_0()
+                            .min_w_0()
+                            .overflow_hidden()
                             .when(!(tiling.top || tiling.right), |div| {
                                 div.rounded_tr(BORDER_RADIUS)
                             })
@@ -186,7 +193,6 @@ impl RenderOnce for WindowBorder {
                         cx.stop_propagation();
                     })
                     .bg(gpui::transparent_black())
-                    .size_full()
                     .children(self.children),
             )
     }
