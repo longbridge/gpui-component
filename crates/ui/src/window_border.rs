@@ -200,6 +200,7 @@ impl RenderOnce for WindowBorder {
                                     blur_radius: shadow_size / 2.,
                                     spread_radius: px(0.),
                                     offset: point(px(0.0), px(0.0)),
+                                    inset: false,
                                 }])
                             }),
                     })
