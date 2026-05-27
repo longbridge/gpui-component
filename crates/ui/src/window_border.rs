@@ -120,12 +120,6 @@ impl RenderOnce for WindowBorder {
                     .flex_col()
                     .overflow_hidden()
                     .bg(gpui::transparent_black())
-                    .children(resize_hit_zones(
-                        window_size,
-                        shadow_size,
-                        resize_hit_size,
-                        &tiling,
-                    ))
                     .when(!(tiling.top || tiling.right), |div| {
                         div.rounded_tr(BORDER_RADIUS)
                     })
@@ -186,7 +180,6 @@ impl RenderOnce for WindowBorder {
                                     blur_radius: shadow_size / 2.,
                                     spread_radius: px(0.),
                                     offset: point(px(0.0), px(0.0)),
-                                    inset: false,
                                 }])
                             }),
                     })
@@ -195,6 +188,25 @@ impl RenderOnce for WindowBorder {
                     })
                     .bg(gpui::transparent_black())
                     .children(self.children),
+            )
+            .when(
+                matches!(decorations, Decorations::Client { .. }),
+                |this| {
+                    let Decorations::Client { tiling, .. } = decorations else {
+                        return this;
+                    };
+                    this.child(
+                        div()
+                            .absolute()
+                            .size_full()
+                            .children(resize_hit_zones(
+                                window_size,
+                                shadow_size,
+                                resize_hit_size,
+                                &tiling,
+                            )),
+                    )
+                },
             )
     }
 }
@@ -208,9 +220,9 @@ fn cursor_style_for_resize_edge(edge: ResizeEdge) -> CursorStyle {
     }
 }
 
-/// Builds a separate hit layer for each resize edge/corner. `.cursor()` lets GPUI update the
-/// cursor immediately on hitbox changes, avoiding the one-frame lag from canvas +
-/// `window.refresh()` (PR #617).
+/// Cursor-only overlay for each resize edge/corner. Resize starts from the backdrop
+/// `on_mouse_down` via [`resize_edge`]. `.cursor()` updates immediately on hitbox changes
+/// without `window.refresh()` (PR #617).
 fn resize_hit_zones(
     window_size: Size<Pixels>,
     shadow_size: Pixels,
@@ -226,6 +238,8 @@ fn resize_hit_zones(
     let inner_right = window_size.width - insets.right;
     let inner_top = insets.top;
     let inner_bottom = window_size.height - insets.bottom;
+    // Overlay is laid out in the padded content box; convert from window coords.
+    let frame_origin = point(insets.left, insets.top);
     let band = hit_size + hit_size;
     let span_x = inner_right - inner_left + band;
     let span_y = inner_bottom - inner_top + band;
@@ -233,6 +247,7 @@ fn resize_hit_zones(
     let mut zones: Vec<AnyElement> = Vec::new();
 
     let mut push_zone = |edge: ResizeEdge, origin: Point<Pixels>, zone_size: Size<Pixels>| {
+        let origin = origin - frame_origin;
         zones.push(
             div()
                 .absolute()
@@ -241,9 +256,6 @@ fn resize_hit_zones(
                 .w(zone_size.width)
                 .h(zone_size.height)
                 .cursor(cursor_style_for_resize_edge(edge))
-                .on_mouse_down(MouseButton::Left, move |_, window, _| {
-                    window.start_window_resize(edge);
-                })
                 .into_any_element(),
         );
     };
