@@ -22,7 +22,7 @@ pub fn window_border() -> WindowBorder {
     WindowBorder::new()
 }
 
-/// Window border use to render a custom window border and shadow for Linux.
+/// Renders a custom window border and shadow on Linux.
 #[derive(IntoElement)]
 pub struct WindowBorder {
     shadow_size: Pixels,
@@ -98,7 +98,12 @@ impl ParentElement for WindowBorder {
 impl RenderOnce for WindowBorder {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let decorations = window.window_decorations();
-        let shadow_size = match decorations {
+        // Keep the platform client inset stable. When the window is tiled on all sides we stop drawing
+        // shadow padding, but `set_client_inset` must still use the full shadow size. Clearing it
+        // makes the first resize after restore double-count the shadow in `compute_outer_size`, and
+        // the window jumps larger.
+        let platform_inset = self.shadow_size;
+        let visual_shadow = match decorations {
             Decorations::Client { tiling }
                 if tiling.top && tiling.bottom && tiling.left && tiling.right =>
             {
@@ -107,7 +112,9 @@ impl RenderOnce for WindowBorder {
             _ => self.shadow_size,
         };
         let resize_hit_size = self.resize_hit_size;
-        window.set_client_inset(shadow_size);
+        if matches!(decorations, Decorations::Client { .. }) {
+            window.set_client_inset(platform_inset);
+        }
         let window_size = window.window_bounds().get_bounds().size;
 
         div()
@@ -126,10 +133,10 @@ impl RenderOnce for WindowBorder {
                     .when(!(tiling.top || tiling.left), |div| {
                         div.rounded_tl(BORDER_RADIUS)
                     })
-                    .when(!tiling.top, |div| div.pt(shadow_size))
-                    .when(!tiling.bottom, |div| div.pb(shadow_size))
-                    .when(!tiling.left, |div| div.pl(shadow_size))
-                    .when(!tiling.right, |div| div.pr(shadow_size))
+                    .when(!tiling.top, |div| div.pt(visual_shadow))
+                    .when(!tiling.bottom, |div| div.pb(visual_shadow))
+                    .when(!tiling.left, |div| div.pl(visual_shadow))
+                    .when(!tiling.right, |div| div.pr(visual_shadow))
                     .on_mouse_down(MouseButton::Left, move |_, window, _| {
                         let Decorations::Client { tiling } = window.window_decorations() else {
                             return;
@@ -139,7 +146,7 @@ impl RenderOnce for WindowBorder {
                         }
                         let size = window.window_bounds().get_bounds().size;
                         let pos = window.mouse_position();
-                        let insets = client_frame_insets(shadow_size, &tiling);
+                        let insets = client_frame_insets(platform_inset, &tiling);
 
                         match resize_edge(pos, size, insets, &tiling, resize_hit_size) {
                             Some(edge) => window.start_window_resize(edge),
@@ -177,10 +184,9 @@ impl RenderOnce for WindowBorder {
                                         l: 0.,
                                         a: 0.3,
                                     },
-                                    blur_radius: shadow_size / 2.,
+                                    blur_radius: visual_shadow / 2.,
                                     spread_radius: px(0.),
                                     offset: point(px(0.0), px(0.0)),
-                                    inset: false,
                                 }])
                             }),
                     })
@@ -202,7 +208,7 @@ impl RenderOnce for WindowBorder {
                             .size_full()
                             .children(resize_hit_zones(
                                 window_size,
-                                shadow_size,
+                                platform_inset,
                                 resize_hit_size,
                                 &tiling,
                             )),
