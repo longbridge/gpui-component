@@ -81,8 +81,12 @@ impl SearchMatcher {
         self.matched_ranges = Rc::new(new_ranges);
         if !self.replacing {
             self.current_match_ix = 0;
-            self.replacing = false;
+        } else if self.matched_ranges.is_empty() {
+            self.current_match_ix = 0;
+        } else {
+            self.current_match_ix = self.current_match_ix.min(self.matched_ranges.len() - 1);
         }
+        self.replacing = false;
     }
 
     /// Update the search query and reset the current match index.
@@ -105,10 +109,6 @@ impl SearchMatcher {
     #[inline]
     fn len(&self) -> usize {
         self.matched_ranges.len()
-    }
-
-    fn peek(&self) -> Option<Range<usize>> {
-        self.matched_ranges.get(self.current_match_ix + 1).cloned()
     }
 
     fn label(&self) -> String {
@@ -223,7 +223,7 @@ impl SearchPanel {
         previous_match_ix: usize,
         current_match_ix: usize,
     ) -> Option<MoveDirection> {
-        if current_match_ix < previous_match_ix {
+        if current_match_ix <= previous_match_ix {
             None
         } else {
             Some(MoveDirection::Down)
@@ -234,7 +234,7 @@ impl SearchPanel {
         previous_match_ix: usize,
         current_match_ix: usize,
     ) -> Option<MoveDirection> {
-        if current_match_ix > previous_match_ix {
+        if current_match_ix >= previous_match_ix {
             None
         } else {
             Some(MoveDirection::Up)
@@ -369,6 +369,7 @@ impl SearchPanel {
     fn replace_next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let new_text = self.replace_input.read(cx).value();
         self.matcher.replacing = true;
+        let previous_match_ix = self.matcher.current_match_ix;
         if let Some(range) = self
             .matcher
             .matched_ranges
@@ -376,13 +377,25 @@ impl SearchPanel {
             .cloned()
         {
             let text_state = self.editor.clone();
-
-            let next_range = self.matcher.peek().unwrap_or(range.clone());
+            let next_match_ix =
+                if previous_match_ix < self.matcher.matched_ranges.len().saturating_sub(1) {
+                    previous_match_ix + 1
+                } else {
+                    0
+                };
+            let next_range = self
+                .matcher
+                .matched_ranges
+                .get(next_match_ix)
+                .cloned()
+                .unwrap_or(range.clone());
+            self.matcher.current_match_ix = next_match_ix;
+            let direction = Self::next_scroll_direction(previous_match_ix, next_match_ix);
             cx.spawn_in(window, async move |_, cx| {
                 cx.update(|window, cx| {
                     text_state.update(cx, |state, cx| {
                         let range_utf16 = state.range_to_utf16(&range);
-                        state.scroll_to(next_range.end, Some(MoveDirection::Down), cx);
+                        state.scroll_to(next_range.end, direction, cx);
                         state.replace_text_in_range_silent(
                             Some(range_utf16),
                             new_text.as_str(),
@@ -681,6 +694,11 @@ mod tests {
     }
 
     #[test]
+    fn test_next_scroll_direction_returns_none_for_single_match() {
+        assert!(SearchPanel::next_scroll_direction(0, 0).is_none());
+    }
+
+    #[test]
     fn test_prev_scroll_direction_returns_up_without_wrap() {
         assert!(matches!(
             SearchPanel::prev_scroll_direction(2, 1),
@@ -691,5 +709,26 @@ mod tests {
     #[test]
     fn test_prev_scroll_direction_returns_none_on_wrap() {
         assert!(SearchPanel::prev_scroll_direction(0, 2).is_none());
+    }
+
+    #[test]
+    fn test_prev_scroll_direction_returns_none_for_single_match() {
+        assert!(SearchPanel::prev_scroll_direction(0, 0).is_none());
+    }
+
+    #[test]
+    fn test_update_matches_clamps_current_match_index_while_replacing() {
+        let mut matcher = SearchMatcher::new();
+        matcher.update(&Rope::from("foo foo foo"));
+        matcher.update_query("foo", true);
+        matcher.current_match_ix = 2;
+        matcher.replacing = true;
+
+        matcher.update(&Rope::from("foo xoo foo"));
+
+        assert_eq!(matcher.len(), 2);
+        assert_eq!(matcher.current_match_ix, 1);
+        assert_eq!(matcher.label(), "2/2");
+        assert!(!matcher.replacing);
     }
 }
