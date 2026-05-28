@@ -1,6 +1,6 @@
 # gpui-component Usage Guide
 
-**Contents:** [Setup](#setup) · [Component Types](#component-types) · [Common Components](#common-components) · [Theming](#theming) · [Layout Helpers](#layout-helpers) · [Overlay Layers](#overlay-layers-dialogs-sheets-notifications) · [Component Reference](#component-reference)
+**Contents:** [Setup](#setup) · [Component Types](#component-types) · [Common Components](#common-components) (Button, Input, Select, Checkbox, Icon, Dialog, Notification, Tabs, Tooltip, Form, List) · [Theming](#theming) · [Layout Helpers](#layout-helpers) · [Overlay Layers](#overlay-layers-dialogs-sheets-notifications) · [Shared Traits](#shared-traits)
 
 ## Setup
 
@@ -213,16 +213,72 @@ window.open_modal(cx, |modal, _, cx| {
 ### Notification
 
 ```rust
-// Push a simple notification
+// Simple string message
 window.push_notification("Saved successfully!", cx);
 
-// Push with detail
+// With type variant
 window.push_notification(
-    Notification::new("Upload complete")
-        .info()
-        .message("File uploaded successfully"),
+    Notification::new("Upload complete").info().message("File uploaded"),
     cx,
 );
+```
+
+### Tabs
+
+```rust
+use gpui_component::tab::{Tab, TabBar};
+
+TabBar::new("tabs")
+    .child(Tab::new("tab1").child("Overview"))
+    .child(Tab::new("tab2").child("Settings"))
+    .child(Tab::new("tab3").child("Logs"))
+```
+
+### Tooltip
+
+```rust
+// On any element with .id(), add .tooltip():
+div()
+    .id("my-btn")
+    .tooltip(|window, cx| Tooltip::new("Delete item").build(window, cx))
+    .child("Delete")
+
+// Or on a Button directly:
+Button::new("btn").icon(IconName::Trash).tooltip("Delete")
+```
+
+### Form
+
+```rust
+use gpui_component::form::{v_form, h_form, field};
+
+// Vertical form
+v_form()
+    .child(field().label("Name").child(Input::new(&self.name)))
+    .child(field().label("Email").child(Input::new(&self.email)))
+    .child(Button::new("submit").primary().label("Submit"))
+
+// Horizontal label alignment
+h_form()
+    .child(field().label("Username").child(Input::new(&self.username)))
+```
+
+### List (searchable, virtualized)
+
+```rust
+use gpui_component::list::{List, ListState, ListDelegate, ListItem, ListEvent};
+
+// Implement ListDelegate for your data type, then:
+let list_state = cx.new(|cx| ListState::new(MyDelegate::new(), window, cx));
+
+// Render
+List::new(&list_state)
+// Events
+cx.subscribe(&list_state, |this, _, event, cx| {
+    if let ListEvent::Select(index_path) = event {
+        // handle selection
+    }
+});
 ```
 
 ---
@@ -304,14 +360,13 @@ impl Render for MyApp {
 
 ---
 
-## Component Reference
+## Shared Traits
 
-All components follow the builder pattern: `Component::new("id").method1().method2()`.
-
-Common shared traits:
-- `Sizable`: `.xsmall()` / `.small()` / `.medium()` / `.large()`
+All components follow the builder pattern `Component::new("id").method().method()`:
+- `Sizable`: `.xsmall()` / `.small()` / `.medium()` (default) / `.large()`
 - `Disableable`: `.disabled(bool)`
 - `Selectable`: `.selected(bool)`
-- `Styled`: any GPUI style methods (`.w()`, `.bg()`, etc.)
+- `Styled`: any GPUI style methods (`.w()`, `.bg()`, `.p_2()`, etc.)
 
-Full component list: Button, Input, Select, Combobox, Checkbox, Switch, Radio, Slider, Toggle, Icon, Badge, Tag, Avatar, Alert, Dialog, AlertDialog, Sheet, Notification, Popover, Tooltip, HoverCard, Menu, DropdownButton, Tabs, Accordion, Collapsible, GroupBox, Form, DataTable, VirtualList, List, Tree, Sidebar, TitleBar, Progress, Spinner, Skeleton, Calendar, DatePicker, ColorPicker, Rating, Stepper, Pagination, Breadcrumb, Kbd, Label, DescriptionList, Image, Plot, Chart, Resizable, Scrollable.
+For any component not covered here, fetch its doc from:
+`https://longbridge.github.io/gpui-component/docs/components/{name}.md`
