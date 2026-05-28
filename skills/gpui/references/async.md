@@ -13,17 +13,44 @@ GPUI provides integrated async runtime for foreground UI updates and background 
 
 ### Foreground Tasks (UI Updates)
 
+When spawned from `Context<Self>`, the closure receives `(WeakEntity<Self>, &mut AsyncApp)`:
+
 ```rust
 impl MyComponent {
     fn fetch_data(&mut self, cx: &mut Context<Self>) {
-        let entity = cx.entity().downgrade();
-
-        cx.spawn(async move |cx| {
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
             // Runs on UI thread, can await and update entities
             let data = fetch_from_api().await;
 
-            entity.update(cx, |state, cx| {
+            this.update(cx, |state, cx| {
                 state.data = Some(data);
+                cx.notify();
+            }).ok();
+        }).detach();
+    }
+}
+```
+
+When spawned from `&mut App` (not inside an entity), the closure receives only `(cx: &mut AsyncApp)`:
+
+```rust
+cx.spawn(async move |cx: &mut AsyncApp| {
+    // No entity reference
+}).detach();
+```
+
+### Spawn with Window Context (spawn_in)
+
+Use `spawn_in` when the task also needs window access (`update_in`):
+
+```rust
+impl MyComponent {
+    fn animate(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.spawn_in(window, async move |this, cx| {
+            // cx here is AsyncWindowContext
+            this.update_in(cx, |state, window, cx| {
+                // Can access window here
+                state.frame += 1;
                 cx.notify();
             }).ok();
         }).detach();
@@ -64,13 +91,11 @@ struct MyView {
 
 impl MyView {
     fn new(cx: &mut Context<Self>) -> Self {
-        let entity = cx.entity().downgrade();
-
-        let _task = cx.spawn(async move |cx| {
+        let _task = cx.spawn(async move |this, cx: &mut AsyncApp| {
             // Task automatically cancelled when dropped
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
-                entity.update(cx, |state, cx| {
+                this.update(cx, |state, cx| {
                     state.tick();
                     cx.notify();
                 }).ok();
@@ -84,12 +109,12 @@ impl MyView {
 
 ## Core Patterns
 
-### 1. Async Data Fetching
+### 1. Async Data Fetching (from Context<Self>)
 
 ```rust
-cx.spawn(async move |cx| {
+cx.spawn(async move |this, cx: &mut AsyncApp| {
     let data = fetch_data().await?;
-    entity.update(cx, |state, cx| {
+    this.update(cx, |state, cx| {
         state.data = Some(data);
         cx.notify();
     })?;
@@ -103,8 +128,8 @@ cx.spawn(async move |cx| {
 cx.background_spawn(async move {
     heavy_work()
 })
-.then(cx.spawn(move |result, cx| {
-    entity.update(cx, |state, cx| {
+.then(cx.spawn(move |this, cx: &mut AsyncApp| {
+    this.update(cx, |state, cx| {
         state.result = result;
         cx.notify();
     }).ok();
@@ -115,10 +140,13 @@ cx.background_spawn(async move {
 ### 3. Periodic Tasks
 
 ```rust
-cx.spawn(async move |cx| {
+cx.spawn(async move |this, cx: &mut AsyncApp| {
     loop {
         tokio::time::sleep(Duration::from_secs(5)).await;
-        // Update every 5 seconds
+        this.update(cx, |state, cx| {
+            state.tick();
+            cx.notify();
+        }).ok();
     }
 }).detach();
 ```

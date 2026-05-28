@@ -66,16 +66,16 @@ impl MyComponent {
 
 ### Async Operations
 
+When calling `cx.spawn` from `Context<Self>`, the closure receives `(WeakEntity<Self>, &mut AsyncApp)`:
+
 ```rust
 impl MyComponent {
     fn fetch_data(&mut self, cx: &mut Context<Self>) {
-        let weak_self = cx.entity().downgrade();
-
-        cx.spawn(async move |cx| {
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
             let data = fetch_from_api().await;
 
-            // Update entity safely
-            let _ = weak_self.update(cx, |state, cx| {
+            // Update entity safely via the weak reference
+            let _ = this.update(cx, |state, cx| {
                 state.data = Some(data);
                 cx.notify();
             });
