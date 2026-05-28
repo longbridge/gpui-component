@@ -219,6 +219,28 @@ impl InputState {
 }
 
 impl SearchPanel {
+    fn next_scroll_direction(
+        previous_match_ix: usize,
+        current_match_ix: usize,
+    ) -> Option<MoveDirection> {
+        if current_match_ix < previous_match_ix {
+            None
+        } else {
+            Some(MoveDirection::Down)
+        }
+    }
+
+    fn prev_scroll_direction(
+        previous_match_ix: usize,
+        current_match_ix: usize,
+    ) -> Option<MoveDirection> {
+        if current_match_ix > previous_match_ix {
+            None
+        } else {
+            Some(MoveDirection::Up)
+        }
+    }
+
     pub fn new(editor: Entity<InputState>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         let search_input = cx.new(|cx| InputState::new(window, cx));
         let replace_input = cx.new(|cx| InputState::new(window, cx));
@@ -315,17 +337,23 @@ impl SearchPanel {
     }
 
     fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let previous_match_ix = self.matcher.current_match_ix;
         if let Some(range) = self.matcher.next_back() {
+            let direction =
+                Self::prev_scroll_direction(previous_match_ix, self.matcher.current_match_ix);
             self.editor.update(cx, |state, cx| {
-                state.scroll_to(range.start, Some(MoveDirection::Up), cx);
+                state.scroll_to(range.start, direction, cx);
             });
         }
     }
 
     fn next(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let previous_match_ix = self.matcher.current_match_ix;
         if let Some(range) = self.matcher.next() {
+            let direction =
+                Self::next_scroll_direction(previous_match_ix, self.matcher.current_match_ix);
             self.editor.update(cx, |state, cx| {
-                state.scroll_to(range.end, Some(MoveDirection::Down), cx);
+                state.scroll_to(range.end, direction, cx);
             });
         }
     }
@@ -637,5 +665,31 @@ mod tests {
 
         matcher.update_cursor_by_offset(31);
         assert_eq!(matcher.current_match_ix, 2);
+    }
+
+    #[test]
+    fn test_next_scroll_direction_returns_down_without_wrap() {
+        assert!(matches!(
+            SearchPanel::next_scroll_direction(0, 1),
+            Some(MoveDirection::Down)
+        ));
+    }
+
+    #[test]
+    fn test_next_scroll_direction_returns_none_on_wrap() {
+        assert!(SearchPanel::next_scroll_direction(2, 0).is_none());
+    }
+
+    #[test]
+    fn test_prev_scroll_direction_returns_up_without_wrap() {
+        assert!(matches!(
+            SearchPanel::prev_scroll_direction(2, 1),
+            Some(MoveDirection::Up)
+        ));
+    }
+
+    #[test]
+    fn test_prev_scroll_direction_returns_none_on_wrap() {
+        assert!(SearchPanel::prev_scroll_direction(0, 2).is_none());
     }
 }
