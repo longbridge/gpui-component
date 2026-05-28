@@ -17,7 +17,8 @@ Load the relevant reference file based on the task:
 | Events & subscriptions | [event.md](references/event.md) | `cx.emit`, `cx.subscribe`, `cx.observe` |
 | Focus & keyboard nav | [focus-handle.md](references/focus-handle.md) | `FocusHandle`, `track_focus`, Tab navigation |
 | Global state | [global.md](references/global.md) | `Global` trait, `cx.set_global`, app-wide config |
-| Layout & styling | [layout-style.md](references/layout-style.md) | `div()`, flexbox, `px()`, `rems()`, colors |
+| Layout & styling | [layout-style.md](references/layout-style.md) | `div()`, `h_flex()`, `v_flex()`, flexbox, overflow, positioning |
+| ElementId | [element-id.md](references/element-id.md) | `ElementId`, `.id()`, uniqueness rules, stateful elements |
 | Testing | [test.md](references/test.md) | `#[gpui::test]`, `TestAppContext`, `VisualTestContext` |
 
 ## Extended References

@@ -149,9 +149,107 @@ App (Global)
                  └─ AsyncWindowContext (Async + Window)
 ```
 
-## Reference Documentation
+## cx.listener — Binding Callbacks to Self
 
-- **API Reference**: See [api-reference.md](references/api-reference.md)
-  - Complete context API, methods, conversions
-  - Entity operations, window operations
-  - Async contexts, best practices
+`cx.listener` creates a callback that borrows `&mut self` (the current entity). Use it for `on_click`, `on_action`, and other element event handlers:
+
+```rust
+impl Render for MyView {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .on_action(cx.listener(Self::on_save))
+            .child(
+                Button::new("btn")
+                    .on_click(cx.listener(|this, _event, _window, cx| {
+                        this.count += 1;
+                        cx.notify();
+                    }))
+            )
+    }
+}
+
+impl MyView {
+    fn on_save(&mut self, _: &Save, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.notify();
+    }
+}
+```
+
+`cx.listener(Self::method)` is equivalent to creating a closure that calls `self.method(...)`.
+
+## subscribe_in — Subscribe with Window Access
+
+Use `subscribe_in` (instead of `subscribe`) when the callback needs `&mut Window`:
+
+```rust
+let _subscription = cx.subscribe_in(&input, window, |this, state, event, window, cx| {
+    match event {
+        InputEvent::Change => {
+            let val = state.read(cx).value();
+            this.on_input_change(val, window, cx);
+        }
+        _ => {}
+    }
+});
+// Store _subscription in struct to keep it alive
+```
+
+`subscribe` vs `subscribe_in`:
+- `subscribe(&entity, |this, source, event, cx|)` — no window access
+- `subscribe_in(&entity, window, |this, source, event, window, cx|)` — has window access
+
+## observe_window_activation
+
+React when the window gains or loses focus:
+
+```rust
+let _sub = cx.observe_window_activation(window, |this, window, cx| {
+    if window.is_window_active() {
+        this.resume(cx);
+    } else {
+        this.pause(cx);
+    }
+});
+```
+
+## observe_global
+
+React when a global value changes:
+
+```rust
+cx.observe_global::<Theme>(|cx| {
+    // Theme changed — react
+    cx.notify();
+});
+```
+
+## defer and defer_in
+
+Schedule work after the current update completes:
+
+```rust
+// defer: runs after current App update, no window access
+cx.defer(|cx| {
+    // Runs after current entity update is done
+});
+
+// defer_in: runs after update, with window access
+cx.defer_in(window, |this, window, cx| {
+    // Can access window here
+    // CAUTION: never call entity.update(cx) on *this same entity* inside defer_in
+    // — it re-enters the lock and panics. Use the &mut self reference directly.
+    this.some_method(window, cx);
+});
+```
+
+## Context Naming Convention
+
+Always name contexts `cx` regardless of type:
+
+```rust
+fn new(window: &mut Window, cx: &mut App) {}             // cx = App
+impl Render for View {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) {}  // cx = Context<Self>
+}
+cx.spawn(async move |this, cx: &mut AsyncApp| {})         // cx = AsyncApp
+```

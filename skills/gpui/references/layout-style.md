@@ -141,6 +141,86 @@ div()
 .flex_grow()              // Grow to fill space
 ```
 
+## h_flex / v_flex Helpers
+
+gpui-component provides shorthand helpers (import from `gpui_component`):
+
+```rust
+use gpui_component::{h_flex, v_flex};
+
+// h_flex() = div().flex().flex_row().items_center()
+h_flex()
+    .gap_2()
+    .child(icon)
+    .child(label)
+
+// v_flex() = div().flex().flex_col()
+v_flex()
+    .gap_4()
+    .p_4()
+    .child(input1)
+    .child(input2)
+    .child(submit_btn)
+```
+
+These are the standard layout primitives in gpui-component — prefer them over raw `div().flex()`.
+
+## Tailwind-style Shorthand
+
+GPUI provides Tailwind-style spacing/sizing shorthands:
+
+```rust
+// Spacing (0=0, 1=4px, 2=8px, 3=12px, 4=16px, ...)
+.p_2()    // padding: 8px
+.px_4()   // padding x: 16px
+.py_3()   // padding y: 12px
+.m_2()    // margin: 8px
+.gap_3()  // gap: 12px
+
+// Size
+.size_full()   // width: 100%, height: 100%
+.size_4()      // width: 16px, height: 16px
+.w_full()      // width: 100%
+.h_full()      // height: 100%
+.flex_1()      // flex: 1 1 0 (fill remaining space)
+.flex_shrink_0() // prevent shrinking
+```
+
+## Overflow and Scroll
+
+```rust
+div()
+    .overflow_hidden()          // clip content
+    .overflow_x_hidden()        // clip horizontal
+    .overflow_y_scrollbar()     // show scrollbar on y axis
+    .overflow_scroll()          // scroll both axes
+```
+
+## Absolute Positioning
+
+```rust
+div()
+    .relative()                 // position: relative (container)
+    .child(
+        div()
+            .absolute()         // position: absolute
+            .top_0()
+            .right_0()
+            .child("badge")
+    )
+
+// Inset helpers
+div().absolute().inset_0()      // top/right/bottom/left: 0 (fill parent)
+div().absolute().top(px(8.)).left(px(8.))
+```
+
+## Z-index and Stacking
+
+```rust
+div().z_index(10).child(overlay)
+div().z_index(20).child(modal)   // higher = on top
+```
+
 ## Theme Integration
 
 ```rust
@@ -156,18 +236,23 @@ div()
 ## Conditional Styling
 
 ```rust
+use gpui::prelude::FluentBuilder as _;
+
 div()
-    .when(is_active, |el| {
-        el.bg(cx.theme().primary)
-    })
-    .when_some(optional_color, |el, color| {
-        el.bg(color)
-    })
+    .when(is_active, |el| el.bg(cx.theme().primary))
+    .when(!is_active, |el| el.opacity(0.5))
+    .when_some(optional_color.as_ref(), |el, color| el.bg(*color))
 ```
 
-## Reference Documentation
+## Text Styling
 
-- **Complete Guide**: See [reference.md](references/reference.md)
-  - All styling methods
-  - Layout strategies
-  - Theming, responsive design
+```rust
+div()
+    .text_sm()          // font-size: small
+    .text_base()        // font-size: base
+    .text_lg()          // font-size: large
+    .font_bold()        // font-weight: bold
+    .line_height_snug() // tighter line height
+    .truncate()         // overflow: ellipsis, single line
+    .whitespace_nowrap()
+```
