@@ -3,8 +3,8 @@ use std::rc::Rc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Context, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
-    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce,
-    StyleRefinement, Styled, TextAlign, Window, div, px, relative,
+    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, Role,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -282,6 +282,11 @@ impl RenderOnce for Input {
 
         div()
             .id(("input", self.state.entity_id()))
+            .role(if state.mode.is_multi_line() {
+                Role::MultilineTextInput
+            } else {
+                Role::TextInput
+            })
             .flex()
             .key_context(crate::input::CONTEXT)
             .track_focus(&state.focus_handle.clone())

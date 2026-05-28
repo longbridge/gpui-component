@@ -7,8 +7,8 @@ use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
     Action, Anchor, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Edges, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
-    WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
+    ParentElement, Pixels, Render, Role, ScrollHandle, SharedString, StatefulInteractiveElement,
+    Styled, WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
 };
 use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Point, Subscription};
 
@@ -1312,6 +1312,7 @@ impl Render for PopupMenu {
 
         v_flex()
             .id("popup-menu")
+            .role(Role::Menu)
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::select_up))

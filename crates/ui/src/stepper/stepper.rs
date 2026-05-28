@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    App, Axis, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    App, Axis, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Role,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{AxisExt, Sizable, Size, StyledExt as _, stepper::StepperItem};
@@ -111,6 +112,7 @@ impl RenderOnce for Stepper {
         let total_items = self.items.len();
         div()
             .id(self.id)
+            .role(Role::Group)
             .w_full()
             .when(self.layout.is_horizontal(), |this| this.h_flex())
             .when(self.layout.is_vertical(), |this| this.v_flex())

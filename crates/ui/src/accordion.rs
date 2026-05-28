@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    SharedString, StatefulInteractiveElement as _, Styled, Window, div,
+    Role, SharedString, StatefulInteractiveElement as _, Styled, Window, div,
     prelude::FluentBuilder as _, rems,
 };
 
@@ -88,6 +88,7 @@ impl RenderOnce for Accordion {
 
         v_flex()
             .id(self.id)
+            .role(Role::Group)
             .size_full()
             .when(self.bordered, |this| this.gap_y_2())
             .children(
@@ -240,6 +241,8 @@ impl RenderOnce for AccordionItem {
                 .child(
                     h_flex()
                         .id(self.index)
+                        .role(Role::Button)
+                        .aria_expanded(self.open)
                         .justify_between()
                         .gap_3()
                         .map(|this| match self.size {

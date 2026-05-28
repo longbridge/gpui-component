@@ -4,8 +4,8 @@ use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, ClickEvent, Div, Edges, Hsla, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window,
-    div, px, relative,
+    ParentElement, Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement, Styled,
+    Window, div, px, relative,
 };
 
 /// Tab variants.
@@ -628,6 +628,8 @@ impl RenderOnce for Tab {
 
         self.base
             .id(self.ix)
+            .role(Role::Tab)
+            .aria_selected(self.selected)
             .relative()
             .flex()
             .flex_wrap()
