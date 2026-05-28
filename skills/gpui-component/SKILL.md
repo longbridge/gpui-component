@@ -1,6 +1,6 @@
 ---
 name: gpui-component
-description: How to use the gpui-component UI library in GPUI applications. Use when building UIs with gpui-component components (Button, Input, Select, Dialog, etc.), setting up the library, handling component state, theming, or following the component API patterns. Also covers contributing: creating new components, writing stories, and documentation.
+description: How to use the gpui-component UI library in GPUI applications. Use when building UIs with gpui-component components (Button, Input, Select, Dialog, etc.), setting up the library, handling component state, theming, or following the component API patterns.
 ---
 
 ## Navigation
@@ -8,10 +8,7 @@ description: How to use the gpui-component UI library in GPUI applications. Use 
 | Topic | File | When to load |
 |-------|------|--------------|
 | Using components (patterns, setup, common APIs) | [usage.md](references/usage.md) | Using Button, Input, Select, Dialog, theme, stateful/stateless patterns |
-| Creating new components | [new-component.md](references/new-component.md) | Adding new UI components to the library |
-| Component style guide | [style-guide.md](references/style-guide.md) | Code conventions, trait implementations |
-| Writing stories | [story.md](references/story.md) | Gallery examples for the story app |
-| Writing documentation | [documentation.md](references/documentation.md) | Component docs in `docs/` |
+| Component style guide | [style-guide.md](references/style-guide.md) | Code conventions, trait implementations (for contributors) |
 
 ## Quick Reference
 
