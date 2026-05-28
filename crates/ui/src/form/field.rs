@@ -2,8 +2,9 @@ use std::rc::Rc;
 
 use gpui::{
     AlignItems, AnyElement, AnyView, App, Axis, Div, Element, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement, Pixels, Rems, RenderOnce, SharedString, StyleRefinement, Styled,
-    Window, div, prelude::FluentBuilder as _, px,
+    IntoElement, ParentElement, Pixels, Rems, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::{ActiveTheme as _, AxisExt, Size, StyledExt, h_flex, v_flex};
@@ -280,6 +281,7 @@ impl RenderOnce for Field {
                 // This warp for aligning the Label + Input
                 wrap_div(layout)
                     .id(self.id)
+                    .role(Role::Group)
                     .gap(inner_gap)
                     .when_some(self.align_items, |this, align| {
                         this.map(|this| match align {

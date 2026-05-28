@@ -13,8 +13,8 @@ use crate::{
 use gpui::{
     Anchor, AnyView, App, AppContext, Bounds, ClipboardItem, Context, DefiniteLength, ElementId,
     Entity, EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle,
-    Window, actions, div, prelude::FluentBuilder as _,
+    ParentElement as _, Pixels, Render, Role, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, WeakEntity, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, collections::HashMap, rc::Rc};
 
@@ -542,6 +542,7 @@ impl Render for Root {
 
         let inner = div()
             .id("root")
+            .role(Role::Application)
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_tab))
             .on_action(cx.listener(Self::on_action_tab_prev))

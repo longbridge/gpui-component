@@ -2,11 +2,11 @@ use std::ops::Range;
 
 use crate::{ActiveTheme, AxisExt, ElementExt, StyledExt, h_flex};
 use gpui::{
-    Along, App, AppContext as _, Axis, Background, Bounds, Context, Corners, DefiniteLength,
-    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, InteractiveElement, IntoElement, IsZero,
-    MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px, relative,
+    AccessibleAction, Along, App, AppContext as _, Axis, Background, Bounds, Context, Corners,
+    DefiniteLength, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, InteractiveElement,
+    IntoElement, IsZero, MouseButton, MouseDownEvent, Orientation, ParentElement as _, Pixels,
+    Point, Render, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
 #[derive(Clone)]
@@ -290,6 +290,21 @@ impl SliderState {
         self.value
     }
 
+    /// Get the minimum value.
+    pub fn min_value(&self) -> f32 {
+        self.min
+    }
+
+    /// Get the maximum value.
+    pub fn max_value(&self) -> f32 {
+        self.max
+    }
+
+    /// Get the step value.
+    pub fn step_value(&self) -> f32 {
+        self.step
+    }
+
     /// Converts a value between 0.0 and 1.0 to a value between the minimum and maximum value,
     /// depending on the chosen scale.
     fn percentage_to_value(&self, percentage: f32) -> f32 {
@@ -562,8 +577,43 @@ impl RenderOnce for Slider {
             radius.bottom_right = px(0.);
         }
 
+        let slider_min = state.min_value() as f64;
+        let slider_max = state.max_value() as f64;
+        let _slider_step = state.step_value() as f64;
+        let slider_value = state.value().end() as f64;
+        let slider_state_ref = self.state.clone();
+
         div()
             .id(("slider", self.state.entity_id()))
+            .role(Role::Slider)
+            .aria_numeric_value(slider_value)
+            .aria_min_numeric_value(slider_min)
+            .aria_max_numeric_value(slider_max)
+            .aria_orientation(if axis.is_vertical() {
+                Orientation::Vertical
+            } else {
+                Orientation::Horizontal
+            })
+            .on_a11y_action(AccessibleAction::Increment, {
+                let state = slider_state_ref.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        let new_val =
+                            (state.value().end() + state.step_value()).min(state.max_value());
+                        state.set_value(new_val, window, cx);
+                    });
+                }
+            })
+            .on_a11y_action(AccessibleAction::Decrement, {
+                let state = slider_state_ref.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        let new_val =
+                            (state.value().end() - state.step_value()).max(state.min_value());
+                        state.set_value(new_val, window, cx);
+                    });
+                }
+            })
             .flex()
             .flex_1()
             .items_center()
