@@ -1,7 +1,3 @@
----
-name: github-pull-request-description
-description: Write a description to description GitHub Pull Request.
----
 
 ## Description
 
