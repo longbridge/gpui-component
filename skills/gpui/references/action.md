@@ -1,3 +1,6 @@
+# Actions & Keybindings
+
+**Contents:** [Overview](#overview) · [Quick Start](#quick-start) · [Key Formats](#key-formats) · [Action Naming](#action-naming) · [Context-Aware Bindings](#context-aware-bindings) · [Best Practices](#best-practices)
 
 ## Overview
 
@@ -168,9 +171,3 @@ impl MyComponent {
 div().on_action(cx.listener(Self::on_action_save))
 ```
 
-## Reference Documentation
-
-- **Complete Guide**: See [reference.md](references/reference.md)
-  - Action definition, keybinding, dispatch
-  - Focus-based routing, best practices
-  - Performance, accessibility

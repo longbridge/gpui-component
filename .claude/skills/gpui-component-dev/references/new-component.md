@@ -1,3 +1,6 @@
+# Creating New Components
+
+**Contents:** [Instructions](#instructions) · [Component Types](#component-types) · [Implementation Steps](#implementation-steps) · [Common Patterns](#common-patterns)
 
 ## Instructions
 

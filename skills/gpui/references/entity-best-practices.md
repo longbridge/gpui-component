@@ -1,6 +1,6 @@
 # Entity Best Practices
 
-Guidelines and best practices for effective entity management in GPUI.
+**Contents:** [Avoiding Common Pitfalls](#avoiding-common-pitfalls) · [Performance Optimization](#performance-optimization) · [Entity Lifecycle Management](#entity-lifecycle-management) · [Entity Observation Best Practices](#entity-observation-best-practices) · [Async Best Practices](#async-best-practices) · [Testing Best Practices](#testing-best-practices) · [Performance Checklist](#performance-checklist)
 
 ## Avoiding Common Pitfalls
 

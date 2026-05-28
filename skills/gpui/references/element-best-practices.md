@@ -1,6 +1,6 @@
 # Element Best Practices
 
-Guidelines and best practices for implementing high-quality GPUI elements.
+**Contents:** [State Management](#state-management) · [Performance Considerations](#performance-considerations) · [Interaction Handling](#interaction-handling) · [Layout Strategies](#layout-strategies) · [Error Handling](#error-handling) · [Testing Element Implementations](#testing-element-implementations) · [Common Pitfalls](#common-pitfalls) · [Performance Checklist](#performance-checklist)
 
 ## State Management
 

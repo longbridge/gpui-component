@@ -2,6 +2,8 @@
 
 Based on analysis of `Button`, `Checkbox`, `Input`, `Select`, and other components in `crates/ui/src`.
 
+**Contents:** [Component Structure](#component-structure) · [Required Traits](#required-trait-implementations) · [Optional Traits](#optional-traits) · [Variants Pattern](#variants-pattern) · [Callback Signatures](#callback-signatures) · [Import Organization](#import-organization) · [Doc Comments](#doc-comments) · [Applying User Style Overrides](#applying-user-style-overrides) · [FluentBuilder Conditionals](#fluentbuilder-for-conditionals) · [Theme Colors](#theme-colors) · [Size Handling](#size-handling) · [Checklist](#checklist-for-new-components)
+
 ## Component Structure
 
 ### Standard Stateless Component

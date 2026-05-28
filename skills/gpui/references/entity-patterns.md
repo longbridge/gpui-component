@@ -1,6 +1,6 @@
 # Entity Patterns
 
-Common patterns and use cases for entity management in GPUI.
+**Contents:** [Application Scenarios](#application-scenarios) · [Common Patterns](#common-patterns) · [Pattern Selection Guide](#pattern-selection-guide)
 
 ## Application Scenarios
 

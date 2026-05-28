@@ -3,6 +3,11 @@ name: gpui-component
 description: How to use the gpui-component UI library in GPUI applications. Use when building UIs with gpui-component components (Button, Input, Select, Dialog, etc.), setting up the library, handling component state, theming, or following the component API patterns.
 ---
 
+## Online Documentation
+
+- **Full API + component guide**: `https://longbridge.github.io/gpui-component/llms-full.txt` (LLM-optimized, fetch when needed)
+- **Per-component docs**: `https://longbridge.github.io/gpui-component/docs/components/<name>.md` — any page on the site is available as Markdown by appending `.md` to the URL (e.g. `/docs/components/button.md`, `/docs/components/input.md`)
+
 ## Navigation
 
 | Topic | File | When to load |

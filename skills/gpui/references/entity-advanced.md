@@ -1,6 +1,6 @@
 # Advanced Entity Patterns
 
-Advanced techniques for sophisticated entity management scenarios.
+**Contents:** [Entity Collections Management](#entity-collections-management) · [Conditional Update Patterns](#conditional-update-patterns) · [Entity State Machine Pattern](#entity-state-machine-pattern) · [Entity Proxy Pattern](#entity-proxy-pattern) · [Cascading Updates Pattern](#cascading-updates-pattern) · [Entity Snapshot Pattern](#entity-snapshot-pattern) · [Entity Transaction Pattern](#entity-transaction-pattern) · [Entity Pool Pattern](#entity-pool-pattern)
 
 ## Entity Collections Management
 

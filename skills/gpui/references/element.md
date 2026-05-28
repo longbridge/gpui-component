@@ -97,26 +97,8 @@ State flows in one direction through associated types, passed as mutable referen
 ## Reference Documentation
 
 ### Complete API Documentation
-- **Element Trait API**: See [api-reference.md](references/api-reference.md)
-  - Associated types, methods, parameters, return values
-  - Hitbox system, event handling, cursor styles
-
-### Implementation Guides
-- **Examples**: See [examples.md](references/examples.md)
-  - Simple text element with highlighting
-  - Interactive element with selection
-  - Complex element with child management
-
-- **Best Practices**: See [best-practices.md](references/best-practices.md)
-  - State management, performance optimization
-  - Interaction handling, layout strategies
-  - Error handling, testing, common pitfalls
-
-- **Common Patterns**: See [patterns.md](references/patterns.md)
-  - Text rendering, container, interactive, composite, scrollable patterns
-  - Pattern selection guide
-
-- **Advanced Patterns**: See [advanced-patterns.md](references/advanced-patterns.md)
-  - Custom layout algorithms (masonry, circular)
-  - Element composition with traits
-  - Async updates, memoization, virtual lists
+- **API**: See [element-api.md](element-api.md) — associated types, hitbox system, event handling, cursor styles
+- **Examples**: See [element-examples.md](element-examples.md) — text, interactive, complex elements
+- **Patterns**: See [element-patterns.md](element-patterns.md) — text, container, interactive, composite, scrollable
+- **Best Practices**: See [element-best-practices.md](element-best-practices.md) — performance, state, common pitfalls
+- **Advanced**: See [element-advanced.md](element-advanced.md) — masonry/circular layouts, memoization, virtual lists

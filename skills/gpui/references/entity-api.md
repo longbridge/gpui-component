@@ -1,6 +1,6 @@
 # Entity API Reference
 
-Complete API documentation for GPUI's entity system.
+**Contents:** [Entity Types](#entity-types) · [Entity Creation](#entity-creation) · [Entity Operations](#entity-operations) · [Context Methods](#context-methods-for-entities) · [Async Operations](#async-operations) · [Entity Lifecycle](#entity-lifecycle) · [EntityId](#entityid) · [Error Handling](#error-handling) · [Type Conversions](#type-conversions)
 
 ## Entity Types
 

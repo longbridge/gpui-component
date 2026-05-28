@@ -1,5 +1,7 @@
 # gpui-component Usage Guide
 
+**Contents:** [Setup](#setup) · [Component Types](#component-types) · [Common Components](#common-components) · [Theming](#theming) · [Layout Helpers](#layout-helpers) · [Overlay Layers](#overlay-layers-dialogs-sheets-notifications) · [Component Reference](#component-reference)
+
 ## Setup
 
 ### 1. Cargo.toml

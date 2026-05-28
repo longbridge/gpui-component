@@ -1,6 +1,6 @@
 # Element API Reference
 
-Complete API documentation for GPUI's low-level Element trait.
+**Contents:** [Element Trait Structure](#element-trait-structure) · [Associated Types](#associated-types) · [Methods](#methods) · [IntoElement Integration](#intoelement-integration) · [Layout System Integration](#layout-system-integration) · [Hitbox System](#hitbox-system) · [Event Handling](#event-handling) · [Cursor Styles](#cursor-styles)
 
 ## Element Trait Structure
 

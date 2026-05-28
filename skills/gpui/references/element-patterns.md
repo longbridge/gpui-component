@@ -1,6 +1,6 @@
 # Common Element Patterns
 
-Reusable patterns for implementing common element types in GPUI.
+**Contents:** [Text Rendering Elements](#text-rendering-elements) · [Container Elements](#container-elements) · [Interactive Elements](#interactive-elements) · [Composite Elements](#composite-elements) · [Scrollable Elements](#scrollable-elements) · [Pattern Selection Guide](#pattern-selection-guide)
 
 ## Text Rendering Elements
 

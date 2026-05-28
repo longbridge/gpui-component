@@ -1,3 +1,6 @@
+# Focus & Keyboard Navigation
+
+**Contents:** [Overview](#overview) · [Quick Start](#quick-start) · [Focus Events](#focus-events) · [Keyboard Navigation](#keyboard-navigation) · [Common Patterns](#common-patterns) · [Best Practices](#best-practices)
 
 ## Overview
 
@@ -220,9 +223,3 @@ div()
     .on_action(cx.listener(Self::on_enter))
 ```
 
-## Reference Documentation
-
-- **API Reference**: See [api-reference.md](references/api-reference.md)
-  - FocusHandle API, focus management
-  - Events, keyboard navigation
-  - Best practices

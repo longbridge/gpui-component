@@ -86,6 +86,5 @@ fn test_with_window(cx: &mut TestAppContext) {
 
 ## Additional Resources
 
-- For detailed testing patterns and examples, see [reference.md](reference.md)
-  - Includes **"Testing Crash-Free State Management (Re-entrancy)"** — patterns for catching entity re-entrancy panics (`cannot update … while it is already being updated`) before they reach users.
-- For best practices and running tests, see [examples.md](examples.md)
+- For detailed patterns (including re-entrancy crash-free testing), see [test-reference.md](test-reference.md)
+- For examples and best practices, see [test-examples.md](test-examples.md)

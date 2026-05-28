@@ -1,6 +1,6 @@
 # Advanced Element Patterns
 
-Advanced techniques and patterns for implementing sophisticated GPUI elements.
+**Contents:** [Custom Layout Algorithms](#custom-layout-algorithms) · [Element Composition with Traits](#element-composition-with-traits) · [Async Element Updates](#async-element-updates) · [Element Memoization](#element-memoization) · [Virtual List Pattern](#virtual-list-pattern)
 
 ## Custom Layout Algorithms
 

@@ -1,3 +1,6 @@
+# Events & Subscriptions
+
+**Contents:** [Overview](#overview) · [Quick Start](#quick-start) · [Common Patterns](#common-patterns) · [subscribe_in](#subscribe_in--subscription-with-window-access) · [observe_window_activation](#observe_window_activation) · [observe_global](#observe_global) · [Subscription Lifetime](#subscription-lifetime) · [Best Practices](#best-practices)
 
 ## Overview
 
@@ -233,12 +236,3 @@ entity2.subscribe(entity1) → emits event → infinite loop!
 
 ## Reference Documentation
 
-- **API Reference**: See [api-reference.md](references/api-reference.md)
-  - Event definition, emission, subscriptions
-  - Observations, global events
-  - Subscription lifecycle
-
-- **Patterns**: See [patterns.md](references/patterns.md)
-  - Event-driven architectures
-  - Communication patterns
-  - Best practices and pitfalls

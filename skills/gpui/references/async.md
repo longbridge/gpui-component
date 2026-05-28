@@ -1,3 +1,6 @@
+# Async & Background Tasks
+
+**Contents:** [Overview](#overview) · [Quick Start](#quick-start) · [Core Patterns](#core-patterns) · [Common Pitfalls](#common-pitfalls)
 
 ## Overview
 
@@ -219,20 +222,3 @@ cx.background_spawn(async move { data })
     .detach();
 ```
 
-## Reference Documentation
-
-### Complete Guides
-
-- **API Reference**: See [api-reference.md](references/api-reference.md)
-  - Task types, spawning methods, contexts
-  - Executors, cancellation, error handling
-
-- **Patterns**: See [patterns.md](references/patterns.md)
-  - Data fetching, background processing
-  - Polling, debouncing, parallel tasks
-  - Pattern selection guide
-
-- **Best Practices**: See [best-practices.md](references/best-practices.md)
-  - Error handling, cancellation
-  - Performance optimization, testing
-  - Common pitfalls and solutions
