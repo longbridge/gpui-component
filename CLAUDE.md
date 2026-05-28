@@ -205,11 +205,11 @@ CI runs full test suite on each platform.
 
 ## Skills Reference
 
-This project has custom Claude Code skills in `skills/` to assist with common development tasks:
+This project has custom Claude Code skills to assist with common development tasks:
 
-- **gpui** - GPUI framework knowledge: actions/keybindings, async, context, custom elements, entity state, events, focus, global state, layout/styling, testing
-- **gpui-component** - How to use gpui-component: setup, stateless/stateful patterns, common component APIs, theming
-- **gpui-component-dev** - Contributing to gpui-component: creating new components, writing stories, writing documentation, writing PR descriptions
+- **gpui** (`skills/`) - GPUI framework knowledge: actions/keybindings, async, context, custom elements, entity state, events, focus, global state, layout/styling, testing
+- **gpui-component** (`skills/`) - How to use gpui-component: setup, stateless/stateful patterns, common component APIs, theming
+- **gpui-component-dev** (`.claude/skills/`) - Contributing to gpui-component: creating new components, writing stories, writing documentation, writing PR descriptions
 
 When working on tasks related to these areas, Claude Code will automatically use the appropriate skill to provide specialized guidance and patterns.
 
