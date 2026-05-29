@@ -98,6 +98,16 @@ anyhow.workspace = true
 gpui = { workspace = true }
 gpui_macros.workspace = true
 gpui-component-macros = { workspace = true }
+# `gpui-component-assets` ships the canonical icon set whose variants we
+# enumerate to generate `IconName` at build time. Cargo's
+# `DEP_<links>_<key>` propagation (the bridge that hands the icons-dir
+# path from the assets crate's build.rs into our own) only works through
+# *regular* dependencies, not build-deps, so this has to live here even
+# though our use is entirely build-time. The runtime cost is negligible:
+# downstream consumers were already pulling in gpui-component-assets
+# alongside gpui-component to load the SVGs that `IconName` paths point
+# at; this just formalizes a coupling that already existed semantically.
+gpui-component-assets = { workspace = true }
 notify.workspace = true
 ropey.workspace = true
 rust-i18n.workspace = true
