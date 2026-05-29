@@ -469,6 +469,9 @@ fn selection_for_multi_click(
 
     match kind {
         TextViewMultiClickKind::Word => word_range_at(text, offset),
+        // Known limitation: a paragraph maps to a single Inline run here. When a
+        // paragraph embeds an inline image it is split into multiple Inline runs,
+        // so triple-click only selects the run on the clicked side of the image.
         TextViewMultiClickKind::Paragraph => (!text.is_empty()).then_some(0..text.len()),
     }
 }

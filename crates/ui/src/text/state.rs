@@ -242,6 +242,14 @@ impl TextViewState {
         cx.notify();
     }
 
+    fn scroll_offset(&self) -> Point<Pixels> {
+        if self.scrollable {
+            self.list_state.scroll_px_offset_for_scrollbar()
+        } else {
+            Point::default()
+        }
+    }
+
     /// Select all rendered text in this view.
     pub fn select_all(&mut self, cx: &mut Context<Self>) {
         self.selection_positions = (None, None);
@@ -259,11 +267,7 @@ impl TextViewState {
         kind: TextViewMultiClickKind,
         selected_text: String,
     ) {
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
+        let scroll_offset = self.scroll_offset();
         let pos = pos - self.bounds.origin - scroll_offset;
         self.selection_positions = (None, None);
         self.multi_click_selection = Some(TextViewMultiClickSelection { pos, kind });
@@ -275,11 +279,7 @@ impl TextViewState {
 
     pub(super) fn start_selection(&mut self, pos: Point<Pixels>) {
         // Store content coordinates (not affected by scrolling)
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
+        let scroll_offset = self.scroll_offset();
         let pos = pos - self.bounds.origin - scroll_offset;
         self.selection_positions = (Some(pos), Some(pos));
         self.multi_click_selection = None;
@@ -289,11 +289,7 @@ impl TextViewState {
     }
 
     pub(super) fn update_selection(&mut self, pos: Point<Pixels>) {
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
+        let scroll_offset = self.scroll_offset();
         let pos = pos - self.bounds.origin - scroll_offset;
         if let (Some(start), Some(_)) = self.selection_positions {
             self.selection_positions = (Some(start), Some(pos))
@@ -332,11 +328,7 @@ impl TextViewState {
 
     /// Return the selection start/end in window coordinates.
     pub(crate) fn selection_points(&self) -> Option<(Point<Pixels>, Point<Pixels>)> {
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
+        let scroll_offset = self.scroll_offset();
 
         selection_points(
             self.selection_positions.0,
@@ -378,11 +370,7 @@ impl TextViewState {
     }
 
     pub(crate) fn multi_click_selection(&self) -> Option<TextViewMultiClickSelection> {
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
+        let scroll_offset = self.scroll_offset();
         self.multi_click_selection.map(|selection| {
             let pos = selection.pos + scroll_offset + self.bounds.origin;
             TextViewMultiClickSelection { pos, ..selection }
