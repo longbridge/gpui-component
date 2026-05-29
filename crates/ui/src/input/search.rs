@@ -121,12 +121,15 @@ impl SearchMatcher {
     fn next_ix(&self) -> Option<usize> {
         if self.matched_ranges.is_empty() {
             None
-        } else if self.current_match_ix < self.matched_ranges.len().saturating_sub(1) {
-            // if current match isn't the last one
+        } else if self.has_next_match_without_wrap() {
             Some(self.current_match_ix + 1)
         } else {
             Some(0)
         }
+    }
+
+    fn has_next_match_without_wrap(&self) -> bool {
+        self.current_match_ix < self.matched_ranges.len().saturating_sub(1)
     }
 
     fn label(&self) -> String {
