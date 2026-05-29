@@ -1335,12 +1335,25 @@ impl TextElement {
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
 
+        // Range semantic tokens, resolved from the LSP provider's cached
+        // result through the active highlight theme so it shares the same
+        // colour vocabulary as the tree-sitter path. Empty Vec when no
+        // provider is set, so `combine_highlights` short-circuits.
+        let custom_styles = state.lsp.semantic_tokens_for_range(
+            text,
+            &visible_byte_range,
+            &cx.theme().highlight_theme,
+        );
+
         // hover definition style
         if let Some(hover_style) = self.layout_hover_definition(cx) {
             styles.push(hover_style);
         }
 
-        // Combine marker styles
+        // Compose order: tree-sitter (base) -> custom (overlay) -> diagnostics (top).
+        // Diagnostics keep highest priority so errors remain visible regardless
+        // of language coloring.
+        styles = gpui::combine_highlights(custom_styles, styles).collect();
         styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
 
         Some(styles)
