@@ -196,7 +196,8 @@ let range_value: SliderValue = (10.0..90.0).into();
 
 | 事件 | 说明 |
 | --- | --- |
-| `Change(SliderValue)` | 当滑块值发生变化时触发 |
+| `Change(SliderValue)` | 滑块值变化过程中持续触发 |
+| `Release(SliderValue)` | 拖拽结束（松开鼠标）时触发一次 |
 
 ### 样式
 

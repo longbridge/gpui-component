@@ -259,6 +259,7 @@ impl Notification {
             _ = view.update_in(cx, |view, _, cx| {
                 view.closing = false;
                 cx.emit(DismissEvent);
+                cx.notify();
             });
             if let Some(on_close) = on_close {
                 _ = cx.update(|window, cx| on_close(window, cx));

@@ -14,6 +14,7 @@ mod checkbox_story;
 mod clipboard_story;
 mod collapsible_story;
 mod color_picker_story;
+mod combobox_story;
 mod data_table_story;
 mod date_picker_story;
 mod description_list_story;
@@ -74,6 +75,7 @@ pub use checkbox_story::CheckboxStory;
 pub use clipboard_story::ClipboardStory;
 pub use collapsible_story::CollapsibleStory;
 pub use color_picker_story::ColorPickerStory;
+pub use combobox_story::ComboboxStory;
 pub use data_table_story::DataTableStory;
 pub use date_picker_story::DatePickerStory;
 pub use description_list_story::DescriptionListStory;
@@ -124,6 +126,7 @@ pub use welcome_story::WelcomeStory;
 
 pub(crate) fn init(cx: &mut App) {
     input_story::init(cx);
+    combobox_story::init(cx);
     rating_story::init(cx);
     number_input_story::init(cx);
     textarea_story::init(cx);

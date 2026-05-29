@@ -652,12 +652,14 @@ impl RenderOnce for Dialog {
                                         offset: point(px(0.), px(20.)),
                                         blur_radius: px(25.),
                                         spread_radius: px(-5.),
+                                        inset: false,
                                     },
                                     BoxShadow {
                                         color: hsla(0., 0., 0., 0.1 * delta),
                                         offset: point(px(0.), px(8.)),
                                         blur_radius: px(10.),
                                         spread_radius: px(-6.),
+                                        inset: false,
                                     },
                                 ];
                                 this.top(y * delta).shadow(shadow)

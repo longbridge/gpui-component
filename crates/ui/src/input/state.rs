@@ -4,7 +4,7 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
@@ -14,17 +14,24 @@ use gpui::{
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
+use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DisplayMap, MASK_CHAR, blink_cursor::BlinkCursor, change::Change, element::TextElement,
-    mask_pattern::MaskPattern, mode::InputMode, number_input,
+    DisplayMap, MASK_CHAR,
+    blink_cursor::BlinkCursor,
+    change::Change,
+    element::{EditorScrollbarSnapshot, TextElement},
+    mask_pattern::MaskPattern,
+    mode::InputMode,
+    number_input,
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use crate::scroll::AutoScroll;
 use crate::highlighter::DiagnosticSet;
 #[cfg(not(target_family = "wasm"))]
 use crate::highlighter::LanguageRegistry;
@@ -45,6 +52,22 @@ use crate::{Root, history::History};
 pub struct Enter {
     /// Is confirm with secondary.
     pub secondary: bool,
+    /// Whether the Shift modifier was held when Enter was pressed.
+    pub shift: bool,
+}
+
+impl Enter {
+    /// Returns true if `action` is a primary `Enter` action (`secondary: false`),
+    /// regardless of whether Shift was held.
+    pub fn is_primary(action: &dyn Action) -> bool {
+        action.partial_eq(&Enter {
+            secondary: false,
+            shift: false,
+        }) || action.partial_eq(&Enter {
+            secondary: false,
+            shift: true,
+        })
+    }
 }
 
 actions!(
@@ -97,7 +120,7 @@ actions!(
 #[derive(Clone)]
 pub enum InputEvent {
     Change,
-    PressEnter { secondary: bool },
+    PressEnter { secondary: bool, shift: bool },
     Focus,
     Blur,
 }
@@ -124,9 +147,30 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("alt-delete", DeleteToNextWordEnd, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-delete", DeleteToNextWordEnd, Some(CONTEXT)),
-        KeyBinding::new("enter", Enter { secondary: false }, Some(CONTEXT)),
-        KeyBinding::new("shift-enter", Enter { secondary: false }, Some(CONTEXT)),
-        KeyBinding::new("secondary-enter", Enter { secondary: true }, Some(CONTEXT)),
+        KeyBinding::new(
+            "enter",
+            Enter {
+                secondary: false,
+                shift: false,
+            },
+            Some(CONTEXT),
+        ),
+        KeyBinding::new(
+            "shift-enter",
+            Enter {
+                secondary: false,
+                shift: true,
+            },
+            Some(CONTEXT),
+        ),
+        KeyBinding::new(
+            "secondary-enter",
+            Enter {
+                secondary: true,
+                shift: false,
+            },
+            Some(CONTEXT),
+        ),
         KeyBinding::new("escape", Escape, Some(CONTEXT)),
         KeyBinding::new("up", MoveUp, Some(CONTEXT)),
         KeyBinding::new("down", MoveDown, Some(CONTEXT)),
@@ -324,6 +368,7 @@ pub struct InputState {
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
+    pub(super) submit_on_enter: bool,
     pub(super) soft_wrap: bool,
     pub(super) show_whitespaces: bool,
     /// This flag tells the renderer to prefer the end of the current visual line.
@@ -335,6 +380,8 @@ pub struct InputState {
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
+    pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
+    pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) text_align: TextAlign,
 
     /// The mask pattern for formatting the input text
@@ -384,6 +431,8 @@ pub struct InputState {
 
     pub(super) _context_menu_task: Task<Result<()>>,
     pub(super) inline_completion: InlineCompletion,
+
+    pub(super) auto_scroll: AutoScroll,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -435,6 +484,7 @@ impl InputState {
             disabled: false,
             masked: false,
             clean_on_escape: false,
+            submit_on_enter: false,
             soft_wrap: true,
             show_whitespaces: false,
             loading: false,
@@ -447,6 +497,13 @@ impl InputState {
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
             scroll_size: gpui::size(px(0.), px(0.)),
+            editor_scrollbar_paddings: Cell::new(Edges {
+                top: px(0.),
+                right: px(0.),
+                bottom: px(0.),
+                left: px(0.),
+            }),
+            editor_scrollbar_snapshot: Cell::new(None),
             deferred_scroll_offset: None,
             preferred_column: None,
             placeholder: SharedString::default(),
@@ -469,6 +526,7 @@ impl InputState {
             _pending_update: false,
             inline_completion: InlineCompletion::default(),
             cursor_line_end_affinity: false,
+            auto_scroll: AutoScroll::default(),
         }
     }
 
@@ -804,6 +862,15 @@ impl InputState {
     /// Set true to clear the input by pressing Escape key.
     pub fn clean_on_escape(mut self) -> Self {
         self.clean_on_escape = true;
+        self
+    }
+
+    /// Set true to treat `Enter` as a submit action in multi-line mode,
+    /// while `Shift+Enter` inserts a newline.
+    ///
+    /// Default is `false` (both `Enter` and `Shift+Enter` insert a newline).
+    pub fn submit_on_enter(mut self, submit: bool) -> Self {
+        self.submit_on_enter = submit;
         self
     }
 
@@ -1308,7 +1375,13 @@ impl InputState {
             self.clear_inline_completion(cx);
         }
 
-        if self.mode.is_multi_line() {
+        // In multi-line mode with `submit_on_enter` enabled, a plain `Enter`
+        // (without Shift) is treated as submit: propagate the action and emit
+        // PressEnter without inserting a newline. `Shift+Enter` still inserts
+        // a newline.
+        let insert_newline = self.mode.is_multi_line() && (!self.submit_on_enter || action.shift);
+
+        if insert_newline {
             // Get current line indent
             let indent = if self.mode.is_code_editor() {
                 self.indent_of_next_line()
@@ -1321,12 +1394,14 @@ impl InputState {
             self.replace_text_in_range_silent(None, &new_line_text, window, cx);
             self.pause_blink_cursor(cx);
         } else {
-            // Single line input, just emit the event (e.g.: In a dialog to confirm).
+            // Single line input or submit-on-enter: just emit the event
+            // (e.g.: in a dialog to confirm, or a chat textarea to send).
             cx.propagate();
         }
 
         cx.emit(InputEvent::PressEnter {
             secondary: action.secondary,
+            shift: action.shift,
         });
     }
 
@@ -1420,6 +1495,7 @@ impl InputState {
         }
         self.selecting = false;
         self.selected_word_range = None;
+        self.auto_scroll.stop();
     }
 
     pub(super) fn on_mouse_move(
@@ -1989,8 +2065,37 @@ impl InputState {
             return;
         }
 
+        self.auto_scroll.last_drag_position = Some(event.position);
         let offset = self.index_for_mouse_position(event.position);
         self.select_to(offset, cx);
+
+        if !self.mode.is_single_line() {
+            // Expand input_bounds by the CSS padding so the bounds reflect the full
+            // visible element. Without this, mouse positions in the padding area
+            // (visually inside the input) would appear outside bounds and trigger max speed.
+            let pad = self.editor_scrollbar_paddings.get();
+            let scroll_bounds = gpui::Bounds::new(
+                point(
+                    self.input_bounds.origin.x - pad.left,
+                    self.input_bounds.origin.y - pad.top,
+                ),
+                gpui::size(
+                    self.input_bounds.size.width + pad.left + pad.right,
+                    self.input_bounds.size.height + pad.top + pad.bottom,
+                ),
+            );
+            let delta = AutoScroll::compute_delta(event.position.y, scroll_bounds);
+            // Input's ScrollHandle uses negative-y-is-down; negate the positive-towards-bottom delta.
+            let scroll_delta = delta.map(|d| -d);
+            self.auto_scroll.set(scroll_delta, cx, |delta, state, cx| {
+                let current = state.scroll_handle.offset();
+                state.update_scroll_offset(Some(point(current.x, current.y + delta)), cx);
+                if let Some(pos) = state.auto_scroll.last_drag_position {
+                    let offset = state.index_for_mouse_position(pos);
+                    state.select_to(offset, cx);
+                }
+            });
+        }
     }
 
     fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
@@ -2182,6 +2287,7 @@ impl InputState {
         let parse_task_rc = pending.parse_task;
         let language = pending.language;
         let text = pending.text;
+        let is_folding = pending.is_folding;
 
         let old_tree = highlighter_rc
             .borrow()
@@ -2232,19 +2338,28 @@ impl InputState {
                         Default::default()
                     };
 
-                    Some((new_tree, injection_layers))
+                    // Walk the syntax tree to extract fold ranges off the main thread.
+                    let fold_ranges = if is_folding {
+                        crate::input::display_map::extract_fold_ranges(&new_tree)
+                    } else {
+                        Vec::new()
+                    };
+
+                    Some((new_tree, injection_layers, fold_ranges))
                 })
                 .await;
 
-            if let Some((new_tree, injection_layers)) = result {
+            if let Some((new_tree, injection_layers, fold_ranges)) = result {
                 if let Some(h) = highlighter_rc.borrow_mut().as_mut() {
                     h.apply_background_tree(new_tree, &text_for_apply, injection_layers);
                 }
 
-                // Trigger re-render so the new highlights are displayed.
-                // Also update fold candidates now that the tree is ready.
+                // Trigger re-render so the new highlights are displayed and
+                // apply the fold candidates extracted in the background.
                 _ = entity.update(cx, |state, cx| {
-                    state.update_fold_candidates();
+                    if is_folding {
+                        state.display_map.set_fold_candidates(fold_ranges);
+                    }
                     cx.notify();
                 });
             }
@@ -2364,7 +2479,7 @@ impl EntityInputHandler for InputState {
 
         let bg = self
             .mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
         if let Some(bg) = bg {
             Self::dispatch_background_parse(bg, window, cx);
         }
@@ -2431,7 +2546,7 @@ impl EntityInputHandler for InputState {
 
         let bg = self
             .mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
         if let Some(bg) = bg {
             Self::dispatch_background_parse(bg, window, cx);
         }
@@ -2548,7 +2663,7 @@ impl Render for InputState {
         if self._pending_update {
             let bg = self
                 .mode
-                .update_highlighter(&(0..0), &self.text, "", false, cx);
+                .update_highlighter(&(0..0), &self.text, &self.text, "", false, cx);
             if let Some(bg) = bg {
                 Self::dispatch_background_parse(bg, window, cx);
             }

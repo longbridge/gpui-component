@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     ops::Range,
     sync::{Arc, Mutex},
@@ -15,7 +16,8 @@ use ropey::Rope;
 
 use crate::{
     ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
-    highlighter::{HighlightTheme, SyntaxHighlighter},
+    highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
+    input::{InputEdit, Point, RopeExt as _},
     text::{
         CodeBlockActionsFn,
         document::NodeRenderOptions,
@@ -26,6 +28,11 @@ use crate::{
 };
 
 use super::{TextViewStyle, utils::list_item_prefix};
+
+thread_local! {
+    static CODE_BLOCK_HIGHLIGHTERS: RefCell<HashMap<SharedString, SyntaxHighlighter>> =
+        RefCell::new(HashMap::new());
+}
 
 /// The block-level nodes.
 #[derive(Debug, Clone, PartialEq)]
@@ -77,6 +84,12 @@ pub(crate) enum BlockNode {
     Unknown,
 }
 
+#[derive(Clone, Copy)]
+enum BlockTextKind {
+    All,
+    Selected,
+}
+
 impl BlockNode {
     pub(super) fn is_list_item(&self) -> bool {
         matches!(self, Self::ListItem { .. })
@@ -95,7 +108,7 @@ impl BlockNode {
     }
 
     /// Get the span of the node.
-    pub(super) fn span(&self) -> Option<Span> {
+    pub(crate) fn span(&self) -> Option<Span> {
         match self {
             BlockNode::Root { span, .. } => *span,
             BlockNode::Paragraph(paragraph) => paragraph.span,
@@ -112,50 +125,49 @@ impl BlockNode {
         }
     }
 
+    pub(super) fn text(&self) -> String {
+        self.text_by_kind(BlockTextKind::All)
+    }
+
     pub(super) fn selected_text(&self) -> String {
+        self.text_by_kind(BlockTextKind::Selected)
+    }
+
+    fn text_by_kind(&self, kind: BlockTextKind) -> String {
         let mut text = String::new();
         match self {
             BlockNode::Root { children, .. } => {
-                let mut block_text = String::new();
-                for c in children.iter() {
-                    block_text.push_str(&c.selected_text());
-                }
+                let block_text = Self::children_text(children, kind);
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
             BlockNode::Paragraph(paragraph) => {
-                let mut block_text = String::new();
-                block_text.push_str(&paragraph.selected_text());
+                let block_text = match kind {
+                    BlockTextKind::All => paragraph.text(),
+                    BlockTextKind::Selected => paragraph.selected_text(),
+                };
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
             BlockNode::Heading { children, .. } => {
-                let mut block_text = String::new();
-                block_text.push_str(&children.selected_text());
+                let block_text = match kind {
+                    BlockTextKind::All => children.text(),
+                    BlockTextKind::Selected => children.selected_text(),
+                };
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
-            BlockNode::List { children, .. } => {
-                for c in children.iter() {
-                    text.push_str(&c.selected_text());
-                }
-            }
-            BlockNode::ListItem { children, .. } => {
-                for c in children.iter() {
-                    text.push_str(&c.selected_text());
-                }
+            BlockNode::List { children, .. } | BlockNode::ListItem { children, .. } => {
+                text.push_str(&Self::children_text(children, kind));
             }
             BlockNode::Blockquote { children, .. } => {
-                let mut block_text = String::new();
-                for c in children.iter() {
-                    block_text.push_str(&c.selected_text());
-                }
+                let block_text = Self::children_text(children, kind);
 
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
@@ -167,7 +179,10 @@ impl BlockNode {
                 for row in table.children.iter() {
                     let mut row_texts = vec![];
                     for cell in row.children.iter() {
-                        row_texts.push(cell.children.selected_text());
+                        row_texts.push(match kind {
+                            BlockTextKind::All => cell.children.text(),
+                            BlockTextKind::Selected => cell.children.selected_text(),
+                        });
                     }
                     if !row_texts.is_empty() {
                         block_text.push_str(&row_texts.join(" "));
@@ -181,7 +196,10 @@ impl BlockNode {
                 }
             }
             BlockNode::CodeBlock(code_block) => {
-                let block_text = code_block.selected_text();
+                let block_text = match kind {
+                    BlockTextKind::All => code_block.text(),
+                    BlockTextKind::Selected => code_block.selected_text(),
+                };
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
                     text.push('\n');
@@ -191,6 +209,15 @@ impl BlockNode {
             | BlockNode::Break { .. }
             | BlockNode::HorizontalRule { .. }
             | BlockNode::Unknown { .. } => {}
+        }
+
+        text
+    }
+
+    fn children_text(children: &[BlockNode], kind: BlockTextKind) -> String {
+        let mut text = String::new();
+        for child in children.iter() {
+            text.push_str(&child.text_by_kind(kind));
         }
 
         text
@@ -211,6 +238,7 @@ pub struct TextMark {
     pub bold: bool,
     pub italic: bool,
     pub strikethrough: bool,
+    pub underline: bool,
     pub code: bool,
     pub link: Option<LinkMark>,
 }
@@ -231,6 +259,11 @@ impl TextMark {
         self
     }
 
+    pub fn underline(mut self) -> Self {
+        self.underline = true;
+        self
+    }
+
     pub fn code(mut self) -> Self {
         self.code = true;
         self
@@ -245,6 +278,7 @@ impl TextMark {
         self.bold |= other.bold;
         self.italic |= other.italic;
         self.strikethrough |= other.strikethrough;
+        self.underline |= other.underline;
         self.code |= other.code;
         if let Some(link) = other.link {
             self.link = Some(link);
@@ -373,19 +407,28 @@ impl Paragraph {
         let mut text = String::new();
 
         for c in self.children.iter() {
-            let state = c.state.lock().unwrap();
+            let Ok(state) = c.state.lock() else {
+                continue;
+            };
             if let Some(selection) = &state.selection {
-                let part_text = state.text.clone();
-                text.push_str(&part_text[selection.start..selection.end]);
+                text.push_str(&state.text[selection.start..selection.end]);
             }
         }
 
-        let state = self.state.lock().unwrap();
-        if let Some(selection) = &state.selection {
-            let all_text = state.text.clone();
-            text.push_str(&all_text[selection.start..selection.end]);
+        if let Ok(state) = self.state.lock()
+            && let Some(selection) = &state.selection
+        {
+            text.push_str(&state.text[selection.start..selection.end]);
         }
 
+        text
+    }
+
+    pub(super) fn text(&self) -> String {
+        let mut text = String::new();
+        for node in self.children.iter() {
+            text.push_str(&node.text);
+        }
         text
     }
 }
@@ -492,14 +535,15 @@ impl Paragraph {
 #[derive(Debug, Clone)]
 pub struct CodeBlock {
     lang: Option<SharedString>,
-    styles: Vec<(Range<usize>, HighlightStyle)>,
+    styles: Arc<Mutex<Option<Vec<(Range<usize>, HighlightStyle)>>>>,
+    highlight_theme: Arc<HighlightTheme>,
     state: Arc<Mutex<InlineState>>,
     pub span: Option<Span>,
 }
 
 impl PartialEq for CodeBlock {
     fn eq(&self, other: &Self) -> bool {
-        self.lang == other.lang && self.styles == other.styles
+        self.lang == other.lang && self.code() == other.code() && self.span == other.span
     }
 }
 
@@ -511,7 +555,10 @@ impl CodeBlock {
 
     /// Get the code content of the code block.
     pub fn code(&self) -> SharedString {
-        self.state.lock().unwrap().text.clone()
+        self.state
+            .lock()
+            .map(|state| state.text.clone())
+            .unwrap_or_default()
     }
 
     pub(crate) fn new(
@@ -520,32 +567,81 @@ impl CodeBlock {
         highlight_theme: &HighlightTheme,
         span: Option<impl Into<Span>>,
     ) -> Self {
-        let mut styles = vec![];
-        if let Some(lang) = &lang {
-            let mut highlighter = SyntaxHighlighter::new(&lang);
-            highlighter.update(None, &Rope::from_str(code.as_str()), None);
-            styles = highlighter.styles(&(0..code.len()), highlight_theme);
-        };
-
         let state = Arc::new(Mutex::new(InlineState::default()));
-        state.lock().unwrap().set_text(code);
+        if let Ok(mut state) = state.lock() {
+            state.set_text(code);
+        }
 
         Self {
             lang,
-            styles,
+            styles: Arc::new(Mutex::new(None)),
+            highlight_theme: Arc::new(highlight_theme.clone()),
             state,
             span: span.map(|s| s.into()),
         }
     }
 
+    pub(crate) fn styles(&self) -> Vec<(Range<usize>, HighlightStyle)> {
+        let Some(lang) = &self.lang else {
+            return Vec::new();
+        };
+
+        let Ok(mut styles) = self.styles.lock() else {
+            return Vec::new();
+        };
+
+        if let Some(styles) = styles.as_ref() {
+            return styles.clone();
+        }
+
+        let code = self.code();
+        let computed_styles = CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let highlighter = cache
+                .entry(lang.clone())
+                .or_insert_with(|| SyntaxHighlighter::new(lang));
+
+            if let Some(config) = LanguageRegistry::singleton().language(lang)
+                && highlighter.language() != &config.name
+            {
+                *highlighter = SyntaxHighlighter::new(lang);
+            }
+
+            let old_end_byte = highlighter.text().len();
+            let old_end_position = highlighter.text().offset_to_point(old_end_byte);
+            let code_rope = Rope::from_str(code.as_str());
+
+            let edit = InputEdit {
+                start_byte: 0,
+                old_end_byte,
+                new_end_byte: code.len(),
+                start_position: Point::new(0, 0),
+                old_end_position,
+                new_end_position: code_rope.offset_to_point(code.len()),
+            };
+
+            highlighter.update(Some(edit), &code_rope, None);
+            highlighter.styles(&(0..code.len()), &self.highlight_theme)
+        });
+        *styles = Some(computed_styles.clone());
+        computed_styles
+    }
+
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
-        let state = self.state.lock().unwrap();
-        if let Some(selection) = &state.selection {
-            let part_text = state.text.clone();
-            text.push_str(&part_text[selection.start..selection.end]);
+        if let Ok(state) = self.state.lock()
+            && let Some(selection) = &state.selection
+        {
+            text.push_str(&state.text[selection.start..selection.end]);
         }
         text
+    }
+
+    pub(super) fn text(&self) -> String {
+        self.state
+            .lock()
+            .map(|state| state.text.to_string())
+            .unwrap_or_default()
     }
 
     fn render(
@@ -573,7 +669,7 @@ impl CodeBlock {
                         "code",
                         self.state.clone(),
                         vec![],
-                        self.styles.clone(),
+                        self.styles(),
                     ))
                     .when_some(node_cx.code_block_actions.clone(), |this, actions| {
                         this.child(
@@ -640,11 +736,9 @@ impl Paragraph {
 
             if let Some(image) = &inline_node.image {
                 if text.len() > 0 {
-                    inline_node
-                        .state
-                        .lock()
-                        .unwrap()
-                        .set_text(text.clone().into());
+                    if let Ok(mut state) = inline_node.state.lock() {
+                        state.set_text(text.clone().into());
+                    }
                     child_nodes.push(
                         Inline::new(
                             ix,
@@ -697,6 +791,12 @@ impl Paragraph {
                             ..Default::default()
                         });
                     }
+                    if style.underline {
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
                     if style.code {
                         highlight.background_color = Some(cx.theme().accent);
                     }
@@ -729,7 +829,9 @@ impl Paragraph {
 
         // Add the last text node
         if text.len() > 0 {
-            self.state.lock().unwrap().set_text(text.into());
+            if let Ok(mut state) = self.state.lock() {
+                state.set_text(text.into());
+            }
             child_nodes
                 .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
         }
@@ -1086,6 +1188,7 @@ impl BlockNode {
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
+                        .overflow_hidden()
                         .children({
                             let mut rows = Vec::with_capacity(table.children.len());
                             for (row_ix, row) in table.children.iter().enumerate() {
@@ -1192,7 +1295,7 @@ impl BlockNode {
                     text_size = (f)(*level, node_cx.style.heading_base_font_size);
                 }
 
-                h_flex()
+                div()
                     .id(SharedString::from(format!("h{}-{}", level, ix)))
                     .pb(rems(0.3))
                     .whitespace_normal()
@@ -1270,5 +1373,88 @@ impl BlockNode {
                 div().into_any_element()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn code_block_equality_includes_code_content() {
+        let theme = HighlightTheme::default_light();
+        let first = CodeBlock::new(
+            "let value = 1;".into(),
+            Some("rust".into()),
+            &theme,
+            None::<Span>,
+        );
+        let second = CodeBlock::new(
+            "let value = 2;".into(),
+            Some("rust".into()),
+            &theme,
+            None::<Span>,
+        );
+
+        assert_ne!(first, second);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn code_block_highlighter_cache_refreshes_after_language_registration() {
+        let lang = SharedString::from("json-cache-test");
+        let theme = HighlightTheme::default_light();
+
+        CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            cache.borrow_mut().remove(&lang);
+        });
+
+        let unknown_block = CodeBlock::new(
+            "{\"value\": 1}".into(),
+            Some(lang.clone()),
+            &theme,
+            None::<Span>,
+        );
+        _ = unknown_block.styles();
+
+        let cached_language = CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            cache
+                .borrow()
+                .get(&lang)
+                .map(|highlighter| highlighter.language().clone())
+        });
+        assert_eq!(cached_language.as_deref(), Some("text"));
+
+        LanguageRegistry::singleton().register(
+            lang.as_ref(),
+            &crate::highlighter::LanguageConfig::new(
+                lang.clone(),
+                tree_sitter_json::LANGUAGE.into(),
+                vec![],
+                r#"
+                    (string) @string
+                    (number) @number
+                    (pair key: (string) @property)
+                "#,
+                "",
+                "",
+            ),
+        );
+
+        let registered_block = CodeBlock::new(
+            "{\"value\": 2}".into(),
+            Some(lang.clone()),
+            &theme,
+            None::<Span>,
+        );
+        _ = registered_block.styles();
+
+        let cached_language = CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            cache
+                .borrow()
+                .get(&lang)
+                .map(|highlighter| highlighter.language().clone())
+        });
+        assert_eq!(cached_language.as_deref(), Some(lang.as_ref()));
     }
 }

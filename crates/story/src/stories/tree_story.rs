@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use autocorrect::ignorer::Ignorer;
 use gpui::{
     App, AppContext, Context, Entity, InteractiveElement, KeyBinding, ParentElement, Render,
     Styled, Window, actions, prelude::FluentBuilder as _, px,
@@ -18,6 +17,11 @@ use gpui_component::{
 };
 use rand::seq::SliceRandom as _;
 
+#[cfg(not(target_family = "wasm"))]
+use autocorrect::ignorer::Ignorer;
+#[cfg(not(target_family = "wasm"))]
+use std::path::Path;
+
 use crate::{Story, section};
 
 actions!(story, [Rename, OpenFile, Delete]);
@@ -32,7 +36,48 @@ pub struct TreeStory {
     items: Vec<TreeItem>,
 }
 
-fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<TreeItem> {
+#[cfg(target_family = "wasm")]
+fn example_file_items() -> Vec<TreeItem> {
+    vec![
+        TreeItem::new("gpui-component", "gpui-component")
+            .expanded(true)
+            .children([
+                TreeItem::new("gpui-component/crates", "crates")
+                    .expanded(true)
+                    .children([
+                        TreeItem::new("gpui-component/crates/ui", "ui")
+                            .expanded(true)
+                            .children([
+                                TreeItem::new("gpui-component/crates/ui/src", "src").children([
+                                    TreeItem::new(
+                                        "gpui-component/crates/ui/src/tree.rs",
+                                        "tree.rs",
+                                    ),
+                                    TreeItem::new(
+                                        "gpui-component/crates/ui/src/list/mod.rs",
+                                        "mod.rs",
+                                    ),
+                                ]),
+                                TreeItem::new("gpui-component/crates/ui/Cargo.toml", "Cargo.toml"),
+                            ]),
+                        TreeItem::new("gpui-component/crates/story", "story").children([
+                            TreeItem::new(
+                                "gpui-component/crates/story/src/stories/tree_story.rs",
+                                "tree_story.rs",
+                            ),
+                            TreeItem::new(
+                                "gpui-component/crates/story/src/gallery.rs",
+                                "gallery.rs",
+                            ),
+                        ]),
+                    ]),
+                TreeItem::new("gpui-component/README.md", "README.md"),
+            ]),
+    ]
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn build_file_items(ignorer: &Ignorer, root: &Path, path: &Path) -> Vec<TreeItem> {
     let mut items = Vec::new();
     if let Ok(entries) = std::fs::read_dir(path) {
         for entry in entries.flatten() {
@@ -50,7 +95,7 @@ fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<Tr
                 .to_string();
             let id = path.to_string_lossy().to_string();
             if path.is_dir() {
-                let children = build_file_items(ignorer, &root, &path);
+                let children = build_file_items(ignorer, root, &path);
                 items.push(TreeItem::new(id, file_name).children(children));
             } else {
                 items.push(TreeItem::new(id, file_name));
@@ -65,6 +110,17 @@ fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<Tr
     items
 }
 
+#[cfg(target_family = "wasm")]
+fn load_tree_items(_: PathBuf) -> Vec<TreeItem> {
+    example_file_items()
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn load_tree_items(path: PathBuf) -> Vec<TreeItem> {
+    let ignorer = Ignorer::new(&path.to_string_lossy());
+    build_file_items(&ignorer, &path, &path)
+}
+
 impl TreeStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
@@ -72,8 +128,7 @@ impl TreeStory {
 
     fn load_files(state: Entity<TreeState>, path: PathBuf, cx: &mut Context<Self>) {
         cx.spawn(async move |weak_self, cx| {
-            let ignorer = Ignorer::new(&path.to_string_lossy());
-            let items = build_file_items(&ignorer, &path, &path);
+            let items = load_tree_items(path);
             _ = state.update(cx, |state, cx| {
                 state.set_items(items.clone(), cx);
             });

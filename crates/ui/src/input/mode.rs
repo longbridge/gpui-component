@@ -16,6 +16,7 @@ pub(super) struct PendingBackgroundParse {
     pub parse_task: Rc<RefCell<Option<Task<()>>>>,
     pub language: SharedString,
     pub text: Rope,
+    pub is_folding: bool,
 }
 
 #[derive(Clone)]
@@ -224,8 +225,9 @@ impl InputMode {
     pub(super) fn update_highlighter(
         &mut self,
         selected_range: &Range<usize>,
-        text: &Rope,
-        new_text: &str,
+        old_text: &Rope,
+        new_text: &Rope,
+        change_text: &str,
         force: bool,
         cx: &mut App,
     ) -> Option<PendingBackgroundParse> {
@@ -234,6 +236,7 @@ impl InputMode {
                 language,
                 highlighter,
                 parse_task,
+                folding,
                 ..
             } => {
                 if !force && highlighter.borrow().is_some() {
@@ -250,32 +253,10 @@ impl InputMode {
                     return None;
                 };
 
-                // When full text changed, the selected_range may be out of bound (The before version).
-                let mut selected_range = selected_range.clone();
-                selected_range.end = selected_range.end.min(text.len());
-
-                // If insert a chart, this is 1.
-                // If backspace or delete, this is -1.
-                // If selected to delete, this is the length of the selected text.
-                // let changed_len = new_text.len() as isize - selected_range.len() as isize;
-                let changed_len = new_text.len() as isize - selected_range.len() as isize;
-                let new_end = (selected_range.end as isize + changed_len) as usize;
-
-                let start_pos = text.offset_to_point(selected_range.start);
-                let old_end_pos = text.offset_to_point(selected_range.end);
-                let new_end_pos = text.offset_to_point(new_end);
-
-                let edit = InputEdit {
-                    start_byte: selected_range.start,
-                    old_end_byte: selected_range.end,
-                    new_end_byte: new_end,
-                    start_position: start_pos,
-                    old_end_position: old_end_pos,
-                    new_end_position: new_end_pos,
-                };
+                let edit = replacement_input_edit(old_text, new_text, selected_range, change_text);
 
                 const SYNC_PARSE_TIMEOUT: Duration = Duration::from_millis(2);
-                let completed = h.update(Some(edit), text, Some(SYNC_PARSE_TIMEOUT));
+                let completed = h.update(Some(edit), new_text, Some(SYNC_PARSE_TIMEOUT));
                 if completed {
                     // Sync parse succeeded, cancel any pending background parse.
                     parse_task.borrow_mut().take();
@@ -284,9 +265,10 @@ impl InputMode {
                     // Timed out. Return the data needed for background parsing.
                     let pending = PendingBackgroundParse {
                         language: h.language().clone(),
-                        text: text.clone(),
+                        text: new_text.clone(),
                         highlighter: highlighter.clone(),
                         parse_task: parse_task.clone(),
+                        is_folding: *folding,
                     };
                     drop(highlighter_ref);
                     Some(pending)
@@ -320,14 +302,88 @@ impl InputMode {
     }
 }
 
+/// Builds the tree-sitter edit for a text replacement.
+///
+/// Byte offsets and positions for `start`/`old_end` come from `old_text`;
+/// `new_end` byte/position come from the post-edit `text`.
+fn replacement_input_edit(
+    old_text: &Rope,
+    new_text: &Rope,
+    selected_range: &Range<usize>,
+    change_text: &str,
+) -> InputEdit {
+    let start_byte = selected_range.start.min(old_text.len());
+    let old_end_byte = selected_range.end.min(old_text.len()).max(start_byte);
+    let new_end_byte = (start_byte + change_text.len()).min(new_text.len());
+
+    InputEdit {
+        start_byte,
+        old_end_byte,
+        new_end_byte,
+        start_position: old_text.offset_to_point(start_byte),
+        old_end_position: old_text.offset_to_point(old_end_byte),
+        new_end_position: new_text.offset_to_point(new_end_byte),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use ropey::Rope;
 
+    use super::replacement_input_edit;
     use crate::{
         highlighter::DiagnosticSet,
-        input::{TabSize, mode::InputMode},
+        input::{Point, TabSize, mode::InputMode},
     };
+
+    #[test]
+    fn test_replacement_input_edit_backspace_at_end_uses_old_range() {
+        let old_text = Rope::from_str("-=");
+        let text = Rope::from_str("-");
+        let edit = replacement_input_edit(&old_text, &text, &(1..2), "");
+
+        assert_eq!(edit.start_byte, 1);
+        assert_eq!(edit.old_end_byte, 2);
+        assert_eq!(edit.new_end_byte, 1);
+        assert_eq!(edit.start_position, Point::new(0, 1));
+        assert_eq!(edit.old_end_position, Point::new(0, 2));
+        assert_eq!(edit.new_end_position, Point::new(0, 1));
+    }
+
+    #[test]
+    #[cfg(not(target_family = "wasm"))]
+    fn test_replacement_input_edit_shifts_tree_sitter_included_ranges() {
+        let old_source = "[1,2]";
+        let new_source = "[1,2";
+        let old_text = Rope::from_str(old_source);
+        let text = Rope::from_str(new_source);
+        let edit = replacement_input_edit(&old_text, &text, &(4..5), "");
+
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_json::LANGUAGE.into())
+            .expect("JSON parser should load");
+        parser
+            .set_included_ranges(&[tree_sitter::Range {
+                start_byte: 0,
+                end_byte: old_source.len(),
+                start_point: Point::new(0, 0),
+                end_point: Point::new(0, old_source.len()),
+            }])
+            .expect("included range should be valid");
+
+        let mut tree = parser
+            .parse(old_source, None)
+            .expect("old JSON should parse");
+        tree.edit(&edit);
+        let included_range = tree
+            .included_ranges()
+            .pop()
+            .expect("tree should keep the included range");
+
+        assert_eq!(included_range.end_byte, new_source.len());
+        assert_eq!(included_range.end_point, Point::new(0, new_source.len()));
+    }
 
     #[test]
     fn test_code_editor() {

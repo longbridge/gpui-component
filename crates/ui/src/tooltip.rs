@@ -2,9 +2,9 @@ use std::{cell::Cell, rc::Rc, time::Duration};
 
 use gpui::{
     Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Display, Element, ElementId,
-    GlobalElementId, Half, InspectorElementId, IntoElement, LayoutId, ParentElement, Pixels, Point,
-    Position, Render, SharedString, Size, StatefulInteractiveElement, Style, StyleRefinement,
-    Styled, Task, Window, deferred, div, point, prelude::FluentBuilder, px,
+    GlobalElementId, Half, InspectorElementId, IntoElement, LayoutId, MouseButton, ParentElement,
+    Pixels, Point, Position, Render, SharedString, Size, StatefulInteractiveElement, Style,
+    StyleRefinement, Styled, Task, Window, deferred, div, point, prelude::FluentBuilder, px,
 };
 
 use crate::{
@@ -460,6 +460,30 @@ impl TooltipOverlay {
             });
         }));
     }
+
+    pub(crate) fn hide(&mut self, cx: &mut Context<Self>) {
+        if self.clear_state() {
+            cx.notify();
+        }
+    }
+
+    fn clear_state(&mut self) -> bool {
+        let changed = self.content.is_some()
+            || self.prev_trigger_bounds.is_some()
+            || self.had_recent_tooltip
+            || self.is_switching
+            || self._show_task.is_some()
+            || self._hide_task.is_some();
+
+        self.content = None;
+        self.prev_trigger_bounds = None;
+        self.had_recent_tooltip = false;
+        self.is_switching = false;
+        self._show_task = None;
+        self._hide_task = None;
+
+        changed
+    }
 }
 
 impl Render for TooltipOverlay {
@@ -597,6 +621,13 @@ pub(crate) trait ManagedTooltipExt:
                 }
             }
         })
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            if let Some(overlay) = Root::tooltip_overlay(window, cx) {
+                overlay.update(cx, |overlay, cx| {
+                    overlay.hide(cx);
+                });
+            }
+        })
     }
 }
 
@@ -607,12 +638,38 @@ mod tests {
     use super::*;
     use gpui::size;
 
+    fn test_content(bounds: Bounds<Pixels>) -> TooltipContent {
+        TooltipContent {
+            build: Rc::new(|window, cx| Tooltip::new("Test tooltip").build(window, cx)),
+            trigger_bounds: bounds,
+        }
+    }
+
     fn test_bounds(x: f32, y: f32, width: f32, height: f32) -> Bounds<Pixels> {
         Bounds::new(point(px(x), px(y)), size(px(width), px(height)))
     }
 
     fn test_size(width: f32, height: f32) -> Size<Pixels> {
         size(px(width), px(height))
+    }
+
+    #[test]
+    fn tooltip_overlay_clear_state_resets_active_tooltip() {
+        let mut overlay = TooltipOverlay::new();
+
+        overlay.content = Some(test_content(test_bounds(10., 10., 40., 20.)));
+        overlay.prev_trigger_bounds = Some(test_bounds(0., 0., 40., 20.));
+        overlay.had_recent_tooltip = true;
+        overlay.is_switching = true;
+        overlay._show_task = Some(Task::ready(()));
+
+        assert!(overlay.clear_state());
+        assert!(overlay.content.is_none());
+        assert!(overlay.prev_trigger_bounds.is_none());
+        assert!(!overlay.had_recent_tooltip);
+        assert!(!overlay.is_switching);
+        assert!(overlay._show_task.is_none());
+        assert!(overlay._hide_task.is_none());
     }
 
     #[test]

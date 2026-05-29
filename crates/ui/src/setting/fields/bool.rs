@@ -7,7 +7,7 @@ use crate::{
         AnySettingField, RenderOptions,
     },
     switch::Switch,
-    Sizable, StyledExt,
+    Disableable, Sizable, StyledExt,
 };
 use gpui::{div, AnyElement, App, IntoElement, ParentElement as _, StyleRefinement, Window};
 
@@ -38,6 +38,7 @@ impl SettingFieldRender for BoolField {
             .child(if self.use_switch {
                 Switch::new("check")
                     .checked(checked)
+                    .disabled(options.disabled)
                     .with_size(options.size)
                     .on_click(move |checked: &bool, _, cx: &mut App| {
                         set_value(*checked, cx);
@@ -46,6 +47,7 @@ impl SettingFieldRender for BoolField {
             } else {
                 Checkbox::new("check")
                     .checked(checked)
+                    .disabled(options.disabled)
                     .with_size(options.size)
                     .on_click(move |checked: &bool, _, cx: &mut App| {
                         set_value(*checked, cx);

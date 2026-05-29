@@ -3,22 +3,20 @@ use std::rc::Rc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Context, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
-    InteractiveElement as _, IntoElement, IsZero, MouseButton, ParentElement as _, Rems,
-    RenderOnce, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
+    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce,
+    StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
 use crate::input::clear_button;
-use crate::input::element::{LINE_NUMBER_RIGHT_MARGIN, RIGHT_MARGIN};
 use crate::menu::PopupMenu;
-use crate::scroll::Scrollbar;
 use crate::spinner::Spinner;
 use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
-use super::InputState;
+use super::{InputState, element::EditorScrollbar};
 
 /// Returns `(background, foreground)` colors for input-like components.
 pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
@@ -197,7 +195,6 @@ impl Input {
         input_state: &Entity<InputState>,
         state: &InputState,
         window: &Window,
-        _cx: &App,
     ) -> impl IntoElement {
         let base_size = window.text_style().font_size;
         let rem_size = window.rem_size();
@@ -221,42 +218,19 @@ impl Input {
                 .unwrap_or(px(0.)),
         };
 
+        state.editor_scrollbar_paddings.set(paddings);
+        state.editor_scrollbar_snapshot.set(None);
+
         v_flex()
             .size_full()
             .children(state.search_panel.clone())
-            .child(div().flex_1().child(input_state.clone()).map(|this| {
-                if let Some(last_layout) = state.last_layout.as_ref() {
-                    let left = if last_layout.line_number_width.is_zero() {
-                        px(0.)
-                    } else {
-                        // Align left edge to the Line number.
-                        paddings.left + last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN
-                    };
-
-                    let scroll_size = gpui::Size {
-                        width: state.scroll_size.width - left + paddings.right + RIGHT_MARGIN,
-                        height: state.scroll_size.height,
-                    };
-
-                    let scrollbar = if !state.soft_wrap {
-                        Scrollbar::new(&state.scroll_handle)
-                    } else {
-                        Scrollbar::vertical(&state.scroll_handle)
-                    };
-
-                    this.relative().child(
-                        div()
-                            .absolute()
-                            .top(-paddings.top)
-                            .left(left)
-                            .right(-paddings.right)
-                            .bottom(-paddings.bottom)
-                            .child(scrollbar.scroll_size(scroll_size)),
-                    )
-                } else {
-                    this
-                }
-            }))
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .child(input_state.clone())
+                    .child(EditorScrollbar::new(input_state.clone())),
+            )
     }
 }
 
@@ -422,13 +396,7 @@ impl RenderOnce for Input {
             .children(prefix)
             .when(state.mode.is_multi_line(), |mut this| {
                 let paddings = this.style().padding.clone();
-                this.child(Self::render_editor(
-                    paddings,
-                    &self.state,
-                    &state,
-                    window,
-                    cx,
-                ))
+                this.child(Self::render_editor(paddings, &self.state, &state, window))
             })
             .when(!state.mode.is_multi_line(), |this| {
                 this.child(self.state.clone())

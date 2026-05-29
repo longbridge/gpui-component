@@ -107,6 +107,22 @@ Select:
     zh-CN: "请选择"
     zh-HK: "請選擇"
     it: Seleziona
+ComboBox:
+  placeholder:
+    en: "Please select"
+    zh-CN: "请选择"
+    zh-HK: "請選擇"
+    it: Seleziona
+  search_placeholder:
+    en: "Search..."
+    zh-CN: "搜索..."
+    zh-HK: "搜索..."
+    it: "Cerca..."
+  empty:
+    en: "No results"
+    zh-CN: "暂无数据"
+    zh-HK: "暫無數據"
+    it: "Nessun risultato"
 Dock:
   Unnamed:
     en: Unnamed

@@ -247,6 +247,7 @@ pub struct RenderOptions {
     pub size: Size,
     pub group_variant: GroupBoxVariant,
     pub layout: Axis,
+    pub disabled: bool,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -280,6 +281,7 @@ impl RenderOnce for Settings {
             size: self.size,
             group_variant: self.group_variant,
             layout: Axis::Horizontal,
+            disabled: false,
         };
 
         h_resizable(self.id.clone())

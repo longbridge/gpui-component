@@ -1,11 +1,17 @@
 [
+  (code_span)
+] @text.code.span
+
+[
   (emphasis_delimiter)
   (code_span_delimiter)
 ] @punctuation.delimiter
 
-(emphasis) @emphasis
+((emphasis) @emphasis
+  (#set! highlight.allow-overlap))
 
-(strong_emphasis) @emphasis.strong
+((strong_emphasis) @emphasis.strong
+  (#set! highlight.allow-overlap))
 
 [
   (link_destination)

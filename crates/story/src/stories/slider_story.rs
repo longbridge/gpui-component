@@ -7,7 +7,7 @@ use gpui_component::{
     checkbox::Checkbox,
     clipboard::Clipboard,
     h_flex,
-    slider::{Slider, SliderEvent, SliderScale, SliderState},
+    slider::{Slider, SliderEvent, SliderScale, SliderState, SliderValue},
     v_flex,
 };
 
@@ -17,9 +17,11 @@ pub struct SliderStory {
     focus_handle: gpui::FocusHandle,
     slider1: Entity<SliderState>,
     slider1_value: f32,
+    slider1_released_value: f32,
     slider2: Entity<SliderState>,
     slider2_value: f32,
     slider3: Entity<SliderState>,
+    slider3_released_value: SliderValue,
     slider_hsl: [Entity<SliderState>; 4],
     slider_hsl_value: Hsla,
     slider4: Entity<SliderState>,
@@ -125,10 +127,22 @@ impl SliderStory {
                     this.slider1_value = value.start();
                     cx.notify();
                 }
+                SliderEvent::Release(value) => {
+                    this.slider1_released_value = value.start();
+                    cx.notify();
+                }
             }),
             cx.subscribe(&slider2, |this, _, event: &SliderEvent, cx| match event {
                 SliderEvent::Change(value) => {
                     this.slider2_value = value.start();
+                    cx.notify();
+                }
+                SliderEvent::Release(_) => {}
+            }),
+            cx.subscribe(&slider3, |this, _, event: &SliderEvent, cx| match event {
+                SliderEvent::Change(_) => {}
+                SliderEvent::Release(value) => {
+                    this.slider3_released_value = *value;
                     cx.notify();
                 }
             }),
@@ -148,6 +162,7 @@ impl SliderStory {
                             );
                             cx.notify();
                         }
+                        SliderEvent::Release(_) => {}
                     })
                 })
                 .collect::<Vec<_>>(),
@@ -160,9 +175,11 @@ impl SliderStory {
         Self {
             focus_handle: cx.focus_handle(),
             slider1_value: 0.,
+            slider1_released_value: 0.,
             slider2_value: 0.,
             slider1,
             slider2,
+            slider3_released_value: (12.0, 45.0).into(),
             slider3,
             slider4,
             slider_hsl,
@@ -203,7 +220,8 @@ impl Render for SliderStory {
                     .max_w_md()
                     .v_flex()
                     .child(Slider::new(&self.slider1).disabled(self.disabled))
-                    .child(format!("Value: {}", self.slider1_value)),
+                    .child(format!("Value: {}", self.slider1_value))
+                    .child(format!("Released: {}", self.slider1_released_value)),
             )
             .child(
                 section("Slider (0 - 5) and with color")
@@ -222,7 +240,8 @@ impl Render for SliderStory {
                     .max_w_md()
                     .v_flex()
                     .child(Slider::new(&self.slider3).disabled(self.disabled))
-                    .child(format!("Value: {}", self.slider3.read(cx).value())),
+                    .child(format!("Value: {}", self.slider3.read(cx).value()))
+                    .child(format!("Released: {}", self.slider3_released_value)),
             )
             .child(
                 section("Vertical with Range")
