@@ -41,8 +41,7 @@ pub struct SearchMatcher {
 
     pub(super) matched_ranges: Rc<Vec<Range<usize>>>,
     pub(super) current_match_ix: usize,
-    // TODO: update the comment
-    /// Is in replacing mode, if true, the next update will not reset the current match index.
+    /// Is in replacing mode, if true, the next update will update the current match index based on matched ranges.
     replacing: bool,
 }
 
@@ -80,7 +79,6 @@ impl SearchMatcher {
             }
         }
         self.matched_ranges = Rc::new(new_ranges);
-        // Is in replacing mode, if true, the next update will update the current match index based on matched ranges.
         if !self.replacing {
             self.current_match_ix = 0;
         } else if self.matched_ranges.is_empty() {
