@@ -1055,17 +1055,12 @@ impl TextElement {
         let text = &state.text;
         let is_multi_line = state.mode.is_multi_line();
 
-        let (mut highlighter, diagnostics, custom_highlighter) = match &state.mode {
+        let (mut highlighter, diagnostics) = match &state.mode {
             InputMode::CodeEditor {
                 highlighter,
                 diagnostics,
-                custom_highlighter,
                 ..
-            } => (
-                highlighter.borrow_mut(),
-                diagnostics,
-                custom_highlighter.clone(),
-            ),
+            } => (highlighter.borrow_mut(), diagnostics),
             _ => return None,
         };
         let highlighter = highlighter.as_mut()?;
@@ -1125,25 +1120,15 @@ impl TextElement {
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
 
-        // Custom highlighter tokens, resolved through the active highlight
-        // theme so the custom source shares the same colour vocabulary as
-        // the tree-sitter path. Empty Vec when no custom highlighter is set,
-        // so `combine_highlights` short-circuits.
-        let custom_styles = match &custom_highlighter {
-            Some(h) => {
-                let highlight_theme = &cx.theme().highlight_theme;
-                h.tokens(visible_byte_range.clone())
-                    .into_iter()
-                    .map(|(range, name)| {
-                        (
-                            range,
-                            highlight_theme.style(name.as_ref()).unwrap_or_default(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            }
-            None => Vec::new(),
-        };
+        // Range semantic tokens, resolved from the LSP provider's cached
+        // result through the active highlight theme so it shares the same
+        // colour vocabulary as the tree-sitter path. Empty Vec when no
+        // provider is set, so `combine_highlights` short-circuits.
+        let custom_styles = state.lsp.semantic_tokens_for_range(
+            text,
+            &visible_byte_range,
+            &cx.theme().highlight_theme,
+        );
 
         // hover definition style
         if let Some(hover_style) = self.layout_hover_definition(cx) {

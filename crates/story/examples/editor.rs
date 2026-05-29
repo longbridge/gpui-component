@@ -13,13 +13,11 @@ use gpui_component::{
     ActiveTheme, IconName, Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
-    highlighter::{
-        CustomHighlighter, Diagnostic, DiagnosticSeverity, Language, LanguageConfig,
-        LanguageRegistry,
-    },
+    highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
-        HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
+        DocumentRangeSemanticTokensProvider, HoverProvider, Input, InputEvent, InputState,
+        Position, Rope, RopeExt, TabSize,
     },
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
@@ -31,7 +29,8 @@ use gpui_component_story::Open;
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
     CompletionTextEdit, InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,
-    InsertReplaceEdit, InsertTextFormat, TextEdit, WorkspaceEdit,
+    InsertReplaceEdit, InsertTextFormat, SemanticToken, SemanticTokenType, SemanticTokens,
+    SemanticTokensLegend, TextEdit, WorkspaceEdit,
 };
 
 enum Lang {
@@ -69,54 +68,82 @@ fn init() {
     );
 }
 
-/// Example consumer of [`CustomHighlighter`]: tags `TODO` / `FIXME` / `XXX`
-/// / `HACK` / `NOTE` markers anywhere in the buffer with the
-/// `keyword.special` token so they stand out against the tree-sitter
-/// comment colour.
+/// Example [`DocumentRangeSemanticTokensProvider`]: tags `TODO` / `FIXME` /
+/// `XXX` / `HACK` / `NOTE` markers with a `keyword.special` semantic token
+/// so they stand out against the tree-sitter comment colour.
 ///
-/// Demonstrates the stateful pattern the trait expects — heavy work happens
-/// off the render thread (here: in response to `InputEvent::Change`) and
-/// the per-frame [`CustomHighlighter::tokens`] call is a pure read of
-/// pre-computed state. A real consumer plugging in syntect or a language
-/// server would follow the same shape with a different parser inside
-/// [`refresh`](MarkerHighlighter::refresh).
-#[derive(Default)]
-struct MarkerHighlighter {
-    tokens: RwLock<Vec<(Range<usize>, SharedString)>>,
-}
+/// Installed on `editor.lsp.semantic_tokens_provider` just like the other
+/// LSP providers. The editor fetches it (debounced) on document change,
+/// caches the result, and composes it into the render pipeline. This
+/// example does its (cheap) scan synchronously and returns a ready task; a
+/// real language-server-backed provider would issue an async request and a
+/// heavy local parser (syntect, …) would offload to a background task.
+struct MarkerHighlighter;
 
 impl MarkerHighlighter {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn refresh(&self, text: &Rope) {
-        const MARKERS: &[&str] = &["TODO", "FIXME", "XXX", "HACK", "NOTE"];
-        let token: SharedString = "keyword.special".into();
-        let s = text.to_string();
-        let mut new_tokens: Vec<(Range<usize>, SharedString)> = Vec::new();
-        for marker in MARKERS {
-            let mut start = 0usize;
-            while let Some(rel) = s[start..].find(marker) {
-                let abs = start + rel;
-                new_tokens.push((abs..abs + marker.len(), token.clone()));
-                start = abs + marker.len();
-            }
-        }
-        new_tokens.sort_by_key(|(r, _)| r.start);
-        *self.tokens.write().unwrap() = new_tokens;
-    }
+    /// Token-type name emitted for every marker. Resolved against the active
+    /// `HighlightTheme`; `keyword.special` falls back to `keyword`.
+    const TOKEN_TYPE: &'static str = "keyword.special";
 }
 
-impl CustomHighlighter for MarkerHighlighter {
-    fn tokens(&self, range: Range<usize>) -> Vec<(Range<usize>, SharedString)> {
-        self.tokens
-            .read()
-            .unwrap()
-            .iter()
-            .filter(|(r, _)| r.start >= range.start && r.end <= range.end)
-            .cloned()
-            .collect()
+impl DocumentRangeSemanticTokensProvider for MarkerHighlighter {
+    fn legend(&self) -> SemanticTokensLegend {
+        SemanticTokensLegend {
+            token_types: vec![SemanticTokenType::from(Self::TOKEN_TYPE.to_string())],
+            token_modifiers: vec![],
+        }
+    }
+
+    fn semantic_tokens(
+        &self,
+        text: &Rope,
+        range: Range<usize>,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Task<Result<SemanticTokens>> {
+        const MARKERS: &[&str] = &["TODO", "FIXME", "XXX", "HACK", "NOTE"];
+
+        // Scan the requested range and collect absolute (line, character,
+        // length) hits.
+        let slice = text.slice(range.clone()).to_string();
+        let mut hits: Vec<(u32, u32, u32)> = Vec::new();
+        for marker in MARKERS {
+            let mut from = 0;
+            while let Some(rel) = slice[from..].find(marker) {
+                let abs = range.start + from + rel;
+                let pos = text.offset_to_position(abs);
+                hits.push((pos.line, pos.character, marker.chars().count() as u32));
+                from += rel + marker.len();
+            }
+        }
+        hits.sort_unstable();
+
+        // Delta-encode into LSP semantic tokens — the exact format a real
+        // language server returns from `textDocument/semanticTokens/range`.
+        let mut data = Vec::with_capacity(hits.len());
+        let (mut prev_line, mut prev_char) = (0u32, 0u32);
+        for (line, character, length) in hits {
+            let delta_line = line - prev_line;
+            let delta_start = if delta_line == 0 {
+                character - prev_char
+            } else {
+                character
+            };
+            data.push(SemanticToken {
+                delta_line,
+                delta_start,
+                length,
+                token_type: 0,
+                token_modifiers_bitset: 0,
+            });
+            prev_line = line;
+            prev_char = character;
+        }
+
+        Task::ready(Ok(SemanticTokens {
+            result_id: None,
+            data,
+        }))
     }
 }
 
@@ -131,7 +158,6 @@ pub struct Example {
     show_whitespaces: bool,
     folding: bool,
     lsp_store: ExampleLspStore,
-    marker_highlighter: Arc<MarkerHighlighter>,
     _subscriptions: Vec<Subscription>,
     _lint_task: Task<()>,
 }
@@ -745,7 +771,6 @@ impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = Lang::BuiltIn(Language::Rust);
         let lsp_store = ExampleLspStore::new();
-        let marker_highlighter = Arc::new(MarkerHighlighter::new());
 
         let editor = cx.new(|cx| {
             let mut editor = InputState::new(window, cx)
@@ -766,14 +791,9 @@ impl Example {
             editor.lsp.hover_provider = Some(lsp_store.clone());
             editor.lsp.definition_provider = Some(lsp_store.clone());
             editor.lsp.document_color_provider = Some(lsp_store.clone());
-
-            // Install the example custom highlighter and seed it from the
-            // initial buffer text so markers are tagged on first paint.
-            marker_highlighter.refresh(editor.text());
-            editor.set_custom_highlighter(
-                Some(marker_highlighter.clone() as Arc<dyn CustomHighlighter>),
-                cx,
-            );
+            // Install the example range semantic tokens provider, alongside
+            // the other LSP providers.
+            editor.lsp.semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
 
             editor
         });
@@ -790,9 +810,7 @@ impl Example {
         let tree_state = cx.new(|cx| TreeState::new(cx));
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
-        let _subscriptions = vec![cx.subscribe(&editor, |this, editor, _: &InputEvent, cx| {
-            let text = editor.read(cx).text().clone();
-            this.marker_highlighter.refresh(&text);
+        let _subscriptions = vec![cx.subscribe(&editor, |this, _editor, _: &InputEvent, cx| {
             this.lint_document(cx);
         })];
 
@@ -807,7 +825,6 @@ impl Example {
             show_whitespaces: false,
             folding: true,
             lsp_store,
-            marker_highlighter,
             _subscriptions,
             _lint_task: Task::ready(()),
         }
