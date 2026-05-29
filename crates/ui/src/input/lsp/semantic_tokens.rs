@@ -59,16 +59,39 @@ impl Lsp {
     /// Get semantic token styles that intersect with the visible byte range,
     /// resolving each cached token's type name against `theme`.
     ///
-    /// Returns byte ranges and styles. Tokens fully outside `visible_range`,
+    /// Called on every paint. The cache is sorted by start position, so this
+    /// binary-searches the small window of tokens that can touch the viewport
+    /// (`O(log N + visible)`) instead of scanning the whole document — only
+    /// the windowed candidates pay the position→byte conversion. Tokens
     /// resolving to an empty byte range, or whose type name the theme does
-    /// not recognize are skipped.
+    /// not recognize, are skipped.
+    ///
+    /// Returns byte ranges and styles.
     pub(crate) fn semantic_tokens_for_range(
         &self,
         text: &Rope,
         visible_range: &Range<usize>,
         theme: &HighlightTheme,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
-        self.semantic_tokens
+        if self.semantic_tokens.is_empty() {
+            return Vec::new();
+        }
+
+        let visible_start = text.offset_to_position(visible_range.start);
+        let visible_end = text.offset_to_position(visible_range.end);
+
+        // Cache is sorted by `range.start`. A token can only touch the
+        // viewport if its start is before `visible_end` (upper bound) and it
+        // is not on a line entirely above the viewport's first line (lower
+        // bound — tokens are single-line, so an earlier line cannot reach in).
+        let hi = self
+            .semantic_tokens
+            .partition_point(|(range, _)| range.start < visible_end);
+        let lo = self
+            .semantic_tokens
+            .partition_point(|(range, _)| range.start.line < visible_start.line);
+
+        self.semantic_tokens[lo..hi]
             .iter()
             .filter_map(|(range, name)| {
                 let start = text.position_to_offset(&range.start);
@@ -137,6 +160,14 @@ fn decode_semantic_tokens(
     tokens: &SemanticTokens,
     legend: &SemanticTokensLegend,
 ) -> Vec<(lsp_types::Range, SharedString)> {
+    // Resolve the legend names once; tokens then share them via cheap
+    // ref-counted clones instead of allocating a String per token.
+    let names: Vec<SharedString> = legend
+        .token_types
+        .iter()
+        .map(|t| SharedString::from(t.as_str().to_owned()))
+        .collect();
+
     let mut out = Vec::with_capacity(tokens.data.len());
     let mut line: u32 = 0;
     let mut character: u32 = 0;
@@ -149,16 +180,13 @@ fn decode_semantic_tokens(
             character += token.delta_start;
         }
 
-        let Some(token_type) = legend.token_types.get(token.token_type as usize) else {
+        let Some(name) = names.get(token.token_type as usize) else {
             continue;
         };
 
         let start = Position::new(line, character);
         let end = Position::new(line, character + token.length);
-        out.push((
-            lsp_types::Range { start, end },
-            SharedString::from(token_type.as_str().to_owned()),
-        ));
+        out.push((lsp_types::Range { start, end }, name.clone()));
     }
 
     out.sort_by_key(|(range, _)| range.start);
@@ -259,6 +287,41 @@ mod tests {
         assert!(
             styles[0].1 != HighlightStyle::default(),
             "'keyword' should resolve to a non-default style on default-dark"
+        );
+    }
+
+    #[test]
+    fn test_for_range_binary_search_window() {
+        // 100 lines of "foo bar\n" (8 bytes each), one keyword token per line
+        // covering "foo" (cols 0..3).
+        let text = Rope::from("foo bar\n".repeat(100).as_str());
+        let theme = HighlightTheme::default_dark();
+
+        let mut lsp = Lsp::default();
+        lsp.semantic_tokens = (0..100u32)
+            .map(|line| {
+                (
+                    lsp_types::Range {
+                        start: Position::new(line, 0),
+                        end: Position::new(line, 3),
+                    },
+                    SharedString::from("keyword"),
+                )
+            })
+            .collect();
+
+        // Only line 50 visible ("foo" at bytes 400..403). The binary-search
+        // window must return exactly that one token out of 100.
+        let line_bytes = "foo bar\n".len();
+        let start = 50 * line_bytes;
+        let styles = lsp.semantic_tokens_for_range(&text, &(start..start + 3), &theme);
+        assert_eq!(styles.len(), 1);
+        assert_eq!(styles[0].0, start..start + 3);
+
+        // Empty viewport before all tokens windows nothing in.
+        assert!(
+            lsp.semantic_tokens_for_range(&text, &(0..0), &theme)
+                .is_empty()
         );
     }
 }
