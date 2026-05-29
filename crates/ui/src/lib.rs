@@ -13,7 +13,6 @@ mod index_path;
 mod inspector;
 mod root;
 mod styled;
-mod text_selection;
 mod time;
 mod title_bar;
 mod virtual_list;

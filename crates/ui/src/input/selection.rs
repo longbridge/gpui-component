@@ -4,7 +4,7 @@ use gpui::{Context, Window};
 use ropey::Rope;
 use sum_tree::Bias;
 
-use crate::{RopeExt as _, input::InputState, text_selection::word_range_from_chars};
+use crate::{RopeExt as _, input::InputState, text::selection::word_range_from_chars};
 
 impl InputState {
     /// Select the word at the given offset on double-click.
