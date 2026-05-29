@@ -41,6 +41,7 @@ pub struct SearchMatcher {
 
     pub(super) matched_ranges: Rc<Vec<Range<usize>>>,
     pub(super) current_match_ix: usize,
+    // TODO: update the comment
     /// Is in replacing mode, if true, the next update will not reset the current match index.
     replacing: bool,
 }
@@ -79,6 +80,7 @@ impl SearchMatcher {
             }
         }
         self.matched_ranges = Rc::new(new_ranges);
+        // Is in replacing mode, if true, the next update will update the current match index based on matched ranges.
         if !self.replacing {
             self.current_match_ix = 0;
         } else if self.matched_ranges.is_empty() {
@@ -111,6 +113,22 @@ impl SearchMatcher {
         self.matched_ranges.len()
     }
 
+    fn peek(&self) -> Option<Range<usize>> {
+        let next_match_ix = self.next_ix()?;
+        self.matched_ranges.get(next_match_ix).cloned()
+    }
+
+    fn next_ix(&self) -> Option<usize> {
+        if self.matched_ranges.is_empty() {
+            None
+        } else if self.current_match_ix < self.matched_ranges.len().saturating_sub(1) {
+            // if current match isn't the last one
+            Some(self.current_match_ix + 1)
+        } else {
+            Some(0)
+        }
+    }
+
     fn label(&self) -> String {
         if self.len() == 0 {
             return "0/0".to_string();
@@ -133,17 +151,9 @@ impl Iterator for SearchMatcher {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.matched_ranges.is_empty() {
-            return None;
-        }
-
-        if self.current_match_ix < self.matched_ranges.len().saturating_sub(1) {
-            self.current_match_ix += 1;
-        } else {
-            self.current_match_ix = 0;
-        }
-
-        self.matched_ranges.get(self.current_match_ix).cloned()
+        let next_match_ix = self.next_ix()?;
+        self.current_match_ix = next_match_ix;
+        self.matched_ranges.get(next_match_ix).cloned()
     }
 }
 
@@ -377,18 +387,8 @@ impl SearchPanel {
             .cloned()
         {
             let text_state = self.editor.clone();
-            let next_match_ix =
-                if previous_match_ix < self.matcher.matched_ranges.len().saturating_sub(1) {
-                    previous_match_ix + 1
-                } else {
-                    0
-                };
-            let next_range = self
-                .matcher
-                .matched_ranges
-                .get(next_match_ix)
-                .cloned()
-                .unwrap_or(range.clone());
+            let next_match_ix = self.matcher.next_ix().unwrap_or(previous_match_ix);
+            let next_range = self.matcher.peek().unwrap_or(range.clone());
             self.matcher.current_match_ix = next_match_ix;
             let direction = Self::next_scroll_direction(previous_match_ix, next_match_ix);
             cx.spawn_in(window, async move |_, cx| {
@@ -696,6 +696,15 @@ mod tests {
     #[test]
     fn test_next_scroll_direction_returns_none_for_single_match() {
         assert!(SearchPanel::next_scroll_direction(0, 0).is_none());
+    }
+
+    #[test]
+    fn test_next_ix_wraps_to_start() {
+        let mut matcher = SearchMatcher::new();
+        matcher.matched_ranges = Rc::new(vec![5..10, 15..20, 25..30]);
+        matcher.current_match_ix = 2;
+
+        assert_eq!(matcher.next_ix(), Some(0));
     }
 
     #[test]
