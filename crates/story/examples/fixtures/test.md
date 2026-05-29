@@ -252,3 +252,23 @@ x^3 + y^3 &= z^3
 $$
 
 This is final paragraph, it includes a code block and a list of items.
+
+### Task markers
+
+The custom `MarkerHighlighter` (an LSP-style semantic tokens provider)
+highlights these markers in the source editor on the left:
+
+- TODO: support nested task lists
+- FIXME: links with parentheses break parsing
+- XXX: revisit the table column-width heuristic
+- HACK: temporary workaround for footnote ordering
+- NOTE: math blocks require the `$$` fence
+
+It also catches markers inside inline `code` and fenced blocks:
+
+```rust
+fn render() {
+    // TODO: cache the parsed AST between frames
+    // FIXME: handle empty input without a panic
+}
+```

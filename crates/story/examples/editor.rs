@@ -16,8 +16,7 @@ use gpui_component::{
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
-        DocumentRangeSemanticTokensProvider, HoverProvider, Input, InputEvent, InputState,
-        Position, Rope, RopeExt, TabSize,
+        HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
     },
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
@@ -29,8 +28,7 @@ use gpui_component_story::Open;
 use lsp_types::{
     CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
     CompletionTextEdit, InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,
-    InsertReplaceEdit, InsertTextFormat, SemanticToken, SemanticTokenType, SemanticTokens,
-    SemanticTokensLegend, TextEdit, WorkspaceEdit,
+    InsertReplaceEdit, InsertTextFormat, TextEdit, WorkspaceEdit,
 };
 
 enum Lang {
@@ -66,85 +64,6 @@ fn init() {
             "",
         ),
     );
-}
-
-/// Example [`DocumentRangeSemanticTokensProvider`]: tags `TODO` / `FIXME` /
-/// `XXX` / `HACK` / `NOTE` markers with a `keyword.special` semantic token
-/// so they stand out against the tree-sitter comment colour.
-///
-/// Installed on `editor.lsp.semantic_tokens_provider` just like the other
-/// LSP providers. The editor fetches it (debounced) on document change,
-/// caches the result, and composes it into the render pipeline. This
-/// example does its (cheap) scan synchronously and returns a ready task; a
-/// real language-server-backed provider would issue an async request and a
-/// heavy local parser (syntect, …) would offload to a background task.
-struct MarkerHighlighter;
-
-impl MarkerHighlighter {
-    /// Token-type name emitted for every marker. Resolved against the active
-    /// `HighlightTheme`; `keyword.special` falls back to `keyword`.
-    const TOKEN_TYPE: &'static str = "keyword.special";
-}
-
-impl DocumentRangeSemanticTokensProvider for MarkerHighlighter {
-    fn legend(&self) -> SemanticTokensLegend {
-        SemanticTokensLegend {
-            token_types: vec![SemanticTokenType::from(Self::TOKEN_TYPE.to_string())],
-            token_modifiers: vec![],
-        }
-    }
-
-    fn semantic_tokens(
-        &self,
-        text: &Rope,
-        range: Range<usize>,
-        _window: &mut Window,
-        _cx: &mut App,
-    ) -> Task<Result<SemanticTokens>> {
-        const MARKERS: &[&str] = &["TODO", "FIXME", "XXX", "HACK", "NOTE"];
-
-        // Scan the requested range and collect absolute (line, character,
-        // length) hits.
-        let slice = text.slice(range.clone()).to_string();
-        let mut hits: Vec<(u32, u32, u32)> = Vec::new();
-        for marker in MARKERS {
-            let mut from = 0;
-            while let Some(rel) = slice[from..].find(marker) {
-                let abs = range.start + from + rel;
-                let pos = text.offset_to_position(abs);
-                hits.push((pos.line, pos.character, marker.chars().count() as u32));
-                from += rel + marker.len();
-            }
-        }
-        hits.sort_unstable();
-
-        // Delta-encode into LSP semantic tokens — the exact format a real
-        // language server returns from `textDocument/semanticTokens/range`.
-        let mut data = Vec::with_capacity(hits.len());
-        let (mut prev_line, mut prev_char) = (0u32, 0u32);
-        for (line, character, length) in hits {
-            let delta_line = line - prev_line;
-            let delta_start = if delta_line == 0 {
-                character - prev_char
-            } else {
-                character
-            };
-            data.push(SemanticToken {
-                delta_line,
-                delta_start,
-                length,
-                token_type: 0,
-                token_modifiers_bitset: 0,
-            });
-            prev_line = line;
-            prev_char = character;
-        }
-
-        Task::ready(Ok(SemanticTokens {
-            result_id: None,
-            data,
-        }))
-    }
 }
 
 pub struct Example {
@@ -791,9 +710,6 @@ impl Example {
             editor.lsp.hover_provider = Some(lsp_store.clone());
             editor.lsp.definition_provider = Some(lsp_store.clone());
             editor.lsp.document_color_provider = Some(lsp_store.clone());
-            // Install the example range semantic tokens provider, alongside
-            // the other LSP providers.
-            editor.lsp.semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
 
             editor
         });
