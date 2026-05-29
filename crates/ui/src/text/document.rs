@@ -30,6 +30,14 @@ impl NodeRenderOptions {
 }
 
 impl ParsedDocument {
+    pub(super) fn text(&self) -> String {
+        let mut text = String::new();
+        for block in self.blocks.iter() {
+            text.push_str(&block.text());
+        }
+        text
+    }
+
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
         for block in self.blocks.iter() {

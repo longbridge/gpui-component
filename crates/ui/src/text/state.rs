@@ -11,7 +11,7 @@ use crate::{
     ActiveTheme, ElementExt,
     async_util::{Receiver, Sender, unbounded},
     highlighter::HighlightTheme,
-    input::{self, Copy},
+    input::{self, Copy, SelectAll},
     scroll::AutoScroll,
     text::{
         CodeBlockActionsFn, TextViewStyle,
@@ -29,6 +29,10 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("cmd-c", input::Copy, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-c", input::Copy, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-a", input::SelectAll, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-a", input::SelectAll, Some(CONTEXT)),
     ]);
 }
 
@@ -57,6 +61,9 @@ pub struct TextViewState {
     pub(super) is_selecting: bool,
     /// The local (in TextView) position of the selection.
     selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
+    multi_click_selection: Option<TextViewMultiClickSelection>,
+    selected_text_override: Option<String>,
+    select_all: bool,
     pub(super) auto_scroll: AutoScroll,
 
     pub(super) parsed_content: ParsedContent,
@@ -101,7 +108,7 @@ impl TextViewState {
                         // positions remain valid for append-only updates and will
                         // self-correct on the next mouse-move event.
                         if !state.is_selecting {
-                            state.clear_selection();
+                            state.reset_selection();
                         }
                         cx.notify();
                     });
@@ -115,6 +122,9 @@ impl TextViewState {
             focus_handle,
             bounds: Bounds::default(),
             selection_positions: (None, None),
+            multi_click_selection: None,
+            selected_text_override: None,
+            select_all: false,
             selectable: false,
             scrollable: false,
             list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)),
@@ -159,7 +169,7 @@ impl TextViewState {
     /// Set whether the text is selectable, default false.
     pub fn set_scrollable(&mut self, scrollable: bool, cx: &mut Context<Self>) {
         if !scrollable {
-            self.clear_selection();
+            self.reset_selection();
         }
         self.scrollable = scrollable;
         cx.notify();
@@ -188,6 +198,14 @@ impl TextViewState {
 
     /// Return the selected text.
     pub fn selected_text(&self) -> String {
+        if self.select_all {
+            return self.parsed_content.document.text();
+        }
+
+        if let Some(text) = &self.selected_text_override {
+            return text.clone();
+        }
+
         self.parsed_content.document.selected_text()
     }
 
@@ -204,35 +222,74 @@ impl TextViewState {
     /// Save bounds and unselect if bounds changed.
     pub(super) fn update_bounds(&mut self, bounds: Bounds<Pixels>) {
         if self.bounds.size != bounds.size {
-            self.clear_selection();
+            self.reset_selection();
         }
         self.bounds = bounds;
     }
 
-    pub(super) fn clear_selection(&mut self) {
+    fn reset_selection(&mut self) {
         self.selection_positions = (None, None);
+        self.multi_click_selection = None;
+        self.selected_text_override = None;
+        self.select_all = false;
+        self.is_selecting = false;
+        self.auto_scroll.stop();
+    }
+
+    /// Clear the current text selection.
+    pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
+        self.reset_selection();
+        cx.notify();
+    }
+
+    fn scroll_offset(&self) -> Point<Pixels> {
+        if self.scrollable {
+            self.list_state.scroll_px_offset_for_scrollbar()
+        } else {
+            Point::default()
+        }
+    }
+
+    /// Select all rendered text in this view.
+    pub fn select_all(&mut self, cx: &mut Context<Self>) {
+        self.selection_positions = (None, None);
+        self.multi_click_selection = None;
+        self.selected_text_override = None;
+        self.select_all = true;
+        self.is_selecting = false;
+        self.auto_scroll.stop();
+        cx.notify();
+    }
+
+    pub(crate) fn set_multi_click_selection(
+        &mut self,
+        pos: Point<Pixels>,
+        kind: TextViewMultiClickKind,
+        selected_text: String,
+    ) {
+        let scroll_offset = self.scroll_offset();
+        let pos = pos - self.bounds.origin - scroll_offset;
+        self.selection_positions = (None, None);
+        self.multi_click_selection = Some(TextViewMultiClickSelection { pos, kind });
+        self.selected_text_override = Some(selected_text);
+        self.select_all = false;
         self.is_selecting = false;
         self.auto_scroll.stop();
     }
 
     pub(super) fn start_selection(&mut self, pos: Point<Pixels>) {
         // Store content coordinates (not affected by scrolling)
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
+        let scroll_offset = self.scroll_offset();
         let pos = pos - self.bounds.origin - scroll_offset;
         self.selection_positions = (Some(pos), Some(pos));
+        self.multi_click_selection = None;
+        self.selected_text_override = None;
+        self.select_all = false;
         self.is_selecting = true;
     }
 
     pub(super) fn update_selection(&mut self, pos: Point<Pixels>) {
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
+        let scroll_offset = self.scroll_offset();
         let pos = pos - self.bounds.origin - scroll_offset;
         if let (Some(start), Some(_)) = self.selection_positions {
             self.selection_positions = (Some(start), Some(pos))
@@ -252,6 +309,16 @@ impl TextViewState {
     }
 
     pub(crate) fn has_selection(&self) -> bool {
+        if self.select_all {
+            return true;
+        }
+        if self.multi_click_selection.is_some() {
+            return true;
+        }
+        if self.selected_text_override.is_some() {
+            return true;
+        }
+
         if let (Some(start), Some(end)) = self.selection_positions {
             start != end
         } else {
@@ -261,11 +328,7 @@ impl TextViewState {
 
     /// Return the selection start/end in window coordinates.
     pub(crate) fn selection_points(&self) -> Option<(Point<Pixels>, Point<Pixels>)> {
-        let scroll_offset = if self.scrollable {
-            self.list_state.scroll_px_offset_for_scrollbar()
-        } else {
-            Point::default()
-        };
+        let scroll_offset = self.scroll_offset();
 
         selection_points(
             self.selection_positions.0,
@@ -284,9 +347,47 @@ impl TextViewState {
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
     }
 
+    pub(super) fn on_action_select_all(
+        &mut self,
+        _: &SelectAll,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.selectable {
+            cx.propagate();
+            return;
+        }
+
+        self.select_all(cx);
+    }
+
     pub(crate) fn is_selectable(&self) -> bool {
         self.selectable
     }
+
+    pub(crate) fn is_all_selected(&self) -> bool {
+        self.select_all
+    }
+
+    pub(crate) fn multi_click_selection(&self) -> Option<TextViewMultiClickSelection> {
+        let scroll_offset = self.scroll_offset();
+        self.multi_click_selection.map(|selection| {
+            let pos = selection.pos + scroll_offset + self.bounds.origin;
+            TextViewMultiClickSelection { pos, ..selection }
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TextViewMultiClickSelection {
+    pub(crate) pos: Point<Pixels>,
+    pub(crate) kind: TextViewMultiClickKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextViewMultiClickKind {
+    Word,
+    Paragraph,
 }
 
 impl Render for TextViewState {
@@ -491,6 +592,31 @@ mod tests {
         state.read_with(cx, |state, _| {
             assert_eq!(state.text.as_str(), "");
             assert_eq!(state.source().as_str(), "");
+        });
+    }
+
+    #[gpui::test]
+    fn select_all_returns_rendered_text(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown("**quick** value", cx)));
+        cx.run_until_parked();
+
+        state.update(cx, |state, cx| {
+            state.select_all(cx);
+        });
+
+        state.read_with(cx, |state, _| {
+            assert!(state.has_selection());
+            assert_eq!(state.selected_text().trim(), "quick value");
+        });
+
+        state.update(cx, |state, cx| {
+            state.clear_selection(cx);
+        });
+
+        state.read_with(cx, |state, _| {
+            assert!(!state.has_selection());
+            assert_eq!(state.selected_text(), "");
         });
     }
 
