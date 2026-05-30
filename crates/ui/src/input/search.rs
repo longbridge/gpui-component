@@ -292,9 +292,9 @@ impl SearchPanel {
         cx.notify();
     }
 
-    fn allow_replace(&self, cx: &App) -> bool {
+    fn replaceable(&self, cx: &App) -> bool {
         let editor = self.editor.read(cx);
-        editor.allow_replace_in_search
+        editor.replaceable
     }
 
     pub(super) fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -344,7 +344,7 @@ impl SearchPanel {
     }
 
     fn replace_next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.allow_replace(cx) {
+        if !self.replaceable(cx) {
             self.replace_mode = false;
             cx.notify();
             return;
@@ -380,7 +380,7 @@ impl SearchPanel {
     }
 
     fn replace_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.allow_replace(cx) {
+        if !self.replaceable(cx) {
             self.replace_mode = false;
             cx.notify();
             return;
@@ -429,7 +429,7 @@ impl Render for SearchPanel {
         }
 
         let has_matches = self.matcher.len() > 0;
-        let allow_replace = self.allow_replace(cx);
+        let allow_replace = self.replaceable(cx);
         if !allow_replace {
             self.replace_mode = false;
         }
