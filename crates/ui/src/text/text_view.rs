@@ -3,8 +3,9 @@ use std::sync::Arc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
-    InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
+    InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, SharedString, StyleRefinement, Styled,
+    Window, div,
 };
 
 use crate::StyledExt;
@@ -219,6 +220,7 @@ impl Element for TextView {
             })
             .relative()
             .on_action(window.listener_for(&state, TextViewState::on_action_copy))
+            .on_action(window.listener_for(&state, TextViewState::on_action_select_all))
             .child(state.clone())
             .refine_style(&self.style)
             .into_any_element();
@@ -269,8 +271,16 @@ impl Element for TextView {
                         return;
                     }
 
-                    state.update(cx, |state, _| {
-                        state.start_selection(event.position);
+                    if event.button != MouseButton::Left {
+                        return;
+                    }
+
+                    state.update(cx, |state, cx| {
+                        state.focus_handle.focus(window, cx);
+
+                        if event.click_count == 1 {
+                            state.start_selection(event.position);
+                        }
                     });
                     cx.notify(parent_view_id);
                 }
@@ -292,10 +302,8 @@ impl Element for TextView {
                             state.update_selection(event.position);
 
                             if scrollable {
-                                let delta = AutoScroll::compute_delta(
-                                    event.position.y,
-                                    viewport_bounds,
-                                );
+                                let delta =
+                                    AutoScroll::compute_delta(event.position.y, viewport_bounds);
                                 state.set_auto_scroll(delta, cx);
                             }
                         });
@@ -329,8 +337,8 @@ impl Element for TextView {
                             return;
                         }
 
-                        state.update(cx, |state, _| {
-                            state.clear_selection();
+                        state.update(cx, |state, cx| {
+                            state.clear_selection(cx);
                         });
                         cx.notify(parent_view_id);
                     }
@@ -345,8 +353,9 @@ mod tests {
     use super::TextView;
     use crate::text::TextViewState;
     use gpui::{
-        AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, ParentElement as _,
-        Render, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
+        AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, MouseDownEvent,
+        MouseUpEvent, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
+        Window, div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -416,5 +425,72 @@ mod tests {
             selected_text.is_empty(),
             "unexpected selection: {selected_text:?}"
         );
+    }
+
+    #[gpui::test]
+    fn double_click_selects_word(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) =
+            cx.add_window_view(|_, cx| TextViewTestRoot::new("quick select value", cx));
+
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        let position = point(px(10.), px(16.));
+        cx.simulate_event(MouseDownEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+            first_mouse: false,
+        });
+        cx.simulate_event(MouseUpEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let selected_text = view.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+        assert_eq!(selected_text.trim(), "quick");
+    }
+
+    #[gpui::test]
+    fn triple_click_selects_paragraph(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) =
+            cx.add_window_view(|_, cx| TextViewTestRoot::new("quick select value", cx));
+
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let position = point(px(10.), px(10.));
+        cx.simulate_event(MouseDownEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 3,
+            first_mouse: false,
+        });
+        cx.simulate_event(MouseUpEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 3,
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let selected_text = view.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+        assert_eq!(selected_text.trim(), "quick select value");
     }
 }

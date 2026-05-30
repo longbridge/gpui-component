@@ -726,7 +726,7 @@ impl Example {
         let tree_state = cx.new(|cx| TreeState::new(cx));
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
 
-        let _subscriptions = vec![cx.subscribe(&editor, |this, _, _: &InputEvent, cx| {
+        let _subscriptions = vec![cx.subscribe(&editor, |this, _editor, _: &InputEvent, cx| {
             this.lint_document(cx);
         })];
 
