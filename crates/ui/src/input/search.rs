@@ -292,6 +292,11 @@ impl SearchPanel {
         cx.notify();
     }
 
+    fn allow_replace(&self, cx: &App) -> bool {
+        let editor = self.editor.read(cx);
+        editor.allow_replace_in_search
+    }
+
     pub(super) fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open = false;
         self.editor.read(cx).focus_handle.clone().focus(window, cx);
@@ -339,6 +344,12 @@ impl SearchPanel {
     }
 
     fn replace_next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.allow_replace(cx) {
+            self.replace_mode = false;
+            cx.notify();
+            return;
+        }
+
         let new_text = self.replace_input.read(cx).value();
         self.matcher.replacing = true;
         if let Some(range) = self
@@ -369,6 +380,12 @@ impl SearchPanel {
     }
 
     fn replace_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.allow_replace(cx) {
+            self.replace_mode = false;
+            cx.notify();
+            return;
+        }
+
         let new_text = self.replace_input.read(cx).value();
         self.matcher.replacing = true;
         let ranges = self.matcher.matched_ranges.clone();
@@ -412,6 +429,10 @@ impl Render for SearchPanel {
         }
 
         let has_matches = self.matcher.len() > 0;
+        let allow_replace = self.allow_replace(cx);
+        if !allow_replace {
+            self.replace_mode = false;
+        }
 
         v_flex()
             .id("search-panel")
@@ -468,30 +489,32 @@ impl Render for SearchPanel {
                                 }
                             }),
                     )
-                    .child(
-                        Button::new("replace-mode")
-                            .xsmall()
-                            .ghost()
-                            .icon(IconName::Replace)
-                            .selected(self.replace_mode)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.replace_mode = !this.replace_mode;
-                                if this.replace_mode {
-                                    this.replace_input
-                                        .read(cx)
-                                        .focus_handle
-                                        .clone()
-                                        .focus(window, cx);
-                                } else {
-                                    this.search_input
-                                        .read(cx)
-                                        .focus_handle
-                                        .clone()
-                                        .focus(window, cx);
-                                }
-                                cx.notify();
-                            })),
-                    )
+                    .when(allow_replace, |this| {
+                        this.child(
+                            Button::new("replace-mode")
+                                .xsmall()
+                                .ghost()
+                                .icon(IconName::Replace)
+                                .selected(self.replace_mode)
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.replace_mode = !this.replace_mode;
+                                    if this.replace_mode {
+                                        this.replace_input
+                                            .read(cx)
+                                            .focus_handle
+                                            .clone()
+                                            .focus(window, cx);
+                                    } else {
+                                        this.search_input
+                                            .read(cx)
+                                            .focus_handle
+                                            .clone()
+                                            .focus(window, cx);
+                                    }
+                                    cx.notify();
+                                })),
+                        )
+                    })
                     .child(
                         Button::new("prev")
                             .xsmall()
@@ -531,7 +554,7 @@ impl Render for SearchPanel {
                             })),
                     ),
             )
-            .when(self.replace_mode, |this| {
+            .when(self.replace_mode && allow_replace, |this| {
                 this.child(
                     h_flex()
                         .w_full()
