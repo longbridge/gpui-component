@@ -1,6 +1,6 @@
 # Layout & Styling
 
-**Contents:** [Overview](#overview) · [Quick Start](#quick-start) · [Common Patterns](#common-patterns) · [Styling Methods](#styling-methods) · [h_flex / v_flex](#h_flex--v_flex-helpers) · [Tailwind Shorthands](#tailwind-style-shorthand) · [Overflow & Scroll](#overflow-and-scroll) · [Absolute Positioning](#absolute-positioning) · [Z-index](#z-index-and-stacking) · [Theme Integration](#theme-integration) · [Conditional Styling](#conditional-styling) · [Text Styling](#text-styling)
+**Contents:** [Overview](#overview) · [Quick Start](#quick-start) · [Common Patterns](#common-patterns) · [Styling Methods](#styling-methods) · [h_flex / v_flex](#h_flex--v_flex-helpers) · [Tailwind Shorthands](#tailwind-style-shorthand) · [Overflow & Scroll](#overflow-and-scroll) · [Absolute Positioning](#absolute-positioning) · [Stacking Order](#stacking-order) · [Theme Integration](#theme-integration) · [Conditional Styling](#conditional-styling) · [Text Styling](#text-styling)
 
 ## Overview
 
@@ -217,12 +217,29 @@ div().absolute().inset_0()      // top/right/bottom/left: 0 (fill parent)
 div().absolute().top(px(8.)).left(px(8.))
 ```
 
-## Z-index and Stacking
+## Stacking Order
 
 ```rust
-div().z_index(10).child(overlay)
-div().z_index(20).child(modal)   // higher = on top
+div()
+    .relative()
+    .child(content)
+    .child(
+        div()
+            .absolute()
+            .top_0()
+            .right_0()
+            .child("badge")
+    ) // later children are typically painted above earlier siblings
 ```
+
+GPUI's general `Styled` API does **not** provide a `z_index(...)` method.
+
+For normal elements, stacking is usually controlled by:
+- Parent/child composition
+- Absolute positioning
+- Render order of siblings (later siblings paint above earlier ones)
+
+If you see a `z_index(...)` method in this repository, make sure it belongs to the specific component you are using. For example, `TileItem::z_index(...)` in the dock tiles system is a custom component API, not a general GPUI `Div` styling method.
 
 ## Theme Integration
 
