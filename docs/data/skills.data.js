@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "fs";
-import { join } from "path";
+import { join, relative } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
@@ -38,6 +38,7 @@ function parseFrontmatter(content) {
 export default {
   async load() {
     const skillsDir = join(__dirname, "../../.claude/skills");
+    const repoRoot = join(__dirname, "../..");
     const skills = [];
     
     try {
@@ -56,6 +57,7 @@ export default {
             name: frontmatter.name || skillDir,
             description: frontmatter.description || "",
             content: body,
+            skillPath: relative(repoRoot, skillPath).replaceAll("\\", "/"),
             path: skillPath,
           });
         } catch (err) {
