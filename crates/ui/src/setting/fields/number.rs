@@ -63,78 +63,97 @@ impl SettingFieldRender for NumberField {
     ) -> AnyElement {
         let value = get_value::<f64>(&field, cx);
         let set_value = set_value::<f64>(&field, cx);
+        let step_set_value = set_value.clone();
         let num_options = self.options.clone();
 
-        let state = window
-            .use_keyed_state(
-                SharedString::from(format!(
-                    "number-state-{}-{}-{}",
-                    options.page_ix, options.group_ix, options.item_ix
-                )),
-                cx,
-                |window, cx| {
-                    let input =
-                        cx.new(|cx| InputState::new(window, cx).default_value(value.to_string()));
-                    let _subscriptions = vec![
-                        cx.subscribe_in(&input, window, {
-                            move |_, input, event: &NumberInputEvent, window, cx| match event {
-                                NumberInputEvent::Step(action) => input.update(cx, |input, cx| {
-                                    let value = input.value();
+        let state_entity = window.use_keyed_state(
+            SharedString::from(format!(
+                "number-state-{}-{}-{}",
+                options.page_ix, options.group_ix, options.item_ix
+            )),
+            cx,
+            |window, cx| {
+                let input =
+                    cx.new(|cx| InputState::new(window, cx).default_value(value.to_string()));
+                let _subscriptions = vec![
+                    cx.subscribe_in(&input, window, {
+                        move |state: &mut State, input, event: &NumberInputEvent, window, cx| {
+                            match event {
+                                NumberInputEvent::Step(action) => {
+                                    let value = input.read(cx).value();
                                     if let Ok(value) = value.parse::<f64>() {
                                         let new_value = if *action == StepAction::Increment {
                                             value + num_options.step
                                         } else {
                                             value - num_options.step
                                         };
-                                        input.set_value(
-                                            SharedString::from(new_value.to_string()),
-                                            window,
-                                            cx,
-                                        );
-                                    }
-                                }),
-                            }
-                        }),
-                        cx.subscribe_in(&input, window, {
-                            move |state: &mut State, input, event: &InputEvent, window, cx| {
-                                match event {
-                                    InputEvent::Change => {
+                                        let clamp_value =
+                                            new_value.clamp(num_options.min, num_options.max);
+
                                         input.update(cx, |input, cx| {
-                                            let value = input.value();
-                                            if value == state.initial_value.to_string() {
-                                                return;
-                                            }
-
-                                            if let Ok(value) = value.parse::<f64>() {
-                                                let clamp_value =
-                                                    value.clamp(num_options.min, num_options.max);
-
-                                                set_value(clamp_value, cx);
-                                                state.initial_value = clamp_value;
-                                                if clamp_value != value {
-                                                    input.set_value(
-                                                        SharedString::from(clamp_value.to_string()),
-                                                        window,
-                                                        cx,
-                                                    );
-                                                }
-                                            }
+                                            input.set_value(
+                                                SharedString::from(clamp_value.to_string()),
+                                                window,
+                                                cx,
+                                            );
                                         });
+                                        step_set_value(clamp_value, cx);
+                                        state.initial_value = clamp_value;
                                     }
-                                    _ => {}
                                 }
                             }
-                        }),
-                    ];
+                        }
+                    }),
+                    cx.subscribe_in(&input, window, {
+                        move |state: &mut State, input, event: &InputEvent, window, cx| match event
+                        {
+                            InputEvent::Change => {
+                                input.update(cx, |input, cx| {
+                                    let value = input.value();
+                                    if value == state.initial_value.to_string() {
+                                        return;
+                                    }
 
-                    State {
-                        input,
-                        initial_value: value,
-                        _subscriptions,
-                    }
-                },
-            )
-            .read(cx);
+                                    if let Ok(value) = value.parse::<f64>() {
+                                        let clamp_value =
+                                            value.clamp(num_options.min, num_options.max);
+
+                                        set_value(clamp_value, cx);
+                                        state.initial_value = clamp_value;
+                                        if clamp_value != value {
+                                            input.set_value(
+                                                SharedString::from(clamp_value.to_string()),
+                                                window,
+                                                cx,
+                                            );
+                                        }
+                                    }
+                                });
+                            }
+                            _ => {}
+                        }
+                    }),
+                ];
+
+                State {
+                    input,
+                    initial_value: value,
+                    _subscriptions,
+                }
+            },
+        );
+
+        // Sync the displayed value when the underlying setting changed externally
+        state_entity.update(cx, |state, cx| {
+            if state.initial_value != value {
+                state.initial_value = value;
+                state.input.update(cx, |input, cx| {
+                    input.set_value(SharedString::from(value.to_string()), window, cx);
+                });
+            }
+        });
+
+        let state = state_entity.read(cx);
 
         NumberInput::new(&state.input)
             .disabled(options.disabled)
