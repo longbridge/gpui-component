@@ -217,30 +217,15 @@ fn masked_display_offset(text: &Rope, original_offset: usize) -> usize {
     text.offset_to_char_index(original_offset) * MASK_CHAR.len_utf8()
 }
 
-/// Minimum pixel padding the cursor is kept clear of the viewport's top
-/// and bottom edges before auto-scroll engages — the "cursor
-/// surrounding lines" setting.
+/// Minimum pixel padding the cursor is kept clear of the viewport's
+/// top/bottom edges before auto-scroll engages. Backs
+/// [`InputState::cursor_surrounding_lines`].
 ///
-/// Auto-grow input always uses one line. For other modes:
-///
-/// - `override_lines = None` (the historical default): on small
-///   viewports (less than [`BOTTOM_MARGIN_ROWS`] × 8 lines tall) the
-///   editor falls back to one line so the cursor isn't stranded;
-///   otherwise [`BOTTOM_MARGIN_ROWS`] lines.
-/// - `override_lines = Some(n)`: exactly `n × line_height`, regardless
-///   of viewport size. Caller is trusted to pick a sensible value for
-///   the surface (e.g. `Some(1)` for JetBrains-style "keep one trailing
-///   row visible" behaviour).
-///
-/// In all cases the result is saturated against half the visible
-/// region so the auto-scroll-into-view computation always has room
-/// — without this clamp, an aggressive override on a small viewport
-/// (e.g. `Some(20)` on a 10-line viewport) yields a bottom-edge
-/// threshold below the top edge, sending the per-frame scroll-offset
-/// adjustment into a feedback loop.
-///
-/// See [`InputState::cursor_surrounding_lines`] for caller-facing
-/// documentation.
+/// Auto-grow uses one line. Otherwise `None` falls back to the historical
+/// heuristic ([`BOTTOM_MARGIN_ROWS`] lines, or one line on small
+/// viewports); `Some(n)` uses `n` lines. The result is saturated against
+/// half the viewport so an oversized override can't invert the
+/// top/bottom thresholds into a scroll feedback loop.
 pub(super) fn cursor_surrounding_padding(
     is_auto_grow: bool,
     override_lines: Option<usize>,
@@ -260,33 +245,17 @@ pub(super) fn cursor_surrounding_padding(
             }
         }
     };
-    // Saturate against half the viewport so top + bottom margins can
-    // always coexist with at least one cursor-line of clear space
-    // between them.
+    // Saturate against half the viewport so top + bottom margins can coexist.
     let viewport_half = (visible_lines as f32 * line_height).half();
     raw.min(viewport_half)
 }
 
 /// Pixel height of the empty area below the last line in the editor's
-/// scrollable region — the "scroll past last line" affordance.
+/// scrollable region. Backs [`InputState::scroll_beyond_last_line`].
 ///
-/// Outside code-editor mode the result is always `0`. Inside code-editor
-/// mode the height is determined by the host-provided override:
-///
-/// - `override_rows = None` (the historical default): roughly half the
-///   viewport, never less than [`BOTTOM_MARGIN_ROWS`] line-heights —
-///   matches the prior behavior and JetBrains IDEs / VSCode default.
-///   The cursor can sit anywhere in the viewport without being painted
-///   at the very edge.
-/// - `override_rows = Some(n)`: exactly `n` line-heights. `Some(0)`
-///   produces the tightest possible scroll bounds (`max_scroll =
-///   max(0, content_height − viewport_height)`) but, with the current
-///   per-frame scroll-into-view calculation, can flicker on `Down` at
-///   end-of-buffer. `Some(3..=8)` is the recommended sweet spot for
-///   full-pane editors that don't want the half-viewport affordance.
-///
-/// See [`InputState::scroll_past_last_line_rows`] for caller-facing
-/// documentation.
+/// `0` outside code-editor mode. Inside it, `None` is half the viewport
+/// (floored at [`BOTTOM_MARGIN_ROWS`] line-heights); `Some(n)` is exactly
+/// `n` line-heights.
 fn empty_bottom_height(
     is_code_editor: bool,
     override_rows: Option<usize>,
@@ -398,12 +367,8 @@ impl TextElement {
         let mut scroll_offset = state.scroll_handle.offset();
         let mut cursor_bounds = None;
 
-        // Minimum padding kept between the cursor and the viewport's
-        // top/bottom edges. The auto-scroll-into-view computation below
-        // uses this to decide when to advance the scroll offset as the
-        // cursor moves toward an edge. Honors
-        // `state.cursor_surrounding_lines` if set; otherwise falls back
-        // to the historical heuristic.
+        // Padding kept between the cursor and the viewport's top/bottom
+        // edges, used by the auto-scroll-into-view computation below.
         let top_bottom_margin = cursor_surrounding_padding(
             state.mode.is_auto_grow(),
             state.cursor_surrounding_lines,
@@ -1800,17 +1765,14 @@ impl Element for TextElement {
         let total_wrapped_lines = state.display_map.wrap_row_count();
         let empty_bottom_height = empty_bottom_height(
             state.mode.is_code_editor(),
-            state.scroll_past_last_line_rows,
+            state.scroll_beyond_last_line,
             bounds.size.height,
             line_height,
         );
 
-        // Empty bottom and ghost lines both describe extra height past
-        // the last real content row; they should not stack. Taking the
-        // max produces a tight `max_scroll` so the cursor can reach
-        // every empty pixel of the scrollable region. Summing them
-        // (the prior behavior) left a band of unreachable empty space
-        // below the cursor-traversable area visible at scroll-max.
+        // Empty bottom and ghost lines both describe extra height past the
+        // last content row, so take the max rather than summing — summing
+        // left a band of empty space the cursor could never reach.
         let mut scroll_size = size(
             if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
                 longest_line_width + line_number_width + RIGHT_MARGIN
