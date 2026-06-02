@@ -76,6 +76,8 @@ pub struct Example {
     soft_wrap: bool,
     show_whitespaces: bool,
     folding: bool,
+    scroll_beyond_last_line: Option<usize>,
+    cursor_surrounding_lines: Option<usize>,
     lsp_store: ExampleLspStore,
     _subscriptions: Vec<Subscription>,
     _lint_task: Task<()>,
@@ -740,6 +742,8 @@ impl Example {
             soft_wrap: false,
             show_whitespaces: false,
             folding: true,
+            scroll_beyond_last_line: None,
+            cursor_surrounding_lines: None,
             lsp_store,
             _subscriptions,
             _lint_task: Task::ready(()),
@@ -1051,6 +1055,65 @@ impl Example {
             }))
     }
 
+    /// Cycle an `Option<usize>` row setting through a few demo values.
+    fn cycle_rows(v: Option<usize>) -> Option<usize> {
+        match v {
+            None => Some(0),
+            Some(0) => Some(3),
+            Some(3) => Some(8),
+            _ => None,
+        }
+    }
+
+    fn rows_label(v: Option<usize>) -> String {
+        match v {
+            None => "default".to_string(),
+            Some(n) => n.to_string(),
+        }
+    }
+
+    fn render_scroll_beyond_last_line_button(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        Button::new("scroll-beyond-last-line")
+            .ghost()
+            .xsmall()
+            .label(format!(
+                "Scroll Beyond: {}",
+                Self::rows_label(self.scroll_beyond_last_line)
+            ))
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.scroll_beyond_last_line = Self::cycle_rows(this.scroll_beyond_last_line);
+                this.editor.update(cx, |state, cx| {
+                    state.set_scroll_beyond_last_line(this.scroll_beyond_last_line, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
+    fn render_cursor_surrounding_lines_button(
+        &self,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        Button::new("cursor-surrounding-lines")
+            .ghost()
+            .xsmall()
+            .label(format!(
+                "Cursor Surrounding: {}",
+                Self::rows_label(self.cursor_surrounding_lines)
+            ))
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.cursor_surrounding_lines = Self::cycle_rows(this.cursor_surrounding_lines);
+                this.editor.update(cx, |state, cx| {
+                    state.set_cursor_surrounding_lines(this.cursor_surrounding_lines, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
     fn render_go_to_line_button(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let position = self.editor.read(cx).cursor_position();
         let cursor = self.editor.read(cx).cursor();
@@ -1126,7 +1189,9 @@ impl Render for Example {
                                     .child(self.render_soft_wrap_button(window, cx))
                                     .child(self.render_show_whitespaces_button(window, cx))
                                     .child(self.render_indent_guides_button(window, cx))
-                                    .child(self.render_folding_button(window, cx)),
+                                    .child(self.render_folding_button(window, cx))
+                                    .child(self.render_scroll_beyond_last_line_button(window, cx))
+                                    .child(self.render_cursor_surrounding_lines_button(window, cx)),
                             )
                             .child(self.render_go_to_line_button(window, cx)),
                     ),
