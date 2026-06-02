@@ -1,5 +1,6 @@
 use std::{
     any::TypeId,
+    borrow::Cow,
     collections::{HashMap, VecDeque},
     rc::Rc,
     time::Duration,
@@ -95,14 +96,17 @@ impl From<&'static str> for Notification {
     }
 }
 
-impl From<(NotificationType, &'static str)> for Notification {
-    fn from((type_, content): (NotificationType, &'static str)) -> Self {
-        Self::new().message(content).with_type(type_)
+impl From<Cow<'static, str>> for Notification {
+    fn from(s: Cow<'static, str>) -> Self {
+        Self::new().message(s)
     }
 }
 
-impl From<(NotificationType, SharedString)> for Notification {
-    fn from((type_, content): (NotificationType, SharedString)) -> Self {
+impl<T> From<(NotificationType, T)> for Notification
+where
+    T: Into<SharedString>,
+{
+    fn from((type_, content): (NotificationType, T)) -> Self {
         Self::new().message(content).with_type(type_)
     }
 }
@@ -171,7 +175,7 @@ impl Notification {
     ///
     /// ```rs
     /// struct MyNotificationKind;
-    /// let notification = Notification::new("Hello").id::<MyNotificationKind>();
+    /// let notification = Notification::new().message("Hello").id::<MyNotificationKind>();
     /// ```
     pub fn id<T: Sized + 'static>(mut self) -> Self {
         self.id = TypeId::of::<T>().into();
