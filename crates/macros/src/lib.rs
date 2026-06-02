@@ -101,13 +101,13 @@ fn pascal_case(filename: &str) -> String {
 ///
 /// ```ignore
 /// // Literal path (relative to the calling crate's CARGO_MANIFEST_DIR)
-/// icon_named!(MyIcons, "icons");
+/// icon_named!(IconName, "icons");
 ///
 /// // Env-var reference (resolved at macro expansion time)
 /// icon_named!(IconName, "$GPUI_COMPONENT_DEFAULT_ICONS_DIR");
 ///
 /// // With custom derives
-/// icon_named!(MyIcons, "icons", [Debug, Copy, PartialEq, Eq]);
+/// icon_named!(IconName, "icons", [Debug, Copy, PartialEq, Eq]);
 /// ```
 #[proc_macro]
 pub fn icon_named(input: TokenStream) -> TokenStream {
