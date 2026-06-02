@@ -90,14 +90,14 @@ impl From<SharedString> for Notification {
     }
 }
 
-impl From<&'static str> for Notification {
-    fn from(s: &'static str) -> Self {
+impl From<&str> for Notification {
+    fn from(s: &str) -> Self {
         Self::new().message(s)
     }
 }
 
-impl From<Cow<'static, str>> for Notification {
-    fn from(s: Cow<'static, str>) -> Self {
+impl<'a> From<Cow<'a, str>> for Notification {
+    fn from(s: Cow<'a, str>) -> Self {
         Self::new().message(s)
     }
 }
