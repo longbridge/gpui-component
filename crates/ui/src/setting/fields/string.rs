@@ -44,15 +44,17 @@ where
         cx: &mut App,
     ) -> AnyElement {
         let value = get_value::<T>(&field, cx);
+        let value: SharedString = value.into();
         let set_value = set_value::<T>(&field, cx);
 
-        let state = window
-            .use_keyed_state(
-                SharedString::from(format!(
-                    "string-state-{}-{}-{}",
-                    options.page_ix, options.group_ix, options.item_ix
-                )),
-                cx,
+        let state_entity = window.use_keyed_state(
+            SharedString::from(format!(
+                "string-state-{}-{}-{}",
+                options.page_ix, options.group_ix, options.item_ix
+            )),
+            cx,
+            {
+                let value = value.clone();
                 |window, cx| {
                     let input = cx.new(|cx| InputState::new(window, cx).default_value(value));
                     let _subscription = cx.subscribe(&input, {
@@ -69,9 +71,20 @@ where
                         input,
                         _subscription,
                     }
-                },
-            )
-            .read(cx);
+                }
+            },
+        );
+
+        // Sync the displayed value when the underlying setting changed externally
+        state_entity.update(cx, |state, cx| {
+            if state.input.read(cx).value() != value {
+                state.input.update(cx, |input, cx| {
+                    input.set_value(value.clone(), window, cx);
+                });
+            }
+        });
+
+        let state = state_entity.read(cx);
 
         Input::new(&state.input)
             .disabled(options.disabled)
