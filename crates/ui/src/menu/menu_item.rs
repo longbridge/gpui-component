@@ -1,7 +1,7 @@
 use crate::{h_flex, ActiveTheme, Disableable, StyledExt};
 use gpui::{
     prelude::FluentBuilder as _, AnyElement, App, ClickEvent, ElementId, InteractiveElement,
-    IntoElement, MouseButton, ParentElement, RenderOnce, SharedString,
+    IntoElement, MouseButton, ParentElement, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
 };
 use smallvec::SmallVec;
@@ -86,6 +86,8 @@ impl RenderOnce for MenuItemElement {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         h_flex()
             .id(self.id)
+            .role(Role::MenuItem)
+            .aria_selected(self.selected)
             .group(&self.group_name)
             .gap_x_1()
             .py_1()

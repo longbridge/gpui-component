@@ -1,8 +1,8 @@
 use gpui::Corners;
 use gpui::{
-    Anchor, App, Context, Edges, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder,
+    Anchor, App, Context, Edges, ElementId, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder,
 };
 
 use crate::{
@@ -159,6 +159,7 @@ impl RenderOnce for DropdownButton {
 
         div()
             .id(self.id)
+            .role(Role::Group)
             .h_flex()
             .refine_style(&self.style)
             .when_some(self.button, |this, button| {
