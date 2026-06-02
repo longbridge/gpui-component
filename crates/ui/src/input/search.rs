@@ -41,7 +41,7 @@ pub struct SearchMatcher {
 
     pub(super) matched_ranges: Rc<Vec<Range<usize>>>,
     pub(super) current_match_ix: usize,
-    /// Is in replacing mode, if true, the next update will not reset the current match index.
+    /// Is in replacing mode, if true, the next update will update the current match index based on matched ranges.
     replacing: bool,
 }
 
@@ -81,8 +81,12 @@ impl SearchMatcher {
         self.matched_ranges = Rc::new(new_ranges);
         if !self.replacing {
             self.current_match_ix = 0;
-            self.replacing = false;
+        } else if self.matched_ranges.is_empty() {
+            self.current_match_ix = 0;
+        } else {
+            self.current_match_ix = self.current_match_ix.min(self.matched_ranges.len() - 1);
         }
+        self.replacing = false;
     }
 
     /// Update the search query and reset the current match index.
@@ -108,7 +112,22 @@ impl SearchMatcher {
     }
 
     fn peek(&self) -> Option<Range<usize>> {
-        self.matched_ranges.get(self.current_match_ix + 1).cloned()
+        let next_match_ix = self.next_ix()?;
+        self.matched_ranges.get(next_match_ix).cloned()
+    }
+
+    fn next_ix(&self) -> Option<usize> {
+        if self.matched_ranges.is_empty() {
+            None
+        } else if self.has_next_match_without_wrap() {
+            Some(self.current_match_ix + 1)
+        } else {
+            Some(0)
+        }
+    }
+
+    fn has_next_match_without_wrap(&self) -> bool {
+        self.current_match_ix < self.matched_ranges.len().saturating_sub(1)
     }
 
     fn label(&self) -> String {
@@ -133,17 +152,9 @@ impl Iterator for SearchMatcher {
     type Item = Range<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.matched_ranges.is_empty() {
-            return None;
-        }
-
-        if self.current_match_ix < self.matched_ranges.len().saturating_sub(1) {
-            self.current_match_ix += 1;
-        } else {
-            self.current_match_ix = 0;
-        }
-
-        self.matched_ranges.get(self.current_match_ix).cloned()
+        let next_match_ix = self.next_ix()?;
+        self.current_match_ix = next_match_ix;
+        self.matched_ranges.get(next_match_ix).cloned()
     }
 }
 
@@ -219,6 +230,28 @@ impl InputState {
 }
 
 impl SearchPanel {
+    fn next_scroll_direction(
+        previous_match_ix: usize,
+        current_match_ix: usize,
+    ) -> Option<MoveDirection> {
+        if current_match_ix <= previous_match_ix {
+            None
+        } else {
+            Some(MoveDirection::Down)
+        }
+    }
+
+    fn prev_scroll_direction(
+        previous_match_ix: usize,
+        current_match_ix: usize,
+    ) -> Option<MoveDirection> {
+        if current_match_ix >= previous_match_ix {
+            None
+        } else {
+            Some(MoveDirection::Up)
+        }
+    }
+
     pub fn new(editor: Entity<InputState>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         let search_input = cx.new(|cx| InputState::new(window, cx));
         let replace_input = cx.new(|cx| InputState::new(window, cx));
@@ -292,6 +325,11 @@ impl SearchPanel {
         cx.notify();
     }
 
+    fn replaceable(&self, cx: &App) -> bool {
+        let editor = self.editor.read(cx);
+        editor.replaceable
+    }
+
     pub(super) fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.open = false;
         self.editor.read(cx).focus_handle.clone().focus(window, cx);
@@ -315,17 +353,23 @@ impl SearchPanel {
     }
 
     fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let previous_match_ix = self.matcher.current_match_ix;
         if let Some(range) = self.matcher.next_back() {
+            let direction =
+                Self::prev_scroll_direction(previous_match_ix, self.matcher.current_match_ix);
             self.editor.update(cx, |state, cx| {
-                state.scroll_to(range.start, Some(MoveDirection::Up), cx);
+                state.scroll_to(range.start, direction, cx);
             });
         }
     }
 
     fn next(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let previous_match_ix = self.matcher.current_match_ix;
         if let Some(range) = self.matcher.next() {
+            let direction =
+                Self::next_scroll_direction(previous_match_ix, self.matcher.current_match_ix);
             self.editor.update(cx, |state, cx| {
-                state.scroll_to(range.end, Some(MoveDirection::Down), cx);
+                state.scroll_to(range.end, direction, cx);
             });
         }
     }
@@ -339,8 +383,15 @@ impl SearchPanel {
     }
 
     fn replace_next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.replaceable(cx) {
+            self.replace_mode = false;
+            cx.notify();
+            return;
+        }
+
         let new_text = self.replace_input.read(cx).value();
         self.matcher.replacing = true;
+        let previous_match_ix = self.matcher.current_match_ix;
         if let Some(range) = self
             .matcher
             .matched_ranges
@@ -348,13 +399,15 @@ impl SearchPanel {
             .cloned()
         {
             let text_state = self.editor.clone();
-
+            let next_match_ix = self.matcher.next_ix().unwrap_or(previous_match_ix);
             let next_range = self.matcher.peek().unwrap_or(range.clone());
+            self.matcher.current_match_ix = next_match_ix;
+            let direction = Self::next_scroll_direction(previous_match_ix, next_match_ix);
             cx.spawn_in(window, async move |_, cx| {
                 cx.update(|window, cx| {
                     text_state.update(cx, |state, cx| {
                         let range_utf16 = state.range_to_utf16(&range);
-                        state.scroll_to(next_range.end, Some(MoveDirection::Down), cx);
+                        state.scroll_to(next_range.end, direction, cx);
                         state.replace_text_in_range_silent(
                             Some(range_utf16),
                             new_text.as_str(),
@@ -369,6 +422,12 @@ impl SearchPanel {
     }
 
     fn replace_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.replaceable(cx) {
+            self.replace_mode = false;
+            cx.notify();
+            return;
+        }
+
         let new_text = self.replace_input.read(cx).value();
         self.matcher.replacing = true;
         let ranges = self.matcher.matched_ranges.clone();
@@ -412,6 +471,10 @@ impl Render for SearchPanel {
         }
 
         let has_matches = self.matcher.len() > 0;
+        let allow_replace = self.replaceable(cx);
+        if !allow_replace {
+            self.replace_mode = false;
+        }
 
         v_flex()
             .id("search-panel")
@@ -468,30 +531,32 @@ impl Render for SearchPanel {
                                 }
                             }),
                     )
-                    .child(
-                        Button::new("replace-mode")
-                            .xsmall()
-                            .ghost()
-                            .icon(IconName::Replace)
-                            .selected(self.replace_mode)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.replace_mode = !this.replace_mode;
-                                if this.replace_mode {
-                                    this.replace_input
-                                        .read(cx)
-                                        .focus_handle
-                                        .clone()
-                                        .focus(window, cx);
-                                } else {
-                                    this.search_input
-                                        .read(cx)
-                                        .focus_handle
-                                        .clone()
-                                        .focus(window, cx);
-                                }
-                                cx.notify();
-                            })),
-                    )
+                    .when(allow_replace, |this| {
+                        this.child(
+                            Button::new("replace-mode")
+                                .xsmall()
+                                .ghost()
+                                .icon(IconName::Replace)
+                                .selected(self.replace_mode)
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.replace_mode = !this.replace_mode;
+                                    if this.replace_mode {
+                                        this.replace_input
+                                            .read(cx)
+                                            .focus_handle
+                                            .clone()
+                                            .focus(window, cx);
+                                    } else {
+                                        this.search_input
+                                            .read(cx)
+                                            .focus_handle
+                                            .clone()
+                                            .focus(window, cx);
+                                    }
+                                    cx.notify();
+                                })),
+                        )
+                    })
                     .child(
                         Button::new("prev")
                             .xsmall()
@@ -531,7 +596,7 @@ impl Render for SearchPanel {
                             })),
                     ),
             )
-            .when(self.replace_mode, |this| {
+            .when(self.replace_mode && allow_replace, |this| {
                 this.child(
                     h_flex()
                         .w_full()
@@ -637,5 +702,66 @@ mod tests {
 
         matcher.update_cursor_by_offset(31);
         assert_eq!(matcher.current_match_ix, 2);
+    }
+
+    #[test]
+    fn test_next_scroll_direction_returns_down_without_wrap() {
+        assert!(matches!(
+            SearchPanel::next_scroll_direction(0, 1),
+            Some(MoveDirection::Down)
+        ));
+    }
+
+    #[test]
+    fn test_next_scroll_direction_returns_none_on_wrap() {
+        assert!(SearchPanel::next_scroll_direction(2, 0).is_none());
+    }
+
+    #[test]
+    fn test_next_scroll_direction_returns_none_for_single_match() {
+        assert!(SearchPanel::next_scroll_direction(0, 0).is_none());
+    }
+
+    #[test]
+    fn test_next_ix_wraps_to_start() {
+        let mut matcher = SearchMatcher::new();
+        matcher.matched_ranges = Rc::new(vec![5..10, 15..20, 25..30]);
+        matcher.current_match_ix = 2;
+
+        assert_eq!(matcher.next_ix(), Some(0));
+    }
+
+    #[test]
+    fn test_prev_scroll_direction_returns_up_without_wrap() {
+        assert!(matches!(
+            SearchPanel::prev_scroll_direction(2, 1),
+            Some(MoveDirection::Up)
+        ));
+    }
+
+    #[test]
+    fn test_prev_scroll_direction_returns_none_on_wrap() {
+        assert!(SearchPanel::prev_scroll_direction(0, 2).is_none());
+    }
+
+    #[test]
+    fn test_prev_scroll_direction_returns_none_for_single_match() {
+        assert!(SearchPanel::prev_scroll_direction(0, 0).is_none());
+    }
+
+    #[test]
+    fn test_update_matches_clamps_current_match_index_while_replacing() {
+        let mut matcher = SearchMatcher::new();
+        matcher.update(&Rope::from("foo foo foo"));
+        matcher.update_query("foo", true);
+        matcher.current_match_ix = 2;
+        matcher.replacing = true;
+
+        matcher.update(&Rope::from("foo xoo foo"));
+
+        assert_eq!(matcher.len(), 2);
+        assert_eq!(matcher.current_match_ix, 1);
+        assert_eq!(matcher.label(), "2/2");
+        assert!(!matcher.replacing);
     }
 }
