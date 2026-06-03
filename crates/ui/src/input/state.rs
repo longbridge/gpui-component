@@ -2759,7 +2759,7 @@ impl Render for InputState {
             .id("input-state")
             .flex_1()
             .when(self.mode.is_multi_line(), |this| this.h_full())
-            .flex_grow(1.0)
+            .flex_grow_1()
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
             .children(self.diagnostic_popover.clone())

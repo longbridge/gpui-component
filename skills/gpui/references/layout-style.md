@@ -7,6 +7,7 @@
 GPUI provides CSS-like styling with Rust type safety.
 
 **Key Concepts:**
+
 - Flexbox layout system
 - Styled trait for chaining styles
 - Size units: `px()`, `rems()`, `relative()`
@@ -141,7 +142,7 @@ div()
 .flex_col()               // Column direction
 .items_center()           // Align items center
 .justify_between()        // Space between items
-.flex_grow(1.0)              // Grow to fill space
+.flex_grow_1()              // Grow to fill space
 ```
 
 ## h_flex / v_flex Helpers
@@ -235,6 +236,7 @@ div()
 GPUI's general `Styled` API does **not** provide a `z_index(...)` method.
 
 For normal elements, stacking is usually controlled by:
+
 - Parent/child composition
 - Absolute positioning
 - Render order of siblings (later siblings paint above earlier ones)

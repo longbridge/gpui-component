@@ -11,4 +11,4 @@
 
 ((plus_metadata) @injection.content (#set! injection.language "toml"))
 
-((inline) @injection.content (#set! injection.language "markdown_inline")(#set! injection.combined "true"))
+((inline) @injection.content (#set! injection.language "markdown_inline"))

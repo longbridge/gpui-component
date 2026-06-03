@@ -797,7 +797,7 @@ impl TabPanel {
                 div()
                     .id("tab-bar-empty-space")
                     .h_full()
-                    .flex_grow(1.0)
+                    .flex_grow_1()
                     .min_w_16()
                     .when(state.droppable, |this| {
                         this.drag_over::<DragPanel>(|this, _, _, cx| {

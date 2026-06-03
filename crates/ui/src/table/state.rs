@@ -2215,7 +2215,7 @@ where
                     this.children(empty_view)
                 } else {
                     this.child(
-                        h_flex().id("table-body").flex_grow(1.0).size_full().child(
+                        h_flex().id("table-body").flex_grow_1().size_full().child(
                             uniform_list(
                                 "table-uniform-list",
                                 render_rows_count,
@@ -2282,7 +2282,7 @@ where
                                     },
                                 ),
                             )
-                            .flex_grow(1.0)
+                            .flex_grow_1()
                             .size_full()
                             .with_sizing_behavior(ListSizingBehavior::Auto)
                             .track_scroll(&self.vertical_scroll_handle)
