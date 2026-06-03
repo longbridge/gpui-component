@@ -2125,6 +2125,15 @@ impl Element for TextElement {
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             offset_y += invisible_top_padding;
 
+            // Gutter background: prefer the dedicated `editor.gutter.background`
+            // theme key, falling back to the editor background so existing
+            // themes render unchanged.
+            let gutter_bg = cx
+                .theme()
+                .highlight_theme
+                .style
+                .editor_gutter_background
+                .unwrap_or_else(|| cx.theme().editor_background());
             window.paint_quad(fill(
                 Bounds {
                     origin: input_bounds.origin,
@@ -2133,7 +2142,7 @@ impl Element for TextElement {
                         input_bounds.size.height + prepaint.ghost_lines_height,
                     ),
                 },
-                cx.theme().editor_background(),
+                gutter_bg,
             ));
 
             // Each item is the normal lines.
