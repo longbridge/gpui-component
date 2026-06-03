@@ -98,7 +98,10 @@ where
 {
     /// Create a new DataTable element with the given [`TableState`].
     pub fn new(state: &Entity<TableState<D>>) -> Self {
-        Self { state: state.clone(), options: TableOptions::default() }
+        Self {
+            state: state.clone(),
+            options: TableOptions::default(),
+        }
     }
 
     /// Set to use stripe style of the table, default to false.
@@ -115,8 +118,11 @@ where
 
     /// Set scrollbar visibility.
     pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
-        self.options.scrollbar_visible =
-            Edges { right: vertical, bottom: horizontal, ..Default::default() };
+        self.options.scrollbar_visible = Edges {
+            right: vertical,
+            bottom: horizontal,
+            ..Default::default()
+        };
         self
     }
 }
@@ -158,7 +164,9 @@ where
             .on_action(window.listener_for(&self.state, TableState::action_select_page_down))
             .bg(cx.theme().table)
             .when(bordered, |this| {
-                this.rounded(cx.theme().radius).border_1().border_color(cx.theme().border)
+                this.rounded(cx.theme().radius)
+                    .border_1()
+                    .border_color(cx.theme().border)
             })
             .child(self.state)
     }

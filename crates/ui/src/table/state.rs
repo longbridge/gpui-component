@@ -1,4 +1,4 @@
-use std::{ops::Range, rc::Rc, time::Duration};
+use std::{collections::HashSet, ops::Range, rc::Rc, time::Duration};
 
 use crate::{
     ActiveTheme, ElementExt, Icon, IconName, StyleSized as _, StyledExt, VirtualListScrollHandle,
@@ -13,8 +13,8 @@ use crate::{
 };
 use gpui::{
     AppContext, Axis, Bounds, ClickEvent, Context, Div, DragMoveEvent, EventEmitter, FocusHandle,
-    Focusable, InteractiveElement, IntoElement, ListSizingBehavior, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
+    Focusable, InteractiveElement as _, IntoElement, ListSizingBehavior, MouseButton,
+    MouseDownEvent, ParentElement, Pixels, Point, Render, ScrollStrategy, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Task, UniformListScrollHandle, Window, div,
     prelude::FluentBuilder, px, uniform_list,
 };
@@ -94,6 +94,35 @@ pub enum TableEvent {
     ///
     /// This event is emitted when the selection is cleared.
     ClearSelection,
+    /// A group has been toggled (expanded or collapsed).
+    ///
+    /// The `SharedString` is the group key, and the `bool` is the new
+    /// expanded state (`true` = expanded).
+    ToggleGroup(SharedString, bool),
+}
+
+/// A grouping level produced by TableState::group_by.
+#[derive(Debug, Clone)]
+pub struct GroupInfo {
+    pub key: SharedString,        // e.g. "US" or "US/Technology"
+    pub label: SharedString,      // display label
+    pub depth: usize,             // nesting depth
+    pub count: usize,             // data row count
+    pub start: usize,             // first data row index
+    pub children: Vec<GroupInfo>, // sub-groups
+}
+
+/// Row type in visible-row list.
+#[derive(Debug, Clone)]
+pub(crate) enum VisibleRow {
+    Group {
+        key: SharedString,
+        label: SharedString,
+        depth: usize,
+    },
+    Data {
+        row_ix: usize,
+    },
 }
 
 /// The visible range of the rows and columns.
@@ -241,6 +270,14 @@ pub struct TableState<D: TableDelegate> {
 
     _measure: Vec<Duration>,
     _load_more_task: Task<()>,
+
+    // Grouping state
+    pub(super) group_columns: Vec<usize>,
+    groups: Vec<GroupInfo>,
+    visible_rows: Vec<VisibleRow>,
+    collapsed_groups: HashSet<SharedString>,
+    rows_count_cache: usize,
+    cached_group_columns: Vec<usize>,
 }
 
 impl<D> TableState<D>
@@ -278,6 +315,12 @@ where
             col_fixed: true,
             _load_more_task: Task::ready(()),
             _measure: Vec::new(),
+            group_columns: Vec::new(),
+            groups: Vec::new(),
+            visible_rows: Vec::new(),
+            collapsed_groups: HashSet::new(),
+            rows_count_cache: 0,
+            cached_group_columns: Vec::new(),
         };
 
         this.prepare_col_groups(cx);
@@ -370,6 +413,111 @@ where
     /// When we update columns or rows, we need to refresh the table.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self.prepare_col_groups(cx);
+    }
+
+    /// Enable row grouping by the given column indices.
+    ///
+    /// Rows are grouped by comparing [`TableDelegate::cell_text`]
+    /// values.  Data must be sorted by the group columns for groups
+    /// to form contiguously.  Multiple indices create nested groups
+    /// (first index = outermost).
+    pub fn group_by(mut self, columns: &[usize]) -> Self {
+        self.group_columns = columns.to_vec();
+        self
+    }
+
+    /// Enable or disable row grouping at runtime.
+    pub fn set_group_by(&mut self, columns: &[usize], cx: &mut Context<Self>) {
+        self.group_columns = columns.to_vec();
+        self.invalidate_groups();
+        cx.notify();
+    }
+
+    /// Rebuild the group tree from current data.  Cached until row count
+    /// or group columns change; call [`Self::invalidate_groups`] to force.
+    fn compute_groups(&mut self, cx: &App) {
+        if self.group_columns.is_empty() {
+            return;
+        }
+        let rows_count = self.delegate.rows_count(cx);
+        if rows_count == 0 {
+            self.groups.clear();
+            self.visible_rows.clear();
+            return;
+        }
+        let cached = rows_count == self.rows_count_cache
+            && self.group_columns == self.cached_group_columns
+            && !self.groups.is_empty();
+        if cached {
+            return;
+        }
+        self.rows_count_cache = rows_count;
+        self.cached_group_columns = self.group_columns.clone();
+        self.groups = build_group_tree(
+            &self.delegate,
+            &self.group_columns,
+            0,
+            rows_count,
+            0,
+            "",
+            cx,
+        );
+        self.compute_visible_rows();
+    }
+
+    /// Invalidate group cache — call after the delegate's data changes.
+    pub fn invalidate_groups(&mut self) {
+        self.rows_count_cache = 0;
+    }
+
+    /// Returns all group keys visible in the current flat layout.
+    pub fn groups(&self) -> Vec<&GroupInfo> {
+        self.groups.iter().collect()
+    }
+
+    /// Flatten group tree into visible-row list, honouring collapsed state.
+    fn compute_visible_rows(&mut self) {
+        self.visible_rows.clear();
+        let groups: Vec<GroupInfo> = self.groups.clone();
+        for group in &groups {
+            self.collect_group(group);
+        }
+    }
+
+    fn collect_group(&mut self, group: &GroupInfo) {
+        self.visible_rows.push(VisibleRow::Group {
+            key: group.key.clone(),
+            label: group.label.clone(),
+            depth: group.depth,
+        });
+        if !self.collapsed_groups.contains(&group.key) {
+            for child in &group.children {
+                self.collect_group(child);
+            }
+            for row_ix in group.start..(group.start + group.count) {
+                self.visible_rows.push(VisibleRow::Data { row_ix });
+            }
+        }
+    }
+
+    /// Toggle group expand/collapse by key.
+    pub fn toggle_group(&mut self, key: &SharedString, cx: &mut Context<Self>) {
+        let expanded = self.collapsed_groups.contains(key);
+        if expanded {
+            self.collapsed_groups.remove(key);
+        } else {
+            self.collapsed_groups.insert(key.clone());
+        }
+        self.compute_visible_rows();
+        cx.emit(TableEvent::ToggleGroup(key.clone(), !expanded));
+        cx.notify();
+    }
+
+    /// Expand all groups.
+    pub fn expand_all(&mut self, cx: &mut Context<Self>) {
+        self.collapsed_groups.clear();
+        self.compute_visible_rows();
+        cx.notify();
     }
 
     /// Scroll to the row at the given index.
@@ -2124,6 +2272,63 @@ where
             .h(Scrollbar::width())
             .child(Scrollbar::horizontal(&self.horizontal_scroll_handle))
     }
+
+    /// Render a group header row with toggle on the right.
+    fn render_group_row(
+        &mut self,
+        key: &SharedString,
+        label: &SharedString,
+        depth: usize,
+        is_expanded: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
+        let row_height = self.options.size.table_row_height();
+        let group = GroupInfo {
+            key: key.clone(),
+            label: label.clone(),
+            depth,
+            count: 0,
+            start: 0,
+            children: Vec::new(),
+        };
+        let mut tr = self.delegate.render_group_tr(&group, window, cx);
+        let style = tr.style().clone();
+
+        tr.h_flex()
+            .w_full()
+            .h(row_height)
+            .px_2()
+            .justify_between()
+            .items_center()
+            .border_b_1()
+            .border_color(cx.theme().table_row_border)
+            .refine_style(&style)
+            .child(self.render_group_toggle(key, is_expanded, window, cx))
+    }
+
+    fn render_group_toggle(
+        &mut self,
+        key: &SharedString,
+        is_expanded: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let key = key.clone();
+        div()
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, _: &MouseDownEvent, _window, cx| {
+                    cx.stop_propagation();
+                    this.toggle_group(&key, cx);
+                }),
+            )
+            .child(self.delegate.render_row_toggle(is_expanded, window, cx))
+    }
 }
 
 impl<D> Focusable for TableState<D>
@@ -2152,6 +2357,17 @@ where
         let rows_count = self.delegate.rows_count(cx);
         let loading = self.delegate.loading(cx);
 
+        // Compute groups and visible rows when group_by is enabled
+        if !self.group_columns.is_empty() {
+            self.compute_groups(cx);
+        } else {
+            self.visible_rows = (0..rows_count)
+                .map(|i| VisibleRow::Data { row_ix: i })
+                .collect();
+        }
+        let visible_rows_for_closure: Rc<Vec<VisibleRow>> = Rc::new(self.visible_rows.clone());
+        let visible_rows_count = visible_rows_for_closure.len();
+
         let row_height = self.options.size.table_row_height();
         let total_height = self
             .vertical_scroll_handle
@@ -2161,13 +2377,13 @@ where
             .bounds()
             .size
             .height;
-        let actual_height = row_height * rows_count as f32;
+        let actual_height = row_height * visible_rows_count as f32;
         let extra_rows_count =
             self.calculate_extra_rows_needed(total_height, actual_height, row_height);
         let render_rows_count = if self.options.stripe {
-            rows_count + extra_rows_count
+            visible_rows_count + extra_rows_count
         } else {
-            rows_count
+            visible_rows_count
         };
         let right_clicked_row = self.right_clicked_row;
         let is_filled = total_height > Pixels::ZERO && total_height <= actual_height;
@@ -2182,7 +2398,7 @@ where
             None
         };
 
-        let empty_view = if rows_count == 0 {
+        let empty_view = if visible_rows_count == 0 {
             Some(
                 div()
                     .size_full()
@@ -2211,7 +2427,8 @@ where
                 }
             })
             .map(|this| {
-                if rows_count == 0 {
+                let visible_rows = visible_rows_for_closure.clone();
+                if visible_rows_count == 0 {
                     this.children(empty_view)
                 } else {
                     this.child(
@@ -2221,6 +2438,7 @@ where
                                 render_rows_count,
                                 cx.processor(
                                     move |table, visible_range: Range<usize>, window, cx| {
+                                        let visible_rows = &visible_rows;
                                         // Use `col.width` (always up-to-date) rather than
                                         // `col.bounds.size.width`, which is only set after
                                         // prepaint and is therefore zero on the first frame.
@@ -2249,13 +2467,13 @@ where
                                             cx,
                                         );
 
-                                        if visible_range.end > rows_count {
-                                            table.scroll_to_row(
+                                        if visible_range.end > visible_rows_count {
+                                            table.vertical_scroll_handle.scroll_to_item(
                                                 std::cmp::min(
                                                     visible_range.start,
-                                                    rows_count.saturating_sub(1),
+                                                    visible_rows_count.saturating_sub(1),
                                                 ),
-                                                cx,
+                                                ScrollStrategy::Top,
                                             );
                                         }
 
@@ -2263,19 +2481,32 @@ where
                                             visible_range.end.saturating_sub(visible_range.start),
                                         );
 
-                                        // Render fake rows to fill the table
-                                        visible_range.for_each(|row_ix| {
-                                            // Render real rows for available data
-                                            items.push(table.render_table_row(
-                                                row_ix,
-                                                rows_count,
-                                                left_columns_count,
-                                                col_sizes.clone(),
-                                                columns_count,
-                                                is_filled,
-                                                window,
-                                                cx,
-                                            ));
+                                        visible_range.for_each(|render_ix| {
+                                            let visible_row = visible_rows
+                                                .get(render_ix)
+                                                .cloned()
+                                                .unwrap_or(VisibleRow::Data { row_ix: rows_count });
+                                            match visible_row {
+                                                VisibleRow::Group { key, label, depth } => {
+                                                    let expanded =
+                                                        !table.collapsed_groups.contains(&key);
+                                                    items.push(table.render_group_row(
+                                                        &key, &label, depth, expanded, window, cx,
+                                                    ));
+                                                }
+                                                VisibleRow::Data { row_ix } => {
+                                                    items.push(table.render_table_row(
+                                                        row_ix,
+                                                        rows_count,
+                                                        left_columns_count,
+                                                        col_sizes.clone(),
+                                                        columns_count,
+                                                        is_filled,
+                                                        window,
+                                                        cx,
+                                                    ));
+                                                }
+                                            }
                                         });
 
                                         items
@@ -2322,10 +2553,75 @@ where
                             this.child(self.render_horizontal_scrollbar(window, cx))
                         })
                         .when(
-                            self.options.scrollbar_visible.right && rows_count > 0,
+                            self.options.scrollbar_visible.right && visible_rows_count > 0,
                             |this| this.children(self.render_vertical_scrollbar(window, cx)),
                         ),
                 )
             })
     }
+}
+
+/// Build group tree by scanning data rows and detecting changes in cell_text.
+fn build_group_tree<D: TableDelegate>(
+    delegate: &D,
+    columns: &[usize],
+    data_start: usize,
+    data_end: usize,
+    depth: usize,
+    parent_key: &str,
+    cx: &App,
+) -> Vec<GroupInfo> {
+    let mut groups = Vec::new();
+    if columns.is_empty() || data_start >= data_end {
+        return groups;
+    }
+    let col_ix = columns[0];
+    let mut current_start = data_start;
+    let mut current_key: SharedString = delegate.cell_text(data_start, col_ix, cx).into();
+
+    for row_ix in (data_start + 1)..=data_end {
+        let key: SharedString = if row_ix < data_end {
+            delegate.cell_text(row_ix, col_ix, cx).into()
+        } else {
+            SharedString::new("")
+        };
+        let group_ends = row_ix == data_end || key != current_key;
+        if group_ends {
+            let label = current_key.clone();
+            let full_key: SharedString = if parent_key.is_empty() {
+                current_key.clone()
+            } else {
+                format!("{}/{}", parent_key, current_key).into()
+            };
+            let count = row_ix - current_start;
+            let children = if columns.len() > 1 {
+                build_group_tree(
+                    delegate,
+                    &columns[1..],
+                    current_start,
+                    row_ix,
+                    depth + 1,
+                    &full_key,
+                    cx,
+                )
+            } else {
+                Vec::new()
+            };
+            // Append sub-groups to the flat tree
+            groups.push(GroupInfo {
+                key: full_key,
+                label,
+                depth,
+                count,
+                start: current_start,
+                children,
+            });
+            // Don't extend with children — they're in the tree now
+            if row_ix < data_end {
+                current_start = row_ix;
+                current_key = key;
+            }
+        }
+    }
+    groups
 }
