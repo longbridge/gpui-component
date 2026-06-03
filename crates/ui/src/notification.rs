@@ -353,7 +353,10 @@ impl Render for Notification {
                             .icon(IconName::Close)
                             .ghost()
                             .xsmall()
-                            .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.dismiss(window, cx);
+                            })),
                     ),
             )
             .when_some(self.on_click.clone(), |this, on_click| {

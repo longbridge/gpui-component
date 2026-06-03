@@ -312,6 +312,33 @@ impl Render for NotificationStory {
                 ),
             )
             .child(
+                section("on_click vs on_close").child(
+                    Button::new("show-notify-click-close")
+                        .outline()
+                        .label("Click vs Close")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            struct ClickCloseNotification;
+
+                            window.push_notification(
+                                Notification::info(
+                                    "Click the body to fire on_click; click the X to close. \
+                                    Watch the console.",
+                                )
+                                .id::<ClickCloseNotification>()
+                                .title("on_click vs on_close")
+                                .autohide(false)
+                                .on_click(|_, _, _| {
+                                    println!("[notification] on_click fired");
+                                })
+                                .on_close(|_, _| {
+                                    println!("[notification] on_close fired");
+                                }),
+                                cx,
+                            )
+                        })),
+                ),
+            )
+            .child(
                 section("Custom Notification").child(
                     Button::new("show-notify-custom")
                         .outline()
