@@ -427,6 +427,10 @@ pub struct HighlightThemeStyle {
     pub editor_active_line_number: Option<Hsla>,
     #[serde(rename = "editor.invisible")]
     pub editor_invisible: Option<Hsla>,
+    /// Optional background color for the gutter (line-number column).
+    /// Falls back to [`Self::editor_background`] when unset.
+    #[serde(rename = "editor.gutter.background")]
+    pub editor_gutter_background: Option<Hsla>,
     #[serde(flatten)]
     pub status: StatusColors,
     #[serde(rename = "syntax")]
