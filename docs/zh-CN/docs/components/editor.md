@@ -144,6 +144,29 @@ let state = cx.new(|cx|
 );
 ```
 
+### 滚动行为
+
+在 `code_editor` 模式下，可以调整编辑器在光标附近以及文档末尾的滚动方式。两个选项分别对应 VSCode / JetBrains 中的同名设置，且仅在 `code_editor` 模式下生效。
+
+- `scroll_beyond_last_line(Option<usize>)` — 在最后一行下方保留的空行数（“scroll beyond last line”，对应 VSCode 的 `editor.scrollBeyondLastLine`）。`None`（默认）保留历史行为，约为半个视口高度；`Some(0)` 不保留空白，光标紧贴最后一行；`Some(n)` 精确保留 `n` 行。
+- `cursor_surrounding_lines(Option<usize>)` — 触发自动滚动前，光标距视口上/下边缘保持的最小行数（对应 VSCode 的 `editor.cursorSurroundingLines`）。`None`（默认）保留历史行为；`Some(n)` 精确保留 `n` 行。
+
+```rust
+let state = cx.new(|cx|
+    InputState::new(window, cx)
+        .code_editor("rust")
+        // 在最后一行下方保留 3 个空行。
+        .scroll_beyond_last_line(Some(3))
+        // 让光标距上/下边缘至少保持 1 行。
+        .cursor_surrounding_lines(Some(1))
+);
+
+Input::new(&state)
+    .h_full()
+```
+
+两者也可以在运行时通过 `set_scroll_beyond_last_line` 和 `set_cursor_surrounding_lines` 修改。
+
 ### 文本操作
 
 ```rust

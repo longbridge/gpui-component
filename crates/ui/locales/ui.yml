@@ -4,254 +4,305 @@ Calendar:
     en: Su
     zh-CN: 日
     zh-HK: 日
+    zh-TW: 日
     it: Do
   week.1:
     en: Mo
     zh-CN: 一
     zh-HK: 一
+    zh-TW: 一
     it: Lu
   week.2:
     en: Tu
     zh-CN: 二
     zh-HK: 二
+    zh-TW: 二
     it: Ma
   week.3:
     en: We
     zh-CN: 三
     zh-HK: 三
+    zh-TW: 三
     it: Me
   week.4:
     en: Th
     zh-CN: 四
     zh-HK: 四
+    zh-TW: 四
     it: Gi
   week.5:
     en: Fr
     zh-CN: 五
     zh-HK: 五
+    zh-TW: 五
     it: Ve
   week.6:
     en: Sa
     zh-CN: 六
     zh-HK: 六
+    zh-TW: 六
     it: Sa
   month.January:
     en: January
     zh-CN: 一月
     zh-HK: 一月
+    zh-TW: 一月
     it: Gennaio
   month.February:
     en: February
     zh-CN: 二月
     zh-HK: 二月
+    zh-TW: 二月
     it: Febbraio
   month.March:
     en: March
     zh-CN: 三月
     zh-HK: 三月
+    zh-TW: 三月
     it: Marzo
   month.April:
     en: April
     zh-CN: 四月
     zh-HK: 四月
+    zh-TW: 四月
     it: Aprile
   month.May:
     en: May
     zh-CN: 五月
     zh-HK: 五月
+    zh-TW: 五月
     it: Maggio
   month.June:
     en: June
     zh-CN: 六月
     zh-HK: 六月
+    zh-TW: 六月
     it: Giugno
   month.July:
     en: July
     zh-CN: 七月
     zh-HK: 七月
+    zh-TW: 七月
     it: Luglio
   month.August:
     en: August
     zh-CN: 八月
     zh-HK: 八月
+    zh-TW: 八月
     it: Agosto
   month.September:
     en: September
     zh-CN: 九月
     zh-HK: 九月
+    zh-TW: 九月
     it: Settembre
   month.October:
     en: October
     zh-CN: 十月
     zh-HK: 十月
+    zh-TW: 十月
     it: Ottobre
   month.November:
     en: November
     zh-CN: 十一月
     zh-HK: 十一月
+    zh-TW: 十一月
     it: Novembre
   month.December:
     en: December
     zh-CN: 十二月
     zh-HK: 十二月
+    zh-TW: 十二月
     it: Dicembre
 DatePicker:
   placeholder:
     en: "Select date"
     zh-CN: 选择日期
     zh-HK: 選擇日期
+    zh-TW: 選取日期
     it: "Seleziona data"
 Select:
   placeholder:
     en: "Please select"
     zh-CN: "请选择"
     zh-HK: "請選擇"
+    zh-TW: "請選擇"
     it: Seleziona
 ComboBox:
   placeholder:
     en: "Please select"
     zh-CN: "请选择"
     zh-HK: "請選擇"
+    zh-TW: "請選擇"
     it: Seleziona
   search_placeholder:
     en: "Search..."
     zh-CN: "搜索..."
     zh-HK: "搜索..."
+    zh-TW: "搜尋..."
     it: "Cerca..."
   empty:
     en: "No results"
     zh-CN: "暂无数据"
     zh-HK: "暫無數據"
+    zh-TW: "沒有結果"
     it: "Nessun risultato"
 Dock:
   Unnamed:
     en: Unnamed
     zh-CN: 未命名
     zh-HK: 未命名
+    zh-TW: 未命名
     it: "Senza nome"
   Close:
     en: Close
     zh-CN: 关闭
     zh-HK: 關閉
+    zh-TW: 關閉
     it: Chiudi
   Zoom In:
     en: Zoom In
     zh-CN: 放大
     zh-HK: 放大
+    zh-TW: 放大
     it: Zoom In
   Zoom Out:
     en: Zoom Out
     zh-CN: 缩小
     zh-HK: 縮小
+    zh-TW: 縮小
     it: Zoom Out
   Collapse:
     en: Collapse
     zh-CN: 隐藏
     zh-HK: 隱藏
+    zh-TW: 收合
     it: Nascondi
   Expand:
     en: Expand
     zh-CN: 展开
     zh-HK: 展開
+    zh-TW: 展開
     it: Espandi
 ColorPicker:
   Palette:
     en: Palette
     zh-CN: 调色板
     zh-HK: 調色板
+    zh-TW: 調色盤
     it: Tavolozza
   HSLA:
     en: HSLA
     zh-CN: HSLA
     zh-HK: HSLA
+    zh-TW: HSLA
     it: HSLA
   Hue:
     en: Hue
     zh-CN: 色相
     zh-HK: 色相
+    zh-TW: 色相
     it: Tonalità
   Saturation:
     en: Saturation
     zh-CN: 饱和度
     zh-HK: 飽和度
+    zh-TW: 飽和度
     it: Saturazione
   Lightness:
     en: Lightness
     zh-CN: 亮度
     zh-HK: 亮度
+    zh-TW: 亮度
     it: Luminosità
   Alpha:
     en: Alpha
     zh-CN: 透明度
     zh-HK: 透明度
+    zh-TW: 透明度
     it: Alfa
 Dialog:
   ok:
     en: OK
     zh-CN: 确定
     zh-HK: 確定
+    zh-TW: 確定
     it: OK
   cancel:
     en: Cancel
     zh-CN: 取消
     zh-HK: 取消
+    zh-TW: 取消
     it: Annulla
 List:
   search_placeholder:
     en: Search...
     zh-CN: 搜索...
     zh-HK: 搜索...
+    zh-TW: 搜尋...
     it: Ricerca...
 Input:
   Replace:
     en: Replace
     zh-CN: 替换
     zh-HK: 替換
+    zh-TW: 取代
   Replace All:
     en: Replace All
     zh-CN: 全部替换
     zh-HK: 全部替換
+    zh-TW: 全部取代
   Cut:
     en: Cut
     zh-CN: 剪切
     zh-HK: 剪切
+    zh-TW: 剪下
   Copy:
     en: Copy
     zh-CN: 复制
     zh-HK: 複製
+    zh-TW: 複製
   Paste:
     en: Paste
     zh-CN: 粘贴
     zh-HK: 貼上
+    zh-TW: 貼上
   Select All:
     en: Select All
     zh-CN: 全选
     zh-HK: 全選
+    zh-TW: 全選
   Go to Definition:
     en: Go to Definition
     zh-CN: 跳转到定义
     zh-HK: 跳轉到定義
+    zh-TW: 前往定義
   Show Code Actions:
     en: Show Code Actions
     zh-CN: 显示代码操作
     zh-HK: 顯示代碼操作
+    zh-TW: 顯示程式碼動作
 Settings:
   search_placeholder:
     en: Search...
     zh-CN: 搜索...
     zh-HK: 搜索...
+    zh-TW: 搜尋...
     it: Ricerca...
   Reset All:
     en: Reset All
     zh-CN: 重置全部
     zh-HK: 重置全部
+    zh-TW: 全部重設
     it: Resetta Tutto
 Pagination:
   previous:
     en: Previous
     zh-CN: 上一页
     zh-HK: 上一頁
+    zh-TW: 上一頁
   next:
     en: Next
     zh-CN: 下一页
     zh-HK: 下一頁
+    zh-TW: 下一頁
