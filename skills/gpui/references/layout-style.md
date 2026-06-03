@@ -141,7 +141,7 @@ div()
 .flex_col()               // Column direction
 .items_center()           // Align items center
 .justify_between()        // Space between items
-.flex_grow()              // Grow to fill space
+.flex_grow_1()              // Grow to fill space
 ```
 
 ## h_flex / v_flex Helpers

@@ -443,7 +443,7 @@ impl RenderOnce for TableHead {
             .flex()
             .items_center()
             .when(self.style.size.width.is_none(), |this| {
-                this.flex_shrink().flex_basis(relative(self.col_span as f32))
+                this.flex_shrink_1().flex_basis(relative(self.col_span as f32))
             })
             .min_w(MIN_CELL_WIDTH * self.col_span)
             .px(paddings.left)
@@ -532,7 +532,7 @@ impl RenderOnce for TableCell {
             .flex()
             .items_center()
             .when(self.style.size.width.is_none(), |this| {
-                this.flex_shrink().flex_basis(relative(self.col_span as f32))
+                this.flex_shrink_1().flex_basis(relative(self.col_span as f32))
             })
             .min_w(MIN_CELL_WIDTH * self.col_span)
             .px(paddings.left)

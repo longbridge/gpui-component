@@ -503,7 +503,7 @@ where
         let scroll_handle = self.scroll_handle.clone();
 
         v_flex()
-            .flex_grow()
+            .flex_grow_1()
             .relative()
             .size_full()
             .when_some(self.options.max_height, |this, h| this.max_h(h))

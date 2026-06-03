@@ -285,12 +285,12 @@ impl RenderOnce for ResizablePanel {
         div()
             .id(("resizable-panel", self.panel_ix))
             .flex()
-            .flex_grow()
+            .flex_grow_1()
             .size_full()
             .relative()
             // Apply caller style overrides here — between the flex defaults
             // above and the size management below. This lets callers cancel
-            // the unconditional `.flex_grow()` (via `.flex_none()`, the load-
+            // the unconditional `.flex_grow_1()` (via `.flex_none()`, the load-
             // bearing case for sized panels next to a collapsing sibling) and
             // add their own padding / colors / borders, while keeping the
             // panel's runtime size constraints (min/max + `flex_basis` driven
@@ -305,7 +305,7 @@ impl RenderOnce for ResizablePanel {
             // 1. initial_size is None, to use auto size.
             // 2. initial_size is Some and size is none, to use the initial size of the panel for first time render.
             // 3. initial_size is Some and size is Some, use `size`.
-            .when(self.initial_size.is_none(), |this| this.flex_shrink())
+            .when(self.initial_size.is_none(), |this| this.flex_shrink_1())
             .when_some(self.initial_size, |this, initial_size| {
                 // The `self.size` is None, that mean the initial size for the panel,
                 // so we need set `flex_shrink_0` To let it keep the initial size.
