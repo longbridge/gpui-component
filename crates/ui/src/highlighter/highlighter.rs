@@ -157,6 +157,14 @@ fn should_include_injection_range(
     markdown_inline_range_has_trigger(text, range.start_byte..range.end_byte)
 }
 
+/// Returns whether an inline range contains any byte that could start a
+/// Markdown inline construct, so plain prose ranges skip the injected parse.
+///
+/// The byte set must stay a superset of the trigger characters for every node
+/// captured by `languages/markdown_inline/highlights.scm` (emphasis, code
+/// spans, links, images, autolinks). If that query gains a construct with a new
+/// trigger character (e.g. GFM bare autolinks), add it here or the construct
+/// will silently lose highlighting.
 fn markdown_inline_range_has_trigger(text: &Rope, range: Range<usize>) -> bool {
     text.slice(range).bytes().any(|byte| {
         matches!(
@@ -527,17 +535,10 @@ impl SyntaxHighlighter {
         }
 
         impl CombinedRanges {
-            fn push_limited(
-                &mut self,
-                language_name: &SharedString,
-                ranges: Vec<tree_sitter::Range>,
-                text: &Rope,
-            ) {
+            /// Ranges are already filtered by `should_include_injection_range`
+            /// before being pushed here; this only enforces the count/byte caps.
+            fn push_limited(&mut self, ranges: Vec<tree_sitter::Range>) {
                 for range in ranges {
-                    if !should_include_injection_range(language_name, &range, text) {
-                        continue;
-                    }
-
                     if self.ranges.len() >= MAX_INJECTION_RANGES {
                         break;
                     }
@@ -635,7 +636,7 @@ impl SyntaxHighlighter {
                         ranges: Vec::new(),
                         byte_count: 0,
                     })
-                    .push_limited(&language_name, ranges, text);
+                    .push_limited(ranges);
             } else {
                 if new_layers.len() >= MAX_INJECTION_LAYERS
                     || !injection_ranges_within_limits(&ranges)
