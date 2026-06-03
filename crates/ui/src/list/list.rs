@@ -1,5 +1,5 @@
-use std::ops::Range;
 use instant::Duration;
+use std::ops::Range;
 
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::input::InputState;
@@ -295,7 +295,10 @@ where
                     });
 
                     // Always wait 100ms to avoid flicker
-                    window.background_executor().timer(Duration::from_millis(100)).await;
+                    window
+                        .background_executor()
+                        .timer(Duration::from_millis(100))
+                        .await;
                     _ = this.update_in(window, |this, window, cx| {
                         this.set_searching(false, window, cx);
                     });
@@ -503,7 +506,7 @@ where
         let scroll_handle = self.scroll_handle.clone();
 
         v_flex()
-            .flex_grow()
+            .flex_grow_1()
             .relative()
             .size_full()
             .when_some(self.options.max_height, |this, h| this.max_h(h))
