@@ -17,6 +17,7 @@ members = [
     "examples/focus_trap",
     "examples/tooltip_top_edge",
     "examples/sidebar",
+    "examples/text_selection",
 ]
 resolver = "2"
 
