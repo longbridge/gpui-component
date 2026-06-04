@@ -1510,6 +1510,10 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Input has its own text selection; suppress the window-level text
+        // selection (Root) so it does not start a drag from here.
+        crate::global_state::GlobalState::suppress_text_selection(cx);
+
         // Clear inline completion on any mouse interaction
         self.clear_inline_completion(cx);
 
