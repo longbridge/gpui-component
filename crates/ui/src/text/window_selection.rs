@@ -355,15 +355,26 @@ impl Root {
         new_points: Option<(Point<Pixels>, Point<Pixels>)>,
         cx: &mut Context<Self>,
     ) {
-        // Single-view fast path: only the anchored view can paint a highlight,
-        // so only it needs to re-render.
-        if let Some(id) = self.text_selection.single_view() {
-            if let Some((view, _)) = self.selectable_text_views.get(&id) {
-                if let Some(view) = view.upgrade() {
-                    view.update(cx, |_, cx| cx.notify());
+        // Single-view fast path: when the selection lives entirely in the
+        // anchor view, only it can paint a highlight, so only it needs to
+        // re-render.
+        //
+        // This is only safe when there is no *previous* band that may have
+        // painted a highlight on some other view: a drag that crossed into a
+        // second view and then came back inside the anchor view leaves the new
+        // band single-view, but the old band still covers the view that must
+        // clear its now-stale highlight. In that case fall through to the
+        // general band path (band = old ∪ new), which always covers the anchor
+        // view too.
+        if old_points.is_none() {
+            if let Some(id) = self.text_selection.single_view() {
+                if let Some((view, _)) = self.selectable_text_views.get(&id) {
+                    if let Some(view) = view.upgrade() {
+                        view.update(cx, |_, cx| cx.notify());
+                    }
                 }
+                return;
             }
-            return;
         }
 
         // Merge the old and new selection bands. The old band covers views that
@@ -518,6 +529,8 @@ mod tests {
         Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render,
         Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
     };
+    use std::cell::Cell;
+    use std::rc::Rc;
 
     struct ChatTestView {
         focus_handle: FocusHandle,
@@ -723,5 +736,68 @@ mod tests {
         let text = window_selected_text(cx);
         assert_eq!(text.trim(), "Hello", "expected word selection: {text:?}");
         assert!(!text.contains("Second message"), "got: {text:?}");
+    }
+
+    #[gpui::test]
+    fn drag_back_into_anchor_view_clears_other_views(cx: &mut TestAppContext) {
+        let (chat, cx) = setup(true, cx);
+        let second = chat.read_with(cx, |chat, _| chat.second.clone());
+
+        // Drag from view A down into view B: this is a cross-view selection, so
+        // B paints a highlight and `selected_text` reports it.
+        cx.simulate_mouse_down(
+            point(px(0.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_move(
+            point(px(300.), px(70.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = second.read_with(cx, |state, _| state.selected_text());
+        assert!(
+            text.contains("Second message"),
+            "precondition: B should be selected, got {text:?}"
+        );
+
+        // Observe B's re-render requests. A view only drops a stale highlight
+        // when it is notified and repaints; this asserts the controller does
+        // notify B, independently of whether the test harness happens to
+        // repaint B for unrelated reasons.
+        let b_notified = Rc::new(Cell::new(false));
+        let _subscription = cx.update({
+            let b_notified = b_notified.clone();
+            let second = second.clone();
+            move |_, cx| cx.observe(&second, move |_, _| b_notified.set(true))
+        });
+        b_notified.set(false);
+
+        // Drag back up inside view A. The drag now lives entirely in A, so
+        // `single_view` is Some(A) and the fast path runs. It must still notify
+        // B (whose old band crossed B) so B can clear its now-stale highlight.
+        //
+        // We check this on the in-drag frame, not after mouse-up:
+        // `end_text_selection` notifies every selectable view, which would
+        // notify B for an unrelated reason and mask the bug.
+        cx.simulate_mouse_move(
+            point(px(60.), px(15.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.run_until_parked();
+
+        assert!(
+            b_notified.get(),
+            "view B was not notified when the drag returned to the anchor view, \
+             so its stale highlight would never be repainted away",
+        );
     }
 }
