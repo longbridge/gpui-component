@@ -192,6 +192,14 @@ impl Root {
         cx: &mut Context<Self>,
     ) {
         let endpoint = self.text_selection_endpoint(position, window, cx);
+        // GPUI's focus-on-mouse-down (`track_focus`) marks the event
+        // default-prevented when pressing any focusable element — including the
+        // TextView itself. A press that hits a selectable TextView must still
+        // start a selection; only blank-space presses respect default_prevented,
+        // which excludes presses consumed by Button, Input, etc.
+        if endpoint.view.is_none() && window.default_prevented() {
+            return;
+        }
         if let Some(view) = endpoint.view.as_ref().and_then(|v| v.upgrade()) {
             view.update(cx, |state, cx| {
                 state.is_selecting = true;
@@ -315,7 +323,11 @@ impl Root {
 /// propagation or prevent default).
 ///
 /// Note: `window.on_mouse_event` handlers are window-global (not scoped to
-/// any hitbox); the phase and `default_prevented` checks are the only guards.
+/// any hitbox); the phase check and the `default_prevented` guard inside
+/// `start_text_selection` are the only guards. `default_prevented` is checked
+/// there (not here) so that presses hitting a selectable TextView — which GPUI
+/// marks default-prevented via its focus-on-mouse-down auto-handler — still
+/// start a selection, while presses consumed by Button/Input etc. are excluded.
 pub(crate) struct TextSelectionController;
 
 impl IntoElement for TextSelectionController {
@@ -378,10 +390,11 @@ impl Element for TextSelectionController {
                 // behavior), even when an interactive component consumes the
                 // event in the bubble phase.
                 Root::update(window, cx, |root, _, cx| root.clear_text_selection(cx));
-            } else if event.click_count == 1 && !window.default_prevented() {
-                // Reaching bubble phase means no component stopped
-                // propagation; default_prevented covers Button-like
-                // components.
+            } else if event.click_count == 1 {
+                // Reaching bubble phase means no component stopped propagation.
+                // default_prevented is checked inside start_text_selection: presses
+                // that hit a selectable TextView must start a selection even though
+                // GPUI's focus-on-mouse-down marks them default-prevented.
                 Root::update(window, cx, |root, window, cx| {
                     root.start_text_selection(event.position, window, cx);
                 });
