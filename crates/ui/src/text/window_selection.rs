@@ -418,3 +418,188 @@ impl Element for TextSelectionController {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        Root,
+        text::{TextView, TextViewState},
+    };
+    use gpui::{
+        AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, MouseDownEvent,
+        MouseUpEvent, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
+        Window, div, point, px,
+    };
+
+    struct ChatTestView {
+        first: Entity<TextViewState>,
+        second: Entity<TextViewState>,
+        second_selectable: bool,
+    }
+
+    impl ChatTestView {
+        fn new(second_selectable: bool, cx: &mut Context<Self>) -> Self {
+            Self {
+                first: cx.new(|cx| TextViewState::markdown("Hello world", cx)),
+                second: cx.new(|cx| TextViewState::markdown("Second message", cx)),
+                second_selectable,
+            }
+        }
+    }
+
+    impl Render for ChatTestView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .pt(px(10.))
+                .child(
+                    div()
+                        .h(px(40.))
+                        .child(TextView::new(&self.first).selectable(true)),
+                )
+                .child(
+                    div()
+                        .h(px(40.))
+                        .child(TextView::new(&self.second).selectable(self.second_selectable)),
+                )
+        }
+    }
+
+    fn setup(
+        second_selectable: bool,
+        cx: &mut TestAppContext,
+    ) -> (Entity<ChatTestView>, &mut VisualTestContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let chat = cx.new(|cx| ChatTestView::new(second_selectable, cx));
+            Root::new(chat, window, cx)
+        });
+        let chat = root.read_with(cx, |root, _| {
+            root.view().clone().downcast::<ChatTestView>().unwrap()
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        (chat, cx)
+    }
+
+    fn drag(
+        cx: &mut VisualTestContext,
+        from: gpui::Point<gpui::Pixels>,
+        to: gpui::Point<gpui::Pixels>,
+    ) {
+        cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::default());
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::default());
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::default());
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+    }
+
+    fn window_selected_text(cx: &mut VisualTestContext) -> String {
+        cx.update(|window, cx| Root::selected_text(window, cx))
+    }
+
+    #[gpui::test]
+    fn cross_view_drag_merges_text_top_to_bottom(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        // From the very start of the first view down into the second view.
+        drag(cx, point(px(0.), px(15.)), point(px(300.), px(70.)));
+
+        let text = window_selected_text(cx);
+        let first = text.find("Hello world").expect("first view text missing");
+        let second = text
+            .find("Second message")
+            .expect("second view text missing");
+        assert!(first < second, "wrong order: {text:?}");
+        assert!(text.contains('\n'), "expected newline separator: {text:?}");
+    }
+
+    #[gpui::test]
+    fn drag_from_blank_space_selects_views_below(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        // Start in the blank padding above the first view.
+        drag(cx, point(px(5.), px(2.)), point(px(300.), px(70.)));
+
+        let text = window_selected_text(cx);
+        assert!(text.contains("Hello world"), "got: {text:?}");
+        assert!(text.contains("Second message"), "got: {text:?}");
+    }
+
+    #[gpui::test]
+    fn non_selectable_view_is_excluded(cx: &mut TestAppContext) {
+        let (_, cx) = setup(false, cx);
+
+        drag(cx, point(px(5.), px(2.)), point(px(300.), px(70.)));
+
+        let text = window_selected_text(cx);
+        assert!(text.contains("Hello world"), "got: {text:?}");
+        assert!(!text.contains("Second message"), "got: {text:?}");
+    }
+
+    #[gpui::test]
+    fn drag_within_single_view_excludes_others(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        // Entirely inside the first view.
+        drag(cx, point(px(5.), px(15.)), point(px(60.), px(15.)));
+
+        let text = window_selected_text(cx);
+        assert!(!text.contains("Second message"), "got: {text:?}");
+        assert!(!text.trim().is_empty(), "expected some selection");
+    }
+
+    #[gpui::test]
+    fn mouse_down_clears_previous_selection(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        drag(cx, point(px(5.), px(15.)), point(px(300.), px(70.)));
+        assert!(!window_selected_text(cx).is_empty());
+
+        // A plain click clears the selection.
+        cx.simulate_click(point(px(300.), px(100.)), Modifiers::default());
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(window_selected_text(cx), "");
+    }
+
+    #[gpui::test]
+    fn double_click_selects_word_under_root(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        // Double-click inside the first view: must trigger the per-view word
+        // selection (Inline), not a window-level drag selection.
+        let position = point(px(5.), px(15.));
+        cx.simulate_event(MouseDownEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+            first_mouse: false,
+        });
+        cx.simulate_event(MouseUpEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = window_selected_text(cx);
+        assert_eq!(text.trim(), "Hello", "expected word selection: {text:?}");
+        assert!(!text.contains("Second message"), "got: {text:?}");
+    }
+}
