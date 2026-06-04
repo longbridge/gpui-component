@@ -113,6 +113,11 @@ impl Root {
     /// Internal: collect selected text using `&self` directly, so it is safe
     /// to call while the Root entity is leased (e.g. inside Root's own action
     /// handler).
+    ///
+    /// Note: per-view selected text is collected from `InlineState`, which is
+    /// populated during paint. The result reflects the last painted frame; a
+    /// copy action racing ahead of a pending repaint may observe the previous
+    /// selection state.
     pub(crate) fn window_selected_text(&self, cx: &App) -> String {
         let resolved = self.text_selection.resolved_points(cx);
         let single_view = self.text_selection.single_view();
@@ -580,7 +585,7 @@ mod tests {
 
         // Double-click inside the first view: must trigger the per-view word
         // selection (Inline), not a window-level drag selection.
-        let position = point(px(5.), px(15.));
+        let position = point(px(10.), px(15.));
         cx.simulate_event(MouseDownEvent {
             position,
             modifiers: Modifiers::default(),

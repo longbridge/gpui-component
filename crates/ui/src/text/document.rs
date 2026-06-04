@@ -46,6 +46,18 @@ impl ParsedDocument {
         text
     }
 
+    /// Synchronously clear the selection stored in every inline state.
+    ///
+    /// This mirrors the [`selected_text`](Self::selected_text) traversal so the
+    /// stored selection can be cleared without relying on a repaint. Offscreen
+    /// (virtualized) views do not repaint, so their `InlineState.selection`
+    /// would otherwise retain stale values from the last painted frame.
+    pub(super) fn clear_selection(&self) {
+        for block in self.blocks.iter() {
+            block.clear_selection();
+        }
+    }
+
     /// Converts the node to markdown format.
     ///
     /// This is used to generate markdown for test.

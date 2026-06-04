@@ -249,6 +249,10 @@ impl TextViewState {
         self.select_all = false;
         self.is_selecting = false;
         self.auto_scroll.stop();
+        // Clear the inline selection state synchronously, so offscreen
+        // (virtualized) views that won't repaint don't leak stale selection
+        // text into a new cross-view copy.
+        self.parsed_content.document.clear_selection();
     }
 
     /// Clear the current text selection.
