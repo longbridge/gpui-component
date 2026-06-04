@@ -563,6 +563,9 @@ impl RenderOnce for Button {
 
                 // Avoid focus on mouse down.
                 window.prevent_default();
+
+                // Pressing a button must not start the window-level text selection.
+                crate::global_state::GlobalState::suppress_text_selection(cx);
             })
             .when_some(self.on_click, |this, on_click| {
                 this.on_click(move |event, window, cx| {

@@ -4,7 +4,7 @@ use gpui::{
     MouseUpEvent, Pixels, Point, Style, WeakEntity, Window,
 };
 
-use crate::{Root, scroll::AutoScroll, text::TextViewState};
+use crate::{Root, global_state::GlobalState, scroll::AutoScroll, text::TextViewState};
 
 /// Window-level text selection state, owned by [`Root`].
 ///
@@ -197,14 +197,12 @@ impl Root {
         cx: &mut Context<Self>,
     ) {
         let endpoint = self.text_selection_endpoint(position, window, cx);
-        // GPUI's focus-on-mouse-down (`track_focus`) marks the event
-        // default-prevented when pressing any focusable element — including the
-        // TextView itself. A press that hits a selectable TextView must still
-        // start a selection; only blank-space presses respect default_prevented,
-        // which excludes presses consumed by Button, Input, etc.
-        if endpoint.view.is_none() && window.default_prevented() {
-            return;
-        }
+        // Components that own their own mouse-down interaction (Input, Button,
+        // etc.) set `GlobalState::suppress_text_selection` in their bubble-phase
+        // handler; the controller checks that flag before calling this, so a
+        // press starts a selection from any point that is not consumed by such a
+        // component — including blank space inside a focusable container, which
+        // GPUI's focus-on-mouse-down would otherwise mark default-prevented.
         if let Some(view) = endpoint.view.as_ref().and_then(|v| v.upgrade()) {
             view.update(cx, |state, cx| {
                 state.is_selecting = true;
@@ -223,6 +221,11 @@ impl Root {
         cx: &mut Context<Self>,
     ) {
         if !self.text_selection.is_selecting {
+            return;
+        }
+        // Do not update the selection while a GPUI drag-and-drop is active
+        // (e.g. dragging a dock tab or a resize handle across TextViews).
+        if cx.has_active_drag() {
             return;
         }
         self.text_selection.cursor = Some(self.text_selection_endpoint(position, window, cx));
@@ -328,11 +331,14 @@ impl Root {
 /// propagation or prevent default).
 ///
 /// Note: `window.on_mouse_event` handlers are window-global (not scoped to
-/// any hitbox); the phase check and the `default_prevented` guard inside
-/// `start_text_selection` are the only guards. `default_prevented` is checked
-/// there (not here) so that presses hitting a selectable TextView — which GPUI
-/// marks default-prevented via its focus-on-mouse-down auto-handler — still
-/// start a selection, while presses consumed by Button/Input etc. are excluded.
+/// any hitbox); the phase check and the `GlobalState::suppress_text_selection`
+/// flag are the only guards. The flag is reset in the capture phase of every
+/// left mouse down and set in the bubble phase by components that own their own
+/// press/drag interaction (Button, Input, etc.). Because bubble-phase listeners
+/// fire in reverse registration order and this controller registers earliest,
+/// it observes the flag after those components have set it, so presses consumed
+/// by them are excluded while presses on blank space (even inside a focusable
+/// container) still start a selection.
 pub(crate) struct TextSelectionController;
 
 impl IntoElement for TextSelectionController {
@@ -391,15 +397,19 @@ impl Element for TextSelectionController {
                 return;
             }
             if phase.capture() {
-                // Any left press clears the previous selection (browser
-                // behavior), even when an interactive component consumes the
-                // event in the bubble phase.
+                // Reset the suppression flag at the start of every press, then
+                // clear the previous selection (browser behavior), even when an
+                // interactive component consumes the event in the bubble phase.
+                GlobalState::global_mut(cx).suppress_text_selection = false;
                 Root::update(window, cx, |root, _, cx| root.clear_text_selection(cx));
             } else if event.click_count == 1 {
                 // Reaching bubble phase means no component stopped propagation.
-                // default_prevented is checked inside start_text_selection: presses
-                // that hit a selectable TextView must start a selection even though
-                // GPUI's focus-on-mouse-down marks them default-prevented.
+                // Components that own their own press (Button, Input, etc.) set
+                // `suppress_text_selection` in their bubble handler; if set, the
+                // press is theirs and must not start a window selection.
+                if GlobalState::global(cx).suppress_text_selection {
+                    return;
+                }
                 Root::update(window, cx, |root, window, cx| {
                     root.start_text_selection(event.position, window, cx);
                 });
@@ -426,17 +436,19 @@ impl Element for TextSelectionController {
 
 #[cfg(test)]
 mod tests {
+    use crate::global_state::GlobalState;
     use crate::{
         Root,
         text::{TextView, TextViewState},
     };
     use gpui::{
-        AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, MouseDownEvent,
-        MouseUpEvent, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
-        Window, div, point, px,
+        AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
+        Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render,
+        Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
     };
 
     struct ChatTestView {
+        focus_handle: FocusHandle,
         first: Entity<TextViewState>,
         second: Entity<TextViewState>,
         second_selectable: bool,
@@ -445,6 +457,7 @@ mod tests {
     impl ChatTestView {
         fn new(second_selectable: bool, cx: &mut Context<Self>) -> Self {
             Self {
+                focus_handle: cx.focus_handle(),
                 first: cx.new(|cx| TextViewState::markdown("Hello world", cx)),
                 second: cx.new(|cx| TextViewState::markdown("Second message", cx)),
                 second_selectable,
@@ -454,7 +467,14 @@ mod tests {
 
     impl Render for ChatTestView {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            // `track_focus` makes the root a focusable container, so GPUI's
+            // focus-on-mouse-down marks every press inside it default-prevented.
+            // Selection must still start from blank space here (regression
+            // guard for `drag_from_blank_space_selects_views_below`), which the
+            // `suppress_text_selection` mechanism guarantees because blank-space
+            // presses never set that flag.
             div()
+                .track_focus(&self.focus_handle)
                 .size_full()
                 .pt(px(10.))
                 .child(
@@ -466,6 +486,16 @@ mod tests {
                     div()
                         .h(px(40.))
                         .child(TextView::new(&self.second).selectable(self.second_selectable)),
+                )
+                // A 20px region below the views that owns its press the way
+                // Input/Button do: its bubble-phase handler sets the suppress
+                // flag, so a press starting here must not start a selection.
+                .child(
+                    div()
+                        .h(px(20.))
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                            GlobalState::suppress_text_selection(cx);
+                        }),
                 )
         }
     }
@@ -538,6 +568,20 @@ mod tests {
         let text = window_selected_text(cx);
         assert!(text.contains("Hello world"), "got: {text:?}");
         assert!(text.contains("Second message"), "got: {text:?}");
+    }
+
+    #[gpui::test]
+    fn suppressed_mouse_down_does_not_start_selection(cx: &mut TestAppContext) {
+        let (_, cx) = setup(true, cx);
+
+        // The suppress region sits below the two views (root pt=10, two 40px
+        // view rows -> y in [90, 110)). Pressing inside it makes its bubble
+        // handler set the suppress flag, so dragging up across both views must
+        // not produce any window selection.
+        drag(cx, point(px(20.), px(100.)), point(px(20.), px(15.)));
+
+        let text = window_selected_text(cx);
+        assert!(text.is_empty(), "expected no selection, got: {text:?}");
     }
 
     #[gpui::test]
