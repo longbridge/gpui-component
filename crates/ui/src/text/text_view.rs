@@ -219,7 +219,8 @@ impl Element for TextView {
             })
             .relative()
             .on_action(move |_: &crate::input::Copy, window, cx| {
-                let text = crate::Root::selected_text(window, cx).trim().to_string();
+                use crate::WindowExt as _;
+                let text = window.selected_text(cx).trim().to_string();
                 if text.is_empty() {
                     cx.propagate();
                     return;

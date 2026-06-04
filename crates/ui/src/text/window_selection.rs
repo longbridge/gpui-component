@@ -101,13 +101,15 @@ impl Root {
         });
     }
 
-    /// Return the merged selected text across all selectable TextViews in this
-    /// window, ordered by vertical position (top to bottom), joined with `\n`.
-    pub fn selected_text(window: &Window, cx: &App) -> String {
-        let Some(root) = window.root::<Root>().flatten() else {
-            return String::new();
-        };
-        root.read(cx).window_selected_text(cx)
+    /// Whether there is an active text selection (window-level or view-local).
+    pub(crate) fn has_text_selection(&self, cx: &App) -> bool {
+        if self.text_selection.resolved_points(cx).is_some() {
+            return true;
+        }
+        self.selectable_text_views.values().any(|(view, _)| {
+            view.upgrade()
+                .is_some_and(|view| view.read(cx).has_view_selection())
+        })
     }
 
     /// Internal: collect selected text using `&self` directly, so it is safe
@@ -539,7 +541,8 @@ mod tests {
     }
 
     fn window_selected_text(cx: &mut VisualTestContext) -> String {
-        cx.update(|window, cx| Root::selected_text(window, cx))
+        use crate::WindowExt as _;
+        cx.update(|window, cx| window.selected_text(cx))
     }
 
     #[gpui::test]
