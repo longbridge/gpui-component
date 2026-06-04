@@ -92,6 +92,9 @@ impl Root {
         let weak = state.downgrade();
         let hitbox = hitbox.clone();
         root.update(cx, |root, _| {
+            // Prune dead views on each registration. This is O(N) per call (O(N²)
+            // per frame across N selectable views), acceptable for typical view
+            // counts; revisit if a window ever hosts hundreds of selectable views.
             root.selectable_text_views
                 .retain(|_, (view, _)| view.upgrade().is_some());
             root.selectable_text_views.insert(id, (weak, hitbox));
@@ -261,6 +264,10 @@ impl Root {
         cx: &App,
     ) -> SelectionEndpoint {
         let mut best: Option<(WeakEntity<TextViewState>, f32)> = None;
+        // `is_hovered` reflects the hitbox state as of the last prepaint frame —
+        // a one-frame lag that is negligible for mouse-driven selection.
+        // Smallest-area wins as a proxy for the innermost (topmost) view when
+        // TextViews overlap.
         for (view, hitbox) in self.selectable_text_views.values() {
             if view.upgrade().is_none() {
                 continue;
