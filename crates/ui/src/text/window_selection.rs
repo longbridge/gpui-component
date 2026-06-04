@@ -161,6 +161,7 @@ impl Root {
 
     /// Clear the window selection and all view-local selections.
     pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
+        let had_window_selection = self.text_selection.anchor.is_some();
         self.text_selection.anchor = None;
         self.text_selection.cursor = None;
         self.text_selection.is_selecting = false;
@@ -168,10 +169,22 @@ impl Root {
             let Some(view) = view.upgrade() else {
                 return false;
             };
-            view.update(cx, |state, cx| {
-                state.is_selecting = false;
-                state.clear_selection(cx);
-            });
+            // Skip views with nothing to clear: without a window selection nor
+            // a view-local selection, their inline selection state is already
+            // empty, and notifying would re-render every selectable view on
+            // every click.
+            //
+            // When `had_window_selection` is true this still clears every view,
+            // even though the selection may have covered only some of them: the
+            // set of views that painted a highlight is not cheaply tracked, so
+            // clearing all of them is the conservative, correctness-first
+            // choice.
+            if had_window_selection || view.read(cx).has_view_selection() {
+                view.update(cx, |state, cx| {
+                    state.is_selecting = false;
+                    state.clear_selection(cx);
+                });
+            }
             true
         });
     }
@@ -230,7 +243,14 @@ impl Root {
         if cx.has_active_drag() {
             return;
         }
+
+        // Compute the selection band before and after moving the cursor so the
+        // notify can be limited to the views that actually changed. Order
+        // matters: read the old points first, then update the cursor, then read
+        // the new points.
+        let old_points = self.text_selection.resolved_points(cx);
         self.text_selection.cursor = Some(self.text_selection_endpoint(position, window, cx));
+        let new_points = self.text_selection.resolved_points(cx);
 
         // Auto-scroll the anchor view when dragging near its viewport edges,
         // same semantics as the previous per-view implementation.
@@ -249,7 +269,7 @@ impl Root {
             });
         }
 
-        self.notify_selectable_text_views(cx);
+        self.notify_selection_band(old_points, new_points, cx);
     }
 
     pub(crate) fn end_text_selection(&mut self, cx: &mut Context<Self>) {
@@ -320,6 +340,56 @@ impl Root {
                 return false;
             };
             view.update(cx, |_, cx| cx.notify());
+            true
+        });
+    }
+
+    /// Notify the views affected by the current selection update. For a
+    /// single-view selection only the anchor view re-renders; for a
+    /// cross-view selection only views whose bounds intersect the vertical
+    /// band covered by the old and new selection participate, plus everything
+    /// that may need to clear a previously painted highlight.
+    fn notify_selection_band(
+        &mut self,
+        old_points: Option<(Point<Pixels>, Point<Pixels>)>,
+        new_points: Option<(Point<Pixels>, Point<Pixels>)>,
+        cx: &mut Context<Self>,
+    ) {
+        // Single-view fast path: only the anchored view can paint a highlight,
+        // so only it needs to re-render.
+        if let Some(id) = self.text_selection.single_view() {
+            if let Some((view, _)) = self.selectable_text_views.get(&id) {
+                if let Some(view) = view.upgrade() {
+                    view.update(cx, |_, cx| cx.notify());
+                }
+            }
+            return;
+        }
+
+        // Merge the old and new selection bands. The old band covers views that
+        // may need to clear a previously painted highlight; the new band covers
+        // views that may need to paint one. If both are empty there is nothing
+        // to update.
+        let band = |points: Option<(Point<Pixels>, Point<Pixels>)>| {
+            points.map(|(a, b)| {
+                let (lo, hi) = if a.y <= b.y { (a.y, b.y) } else { (b.y, a.y) };
+                (lo, hi)
+            })
+        };
+        let (band_min, band_max) = match (band(old_points), band(new_points)) {
+            (Some((lo_a, hi_a)), Some((lo_b, hi_b))) => (lo_a.min(lo_b), hi_a.max(hi_b)),
+            (Some(b), None) | (None, Some(b)) => b,
+            (None, None) => return,
+        };
+
+        self.selectable_text_views.retain(|_, (view, _)| {
+            let Some(view) = view.upgrade() else {
+                return false;
+            };
+            let bounds = view.read(cx).bounds();
+            if bounds.top() <= band_max && bounds.bottom() >= band_min {
+                view.update(cx, |_, cx| cx.notify());
+            }
             true
         });
     }
