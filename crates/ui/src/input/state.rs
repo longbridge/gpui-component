@@ -1510,6 +1510,10 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Input has its own text selection; mark the event as handled so the
+        // window-level text selection (Root) does not start a drag from here.
+        window.prevent_default();
+
         // Clear inline completion on any mouse interaction
         self.clear_inline_completion(cx);
 
