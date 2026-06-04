@@ -1,7 +1,7 @@
 use gpui::{
     App, Bounds, Context, Element, ElementId, Entity, EntityId, GlobalElementId, Hitbox,
     InspectorElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Point, Style, WeakEntity, Window,
+    MouseUpEvent, Pixels, Point, ScrollWheelEvent, Style, WeakEntity, Window,
 };
 
 use crate::{Root, global_state::GlobalState, scroll::AutoScroll, text::TextViewState};
@@ -18,17 +18,36 @@ pub struct WindowTextSelection {
     pub(crate) is_selecting: bool,
 }
 
-/// A selection endpoint, content-anchored if inside a TextView.
+/// A selection endpoint, content-anchored to a TextView.
+///
+/// `point` is always stored in the view's content coordinates (relative to its
+/// `bounds().origin` and `scroll_offset()`), even when the press landed in
+/// blank space: in that case the endpoint is proxy-anchored to the nearest view
+/// in document flow (see [`Root::text_selection_endpoint`]) and `inside` is
+/// false. This keeps the selection following the content when an outer
+/// container scrolls — a window-coordinate anchor would drift relative to the
+/// content. `view` is only `None` when no view is registered at all.
 #[derive(Clone)]
 pub(crate) struct SelectionEndpoint {
-    /// Some: the endpoint is inside this TextView; `point` is in that view's
-    /// content coordinates. None: blank space; `point` is window coordinates.
+    /// Some: the endpoint is anchored to this TextView; `point` is in that
+    /// view's content coordinates (may fall outside the view when proxy-
+    /// anchored from blank space). None: no view is registered; `point` is
+    /// window coordinates.
     pub(crate) view: Option<WeakEntity<TextViewState>>,
     pub(crate) point: Point<Pixels>,
+    /// True when the press actually hit the view's hitbox; false when the
+    /// endpoint is proxy-anchored to the nearest view from blank space (so
+    /// the selection follows content when an outer container scrolls).
+    pub(crate) inside: bool,
 }
 
 impl SelectionEndpoint {
     /// Resolve this endpoint to window coordinates.
+    ///
+    /// Whether the endpoint was a true hit or proxy-anchored from blank space,
+    /// `point` is in the view's content coordinates, so resolving uses the
+    /// view's current `bounds().origin + scroll_offset()` (refreshed every
+    /// frame in prepaint) and the endpoint follows the content as it moves.
     fn resolve(&self, cx: &App) -> Option<Point<Pixels>> {
         match &self.view {
             Some(view) => {
@@ -57,13 +76,17 @@ impl WindowTextSelection {
         Some((start, end))
     }
 
-    /// If both endpoints are anchored inside the same TextView, return its id.
+    /// If both endpoints are anchored to the same TextView, return its id.
     ///
-    /// This is the single-view fast path: when a drag starts and ends inside
-    /// one TextView, only that view participates, keeping the single-view
-    /// behavior identical to before. When either endpoint is in blank space,
-    /// all registered views participate and the per-character geometric test
-    /// (in `Inline`) decides what is actually selected.
+    /// This is the single-view fast path: when a drag starts and ends anchored
+    /// to one TextView, only that view participates, keeping the single-view
+    /// behavior identical to before. Proxy-anchored endpoints (from blank
+    /// space) count here too: a drag that begins in the blank space just above
+    /// view A proxy-anchors its anchor to A, so a drag from there into A stays
+    /// single-view — geometrically the selection starts at A's top, which is
+    /// correct. When the two endpoints anchor to different views, all
+    /// registered views participate and the per-character geometric test (in
+    /// `Inline`) decides what is actually selected.
     pub(crate) fn single_view(&self) -> Option<EntityId> {
         let anchor = self.anchor.as_ref()?.view_id()?;
         let cursor = self.cursor.as_ref()?.view_id()?;
@@ -192,6 +215,11 @@ impl Root {
     /// Clear the window selection when a view it is anchored to has been
     /// resized (its content coordinates are no longer valid). An active drag
     /// is not interrupted, so streaming (append-only) updates keep working.
+    ///
+    /// `involves` also matches a proxy-anchored endpoint (blank space anchored
+    /// to this view): once the view resizes, the content the blank endpoint was
+    /// pinned relative to has moved, so clearing the selection is the
+    /// conservative, correctness-first choice there too.
     pub(crate) fn clear_text_selection_for_resized_view(
         &mut self,
         view_id: EntityId,
@@ -218,11 +246,15 @@ impl Root {
         // press starts a selection from any point that is not consumed by such a
         // component — including blank space inside a focusable container, which
         // GPUI's focus-on-mouse-down would otherwise mark default-prevented.
-        if let Some(view) = endpoint.view.as_ref().and_then(|v| v.upgrade()) {
-            view.update(cx, |state, cx| {
-                state.is_selecting = true;
-                state.focus_handle.focus(window, cx);
-            });
+        // Only focus the view when the press actually hit it. A proxy-anchored
+        // endpoint (blank space) must not steal focus from wherever it was.
+        if endpoint.inside {
+            if let Some(view) = endpoint.view.as_ref().and_then(|v| v.upgrade()) {
+                view.update(cx, |state, cx| {
+                    state.is_selecting = true;
+                    state.focus_handle.focus(window, cx);
+                });
+            }
         }
         self.text_selection.anchor = Some(endpoint.clone());
         self.text_selection.cursor = Some(endpoint);
@@ -253,11 +285,14 @@ impl Root {
         let new_points = self.text_selection.resolved_points(cx);
 
         // Auto-scroll the anchor view when dragging near its viewport edges,
-        // same semantics as the previous per-view implementation.
+        // same semantics as the previous per-view implementation. Only a true
+        // hit anchor (inside == true) auto-scrolls; a proxy-anchored view was
+        // never pressed and must not scroll.
         if let Some(view) = self
             .text_selection
             .anchor
             .as_ref()
+            .filter(|e| e.inside)
             .and_then(|e| e.view.as_ref())
             .and_then(|v| v.upgrade())
         {
@@ -277,10 +312,14 @@ impl Root {
             return;
         }
         self.text_selection.is_selecting = false;
+        // Only a true hit anchor (inside == true) had `is_selecting` and
+        // auto-scroll set in `start_text_selection`; a proxy-anchored view
+        // has nothing to tear down.
         if let Some(view) = self
             .text_selection
             .anchor
             .as_ref()
+            .filter(|e| e.inside)
             .and_then(|e| e.view.as_ref())
             .and_then(|v| v.upgrade())
         {
@@ -295,6 +334,13 @@ impl Root {
 
     /// Resolve a window position to a selection endpoint. Uses hitbox hover
     /// testing so clipped or occluded TextViews are correctly excluded.
+    ///
+    /// When the position falls inside a view's hitbox, the endpoint is a true
+    /// hit (`inside == true`), anchored to that view's content coordinates.
+    /// When it lands in blank space, the endpoint is proxy-anchored to the
+    /// nearest view in document flow (`inside == false`), so the selection
+    /// still follows the content when an outer container scrolls. Only when no
+    /// view is registered does it fall back to a window-coordinate endpoint.
     fn text_selection_endpoint(
         &self,
         position: Point<Pixels>,
@@ -319,17 +365,67 @@ impl Root {
             }
         }
 
-        match best.and_then(|(view, _)| view.upgrade().map(|entity| (view, entity))) {
-            Some((view, entity)) => {
-                let state = entity.read(cx);
-                SelectionEndpoint {
-                    point: position - state.bounds().origin - state.scroll_offset(),
-                    view: Some(view),
+        if let Some((view, entity)) =
+            best.and_then(|(view, _)| view.upgrade().map(|entity| (view, entity)))
+        {
+            let state = entity.read(cx);
+            return SelectionEndpoint {
+                point: position - state.bounds().origin - state.scroll_offset(),
+                view: Some(view),
+                inside: true,
+            };
+        }
+
+        // Blank space: proxy-anchor to the nearest view in document flow so the
+        // endpoint moves with the content (a window-coordinate anchor would
+        // drift when an outer container scrolls). Prefer the view whose top is
+        // the largest value still at or above `position.y` (the nearest
+        // predecessor in the flow); if the position is above every view, fall
+        // back to the first view (smallest top). `point` is computed with the
+        // same formula as a true hit and may fall outside the view's bounds —
+        // it is a pure relative offset.
+        let mut predecessor: Option<(WeakEntity<TextViewState>, Pixels)> = None;
+        let mut first: Option<(WeakEntity<TextViewState>, Pixels)> = None;
+        for (view, _) in self.selectable_text_views.values() {
+            let Some(entity) = view.upgrade() else {
+                continue;
+            };
+            let top = entity.read(cx).bounds().top();
+            if top <= position.y {
+                if predecessor.as_ref().map_or(true, |(_, t)| top > *t) {
+                    predecessor = Some((view.clone(), top));
+                }
+            }
+            if first.as_ref().map_or(true, |(_, t)| top < *t) {
+                first = Some((view.clone(), top));
+            }
+        }
+
+        match predecessor.or(first) {
+            Some((view, _)) => {
+                let entity = view.upgrade();
+                // `view.upgrade()` succeeded above when the candidate was
+                // chosen; if it raced to None, fall back to a window endpoint.
+                match entity {
+                    Some(entity) => {
+                        let state = entity.read(cx);
+                        SelectionEndpoint {
+                            point: position - state.bounds().origin - state.scroll_offset(),
+                            view: Some(view),
+                            inside: false,
+                        }
+                    }
+                    None => SelectionEndpoint {
+                        view: None,
+                        point: position,
+                        inside: false,
+                    },
                 }
             }
             None => SelectionEndpoint {
                 view: None,
                 point: position,
+                inside: false,
             },
         }
     }
@@ -514,6 +610,25 @@ impl Element for TextSelectionController {
             }
             Root::update(window, cx, |root, _, cx| root.end_text_selection(cx));
         });
+
+        window.on_mouse_event(move |_: &ScrollWheelEvent, phase, window, cx| {
+            if !phase.bubble() {
+                return;
+            }
+            // While drag-selecting, a wheel scroll moves content under the
+            // stationary cursor; re-resolve the cursor endpoint at the current
+            // mouse position so the selection keeps extending to the pointer
+            // (browser behavior). `update_text_selection` is a no-op unless a
+            // selection drag is active, so the idle cost is negligible.
+            //
+            // Bounds are refreshed in the next frame's prepaint, so a single
+            // wheel event may resolve one frame stale; continuous scrolling
+            // converges, so this is left unhandled.
+            let position = window.mouse_position();
+            Root::update(window, cx, |root, window, cx| {
+                root.update_text_selection(position, window, cx);
+            });
+        });
     }
 }
 
@@ -537,6 +652,13 @@ mod tests {
         first: Entity<TextViewState>,
         second: Entity<TextViewState>,
         second_selectable: bool,
+        /// Top padding above the views. Bumping it shifts the whole content
+        /// down, which is the layout-level equivalent of an outer container
+        /// scrolling (see `selection_follows_content_when_layout_shifts`).
+        top_offset: gpui::Pixels,
+        /// Blank gap between the two views, used to anchor a selection in blank
+        /// space (the proxy-anchored endpoint path).
+        mid_gap: gpui::Pixels,
     }
 
     impl ChatTestView {
@@ -546,6 +668,8 @@ mod tests {
                 first: cx.new(|cx| TextViewState::markdown("Hello world", cx)),
                 second: cx.new(|cx| TextViewState::markdown("Second message", cx)),
                 second_selectable,
+                top_offset: px(10.),
+                mid_gap: px(0.),
             }
         }
     }
@@ -561,12 +685,16 @@ mod tests {
             div()
                 .track_focus(&self.focus_handle)
                 .size_full()
-                .pt(px(10.))
+                .pt(self.top_offset)
                 .child(
                     div()
                         .h(px(40.))
                         .child(TextView::new(&self.first).selectable(true)),
                 )
+                // A blank gap between the two views. It is not over any
+                // TextView hitbox, so a press here exercises the blank-space
+                // (proxy-anchored) endpoint path.
+                .child(div().h(self.mid_gap))
                 .child(
                     div()
                         .h(px(40.))
@@ -654,6 +782,49 @@ mod tests {
         let text = window_selected_text(cx);
         assert!(text.contains("Hello world"), "got: {text:?}");
         assert!(text.contains("Second message"), "got: {text:?}");
+    }
+
+    #[gpui::test]
+    fn selection_follows_content_when_layout_shifts(cx: &mut TestAppContext) {
+        let (chat, cx) = setup(true, cx);
+
+        // Open a blank gap between the two views so we can anchor a selection
+        // in blank space that sits *below* the first view's text and *above*
+        // the second. Layout: first [10,50], gap [50,110], second [110,150].
+        chat.update(cx, |chat, cx| {
+            chat.mid_gap = px(60.);
+            cx.notify();
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        // Anchor in the gap (blank space) and drag down-right into the second
+        // view, ending past the end of its text so the whole line is selected.
+        // The anchor sits below "Hello world", so only the second view is
+        // selected.
+        drag(cx, point(px(0.), px(80.)), point(px(300.), px(120.)));
+        let before = window_selected_text(cx);
+        assert!(
+            before.contains("Second message") && !before.contains("Hello world"),
+            "expected only the second view selected, got: {before:?}"
+        );
+
+        // Shift the whole content down by 80px — the equivalent of an outer
+        // container scrolling. A window-anchored blank endpoint stays at window
+        // y=80, which the first view now covers (first moves to ~[90,130]), so
+        // the selection drifts to also grab "Hello world". A proxy-anchored
+        // endpoint moves with the content and the selection stays stable.
+        chat.update(cx, |chat, cx| {
+            chat.top_offset = px(90.);
+            cx.notify();
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let after = window_selected_text(cx);
+        assert_eq!(before, after, "selection drifted after layout shift");
     }
 
     #[gpui::test]
