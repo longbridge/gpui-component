@@ -48,6 +48,7 @@ pub(super) enum TextViewFormat {
 /// The state of a TextView.
 pub struct TextViewState {
     pub(super) focus_handle: FocusHandle,
+    pub(super) entity_id: gpui::EntityId,
     pub(super) list_state: ListState,
 
     /// The bounds of the text view
@@ -88,6 +89,7 @@ impl TextViewState {
     /// Create a new TextViewState.
     fn new(format: TextViewFormat, text: &str, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
+        let entity_id = cx.entity_id();
 
         let (tx, rx) = unbounded::<UpdateOptions>();
         let (tx_result, rx_result) = unbounded::<Result<ParsedContent, SharedString>>();
@@ -120,6 +122,7 @@ impl TextViewState {
 
         let mut this = Self {
             focus_handle,
+            entity_id,
             bounds: Bounds::default(),
             selection_positions: (None, None),
             multi_click_selection: None,
@@ -227,6 +230,22 @@ impl TextViewState {
         self.bounds = bounds;
     }
 
+    pub(super) fn bounds(&self) -> Bounds<Pixels> {
+        self.bounds
+    }
+
+    /// Whether this view has a view-local selection (select-all, multi-click, or override),
+    /// independent of the window-level selection.
+    pub(super) fn has_view_selection(&self) -> bool {
+        self.select_all
+            || self.multi_click_selection.is_some()
+            || self.selected_text_override.is_some()
+    }
+
+    pub(super) fn stop_auto_scroll(&mut self) {
+        self.auto_scroll.stop();
+    }
+
     fn reset_selection(&mut self) {
         self.selection_positions = (None, None);
         self.multi_click_selection = None;
@@ -242,7 +261,7 @@ impl TextViewState {
         cx.notify();
     }
 
-    fn scroll_offset(&self) -> Point<Pixels> {
+    pub(super) fn scroll_offset(&self) -> Point<Pixels> {
         if self.scrollable {
             self.list_state.scroll_px_offset_for_scrollbar()
         } else {
