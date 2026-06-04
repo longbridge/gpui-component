@@ -22,6 +22,7 @@ pub enum SettingItem {
     Item {
         title: SharedString,
         description: Option<Text>,
+        search_aliases: Vec<SharedString>,
         layout: Axis,
         disabled: bool,
         field: Rc<dyn AnySettingField>,
@@ -29,6 +30,7 @@ pub enum SettingItem {
     /// A full custom element to render.
     Element {
         disabled: bool,
+        search_aliases: Vec<SharedString>,
         render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static>,
     },
 }
@@ -44,6 +46,7 @@ impl SettingItem {
             description: None,
             layout: Axis::Horizontal,
             disabled: false,
+            search_aliases: Vec::new(),
             field: Rc::new(field),
         }
     }
@@ -56,10 +59,34 @@ impl SettingItem {
     {
         SettingItem::Element {
             disabled: false,
+            search_aliases: Vec::new(),
             render: Rc::new(move |options, window, cx| {
                 render(options, window, cx).into_any_element()
             }),
         }
+    }
+
+    /// Additional strings that will act as search aliases.
+    ///
+    /// For example, an item titled "Enable Two-factor auth" may be
+    /// aliased with "MFA". Another use case for aliases is when working
+    /// with custom elements that don't have a title/desc while still
+    /// wanting them to show up in search results.
+    pub fn search_aliases<I, S>(mut self, aliases: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<SharedString>,
+    {
+        let aliases: Vec<SharedString> = aliases.into_iter().map(Into::into).collect();
+        match &mut self {
+            SettingItem::Item {
+                search_aliases: a, ..
+            } => *a = aliases,
+            SettingItem::Element {
+                search_aliases: a, ..
+            } => *a = aliases,
+        }
+        self
     }
 
     /// Set whether the setting item is disabled, default is false.
@@ -106,17 +133,23 @@ impl SettingItem {
     pub(crate) fn is_match(&self, query: &str, cx: &App) -> bool {
         match self {
             SettingItem::Item {
-                title, description, ..
+                title,
+                description,
+                search_aliases,
+                ..
             } => {
-                title.to_lowercase().contains(&query.to_lowercase())
-                    || description.as_ref().map_or(false, |d| {
-                        d.get_text(cx)
-                            .to_lowercase()
-                            .contains(&query.to_lowercase())
-                    })
+                let q = &query.to_lowercase();
+                title.to_lowercase().contains(q)
+                    || description
+                        .as_ref()
+                        .map_or(false, |d| d.get_text(cx).to_lowercase().contains(q))
+                    || search_aliases.iter().any(|s| s.to_lowercase().contains(q))
             }
             // We need to show all custom elements when not searching.
-            SettingItem::Element { .. } => query.is_empty(),
+            SettingItem::Element { search_aliases, .. } => {
+                let q = &query.to_lowercase();
+                query.is_empty() || search_aliases.iter().any(|s| s.to_lowercase().contains(q))
+            }
         }
     }
 
@@ -191,6 +224,7 @@ impl SettingItem {
                     layout,
                     disabled,
                     field,
+                    ..
                 } => div()
                     .w_full()
                     .overflow_hidden()
@@ -235,7 +269,9 @@ impl SettingItem {
                         cx,
                     )))
                     .into_any_element(),
-                SettingItem::Element { disabled, render } => div()
+                SettingItem::Element {
+                    disabled, render, ..
+                } => div()
                     .w_full()
                     .when(disabled, |this| this.opacity(0.5))
                     .child((render)(
