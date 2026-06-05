@@ -1,0 +1,16 @@
+[package]
+name = "window_glass"
+description = "An example of the system glass window effect (macOS Liquid Glass / Windows Mica) with GPUI Component."
+version = "0.5.1"
+publish = false
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component = { workspace = true }
+gpui-component-assets = { workspace = true }
+
+[lints]
+workspace = true

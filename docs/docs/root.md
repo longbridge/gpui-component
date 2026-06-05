@@ -56,4 +56,29 @@ impl Render for MyApp {
 Here the example we used `children` method, it because if there is no opened dialogs, sheets, notifications, these methods will return `None`, so GPUI will not render anything.
 :::
 
+## Window Glass
+
+We can enable the system glass effect for the window background by calling `WindowExt::enable_window_glass`:
+
+- macOS 26 (Tahoe) or later: Liquid Glass (a native `NSGlassEffectView` embedded behind the window content).
+- Windows 11 22H2 or later: Mica backdrop.
+- Other platforms (older systems, Linux): no-op that returns `false`, the window stays opaque.
+
+```rs
+use gpui_component::WindowExt as _;
+
+let window = cx.open_window(options, |window, cx| {
+    let view = cx.new(|_| Example);
+    cx.new(|cx| Root::new(view, window, cx))
+})?;
+
+window.update(cx, |_, window, cx| {
+    window.enable_window_glass(cx);
+})?;
+```
+
+When enabled, the large surface colors of the theme (e.g. `background`, `title_bar`, `sidebar`) are automatically made semi-transparent to let the glass show through, this applies to all windows of the application. Use `WindowExt::disable_window_glass` to restore the opaque background.
+
+See the [window_glass example](https://github.com/longbridge/gpui-component/tree/main/examples/window_glass) for a complete example.
+
 [Root]: https://docs.rs/gpui-component/latest/gpui_component/root/struct.Root.html

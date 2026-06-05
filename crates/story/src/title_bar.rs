@@ -14,7 +14,10 @@ use gpui_component::{
     scroll::ScrollbarShow,
 };
 
-use crate::{SelectFont, SelectRadius, SelectScrollbarShow, ToggleListActiveHighlight, app_menus};
+use crate::{
+    SelectFont, SelectRadius, SelectScrollbarShow, ToggleListActiveHighlight, ToggleWindowGlass,
+    app_menus,
+};
 
 pub struct AppTitleBar {
     app_menu_bar: Entity<AppMenuBar>,
@@ -152,14 +155,28 @@ impl FontSizeSelector {
         theme.list.active_highlight = !theme.list.active_highlight;
         window.refresh();
     }
+
+    fn on_toggle_window_glass(
+        &mut self,
+        _: &ToggleWindowGlass,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if window.is_window_glass_enabled(cx) {
+            window.disable_window_glass(cx);
+        } else if !window.enable_window_glass(cx) {
+            window.push_notification("Window glass requires macOS 26+ or Windows 11 22H2+.", cx);
+        }
+    }
 }
 
 impl Render for FontSizeSelector {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let font_size = cx.theme().font_size.as_f32() as i32;
         let radius = cx.theme().radius.as_f32() as i32;
         let scroll_show = cx.theme().scrollbar_show;
+        let window_glass = window.is_window_glass_enabled(cx);
 
         div()
             .id("font-size-selector")
@@ -168,6 +185,7 @@ impl Render for FontSizeSelector {
             .on_action(cx.listener(Self::on_select_radius))
             .on_action(cx.listener(Self::on_select_scrollbar_show))
             .on_action(cx.listener(Self::on_toggle_list_active_highlight))
+            .on_action(cx.listener(Self::on_toggle_window_glass))
             .child(
                 Button::new("btn")
                     .small()
@@ -217,6 +235,12 @@ impl Render for FontSizeSelector {
                                 "List Active Highlight",
                                 cx.theme().list.active_highlight,
                                 Box::new(ToggleListActiveHighlight),
+                            )
+                            .separator()
+                            .menu_with_check(
+                                "Window Glass",
+                                window_glass,
+                                Box::new(ToggleWindowGlass),
                             )
                     })
                     .anchor(Anchor::TopRight),

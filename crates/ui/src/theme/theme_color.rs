@@ -254,4 +254,58 @@ impl ThemeColor {
     pub fn dark() -> Arc<Self> {
         DEFAULT_THEME_COLORS[&ThemeMode::Dark].0.clone()
     }
+
+    /// Make the surface colors semi-transparent to let the window glass
+    /// background show through,
+    /// see [`crate::WindowExt::enable_window_glass`].
+    pub(crate) fn apply_window_glass(&mut self) {
+        /// Window level surfaces, e.g.: window background, title bar.
+        const WINDOW_OPACITY: f32 = 0.5;
+        /// Container surfaces, e.g.: cards, secondary buttons, list rows.
+        const CONTAINER_OPACITY: f32 = 0.7;
+        /// Floating surfaces, e.g.: popovers, menus, notifications.
+        const FLOATING_OPACITY: f32 = 0.85;
+
+        let window_surfaces = [
+            &mut self.background,
+            &mut self.title_bar,
+            &mut self.sidebar,
+            &mut self.tab_bar,
+            &mut self.table,
+            &mut self.tiles,
+        ];
+        for color in window_surfaces {
+            color.a *= WINDOW_OPACITY;
+        }
+
+        let container_surfaces = [
+            &mut self.accent,
+            &mut self.description_list_label,
+            &mut self.group_box,
+            &mut self.list,
+            &mut self.list_active,
+            &mut self.list_even,
+            &mut self.list_head,
+            &mut self.list_hover,
+            &mut self.muted,
+            &mut self.secondary,
+            &mut self.secondary_active,
+            &mut self.secondary_hover,
+            &mut self.sidebar_accent,
+            &mut self.skeleton,
+            &mut self.tab,
+            &mut self.tab_active,
+            &mut self.tab_bar_segmented,
+            &mut self.table_active,
+            &mut self.table_even,
+            &mut self.table_foot,
+            &mut self.table_head,
+            &mut self.table_hover,
+        ];
+        for color in container_surfaces {
+            color.a *= CONTAINER_OPACITY;
+        }
+
+        self.popover.a *= FLOATING_OPACITY;
+    }
 }

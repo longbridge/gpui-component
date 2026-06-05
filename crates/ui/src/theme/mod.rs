@@ -167,12 +167,19 @@ impl Theme {
             cx.set_global(theme);
         }
 
+        let window_glass = cx
+            .try_global::<crate::GlobalState>()
+            .is_some_and(|state| !state.glass_windows.is_empty());
+
         let theme = cx.global_mut::<Theme>();
         theme.mode = mode;
         if mode.is_dark() {
             theme.apply_config(&theme.dark_theme.clone());
         } else {
             theme.apply_config(&theme.light_theme.clone());
+        }
+        if window_glass {
+            theme.colors.apply_window_glass();
         }
 
         if let Some(window) = window {
