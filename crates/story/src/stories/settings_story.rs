@@ -314,6 +314,18 @@ impl SettingsStory {
                             .default_value(false),
                         )
                         .description("Lock the other settings."),
+                        SettingItem::new(
+                            "Foo",
+                            SettingField::switch(
+                                |cx: &App| AppSettings::global(cx).disabled,
+                                |checked: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).disabled = checked
+                                },
+                            )
+                            .default_value(false),
+                        )
+                        .description("Find me by searching for my sibling")
+                        .keywords(["Bar"]),
                         SettingItem::render(|options, _, _| {
                             h_flex()
                                 .w_full()

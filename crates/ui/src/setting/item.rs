@@ -22,6 +22,7 @@ pub enum SettingItem {
     Item {
         title: SharedString,
         description: Option<Text>,
+        keywords: Vec<SharedString>,
         layout: Axis,
         disabled: bool,
         field: Rc<dyn AnySettingField>,
@@ -29,6 +30,7 @@ pub enum SettingItem {
     /// A full custom element to render.
     Element {
         disabled: bool,
+        keywords: Vec<SharedString>,
         render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static>,
     },
 }
@@ -44,6 +46,7 @@ impl SettingItem {
             description: None,
             layout: Axis::Horizontal,
             disabled: false,
+            keywords: Vec::new(),
             field: Rc::new(field),
         }
     }
@@ -56,10 +59,29 @@ impl SettingItem {
     {
         SettingItem::Element {
             disabled: false,
+            keywords: Vec::new(),
             render: Rc::new(move |options, window, cx| {
                 render(options, window, cx).into_any_element()
             }),
         }
+    }
+
+    /// Set additional keywords used only for search matching (not rendered).
+    ///
+    /// For example, an item titled "Enable Two-factor auth" can be made
+    /// searchable via "MFA". This is also useful for custom elements that
+    /// have no title/description but should still show up in search results.
+    pub fn keywords<I, S>(mut self, keywords: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<SharedString>,
+    {
+        let keywords: Vec<SharedString> = keywords.into_iter().map(Into::into).collect();
+        match &mut self {
+            SettingItem::Item { keywords: k, .. } => *k = keywords,
+            SettingItem::Element { keywords: k, .. } => *k = keywords,
+        }
+        self
     }
 
     /// Set whether the setting item is disabled, default is false.
@@ -106,17 +128,23 @@ impl SettingItem {
     pub(crate) fn is_match(&self, query: &str, cx: &App) -> bool {
         match self {
             SettingItem::Item {
-                title, description, ..
+                title,
+                description,
+                keywords,
+                ..
             } => {
-                title.to_lowercase().contains(&query.to_lowercase())
-                    || description.as_ref().map_or(false, |d| {
-                        d.get_text(cx)
-                            .to_lowercase()
-                            .contains(&query.to_lowercase())
-                    })
+                let q = &query.to_lowercase();
+                title.to_lowercase().contains(q)
+                    || description
+                        .as_ref()
+                        .map_or(false, |d| d.get_text(cx).to_lowercase().contains(q))
+                    || keywords.iter().any(|s| s.to_lowercase().contains(q))
             }
             // We need to show all custom elements when not searching.
-            SettingItem::Element { .. } => query.is_empty(),
+            SettingItem::Element { keywords, .. } => {
+                let q = &query.to_lowercase();
+                query.is_empty() || keywords.iter().any(|s| s.to_lowercase().contains(q))
+            }
         }
     }
 
@@ -191,6 +219,7 @@ impl SettingItem {
                     layout,
                     disabled,
                     field,
+                    ..
                 } => div()
                     .w_full()
                     .overflow_hidden()
@@ -235,7 +264,9 @@ impl SettingItem {
                         cx,
                     )))
                     .into_any_element(),
-                SettingItem::Element { disabled, render } => div()
+                SettingItem::Element {
+                    disabled, render, ..
+                } => div()
                     .w_full()
                     .when(disabled, |this| this.opacity(0.5))
                     .child((render)(
