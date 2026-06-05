@@ -22,7 +22,7 @@ pub enum SettingItem {
     Item {
         title: SharedString,
         description: Option<Text>,
-        search_aliases: Vec<SharedString>,
+        keywords: Vec<SharedString>,
         layout: Axis,
         disabled: bool,
         field: Rc<dyn AnySettingField>,
@@ -30,7 +30,7 @@ pub enum SettingItem {
     /// A full custom element to render.
     Element {
         disabled: bool,
-        search_aliases: Vec<SharedString>,
+        keywords: Vec<SharedString>,
         render: Rc<dyn Fn(&RenderOptions, &mut Window, &mut App) -> AnyElement + 'static>,
     },
 }
@@ -46,7 +46,7 @@ impl SettingItem {
             description: None,
             layout: Axis::Horizontal,
             disabled: false,
-            search_aliases: Vec::new(),
+            keywords: Vec::new(),
             field: Rc::new(field),
         }
     }
@@ -59,32 +59,27 @@ impl SettingItem {
     {
         SettingItem::Element {
             disabled: false,
-            search_aliases: Vec::new(),
+            keywords: Vec::new(),
             render: Rc::new(move |options, window, cx| {
                 render(options, window, cx).into_any_element()
             }),
         }
     }
 
-    /// Additional strings that will act as search aliases.
+    /// Set additional keywords used only for search matching (not rendered).
     ///
-    /// For example, an item titled "Enable Two-factor auth" may be
-    /// aliased with "MFA". Another use case for aliases is when working
-    /// with custom elements that don't have a title/desc while still
-    /// wanting them to show up in search results.
-    pub fn search_aliases<I, S>(mut self, aliases: I) -> Self
+    /// For example, an item titled "Enable Two-factor auth" can be made
+    /// searchable via "MFA". This is also useful for custom elements that
+    /// have no title/description but should still show up in search results.
+    pub fn keywords<I, S>(mut self, keywords: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: Into<SharedString>,
     {
-        let aliases: Vec<SharedString> = aliases.into_iter().map(Into::into).collect();
+        let keywords: Vec<SharedString> = keywords.into_iter().map(Into::into).collect();
         match &mut self {
-            SettingItem::Item {
-                search_aliases: a, ..
-            } => *a = aliases,
-            SettingItem::Element {
-                search_aliases: a, ..
-            } => *a = aliases,
+            SettingItem::Item { keywords: k, .. } => *k = keywords,
+            SettingItem::Element { keywords: k, .. } => *k = keywords,
         }
         self
     }
@@ -135,7 +130,7 @@ impl SettingItem {
             SettingItem::Item {
                 title,
                 description,
-                search_aliases,
+                keywords,
                 ..
             } => {
                 let q = &query.to_lowercase();
@@ -143,12 +138,12 @@ impl SettingItem {
                     || description
                         .as_ref()
                         .map_or(false, |d| d.get_text(cx).to_lowercase().contains(q))
-                    || search_aliases.iter().any(|s| s.to_lowercase().contains(q))
+                    || keywords.iter().any(|s| s.to_lowercase().contains(q))
             }
             // We need to show all custom elements when not searching.
-            SettingItem::Element { search_aliases, .. } => {
+            SettingItem::Element { keywords, .. } => {
                 let q = &query.to_lowercase();
-                query.is_empty() || search_aliases.iter().any(|s| s.to_lowercase().contains(q))
+                query.is_empty() || keywords.iter().any(|s| s.to_lowercase().contains(q))
             }
         }
     }

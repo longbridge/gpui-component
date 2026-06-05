@@ -325,7 +325,7 @@ impl SettingsStory {
                             .default_value(false),
                         )
                         .description("Find me by searching for my sibling")
-                        .search_aliases(["Bar"]),
+                        .keywords(["Bar"]),
                         SettingItem::render(|options, _, _| {
                             h_flex()
                                 .w_full()
