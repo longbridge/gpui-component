@@ -31,7 +31,6 @@ use super::{
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
-use crate::scroll::AutoScroll;
 use crate::highlighter::DiagnosticSet;
 #[cfg(not(target_family = "wasm"))]
 use crate::highlighter::LanguageRegistry;
@@ -45,6 +44,7 @@ use crate::input::{
     search::{self, SearchPanel},
 };
 use crate::menu::PopupMenu;
+use crate::scroll::AutoScroll;
 use crate::{Root, history::History};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -1797,6 +1797,12 @@ impl InputState {
     /// Current scroll offset of the editor viewport.
     pub fn scroll_offset(&self) -> gpui::Point<gpui::Pixels> {
         self.scroll_handle.offset()
+    }
+
+    /// Schedules an editor viewport scroll offset to apply on the next layout pass.
+    pub fn defer_scroll_offset(&mut self, offset: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        self.deferred_scroll_offset = Some(offset);
+        cx.notify();
     }
 
     /// Laid-out line height; `None` before first layout.
