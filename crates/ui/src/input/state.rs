@@ -41,7 +41,7 @@ use crate::input::{
     display_map::LineLayout,
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover, InputContextMenu},
-    search::{self, SearchPanel},
+    search::SearchPanel,
 };
 use crate::menu::PopupMenu;
 use crate::scroll::AutoScroll;
@@ -272,7 +272,6 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("ctrl-f", Search, Some(CONTEXT)),
     ]);
 
-    search::init(cx);
     number_input::init(cx);
 }
 

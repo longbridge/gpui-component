@@ -4,14 +4,13 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
-    InteractiveElement as _, IntoElement, KeyBinding, ParentElement as _, Pixels, Render, Styled,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render, Styled,
     Subscription, Window, actions, div, prelude::FluentBuilder as _,
 };
 use ropey::Rope;
 
 use crate::{
     ActiveTheme, Disableable, ElementExt, IconName, Selectable, Sizable,
-    actions::SelectUp,
     button::{Button, ButtonVariants},
     h_flex,
     input::{
@@ -25,14 +24,6 @@ use crate::{
 const CONTEXT: &'static str = "SearchPanel";
 
 actions!(input, [Tab]);
-
-pub(super) fn init(cx: &mut App) {
-    cx.bind_keys(vec![KeyBinding::new(
-        "shift-enter",
-        SelectUp,
-        Some(CONTEXT),
-    )]);
-}
 
 #[derive(Debug, Clone)]
 pub struct SearchMatcher {
@@ -336,12 +327,14 @@ impl SearchPanel {
         cx.notify();
     }
 
-    fn on_action_prev(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
-        self.prev(window, cx);
-    }
-
-    fn on_action_next(&mut self, _: &Enter, window: &mut Window, cx: &mut Context<Self>) {
-        self.next(window, cx);
+    fn on_action_next(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        // The focused search box is an Input, so Shift+Enter is resolved there as
+        // Enter { shift: true } before the action bubbles to the SearchPanel.
+        if action.shift {
+            self.prev(window, cx);
+        } else {
+            self.next(window, cx);
+        }
     }
 
     fn on_action_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
@@ -481,7 +474,6 @@ impl Render for SearchPanel {
             .occlude()
             .track_focus(&self.focus_handle(cx))
             .key_context(CONTEXT)
-            .on_action(cx.listener(Self::on_action_prev))
             .on_action(cx.listener(Self::on_action_next))
             .on_action(cx.listener(Self::on_action_escape))
             .on_action(cx.listener(Self::on_action_tab))
@@ -747,6 +739,18 @@ mod tests {
     #[test]
     fn test_prev_scroll_direction_returns_none_for_single_match() {
         assert!(SearchPanel::prev_scroll_direction(0, 0).is_none());
+    }
+
+    #[test]
+    fn test_shift_enter_finds_previous_match() {
+        let mut matcher = SearchMatcher::new();
+        matcher.matched_ranges = Rc::new(vec![5..10, 15..20, 25..30]);
+        matcher.current_match_ix = 1;
+
+        let previous = matcher.next_back();
+
+        assert_eq!(previous, Some(5..10));
+        assert_eq!(matcher.current_match_ix, 0);
     }
 
     #[test]
