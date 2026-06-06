@@ -328,8 +328,6 @@ impl SearchPanel {
     }
 
     fn on_action_enter(&mut self, action: &Enter, window: &mut Window, cx: &mut Context<Self>) {
-        // The focused search box is an Input, so Shift+Enter is resolved there as
-        // Enter { shift: true } before the action bubbles to the SearchPanel.
         if action.shift {
             self.prev(window, cx);
         } else {
