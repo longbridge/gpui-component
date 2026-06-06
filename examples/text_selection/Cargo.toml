@@ -1,0 +1,16 @@
+[package]
+name = "text_selection"
+description = "Window-level text selection across multiple TextView bubbles."
+version = "0.5.1"
+publish = false
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component = { workspace = true }
+gpui-component-assets.workspace = true
+
+[lints]
+workspace = true

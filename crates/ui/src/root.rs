@@ -2,18 +2,20 @@ use crate::{
     ActiveTheme, ElementExt, Placement, StyledExt,
     dialog::{ANIMATION_DURATION, Dialog},
     focus_trap::FocusTrapManager,
-    input::InputState,
+    input::{Copy, InputState},
     notification::{Notification, NotificationList},
     sheet::Sheet,
+    text::{TextSelectionController, TextViewState, WindowTextSelection},
     tooltip::TooltipOverlay,
     window_border,
 };
 use gpui::{
-    Anchor, AnyView, App, AppContext, Context, DefiniteLength, ElementId, Entity, FocusHandle,
-    InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
-    StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
+    Anchor, AnyView, App, AppContext, ClipboardItem, Context, DefiniteLength, ElementId, Entity,
+    EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle,
+    Window, actions, div, prelude::FluentBuilder as _,
 };
-use std::{any::TypeId, rc::Rc};
+use std::{any::TypeId, collections::HashMap, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
@@ -22,6 +24,10 @@ pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("tab", Tab, Some(CONTEXT)),
         KeyBinding::new("shift-tab", TabPrev, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-c", Copy, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-c", Copy, Some(CONTEXT)),
     ]);
 }
 
@@ -41,6 +47,10 @@ pub struct Root {
     /// The focus handle that will be restored after a dialog is closed with animation.
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
+    /// Window-level text selection state. See `text::window_selection`.
+    pub(crate) text_selection: WindowTextSelection,
+    /// Selectable TextViews registered this frame, keyed by entity id.
+    pub(crate) selectable_text_views: HashMap<EntityId, (WeakEntity<TextViewState>, Hitbox)>,
 }
 
 #[derive(Clone)]
@@ -88,6 +98,8 @@ impl Root {
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
             pending_focus_restore: None,
+            text_selection: WindowTextSelection::default(),
+            selectable_text_views: HashMap::new(),
         }
     }
 
@@ -480,6 +492,15 @@ impl Root {
         // Normal tab navigation
         window.focus_prev(cx);
     }
+
+    fn on_action_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+        let text = self.window_selected_text(cx).trim().to_string();
+        if text.is_empty() {
+            cx.propagate();
+            return;
+        }
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
+    }
 }
 
 impl Styled for Root {
@@ -498,12 +519,14 @@ impl Render for Root {
                 .key_context(CONTEXT)
                 .on_action(cx.listener(Self::on_action_tab))
                 .on_action(cx.listener(Self::on_action_tab_prev))
+                .on_action(cx.listener(Self::on_action_copy))
                 .relative()
                 .size_full()
                 .font_family(cx.theme().font_family.clone())
                 .bg(cx.theme().background)
                 .text_color(cx.theme().foreground)
                 .refine_style(&self.style)
+                .child(TextSelectionController)
                 .child(self.view.clone())
                 .child(self.tooltip_overlay.clone()),
         )

@@ -3,13 +3,12 @@ use std::sync::Arc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
-    InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, SharedString, StyleRefinement, Styled,
-    Window, div,
+    InspectorElementId, InteractiveElement, IntoElement, LayoutId, ParentElement, Pixels,
+    SharedString, StyleRefinement, Styled, Window, div,
 };
 
 use crate::StyledExt;
-use crate::scroll::{AutoScroll, ScrollableElement};
+use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
 use crate::text::node::CodeBlock;
 use crate::text::state::TextViewState;
@@ -219,7 +218,15 @@ impl Element for TextView {
                 this.size_full().vertical_scrollbar(&list_state)
             })
             .relative()
-            .on_action(window.listener_for(&state, TextViewState::on_action_copy))
+            .on_action(move |_: &crate::input::Copy, window, cx| {
+                use crate::WindowExt as _;
+                let text = window.selected_text(cx).trim().to_string();
+                if text.is_empty() {
+                    cx.propagate();
+                    return;
+                }
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text));
+            })
             .on_action(window.listener_for(&state, TextViewState::on_action_select_all))
             .child(state.clone())
             .refine_style(&self.style)
@@ -259,91 +266,10 @@ impl Element for TextView {
         GlobalState::global_mut(cx).text_view_state_stack.pop();
 
         if self.selectable {
-            let is_selecting = state.read(cx).is_selecting;
-            let has_selection = state.read(cx).has_selection();
-            let parent_view_id = window.current_view();
-
-            window.on_mouse_event({
-                let state = state.clone();
-                let hitbox = hitbox.clone();
-                move |event: &MouseDownEvent, phase, window, cx| {
-                    if !phase.bubble() || !hitbox.is_hovered(window) {
-                        return;
-                    }
-
-                    if event.button != MouseButton::Left {
-                        return;
-                    }
-
-                    state.update(cx, |state, cx| {
-                        state.focus_handle.focus(window, cx);
-
-                        if event.click_count == 1 {
-                            state.start_selection(event.position);
-                        }
-                    });
-                    cx.notify(parent_view_id);
-                }
-            });
-
-            if is_selecting {
-                let scrollable = self.scrollable;
-                let viewport_bounds = hitbox.bounds;
-
-                // move to update end position, auto-scroll when dragging near edges.
-                window.on_mouse_event({
-                    let state = state.clone();
-                    move |event: &MouseMoveEvent, phase, _, cx| {
-                        if !phase.bubble() {
-                            return;
-                        }
-
-                        state.update(cx, |state, cx| {
-                            state.update_selection(event.position);
-
-                            if scrollable {
-                                let delta =
-                                    AutoScroll::compute_delta(event.position.y, viewport_bounds);
-                                state.set_auto_scroll(delta, cx);
-                            }
-                        });
-                        cx.notify(parent_view_id);
-                    }
-                });
-
-                // up to end selection
-                window.on_mouse_event({
-                    let state = state.clone();
-                    move |_: &MouseUpEvent, phase, _, cx| {
-                        if !phase.bubble() {
-                            return;
-                        }
-
-                        state.update(cx, |state, _| {
-                            state.end_selection();
-                        });
-                        cx.notify(parent_view_id);
-                    }
-                });
-            }
-
-            if has_selection {
-                // down outside to clear selection
-                window.on_mouse_event({
-                    let state = state.clone();
-                    let hitbox = hitbox.clone();
-                    move |_: &MouseDownEvent, _, window, cx| {
-                        if hitbox.is_hovered(window) {
-                            return;
-                        }
-
-                        state.update(cx, |state, cx| {
-                            state.clear_selection(cx);
-                        });
-                        cx.notify(parent_view_id);
-                    }
-                });
-            }
+            // Window-level selection: register this view (with its clipped
+            // hitbox) so the Root selection controller can hit-test and collect
+            // selected text. All mouse handling lives in TextSelectionController.
+            crate::Root::register_selectable_text_view(state, hitbox, window, cx);
         }
     }
 }

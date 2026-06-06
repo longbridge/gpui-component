@@ -5,7 +5,7 @@ use gpui::{
 
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, Sizable, Size, Theme, ThemeMode,
-    button::Button,
+    button::{Button, ButtonVariants},
     group_box::GroupBoxVariant,
     h_flex,
     label::Label,
@@ -23,6 +23,9 @@ struct AppSettings {
     font_family: SharedString,
     font_size: f64,
     line_height: f64,
+    /// Demonstrates a custom element field driving its own state, with reset
+    /// support wired up via [`SettingField::on_reset`].
+    density: SharedString,
     notifications_enabled: bool,
     auto_update: bool,
     resettable: bool,
@@ -37,6 +40,7 @@ impl Default for AppSettings {
             font_family: "Arial".into(),
             font_size: 14.0,
             line_height: 12.0,
+            density: "Comfortable".into(),
             notifications_enabled: true,
             auto_update: true,
             resettable: true,
@@ -314,6 +318,18 @@ impl SettingsStory {
                             .default_value(false),
                         )
                         .description("Lock the other settings."),
+                        SettingItem::new(
+                            "Foo",
+                            SettingField::switch(
+                                |cx: &App| AppSettings::global(cx).disabled,
+                                |checked: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).disabled = checked
+                                },
+                            )
+                            .default_value(false),
+                        )
+                        .description("Find me by searching for my sibling")
+                        .keywords(["Bar"]),
                         SettingItem::render(|options, _, _| {
                             h_flex()
                                 .w_full()
@@ -337,6 +353,48 @@ impl SettingsStory {
                                 )
                                 .into_any_element()
                         })
+                        .disabled(disabled),
+                        SettingItem::new(
+                            "Density",
+                            SettingField::render(|options, _window, cx| {
+                                let current = AppSettings::global(cx).density.clone();
+                                h_flex()
+                                    .gap_1()
+                                    .children(["Comfortable", "Compact"].map(|value| {
+                                        Button::new(value)
+                                            .label(value)
+                                            .with_size(options.size)
+                                            .map(|this| {
+                                                if current == value {
+                                                    this.primary()
+                                                } else {
+                                                    this.outline()
+                                                }
+                                            })
+                                            .on_click(move |_, _, cx| {
+                                                AppSettings::global_mut(cx).density = value.into();
+                                            })
+                                    }))
+                            })
+                            // A custom element field manages its own state, so reset
+                            // support must be wired up explicitly via `on_reset`.
+                            .on_reset(
+                                {
+                                    let default_density = default_settings.density.clone();
+                                    move |cx: &App| {
+                                        AppSettings::global(cx).density != default_density
+                                    }
+                                },
+                                {
+                                    let default_density = default_settings.density.clone();
+                                    move |_window, cx: &mut App| {
+                                        AppSettings::global_mut(cx).density =
+                                            default_density.clone();
+                                    }
+                                },
+                            ),
+                        )
+                        .description("A custom element field with reset support via `on_reset`.")
                         .disabled(disabled),
                         SettingItem::new(
                             "CLI Path",

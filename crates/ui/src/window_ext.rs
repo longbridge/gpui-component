@@ -81,6 +81,20 @@ pub trait WindowExt: Sized {
     fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>>;
     /// Returns true if there is a focused Input entity.
     fn has_focused_input(&mut self, cx: &mut App) -> bool;
+
+    /// Returns the merged selected text across all selectable TextViews in
+    /// this window, ordered top to bottom and joined with `\n`.
+    ///
+    /// Returns an empty string if the window root is not a [`Root`].
+    fn selected_text(&mut self, cx: &mut App) -> String;
+
+    /// Returns true if there is an active text selection in this window
+    /// (either a window-level drag selection or a view-local selection such
+    /// as select-all or a double-click word selection).
+    fn has_text_selection(&mut self, cx: &mut App) -> bool;
+
+    /// Clears the window-level text selection and all view-local selections.
+    fn clear_text_selection(&mut self, cx: &mut App);
 }
 
 impl WindowExt for Window {
@@ -200,5 +214,29 @@ impl WindowExt for Window {
     #[inline]
     fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>> {
         Root::read(self, cx).focused_input.clone()
+    }
+
+    #[inline]
+    fn selected_text(&mut self, cx: &mut App) -> String {
+        let Some(root) = self.root::<Root>().flatten() else {
+            return String::new();
+        };
+        root.read(cx).window_selected_text(cx)
+    }
+
+    #[inline]
+    fn has_text_selection(&mut self, cx: &mut App) -> bool {
+        let Some(root) = self.root::<Root>().flatten() else {
+            return false;
+        };
+        root.read(cx).has_text_selection(cx)
+    }
+
+    #[inline]
+    fn clear_text_selection(&mut self, cx: &mut App) {
+        let Some(root) = self.root::<Root>().flatten() else {
+            return;
+        };
+        root.update(cx, |root, cx| root.clear_text_selection(cx));
     }
 }

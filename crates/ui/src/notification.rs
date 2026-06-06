@@ -1,5 +1,6 @@
 use std::{
     any::TypeId,
+    borrow::Cow,
     collections::{HashMap, VecDeque},
     rc::Rc,
     time::Duration,
@@ -89,20 +90,23 @@ impl From<SharedString> for Notification {
     }
 }
 
-impl From<&'static str> for Notification {
-    fn from(s: &'static str) -> Self {
+impl From<&str> for Notification {
+    fn from(s: &str) -> Self {
         Self::new().message(s)
     }
 }
 
-impl From<(NotificationType, &'static str)> for Notification {
-    fn from((type_, content): (NotificationType, &'static str)) -> Self {
-        Self::new().message(content).with_type(type_)
+impl<'a> From<Cow<'a, str>> for Notification {
+    fn from(s: Cow<'a, str>) -> Self {
+        Self::new().message(s)
     }
 }
 
-impl From<(NotificationType, SharedString)> for Notification {
-    fn from((type_, content): (NotificationType, SharedString)) -> Self {
+impl<T> From<(NotificationType, T)> for Notification
+where
+    T: Into<SharedString>,
+{
+    fn from((type_, content): (NotificationType, T)) -> Self {
         Self::new().message(content).with_type(type_)
     }
 }
@@ -171,7 +175,7 @@ impl Notification {
     ///
     /// ```rs
     /// struct MyNotificationKind;
-    /// let notification = Notification::new("Hello").id::<MyNotificationKind>();
+    /// let notification = Notification::new().message("Hello").id::<MyNotificationKind>();
     /// ```
     pub fn id<T: Sized + 'static>(mut self) -> Self {
         self.id = TypeId::of::<T>().into();
@@ -349,7 +353,10 @@ impl Render for Notification {
                             .icon(IconName::Close)
                             .ghost()
                             .xsmall()
-                            .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.dismiss(window, cx);
+                            })),
                     ),
             )
             .when_some(self.on_click.clone(), |this, on_click| {
