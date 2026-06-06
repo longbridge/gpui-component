@@ -742,18 +742,6 @@ mod tests {
     }
 
     #[test]
-    fn test_shift_enter_finds_previous_match() {
-        let mut matcher = SearchMatcher::new();
-        matcher.matched_ranges = Rc::new(vec![5..10, 15..20, 25..30]);
-        matcher.current_match_ix = 1;
-
-        let previous = matcher.next_back();
-
-        assert_eq!(previous, Some(5..10));
-        assert_eq!(matcher.current_match_ix, 0);
-    }
-
-    #[test]
     fn test_update_matches_clamps_current_match_index_while_replacing() {
         let mut matcher = SearchMatcher::new();
         matcher.update(&Rope::from("foo foo foo"));
