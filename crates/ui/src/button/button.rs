@@ -893,6 +893,15 @@ impl ButtonVariant {
     }
 
     fn selected(&self, outline: bool, cx: &mut App) -> ButtonVariantStyle {
+        if outline {
+            let active_style = self.active(outline, cx);
+
+            return ButtonVariantStyle {
+                fg: self.text_color(outline, cx),
+                ..active_style
+            };
+        }
+
         let bg = match self {
             Self::Default => cx.theme().input.mix_oklab(cx.theme().transparent, 0.7),
             Self::Primary => cx.theme().button_primary_active,
@@ -1026,5 +1035,21 @@ mod tests {
         assert!(ButtonVariant::Link.no_padding());
         assert!(ButtonVariant::Text.no_padding());
         assert!(!ButtonVariant::Ghost.no_padding());
+    }
+
+    #[gpui::test]
+    fn test_outline_selected_uses_outline_active_style(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let window = cx.add_empty_window();
+        window.update(|_, cx| {
+            let variant = ButtonVariant::Danger;
+            let active_style = variant.active(true, cx);
+            let selected_style = variant.selected(true, cx);
+
+            assert_eq!(selected_style.bg, active_style.bg);
+            assert_eq!(selected_style.border, active_style.border);
+            assert_eq!(selected_style.fg, cx.theme().danger);
+            assert_ne!(selected_style.bg, cx.theme().danger_active);
+        });
     }
 }
