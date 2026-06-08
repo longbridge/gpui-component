@@ -18,6 +18,7 @@ mod title_bar;
 mod virtual_list;
 mod window_border;
 mod window_ext;
+mod window_glass;
 
 pub(crate) mod actions;
 

@@ -56,4 +56,29 @@ impl Render for MyApp {
 这里使用的是 `children` 而不是 `child`，因为当没有打开的 dialog、sheet 或 notification 时，这些方法会返回 `None`，GPUI 就不会渲染任何内容。
 :::
 
+## Window Glass（窗口玻璃效果）
+
+调用 `WindowExt::set_window_glass` 可以为窗口背景启用系统玻璃效果：
+
+- macOS 26（Tahoe）及以上：Liquid Glass（在窗口内容下方嵌入原生 `NSGlassEffectView`）。
+- Windows 11 22H2 及以上：Mica 背景材质。
+- 其它环境（更低版本系统、Linux）：不做任何事并返回 `false`，窗口保持不透明背景。
+
+```rs
+use gpui_component::WindowExt as _;
+
+let window = cx.open_window(options, |window, cx| {
+    let view = cx.new(|_| Example);
+    cx.new(|cx| Root::new(view, window, cx))
+})?;
+
+window.update(cx, |_, window, cx| {
+    window.set_window_glass(true, cx);
+})?;
+```
+
+遵循 Apple Liquid Glass 的原则（玻璃属于导航层，而非内容层），开启后仅导航层表面（`sidebar`、`title_bar`、`tab_bar`）会变为半透明以透出玻璃。内容区保持不透明，以保证内容清晰、不透出下方（重影）。玻璃模式下窗口背景本身会变为透明，因此**你的内容区容器必须自己画不透明背景**（如 `bg(cx.theme().background)`）来盖住玻璃。该行为对应用的所有窗口生效。调用 `window.set_window_glass(false, cx)` 可恢复不透明背景。
+
+Story 画廊中有可运行的演示——从标题栏的 window glass 操作切换即可。
+
 [Root]: https://docs.rs/gpui-component/latest/gpui_component/root/struct.Root.html

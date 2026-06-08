@@ -1,9 +1,11 @@
 use crate::{
-    Placement, Root,
+    Placement, Root, Theme,
     dialog::{AlertDialog, Dialog},
+    global_state::GlobalState,
     input::InputState,
     notification::Notification,
     sheet::Sheet,
+    window_glass,
 };
 use gpui::{App, ElementId, Entity, Window};
 use std::rc::Rc;
@@ -95,6 +97,43 @@ pub trait WindowExt: Sized {
 
     /// Clears the window-level text selection and all view-local selections.
     fn clear_text_selection(&mut self, cx: &mut App);
+
+    /// Enables or disables the system glass effect for the window background.
+    ///
+    /// When `enable` is `false`, the opaque background is restored; this is a
+    /// no-op if the effect is not currently enabled.
+    ///
+    /// When enabling:
+    ///
+    /// - macOS 26 (Tahoe) or later: Liquid Glass, by embedding a native
+    ///   `NSGlassEffectView` behind the window content.
+    /// - Windows 11 22H2 (build 22621) or later: Mica backdrop.
+    /// - Other platforms (older systems, Linux): no-op that returns `false`,
+    ///   the window stays opaque.
+    ///
+    /// When enabled, the large surface colors of the theme (e.g. `background`,
+    /// `title_bar`, `sidebar`) are automatically made semi-transparent to let
+    /// the glass show through, this applies to all windows of the application.
+    ///
+    /// Returns `true` if the requested state was applied successfully.
+    /// Disabling always returns `true`.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let window = cx.open_window(options, |window, cx| {
+    ///     let view = cx.new(|_| Example);
+    ///     cx.new(|cx| Root::new(view, window, cx))
+    /// })?;
+    ///
+    /// window.update(cx, |_, window, cx| {
+    ///     window.set_window_glass(true, cx);
+    /// })?;
+    /// ```
+    fn set_window_glass(&mut self, enable: bool, cx: &mut App) -> bool;
+
+    /// Returns true if the system glass effect is enabled for the window.
+    fn is_window_glass_enabled(&self, cx: &App) -> bool;
 }
 
 impl WindowExt for Window {
@@ -238,5 +277,38 @@ impl WindowExt for Window {
             return;
         };
         root.update(cx, |root, cx| root.clear_text_selection(cx));
+    }
+
+    fn set_window_glass(&mut self, enable: bool, cx: &mut App) -> bool {
+        let window_id = self.window_handle().window_id();
+        if enable {
+            if GlobalState::global(cx).glass_windows.contains(&window_id) {
+                return true;
+            }
+            if !window_glass::enable(self) {
+                return false;
+            }
+
+            GlobalState::global_mut(cx).glass_windows.insert(window_id);
+        } else {
+            if !GlobalState::global_mut(cx).glass_windows.remove(&window_id) {
+                return true;
+            }
+
+            window_glass::disable(self);
+        }
+
+        // Mirror the glass state onto the Theme so subsequent theme changes
+        // (mode switch or full theme swap via `apply_config`) reapply the
+        // glass surface adjustments.
+        Theme::global_mut(cx).window_glass = !GlobalState::global(cx).glass_windows.is_empty();
+        // Reapply the theme to update the surface colors.
+        Theme::change(Theme::global(cx).mode, Some(self), cx);
+        true
+    }
+
+    #[inline]
+    fn is_window_glass_enabled(&self, cx: &App) -> bool {
+        GlobalState::global(cx).is_window_glass_enabled(self)
     }
 }

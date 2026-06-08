@@ -56,4 +56,29 @@ impl Render for MyApp {
 Here the example we used `children` method, it because if there is no opened dialogs, sheets, notifications, these methods will return `None`, so GPUI will not render anything.
 :::
 
+## Window Glass
+
+We can enable the system glass effect for the window background by calling `WindowExt::set_window_glass`:
+
+- macOS 26 (Tahoe) or later: Liquid Glass (a native `NSGlassEffectView` embedded behind the window content).
+- Windows 11 22H2 or later: Mica backdrop.
+- Other platforms (older systems, Linux): no-op that returns `false`, the window stays opaque.
+
+```rs
+use gpui_component::WindowExt as _;
+
+let window = cx.open_window(options, |window, cx| {
+    let view = cx.new(|_| Example);
+    cx.new(|cx| Root::new(view, window, cx))
+})?;
+
+window.update(cx, |_, window, cx| {
+    window.set_window_glass(true, cx);
+})?;
+```
+
+Following Apple's Liquid Glass guidance (glass belongs to the navigation layer, never the content), only the navigation-layer surfaces (`sidebar`, `title_bar`, `tab_bar`) are made semi-transparent to let the glass show through them. The content area stays opaque so content is readable and never bleeds through (ghosting). The window background itself becomes transparent in glass mode, so **your content areas must paint their own opaque background** (e.g. `bg(cx.theme().background)`) to cover the glass. This applies to all windows of the application. Call `window.set_window_glass(false, cx)` to restore the opaque background.
+
+The Story gallery has a working demo — toggle it from the title bar's window glass action.
+
 [Root]: https://docs.rs/gpui-component/latest/gpui_component/root/struct.Root.html

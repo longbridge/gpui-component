@@ -1,4 +1,4 @@
-use gpui::{App, ElementId, Entity, FocusHandle, Global, OwnedMenu};
+use gpui::{App, ElementId, Entity, FocusHandle, Global, OwnedMenu, Window, WindowId};
 use std::collections::HashSet;
 
 use crate::text::TextViewState;
@@ -22,6 +22,9 @@ pub struct GlobalState {
     /// interaction (e.g. `Input`, `Button`); reset by the selection
     /// controller in the capture phase of every left mouse down.
     pub(crate) suppress_text_selection: bool,
+    /// Windows with the glass background effect enabled,
+    /// see [`crate::WindowExt::set_window_glass`].
+    pub(crate) glass_windows: HashSet<WindowId>,
 }
 
 impl GlobalState {
@@ -31,7 +34,14 @@ impl GlobalState {
             open_deferred_popovers: HashSet::new(),
             app_menus: Vec::new(),
             suppress_text_selection: false,
+            glass_windows: HashSet::new(),
         }
+    }
+
+    /// Returns true if the glass background effect is enabled for the window.
+    pub(crate) fn is_window_glass_enabled(&self, window: &Window) -> bool {
+        self.glass_windows
+            .contains(&window.window_handle().window_id())
     }
 
     /// Suppress the window-level text selection for the current mouse down.

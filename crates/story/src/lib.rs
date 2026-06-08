@@ -56,7 +56,8 @@ actions!(
         Tab,
         TabPrev,
         ShowPanelInfo,
-        ToggleListActiveHighlight
+        ToggleListActiveHighlight,
+        ToggleWindowGlass
     ]
 );
 

@@ -46,7 +46,9 @@ impl ListDelegate for ListItemDeletegate {
         cx.spawn(async move |this, cx| {
             // Simulate a slow search.
             let sleep = (0.05..0.1).fake();
-            cx.background_executor().timer(Duration::from_secs_f64(sleep)).await;
+            cx.background_executor()
+                .timer(Duration::from_secs_f64(sleep))
+                .await;
 
             this.update(cx, |this, cx| {
                 this.delegate_mut().matches = this
@@ -74,7 +76,12 @@ impl ListDelegate for ListItemDeletegate {
             let list_item = ListItem::new(("item", ix.row))
                 .check_icon(IconName::Check)
                 .confirmed(confirmed)
-                .child(h_flex().items_center().justify_between().child(item.to_string()))
+                .child(
+                    h_flex()
+                        .items_center()
+                        .justify_between()
+                        .child(item.to_string()),
+                )
                 .suffix(|_, _| {
                     Button::new("like")
                         .tab_stop(false)
@@ -101,7 +108,11 @@ impl ListDelegate for ListItemDeletegate {
     ) -> impl IntoElement {
         v_flex()
             .size_full()
-            .child(Icon::new(IconName::Inbox).size(px(50.)).text_color(cx.theme().muted_foreground))
+            .child(
+                Icon::new(IconName::Inbox)
+                    .size(px(50.))
+                    .text_color(cx.theme().muted_foreground),
+            )
             .child("No matches found")
             .items_center()
             .justify_center()
@@ -280,12 +291,12 @@ impl SheetStory {
                         .child(Input::new(&input1))
                         .child(DatePicker::new(&date).placeholder("Date of Birth"))
                         .child(
-                            Button::new("send-notification").child("Test Notification").on_click(
-                                |_, window, cx| {
+                            Button::new("send-notification")
+                                .child("Test Notification")
+                                .on_click(|_, window, cx| {
                                     window
                                         .push_notification("Hello this is message from Sheet.", cx)
-                                },
-                            ),
+                                }),
                         )
                         .child(
                             Button::new("confirm-dialog-from-sheet")
@@ -325,9 +336,13 @@ impl SheetStory {
                                 window.close_sheet(cx);
                             },
                         ))
-                        .child(Button::new("cancel").label("Cancel").on_click(|_, window, cx| {
-                            window.close_sheet(cx);
-                        })),
+                        .child(
+                            Button::new("cancel")
+                                .label("Cancel")
+                                .on_click(|_, window, cx| {
+                                    window.close_sheet(cx);
+                                }),
+                        ),
                 )
         });
     }
@@ -461,7 +476,9 @@ impl Render for SheetStory {
                     .when_some(self.selected_value.clone(), |this, selected_value| {
                         this.child(
                             h_flex().gap_1().child("You have selected:").child(
-                                div().child(selected_value.to_string()).text_color(gpui::red()),
+                                div()
+                                    .child(selected_value.to_string())
+                                    .text_color(gpui::red()),
                             ),
                         )
                     }),

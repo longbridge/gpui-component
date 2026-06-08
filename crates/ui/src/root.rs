@@ -2,6 +2,7 @@ use crate::{
     ActiveTheme, ElementExt, Placement, StyledExt,
     dialog::{ANIMATION_DURATION, Dialog},
     focus_trap::FocusTrapManager,
+    global_state::GlobalState,
     input::{Copy, InputState},
     notification::{Notification, NotificationList},
     sheet::Sheet,
@@ -11,15 +12,16 @@ use crate::{
 };
 use gpui::{
     Anchor, AnyView, App, AppContext, ClipboardItem, Context, DefiniteLength, ElementId, Entity,
-    EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle,
-    Window, actions, div, prelude::FluentBuilder as _,
+    EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding, ParentElement as _,
+    Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle, Window, actions, div,
+    prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, collections::HashMap, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
 const CONTEXT: &str = "Root";
+
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("tab", Tab, Some(CONTEXT)),
@@ -513,6 +515,16 @@ impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
 
+        // In glass mode the window background is transparent, so the glass is
+        // revealed through the navigation areas (sidebar / title bar / tab
+        // bar), while content areas keep their own opaque surfaces and cover
+        // it. Otherwise it uses the opaque theme background.
+        let background = if GlobalState::global(cx).is_window_glass_enabled(window) {
+            gpui::transparent_black()
+        } else {
+            cx.theme().background
+        };
+
         window_border().shadow_size(self.window_shadow_size).child(
             div()
                 .id("root")
@@ -523,7 +535,7 @@ impl Render for Root {
                 .relative()
                 .size_full()
                 .font_family(cx.theme().font_family.clone())
-                .bg(cx.theme().background)
+                .bg(background)
                 .text_color(cx.theme().foreground)
                 .refine_style(&self.style)
                 .child(TextSelectionController)
