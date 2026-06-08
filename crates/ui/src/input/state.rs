@@ -1877,8 +1877,10 @@ impl InputState {
         self.scroll_handle.offset()
     }
 
-    /// Schedules an editor viewport scroll offset to apply on the next layout pass.
-    pub fn defer_scroll_offset(&mut self, offset: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+    /// Set scroll offset of the editor viewport.
+    ///
+    /// The offset will be clamped to the valid range, and applied after the next layout.
+    pub fn set_scroll_offset(&mut self, offset: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
         self.deferred_scroll_offset = Some(offset);
         cx.notify();
     }
