@@ -2,7 +2,7 @@
 
 use std::cell::Cell;
 
-use gpui::{App, Pixels, Point, Window};
+use gpui::{Action, App, Pixels, Point, Window};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker, define_class, msg_send, sel};
@@ -28,8 +28,7 @@ define_class!(
     impl MenuTarget {
         #[unsafe(method(menuItemClicked:))]
         fn menu_item_clicked(&self, sender: &NSMenuItem) {
-            let tag = sender.tag();
-            self.ivars().selected.set(tag);
+            self.ivars().selected.set(sender.tag());
         }
     }
 );
@@ -46,8 +45,7 @@ impl MenuTarget {
 /// Show a native popup menu and dispatch the selected item's action.
 ///
 /// The AppKit tracking loop is run from a foreground task so that GPUI is not
-/// borrowed while the menu is open — otherwise re-entrant events delivered
-/// during tracking would hit an already-borrowed `RefCell`.
+/// borrowed while the menu is open.
 pub(super) fn popup(
     items: Vec<NativeMenuItem>,
     position: Point<Pixels>,
@@ -62,18 +60,9 @@ pub(super) fn popup(
     let handle = Window::window_handle(window);
 
     cx.spawn(async move |cx| {
-        let Some(index) = run_menu(view_ptr, &items, position) else {
+        let Some(action) = run_menu(view_ptr, &items, position) else {
             return;
         };
-        let Some(NativeMenuItem::Item {
-            action: Some(action),
-            ..
-        }) = items.get(index)
-        else {
-            return;
-        };
-        let action = action.boxed_clone();
-
         cx.update(move |app| {
             let _ = handle.update(app, move |_, window, app| {
                 window.dispatch_action(action, app);
@@ -83,51 +72,24 @@ pub(super) fn popup(
     .detach();
 }
 
-/// Build and synchronously run the `NSMenu`, returning the selected item index.
-fn run_menu(view_ptr: usize, items: &[NativeMenuItem], position: Point<Pixels>) -> Option<usize> {
+/// Build the menu (recursively, including submenus), show it, and return the
+/// selected item's action.
+fn run_menu(
+    view_ptr: usize,
+    items: &[NativeMenuItem],
+    position: Point<Pixels>,
+) -> Option<Box<dyn Action>> {
     let mtm = MainThreadMarker::new()?;
     // SAFETY: `view_ptr` came from the window's AppKit handle, and the window
     // outlives this synchronous call.
     let view: &NSView = unsafe { &*(view_ptr as *const NSView) };
 
     let target = MenuTarget::new();
-    let ns_menu = NSMenu::new(mtm);
-    // Items are configured explicitly, so disable AppKit's automatic enabling.
-    ns_menu.setAutoenablesItems(false);
-
-    for (index, item) in items.iter().enumerate() {
-        let ns_item = match item {
-            NativeMenuItem::Separator => NSMenuItem::separatorItem(mtm),
-            NativeMenuItem::Item {
-                label,
-                disabled,
-                checked,
-                ..
-            } => {
-                let ns_item = NSMenuItem::new(mtm);
-                let title = NSString::from_str(label);
-                unsafe {
-                    ns_item.setTitle(&title);
-                    ns_item.setTag(index as isize);
-                    ns_item.setEnabled(!*disabled);
-                    if *checked {
-                        // `NSControlStateValueOn`
-                        ns_item.setState(1);
-                    }
-                    if !*disabled {
-                        ns_item.setTarget(Some(&*target as &AnyObject));
-                        ns_item.setAction(Some(sel!(menuItemClicked:)));
-                    }
-                }
-                ns_item
-            }
-        };
-        ns_menu.addItem(&ns_item);
-    }
+    let mut actions: Vec<&Box<dyn Action>> = Vec::new();
+    let ns_menu = build_menu(items, &target, mtm, &mut actions);
 
     // `position` is window-relative, logical pixels, origin top-left (GPUI).
-    // AppKit view coordinates have their origin at the bottom-left with the y
-    // axis pointing up, so flip y against the view height.
+    // AppKit view coordinates have their origin at the bottom-left, so flip y.
     let height = view.bounds().size.height;
     let location = NSPoint::new(
         f32::from(position.x) as f64,
@@ -135,10 +97,70 @@ fn run_menu(view_ptr: usize, items: &[NativeMenuItem], position: Point<Pixels>) 
     );
     ns_menu.popUpMenuPositioningItem_atLocation_inView(None, location, Some(view));
 
-    match target.ivars().selected.get() {
-        index if index >= 0 => Some(index as usize),
-        _ => None,
+    let tag = target.ivars().selected.get();
+    if tag >= 0 {
+        actions.get(tag as usize).map(|action| action.boxed_clone())
+    } else {
+        None
     }
+}
+
+/// Recursively build an `NSMenu`. Each actionable leaf item is given a tag equal
+/// to its index in `actions`, so the selected tag maps back to its action.
+fn build_menu<'a>(
+    items: &'a [NativeMenuItem],
+    target: &MenuTarget,
+    mtm: MainThreadMarker,
+    actions: &mut Vec<&'a Box<dyn Action>>,
+) -> Retained<NSMenu> {
+    let menu = NSMenu::new(mtm);
+    // Items are configured explicitly, so disable AppKit's automatic enabling.
+    menu.setAutoenablesItems(false);
+
+    for item in items {
+        match item {
+            NativeMenuItem::Separator => menu.addItem(&NSMenuItem::separatorItem(mtm)),
+            NativeMenuItem::Item {
+                label,
+                disabled,
+                checked,
+                action,
+            } => {
+                let ns_item = NSMenuItem::new(mtm);
+                unsafe {
+                    ns_item.setTitle(&NSString::from_str(label));
+                    ns_item.setEnabled(!*disabled);
+                    if *checked {
+                        // `NSControlStateValueOn`
+                        ns_item.setState(1);
+                    }
+                    if let Some(action) = action {
+                        if !*disabled {
+                            ns_item.setTag(actions.len() as isize);
+                            actions.push(action);
+                            ns_item.setTarget(Some(target as &AnyObject));
+                            ns_item.setAction(Some(sel!(menuItemClicked:)));
+                        }
+                    }
+                }
+                menu.addItem(&ns_item);
+            }
+            NativeMenuItem::Submenu {
+                label,
+                disabled,
+                items,
+            } => {
+                let ns_item = NSMenuItem::new(mtm);
+                let submenu = build_menu(items, target, mtm, actions);
+                ns_item.setTitle(&NSString::from_str(label));
+                ns_item.setEnabled(!*disabled);
+                ns_item.setSubmenu(Some(&submenu));
+                menu.addItem(&ns_item);
+            }
+        }
+    }
+
+    menu
 }
 
 /// Extract the AppKit `NSView` pointer from the window's raw handle.

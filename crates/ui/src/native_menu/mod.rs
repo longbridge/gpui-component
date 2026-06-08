@@ -19,7 +19,7 @@
 //!     .menu("Paste", Box::new(Paste))
 //!     .separator()
 //!     .menu("Delete", Box::new(Delete))
-//!     .popup(position, window, cx);
+//!     .show(position, window, cx);
 //! ```
 
 use gpui::{Action, App, Pixels, Point, SharedString, Window};
@@ -42,6 +42,11 @@ enum NativeMenuItem {
         checked: bool,
         /// Action dispatched when the item is selected.
         action: Option<Box<dyn Action>>,
+    },
+    Submenu {
+        label: SharedString,
+        disabled: bool,
+        items: Vec<NativeMenuItem>,
     },
 }
 
@@ -107,6 +112,16 @@ impl NativeMenu {
         self
     }
 
+    /// Append a submenu built from another [`NativeMenu`].
+    pub fn submenu(mut self, label: impl Into<SharedString>, submenu: NativeMenu) -> Self {
+        self.items.push(NativeMenuItem::Submenu {
+            label: label.into(),
+            disabled: false,
+            items: submenu.items,
+        });
+        self
+    }
+
     /// Build a native menu from GPUI [`gpui::MenuItem`]s, e.g. the items of a
     /// [`gpui::Menu`]. This lets an existing GPUI menu definition be reused as a
     /// native menu.
@@ -134,8 +149,15 @@ impl NativeMenu {
                         action: Some(action),
                     });
                 }
-                // TODO(native-menu): nested submenus / system menus.
-                gpui::MenuItem::Submenu(_) | gpui::MenuItem::SystemMenu(_) => {}
+                gpui::MenuItem::Submenu(submenu) => {
+                    menu.items.push(NativeMenuItem::Submenu {
+                        label: submenu.name.clone(),
+                        disabled: submenu.disabled,
+                        items: Self::from_menu_items(submenu.items).items,
+                    });
+                }
+                // System menus (e.g. macOS Services) have no native popup equivalent.
+                gpui::MenuItem::SystemMenu(_) => {}
             }
         }
         menu
@@ -146,12 +168,12 @@ impl NativeMenu {
         self.items.is_empty()
     }
 
-    /// Pop up the menu at `position` (window coordinates, in logical pixels).
+    /// Show the menu at `position` (window coordinates, in logical pixels).
     ///
     /// The menu is shown without blocking the caller: the OS tracking loop runs
     /// off GPUI's call stack, so GPUI is not borrowed while it is open. When an
     /// item is selected, its action is dispatched via [`Window::dispatch_action`].
-    pub fn popup(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
+    pub fn show(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
         if self.items.is_empty() {
             return;
         }

@@ -9,7 +9,7 @@ use gpui::{
     Pixels, Point, Render, Subscription, Window, anchored, deferred, div, px,
 };
 
-use crate::menu::PopupMenu;
+use crate::menu::{PopupMenu, PopupMenuItem};
 use crate::root::Root;
 
 use super::NativeMenuItem;
@@ -43,24 +43,7 @@ impl FallbackMenuOverlay {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let menu = PopupMenu::build(window, cx, move |mut menu, _, _| {
-            if let Some(handle) = action_context {
-                menu = menu.action_context(handle);
-            }
-            for item in items {
-                menu = match item {
-                    NativeMenuItem::Separator => menu.separator(),
-                    NativeMenuItem::Item {
-                        label,
-                        disabled,
-                        checked,
-                        action: Some(action),
-                    } => menu.menu_with_check_and_disabled(label, checked, action, disabled),
-                    NativeMenuItem::Item { action: None, .. } => menu,
-                };
-            }
-            menu
-        });
+        let menu = build_popup(items, action_context, window, cx);
 
         let subscription = cx.subscribe(&menu, |this, _, _: &DismissEvent, cx| {
             this.active = None;
@@ -75,6 +58,42 @@ impl FallbackMenuOverlay {
         });
         cx.notify();
     }
+}
+
+/// Recursively build a [`PopupMenu`] entity from native menu items.
+#[allow(dead_code)] // Only used where the native menu falls back (e.g. Linux).
+fn build_popup(
+    items: Vec<NativeMenuItem>,
+    action_context: Option<FocusHandle>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Entity<PopupMenu> {
+    PopupMenu::build(window, cx, move |mut menu, window, cx| {
+        if let Some(handle) = action_context.clone() {
+            menu = menu.action_context(handle);
+        }
+        for item in items {
+            menu = match item {
+                NativeMenuItem::Separator => menu.separator(),
+                NativeMenuItem::Item {
+                    label,
+                    disabled,
+                    checked,
+                    action: Some(action),
+                } => menu.menu_with_check_and_disabled(label, checked, action, disabled),
+                NativeMenuItem::Item { action: None, .. } => menu,
+                NativeMenuItem::Submenu {
+                    label,
+                    disabled,
+                    items,
+                } => {
+                    let submenu = build_popup(items, action_context.clone(), window, cx);
+                    menu.item(PopupMenuItem::submenu(label, submenu).disabled(disabled))
+                }
+            };
+        }
+        menu
+    })
 }
 
 impl Render for FallbackMenuOverlay {

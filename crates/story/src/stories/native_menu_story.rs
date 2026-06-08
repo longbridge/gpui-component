@@ -6,9 +6,7 @@ use gpui::{
     InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels,
     Point, Render, SharedString, Styled as _, Window, div, px,
 };
-use gpui_component::{
-    ActiveTheme as _, ElementExt, button::Button, native_menu::NativeMenu, v_flex,
-};
+use gpui_component::{ActiveTheme as _, ElementExt, button::Button, native_menu::NativeMenu, v_flex};
 use serde::Deserialize;
 
 use crate::section;
@@ -20,6 +18,11 @@ use crate::section;
 struct MenuClick(SharedString);
 
 const CONTEXT: &str = "NativeMenuStory";
+
+/// Build a menu item dispatching `MenuClick(label)`.
+fn click(label: &str) -> Box<dyn Action> {
+    Box::new(MenuClick(label.to_string().into()))
+}
 
 pub struct NativeMenuStory {
     focus_handle: FocusHandle,
@@ -58,8 +61,35 @@ impl NativeMenuStory {
         cx.notify();
     }
 
+    /// Demo menu shared by the examples: normal items, disabled, checked, and a
+    /// submenu.
+    fn demo_menu() -> NativeMenu {
+        NativeMenu::new()
+            .menu("Cut", click("Cut"))
+            .menu("Copy", click("Copy"))
+            .menu("Paste", click("Paste"))
+            .separator()
+            .menu_with_disabled("Disabled item", true, click("Disabled"))
+            .menu_with_check("Word Wrap (checked)", true, click("Word Wrap"))
+            .separator()
+            .submenu(
+                "Open Recent",
+                NativeMenu::new()
+                    .menu("project-a", click("project-a"))
+                    .menu("project-b", click("project-b"))
+                    .separator()
+                    .submenu(
+                        "More",
+                        NativeMenu::new()
+                            .menu("project-c", click("project-c"))
+                            .menu("project-d", click("project-d")),
+                    ),
+            )
+            .separator()
+            .menu("Select All", click("Select All"))
+    }
+
     fn trigger(&self, label: &str, cx: &mut App) -> Div {
-        // A bordered box that opens a native menu where the user right-clicks.
         div()
             .flex()
             .items_center()
@@ -83,7 +113,7 @@ impl Focusable for NativeMenuStory {
 impl Render for NativeMenuStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let result = if self.message.is_empty() {
-            "Right-click a box above to open a native menu.".to_string()
+            "Right-click a box / click the button below to open a native menu.".to_string()
         } else {
             self.message.clone()
         };
@@ -96,38 +126,18 @@ impl Render for NativeMenuStory {
             .size_full()
             .gap_6()
             .child(
-                section("Builder API").child(
+                section("Builder API (disabled / checked / submenu)").child(
                     self.trigger("Right-click here", cx).on_mouse_down(
                         MouseButton::Right,
                         cx.listener(|this, ev: &MouseDownEvent, window, cx| {
                             // Focus the story so the dispatched action reaches `on_click`.
                             this.focus_handle.focus(window, cx);
-                            NativeMenu::new()
-                                .menu("Cut", Box::new(MenuClick("Cut".into())))
-                                .menu("Copy", Box::new(MenuClick("Copy".into())))
-                                .menu("Paste", Box::new(MenuClick("Paste".into())))
-                                .separator()
-                                .menu_with_disabled(
-                                    "Disabled",
-                                    true,
-                                    Box::new(MenuClick("Disabled".into())),
-                                )
-                                .menu_with_check(
-                                    "Word Wrap",
-                                    true,
-                                    Box::new(MenuClick("Word Wrap".into())),
-                                )
-                                .separator()
-                                .menu("Select All", Box::new(MenuClick("Select All".into())))
-                                // Nudge right so the cursor doesn't land on the first item.
-                                .popup(
-                                    Point {
-                                        x: ev.position.x + px(4.),
-                                        y: ev.position.y,
-                                    },
-                                    window,
-                                    cx,
-                                );
+                            // Nudge right so the cursor doesn't land on the first item.
+                            let position = Point {
+                                x: ev.position.x + px(4.),
+                                y: ev.position.y,
+                            };
+                            Self::demo_menu().show(position, window, cx);
                         }),
                     ),
                 ),
@@ -138,20 +148,33 @@ impl Render for NativeMenuStory {
                         MouseButton::Right,
                         cx.listener(|this, ev: &MouseDownEvent, window, cx| {
                             this.focus_handle.focus(window, cx);
-                            // Reuse a GPUI menu definition directly as a native menu.
+                            let position = Point {
+                                x: ev.position.x + px(4.),
+                                y: ev.position.y,
+                            };
+                            // Reuse a GPUI menu definition (incl. a submenu) directly.
                             NativeMenu::from_menu_items([
                                 gpui::MenuItem::action("Copy", MenuClick("Copy".into())),
-                                gpui::MenuItem::separator(),
                                 gpui::MenuItem::action("Paste", MenuClick("Paste".into())),
+                                gpui::MenuItem::separator(),
+                                gpui::MenuItem::submenu(
+                                    gpui::Menu::new("Share").items([
+                                        gpui::MenuItem::action("Email", MenuClick("Email".into())),
+                                        gpui::MenuItem::action(
+                                            "Message",
+                                            MenuClick("Message".into()),
+                                        ),
+                                    ]),
+                                ),
                             ])
-                            .popup(ev.position, window, cx);
+                            .show(position, window, cx);
                         }),
                     ),
                 ),
             )
             .child(
                 section("Dropdown (click to open)").child({
-                    // A native menu isn't limited to right-click — `popup` takes
+                    // A native menu isn't limited to right-click — `show` takes
                     // any window position. Capture the trigger's bounds so the
                     // menu opens at its bottom-left, like a real dropdown.
                     let trigger_bounds: Rc<Cell<Bounds<Pixels>>> =
@@ -165,19 +188,11 @@ impl Render for NativeMenuStory {
                                 let bounds = trigger_bounds.get();
                                 let position = Point {
                                     x: bounds.origin.x,
-                                    // Just below the button. NSMenu's frame has a
-                                    // little top padding, so add a small gap to keep
-                                    // the menu from overlapping the button.
+                                    // Just below the button, with a small gap.
                                     y: bounds.origin.y + bounds.size.height + px(8.),
                                 };
-                                // Focus the story so the dispatched action is handled.
                                 focus_handle.focus(window, cx);
-                                NativeMenu::new()
-                                    .menu("New File", Box::new(MenuClick("New File".into())))
-                                    .menu("Open…", Box::new(MenuClick("Open".into())))
-                                    .separator()
-                                    .menu("Save", Box::new(MenuClick("Save".into())))
-                                    .popup(position, window, cx);
+                                Self::demo_menu().show(position, window, cx);
                             },
                         ))
                 }),

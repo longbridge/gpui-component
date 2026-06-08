@@ -2,15 +2,15 @@
 
 use std::ffi::c_void;
 
-use gpui::{App, Pixels, Point, Window};
+use gpui::{Action, App, Pixels, Point, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::UI::Input::KeyboardAndMouse::SetCapture;
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DestroyMenu, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING,
-    PostMessageW, SetForegroundWindow, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD, TPM_TOPALIGN,
-    TrackPopupMenuEx, WM_NULL,
+    AppendMenuW, CreatePopupMenu, DestroyMenu, HMENU, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR,
+    MF_STRING, PostMessageW, SetForegroundWindow, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD,
+    TPM_TOPALIGN, TrackPopupMenuEx, WM_NULL,
 };
 use windows::core::PCWSTR;
 
@@ -38,18 +38,9 @@ pub(super) fn popup(
     let handle = Window::window_handle(window);
 
     cx.spawn(async move |cx| {
-        let Some(index) = run_menu(hwnd, &items, client_x, client_y) else {
+        let Some(action) = run_menu(hwnd, &items, client_x, client_y) else {
             return;
         };
-        let Some(NativeMenuItem::Item {
-            action: Some(action),
-            ..
-        }) = items.get(index)
-        else {
-            return;
-        };
-        let action = action.boxed_clone();
-
         cx.update(move |app| {
             let _ = handle.update(app, move |_, window, app| {
                 window.dispatch_action(action, app);
@@ -59,69 +50,111 @@ pub(super) fn popup(
     .detach();
 }
 
-/// Build and synchronously run the popup menu, returning the selected item index.
-fn run_menu(hwnd: isize, items: &[NativeMenuItem], client_x: i32, client_y: i32) -> Option<usize> {
+/// Build the menu (recursively, including submenus), show it, and return the
+/// selected item's action.
+fn run_menu(
+    hwnd: isize,
+    items: &[NativeMenuItem],
+    client_x: i32,
+    client_y: i32,
+) -> Option<Box<dyn Action>> {
     let hwnd = HWND(hwnd as *mut c_void);
 
     // SAFETY: Win32 menu calls on a live window owned by the calling (main)
-    // thread. The menu is destroyed before returning.
+    // thread. The menu (and its submenus) is destroyed before returning.
     unsafe {
-        let hmenu = CreatePopupMenu().ok()?;
+        let mut actions: Vec<&Box<dyn Action>> = Vec::new();
+        let menu = build_menu(items, &mut actions)?;
 
-        for (index, item) in items.iter().enumerate() {
-            match item {
-                NativeMenuItem::Separator => {
-                    let _ = AppendMenuW(hmenu, MF_SEPARATOR, 0, PCWSTR::null());
-                }
-                NativeMenuItem::Item {
-                    label,
-                    disabled,
-                    checked,
-                    ..
-                } => {
-                    let mut flags = MF_STRING;
-                    if *disabled {
-                        flags |= MF_GRAYED;
-                    }
-                    if *checked {
-                        flags |= MF_CHECKED;
-                    }
-                    let wide: Vec<u16> = label.encode_utf16().chain(std::iter::once(0)).collect();
-                    // Item ids are 1-based; `TrackPopupMenuEx` returns 0 for "no
-                    // selection", so reserve 0 and map back with `id - 1`.
-                    let _ = AppendMenuW(hmenu, flags, index + 1, PCWSTR(wide.as_ptr()));
-                }
-            }
-        }
-
-        // Convert the window-relative (client) point to screen coordinates.
         let mut point = POINT {
             x: client_x,
             y: client_y,
         };
         let _ = ClientToScreen(hwnd, &mut point);
-
         // Required so the menu dismisses correctly when clicking elsewhere.
         let _ = SetForegroundWindow(hwnd);
 
         let flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD | TPM_NONOTIFY;
-        let selected = TrackPopupMenuEx(hmenu, flags.0, point.x, point.y, hwnd, None);
-        let _ = DestroyMenu(hmenu);
+        let selected = TrackPopupMenuEx(menu, flags.0, point.x, point.y, hwnd, None);
+        // Destroying the top menu also destroys its attached submenus.
+        let _ = DestroyMenu(menu);
 
-        // The menu's modal loop took over and cleared the global mouse capture
-        // that GPUI set on mouse-down. Restore it so GPUI's matching mouse-up
-        // `ReleaseCapture` succeeds instead of "failing" with GetLastError == 0
-        // and logging a spurious "operation completed successfully" message.
+        // The menu's modal loop cleared the capture GPUI set on mouse-down;
+        // restore it so GPUI's mouse-up `ReleaseCapture` succeeds and doesn't
+        // log a spurious "operation completed successfully" (GetLastError == 0).
         let _ = SetCapture(hwnd);
-        // MSDN-recommended quirk so the window's message queue recovers cleanly
-        // after `TrackPopupMenuEx`.
         let _ = PostMessageW(hwnd, WM_NULL, WPARAM(0), LPARAM(0));
 
+        // Ids are 1-based (0 means "no selection"); map back to `actions`.
         match selected.0 {
-            id if id > 0 => Some((id - 1) as usize),
+            id if id > 0 => actions.get((id - 1) as usize).map(|action| action.boxed_clone()),
             _ => None,
         }
     }
+}
+
+/// Recursively create an `HMENU`. Each actionable leaf gets a 1-based id equal
+/// to its index in `actions` plus one, so the returned id maps back to its action.
+///
+/// # Safety
+/// Win32 menu creation; the returned `HMENU` must be destroyed by the caller.
+unsafe fn build_menu<'a>(
+    items: &'a [NativeMenuItem],
+    actions: &mut Vec<&'a Box<dyn Action>>,
+) -> Option<HMENU> {
+    let menu = unsafe { CreatePopupMenu() }.ok()?;
+
+    for item in items {
+        match item {
+            NativeMenuItem::Separator => {
+                let _ = unsafe { AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()) };
+            }
+            NativeMenuItem::Item {
+                label,
+                disabled,
+                checked,
+                action,
+            } => {
+                let mut flags = MF_STRING;
+                if *disabled {
+                    flags |= MF_GRAYED;
+                }
+                if *checked {
+                    flags |= MF_CHECKED;
+                }
+                let wide: Vec<u16> = label.encode_utf16().chain(std::iter::once(0)).collect();
+                // Actionable, enabled items get an id; others use 0.
+                let id = match action {
+                    Some(action) if !*disabled => {
+                        actions.push(action);
+                        actions.len()
+                    }
+                    _ => 0,
+                };
+                let _ = unsafe { AppendMenuW(menu, flags, id, PCWSTR(wide.as_ptr())) };
+            }
+            NativeMenuItem::Submenu {
+                label,
+                disabled,
+                items,
+            } => {
+                let Some(submenu) = (unsafe { build_menu(items, actions) }) else {
+                    continue;
+                };
+                let mut flags = MF_POPUP;
+                if *disabled {
+                    flags |= MF_GRAYED;
+                }
+                let wide: Vec<u16> = label.encode_utf16().chain(std::iter::once(0)).collect();
+                // For MF_POPUP, the id parameter is the submenu handle.
+                let _ = unsafe {
+                    AppendMenuW(menu, flags, submenu.0 as usize, PCWSTR(wide.as_ptr()))
+                };
+            }
+        }
+    }
+
+    Some(menu)
 }
 
 /// Extract the Win32 `HWND` (as an `isize`) from the window's raw handle.
