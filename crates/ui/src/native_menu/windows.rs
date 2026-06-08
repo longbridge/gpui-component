@@ -4,12 +4,13 @@ use std::ffi::c_void;
 
 use gpui::{App, Pixels, Point, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::{HWND, POINT};
+use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::ClientToScreen;
+use windows::Win32::UI::Input::KeyboardAndMouse::SetCapture;
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING,
-    SetForegroundWindow, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD, TPM_TOPALIGN,
-    TrackPopupMenuEx,
+    PostMessageW, SetForegroundWindow, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD, TPM_TOPALIGN,
+    TrackPopupMenuEx, WM_NULL,
 };
 use windows::core::PCWSTR;
 
@@ -106,6 +107,15 @@ fn run_menu(hwnd: isize, items: &[NativeMenuItem], client_x: i32, client_y: i32)
         let flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD | TPM_NONOTIFY;
         let selected = TrackPopupMenuEx(hmenu, flags.0, point.x, point.y, hwnd, None);
         let _ = DestroyMenu(hmenu);
+
+        // The menu's modal loop took over and cleared the global mouse capture
+        // that GPUI set on mouse-down. Restore it so GPUI's matching mouse-up
+        // `ReleaseCapture` succeeds instead of "failing" with GetLastError == 0
+        // and logging a spurious "operation completed successfully" message.
+        let _ = SetCapture(hwnd);
+        // MSDN-recommended quirk so the window's message queue recovers cleanly
+        // after `TrackPopupMenuEx`.
+        let _ = PostMessageW(hwnd, WM_NULL, WPARAM(0), LPARAM(0));
 
         match selected.0 {
             id if id > 0 => Some((id - 1) as usize),
