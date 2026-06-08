@@ -12,21 +12,51 @@ use serde::Deserialize;
 use crate::section;
 
 /// Dispatched by every native menu item; the payload is the item label so the
-/// story can report which item was selected.
+/// story can report which item was selected (and toggle "Word Wrap").
 #[derive(Action, Clone, PartialEq, Deserialize)]
 #[action(namespace = native_menu_story, no_json)]
 struct MenuClick(SharedString);
 
 const CONTEXT: &str = "NativeMenuStory";
 
-/// Build a menu item dispatching `MenuClick(label)`.
+/// A menu item dispatching `MenuClick(label)`.
 fn click(label: &str) -> Box<dyn Action> {
     Box::new(MenuClick(label.to_string().into()))
+}
+
+/// Demo menu: normal items, a disabled item, a checked item (reflecting
+/// `word_wrap`, which the story toggles), and nested submenus.
+fn demo_menu(word_wrap: bool) -> NativeMenu {
+    NativeMenu::new()
+        .menu("Cut", click("Cut"))
+        .menu("Copy", click("Copy"))
+        .menu("Paste", click("Paste"))
+        .separator()
+        .menu_with_disabled("Disabled item", true, click("Disabled"))
+        .menu_with_check("Word Wrap", word_wrap, click("Word Wrap"))
+        .separator()
+        .submenu(
+            "Open Recent",
+            NativeMenu::new()
+                .menu("project-a", click("project-a"))
+                .menu("project-b", click("project-b"))
+                .separator()
+                .submenu(
+                    "More",
+                    NativeMenu::new()
+                        .menu("project-c", click("project-c"))
+                        .menu("project-d", click("project-d")),
+                ),
+        )
+        .separator()
+        .menu("Select All", click("Select All"))
 }
 
 pub struct NativeMenuStory {
     focus_handle: FocusHandle,
     message: String,
+    /// Demo checked state — toggled when the "Word Wrap" item is selected.
+    word_wrap: bool,
 }
 
 impl super::Story for NativeMenuStory {
@@ -53,40 +83,16 @@ impl NativeMenuStory {
         Self {
             focus_handle: cx.focus_handle(),
             message: String::new(),
+            word_wrap: true,
         }
     }
 
     fn on_click(&mut self, click: &MenuClick, _: &mut Window, cx: &mut Context<Self>) {
+        if click.0.as_ref() == "Word Wrap" {
+            self.word_wrap = !self.word_wrap;
+        }
         self.message = format!("Selected: {}", click.0);
         cx.notify();
-    }
-
-    /// Demo menu shared by the examples: normal items, disabled, checked, and a
-    /// submenu.
-    fn demo_menu() -> NativeMenu {
-        NativeMenu::new()
-            .menu("Cut", click("Cut"))
-            .menu("Copy", click("Copy"))
-            .menu("Paste", click("Paste"))
-            .separator()
-            .menu_with_disabled("Disabled item", true, click("Disabled"))
-            .menu_with_check("Word Wrap (checked)", true, click("Word Wrap"))
-            .separator()
-            .submenu(
-                "Open Recent",
-                NativeMenu::new()
-                    .menu("project-a", click("project-a"))
-                    .menu("project-b", click("project-b"))
-                    .separator()
-                    .submenu(
-                        "More",
-                        NativeMenu::new()
-                            .menu("project-c", click("project-c"))
-                            .menu("project-d", click("project-d")),
-                    ),
-            )
-            .separator()
-            .menu("Select All", click("Select All"))
     }
 
     fn trigger(&self, label: &str, cx: &mut App) -> Div {
@@ -117,6 +123,7 @@ impl Render for NativeMenuStory {
         } else {
             self.message.clone()
         };
+        let view = cx.entity();
         let focus_handle = self.focus_handle.clone();
 
         v_flex()
@@ -137,7 +144,7 @@ impl Render for NativeMenuStory {
                                 x: ev.position.x + px(4.),
                                 y: ev.position.y,
                             };
-                            Self::demo_menu().show(position, window, cx);
+                            demo_menu(this.word_wrap).popup(position, window, cx);
                         }),
                     ),
                 ),
@@ -167,14 +174,14 @@ impl Render for NativeMenuStory {
                                     ]),
                                 ),
                             ]))
-                            .show(position, window, cx);
+                            .popup(position, window, cx);
                         }),
                     ),
                 ),
             )
             .child(
                 section("Dropdown (click to open)").child({
-                    // A native menu isn't limited to right-click — `show` takes
+                    // A native menu isn't limited to right-click — `popup` takes
                     // any window position. Capture the trigger's bounds so the
                     // menu opens at its bottom-left, like a real dropdown.
                     let trigger_bounds: Rc<Cell<Bounds<Pixels>>> =
@@ -192,7 +199,7 @@ impl Render for NativeMenuStory {
                                     y: bounds.origin.y + bounds.size.height + px(8.),
                                 };
                                 focus_handle.focus(window, cx);
-                                Self::demo_menu().show(position, window, cx);
+                                demo_menu(view.read(cx).word_wrap).popup(position, window, cx);
                             },
                         ))
                 }),

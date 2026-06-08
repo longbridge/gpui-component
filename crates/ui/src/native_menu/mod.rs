@@ -19,7 +19,7 @@
 //!     .menu("Paste", Box::new(Paste))
 //!     .separator()
 //!     .menu("Delete", Box::new(Delete))
-//!     .show(position, window, cx);
+//!     .popup(position, window, cx);
 //! ```
 
 use gpui::{Action, App, Pixels, Point, SharedString, Window};
@@ -127,12 +127,12 @@ impl NativeMenu {
         self.items.is_empty()
     }
 
-    /// Show the menu at `position` (window coordinates, in logical pixels).
+    /// Pop up the menu at `position` (window coordinates, in logical pixels).
     ///
     /// The menu is shown without blocking the caller: the OS tracking loop runs
     /// off GPUI's call stack, so GPUI is not borrowed while it is open. When an
     /// item is selected, its action is dispatched via [`Window::dispatch_action`].
-    pub fn show(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
+    pub fn popup(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
         if self.items.is_empty() {
             return;
         }
