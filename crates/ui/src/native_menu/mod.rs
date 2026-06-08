@@ -146,44 +146,37 @@ impl NativeMenu {
     }
 }
 
-impl From<gpui::Menu> for NativeMenu {
-    fn from(menu: gpui::Menu) -> Self {
-        menu.items.into_iter().collect()
-    }
-}
-
-/// Build a native menu from GPUI [`gpui::MenuItem`]s, reusing an existing GPUI
-/// menu definition (e.g. `menu.items.into_iter().collect()`).
+/// Reuse an existing GPUI menu definition as a native menu.
 ///
 /// `Action`s, separators, submenus, `checked`, and `disabled` are mapped over;
 /// system menus (e.g. macOS Services) have no native popup equivalent and are
 /// skipped.
-impl FromIterator<gpui::MenuItem> for NativeMenu {
-    fn from_iter<I: IntoIterator<Item = gpui::MenuItem>>(iter: I) -> Self {
-        let mut menu = Self::new();
-        for item in iter {
+impl From<gpui::Menu> for NativeMenu {
+    fn from(menu: gpui::Menu) -> Self {
+        let mut native = Self::new();
+        for item in menu.items {
             match item {
-                gpui::MenuItem::Separator => menu.items.push(NativeMenuItem::Separator),
+                gpui::MenuItem::Separator => native.items.push(NativeMenuItem::Separator),
                 gpui::MenuItem::Action {
                     name,
                     action,
                     checked,
                     disabled,
                     ..
-                } => menu.items.push(NativeMenuItem::Item {
+                } => native.items.push(NativeMenuItem::Item {
                     label: name,
                     disabled,
                     checked,
                     action: Some(action),
                 }),
-                gpui::MenuItem::Submenu(submenu) => menu.items.push(NativeMenuItem::Submenu {
+                gpui::MenuItem::Submenu(submenu) => native.items.push(NativeMenuItem::Submenu {
                     label: submenu.name.clone(),
                     disabled: submenu.disabled,
-                    items: Self::from_iter(submenu.items).items,
+                    items: Self::from(submenu).items,
                 }),
                 gpui::MenuItem::SystemMenu(_) => {}
             }
         }
-        menu
+        native
     }
 }
