@@ -122,47 +122,6 @@ impl NativeMenu {
         self
     }
 
-    /// Build a native menu from GPUI [`gpui::MenuItem`]s, e.g. the items of a
-    /// [`gpui::Menu`]. This lets an existing GPUI menu definition be reused as a
-    /// native menu.
-    ///
-    /// `Action` items, separators, `checked`, and `disabled` are mapped over.
-    /// Nested submenus and system menus are not yet supported and are skipped.
-    pub fn from_menu_items(items: impl IntoIterator<Item = gpui::MenuItem>) -> Self {
-        let mut menu = Self::new();
-        for item in items {
-            match item {
-                gpui::MenuItem::Separator => {
-                    menu.items.push(NativeMenuItem::Separator);
-                }
-                gpui::MenuItem::Action {
-                    name,
-                    action,
-                    checked,
-                    disabled,
-                    ..
-                } => {
-                    menu.items.push(NativeMenuItem::Item {
-                        label: name,
-                        disabled,
-                        checked,
-                        action: Some(action),
-                    });
-                }
-                gpui::MenuItem::Submenu(submenu) => {
-                    menu.items.push(NativeMenuItem::Submenu {
-                        label: submenu.name.clone(),
-                        disabled: submenu.disabled,
-                        items: Self::from_menu_items(submenu.items).items,
-                    });
-                }
-                // System menus (e.g. macOS Services) have no native popup equivalent.
-                gpui::MenuItem::SystemMenu(_) => {}
-            }
-        }
-        menu
-    }
-
     /// Whether the menu has no items.
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
@@ -189,6 +148,42 @@ impl NativeMenu {
 
 impl From<gpui::Menu> for NativeMenu {
     fn from(menu: gpui::Menu) -> Self {
-        Self::from_menu_items(menu.items)
+        menu.items.into_iter().collect()
+    }
+}
+
+/// Build a native menu from GPUI [`gpui::MenuItem`]s, reusing an existing GPUI
+/// menu definition (e.g. `menu.items.into_iter().collect()`).
+///
+/// `Action`s, separators, submenus, `checked`, and `disabled` are mapped over;
+/// system menus (e.g. macOS Services) have no native popup equivalent and are
+/// skipped.
+impl FromIterator<gpui::MenuItem> for NativeMenu {
+    fn from_iter<I: IntoIterator<Item = gpui::MenuItem>>(iter: I) -> Self {
+        let mut menu = Self::new();
+        for item in iter {
+            match item {
+                gpui::MenuItem::Separator => menu.items.push(NativeMenuItem::Separator),
+                gpui::MenuItem::Action {
+                    name,
+                    action,
+                    checked,
+                    disabled,
+                    ..
+                } => menu.items.push(NativeMenuItem::Item {
+                    label: name,
+                    disabled,
+                    checked,
+                    action: Some(action),
+                }),
+                gpui::MenuItem::Submenu(submenu) => menu.items.push(NativeMenuItem::Submenu {
+                    label: submenu.name.clone(),
+                    disabled: submenu.disabled,
+                    items: Self::from_iter(submenu.items).items,
+                }),
+                gpui::MenuItem::SystemMenu(_) => {}
+            }
+        }
+        menu
     }
 }

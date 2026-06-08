@@ -153,7 +153,7 @@ impl Render for NativeMenuStory {
                                 y: ev.position.y,
                             };
                             // Reuse a GPUI menu definition (incl. a submenu) directly.
-                            NativeMenu::from_menu_items([
+                            NativeMenu::from_iter([
                                 gpui::MenuItem::action("Copy", MenuClick("Copy".into())),
                                 gpui::MenuItem::action("Paste", MenuClick("Paste".into())),
                                 gpui::MenuItem::separator(),
