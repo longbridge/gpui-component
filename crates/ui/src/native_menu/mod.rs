@@ -1,0 +1,169 @@
+//! A menu rendered natively by the operating system.
+//!
+//! Unlike [`crate::menu::PopupMenu`], which is drawn by GPUI and therefore
+//! clipped to the window bounds, [`NativeMenu`] is rendered by the OS. It can
+//! extend beyond the window — useful for small windows where a GPUI-drawn popup
+//! menu would otherwise be cut off.
+//!
+//! Items carry a GPUI [`Action`], dispatched via [`Window::dispatch_action`]
+//! when selected — the same mechanism the application menu bar and key bindings
+//! use. A [`NativeMenu`] can therefore be built directly from GPUI
+//! [`gpui::MenuItem`]s (see [`NativeMenu::from_menu_items`] /
+//! [`From<gpui::Menu>`]).
+//!
+//! ```ignore
+//! use gpui_component::native_menu::NativeMenu;
+//!
+//! NativeMenu::new()
+//!     .menu("Copy", Box::new(Copy))
+//!     .menu("Paste", Box::new(Paste))
+//!     .separator()
+//!     .menu("Delete", Box::new(Delete))
+//!     .popup(position, window, cx);
+//! ```
+
+use gpui::{Action, App, Pixels, Point, SharedString, Window};
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+mod linux;
+
+enum NativeMenuItem {
+    Separator,
+    Item {
+        label: SharedString,
+        disabled: bool,
+        checked: bool,
+        /// Action dispatched when the item is selected.
+        action: Option<Box<dyn Action>>,
+    },
+}
+
+/// A menu rendered by the operating system.
+///
+/// Build it with the [`NativeMenu::menu`] / [`NativeMenu::separator`] builders,
+/// then call [`NativeMenu::popup`] to display it at a position.
+#[derive(Default)]
+pub struct NativeMenu {
+    items: Vec<NativeMenuItem>,
+}
+
+impl NativeMenu {
+    /// Create an empty native menu.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Append a clickable item that dispatches `action` when selected.
+    pub fn menu(self, label: impl Into<SharedString>, action: Box<dyn Action>) -> Self {
+        self.menu_with(label, false, false, Some(action))
+    }
+
+    /// Append an item, controlling its `disabled` state.
+    pub fn menu_with_disabled(
+        self,
+        label: impl Into<SharedString>,
+        disabled: bool,
+        action: Box<dyn Action>,
+    ) -> Self {
+        self.menu_with(label, disabled, false, Some(action))
+    }
+
+    /// Append an item, controlling its `checked` state (a check mark is shown).
+    pub fn menu_with_check(
+        self,
+        label: impl Into<SharedString>,
+        checked: bool,
+        action: Box<dyn Action>,
+    ) -> Self {
+        self.menu_with(label, false, checked, Some(action))
+    }
+
+    fn menu_with(
+        mut self,
+        label: impl Into<SharedString>,
+        disabled: bool,
+        checked: bool,
+        action: Option<Box<dyn Action>>,
+    ) -> Self {
+        self.items.push(NativeMenuItem::Item {
+            label: label.into(),
+            disabled,
+            checked,
+            action,
+        });
+        self
+    }
+
+    /// Append a separator line.
+    pub fn separator(mut self) -> Self {
+        self.items.push(NativeMenuItem::Separator);
+        self
+    }
+
+    /// Build a native menu from GPUI [`gpui::MenuItem`]s, e.g. the items of a
+    /// [`gpui::Menu`]. This lets an existing GPUI menu definition be reused as a
+    /// native menu.
+    ///
+    /// `Action` items, separators, `checked`, and `disabled` are mapped over.
+    /// Nested submenus and system menus are not yet supported and are skipped.
+    pub fn from_menu_items(items: impl IntoIterator<Item = gpui::MenuItem>) -> Self {
+        let mut menu = Self::new();
+        for item in items {
+            match item {
+                gpui::MenuItem::Separator => {
+                    menu.items.push(NativeMenuItem::Separator);
+                }
+                gpui::MenuItem::Action {
+                    name,
+                    action,
+                    checked,
+                    disabled,
+                    ..
+                } => {
+                    menu.items.push(NativeMenuItem::Item {
+                        label: name,
+                        disabled,
+                        checked,
+                        action: Some(action),
+                    });
+                }
+                // TODO(native-menu): nested submenus / system menus.
+                gpui::MenuItem::Submenu(_) | gpui::MenuItem::SystemMenu(_) => {}
+            }
+        }
+        menu
+    }
+
+    /// Whether the menu has no items.
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    /// Pop up the menu at `position` (window coordinates, in logical pixels).
+    ///
+    /// The menu is shown without blocking the caller: the OS tracking loop runs
+    /// off GPUI's call stack, so GPUI is not borrowed while it is open. When an
+    /// item is selected, its action is dispatched via [`Window::dispatch_action`].
+    pub fn popup(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
+        if self.items.is_empty() {
+            return;
+        }
+
+        #[cfg(target_os = "macos")]
+        macos::popup(self.items, position, window, cx);
+        #[cfg(target_os = "windows")]
+        windows::popup(self.items, position, window, cx);
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        linux::popup(self.items, position, window, cx);
+    }
+}
+
+impl From<gpui::Menu> for NativeMenu {
+    fn from(menu: gpui::Menu) -> Self {
+        Self::from_menu_items(menu.items)
+    }
+}
