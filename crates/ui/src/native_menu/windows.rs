@@ -32,7 +32,9 @@ pub(super) fn popup(
     let scale = window.scale_factor();
     let client_x = (f32::from(position.x) * scale).round() as i32;
     let client_y = (f32::from(position.y) * scale).round() as i32;
-    let handle = window.window_handle();
+    // Inherent `Window::window_handle` (GPUI's `AnyWindowHandle`), not the
+    // `raw_window_handle::HasWindowHandle` trait method in scope below.
+    let handle = Window::window_handle(window);
 
     cx.spawn(async move |cx| {
         let Some(index) = run_menu(hwnd, &items, client_x, client_y) else {
