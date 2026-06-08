@@ -259,26 +259,24 @@ impl ThemeColor {
     /// background show through,
     /// see [`crate::WindowExt::set_window_glass`].
     pub(crate) fn apply_window_glass(&mut self) {
-        /// Opacity for navigation-layer surfaces that reveal the glass behind
-        /// them (sidebar, title bar, tab bar).
+        /// Opacity for the navigation surfaces that reveal the glass.
+        ///
+        /// Note: GPUI has no per-element backdrop blur, so a rounded element on
+        /// top of a translucent navigation surface has its anti-aliased corner
+        /// edge bleed the glass through (a faint jaggy). The lower this value,
+        /// the stronger that bleed — keep it fairly high so the glass tint
+        /// still reads while the corner artifact stays negligible.
         const NAVIGATION_OPACITY: f32 = 0.5;
 
-        // Apple's Liquid Glass guidance: glass belongs to the navigation layer
-        // (sidebar, title bar, tab bar), never the content layer and never
-        // stacked on other glass. So only these navigation surfaces are made
-        // translucent to let the glass show through them. The window
-        // background stays opaque here — instead the `Root` view paints a
-        // transparent background in glass mode (see `Root::render`), so the
-        // glass is revealed only through the navigation areas while content
-        // areas keep their own opaque surfaces and cover the glass.
-        //
-        // Content surfaces (background, cards, list, table, secondary, …) and
-        // floating surfaces (popover, menu, dialog, notification) are left
-        // opaque on purpose: they are layered over page content rather than
-        // the glass, so making them translucent would bleed that content
-        // through (ghosting). Keeping them opaque also avoids losing alpha
-        // when those colors are recomputed downstream (e.g. `.opacity()`,
-        // `.lighten()`, `.alpha()`).
+        // Only the navigation surfaces (sidebar, title bar, tab bar) are made
+        // translucent to reveal the glass behind them. The content background
+        // and all controls / cards (secondary, list, table, group_box, popover,
+        // dialog, …) stay opaque, so content stays readable and never bleeds
+        // through (ghosting), and their colors keep full alpha when recomputed
+        // downstream (e.g. `.opacity()`, `.lighten()`, `.alpha()`). The `Root`
+        // view paints a transparent window background in glass mode so the
+        // glass shows through these navigation areas, while the content area
+        // covers it with its opaque background.
         let navigation_surfaces = [
             &mut self.title_bar,
             &mut self.sidebar,

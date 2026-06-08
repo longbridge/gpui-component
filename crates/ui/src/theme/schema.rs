@@ -711,5 +711,11 @@ impl Theme {
 
         self.colors.apply_config(&config, &default_colors);
         self.mode = config.mode;
+
+        // `apply_config` just rebuilt the colors, so reapply the window glass
+        // surface adjustments to keep glass active across theme switches.
+        if self.window_glass {
+            self.colors.apply_window_glass();
+        }
     }
 }

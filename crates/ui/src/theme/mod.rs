@@ -84,6 +84,13 @@ pub struct Theme {
     pub list: ListSettings,
     /// The sheet settings.
     pub sheet: SheetSettings,
+    /// Whether the system glass background effect is enabled for any window.
+    ///
+    /// Mirrored from [`crate::WindowExt::set_window_glass`] so that every theme
+    /// change (mode switch or full theme swap) reapplies the glass surface
+    /// adjustments via [`ThemeColor::apply_window_glass`].
+    #[serde(skip)]
+    pub(crate) window_glass: bool,
 }
 
 impl Default for Theme {
@@ -167,10 +174,6 @@ impl Theme {
             cx.set_global(theme);
         }
 
-        let window_glass = cx
-            .try_global::<crate::GlobalState>()
-            .is_some_and(|state| !state.glass_windows.is_empty());
-
         let theme = cx.global_mut::<Theme>();
         theme.mode = mode;
         if mode.is_dark() {
@@ -178,9 +181,8 @@ impl Theme {
         } else {
             theme.apply_config(&theme.light_theme.clone());
         }
-        if window_glass {
-            theme.colors.apply_window_glass();
-        }
+        // `apply_config` reapplies the glass adjustments when `window_glass`
+        // is set, so no extra handling is needed here.
 
         if let Some(window) = window {
             window.refresh();
@@ -240,6 +242,7 @@ impl From<&ThemeColor> for Theme {
             dark_theme: Rc::new(ThemeConfig::default()),
             highlight_theme: HighlightTheme::default_light(),
             sheet: SheetSettings::default(),
+            window_glass: false,
         }
     }
 }

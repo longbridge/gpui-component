@@ -77,8 +77,8 @@ window.update(cx, |_, window, cx| {
 })?;
 ```
 
-Following Apple's Liquid Glass guidance (glass belongs to the navigation layer, never the content), only the navigation-layer surfaces (`sidebar`, `title_bar`, `tab_bar`) are made semi-transparent to let the glass show through them. The window background itself becomes transparent in glass mode, so **your content areas must paint their own opaque background** (e.g. `bg(cx.theme().background)`) to cover the glass. Content and floating surfaces (cards, lists, tables, popovers, dialogs) stay opaque to keep content readable and avoid ghosting. This applies to all windows of the application. Call `window.set_window_glass(false, cx)` to restore the opaque background.
+Following Apple's Liquid Glass guidance (glass belongs to the navigation layer, never the content), only the navigation-layer surfaces (`sidebar`, `title_bar`, `tab_bar`) are made semi-transparent to let the glass show through them. The content area stays opaque so content is readable and never bleeds through (ghosting). The window background itself becomes transparent in glass mode, so **your content areas must paint their own opaque background** (e.g. `bg(cx.theme().background)`) to cover the glass. This applies to all windows of the application. Call `window.set_window_glass(false, cx)` to restore the opaque background.
 
-See the [window_glass example](https://github.com/longbridge/gpui-component/tree/main/examples/window_glass) for a complete example.
+The Story gallery has a working demo — toggle it from the title bar's window glass action.
 
 [Root]: https://docs.rs/gpui-component/latest/gpui_component/root/struct.Root.html

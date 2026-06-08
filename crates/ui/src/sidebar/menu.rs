@@ -1,5 +1,5 @@
 use crate::{
-    ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _, StyledExt,
+    ActiveTheme as _, Collapsible, Colorize as _, Icon, IconName, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     menu::{ContextMenuExt, PopupMenu},
@@ -269,7 +269,15 @@ impl SidebarItem for SidebarMenuItem {
                     .text_sm()
                     .when(is_hoverable, |this| {
                         this.hover(|this| {
-                            this.bg(cx.theme().sidebar_accent.opacity(0.8))
+                            // Opaque hover, lighter than the active item: mix
+                            // toward the sidebar for the hue, then force full
+                            // alpha. In glass mode `sidebar` is translucent, so
+                            // the mix would otherwise stay semi-transparent and
+                            // blend with the glass to read darker than active.
+                            let mut hover_bg =
+                                cx.theme().sidebar_accent.mix(cx.theme().sidebar, 0.8);
+                            hover_bg.a = 1.0;
+                            this.bg(hover_bg)
                                 .text_color(cx.theme().sidebar_accent_foreground)
                         })
                     })
