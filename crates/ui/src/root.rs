@@ -3,6 +3,7 @@ use crate::{
     dialog::{ANIMATION_DURATION, Dialog},
     focus_trap::FocusTrapManager,
     input::{Copy, InputState},
+    native_menu::FallbackMenuOverlay,
     notification::{Notification, NotificationList},
     sheet::Sheet,
     text::{TextSelectionController, TextViewState, WindowTextSelection},
@@ -42,6 +43,7 @@ pub struct Root {
     pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
     pub(crate) tooltip_overlay: Entity<TooltipOverlay>,
+    pub(crate) native_menu_overlay: Entity<FallbackMenuOverlay>,
     sheet_size: Option<DefiniteLength>,
     window_shadow_size: Pixels,
     /// The focus handle that will be restored after a dialog is closed with animation.
@@ -95,6 +97,7 @@ impl Root {
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
             tooltip_overlay: cx.new(|_| TooltipOverlay::new()),
+            native_menu_overlay: cx.new(|_| FallbackMenuOverlay::new()),
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
             pending_focus_restore: None,
@@ -418,6 +421,15 @@ impl Root {
         Some(root.read(cx).tooltip_overlay.clone())
     }
 
+    /// Get the fallback native-menu overlay entity for this window.
+    pub(crate) fn native_menu_overlay(
+        window: &Window,
+        cx: &App,
+    ) -> Option<Entity<FallbackMenuOverlay>> {
+        let root = window.root::<Root>()??;
+        Some(root.read(cx).native_menu_overlay.clone())
+    }
+
     /// Return the root view of the Root.
     pub fn view(&self) -> &AnyView {
         &self.view
@@ -528,7 +540,8 @@ impl Render for Root {
                 .refine_style(&self.style)
                 .child(TextSelectionController)
                 .child(self.view.clone())
-                .child(self.tooltip_overlay.clone()),
+                .child(self.tooltip_overlay.clone())
+                .child(self.native_menu_overlay.clone()),
         )
     }
 }

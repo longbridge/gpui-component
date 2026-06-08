@@ -28,8 +28,11 @@ use gpui::{Action, App, Pixels, Point, SharedString, Window};
 mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-mod linux;
+
+// Drawn-menu fallback (used on platforms without an OS-native popup, e.g. Linux).
+// Compiled on all platforms because `Root` holds the overlay entity.
+mod fallback;
+pub(crate) use fallback::FallbackMenuOverlay;
 
 enum NativeMenuItem {
     Separator,
@@ -158,7 +161,7 @@ impl NativeMenu {
         #[cfg(target_os = "windows")]
         windows::popup(self.items, position, window, cx);
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        linux::popup(self.items, position, window, cx);
+        fallback::popup(self.items, position, window, cx);
     }
 }
 
