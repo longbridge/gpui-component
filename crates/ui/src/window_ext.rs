@@ -97,7 +97,12 @@ pub trait WindowExt: Sized {
     /// Clears the window-level text selection and all view-local selections.
     fn clear_text_selection(&mut self, cx: &mut App);
 
-    /// Enables the system glass effect for the window background.
+    /// Enables or disables the system glass effect for the window background.
+    ///
+    /// When `enable` is `false`, the opaque background is restored; this is a
+    /// no-op if the effect is not currently enabled.
+    ///
+    /// When enabling:
     ///
     /// - macOS 26 (Tahoe) or later: Liquid Glass, by embedding a native
     ///   `NSGlassEffectView` behind the window content.
@@ -109,6 +114,9 @@ pub trait WindowExt: Sized {
     /// `title_bar`, `sidebar`) are automatically made semi-transparent to let
     /// the glass show through, this applies to all windows of the application.
     ///
+    /// Returns `true` if the requested state was applied successfully.
+    /// Disabling always returns `true`.
+    ///
     /// # Examples
     ///
     /// ```ignore
@@ -118,16 +126,10 @@ pub trait WindowExt: Sized {
     /// })?;
     ///
     /// window.update(cx, |_, window, cx| {
-    ///     window.enable_window_glass(cx);
+    ///     window.set_window_glass(true, cx);
     /// })?;
     /// ```
-    fn enable_window_glass(&mut self, cx: &mut App) -> bool;
-
-    /// Disables the system glass effect for the window background,
-    /// restoring the opaque background.
-    ///
-    /// This is a no-op if the effect is not enabled.
-    fn disable_window_glass(&mut self, cx: &mut App);
+    fn set_window_glass(&mut self, enable: bool, cx: &mut App) -> bool;
 
     /// Returns true if the system glass effect is enabled for the window.
     fn is_window_glass_enabled(&self, cx: &App) -> bool;
@@ -276,30 +278,28 @@ impl WindowExt for Window {
         root.update(cx, |root, cx| root.clear_text_selection(cx));
     }
 
-    fn enable_window_glass(&mut self, cx: &mut App) -> bool {
+    fn set_window_glass(&mut self, enable: bool, cx: &mut App) -> bool {
         let window_id = self.window_handle().window_id();
-        if GlobalState::global(cx).glass_windows.contains(&window_id) {
-            return true;
-        }
-        if !window_glass::enable(self) {
-            return false;
+        if enable {
+            if GlobalState::global(cx).glass_windows.contains(&window_id) {
+                return true;
+            }
+            if !window_glass::enable(self) {
+                return false;
+            }
+
+            GlobalState::global_mut(cx).glass_windows.insert(window_id);
+        } else {
+            if !GlobalState::global_mut(cx).glass_windows.remove(&window_id) {
+                return true;
+            }
+
+            window_glass::disable(self);
         }
 
-        GlobalState::global_mut(cx).glass_windows.insert(window_id);
-        // Reapply the theme to make the surface colors semi-transparent.
+        // Reapply the theme to update the surface colors.
         Theme::change(Theme::global(cx).mode, Some(self), cx);
         true
-    }
-
-    fn disable_window_glass(&mut self, cx: &mut App) {
-        let window_id = self.window_handle().window_id();
-        if !GlobalState::global_mut(cx).glass_windows.remove(&window_id) {
-            return;
-        }
-
-        window_glass::disable(self);
-        // Reapply the theme to restore the original surface colors.
-        Theme::change(Theme::global(cx).mode, Some(self), cx);
     }
 
     #[inline]

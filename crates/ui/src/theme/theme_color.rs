@@ -257,55 +257,35 @@ impl ThemeColor {
 
     /// Make the surface colors semi-transparent to let the window glass
     /// background show through,
-    /// see [`crate::WindowExt::enable_window_glass`].
+    /// see [`crate::WindowExt::set_window_glass`].
     pub(crate) fn apply_window_glass(&mut self) {
-        /// Window level surfaces, e.g.: window background, title bar.
-        const WINDOW_OPACITY: f32 = 0.5;
-        /// Container surfaces, e.g.: cards, secondary buttons, list rows.
-        const CONTAINER_OPACITY: f32 = 0.7;
-        /// Floating surfaces, e.g.: popovers, menus, notifications.
-        const FLOATING_OPACITY: f32 = 0.85;
+        /// Opacity for navigation-layer surfaces that reveal the glass behind
+        /// them (sidebar, title bar, tab bar).
+        const NAVIGATION_OPACITY: f32 = 0.5;
 
-        let window_surfaces = [
-            &mut self.background,
+        // Apple's Liquid Glass guidance: glass belongs to the navigation layer
+        // (sidebar, title bar, tab bar), never the content layer and never
+        // stacked on other glass. So only these navigation surfaces are made
+        // translucent to let the glass show through them. The window
+        // background stays opaque here — instead the `Root` view paints a
+        // transparent background in glass mode (see `Root::render`), so the
+        // glass is revealed only through the navigation areas while content
+        // areas keep their own opaque surfaces and cover the glass.
+        //
+        // Content surfaces (background, cards, list, table, secondary, …) and
+        // floating surfaces (popover, menu, dialog, notification) are left
+        // opaque on purpose: they are layered over page content rather than
+        // the glass, so making them translucent would bleed that content
+        // through (ghosting). Keeping them opaque also avoids losing alpha
+        // when those colors are recomputed downstream (e.g. `.opacity()`,
+        // `.lighten()`, `.alpha()`).
+        let navigation_surfaces = [
             &mut self.title_bar,
             &mut self.sidebar,
             &mut self.tab_bar,
-            &mut self.table,
-            &mut self.tiles,
         ];
-        for color in window_surfaces {
-            color.a *= WINDOW_OPACITY;
+        for color in navigation_surfaces {
+            color.a *= NAVIGATION_OPACITY;
         }
-
-        let container_surfaces = [
-            &mut self.accent,
-            &mut self.description_list_label,
-            &mut self.group_box,
-            &mut self.list,
-            &mut self.list_active,
-            &mut self.list_even,
-            &mut self.list_head,
-            &mut self.list_hover,
-            &mut self.muted,
-            &mut self.secondary,
-            &mut self.secondary_active,
-            &mut self.secondary_hover,
-            &mut self.sidebar_accent,
-            &mut self.skeleton,
-            &mut self.tab,
-            &mut self.tab_active,
-            &mut self.tab_bar_segmented,
-            &mut self.table_active,
-            &mut self.table_even,
-            &mut self.table_foot,
-            &mut self.table_head,
-            &mut self.table_hover,
-        ];
-        for color in container_surfaces {
-            color.a *= CONTAINER_OPACITY;
-        }
-
-        self.popover.a *= FLOATING_OPACITY;
     }
 }

@@ -270,6 +270,9 @@ impl Render for Gallery {
                 v_flex()
                     .flex_1()
                     .h_full()
+                    // Content layer: opaque background covers the window glass
+                    // (only the navigation areas reveal it).
+                    .bg(cx.theme().background)
                     .overflow_x_hidden()
                     .child(
                         h_flex()

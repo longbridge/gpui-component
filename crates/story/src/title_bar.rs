@@ -163,8 +163,8 @@ impl FontSizeSelector {
         cx: &mut Context<Self>,
     ) {
         if window.is_window_glass_enabled(cx) {
-            window.disable_window_glass(cx);
-        } else if !window.enable_window_glass(cx) {
+            window.set_window_glass(false, cx);
+        } else if !window.set_window_glass(true, cx) {
             window.push_notification("Window glass requires macOS 26+ or Windows 11 22H2+.", cx);
         }
     }

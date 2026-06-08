@@ -58,7 +58,7 @@ impl Render for MyApp {
 
 ## Window Glass（窗口玻璃效果）
 
-调用 `WindowExt::enable_window_glass` 可以为窗口背景启用系统玻璃效果：
+调用 `WindowExt::set_window_glass` 可以为窗口背景启用系统玻璃效果：
 
 - macOS 26（Tahoe）及以上：Liquid Glass（在窗口内容下方嵌入原生 `NSGlassEffectView`）。
 - Windows 11 22H2 及以上：Mica 背景材质。
@@ -73,11 +73,11 @@ let window = cx.open_window(options, |window, cx| {
 })?;
 
 window.update(cx, |_, window, cx| {
-    window.enable_window_glass(cx);
+    window.set_window_glass(true, cx);
 })?;
 ```
 
-开启后，主题中的大面积表面色（如 `background`、`title_bar`、`sidebar`）会自动变为半透明，让玻璃透出来；该变换对应用的所有窗口生效。调用 `WindowExt::disable_window_glass` 可恢复不透明背景。
+遵循 Apple Liquid Glass 的原则（玻璃属于导航层，而非内容层），开启后仅导航层表面（`sidebar`、`title_bar`、`tab_bar`）会变为半透明以透出玻璃。玻璃模式下窗口背景本身会变为透明，因此**你的内容区容器必须自己画不透明背景**（如 `bg(cx.theme().background)`）来盖住玻璃。内容与浮层表面（卡片、列表、表格、popover、对话框）保持不透明，以保证内容清晰并避免重影。该行为对应用的所有窗口生效。调用 `window.set_window_glass(false, cx)` 可恢复不透明背景。
 
 完整示例参见 [window_glass example](https://github.com/longbridge/gpui-component/tree/main/examples/window_glass)。
 

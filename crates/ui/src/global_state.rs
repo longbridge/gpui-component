@@ -23,7 +23,7 @@ pub struct GlobalState {
     /// controller in the capture phase of every left mouse down.
     pub(crate) suppress_text_selection: bool,
     /// Windows with the glass background effect enabled,
-    /// see [`crate::WindowExt::enable_window_glass`].
+    /// see [`crate::WindowExt::set_window_glass`].
     pub(crate) glass_windows: HashSet<WindowId>,
 }
 
