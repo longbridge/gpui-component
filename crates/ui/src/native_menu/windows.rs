@@ -20,7 +20,7 @@ use super::NativeMenuItem;
 ///
 /// The Win32 tracking loop (`TrackPopupMenuEx`) blocks, so — like macOS — it is
 /// run from a foreground task to avoid re-entering GPUI while it is borrowed.
-pub(super) fn popup(
+pub(super) fn show(
     items: Vec<NativeMenuItem>,
     position: Point<Pixels>,
     window: &mut Window,

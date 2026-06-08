@@ -116,7 +116,7 @@ impl Render for FallbackMenuOverlay {
 
 /// Show the fallback popup menu through [`Root`]'s overlay.
 #[allow(dead_code)] // Only called where the native menu falls back (e.g. Linux).
-pub(super) fn popup(
+pub(super) fn show(
     items: Vec<NativeMenuItem>,
     position: Point<Pixels>,
     window: &mut Window,

@@ -19,7 +19,7 @@
 //!     .menu("Paste", Box::new(Paste))
 //!     .separator()
 //!     .menu("Delete", Box::new(Delete))
-//!     .popup(position, window, cx);
+//!     .show(position, window, cx);
 //! ```
 
 use gpui::{Action, App, Pixels, Point, SharedString, Window};
@@ -53,7 +53,7 @@ enum NativeMenuItem {
 /// A menu rendered by the operating system.
 ///
 /// Build it with the [`NativeMenu::menu`] / [`NativeMenu::separator`] builders,
-/// then call [`NativeMenu::popup`] to display it at a position.
+/// then call [`NativeMenu::show`] to display it at a position.
 #[derive(Default)]
 pub struct NativeMenu {
     items: Vec<NativeMenuItem>,
@@ -132,17 +132,17 @@ impl NativeMenu {
     /// The menu is shown without blocking the caller: the OS tracking loop runs
     /// off GPUI's call stack, so GPUI is not borrowed while it is open. When an
     /// item is selected, its action is dispatched via [`Window::dispatch_action`].
-    pub fn popup(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
+    pub fn show(self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
         if self.items.is_empty() {
             return;
         }
 
         #[cfg(target_os = "macos")]
-        macos::popup(self.items, position, window, cx);
+        macos::show(self.items, position, window, cx);
         #[cfg(target_os = "windows")]
-        windows::popup(self.items, position, window, cx);
+        windows::show(self.items, position, window, cx);
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        fallback::popup(self.items, position, window, cx);
+        fallback::show(self.items, position, window, cx);
     }
 }
 

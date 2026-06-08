@@ -46,7 +46,7 @@ impl MenuTarget {
 ///
 /// The AppKit tracking loop is run from a foreground task so that GPUI is not
 /// borrowed while the menu is open.
-pub(super) fn popup(
+pub(super) fn show(
     items: Vec<NativeMenuItem>,
     position: Point<Pixels>,
     window: &mut Window,

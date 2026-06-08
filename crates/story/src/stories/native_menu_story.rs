@@ -144,7 +144,7 @@ impl Render for NativeMenuStory {
                                 x: ev.position.x + px(4.),
                                 y: ev.position.y,
                             };
-                            demo_menu(this.word_wrap).popup(position, window, cx);
+                            demo_menu(this.word_wrap).show(position, window, cx);
                         }),
                     ),
                 ),
@@ -174,14 +174,14 @@ impl Render for NativeMenuStory {
                                     ]),
                                 ),
                             ]))
-                            .popup(position, window, cx);
+                            .show(position, window, cx);
                         }),
                     ),
                 ),
             )
             .child(
                 section("Dropdown (click to open)").child({
-                    // A native menu isn't limited to right-click — `popup` takes
+                    // A native menu isn't limited to right-click — `show` takes
                     // any window position. Capture the trigger's bounds so the
                     // menu opens at its bottom-left, like a real dropdown.
                     let trigger_bounds: Rc<Cell<Bounds<Pixels>>> =
@@ -199,7 +199,7 @@ impl Render for NativeMenuStory {
                                     y: bounds.origin.y + bounds.size.height + px(8.),
                                 };
                                 focus_handle.focus(window, cx);
-                                demo_menu(view.read(cx).word_wrap).popup(position, window, cx);
+                                demo_menu(view.read(cx).word_wrap).show(position, window, cx);
                             },
                         ))
                 }),
