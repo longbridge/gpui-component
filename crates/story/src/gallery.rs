@@ -1,9 +1,10 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, h_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _, h_flex,
     input::{Input, InputEvent, InputState},
     resizable::{h_resizable, resizable_panel},
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    status_bar::StatusBar,
     v_flex,
 };
 
@@ -84,6 +85,7 @@ impl Gallery {
                     StoryContainer::panel::<SkeletonStory>(window, cx),
                     StoryContainer::panel::<SliderStory>(window, cx),
                     StoryContainer::panel::<SpinnerStory>(window, cx),
+                    StoryContainer::panel::<StatusBarStory>(window, cx),
                     StoryContainer::panel::<StepperStory>(window, cx),
                     StoryContainer::panel::<SwitchStory>(window, cx),
                     StoryContainer::panel::<DataTableStory>(window, cx),
@@ -162,7 +164,10 @@ impl Render for Gallery {
                 ("".into(), "".into())
             };
 
-        h_resizable("gallery-container")
+        let current_story = story_name.clone();
+        let total_components: usize = self.stories.iter().map(|(_, items)| items.len()).sum();
+
+        let body = h_resizable("gallery-container")
             .child(
                 resizable_panel()
                     .size(px(255.))
@@ -300,6 +305,38 @@ impl Render for Gallery {
                             }),
                     )
                     .into_any_element(),
+            );
+
+        v_flex()
+            .size_full()
+            .child(div().flex_1().min_h_0().child(body))
+            .child(
+                StatusBar::new()
+                    .left(
+                        h_flex()
+                            .items_center()
+                            .gap_1()
+                            .child(Icon::new(IconName::GalleryVerticalEnd).xsmall())
+                            .child(format!("{total_components} components")),
+                    )
+                    .left(StatusBar::separator())
+                    .map(|this| {
+                        if current_story.is_empty() {
+                            this
+                        } else {
+                            this.left(current_story.clone())
+                        }
+                    })
+                    .child(cx.theme().theme_name().clone())
+                    .right(format!("v{}", env!("CARGO_PKG_VERSION")))
+                    .right(
+                        StatusBar::button("assistant")
+                            .icon(IconName::Github)
+                            .tooltip("GPUI Component GitHub repository")
+                            .on_click(|_, _, cx| {
+                                cx.open_url("https://github.com/longbridge/gpui-component")
+                            }),
+                    ),
             )
     }
 }

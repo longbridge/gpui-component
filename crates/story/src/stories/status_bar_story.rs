@@ -1,0 +1,182 @@
+use gpui::{
+    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window,
+};
+use gpui_component::{
+    ActiveTheme as _, Icon, IconName, Sizable as _, WindowExt as _, dock::PanelControl, h_flex,
+    progress::Progress, status_bar::StatusBar, v_flex,
+};
+
+use crate::section;
+
+pub struct StatusBarStory {
+    focus_handle: gpui::FocusHandle,
+}
+
+impl StatusBarStory {
+    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self {
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
+    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self::new(window, cx))
+    }
+}
+
+impl super::Story for StatusBarStory {
+    fn title() -> &'static str {
+        "StatusBar"
+    }
+
+    fn description() -> &'static str {
+        "A horizontal bar with left/center/right regions, usually placed at the bottom."
+    }
+
+    fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
+        Self::view(window, cx)
+    }
+
+    fn zoomable() -> Option<PanelControl> {
+        None
+    }
+}
+
+impl Focusable for StatusBarStory {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
+}
+
+impl Render for StatusBarStory {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex()
+            .w_full()
+            .gap_4()
+            .child(
+                section("Code editor").child(
+                    v_flex().w_full().child(
+                        StatusBar::new()
+                            .left(
+                                StatusBar::button("branch")
+                                    .icon(IconName::Github)
+                                    .label("main")
+                                    .tooltip("Git branch")
+                                    .on_click(|_, window, cx| {
+                                        window.push_notification("Switch branch", cx);
+                                    }),
+                            )
+                            .left(StatusBar::separator())
+                            .left(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .gap_1()
+                                            .child(
+                                                Icon::new(IconName::CircleCheck)
+                                                    .xsmall()
+                                                    .text_color(cx.theme().green),
+                                            )
+                                            .child("0"),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .items_center()
+                                            .gap_1()
+                                            .child(
+                                                Icon::new(IconName::Info)
+                                                    .xsmall()
+                                                    .text_color(cx.theme().blue),
+                                            )
+                                            .child("2"),
+                                    ),
+                            )
+                            .right(
+                                StatusBar::button("position")
+                                    .label("Ln 12, Col 34")
+                                    .tooltip("Go to Line/Column")
+                                    .on_click(|_, window, cx| {
+                                        window.push_notification("Go to Line/Column", cx);
+                                    }),
+                            )
+                            .right(StatusBar::separator())
+                            .right(StatusBar::button("encoding").label("UTF-8").on_click(
+                                |_, window, cx| {
+                                    window.push_notification("Select encoding", cx);
+                                },
+                            ))
+                            .right(StatusBar::button("language").label("Rust").on_click(
+                                |_, window, cx| {
+                                    window.push_notification("Select language", cx);
+                                },
+                            )),
+                    ),
+                ),
+            )
+            .child(
+                section("Application").child(
+                    v_flex().w_full().child(
+                        StatusBar::new()
+                            .left(
+                                h_flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .child(
+                                        Icon::new(IconName::CircleCheck)
+                                            .xsmall()
+                                            .text_color(cx.theme().green),
+                                    )
+                                    .child("Connected"),
+                            )
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child("Syncing…")
+                                    .child(Progress::new("sync").value(60.).w_24()),
+                            )
+                            .right("All changes saved")
+                            .right(
+                                StatusBar::button("notifications")
+                                    .icon(IconName::Bell)
+                                    .label("3")
+                                    .tooltip("3 notifications")
+                                    .on_click(|_, window, cx| {
+                                        window.push_notification("3 notifications", cx);
+                                    }),
+                            ),
+                    ),
+                ),
+            )
+            // Layout cases for verifying the dynamic centering behavior.
+            .child(
+                section("Layout cases").child(
+                    v_flex()
+                        .w_full()
+                        .gap_6()
+                        .child(StatusBar::new().child("Center only → start-aligned"))
+                        .child(
+                            StatusBar::new()
+                                .left("Left")
+                                .child("Center → end (only left)"),
+                        )
+                        .child(
+                            StatusBar::new()
+                                .child("Center → start (only right)")
+                                .right("Right"),
+                        )
+                        .child(
+                            StatusBar::new()
+                                .left("Left")
+                                .child("Center → centered (left + right)")
+                                .right("Right"),
+                        )
+                        .child(StatusBar::new().left("Left").right("Right")),
+                ),
+            )
+    }
+}

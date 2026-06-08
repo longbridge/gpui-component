@@ -5,6 +5,7 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     dock::{ClosePanel, DockArea, DockAreaState, DockEvent, DockItem, DockPlacement, ToggleZoom},
     menu::DropdownMenu,
+    status_bar::StatusBar,
 };
 
 use gpui_component_assets::Assets;
@@ -513,7 +514,40 @@ impl Render for StoryWorkspace {
             .flex()
             .flex_col()
             .child(self.title_bar.clone())
-            .child(self.dock_area.clone())
+            .child(div().flex_1().min_h_0().child(self.dock_area.clone()))
+            .child(
+                StatusBar::new()
+                    .left(
+                        StatusBar::button("toggle-left-dock")
+                            .icon(IconName::PanelLeft)
+                            .tooltip("Toggle Left Dock")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.dock_area.update(cx, |area, cx| {
+                                    area.toggle_dock(DockPlacement::Left, window, cx);
+                                });
+                            })),
+                    )
+                    .left(
+                        StatusBar::button("toggle-bottom-dock")
+                            .icon(IconName::PanelBottom)
+                            .tooltip("Toggle Bottom Dock")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.dock_area.update(cx, |area, cx| {
+                                    area.toggle_dock(DockPlacement::Bottom, window, cx);
+                                });
+                            })),
+                    )
+                    .child(
+                        StatusBar::button("toggle-right-dock")
+                            .icon(IconName::PanelRight)
+                            .tooltip("Toggle Right Dock")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.dock_area.update(cx, |area, cx| {
+                                    area.toggle_dock(DockPlacement::Right, window, cx);
+                                });
+                            })),
+                    ),
+            )
             .children(sheet_layer)
             .children(dialog_layer)
             .children(notification_layer)
