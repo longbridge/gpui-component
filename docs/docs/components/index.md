@@ -56,6 +56,7 @@ collapsed: false
 - [Scrollable](scrollable) - Scrollable containers
 - [Sheet](sheet) - Slide-in panel from edges
 - [Sidebar](sidebar) - Navigation sidebar
+- [StatusBar](status-bar) - Bottom status bar with left/center/right regions
 
 ### Advanced Components
 

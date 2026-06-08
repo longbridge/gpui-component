@@ -20,6 +20,7 @@ use gpui_component::{
     },
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
+    status_bar::{StatusBar, StatusBarItem},
     tree::{TreeItem, TreeState, tree},
     v_flex,
 };
@@ -1118,15 +1119,14 @@ impl Example {
         let position = self.editor.read(cx).cursor_position();
         let cursor = self.editor.read(cx).cursor();
 
-        Button::new("line-column")
-            .ghost()
-            .xsmall()
+        StatusBarItem::new("line-column")
             .label(format!(
                 "{}:{} ({} byte)",
                 position.line + 1,
                 position.character + 1,
                 cursor
             ))
+            .tooltip("Go to Line/Column")
             .on_click(cx.listener(Self::go_to_line))
     }
 }
@@ -1173,27 +1173,15 @@ impl Render for Example {
                             ),
                     )
                     .child(
-                        h_flex()
-                            .justify_between()
-                            .text_sm()
-                            .bg(cx.theme().background)
-                            .py_1p5()
-                            .px_4()
-                            .border_t_1()
-                            .border_color(cx.theme().border)
-                            .text_color(cx.theme().muted_foreground)
-                            .child(
-                                h_flex()
-                                    .gap_3()
-                                    .child(self.render_line_number_button(window, cx))
-                                    .child(self.render_soft_wrap_button(window, cx))
-                                    .child(self.render_show_whitespaces_button(window, cx))
-                                    .child(self.render_indent_guides_button(window, cx))
-                                    .child(self.render_folding_button(window, cx))
-                                    .child(self.render_scroll_beyond_last_line_button(window, cx))
-                                    .child(self.render_cursor_surrounding_lines_button(window, cx)),
-                            )
-                            .child(self.render_go_to_line_button(window, cx)),
+                        StatusBar::new()
+                            .left(self.render_line_number_button(window, cx))
+                            .left(self.render_soft_wrap_button(window, cx))
+                            .left(self.render_show_whitespaces_button(window, cx))
+                            .left(self.render_indent_guides_button(window, cx))
+                            .left(self.render_folding_button(window, cx))
+                            .left(self.render_scroll_beyond_last_line_button(window, cx))
+                            .left(self.render_cursor_surrounding_lines_button(window, cx))
+                            .right(self.render_go_to_line_button(window, cx)),
                     ),
             )
     }
