@@ -56,8 +56,9 @@ export default {
             const content = readFileSync(skillPath, "utf-8");
             const { frontmatter, content: body } = parseFrontmatter(content);
 
+            const relDir = relative(repoRoot, join(skillsDir, skillDir)).replaceAll("\\", "/");
             skills.push({
-              id: skillDir,
+              id: relDir,
               name: frontmatter.name || skillDir,
               description: frontmatter.description || "",
               content: body,
