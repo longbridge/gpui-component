@@ -60,12 +60,18 @@ pub(super) fn show(
     let handle = Window::window_handle(window);
 
     cx.spawn(async move |cx| {
-        let Some(action) = run_menu(view_ptr, &items, position) else {
-            return;
-        };
-        cx.update(move |app| {
+        let action = run_menu(view_ptr, &items, position);
+        let _ = cx.update(move |app| {
             let _ = handle.update(app, move |_, window, app| {
-                window.dispatch_action(action, app);
+                if let Some(action) = action {
+                    window.dispatch_action(action, app);
+                }
+                // Wake GPUI after the AppKit tracking loop returns so the window
+                // resumes painting and re-registers its mouse handlers. Without
+                // this, a dismissed menu (especially when nothing is selected)
+                // leaves the window idle and unresponsive to a second
+                // right-click.
+                window.refresh();
             });
         });
     })
