@@ -1,8 +1,11 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, h_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
     input::{Input, InputEvent, InputState},
     resizable::{h_resizable, resizable_panel},
+    separator::Separator,
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
     status_bar::StatusBar,
     v_flex,
@@ -312,25 +315,18 @@ impl Render for Gallery {
             .child(div().flex_1().min_h_0().child(body))
             .child(
                 StatusBar::new()
-                    .left(
-                        h_flex()
-                            .items_center()
-                            .gap_1()
-                            .child(Icon::new(IconName::GalleryVerticalEnd).xsmall())
-                            .child(format!("{total_components} components")),
-                    )
-                    .left(StatusBar::separator())
-                    .map(|this| {
-                        if current_story.is_empty() {
-                            this
-                        } else {
-                            this.left(current_story.clone())
-                        }
+                    .child(Icon::new(IconName::GalleryVerticalEnd).xsmall())
+                    .child(format!("{total_components} components"))
+                    .child(Separator::vertical())
+                    .when(!current_story.is_empty(), |this| {
+                        this.child(current_story.clone())
                     })
-                    .child(cx.theme().theme_name().clone())
+                    .right(cx.theme().theme_name().clone())
                     .right(format!("v{}", env!("CARGO_PKG_VERSION")))
                     .right(
-                        StatusBar::button("assistant")
+                        Button::new("assistant")
+                            .ghost()
+                            .xsmall()
                             .icon(IconName::Github)
                             .tooltip("GPUI Component GitHub repository")
                             .on_click(|_, _, cx| {

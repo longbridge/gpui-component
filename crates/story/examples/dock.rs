@@ -518,7 +518,7 @@ impl Render for StoryWorkspace {
             .child(
                 StatusBar::new()
                     .left(
-                        StatusBar::button("toggle-left-dock")
+                        Button::new("toggle-left-dock").ghost().xsmall()
                             .icon(IconName::PanelLeft)
                             .tooltip("Toggle Left Dock")
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -528,7 +528,7 @@ impl Render for StoryWorkspace {
                             })),
                     )
                     .left(
-                        StatusBar::button("toggle-bottom-dock")
+                        Button::new("toggle-bottom-dock").ghost().xsmall()
                             .icon(IconName::PanelBottom)
                             .tooltip("Toggle Bottom Dock")
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -538,7 +538,7 @@ impl Render for StoryWorkspace {
                             })),
                     )
                     .child(
-                        StatusBar::button("toggle-right-dock")
+                        Button::new("toggle-right-dock").ghost().xsmall()
                             .icon(IconName::PanelRight)
                             .tooltip("Toggle Right Dock")
                             .on_click(cx.listener(|this, _, window, cx| {

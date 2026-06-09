@@ -359,6 +359,12 @@ pub struct ThemeConfigColors {
     /// TitleBar border color.
     #[serde(rename = "title_bar.border")]
     pub title_bar_border: Option<SharedString>,
+    /// StatusBar background color, use for the bottom status bar.
+    #[serde(rename = "status_bar.background")]
+    pub status_bar: Option<SharedString>,
+    /// StatusBar border color.
+    #[serde(rename = "status_bar.border")]
+    pub status_bar_border: Option<SharedString>,
     /// Background color for Tiles.
     #[serde(rename = "tiles.background")]
     pub tiles: Option<SharedString>,
@@ -651,6 +657,8 @@ impl ThemeColor {
         apply_color!(table_row_border, fallback = self.border);
         apply_color!(title_bar, fallback = self.background);
         apply_color!(title_bar_border, fallback = self.border);
+        apply_color!(status_bar, fallback = self.title_bar);
+        apply_color!(status_bar_border, fallback = self.title_bar_border);
         apply_color!(tiles, fallback = self.background);
         apply_color!(overlay);
         apply_color!(window_border, fallback = self.border);

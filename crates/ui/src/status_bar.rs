@@ -1,15 +1,10 @@
 use gpui::{
-    AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled,
-    Window, prelude::FluentBuilder as _,
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
-use crate::{
-    ActiveTheme, Sizable as _, StyledExt,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-    separator::Separator,
-};
+use crate::{ActiveTheme, StyledExt, h_flex};
 
 /// A horizontal status bar, usually placed at the bottom of a window or pane.
 ///
@@ -19,10 +14,8 @@ use crate::{
 /// aligned to either end.
 ///
 /// Each region accepts any [`IntoElement`], so a string, an [`Icon`](crate::Icon),
-/// a [`Button`], a custom layout, etc. can be passed directly. Use a plain
-/// string for a non-interactive label, [`StatusBar::button`] for a
-/// consistently-sized clickable button, and [`StatusBar::separator`] for a
-/// vertical separator between items.
+/// a ghost `Button`, a vertical `Separator`, a custom layout, etc. can be passed
+/// directly. Use a plain string for a non-interactive label.
 ///
 /// `left` and `right` pin items to each end. `child`/`children` add to the
 /// center region, whose alignment follows the pinned ends: centered with both
@@ -32,9 +25,7 @@ use crate::{
 /// ```
 /// use gpui_component::status_bar::StatusBar;
 ///
-/// let _ = StatusBar::new()
-///     .left("Ln 1, Col 1")
-///     .right(StatusBar::button("encoding").label("UTF-8"));
+/// let _ = StatusBar::new().left("Ln 1, Col 1").right("UTF-8");
 /// ```
 #[derive(IntoElement)]
 pub struct StatusBar {
@@ -53,17 +44,6 @@ impl StatusBar {
             right: SmallVec::new(),
             children: SmallVec::new(),
         }
-    }
-
-    /// A ghost, xsmall [`Button`] preset for a status bar, so every status bar
-    /// button shares a consistent size. Chain `label`, `icon`, `on_click`, etc.
-    pub fn button(id: impl Into<ElementId>) -> Button {
-        Button::new(id).ghost().xsmall()
-    }
-
-    /// A vertical separator for splitting status bar items into groups.
-    pub fn separator() -> Separator {
-        Separator::vertical().h_3()
     }
 
     /// Append an element to the left region. Call multiple times to add more.
@@ -100,21 +80,20 @@ impl RenderOnce for StatusBar {
         // right, or neither) — so a bar with just `child`s reads like a container.
         let has_left = !self.left.is_empty();
         let has_right = !self.right.is_empty();
-        let region = || h_flex().items_center().gap_1();
+        let region = || h_flex().overflow_hidden().items_center().gap_2();
 
         h_flex()
             .items_center()
-            .gap_1()
+            .gap_2()
             .py_1()
             .px_2()
             .border_t_1()
-            .border_color(cx.theme().border)
+            .border_color(cx.theme().status_bar_border)
+            .bg(cx.theme().status_bar)
             .text_xs()
             .text_color(cx.theme().muted_foreground)
             .refine_style(&self.style)
             .when(has_left, |this| this.child(region().children(self.left)))
-            // The center region is always present as a flex spacer, so `left`
-            // and `right` are pushed to each end even without center content.
             .child(
                 region()
                     .flex_1()

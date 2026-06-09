@@ -20,8 +20,8 @@ use gpui_component::status_bar::StatusBar;
 向区域传入任意 `impl IntoElement` —— 字符串、`Icon`、`Button`、自定义布局等。`left` 和 `right` 把项固定在两端;`child` / `children` 添加到中间区域,其对齐方式取决于固定了哪一端 —— 同时有 `left` 和 `right` 时居中,只有 `left` 时右对齐,否则左对齐(只有 `right`,或两者都没有,像普通容器一样)。多次调用即可追加更多。
 
 - **不可交互的标签**:直接传字符串 —— 它会继承状态栏的文字样式,且没有 hover。
-- **可点击的按钮**:用 `StatusBar::button(id)`,它返回一个 ghost、xsmall 的 `Button`,保证所有状态栏按钮尺寸一致。可链式调用 `label`、`icon`、`tooltip`、`on_click` 等。
-- **分隔线**:用 `StatusBar::separator()`。
+- **可点击的按钮**:传入一个 ghost、xsmall 的 `Button` —— `Button::new(id).ghost().xsmall()` —— 保证按钮尺寸一致。可链式调用 `label`、`icon`、`tooltip`、`on_click` 等。
+- **分隔线**:传入 `Separator::vertical()`。
 - **其他任意内容**:直接传该元素。
 
 ## 用法
@@ -40,13 +40,13 @@ StatusBar::new()
 ```rust
 StatusBar::new()
     .left(
-        StatusBar::button("branch")
+        Button::new("branch").ghost().xsmall()
             .icon(IconName::Github)
             .label("main")
             .on_click(|_, window, cx| { /* ... */ }),
     )
     .right(
-        StatusBar::button("go-to-line")
+        Button::new("go-to-line").ghost().xsmall()
             .label("Ln 1, Col 1")
             .tooltip("Go to Line/Column")
             .on_click(cx.listener(|this, _, window, cx| { /* ... */ })),
@@ -57,8 +57,8 @@ StatusBar::new()
 
 ```rust
 StatusBar::new()
-    .left(StatusBar::button("branch").icon(IconName::Github).label("main"))
-    .left(StatusBar::divider())
+    .left(Button::new("branch").ghost().xsmall().icon(IconName::Github).label("main"))
+    .left(Separator::vertical())
     .left(
         // 任意自定义元素都可以。
         h_flex()
@@ -88,8 +88,6 @@ StatusBar::new()
 | 方法             | 说明                                       |
 | ---------------- | ------------------------------------------ |
 | `new()`          | 创建一个空的状态栏                         |
-| `button(id)`     | 状态栏专用的 ghost、xsmall `Button` 预设   |
-| `divider()`      | 用于分隔项的竖直分割线                     |
 | `left(child)`    | 向左侧区域追加一个元素(可多次调用)       |
 | `right(child)`   | 向右侧区域追加一个元素                     |
 | `child(c)` / `children(cs)` | 向中间区域添加元素              |
@@ -99,4 +97,5 @@ StatusBar::new()
 ## 注意事项
 
 - 中间区域(通过 `child` / `children`)在同时有 `left` 和 `right` 时居中,只有 `left` 时右对齐,否则左对齐(只有 `right`,或两者都没有 —— 像普通容器一样)。
-- 只读项请用纯字符串(或任意不可交互元素),以避免按钮的 hover 效果;只有可点击项才用 `StatusBar::button`。
+- 只读项请用纯字符串(或任意不可交互元素),以避免按钮的 hover 效果;只有可点击项才用 ghost、xsmall 的 `Button`。
+- 颜色取自 `status_bar`(背景)和 `status_bar_border`(边框)主题变量,缺省回退到 `background` / `border`。

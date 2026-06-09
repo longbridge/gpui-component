@@ -20,8 +20,8 @@ use gpui_component::status_bar::StatusBar;
 Pass any `impl IntoElement` — a string, an `Icon`, a `Button`, a custom layout, etc. — to a region. `left` and `right` pin items to each end; `child` / `children` add to the center, whose alignment follows the pinned ends — centered with both `left` and `right`, end-aligned with only `left`, start-aligned otherwise (only `right`, or neither, like a plain container). Call a method multiple times to add more.
 
 - For a **non-interactive label**, pass a plain string — it inherits the bar's text style and has no hover.
-- For a **clickable button**, use `StatusBar::button(id)`, which returns a ghost, xsmall `Button` so every status bar button stays a consistent size. Chain `label`, `icon`, `tooltip`, `on_click`, etc.
-- For a **separator**, use `StatusBar::separator()`.
+- For a **clickable button**, pass a ghost, xsmall `Button` — `Button::new(id).ghost().xsmall()` — so buttons stay a consistent size. Chain `label`, `icon`, `tooltip`, `on_click`, etc.
+- For a **separator**, pass `Separator::vertical()`.
 - For anything else, pass the element directly.
 
 ## Usage
@@ -40,13 +40,13 @@ StatusBar::new()
 ```rust
 StatusBar::new()
     .left(
-        StatusBar::button("branch")
+        Button::new("branch").ghost().xsmall()
             .icon(IconName::Github)
             .label("main")
             .on_click(|_, window, cx| { /* ... */ }),
     )
     .right(
-        StatusBar::button("go-to-line")
+        Button::new("go-to-line").ghost().xsmall()
             .label("Ln 1, Col 1")
             .tooltip("Go to Line/Column")
             .on_click(cx.listener(|this, _, window, cx| { /* ... */ })),
@@ -57,8 +57,8 @@ StatusBar::new()
 
 ```rust
 StatusBar::new()
-    .left(StatusBar::button("branch").icon(IconName::Github).label("main"))
-    .left(StatusBar::separator())
+    .left(Button::new("branch").ghost().xsmall().icon(IconName::Github).label("main"))
+    .left(Separator::vertical())
     .left(
         // Any custom element works.
         h_flex()
@@ -88,8 +88,6 @@ StatusBar::new()
 | Method            | Description                                          |
 | ----------------- | ---------------------------------------------------- |
 | `new()`           | Create a new, empty status bar                       |
-| `button(id)`      | A ghost, xsmall `Button` preset for the status bar   |
-| `separator()`     | A vertical separator for splitting items into groups |
 | `left(child)`     | Append an element to the left region (call to add more) |
 | `right(child)`    | Append an element to the right region                |
 | `child(c)` / `children(cs)` | Add element(s) to the center region        |
@@ -99,4 +97,5 @@ Each region method takes `impl IntoElement`. `StatusBar` also implements `Styled
 ## Notes
 
 - The center (via `child` / `children`) is centered with both `left` and `right`, end-aligned with only `left`, and start-aligned otherwise (only `right`, or neither — like a plain container).
-- Use a plain string (or any non-interactive element) for read-only items to avoid the button hover effect; use `StatusBar::button` only for clickable items.
+- Use a plain string (or any non-interactive element) for read-only items to avoid the button hover effect; use a ghost xsmall `Button` only for clickable items.
+- Colors come from the `status_bar` (background) and `status_bar_border` theme tokens, which fall back to `background` / `border`.
