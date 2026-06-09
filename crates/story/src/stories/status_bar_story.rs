@@ -4,7 +4,7 @@ use gpui::{
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable as _, WindowExt as _, dock::PanelControl, h_flex,
-    progress::Progress, status_bar::StatusBar, v_flex,
+    progress::ProgressCircle, status_bar::StatusBar, v_flex,
 };
 
 use crate::section;
@@ -125,19 +125,15 @@ impl Render for StatusBarStory {
                                 h_flex()
                                     .items_center()
                                     .gap_1()
-                                    .child(
-                                        Icon::new(IconName::CircleCheck)
-                                            .xsmall()
-                                            .text_color(cx.theme().green),
-                                    )
+                                    .child(Icon::new(IconName::Check).xsmall())
                                     .child("Connected"),
                             )
                             .child(
                                 h_flex()
                                     .items_center()
                                     .gap_2()
-                                    .child("Syncing…")
-                                    .child(Progress::new("sync").value(60.).w_24()),
+                                    .child(ProgressCircle::new("syncing").value(45.))
+                                    .child("Syncing…"),
                             )
                             .right("All changes saved")
                             .right(
