@@ -656,12 +656,6 @@ impl PopupMenu {
         self
     }
 
-    /// Use small size, the menu item will have smaller height.
-    pub(crate) fn small(mut self) -> Self {
-        self.size = Size::Small;
-        self
-    }
-
     fn add_menu_item(
         &mut self,
         label: impl Into<SharedString>,
