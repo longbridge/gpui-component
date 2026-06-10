@@ -921,6 +921,9 @@ impl SyntaxHighlighter {
             if node_range.start > node_range.end {
                 node_range.end = node_range.start;
             }
+            if node_range.is_empty() {
+                continue;
+            }
 
             styles.push((node_range, theme.style(name.as_ref()).unwrap_or_default()));
         }
@@ -960,6 +963,11 @@ pub(crate) fn unique_styles(
     total_range: &Range<usize>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
+    let styles: Vec<_> = styles
+        .into_iter()
+        .filter(|(range, _)| !range.is_empty())
+        .collect();
+
     if styles.is_empty() {
         return styles;
     }
@@ -1391,6 +1399,12 @@ $x = 1;
                 (45..60, blue),
                 (60..65, clean),
             ],
+        );
+
+        assert_unique_styles(
+            0..10,
+            vec![(2..2, red), (4..6, green)],
+            vec![(0..4, clean), (4..6, green), (6..10, clean)],
         );
     }
 }
