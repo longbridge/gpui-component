@@ -356,7 +356,7 @@ impl SidebarItem for SidebarMenuItem {
                     })
                     .map(|this| {
                         if let Some(context_menu) = self.context_menu {
-                            this.popup_context_menu(move |menu, window, cx| {
+                            this.context_menu(move |menu, window, cx| {
                                 context_menu(menu, window, cx)
                             })
                             .into_any_element()
