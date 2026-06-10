@@ -7,7 +7,7 @@ mod menu_item;
 mod popup_menu;
 
 pub use app_menu_bar::AppMenuBar;
-pub use context_menu::{ContextMenu, ContextMenuExt, ContextMenuState};
+pub use context_menu::{ContextMenu, ContextMenuExt, PopupContextMenu};
 pub use dropdown_menu::DropdownMenu;
 pub use popup_menu::{PopupMenu, PopupMenuItem};
 

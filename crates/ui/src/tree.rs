@@ -429,7 +429,7 @@ impl Render for TreeState {
             .id("tree-state")
             .size_full()
             .relative()
-            .context_menu({
+            .popup_context_menu({
                 let state = state.clone();
                 move |menu, window, cx: &mut Context<PopupMenu>| {
                     if state.read(cx).context_menu_builder.is_none() {

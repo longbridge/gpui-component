@@ -40,10 +40,10 @@ use crate::input::{
     HoverDefinition, InlineCompletion, Lsp, Position, RopeExt as _, Selection,
     display_map::LineLayout,
     element::RIGHT_MARGIN,
-    popovers::{ContextMenu, DiagnosticPopover, HoverPopover, InputContextMenu},
+    popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
     search::SearchPanel,
 };
-use crate::menu::PopupMenu;
+use crate::native_menu::NativeMenu;
 use crate::scroll::AutoScroll;
 use crate::{Root, history::History};
 
@@ -396,18 +396,6 @@ pub struct InputState {
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
     /// Completion/CodeAction context menu
     pub(super) context_menu_content: Option<ContextMenu>,
-    pub(super) context_menu: Entity<InputContextMenu>,
-
-    /// An optional context menu builder to allow a custom context menu on the input.
-    ///
-    /// If set, this will override the built-in context menu and ignore the value set in [`Self::enable_context_menu`].
-    pub(super) context_menu_builder:
-        Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
-
-    /// Whether the context menu that shows on right-click is enabled.
-    ///
-    /// This value will be ignored if a context menu builder is defined in [`Self::context_menu_builder`].
-    pub(super) enable_context_menu: bool,
 
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
@@ -469,7 +457,6 @@ impl InputState {
         ];
 
         let text_style = window.text_style();
-        let mouse_context_menu = InputContextMenu::new(cx.entity(), window, cx);
 
         Self {
             focus_handle: focus_handle.clone(),
@@ -519,9 +506,6 @@ impl InputState {
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu_content: None,
-            context_menu: mouse_context_menu,
-            context_menu_builder: None,
-            enable_context_menu: true,
             completion_inserting: false,
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
@@ -576,15 +560,6 @@ impl InputState {
         let language: SharedString = language.into();
         self.mode = InputMode::code_editor(language);
         self.searchable = true;
-        self
-    }
-
-    /// Sets whether the context menu that shows on right-click is enabled.
-    ///
-    /// The context menu is enabled by default.
-    /// This value will be ignored if a custom context menu is defined on the input.
-    pub fn context_menu(mut self, enable: bool) -> Self {
-        self.enable_context_menu = enable;
         self
     }
 
@@ -1503,6 +1478,74 @@ impl InputState {
         cx.propagate();
     }
 
+    /// Show the right-click context menu as a native OS menu.
+    pub(crate) fn handle_right_click_menu(
+        &mut self,
+        event: &MouseDownEvent,
+        offset: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if crate::global_state::GlobalState::global(cx).is_in_deferred_context() {
+            return;
+        }
+
+        if !self.selected_range.contains(offset) {
+            self.move_to(offset, None, cx);
+        }
+
+        let is_code_editor = self.mode.is_code_editor();
+        if is_code_editor {
+            self.handle_hover_definition(offset, window, cx);
+        }
+
+        let is_enable = !self.disabled;
+        let has_goto_definition = is_enable && self.lsp.definition_provider.is_some();
+        let has_code_action = is_enable && !self.lsp.code_action_providers.is_empty();
+        let is_selected = !self.selected_range.is_empty();
+        let has_paste = is_enable && cx.read_from_clipboard().is_some();
+
+        let mut menu = NativeMenu::new();
+        if is_code_editor {
+            menu = menu
+                .menu_with_disabled(
+                    rust_i18n::t!("Input.Go to Definition"),
+                    !has_goto_definition,
+                    Box::new(crate::input::GoToDefinition),
+                )
+                .menu_with_disabled(
+                    rust_i18n::t!("Input.Show Code Actions"),
+                    !has_code_action,
+                    Box::new(crate::input::ToggleCodeActions),
+                )
+                .separator();
+        }
+
+        menu = menu
+            .menu_with_disabled(
+                rust_i18n::t!("Input.Cut"),
+                !(is_enable && is_selected),
+                Box::new(crate::input::Cut),
+            )
+            .menu_with_disabled(
+                rust_i18n::t!("Input.Copy"),
+                !is_selected,
+                Box::new(crate::input::Copy),
+            )
+            .menu_with_disabled(
+                rust_i18n::t!("Input.Paste"),
+                !has_paste,
+                Box::new(crate::input::Paste),
+            )
+            .separator()
+            .menu(
+                rust_i18n::t!("Input.Select All"),
+                Box::new(crate::input::SelectAll),
+            );
+
+        menu.show(event.position, window, cx);
+    }
+
     pub(super) fn on_mouse_down(
         &mut self,
         event: &MouseDownEvent,
@@ -1545,9 +1588,7 @@ impl InputState {
 
         // Show Mouse context menu
         if event.button == MouseButton::Right {
-            if self.enable_context_menu || self.context_menu_builder.is_some() {
-                self.handle_right_click_menu(event, offset, window, cx);
-            }
+            self.handle_right_click_menu(event, offset, window, cx);
             return;
         }
 

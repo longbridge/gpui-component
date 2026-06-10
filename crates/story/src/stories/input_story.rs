@@ -27,7 +27,6 @@ pub struct InputStory {
     mask_input2: Entity<InputState>,
     currency_input: Entity<InputState>,
     custom_input: Entity<InputState>,
-    custom_menu_input: Entity<InputState>,
     code_input: Entity<InputState>,
     color_input: Entity<InputState>,
 
@@ -93,13 +92,8 @@ impl InputStory {
             })
         });
         let custom_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("Custom Input use monospace, 0123456789.")
-                .context_menu(false)
+            InputState::new(window, cx).placeholder("Custom Input use monospace, 0123456789.")
         });
-
-        let custom_menu_input = cx
-            .new(|cx| InputState::new(window, cx).placeholder("Input with custom context menu..."));
 
         let color_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -153,7 +147,6 @@ impl InputStory {
             mask_input2,
             currency_input,
             custom_input,
-            custom_menu_input,
             code_input,
             color_input,
             input_text_centered,
@@ -314,14 +307,6 @@ impl Render for InputStory {
                         .child(Input::new(&self.custom_input).appearance(false)),
                 ),
             )
-            .child(section("Custom Context Menu").max_w_md().child(
-                Input::new(&self.custom_menu_input).context_menu(|menu, _, _| {
-                    menu.menu("Custom Action", Box::new(input::SelectAll))
-                        .separator()
-                        .menu("Copy", Box::new(input::Copy))
-                        .menu("Paste", Box::new(input::Paste))
-                }),
-            ))
             .child(
                 section("Custom Text Color")
                     .max_w_md()

@@ -1,15 +1,12 @@
-use std::rc::Rc;
-
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Context, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce,
     StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
 use crate::input::clear_button;
-use crate::menu::PopupMenu;
 use crate::spinner::Spinner;
 use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
@@ -47,12 +44,6 @@ pub struct Input {
     focus_bordered: bool,
     tab_index: isize,
     selected: bool,
-
-    /// An optional context menu builder to allow a custom context menu on the input.
-    ///
-    /// If set, this will override the built-in context menu.
-    context_menu_builder:
-        Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
 }
 
 impl Sizable for Input {
@@ -91,7 +82,6 @@ impl Input {
             focus_bordered: true,
             tab_index: 0,
             selected: false,
-            context_menu_builder: None,
         }
     }
 
@@ -156,15 +146,6 @@ impl Input {
     /// Set the tab index for the input, default is 0.
     pub fn tab_index(mut self, index: isize) -> Self {
         self.tab_index = index;
-        self
-    }
-
-    /// Sets the context menu for the input.
-    pub fn context_menu(
-        mut self,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-    ) -> Self {
-        self.context_menu_builder = Some(Rc::new(f));
         self
     }
 
@@ -246,7 +227,6 @@ impl RenderOnce for Input {
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
 
         self.state.update(cx, |state, _| {
-            state.context_menu_builder = self.context_menu_builder.clone();
             state.disabled = self.disabled;
             state.size = self.size;
 

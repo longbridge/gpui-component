@@ -2198,7 +2198,7 @@ where
             .size_full()
             .overflow_hidden()
             .child(self.render_table_header(left_columns_count, window, cx))
-            .context_menu({
+            .popup_context_menu({
                 let view = cx.entity().clone();
                 move |this, window: &mut Window, cx: &mut Context<PopupMenu>| {
                     if let Some(row_ix) = view.read(cx).right_clicked_row {

@@ -238,7 +238,7 @@ impl Render for MenuStory {
                             .border_dashed()
                             .border_color(cx.theme().border)
                             .child("Right click to open ContextMenu")
-                            .context_menu({
+                            .popup_context_menu({
                                 move |this, window, cx| {
                                     this.check_side(check_side.unwrap_or(Side::Left))
                                         .external_link_icon(false)
@@ -293,7 +293,7 @@ impl Render for MenuStory {
                             .border_dashed()
                             .border_color(cx.theme().border)
                             .child("Here is another area with context menu.")
-                            .context_menu({
+                            .popup_context_menu({
                                 move |this, _, _| {
                                     this.link(
                                         "About",
@@ -318,7 +318,7 @@ impl Render for MenuStory {
                             .border_dashed()
                             .border_color(cx.theme().border)
                             .child("ContextMenu area 1")
-                            .context_menu({
+                            .popup_context_menu({
                                 move |this, _, _| {
                                     this.link(
                                         "About",
