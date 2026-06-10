@@ -15,7 +15,7 @@ use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
+    ActiveTheme as _, Icon, IconName, Root, StyledExt, h_flex,
     highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
     input::{InputEdit, Point, RopeExt as _},
     text::{
@@ -816,7 +816,10 @@ impl Paragraph {
                                 .tooltip(move |window, cx| {
                                     Tooltip::new(title.clone()).build(window, cx)
                                 })
-                                .on_click(move |_, _, cx| {
+                                .on_click(move |_, window, cx| {
+                                    Root::update(window, cx, |root, _, cx| {
+                                        root.end_text_selection(cx)
+                                    });
                                     cx.stop_propagation();
                                     cx.open_url(&link.url);
                                 })

@@ -13,7 +13,7 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme, global_state::GlobalState, input::Selection, text::TextViewMultiClickKind,
+    ActiveTheme, Root, global_state::GlobalState, input::Selection, text::TextViewMultiClickKind,
     text::node::LinkMark, text::selection::word_range_at,
 };
 
@@ -455,6 +455,7 @@ impl Element for Inline {
                     if let Some(link) =
                         Self::link_for_position(&text_layout, &links, event.position)
                     {
+                        Root::update(window, cx, |root, _, cx| root.end_text_selection(cx));
                         cx.stop_propagation();
                         cx.open_url(&link.url);
                     }
