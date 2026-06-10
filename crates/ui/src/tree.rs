@@ -272,7 +272,7 @@ impl TreeState {
             if ix.is_some() {
                 self.selected_ix = ix;
             } else {
-                self.expand_ancestors(item.id.clone());
+                self.expand_ancestors(item.id.clone(), cx);
                 self.selected_ix = self
                     .entries
                     .iter()
@@ -299,7 +299,7 @@ impl TreeState {
         self.selected_ix.and_then(|ix| self.entries.get(ix))
     }
 
-    fn expand_ancestors(&mut self, target_id: SharedString) {
+    fn expand_ancestors(&mut self, target_id: SharedString, cx: &mut Context<Self>) {
         let mut ancestors = Vec::new();
 
         for entry in &self.entries {
@@ -313,8 +313,11 @@ impl TreeState {
             return;
         }
 
-        for ancestor in ancestors {
-            ancestor.state.borrow_mut().expanded = true;
+        for ancestor in ancestors.into_iter().rev() {
+            if !ancestor.is_expanded() {
+                ancestor.state.borrow_mut().expanded = true;
+                cx.emit(TreeEvent::Expanded(ancestor.id.clone()));
+            }
         }
 
         self.rebuild_entries();
@@ -807,5 +810,31 @@ mod tests {
 
         let events = collector.read_with(cx, |c, _| c.events.borrow().clone());
         assert_eq!(events, vec![TreeEvent::Expanded("src/ui".into())]);
+    }
+
+    #[gpui::test]
+    fn test_set_selected_item_emits_expanded_events_for_hidden_ancestors(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let target = super::TreeItem::new("src/ui/button.rs", "button.rs");
+        let items = vec![
+            super::TreeItem::new("src", "src")
+                .child(super::TreeItem::new("src/ui", "ui").child(target.clone())),
+        ];
+        let state = cx.new(|cx| TreeState::new(cx).items(items));
+        let collector = cx.new(|cx| TestCollector::new(&state, cx));
+
+        state.update(cx, |state, cx| {
+            state.set_selected_item(Some(&target), cx);
+        });
+
+        let events = collector.read_with(cx, |c, _| c.events.borrow().clone());
+        assert_eq!(
+            events,
+            vec![
+                TreeEvent::Expanded("src".into()),
+                TreeEvent::Expanded("src/ui".into())
+            ]
+        );
     }
 }
