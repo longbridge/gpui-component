@@ -397,6 +397,17 @@ pub struct InputState {
     /// Completion/CodeAction context menu
     pub(super) context_menu_content: Option<ContextMenu>,
 
+    /// An optional context menu builder to allow a custom right-click context menu on the input.
+    ///
+    /// If set, this overrides the built-in context menu (and ignores [`Self::enable_context_menu`]).
+    pub(super) context_menu_builder:
+        Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
+
+    /// Whether the context menu that shows on right-click is enabled.
+    ///
+    /// This value is ignored if a context menu builder is defined in [`Self::context_menu_builder`].
+    pub(super) enable_context_menu: bool,
+
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
     pub(super) hover_popover: Option<Entity<HoverPopover>>,
@@ -506,6 +517,8 @@ impl InputState {
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu_content: None,
+            context_menu_builder: None,
+            enable_context_menu: true,
             completion_inserting: false,
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
@@ -560,6 +573,15 @@ impl InputState {
         let language: SharedString = language.into();
         self.mode = InputMode::code_editor(language);
         self.searchable = true;
+        self
+    }
+
+    /// Sets whether the context menu that shows on right-click is enabled.
+    ///
+    /// The context menu is enabled by default.
+    /// This value is ignored if a custom context menu builder is defined on the input.
+    pub fn context_menu(mut self, enable: bool) -> Self {
+        self.enable_context_menu = enable;
         self
     }
 
@@ -1494,35 +1516,38 @@ impl InputState {
             self.move_to(offset, None, cx);
         }
 
-        let is_code_editor = self.mode.is_code_editor();
-        if is_code_editor {
-            self.handle_hover_definition(offset, window, cx);
-        }
+        // A custom builder fully replaces the built-in context menu.
+        let menu = if let Some(builder) = self.context_menu_builder.clone() {
+            builder(NativeMenu::new(), window, cx)
+        } else {
+            let is_code_editor = self.mode.is_code_editor();
+            if is_code_editor {
+                self.handle_hover_definition(offset, window, cx);
+            }
 
-        let is_enable = !self.disabled;
-        let has_goto_definition = is_enable && self.lsp.definition_provider.is_some();
-        let has_code_action = is_enable && !self.lsp.code_action_providers.is_empty();
-        let is_selected = !self.selected_range.is_empty();
-        let has_paste = is_enable && cx.read_from_clipboard().is_some();
+            let is_enable = !self.disabled;
+            let has_goto_definition = is_enable && self.lsp.definition_provider.is_some();
+            let has_code_action = is_enable && !self.lsp.code_action_providers.is_empty();
+            let is_selected = !self.selected_range.is_empty();
+            let has_paste = is_enable && cx.read_from_clipboard().is_some();
 
-        let mut menu = NativeMenu::new();
-        if is_code_editor {
-            menu = menu
-                .menu_with_disabled(
-                    rust_i18n::t!("Input.Go to Definition"),
-                    !has_goto_definition,
-                    Box::new(crate::input::GoToDefinition),
-                )
-                .menu_with_disabled(
-                    rust_i18n::t!("Input.Show Code Actions"),
-                    !has_code_action,
-                    Box::new(crate::input::ToggleCodeActions),
-                )
-                .separator();
-        }
+            let mut menu = NativeMenu::new();
+            if is_code_editor {
+                menu = menu
+                    .menu_with_disabled(
+                        rust_i18n::t!("Input.Go to Definition"),
+                        !has_goto_definition,
+                        Box::new(crate::input::GoToDefinition),
+                    )
+                    .menu_with_disabled(
+                        rust_i18n::t!("Input.Show Code Actions"),
+                        !has_code_action,
+                        Box::new(crate::input::ToggleCodeActions),
+                    )
+                    .separator();
+            }
 
-        menu = menu
-            .menu_with_disabled(
+            menu.menu_with_disabled(
                 rust_i18n::t!("Input.Cut"),
                 !(is_enable && is_selected),
                 Box::new(crate::input::Cut),
@@ -1541,7 +1566,8 @@ impl InputState {
             .menu(
                 rust_i18n::t!("Input.Select All"),
                 Box::new(crate::input::SelectAll),
-            );
+            )
+        };
 
         menu.show(event.position, window, cx);
     }
@@ -1588,7 +1614,9 @@ impl InputState {
 
         // Show Mouse context menu
         if event.button == MouseButton::Right {
-            self.handle_right_click_menu(event, offset, window, cx);
+            if self.enable_context_menu || self.context_menu_builder.is_some() {
+                self.handle_right_click_menu(event, offset, window, cx);
+            }
             return;
         }
 
