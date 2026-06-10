@@ -11,6 +11,7 @@ members = [
     "examples/hello_world",
     "examples/input",
     "examples/window_title",
+    "examples/titlebar_buttons",
     "examples/dialog_overlay",
     "examples/webview",
     "examples/system_monitor",

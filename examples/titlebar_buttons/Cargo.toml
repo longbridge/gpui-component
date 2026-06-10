@@ -1,0 +1,16 @@
+[package]
+name = "titlebar_buttons"
+description = "Repro for #2447: buttons placed inside TitleBar don't receive click events (Windows drags the window instead)."
+version = "0.5.1"
+publish = false
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component.workspace = true
+gpui-component-assets.workspace = true
+
+[lints]
+workspace = true
