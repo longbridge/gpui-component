@@ -95,6 +95,9 @@ pub trait WindowExt: Sized {
 
     /// Clears the window-level text selection and all view-local selections.
     fn clear_text_selection(&mut self, cx: &mut App);
+
+    /// Ends the in-progress window-level text selection drag (if any).
+    fn end_text_selection(&mut self, cx: &mut App);
 }
 
 impl WindowExt for Window {
@@ -238,5 +241,13 @@ impl WindowExt for Window {
             return;
         };
         root.update(cx, |root, cx| root.clear_text_selection(cx));
+    }
+
+    #[inline]
+    fn end_text_selection(&mut self, cx: &mut App) {
+        let Some(root) = self.root::<Root>().flatten() else {
+            return;
+        };
+        root.update(cx, |root, cx| root.end_text_selection(cx));
     }
 }

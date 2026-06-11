@@ -13,8 +13,8 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme, global_state::GlobalState, input::Selection, text::TextViewMultiClickKind,
-    text::node::LinkMark, text::selection::word_range_at,
+    ActiveTheme, WindowExt as _, global_state::GlobalState, input::Selection,
+    text::TextViewMultiClickKind, text::node::LinkMark, text::selection::word_range_at,
 };
 
 /// A inline element used to render a inline text and support selectable.
@@ -455,6 +455,7 @@ impl Element for Inline {
                     if let Some(link) =
                         Self::link_for_position(&text_layout, &links, event.position)
                     {
+                        window.end_text_selection(cx);
                         cx.stop_propagation();
                         cx.open_url(&link.url);
                     }
