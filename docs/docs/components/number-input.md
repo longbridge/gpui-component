@@ -27,7 +27,25 @@ let number_input = cx.new(|cx|
 NumberInput::new(&number_input)
 ```
 
-### With Min/Max Validation
+### Input Restriction and Normalization
+
+By default, the NumberInput only accepts a valid number: an optional leading
+`+`/`-` sign, digits and a single decimal point (e.g. `-1.5`), other characters
+are rejected on typing and pasting.
+
+Full-width number characters are normalized into their ASCII equivalents
+automatically, for CJK IME users:
+
+- Full-width digits: `１２３` → `123`
+- Full-width signs: `＋` → `+`, `－` → `-`
+- Full-width dot and ideographic full stop: `．`, `。` → `.`
+
+A bare leading decimal point is completed automatically, e.g. `.5` → `0.5`.
+
+To opt out of the default restriction, set an explicit mask:
+`state.set_mask_pattern(MaskPattern::None, window, cx)`.
+
+To further restrict the input (e.g. positive integers only), use `pattern`:
 
 ```rust
 // Integer input with validation
@@ -38,6 +56,58 @@ let integer_input = cx.new(|cx|
 );
 
 NumberInput::new(&integer_input)
+```
+
+### With Min/Max/Step
+
+Set `step`, `min` or `max` to let the NumberInput update the value internally:
+the `↑`/`↓` keys and the `+`/`-` buttons step the value by `step` (default: 1)
+and clamp it to the `min`/`max` range, then emit `InputEvent::Change`. There is
+no need to subscribe to `NumberInputEvent::Step`.
+
+A typed out-of-range value is kept while typing, and clamped on blur.
+Stepping follows the web behavior: a step that cannot move the value in the
+pressed direction (e.g. `↓` on a value at or below the `min`) does nothing.
+
+```rust
+let stepper_input = cx.new(|cx|
+    InputState::new(window, cx)
+        .default_value("50")
+        .step(5.)
+        .min(0.)
+        .max(100.)
+);
+
+NumberInput::new(&stepper_input)
+```
+
+### Dynamic Step
+
+Use `step_by` to calculate the step value based on the current value on
+stepping, e.g. a stock price tick size that varies by the price range:
+
+```rust
+let price_input = cx.new(|cx|
+    InputState::new(window, cx)
+        .step_by(|value| match value {
+            v if v < 0.25 => 0.001,
+            v if v < 0.5 => 0.005,
+            _ => 0.01,
+        })
+        .min(0.)
+);
+
+NumberInput::new(&price_input)
+```
+
+The step strategy can also be updated at runtime via `set_step`:
+
+```rust
+use gpui_component::input::NumberStep;
+
+state.set_step(NumberStep::Fixed(0.01), window, cx);
+state.set_step(NumberStep::by_value(|v| if v < 1. { 0.01 } else { 0.1 }), window, cx);
+state.set_step(None, window, cx); // Fall back to NumberInputEvent::Step
 ```
 
 ### With Number Formatting
@@ -109,6 +179,10 @@ div()
 
 ### Handle Number Input Events
 
+If none of `step`, `min`, `max` is set, the NumberInput emits
+`NumberInputEvent::Step` on increment/decrement, and the subscriber is
+responsible for updating the value:
+
 ```rust
 let number_input = cx.new(|cx| InputState::new(window, cx));
 let mut value: i64 = 0;
@@ -179,7 +253,7 @@ NumberInput::decrement(&number_input, window, cx);
 
 | Event              | Description                        |
 | ------------------ | ---------------------------------- |
-| `Step(StepAction)` | Increment/decrement button pressed |
+| `Step(StepAction)` | Increment/decrement pressed. Only emitted when none of `step`, `min`, `max` is set. |
 
 ### StepAction
 
@@ -192,6 +266,13 @@ NumberInput::decrement(&number_input, window, cx);
 
 | Method                              | Description                                             |
 | ----------------------------------- | ------------------------------------------------------- |
+| `step(impl Into<NumberStep>)`       | Set step value for built-in increment/decrement (default: 1) |
+| `step_by(fn(f64) -> f64)`           | Calculate step value based on the current value on stepping |
+| `min(f64)`                          | Set minimum value, clamped on stepping and blur          |
+| `max(f64)`                          | Set maximum value, clamped on stepping and blur          |
+| `set_step(Option<NumberStep>, ...)` | Update step strategy after construction                  |
+| `set_min(Option<f64>, ...)`         | Update minimum value after construction                  |
+| `set_max(Option<f64>, ...)`         | Update maximum value after construction                  |
 | `pattern(regex)`                    | Set regex pattern for validation (e.g., digits only)    |
 | `mask_pattern(MaskPattern::Number)` | Set number formatting with separator and decimal places |
 | `value()`                           | Get current display value (formatted)                   |
@@ -308,57 +389,19 @@ h_flex()
 ```rust
 struct QuantitySelector {
     quantity_input: Entity<InputState>,
-    quantity: u32,
-    min_quantity: u32,
-    max_quantity: u32,
 }
 
 impl QuantitySelector {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let min_quantity = 1;
-        let max_quantity = 99;
-
+        // Step by 1 and clamp to 1..=99, no event handling needed.
         let quantity_input = cx.new(|cx|
             InputState::new(window, cx)
-                .default_value(min_quantity.to_string())
-                .pattern(Regex::new(&format!(r"^[{}-{}]\d*$", min_quantity, max_quantity)).unwrap())
+                .default_value("1")
+                .min(1.)
+                .max(99.)
         );
 
-        let _subscription = cx.subscribe_in(&quantity_input, window, Self::on_quantity_event);
-
-        Self {
-            quantity_input,
-            quantity: min_quantity,
-            min_quantity,
-            max_quantity,
-        }
-    }
-
-    fn on_quantity_event(
-        &mut self,
-        state: &Entity<InputState>,
-        event: &NumberInputEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            NumberInputEvent::Step(StepAction::Increment) => {
-                if self.quantity < self.max_quantity {
-                    self.quantity += 1;
-                    state.update(cx, |input, cx| {
-                        input.set_value(self.quantity.to_string(), window, cx);
-                    });
-                }
-            }
-            NumberInputEvent::Step(StepAction::Decrement) => {
-                if self.quantity > self.min_quantity {
-                    self.quantity -= 1;
-                    state.update(cx, |input, cx| {
-                        input.set_value(self.quantity.to_string(), window, cx);
-                    });
-                }
-            }
-        }
+        Self { quantity_input }
     }
 }
 
@@ -369,57 +412,22 @@ NumberInput::new(&self.quantity_input).small()
 ### Floating Point Input
 
 ```rust
-struct FloatInput {
-    float_input: Entity<InputState>,
-    float_value: f64,
-    step: f64,
-}
+// Step by 0.1, the fraction digits of the value are kept on stepping,
+// e.g. 0.2 -> 0.3 (not 0.30000000000000004).
+let float_input = cx.new(|cx|
+    InputState::new(window, cx)
+        .placeholder("0.0")
+        .step(0.1)
+);
 
-impl FloatInput {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let float_input = cx.new(|cx|
-            InputState::new(window, cx)
-                .placeholder("0.0")
-                .pattern(Regex::new(r"^-?\d*\.?\d*$").unwrap()) // Allow decimal numbers
-        );
-
-        Self {
-            float_input,
-            float_value: 0.0,
-            step: 0.1,
-        }
-    }
-
-    fn on_float_event(
-        &mut self,
-        state: &Entity<InputState>,
-        event: &NumberInputEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            NumberInputEvent::Step(StepAction::Increment) => {
-                self.float_value += self.step;
-                state.update(cx, |input, cx| {
-                    input.set_value(format!("{:.1}", self.float_value), window, cx);
-                });
-            }
-            NumberInputEvent::Step(StepAction::Decrement) => {
-                self.float_value -= self.step;
-                state.update(cx, |input, cx| {
-                    input.set_value(format!("{:.1}", self.float_value), window, cx);
-                });
-            }
-        }
-    }
-}
+NumberInput::new(&float_input)
 ```
 
 ## Best Practices
 
 1. **Validation**: Always validate numeric input on both client and server side
-2. **Range Limits**: Implement min/max validation for user safety
-3. **Step Size**: Choose appropriate step values for your use case
+2. **Range Limits**: Use `min`/`max` to clamp values for user safety
+3. **Step Size**: Choose appropriate `step` values for your use case
 4. **Error Handling**: Provide clear feedback for invalid input
 5. **Formatting**: Use consistent number formatting across your application
 6. **Performance**: Debounce rapid increment/decrement actions if needed
