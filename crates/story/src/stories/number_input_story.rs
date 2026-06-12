@@ -49,14 +49,16 @@ impl NumberInputStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Without step/min/max, the NumberInput emits NumberInputEvent::Step,
-        // the subscriber is responsible for updating the value.
+        // Opt out of internal stepping via `set_step(None)`, so the
+        // NumberInput emits NumberInputEvent::Step and the subscriber is
+        // responsible for updating the value (see `on_number_input_event`).
         let number_input1_value = 1;
         let number_input1 = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Normal Integer")
                 .default_value(number_input1_value.to_string())
         });
+        number_input1.update(cx, |state, cx| state.set_step(None, window, cx));
 
         // With min, the NumberInput steps the value internally (step
         // default: 1) and clamps it to the range, no event handling needed.
@@ -79,15 +81,32 @@ impl NumberInputStory {
                 .min(0.)
         });
 
-        // The step value is calculated based on the current value on stepping,
+        // The step value is calculated based on the current value and the
+        // direction on stepping, e.g. a stock price tick size that varies by
+        // the price range (0.25 is the upper bound of the 0.001-tick range).
         let number_input4 = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Styling")
                 .default_value("0.245")
-                .step_by(|value| match value {
-                    v if v < 0.25 => 0.001,
-                    v if v < 0.5 => 0.005,
-                    _ => 0.01,
+                .step_by(|value, action| match action {
+                    StepAction::Increment => {
+                        if value < 0.25 {
+                            0.005
+                        } else if value < 0.5 {
+                            0.01
+                        } else {
+                            0.01
+                        }
+                    }
+                    StepAction::Decrement => {
+                        if value <= 0.25 {
+                            0.001
+                        } else if value <= 0.5 {
+                            0.01
+                        } else {
+                            0.01
+                        }
+                    }
                 })
                 .min(0.)
         });

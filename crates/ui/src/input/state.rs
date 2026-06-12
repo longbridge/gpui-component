@@ -29,7 +29,7 @@ use super::{
     mask_pattern::{MaskPattern, normalize_number_input},
     mode::InputMode,
     number_input,
-    number_input::NumberStep,
+    number_input::{NumberStep, StepAction},
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
@@ -1054,18 +1054,22 @@ impl InputState {
     /// The current value is the value before stepping, an empty or
     /// invalid value is treated as 0.
     ///
+    /// The [`StepAction`] tells whether the value is being incremented or
+    /// decremented, useful when the step differs by direction (e.g. a price
+    /// tick size at a range boundary).
+    ///
     /// This is a shorthand of `step(NumberStep::by_value(f))`. See also [`Self::step`].
     ///
     /// # Example
     ///
     /// ```ignore
-    /// InputState::new(window, cx).step_by(|value| match value {
+    /// InputState::new(window, cx).step_by(|value, _action| match value {
     ///     v if v < 0.25 => 0.001,
     ///     v if v < 0.5 => 0.005,
     ///     _ => 0.01,
     /// })
     /// ```
-    pub fn step_by(mut self, f: impl Fn(f64) -> f64 + 'static) -> Self {
+    pub fn step_by(mut self, f: impl Fn(f64, StepAction) -> f64 + 'static) -> Self {
         debug_assert!(self.mode.is_single_line());
         self.number_step = Some(NumberStep::by_value(f));
         self

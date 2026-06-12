@@ -116,29 +116,26 @@ impl InputState {
             return;
         }
 
-        // By default with `step(1.)`, NumberInput steps the value internally.
-        // To opt out and emit `NumberInputEvent::Step`, call
-        // `state.set_step(None, window, cx)`.
-        if self.number_step.is_some() || self.number_min.is_some() || self.number_max.is_some() {
+        // By default NumberInput steps the value internally with step 1.
+        // To opt out and emit `NumberInputEvent::Step` instead (the caller
+        // updates the value), call `state.set_step(None, window, cx)`.
+        if let Some(step) = self.number_step.clone() {
             let value = self.unmask_value();
             let current = value.trim().parse::<f64>().unwrap_or(0.);
-            let step = self
-                .number_step
-                .as_ref()
-                .map_or(1., |step| step.value(current));
-            let Some(new_value) =
+            let step = step.value(current, action);
+            if let Some(new_value) =
                 step_value(&value, action, step, self.number_min, self.number_max)
-            else {
+            {
+                // The stepped value must pass the `pattern`/`validate` check,
+                // otherwise fall back to emit the event to let the caller handle it.
+                if self.is_valid_input(&new_value, cx) {
+                    let range = self.range_to_utf16(&(0..self.text.len()));
+                    self.replace_text_in_range_silent(Some(range), &new_value, window, cx);
+                    return;
+                }
+            } else {
                 // Stepping cannot move the value in this direction (e.g.
                 // Decrement on a below-min value), do nothing.
-                return;
-            };
-
-            // The stepped value must pass the `pattern`/`validate` check,
-            // otherwise fall back to emit the event to let the caller handle it.
-            if self.is_valid_input(&new_value, cx) {
-                let range = self.range_to_utf16(&(0..self.text.len()));
-                self.replace_text_in_range_silent(Some(range), &new_value, window, cx);
                 return;
             }
         }
@@ -154,25 +151,28 @@ impl InputState {
 pub enum NumberStep {
     /// A fixed step value.
     Fixed(f64),
-    /// Calculate the step value based on the current value on stepping.
-    ByValue(Rc<dyn Fn(f64) -> f64>),
+    /// Calculate the step value based on the current value and the step
+    /// direction on stepping.
+    ByValue(Rc<dyn Fn(f64, StepAction) -> f64>),
 }
 
 impl NumberStep {
-    /// Create a step that calculates the step value based on the
-    /// current value on stepping.
+    /// Create a step that calculates the step value based on the current
+    /// value and the step direction on stepping.
     ///
     /// The current value is the value before stepping, an empty or
-    /// invalid value is treated as 0.
-    pub fn by_value(f: impl Fn(f64) -> f64 + 'static) -> Self {
+    /// invalid value is treated as 0. The [`StepAction`] tells whether the
+    /// value is being incremented or decremented, useful when the step
+    /// differs by direction (e.g. a price tick size at a range boundary).
+    pub fn by_value(f: impl Fn(f64, StepAction) -> f64 + 'static) -> Self {
         Self::ByValue(Rc::new(f))
     }
 
-    /// Return the step value for the given current value.
-    fn value(&self, current: f64) -> f64 {
+    /// Return the step value for the given current value and direction.
+    fn value(&self, current: f64, action: StepAction) -> f64 {
         match self {
             Self::Fixed(step) => *step,
-            Self::ByValue(f) => f(current),
+            Self::ByValue(f) => f(current, action),
         }
     }
 }
@@ -368,16 +368,31 @@ mod tests {
 
     #[test]
     fn test_number_step() {
-        assert_eq!(NumberStep::from(5.).value(123.), 5.);
+        assert_eq!(NumberStep::from(5.).value(123., StepAction::Increment), 5.);
 
-        let step = NumberStep::by_value(|value| match value {
-            v if v < 0.25 => 0.001,
-            v if v < 0.5 => 0.005,
-            _ => 0.01,
+        // The step can differ by direction at a range boundary, e.g. 0.25
+        // is the upper bound of the 0.001-tick range and the lower bound of
+        // the 0.005-tick range.
+        let step = NumberStep::by_value(|value, action| match action {
+            StepAction::Increment => {
+                if value < 0.25 {
+                    0.001
+                } else {
+                    0.005
+                }
+            }
+            StepAction::Decrement => {
+                if value <= 0.25 {
+                    0.001
+                } else {
+                    0.005
+                }
+            }
         });
-        assert_eq!(step.value(0.1), 0.001);
-        assert_eq!(step.value(0.25), 0.005);
-        assert_eq!(step.value(100.), 0.01);
+        assert_eq!(step.value(0.1, StepAction::Increment), 0.001);
+        assert_eq!(step.value(0.25, StepAction::Increment), 0.005);
+        assert_eq!(step.value(0.25, StepAction::Decrement), 0.001);
+        assert_eq!(step.value(100., StepAction::Increment), 0.005);
     }
 
     #[test]
