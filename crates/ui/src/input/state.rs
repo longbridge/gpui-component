@@ -1048,28 +1048,33 @@ impl InputState {
         self
     }
 
-    /// Set a function to calculate the step value based on the current value
-    /// on stepping, e.g. a stock price tick size that varies by the price range.
+    /// Set a function to calculate the step value from the current value and
+    /// direction on stepping, e.g. a step size that varies by range.
     ///
-    /// The current value is the value before stepping, an empty or
-    /// invalid value is treated as 0.
-    ///
-    /// The [`StepAction`] tells whether the value is being incremented or
-    /// decremented, useful when the step differs by direction (e.g. a price
-    /// tick size at a range boundary).
+    /// The current value is the value before stepping; an empty or invalid
+    /// value is treated as 0. The [`StepAction`] tells whether the value is
+    /// being incremented or decremented, useful when the step differs by
+    /// direction at a range boundary.
     ///
     /// This is a shorthand of `step(NumberStep::by_value(f))`. See also [`Self::step`].
+    ///
+    /// The closure receives a [`Context<Self>`] to read or update other
+    /// entities while computing the step, but must not re-enter the owning
+    /// [`InputState`] (it is mutably borrowed during stepping).
     ///
     /// # Example
     ///
     /// ```ignore
-    /// InputState::new(window, cx).step_by(|value, _action| match value {
-    ///     v if v < 0.25 => 0.001,
-    ///     v if v < 0.5 => 0.005,
-    ///     _ => 0.01,
+    /// // At the boundary 1.0 the step is 0.1 going down and 0.5 going up.
+    /// InputState::new(window, cx).step_by(|value, action, _cx| match action {
+    ///     StepAction::Increment => if value < 1.0 { 0.1 } else { 0.5 },
+    ///     StepAction::Decrement => if value <= 1.0 { 0.1 } else { 0.5 },
     /// })
     /// ```
-    pub fn step_by(mut self, f: impl Fn(f64, StepAction) -> f64 + 'static) -> Self {
+    pub fn step_by(
+        mut self,
+        f: impl Fn(f64, StepAction, &mut Context<Self>) -> f64 + 'static,
+    ) -> Self {
         debug_assert!(self.mode.is_single_line());
         self.number_step = Some(NumberStep::by_value(f));
         self
@@ -3268,6 +3273,34 @@ ORDER BY id
                     deferred.y,
                     safe_y_min,
                 );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_step(cx: &mut TestAppContext) {
+        let input = InputView::build(cx, |state| state).input;
+
+        cx.update(|cx| {
+            input.update(cx, |_state, cx| {
+                assert_eq!(
+                    NumberStep::from(5.).value(123., StepAction::Increment, cx),
+                    5.
+                );
+
+                // The step can differ by direction at a boundary: at 1.0 it
+                // is 0.1 going down and 0.5 going up.
+                let step = NumberStep::by_value(|value, action, _cx| {
+                    let below = match action {
+                        StepAction::Increment => value < 1.0,
+                        StepAction::Decrement => value <= 1.0,
+                    };
+                    if below { 0.1 } else { 0.5 }
+                });
+                assert_eq!(step.value(0.5, StepAction::Increment, cx), 0.1);
+                assert_eq!(step.value(1.0, StepAction::Increment, cx), 0.5);
+                assert_eq!(step.value(1.0, StepAction::Decrement, cx), 0.1);
+                assert_eq!(step.value(2.0, StepAction::Decrement, cx), 0.5);
             });
         });
     }

@@ -122,7 +122,7 @@ impl InputState {
         if let Some(step) = self.number_step.clone() {
             let value = self.unmask_value();
             let current = value.trim().parse::<f64>().unwrap_or(0.);
-            let step = step.value(current, action);
+            let step = step.value(current, action, cx);
             if let Some(new_value) =
                 step_value(&value, action, step, self.number_min, self.number_max)
             {
@@ -151,28 +151,38 @@ impl InputState {
 pub enum NumberStep {
     /// A fixed step value.
     Fixed(f64),
-    /// Calculate the step value based on the current value and the step
-    /// direction on stepping.
-    ByValue(Rc<dyn Fn(f64, StepAction) -> f64>),
+    /// Calculate the step value from the current value and direction.
+    ByValue(Rc<dyn Fn(f64, StepAction, &mut Context<InputState>) -> f64>),
 }
 
 impl NumberStep {
-    /// Create a step that calculates the step value based on the current
-    /// value and the step direction on stepping.
+    /// Create a step that calculates the step value from the current value
+    /// and direction on stepping.
     ///
-    /// The current value is the value before stepping, an empty or
-    /// invalid value is treated as 0. The [`StepAction`] tells whether the
-    /// value is being incremented or decremented, useful when the step
-    /// differs by direction (e.g. a price tick size at a range boundary).
-    pub fn by_value(f: impl Fn(f64, StepAction) -> f64 + 'static) -> Self {
+    /// The current value is the value before stepping; an empty or invalid
+    /// value is treated as 0. The [`StepAction`] tells whether the value is
+    /// being incremented or decremented, useful when the step differs by
+    /// direction at a range boundary.
+    ///
+    /// The closure receives a [`Context<InputState>`] to read or update other
+    /// entities while computing the step, but must not re-enter the owning
+    /// [`InputState`] (it is mutably borrowed during stepping).
+    pub fn by_value(
+        f: impl Fn(f64, StepAction, &mut Context<InputState>) -> f64 + 'static,
+    ) -> Self {
         Self::ByValue(Rc::new(f))
     }
 
     /// Return the step value for the given current value and direction.
-    fn value(&self, current: f64, action: StepAction) -> f64 {
+    pub(super) fn value(
+        &self,
+        current: f64,
+        action: StepAction,
+        cx: &mut Context<InputState>,
+    ) -> f64 {
         match self {
             Self::Fixed(step) => *step,
-            Self::ByValue(f) => f(current, action),
+            Self::ByValue(f) => f(current, action, cx),
         }
     }
 }
@@ -364,27 +374,10 @@ impl RenderOnce for NumberInput {
 
 #[cfg(test)]
 mod tests {
-    use super::{NumberStep, StepAction, step_value};
+    use super::{StepAction, step_value};
 
-    #[test]
-    fn test_number_step() {
-        assert_eq!(NumberStep::from(5.).value(123., StepAction::Increment), 5.);
-
-        // The step can differ by direction at a range boundary: 1.0 belongs
-        // to the lower tick (0.1) when stepping down and the upper tick (0.5)
-        // when stepping up.
-        let step = NumberStep::by_value(|value, action| {
-            let below = match action {
-                StepAction::Increment => value < 1.0,
-                StepAction::Decrement => value <= 1.0,
-            };
-            if below { 0.1 } else { 0.5 }
-        });
-        assert_eq!(step.value(0.5, StepAction::Increment), 0.1);
-        assert_eq!(step.value(1.0, StepAction::Increment), 0.5);
-        assert_eq!(step.value(1.0, StepAction::Decrement), 0.1);
-        assert_eq!(step.value(2.0, StepAction::Decrement), 0.5);
-    }
+    // `test_number_step` lives in `state::tests` because `NumberStep::value`
+    // now needs a `Context<InputState>` to invoke the `by_value` closure.
 
     #[test]
     fn test_step_value() {

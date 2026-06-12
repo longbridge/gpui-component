@@ -75,16 +75,14 @@ NumberInput::new(&stepper_input)
 
 ### 动态步长
 
-使用 `step_by` 可以在步进时根据当前值和步进方向实时计算步长，例如证券价格随价位区间变化的最小报价单位（tick size）。例如 `0.25` 是 `0.001` 档位的上界，从它向下步进与向上步进使用的 tick 不同：
+使用 `step_by` 可以根据当前值和步进方向实时计算步长，例如步长随取值区间变化。步长可在边界处随方向不同，因此闭包会收到 `StepAction`；下例中以 `1.0` 为界，向下步进 `0.1`，向上步进 `0.5`。闭包还会收到一个 `Context`，可用于读取或更新其他 entity：
 
 ```rust
 let price_input = cx.new(|cx|
     InputState::new(window, cx)
-        .step_by(|value, action| match action {
-            StepAction::Increment if value < 0.25 => 0.001,
-            StepAction::Decrement if value <= 0.25 => 0.001,
-            _ if value < 0.5 => 0.005,
-            _ => 0.01,
+        .step_by(|value, action, _cx| match action {
+            StepAction::Increment => if value < 1.0 { 0.1 } else { 0.5 },
+            StepAction::Decrement => if value <= 1.0 { 0.1 } else { 0.5 },
         })
         .min(0.)
 );
@@ -98,7 +96,7 @@ NumberInput::new(&price_input)
 use gpui_component::input::NumberStep;
 
 state.set_step(NumberStep::Fixed(0.01), window, cx);
-state.set_step(NumberStep::by_value(|v, _| if v < 1. { 0.01 } else { 0.1 }), window, cx);
+state.set_step(NumberStep::by_value(|v, _, _cx| if v < 1. { 0.01 } else { 0.1 }), window, cx);
 state.set_step(None, window, cx); // 回退到 NumberInputEvent::Step 事件模式
 ```
 
@@ -243,7 +241,7 @@ NumberInput::decrement(&number_input, window, cx);
 | 方法 | 说明 |
 | ----------------------------------- | ------------------------------------------------------- |
 | `step(impl Into<NumberStep>)` | 设置内置递增/递减的步进值（默认为 1） |
-| `step_by(fn(f64, StepAction) -> f64)` | 步进时根据当前值和方向实时计算步长 |
+| `step_by(fn(f64, StepAction, &mut Context) -> f64)` | 步进时根据当前值和方向实时计算步长 |
 | `min(f64)` | 设置最小值，步进与失焦时收敛到该值 |
 | `max(f64)` | 设置最大值，步进与失焦时收敛到该值 |
 | `set_step(Option<NumberStep>, ...)` | 构造后更新步进策略 |

@@ -86,19 +86,18 @@ NumberInput::new(&stepper_input)
 
 ### Dynamic Step
 
-Use `step_by` to calculate the step value based on the current value and the
-step direction on stepping, e.g. a stock price tick size that varies by the
-price range (`0.25` is the upper bound of the `0.001`-tick range, so stepping
-down from it uses a different tick than stepping up):
+Use `step_by` to calculate the step value from the current value and the step
+direction, e.g. a step size that varies by range. Because the step can differ
+by direction at a boundary, the closure receives the `StepAction`; here `1.0`
+steps by `0.1` going down and `0.5` going up. The closure also receives a
+`Context` for reading or updating other entities:
 
 ```rust
 let price_input = cx.new(|cx|
     InputState::new(window, cx)
-        .step_by(|value, action| match action {
-            StepAction::Increment if value < 0.25 => 0.001,
-            StepAction::Decrement if value <= 0.25 => 0.001,
-            _ if value < 0.5 => 0.005,
-            _ => 0.01,
+        .step_by(|value, action, _cx| match action {
+            StepAction::Increment => if value < 1.0 { 0.1 } else { 0.5 },
+            StepAction::Decrement => if value <= 1.0 { 0.1 } else { 0.5 },
         })
         .min(0.)
 );
@@ -112,7 +111,7 @@ The step strategy can also be updated at runtime via `set_step`:
 use gpui_component::input::NumberStep;
 
 state.set_step(NumberStep::Fixed(0.01), window, cx);
-state.set_step(NumberStep::by_value(|v, _| if v < 1. { 0.01 } else { 0.1 }), window, cx);
+state.set_step(NumberStep::by_value(|v, _, _cx| if v < 1. { 0.01 } else { 0.1 }), window, cx);
 state.set_step(None, window, cx); // Fall back to NumberInputEvent::Step
 ```
 
@@ -273,7 +272,7 @@ NumberInput::decrement(&number_input, window, cx);
 | Method                              | Description                                             |
 | ----------------------------------- | ------------------------------------------------------- |
 | `step(impl Into<NumberStep>)`       | Set step value for built-in increment/decrement (default: 1) |
-| `step_by(fn(f64, StepAction) -> f64)` | Calculate step value based on the current value and direction |
+| `step_by(fn(f64, StepAction, &mut Context) -> f64)` | Calculate step value based on the current value and direction |
 | `min(f64)`                          | Set minimum value, clamped on stepping and blur          |
 | `max(f64)`                          | Set maximum value, clamped on stepping and blur          |
 | `set_step(Option<NumberStep>, ...)` | Update step strategy after construction                  |

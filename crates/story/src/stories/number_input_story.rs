@@ -81,30 +81,25 @@ impl NumberInputStory {
                 .min(0.)
         });
 
-        // The step value is calculated based on the current value and the
-        // direction on stepping, e.g. a stock price tick size that varies by
-        // the price range (0.25 is the upper bound of the 0.001-tick range).
+        // The step varies by direction at the boundary 1.0: 0.1 going down,
+        // 0.5 going up.
         let number_input4 = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Styling")
-                .default_value("0.245")
-                .step_by(|value, action| match action {
+                .default_value("0.9")
+                .step_by(|value, action, _cx| match action {
                     StepAction::Increment => {
-                        if value < 0.25 {
-                            0.005
-                        } else if value < 0.5 {
-                            0.01
+                        if value < 1.0 {
+                            0.1
                         } else {
-                            0.01
+                            0.5
                         }
                     }
                     StepAction::Decrement => {
-                        if value <= 0.25 {
-                            0.001
-                        } else if value <= 0.5 {
-                            0.01
+                        if value <= 1.0 {
+                            0.1
                         } else {
-                            0.01
+                            0.5
                         }
                     }
                 })
