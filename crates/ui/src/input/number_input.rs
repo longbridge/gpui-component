@@ -1,19 +1,15 @@
 use std::rc::Rc;
 
-use gpui::{Window};
-use gpui::Corners;
 use crate::theme::ActiveTheme;
-use gpui::{
-    App, AnyElement, Context, Edges, Entity, EventEmitter, FocusHandle, Focusable,
-};
+use gpui::Corners;
+use gpui::Window;
+use gpui::{AnyElement, App, Context, Edges, Entity, EventEmitter, FocusHandle, Focusable};
 use gpui::{
     InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
     StyleRefinement, Styled, TextAlign, actions, prelude::FluentBuilder as _,
 };
 
-use crate::{
-    Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex,
-};
+use crate::{Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex};
 
 use super::{Input, InputState, MaskPattern};
 
@@ -159,8 +155,6 @@ pub enum NumberStep {
     /// A fixed step value.
     Fixed(f64),
     /// Calculate the step value based on the current value on stepping.
-    ///
-    /// E.g. a stock price tick size that varies by the price range.
     ByValue(Rc<dyn Fn(f64) -> f64>),
 }
 
@@ -376,7 +370,6 @@ mod tests {
     fn test_number_step() {
         assert_eq!(NumberStep::from(5.).value(123.), 5.);
 
-        // E.g. a stock price tick size that varies by the price range.
         let step = NumberStep::by_value(|value| match value {
             v if v < 0.25 => 0.001,
             v if v < 0.5 => 0.005,

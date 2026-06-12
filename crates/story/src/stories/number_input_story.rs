@@ -80,7 +80,6 @@ impl NumberInputStory {
         });
 
         // The step value is calculated based on the current value on stepping,
-        // e.g. a stock price tick size that varies by the price range.
         let number_input4 = cx.new(|cx| {
             InputState::new(window, cx)
                 .placeholder("Styling")
