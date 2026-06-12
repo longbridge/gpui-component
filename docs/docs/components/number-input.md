@@ -60,10 +60,13 @@ NumberInput::new(&integer_input)
 
 ### With Min/Max/Step
 
-Set `step`, `min` or `max` to let the NumberInput update the value internally:
-the `↑`/`↓` keys and the `+`/`-` buttons step the value by `step` (default: 1)
-and clamp it to the `min`/`max` range, then emit `InputEvent::Change`. There is
-no need to subscribe to `NumberInputEvent::Step`.
+By default, the NumberInput updates the value internally with `step(1.)`:
+the `↑`/`↓` keys and the `+`/`-` buttons step the value by 1 and emit
+`InputEvent::Change`. Set `min`/`max` to clamp the range, or set a custom step.
+
+To fall back to emitting `NumberInputEvent::Step` only (the subscriber is
+responsible for updating the value), call
+`state.set_step(None, window, cx)`.
 
 A typed out-of-range value is kept while typing, and clamped on blur.
 Stepping follows the web behavior: a step that cannot move the value in the
@@ -179,9 +182,9 @@ div()
 
 ### Handle Number Input Events
 
-If none of `step`, `min`, `max` is set, the NumberInput emits
-`NumberInputEvent::Step` on increment/decrement, and the subscriber is
-responsible for updating the value:
+By default, the NumberInput updates the value internally. To fall back to
+`NumberInputEvent::Step` (the subscriber is responsible for updating the
+value), call `state.set_step(None, window, cx)`:
 
 ```rust
 let number_input = cx.new(|cx| InputState::new(window, cx));
@@ -253,7 +256,7 @@ NumberInput::decrement(&number_input, window, cx);
 
 | Event              | Description                        |
 | ------------------ | ---------------------------------- |
-| `Step(StepAction)` | Increment/decrement pressed. Only emitted when none of `step`, `min`, `max` is set. |
+| `Step(StepAction)` | Increment/decrement pressed. Only emitted when `step` is `None` (opt out via `set_step(None, ...)`). |
 
 ### StepAction
 

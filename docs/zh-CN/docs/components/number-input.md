@@ -55,7 +55,9 @@ NumberInput::new(&integer_input)
 
 ### 最小值 / 最大值 / 步进值
 
-设置 `step`、`min` 或 `max` 后，NumberInput 会在内部更新数值：`↑`/`↓` 键和 `+`/`-` 按钮按 `step`（默认为 1）步进，并将结果限制在 `min`/`max` 范围内，然后发出 `InputEvent::Change` 事件，无需再订阅 `NumberInputEvent::Step`。
+默认情况下，NumberInput 以 `step(1.)` 在内部更新数值：`↑`/`↓` 键和 `+`/`-` 按钮按 1 步进并发出 `InputEvent::Change` 事件。可通过 `min`/`max` 限制范围，或设置自定义步进值。
+
+如需仅发出 `NumberInputEvent::Step` 事件（由订阅方负责更新数值），可调用 `state.set_step(None, window, cx)`。
 
 手动输入的越界值在输入过程中会被保留，失焦时自动收敛到范围内。步进遵循 Web 行为：无法朝按键方向移动数值的步进不会生效（例如数值已等于或低于 `min` 时按 `↓` 不会变化）。
 
@@ -159,7 +161,7 @@ div()
 
 ### 处理 NumberInput 事件
 
-未设置 `step`、`min`、`max` 时，NumberInput 在递增/递减时会发出 `NumberInputEvent::Step` 事件，由订阅方负责更新数值：
+默认情况下 NumberInput 在内部更新数值。如需回退到 `NumberInputEvent::Step` 模式（由订阅方负责更新数值），可调用 `state.set_step(None, window, cx)`：
 
 ```rust
 let number_input = cx.new(|cx| InputState::new(window, cx));
@@ -226,7 +228,7 @@ NumberInput::decrement(&number_input, window, cx);
 
 | 事件 | 说明 |
 | ------------------ | ---------------------------------- |
-| `Step(StepAction)` | 点击增减按钮时触发，仅在未设置 `step`、`min`、`max` 时发出 |
+| `Step(StepAction)` | 点击增减按钮时触发，仅当 `step` 为 `None` 时发出（通过 `set_step(None, ...)` 选择该模式） |
 
 ### StepAction
 

@@ -508,7 +508,7 @@ impl InputState {
             loading: false,
             pattern: None,
             validate: None,
-            number_step: None,
+            number_step: Some(NumberStep::Fixed(1.)),
             number_min: None,
             number_max: None,
             mode: InputMode::default(),

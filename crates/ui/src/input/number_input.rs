@@ -120,8 +120,9 @@ impl InputState {
             return;
         }
 
-        // If any of step/min/max is set, step the value internally,
-        // otherwise emit the event to let the caller to update the value.
+        // By default with `step(1.)`, NumberInput steps the value internally.
+        // To opt out and emit `NumberInputEvent::Step`, call
+        // `state.set_step(None, window, cx)`.
         if self.number_step.is_some() || self.number_min.is_some() || self.number_max.is_some() {
             let value = self.unmask_value();
             let current = value.trim().parse::<f64>().unwrap_or(0.);
