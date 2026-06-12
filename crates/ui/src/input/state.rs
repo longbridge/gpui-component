@@ -3313,7 +3313,8 @@ ORDER BY id
             });
         });
 
-        // A bare leading dot is completed to "0.".
+        // A bare leading dot is kept as-is (normalized from the ideographic
+        // full stop), not completed to "0.", so it stays editable.
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
                 let range = state.range_to_utf16(&(0..state.text.len()));
@@ -3323,9 +3324,9 @@ ORDER BY id
         cx.run_until_parked();
         cx.update(|_, cx| {
             input.read_with(cx, |state, _| {
-                assert_eq!(state.value(), "0.");
+                assert_eq!(state.value(), ".");
                 let cursor: Range<usize> = state.selected_range.into();
-                assert_eq!(cursor, 2..2);
+                assert_eq!(cursor, 1..1);
             });
         });
     }
@@ -3418,7 +3419,7 @@ ORDER BY id
     }
 
     #[gpui::test]
-    fn test_number_input_undo_leading_dot(cx: &mut TestAppContext) {
+    fn test_number_input_leading_dot_editable(cx: &mut TestAppContext) {
         let input_view = InputView::build(cx, |state| {
             state.mask_pattern(MaskPattern::Number {
                 separator: None,
@@ -3430,10 +3431,20 @@ ORDER BY id
 
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
-                state.replace_text_in_range(None, ".", window, cx);
-                assert_eq!(state.value(), "0.");
-                state.undo(&Undo, window, cx);
-                assert_eq!(state.value(), "");
+                state.replace_text_in_range(None, "1.2", window, cx);
+
+                // Delete the integer part "1": the value keeps the leading dot
+                // (".2"), not completed to "0.2", so the digits before the dot
+                // stay editable.
+                let range = state.range_to_utf16(&(0..1));
+                state.replace_text_in_range(Some(range), "", window, cx);
+                assert_eq!(state.value(), ".2");
+                let cursor: Range<usize> = state.selected_range.into();
+                assert_eq!(cursor, 0..0);
+
+                // The user can type a new integer part.
+                state.replace_text_in_range(Some(0..0), "3", window, cx);
+                assert_eq!(state.value(), "3.2");
             });
         });
     }

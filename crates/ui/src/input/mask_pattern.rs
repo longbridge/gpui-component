@@ -290,16 +290,6 @@ impl MaskPattern {
                 separator,
                 fraction,
             } => {
-                // Complete a bare leading dot, e.g. "." -> "0.", "-.5" -> "-0.5"
-                let text: Cow<str> = if let Some(rest) = text.strip_prefix('.') {
-                    Cow::Owned(format!("0.{}", rest))
-                } else if text.starts_with("+.") || text.starts_with("-.") {
-                    let (sign, rest) = text.split_at(1);
-                    Cow::Owned(format!("{}0{}", sign, rest))
-                } else {
-                    Cow::Borrowed(text)
-                };
-
                 if let Some(sep) = *separator {
                     // Remove the existing group separator
                     let text = text.replace(sep, "");
@@ -352,7 +342,7 @@ impl MaskPattern {
                     return final_str.into();
                 }
 
-                text.into_owned().into()
+                text.to_owned().into()
             }
             Self::Pattern { tokens, .. } => {
                 let mut result = String::new();
@@ -695,14 +685,16 @@ mod tests {
         assert_eq!(mask.is_valid("1.2.3"), false);
         assert_eq!(mask.is_valid("1.."), false);
 
-        assert_eq!(mask.mask("."), "0.");
-        assert_eq!(mask.mask(".5"), "0.5");
-        assert_eq!(mask.mask("-.5"), "-0.5");
-        assert_eq!(mask.mask("+.5"), "+0.5");
+        // A bare leading dot is kept as-is (not completed to "0."), so that
+        // deleting the integer part of "1.2" keeps ".2" and stays editable.
+        assert_eq!(mask.mask("."), ".");
+        assert_eq!(mask.mask(".5"), ".5");
+        assert_eq!(mask.mask("-.5"), "-.5");
+        assert_eq!(mask.mask("+.5"), "+.5");
 
         let mask = MaskPattern::number(Some(','));
-        assert_eq!(mask.mask(".5"), "0.5");
-        assert_eq!(mask.mask("-.5"), "-0.5");
+        assert_eq!(mask.mask(".5"), ".5");
+        assert_eq!(mask.mask("-.5"), "-.5");
     }
 
     #[test]

@@ -370,29 +370,20 @@ mod tests {
     fn test_number_step() {
         assert_eq!(NumberStep::from(5.).value(123., StepAction::Increment), 5.);
 
-        // The step can differ by direction at a range boundary, e.g. 0.25
-        // is the upper bound of the 0.001-tick range and the lower bound of
-        // the 0.005-tick range.
-        let step = NumberStep::by_value(|value, action| match action {
-            StepAction::Increment => {
-                if value < 0.25 {
-                    0.001
-                } else {
-                    0.005
-                }
-            }
-            StepAction::Decrement => {
-                if value <= 0.25 {
-                    0.001
-                } else {
-                    0.005
-                }
-            }
+        // The step can differ by direction at a range boundary: 1.0 belongs
+        // to the lower tick (0.1) when stepping down and the upper tick (0.5)
+        // when stepping up.
+        let step = NumberStep::by_value(|value, action| {
+            let below = match action {
+                StepAction::Increment => value < 1.0,
+                StepAction::Decrement => value <= 1.0,
+            };
+            if below { 0.1 } else { 0.5 }
         });
-        assert_eq!(step.value(0.1, StepAction::Increment), 0.001);
-        assert_eq!(step.value(0.25, StepAction::Increment), 0.005);
-        assert_eq!(step.value(0.25, StepAction::Decrement), 0.001);
-        assert_eq!(step.value(100., StepAction::Increment), 0.005);
+        assert_eq!(step.value(0.5, StepAction::Increment), 0.1);
+        assert_eq!(step.value(1.0, StepAction::Increment), 0.5);
+        assert_eq!(step.value(1.0, StepAction::Decrement), 0.1);
+        assert_eq!(step.value(2.0, StepAction::Decrement), 0.5);
     }
 
     #[test]

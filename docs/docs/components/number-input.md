@@ -40,7 +40,7 @@ automatically, for CJK IME users:
 - Full-width signs: `＋` → `+`, `－` → `-`
 - Full-width dot and ideographic full stop: `．`, `。` → `.`
 
-A bare leading decimal point is completed automatically, e.g. `.5` → `0.5`.
+A bare leading decimal point is kept as-is (e.g. `.5`, parsed as `0.5`), matching the web behavior, so deleting the integer part of `1.2` keeps `.2` and stays editable.
 
 To opt out of the default restriction, set an explicit mask:
 `state.set_mask_pattern(MaskPattern::None, window, cx)`.
