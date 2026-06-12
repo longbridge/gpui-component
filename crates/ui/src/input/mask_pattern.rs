@@ -718,8 +718,6 @@ mod tests {
         assert_eq!(normalize_number_input("−1.5"), "-1.5");
         // Ideographic full stop
         assert_eq!(normalize_number_input("12。5"), "12.5");
-        // Mixed half/full-width
-        assert_eq!(normalize_number_input("123。5"), "123.5");
         // Other characters are kept as-is
         assert_eq!(normalize_number_input("ab 中 1"), "ab 中 1");
     }

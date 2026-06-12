@@ -230,10 +230,9 @@ fn step_value(
         }
     }
 
-    // Follow the web behavior: stepping must move the value in the pressed
-    // direction, e.g. Decrement on a below-min value does nothing (instead
-    // of clamping it up to the min). An empty or invalid value always steps
-    // into the range.
+    // Web behavior: stepping must move the value in the pressed direction, so
+    // a Decrement below min does nothing rather than clamping up. An empty or
+    // invalid value always steps into the range.
     if let Some(current) = current {
         let moved = match action {
             StepAction::Increment => new_value > current,
