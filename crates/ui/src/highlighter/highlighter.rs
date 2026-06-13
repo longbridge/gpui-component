@@ -3,7 +3,8 @@ use crate::highlighter::{HighlightTheme, LanguageRegistry};
 use anyhow::{Context, Result, anyhow};
 use gpui::{HighlightStyle, SharedString};
 
-use ropey::{ChunkCursor, Rope};
+use ropey::{ChunkCursor, LineType, Rope};
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{
@@ -22,6 +23,11 @@ const MAX_INJECTION_LAYERS: usize = 256;
 const MAX_INJECTION_RANGES: usize = 4096;
 const MAX_INJECTION_BYTES: usize = 512 * 1024;
 const INJECTION_PARSE_TIMEOUT: Duration = Duration::from_millis(20);
+
+/// Upper bound on lines retained in the per-line highlight match cache. A fully
+/// scrolled large file would otherwise retain every line's matches; past this we
+/// drop the cache and rebuild lazily.
+const MATCH_CACHE_MAX_LINES: usize = 8000;
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
@@ -53,6 +59,18 @@ pub struct SyntaxHighlighter {
     /// Parsed injection trees.
     /// These are built once in update() and queried multiple times in match_styles().
     injection_layers: Vec<InjectionLayer>,
+
+    /// Monotonic counter bumped whenever the syntax tree changes (i.e. on every
+    /// applied edit). Callers can cache per-line highlight styles keyed by this
+    /// value and reuse them across frames (e.g. while scrolling) without
+    /// re-querying tree-sitter; a bump invalidates those caches.
+    generation: u64,
+
+    /// Per-line `match_styles` results (keyed by line start byte), reused across
+    /// frames while `generation` is unchanged so scrolling does not re-run the
+    /// tree-sitter query. Cleared when `generation` advances (an edit).
+    match_cache: RefCell<HashMap<usize, Vec<HighlightItem>>>,
+    match_cache_gen: Cell<u64>,
 }
 
 /// A parsed injection layer.
@@ -403,7 +421,69 @@ impl SyntaxHighlighter {
             parser,
             tree: None,
             injection_layers: Vec::new(),
+            generation: 0,
+            match_cache: RefCell::new(HashMap::new()),
+            match_cache_gen: Cell::new(0),
         })
+    }
+
+    /// Per-line, generation-cached wrapper over [`Self::match_styles`]. Returns
+    /// the highlight matches intersecting `range`, querying tree-sitter only for
+    /// lines not already cached for the current `generation`. Equivalent to a
+    /// single `match_styles(range)` for typical token highlighting; downstream
+    /// `styles()` still clips and de-duplicates, so per-line boundaries are
+    /// reconciled.
+    fn match_styles_cached(&self, range: &Range<usize>) -> Vec<HighlightItem> {
+        let total = self.text.len();
+        if self.tree.is_none() || self.query.is_none() || total == 0 || range.start >= total {
+            return self.match_styles(range.clone());
+        }
+
+        if self.match_cache_gen.get() != self.generation {
+            self.match_cache.borrow_mut().clear();
+            self.match_cache_gen.set(self.generation);
+        }
+
+        let line_count = self.text.len_lines(LineType::LF);
+        let first_row = self.text.byte_to_line_idx(range.start.min(total - 1), LineType::LF);
+        let last_byte = range
+            .end
+            .min(total)
+            .saturating_sub(1)
+            .max(range.start)
+            .min(total - 1);
+        let last_row = self.text.byte_to_line_idx(last_byte, LineType::LF);
+
+        let mut items = Vec::new();
+        for row in first_row..=last_row {
+            let line_start = self.text.line_to_byte_idx(row, LineType::LF);
+            if let Some(cached) = self.match_cache.borrow().get(&line_start) {
+                items.extend(cached.iter().cloned());
+                continue;
+            }
+            let line_end = if row + 1 < line_count {
+                self.text.line_to_byte_idx(row + 1, LineType::LF)
+            } else {
+                total
+            };
+            let line_items = self.match_styles(line_start..line_end);
+            {
+                let mut cache = self.match_cache.borrow_mut();
+                if cache.len() > MATCH_CACHE_MAX_LINES {
+                    cache.clear();
+                }
+                cache.insert(line_start, line_items.clone());
+            }
+            items.extend(line_items);
+        }
+        items
+    }
+
+    /// A monotonic counter bumped whenever the syntax tree changes. Stable
+    /// between edits, so it is a valid key for caching highlight styles across
+    /// frames.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     pub fn is_empty(&self) -> bool {
@@ -442,6 +522,10 @@ impl SyntaxHighlighter {
         if self.text.eq(text) {
             return true;
         }
+
+        // The text (and therefore the tree) is about to change — invalidate any
+        // generation-keyed highlight caches.
+        self.generation = self.generation.wrapping_add(1);
 
         let edit = edit.unwrap_or(InputEdit {
             start_byte: 0,
@@ -748,6 +832,10 @@ impl SyntaxHighlighter {
 
         self.tree = Some(tree);
         self.injection_layers = injection_layers;
+        // The tree just became more complete (the sync parse had timed out);
+        // bump the generation so any generation-keyed highlight caches drop the
+        // partial-tree results queried for the first screen.
+        self.generation = self.generation.wrapping_add(1);
     }
 
     /// Parse injection layers after the main tree is updated.
@@ -908,7 +996,7 @@ impl SyntaxHighlighter {
         let mut styles = vec![];
         let start_offset = range.start;
 
-        let highlights = self.match_styles(range.clone());
+        let highlights = self.match_styles_cached(range);
 
         // let mut iter_count = 0;
         for item in highlights {
