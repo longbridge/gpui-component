@@ -203,6 +203,7 @@ pub struct Button {
         Option<(Rc<Box<dyn gpui::Action>>, Option<SharedString>)>,
     )>,
     tooltip_builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> gpui::AnyView>>,
+    tooltip_placement: Option<crate::tooltip::TooltipPreferredPlacement>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     on_hover: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     loading: bool,
@@ -244,6 +245,7 @@ impl Button {
             size: Size::Medium,
             tooltip: None,
             tooltip_builder: None,
+            tooltip_placement: None,
             on_click: None,
             on_hover: None,
             loading: false,
@@ -313,6 +315,15 @@ impl Button {
                 context.map(|c| c.to_string().into()),
             )),
         ));
+        self
+    }
+
+    /// Set the preferred placement of the tooltip relative to the button (`Left` is recommended for extremely narrow windows).
+    pub fn tooltip_placement(
+        mut self,
+        placement: crate::tooltip::TooltipPreferredPlacement,
+    ) -> Self {
+        self.tooltip_placement = Some(placement);
         self
     }
 
@@ -624,10 +635,15 @@ impl RenderOnce for Button {
                     .text_color(normal_style.fg.opacity(0.8))
             })
             .map(|this| {
+                let placement = self
+                    .tooltip_placement
+                    .unwrap_or(crate::tooltip::TooltipPreferredPlacement::Auto);
                 if let Some(builder) = self.tooltip_builder {
-                    this.managed_tooltip(move |window, cx| builder(window, cx))
+                    this.managed_tooltip_with_placement(placement, move |window, cx| {
+                        builder(window, cx)
+                    })
                 } else if let Some((tooltip, action)) = self.tooltip {
-                    this.managed_tooltip(move |window, cx| {
+                    this.managed_tooltip_with_placement(placement, move |window, cx| {
                         Tooltip::new(tooltip.clone())
                             .when_some(action.clone(), |this, (action, context)| {
                                 this.action(
