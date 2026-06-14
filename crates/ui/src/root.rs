@@ -46,6 +46,8 @@ pub struct Root {
     pub(crate) native_menu_overlay: Entity<FallbackMenuOverlay>,
     sheet_size: Option<DefiniteLength>,
     window_shadow_size: Pixels,
+    /// Skip Linux CSD `window_border` wrapper (layer-shell fullscreen, etc.).
+    borderless: bool,
     /// The focus handle that will be restored after a dialog is closed with animation.
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
@@ -100,10 +102,17 @@ impl Root {
             native_menu_overlay: cx.new(|_| FallbackMenuOverlay::new()),
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
+            borderless: false,
             pending_focus_restore: None,
             text_selection: WindowTextSelection::default(),
             selectable_text_views: HashMap::new(),
         }
+    }
+
+    /// Skip Linux CSD `window_border` wrapper (layer-shell fullscreen, etc.).
+    pub fn borderless(mut self, borderless: bool) -> Self {
+        self.borderless = borderless;
+        self
     }
 
     /// Set the window border shadow size for Linux client-side decorations.
@@ -525,23 +534,30 @@ impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
 
-        window_border().shadow_size(self.window_shadow_size).child(
-            div()
-                .id("root")
-                .key_context(CONTEXT)
-                .on_action(cx.listener(Self::on_action_tab))
-                .on_action(cx.listener(Self::on_action_tab_prev))
-                .on_action(cx.listener(Self::on_action_copy))
-                .relative()
-                .size_full()
-                .font_family(cx.theme().font_family.clone())
-                .bg(cx.theme().background)
-                .text_color(cx.theme().foreground)
-                .refine_style(&self.style)
-                .child(TextSelectionController)
-                .child(self.view.clone())
-                .child(self.tooltip_overlay.clone())
-                .child(self.native_menu_overlay.clone()),
-        )
+        let inner = div()
+            .id("root")
+            .key_context(CONTEXT)
+            .on_action(cx.listener(Self::on_action_tab))
+            .on_action(cx.listener(Self::on_action_tab_prev))
+            .on_action(cx.listener(Self::on_action_copy))
+            .relative()
+            .size_full()
+            .font_family(cx.theme().font_family.clone())
+            .bg(cx.theme().background)
+            .text_color(cx.theme().foreground)
+            .refine_style(&self.style)
+            .child(TextSelectionController)
+            .child(self.view.clone())
+            .child(self.tooltip_overlay.clone())
+            .child(self.native_menu_overlay.clone());
+
+        if self.borderless {
+            inner.into_any_element()
+        } else {
+            window_border()
+                .shadow_size(self.window_shadow_size)
+                .child(inner)
+                .into_any_element()
+        }
     }
 }
