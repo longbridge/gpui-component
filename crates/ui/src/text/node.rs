@@ -7,9 +7,9 @@ use std::{
 
 use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle,
-    InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement, SharedString,
-    SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, Window, div, img,
-    prelude::FluentBuilder as _, px, relative, rems,
+    InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement, ScrollHandle,
+    SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, Window, div,
+    img, prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
@@ -18,6 +18,7 @@ use crate::{
     ActiveTheme as _, Icon, IconName, StyledExt, WindowExt as _, h_flex,
     highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
     input::{InputEdit, Point, RopeExt as _},
+    scroll::horizontal_scroll_area,
     text::{
         CodeBlockActionsFn,
         document::NodeRenderOptions,
@@ -1289,6 +1290,24 @@ impl BlockNode {
         let total_w: f32 = col_w.iter().sum();
 
         let style = &node_cx.style;
+        let table_scroll_key = if let Some(span) = table.span {
+            SharedString::from(format!(
+                "{}-table-scroll-{}:{}",
+                window.current_view(),
+                span.start,
+                span.end
+            ))
+        } else {
+            SharedString::from(format!(
+                "{}-table-scroll-{}",
+                window.current_view(),
+                options.ix
+            ))
+        };
+        let scroll_handle = window
+            .use_keyed_state(table_scroll_key, cx, |_, _| ScrollHandle::default())
+            .read(cx)
+            .clone();
         let row_count = table.children.len();
         let mut rows = Vec::with_capacity(row_count);
         for (row_ix, row) in table.children.iter().enumerate() {
@@ -1338,26 +1357,26 @@ impl BlockNode {
             .w_full()
             .child(
                 // Scroll viewport: clips and scrolls horizontally (overflow-x
-                // comes from `style.table` via `refine_style`). No border — the
-                // frame is on the inner track so it wraps the table tightly.
-                div()
-                    .id(("table", options.ix))
-                    .w_full()
-                    .refine_style(&style.table)
-                    .child(
-                        // Bordered track sized to `max(viewport, total table
-                        // width)`: `min_w_full` fills the frame when the table is
-                        // narrow (cells then grow to fill), the definite
-                        // `w(total_w)` lets it exceed the viewport and scroll when
-                        // the content is wider.
-                        div()
-                            .min_w_full()
-                            .w(px(total_w))
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .rounded(cx.theme().radius)
-                            .children(rows),
-                    ),
+                // is handled by `ScrollableMask`, so vertical wheel events keep
+                // bubbling to the parent TextView). No border — the frame is on
+                // the inner track so it wraps the table tightly.
+                horizontal_scroll_area(
+                    ("table", options.ix),
+                    &scroll_handle,
+                    &style.table,
+                    // Bordered track sized to `max(viewport, total table
+                    // width)`: `min_w_full` fills the frame when the table is
+                    // narrow (cells then grow to fill), the definite `w(total_w)`
+                    // lets it exceed the viewport and scroll when the content is
+                    // wider.
+                    div()
+                        .min_w_full()
+                        .w(px(total_w))
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .rounded(cx.theme().radius)
+                        .children(rows),
+                ),
             )
             .into_any_element()
     }
