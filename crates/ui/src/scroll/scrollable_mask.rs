@@ -1,11 +1,36 @@
 use gpui::{
     App, Axis, BorderStyle, Bounds, ContentMask, Edges, Element, ElementId, GlobalElementId,
-    Hitbox, Hsla, IntoElement, IsZero as _, LayoutId, PaintQuad, Point, Position, ScrollHandle,
-    ScrollWheelEvent, Style, Window, px, relative,
+    Hitbox, Hsla, InteractiveElement as _, IntoElement, IsZero as _, LayoutId, PaintQuad,
+    ParentElement as _, Point, Position, ScrollHandle, ScrollWheelEvent,
+    StatefulInteractiveElement as _, Style, StyleRefinement, Styled as _, Window, div, px,
+    relative,
 };
 use gpui::{Corners, Pixels};
 
-use crate::AxisExt;
+use crate::{AxisExt, StyledExt as _};
+
+/// A horizontal scroll viewport that only consumes horizontal wheel deltas.
+///
+/// GPUI's native `overflow_x_scroll` maps vertical wheel input onto horizontal
+/// scrolling when there is no vertical overflow. This wrapper keeps the visual
+/// clipping and scroll offset, while delegating wheel input to [`ScrollableMask`]
+/// so vertical wheel events can continue bubbling to the parent scroller.
+pub(crate) fn horizontal_scroll_area(
+    id: impl Into<ElementId>,
+    scroll_handle: &ScrollHandle,
+    style: &StyleRefinement,
+    child: impl IntoElement,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .w_full()
+        .relative()
+        .refine_style(style)
+        .overflow_hidden()
+        .track_scroll(scroll_handle)
+        .child(child)
+        .child(ScrollableMask::new(Axis::Horizontal, scroll_handle))
+}
 
 /// Make a scrollable mask element to cover the parent view with the mouse wheel event listening.
 ///
@@ -158,5 +183,77 @@ impl Element for ScrollableMask {
                 }
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{
+        Context, IntoElement, Render, ScrollDelta, ScrollWheelEvent, TestAppContext,
+        VisualTestContext, Window, div, point, px,
+    };
+
+    struct HorizontalScrollAreaTest {
+        scroll_handle: ScrollHandle,
+    }
+
+    impl Render for HorizontalScrollAreaTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(100.)).h(px(40.)).child(horizontal_scroll_area(
+                "horizontal-scroll-area",
+                &self.scroll_handle,
+                &Default::default(),
+                div().w(px(300.)).h(px(40.)),
+            ))
+        }
+    }
+
+    #[gpui::test]
+    fn horizontal_scroll_area_ignores_vertical_wheel(cx: &mut TestAppContext) {
+        let scroll_handle = ScrollHandle::new();
+        let (_, cx) = cx.add_window_view({
+            let scroll_handle = scroll_handle.clone();
+            move |_, _| HorizontalScrollAreaTest {
+                scroll_handle: scroll_handle.clone(),
+            }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        assert_eq!(scroll_handle.offset().x, px(0.));
+    }
+
+    #[gpui::test]
+    fn horizontal_scroll_area_uses_horizontal_wheel(cx: &mut TestAppContext) {
+        let scroll_handle = ScrollHandle::new();
+        let (_, cx) = cx.add_window_view({
+            let scroll_handle = scroll_handle.clone();
+            move |_, _| HorizontalScrollAreaTest {
+                scroll_handle: scroll_handle.clone(),
+            }
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(-40.), px(0.))),
+            ..Default::default()
+        });
+
+        assert_eq!(scroll_handle.offset().x, px(-40.));
     }
 }
