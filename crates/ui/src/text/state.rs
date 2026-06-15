@@ -66,7 +66,8 @@ pub struct TextViewState {
     pub(super) auto_scroll: AutoScroll,
 
     pub(super) parsed_content: ParsedContent,
-    /// 内容格式（markdown / html），用于整体替换时在主线程同步解析。
+    /// Content format (markdown / html), used to parse synchronously on the
+    /// main thread for full-replace updates.
     format: TextViewFormat,
     text: String,
     parsed_error: Option<SharedString>,
@@ -223,11 +224,15 @@ impl TextViewState {
             highlight_theme: cx.theme().highlight_theme.clone(),
         };
 
-        // 整体替换（首屏 / `set_text`）在主线程**同步**解析：让首帧 layout 就拿到
-        // 正确高度。否则解析在后台异步完成、首帧 `parsed_content` 为空（高度≈0），
-        // 外层虚拟 `list` 的 `measure_all` 会把离屏项量成空高，滚动时总高不断增长、
-        // 滚动条 thumb 抖动。流式 `append`（逐字增量）仍走后台异步，避免每个 chunk
-        // 都在主线程重解析。
+        // Full-replace updates (initial content / `set_text`) parse
+        // synchronously on the main thread so the first layout already has the
+        // correct height. Otherwise parsing finishes later on a background task
+        // and the first layout sees an empty `parsed_content` (≈0 height); when
+        // this `TextView` is an item inside an outer `list` with `measure_all`,
+        // off-screen items get measured at that empty height and the total
+        // content height keeps growing as items scroll into view — the scrollbar
+        // thumb jitters. Streaming appends stay async to avoid re-parsing the
+        // whole document on every chunk.
         if !append {
             match parse_content(self.format, ParsedContent::default(), &update_options) {
                 Ok(content) => {
