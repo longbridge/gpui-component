@@ -419,4 +419,82 @@ mod tests {
         let selected_text = view.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
         assert_eq!(selected_text.trim(), "quick select value");
     }
+
+    // 回归：把多条 markdown `TextView` 放进开了 `measure_all` 的外层 `gpui::list`，
+    // 程序化滚动时内容总高必须稳定。修复前 markdown 异步解析使离屏项首测为空高，
+    // 滚动时总高不断增长、滚动条 thumb 抖动；同步解析后总高从首帧即正确、恒定。
+    #[gpui::test]
+    fn outer_list_content_total_stable_while_scrolling(cx: &mut TestAppContext) {
+        use gpui::{ListAlignment, ListState, list};
+
+        const ITEMS: &[&str] = &[
+            "# 标题\n\n一段会换行好几行的正文，用来制造非平凡高度，再补点字更高一些。",
+            "短。",
+            "段落 A\n\n段落 B\n\n段落 C，更多字更高。",
+            "## 小标题\n\n- 一\n- 二\n- 三\n\n收尾。",
+            "只有一行。",
+            "**粗体**：中等长度说明，含 `code` 与普通文字混排足够长。",
+            "1. 第一\n2. 第二\n3. 第三\n\n收尾段落补字。",
+            "很长的一条消息，包含很多文字足够换行很多次占据较大高度，验证离屏测量与可视重测一致，继续补字确保够高够长够多行。",
+        ];
+        let n = 40usize;
+
+        struct ListRoot {
+            state: ListState,
+        }
+        impl Render for ListRoot {
+            fn render(&mut self, _w: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+                div().w(px(360.)).h(px(500.)).child(
+                    list(self.state.clone(), |ix, _w, _cx| {
+                        div()
+                            .w_full()
+                            .child(TextView::markdown(
+                                ("md", ix as u64),
+                                ITEMS[ix % ITEMS.len()],
+                            ))
+                            .into_any_element()
+                    })
+                    .size_full(),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        let state = ListState::new(n, ListAlignment::Top, px(2048.)).measure_all();
+        let probe = state.clone();
+        let (_view, cx) = cx.add_window_view(|_w, _cx| ListRoot { state });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|w, cx| {
+            let _ = w.draw(cx);
+        });
+        cx.run_until_parked();
+        cx.update(|w, cx| {
+            let _ = w.draw(cx);
+        });
+
+        let total = |p: &ListState| {
+            f32::from(p.max_offset_for_scrollbar().y + p.viewport_bounds().size.height)
+        };
+        let mut totals = vec![total(&probe)];
+        for _ in 0..20 {
+            probe.scroll_by(px(150.));
+            cx.update(|w, cx| {
+                let _ = w.draw(cx);
+            });
+            cx.run_until_parked();
+            totals.push(total(&probe));
+        }
+        let min = totals.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = totals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        println!(
+            "OUTER_LIST_PROBE min={min:.1} max={max:.1} delta={:.1}",
+            max - min
+        );
+        assert!(
+            (max - min) < 2.0,
+            "list content total jittered while scrolling: min={min} max={max} totals={totals:?}"
+        );
+    }
 }
