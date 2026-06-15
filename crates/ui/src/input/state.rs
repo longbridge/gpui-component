@@ -14,6 +14,7 @@ use gpui::{
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
@@ -25,9 +26,10 @@ use super::{
     blink_cursor::BlinkCursor,
     change::Change,
     element::{EditorScrollbarSnapshot, TextElement},
-    mask_pattern::MaskPattern,
+    mask_pattern::{MaskPattern, normalize_number_input},
     mode::InputMode,
     number_input,
+    number_input::{NumberStep, StepAction},
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
@@ -379,6 +381,13 @@ pub struct InputState {
     pub(crate) cursor_line_end_affinity: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
+    /// The step strategy for [`super::NumberInput`] to increment/decrement.
+    /// See [`Self::step`] and [`Self::step_by`].
+    pub(super) number_step: Option<NumberStep>,
+    /// The minimum value for [`super::NumberInput`]. See [`Self::min`].
+    pub(super) number_min: Option<f64>,
+    /// The maximum value for [`super::NumberInput`]. See [`Self::max`].
+    pub(super) number_max: Option<f64>,
     pub(crate) scroll_handle: ScrollHandle,
     /// The deferred scroll offset to apply on next layout.
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
@@ -390,6 +399,10 @@ pub struct InputState {
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
+    /// Whether the `mask_pattern` was explicitly set (via [`Self::mask_pattern`]
+    /// or [`Self::set_mask_pattern`]), to let [`super::NumberInput`] only apply
+    /// its default mask when the user has not made an explicit choice.
+    pub(super) mask_pattern_set: bool,
     pub(super) placeholder: SharedString,
 
     /// Popover
@@ -495,6 +508,9 @@ impl InputState {
             loading: false,
             pattern: None,
             validate: None,
+            number_step: Some(NumberStep::Fixed(1.)),
+            number_min: None,
+            number_max: None,
             mode: InputMode::default(),
             last_layout: None,
             last_bounds: None,
@@ -513,6 +529,7 @@ impl InputState {
             preferred_column: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
+            mask_pattern_set: false,
             text_align: TextAlign::Left,
             lsp: Lsp::default(),
             diagnostic_popover: None,
@@ -1012,6 +1029,107 @@ impl InputState {
         debug_assert!(self.mode.is_single_line());
         self.validate = Some(Box::new(f));
         self
+    }
+
+    /// Set the step value of the [`super::NumberInput`] for increment/decrement.
+    ///
+    /// Only for [`InputMode::SingleLine`] mode with [`super::NumberInput`].
+    ///
+    /// If any of `step`, `min`, `max` is set, the [`super::NumberInput`] will
+    /// update the value internally (step by `step`, default 1, clamp to the
+    /// `min`/`max` range and emit [`InputEvent::Change`]) instead of emitting
+    /// [`super::NumberInputEvent::Step`].
+    ///
+    /// See also [`Self::step_by`] to calculate the step value
+    /// based on the current value.
+    pub fn step(mut self, step: impl Into<NumberStep>) -> Self {
+        debug_assert!(self.mode.is_single_line());
+        self.number_step = Some(step.into());
+        self
+    }
+
+    /// Set a function to calculate the step value from the current value and
+    /// direction on stepping, e.g. a step size that varies by range.
+    ///
+    /// The current value is the value before stepping; an empty or invalid
+    /// value is treated as 0. The [`StepAction`] tells whether the value is
+    /// being incremented or decremented, useful when the step differs by
+    /// direction at a range boundary.
+    ///
+    /// This is a shorthand of `step(NumberStep::by_value(f))`. See also [`Self::step`].
+    ///
+    /// The closure receives a [`Context<Self>`] to read or update other
+    /// entities while computing the step, but must not re-enter the owning
+    /// [`InputState`] (it is mutably borrowed during stepping).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // At the boundary 1.0 the step is 0.1 going down and 0.5 going up.
+    /// InputState::new(window, cx).step_by(|value, action, _cx| match action {
+    ///     StepAction::Increment => if value < 1.0 { 0.1 } else { 0.5 },
+    ///     StepAction::Decrement => if value <= 1.0 { 0.1 } else { 0.5 },
+    /// })
+    /// ```
+    pub fn step_by(
+        mut self,
+        f: impl Fn(f64, StepAction, &mut Context<Self>) -> f64 + 'static,
+    ) -> Self {
+        debug_assert!(self.mode.is_single_line());
+        self.number_step = Some(NumberStep::by_value(f));
+        self
+    }
+
+    /// Set the minimum value of the [`super::NumberInput`].
+    ///
+    /// Only for [`InputMode::SingleLine`] mode with [`super::NumberInput`].
+    ///
+    /// The value will be clamped to the minimum value on stepping and on
+    /// blur (only if the clamped value passes the `pattern`/`validate` check).
+    /// See also [`Self::step`].
+    pub fn min(mut self, min: f64) -> Self {
+        debug_assert!(self.mode.is_single_line());
+        self.number_min = Some(min);
+        self
+    }
+
+    /// Set the maximum value of the [`super::NumberInput`].
+    ///
+    /// Only for [`InputMode::SingleLine`] mode with [`super::NumberInput`].
+    ///
+    /// The value will be clamped to the maximum value on stepping and on
+    /// blur (only if the clamped value passes the `pattern`/`validate` check).
+    /// See also [`Self::step`].
+    pub fn max(mut self, max: f64) -> Self {
+        debug_assert!(self.mode.is_single_line());
+        self.number_max = Some(max);
+        self
+    }
+
+    /// Update the step value after construction, `None` to fall back to
+    /// emitting [`super::NumberInputEvent::Step`] (if `min`, `max` are unset).
+    ///
+    /// See [`Self::step`] and [`Self::step_by`].
+    pub fn set_step(
+        &mut self,
+        step: impl Into<Option<NumberStep>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) {
+        debug_assert!(self.mode.is_single_line());
+        self.number_step = step.into();
+    }
+
+    /// Update the minimum value after construction. See [`Self::min`].
+    pub fn set_min(&mut self, min: Option<f64>, _: &mut Window, _: &mut Context<Self>) {
+        debug_assert!(self.mode.is_single_line());
+        self.number_min = min;
+    }
+
+    /// Update the maximum value after construction. See [`Self::max`].
+    pub fn set_max(&mut self, max: Option<f64>, _: &mut Window, _: &mut Context<Self>) {
+        debug_assert!(self.mode.is_single_line());
+        self.number_max = max;
     }
 
     /// Set true to show spinner at the input right.
@@ -2191,8 +2309,45 @@ impl InputState {
         Root::update(window, cx, |root, _, _| {
             root.focused_input = None;
         });
+        self.clamp_number_value(window, cx);
         cx.emit(InputEvent::Blur);
         cx.notify();
+    }
+
+    /// Clamp the number value to the `min`/`max` range, used on blur.
+    ///
+    /// Out-of-range values are allowed while typing (e.g. `1` is an
+    /// intermediate state of `15` when min is 10), and clamped on blur.
+    fn clamp_number_value(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.mode.is_single_line() {
+            return;
+        }
+        if !matches!(self.mask_pattern, MaskPattern::Number { .. }) {
+            return;
+        }
+        if self.number_min.is_none() && self.number_max.is_none() {
+            return;
+        }
+
+        let Ok(value) = self.unmask_value().parse::<f64>() else {
+            return;
+        };
+
+        let clamped = match (self.number_min, self.number_max) {
+            (Some(min), _) if value < min => min,
+            (_, Some(max)) if value > max => max,
+            _ => return,
+        };
+
+        // The clamped value must pass the `pattern`/`validate` check,
+        // otherwise keep the value as is.
+        let new_text = clamped.to_string();
+        if !self.is_valid_input(&new_text, cx) {
+            return;
+        }
+
+        let range = self.range_to_utf16(&(0..self.text.len()));
+        self.replace_text_in_range_silent(Some(range), &new_text, window, cx);
     }
 
     pub(super) fn pause_blink_cursor(&mut self, cx: &mut Context<Self>) {
@@ -2260,7 +2415,20 @@ impl InputState {
         }
     }
 
-    fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
+    /// Normalize the inserted text before applying it to the input.
+    ///
+    /// For number inputs (with [`MaskPattern::Number`]), this converts
+    /// full-width number characters into their ASCII equivalents,
+    /// e.g. `12。5` -> `12.5`.
+    fn normalize_input<'a>(&self, new_text: &'a str) -> Cow<'a, str> {
+        if matches!(self.mask_pattern, MaskPattern::Number { .. }) {
+            normalize_number_input(new_text)
+        } else {
+            Cow::Borrowed(new_text)
+        }
+    }
+
+    pub(super) fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
         if new_text.is_empty() {
             return true;
         }
@@ -2293,6 +2461,7 @@ impl InputState {
     /// Example: "(999)999-999" for phone numbers
     pub fn mask_pattern(mut self, pattern: impl Into<MaskPattern>) -> Self {
         self.mask_pattern = pattern.into();
+        self.mask_pattern_set = true;
         if let Some(placeholder) = self.mask_pattern.placeholder() {
             self.placeholder = placeholder.into();
         }
@@ -2306,6 +2475,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.mask_pattern = pattern.into();
+        self.mask_pattern_set = true;
         if let Some(placeholder) = self.mask_pattern.placeholder() {
             self.placeholder = placeholder.into();
         }
@@ -2597,6 +2767,12 @@ impl EntityInputHandler for InputState {
             self.pause_blink_cursor(cx);
         }
 
+        // NOTE: The normalization keeps the UTF-16 length, but may change the
+        // UTF-8 byte length, so all the byte-offset calculations below must
+        // use the normalized text.
+        let new_text = self.normalize_input(new_text);
+        let new_text: &str = &new_text;
+
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
@@ -2611,16 +2787,27 @@ impl EntityInputHandler for InputState {
 
         let mut new_offset = (range.start + new_text.len()).min(self.text.len());
 
+        // True if the mask has changed the text, e.g. regrouping the
+        // separators or completing a leading dot.
+        let mut mask_changed = false;
+
         if self.mode.is_single_line() {
             let pending_text = self.text.to_string();
-            // Check if the new text is valid
-            if !self.is_valid_input(&pending_text, cx) {
+            // Check if the new text is valid.
+            //
+            // Only reject the edit if the old text was valid, to avoid
+            // trapping a pre-existing invalid text (e.g. a `default_value`
+            // that does not conform), the user can still edit to fix it.
+            if !self.is_valid_input(&pending_text, cx)
+                && self.is_valid_input(&old_text.to_string(), cx)
+            {
                 self.text = old_text;
                 return;
             }
 
             if !self.mask_pattern.is_none() {
                 let mask_text = self.mask_pattern.mask(&pending_text);
+                mask_changed = mask_text.as_str() != pending_text;
                 self.text = Rope::from(mask_text.as_str());
                 let new_text_len =
                     (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
@@ -2628,7 +2815,14 @@ impl EntityInputHandler for InputState {
             }
         }
 
-        self.push_history(&old_text, &range, &new_text);
+        if mask_changed {
+            // A segment-based history entry no longer matches the masked
+            // document, record a whole-document change instead, so that
+            // undo/redo can restore the text exactly.
+            self.push_history(&old_text, &(0..old_text.len()), &self.text.to_string());
+        } else {
+            self.push_history(&old_text, &range, &new_text);
+        }
         self.history.end_grouping();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
@@ -2677,6 +2871,10 @@ impl EntityInputHandler for InputState {
 
         self.lsp.reset();
 
+        // See the same NOTE in `replace_text_in_range`.
+        let new_text = self.normalize_input(new_text);
+        let new_text: &str = &new_text;
+
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
@@ -2691,7 +2889,10 @@ impl EntityInputHandler for InputState {
 
         if self.mode.is_single_line() {
             let pending_text = self.text.to_string();
-            if !self.is_valid_input(&pending_text, cx) {
+            // See the same NOTE in `replace_text_in_range`.
+            if !self.is_valid_input(&pending_text, cx)
+                && self.is_valid_input(&old_text.to_string(), cx)
+            {
                 self.text = old_text;
                 return;
             }
@@ -2862,6 +3063,13 @@ mod tests {
     /// Helper to create an InputState in a window for testing
     impl InputView {
         pub fn new(cx: &mut TestAppContext) -> Self {
+            Self::build(cx, |state| state.code_editor("sql"))
+        }
+
+        pub fn build(
+            cx: &mut TestAppContext,
+            f: impl FnOnce(InputState) -> InputState + 'static,
+        ) -> Self {
             let mut input: Option<Entity<InputState>> = None;
 
             let window = cx.update(|cx| {
@@ -2871,7 +3079,7 @@ mod tests {
                     // Initialize input keybindings
                     super::super::init(cx);
 
-                    input = Some(cx.new(|cx| InputState::new(window, cx).code_editor("sql")));
+                    input = Some(cx.new(|cx| f(InputState::new(window, cx))));
 
                     cx.new(|cx| crate::Root::new(input.clone().unwrap(), window, cx))
                 })
@@ -3065,6 +3273,245 @@ ORDER BY id
                     deferred.y,
                     safe_y_min,
                 );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_step(cx: &mut TestAppContext) {
+        let input = InputView::build(cx, |state| state).input;
+
+        cx.update(|cx| {
+            input.update(cx, |_state, cx| {
+                assert_eq!(
+                    NumberStep::from(5.).value(123., StepAction::Increment, cx),
+                    5.
+                );
+
+                // The step can differ by direction at a boundary: at 1.0 it
+                // is 0.1 going down and 0.5 going up.
+                let step = NumberStep::by_value(|value, action, _cx| {
+                    let below = match action {
+                        StepAction::Increment => value < 1.0,
+                        StepAction::Decrement => value <= 1.0,
+                    };
+                    if below { 0.1 } else { 0.5 }
+                });
+                assert_eq!(step.value(0.5, StepAction::Increment, cx), 0.1);
+                assert_eq!(step.value(1.0, StepAction::Increment, cx), 0.5);
+                assert_eq!(step.value(1.0, StepAction::Decrement, cx), 0.1);
+                assert_eq!(step.value(2.0, StepAction::Decrement, cx), 0.5);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_normalization(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: None,
+                fraction: None,
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Full-width digits and the ideographic full stop are normalized,
+        // and the cursor is at the end (in normalized bytes, not the
+        // original 12 bytes).
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "12。5", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert_eq!(state.value(), "12.5");
+                let cursor: Range<usize> = state.selected_range.into();
+                assert_eq!(cursor, 4..4);
+            });
+        });
+
+        // Non-numeric input is rejected.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "abc", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert_eq!(state.value(), "12.5");
+            });
+        });
+
+        // A bare leading dot is kept as-is (normalized from the ideographic
+        // full stop), not completed to "0.", so it stays editable.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                let range = state.range_to_utf16(&(0..state.text.len()));
+                state.replace_text_in_range(Some(range), "。", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert_eq!(state.value(), ".");
+                let cursor: Range<usize> = state.selected_range.into();
+                assert_eq!(cursor, 1..1);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_normalization_with_separator(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: Some(','),
+                fraction: Some(2),
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "1234", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert_eq!(state.value(), "1,234");
+                assert_eq!(state.unmask_value(), "1234");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_clamp_on_blur(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state
+                .mask_pattern(MaskPattern::Number {
+                    separator: None,
+                    fraction: None,
+                })
+                .min(10.)
+                .max(100.)
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Out-of-range values are allowed while typing, and clamped on blur.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "1000", window, cx);
+                assert_eq!(state.value(), "1000");
+                state.clamp_number_value(window, cx);
+                assert_eq!(state.value(), "100");
+
+                let range = state.range_to_utf16(&(0..state.text.len()));
+                state.replace_text_in_range(Some(range), "1", window, cx);
+                assert_eq!(state.value(), "1");
+                state.clamp_number_value(window, cx);
+                assert_eq!(state.value(), "10");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_undo_with_mask(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: Some(','),
+                fraction: None,
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // When the mask changes the text (regrouping separators), a
+        // whole-document change is recorded, so undo/redo can restore it.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "1234", window, cx);
+                assert_eq!(state.value(), "1,234");
+                state.replace_text_in_range(None, "5", window, cx);
+                assert_eq!(state.value(), "12,345");
+
+                // The two edits are grouped into one undo step (by the
+                // history group interval). Before the whole-document history
+                // fix, this undo produced a corrupted value like "1,2344".
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "12,345");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_leading_dot_editable(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: None,
+                fraction: None,
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "1.2", window, cx);
+
+                // Delete the integer part "1": the value keeps the leading dot
+                // (".2"), not completed to "0.2", so the digits before the dot
+                // stay editable.
+                let range = state.range_to_utf16(&(0..1));
+                state.replace_text_in_range(Some(range), "", window, cx);
+                assert_eq!(state.value(), ".2");
+                let cursor: Range<usize> = state.selected_range.into();
+                assert_eq!(cursor, 0..0);
+
+                // The user can type a new integer part.
+                state.replace_text_in_range(Some(0..0), "3", window, cx);
+                assert_eq!(state.value(), "3.2");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_escape_invalid_text(cx: &mut TestAppContext) {
+        // A pre-existing invalid text (e.g. a `default_value` that does not
+        // conform) must not trap the user, the edit is allowed to fix it.
+        let input_view = InputView::build(cx, |state| {
+            state
+                .mask_pattern(MaskPattern::Number {
+                    separator: None,
+                    fraction: None,
+                })
+                .default_value("1,234")
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // Delete the last char, the pending text "1,23" is still
+                // invalid, but the edit is allowed since the old text was
+                // already invalid.
+                let range = state.range_to_utf16(&(4..5));
+                state.replace_text_in_range(Some(range), "", window, cx);
+                assert_eq!(state.value(), "1,23");
+
+                // Once the text becomes valid, the validation works as usual.
+                let range = state.range_to_utf16(&(1..2));
+                state.replace_text_in_range(Some(range), "", window, cx);
+                assert_eq!(state.value(), "123");
+                state.replace_text_in_range(None, "a", window, cx);
+                assert_eq!(state.value(), "123");
             });
         });
     }

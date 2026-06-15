@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use gpui::SharedString;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -198,7 +200,8 @@ impl MaskPattern {
                 let int_part = parts.next().unwrap_or("");
                 let frac_part = parts.next();
 
-                if int_part.is_empty() {
+                // only one dot is valid
+                if parts.next().is_some() {
                     return false;
                 }
 
@@ -411,6 +414,43 @@ impl MaskPattern {
 #[inline]
 fn is_sign(ch: &char) -> bool {
     matches!(ch, '+' | '-')
+}
+
+/// Normalize full-width and CJK number characters into their ASCII equivalents.
+///
+/// E.g. `123。5` -> `123.5`
+///
+/// Every mapping is 1 char to 1 char with the same UTF-16 length, so the IME
+/// marked-range offsets (in UTF-16) stay valid. The UTF-8 byte length may
+/// shrink (3 bytes to 1), the caller must use the normalized string for all
+/// byte-offset calculations.
+pub(crate) fn normalize_number_input(text: &str) -> Cow<'_, str> {
+    #[inline]
+    fn normalize_char(ch: char) -> Option<char> {
+        match ch {
+            // Full-width digits 0-9
+            '\u{FF10}'..='\u{FF19}' => char::from_u32(ch as u32 - 0xFF10 + '0' as u32),
+            // Full-width plus ＋
+            '\u{FF0B}' => Some('+'),
+            // Full-width hyphen － and minus sign −
+            '\u{FF0D}' | '\u{2212}' => Some('-'),
+            // Full-width dot ． and ideographic full stop 。
+            '\u{FF0E}' | '\u{3002}' => Some('.'),
+            // Full-width comma ，
+            '\u{FF0C}' => Some(','),
+            _ => None,
+        }
+    }
+
+    if !text.chars().any(|ch| normalize_char(ch).is_some()) {
+        return Cow::Borrowed(text);
+    }
+
+    Cow::Owned(
+        text.chars()
+            .map(|ch| normalize_char(ch).unwrap_or(ch))
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -633,5 +673,52 @@ mod tests {
         assert_eq!(mask.unmask("-1,234,567"), "-1234567");
         assert_eq!(mask.mask("-1234567."), "-1,234,567.");
         assert_eq!(mask.mask("-1234567.89"), "-1,234,567.89");
+    }
+
+    #[test]
+    fn test_number_leading_dot() {
+        let mask = MaskPattern::number(None);
+        assert_eq!(mask.is_valid("."), true);
+        assert_eq!(mask.is_valid(".5"), true);
+        assert_eq!(mask.is_valid("-."), true);
+        assert_eq!(mask.is_valid("-.5"), true);
+        assert_eq!(mask.is_valid("1.2.3"), false);
+        assert_eq!(mask.is_valid("1.."), false);
+
+        // A bare leading dot is kept as-is (not completed to "0."), so that
+        // deleting the integer part of "1.2" keeps ".2" and stays editable.
+        assert_eq!(mask.mask("."), ".");
+        assert_eq!(mask.mask(".5"), ".5");
+        assert_eq!(mask.mask("-.5"), "-.5");
+        assert_eq!(mask.mask("+.5"), "+.5");
+
+        let mask = MaskPattern::number(Some(','));
+        assert_eq!(mask.mask(".5"), ".5");
+        assert_eq!(mask.mask("-.5"), "-.5");
+    }
+
+    #[test]
+    fn test_normalize_number_input() {
+        use std::borrow::Cow;
+
+        use crate::input::mask_pattern::normalize_number_input;
+
+        // Fast path: no allocation when nothing to normalize
+        assert!(matches!(
+            normalize_number_input("-1,234.5"),
+            Cow::Borrowed(_)
+        ));
+
+        // Full-width digits
+        assert_eq!(normalize_number_input("0123456789"), "0123456789");
+        // Full-width signs, dot and comma
+        assert_eq!(normalize_number_input("＋1．5"), "+1.5");
+        assert_eq!(normalize_number_input("－1，234"), "-1,234");
+        // Minus sign (U+2212)
+        assert_eq!(normalize_number_input("−1.5"), "-1.5");
+        // Ideographic full stop
+        assert_eq!(normalize_number_input("12。5"), "12.5");
+        // Other characters are kept as-is
+        assert_eq!(normalize_number_input("ab 中 1"), "ab 中 1");
     }
 }
