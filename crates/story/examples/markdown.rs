@@ -12,7 +12,9 @@ use gpui_component::{
         DocumentRangeSemanticTokensProvider, Input, InputEvent, InputState, Rope, RopeExt, TabSize,
     },
     resizable::{h_resizable, resizable_panel},
-    text::markdown,
+    status_bar::StatusBar,
+    text::{TextViewStyle, markdown},
+    v_flex,
 };
 use gpui_component_assets::Assets;
 use gpui_component_story::Open;
@@ -111,6 +113,9 @@ impl DocumentRangeSemanticTokensProvider for MarkerHighlighter {
 
 pub struct Example {
     input_state: Entity<InputState>,
+    /// When `true`, tables wrap cell content to fit the width; when `false`
+    /// (the default), tables keep cells on one line and scroll horizontally.
+    table_wrap: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -148,8 +153,21 @@ impl Example {
 
         Self {
             input_state,
+            // Default to horizontal scrolling for tables.
+            table_wrap: false,
             _subscriptions,
         }
+    }
+
+    /// Build the markdown style: tables scroll horizontally unless `table_wrap`
+    /// is on, in which case the default wrapping layout is used.
+    fn text_view_style(&self) -> TextViewStyle {
+        if self.table_wrap {
+            return TextViewStyle::default();
+        }
+        let mut table = StyleRefinement::default();
+        table.overflow.x = Some(Overflow::Scroll);
+        TextViewStyle::default().table(table)
     }
 
     fn on_action_open(&mut self, _: &Open, window: &mut Window, cx: &mut Context<Self>) {
@@ -191,58 +209,86 @@ impl Render for Example {
             .size_full()
             .on_action(cx.listener(Self::on_action_open))
             .child(
-                h_resizable("container")
+                v_flex()
+                    .size_full()
                     .child(
-                        resizable_panel().child(
-                            div()
-                                .id("source")
-                                .size_full()
-                                .font_family(cx.theme().mono_font_family.clone())
-                                .text_size(cx.theme().mono_font_size)
+                        div().flex_1().overflow_hidden().child(
+                            h_resizable("container")
                                 .child(
-                                    Input::new(&self.input_state)
-                                        .h_full()
-                                        .p_0()
-                                        .border_0()
-                                        .focus_bordered(false),
+                                    resizable_panel().child(
+                                        div()
+                                            .id("source")
+                                            .size_full()
+                                            .font_family(cx.theme().mono_font_family.clone())
+                                            .text_size(cx.theme().mono_font_size)
+                                            .child(
+                                                Input::new(&self.input_state)
+                                                    .h_full()
+                                                    .p_0()
+                                                    .border_0()
+                                                    .focus_bordered(false),
+                                            ),
+                                    ),
+                                )
+                                .child(
+                                    resizable_panel().child(
+                                        markdown(self.input_state.read(cx).value().clone())
+                                            .code_block_actions(|code_block, _window, _cx| {
+                                                let code = code_block.code();
+                                                let lang = code_block.lang();
+
+                                                h_flex()
+                                                    .gap_1()
+                                                    .child(
+                                                        Clipboard::new("copy").value(code.clone()),
+                                                    )
+                                                    .when_some(lang, |this, lang| {
+                                                        // Only show run terminal button for certain languages
+                                                        if lang.as_ref() == "rust"
+                                                            || lang.as_ref() == "python"
+                                                        {
+                                                            this.child(
+                                                                Button::new("run-terminal")
+                                                                    .icon(IconName::SquareTerminal)
+                                                                    .ghost()
+                                                                    .xsmall()
+                                                                    .on_click(move |_, _, _cx| {
+                                                                        println!(
+                                                                            "Running {} code: {}",
+                                                                            lang, code
+                                                                        );
+                                                                    }),
+                                                            )
+                                                        } else {
+                                                            this
+                                                        }
+                                                    })
+                                            })
+                                            // Tables scroll horizontally by default; the
+                                            // status bar toggle switches to wrapping.
+                                            .style(self.text_view_style())
+                                            .flex_none()
+                                            .p_5()
+                                            .scrollable(true)
+                                            .selectable(true),
+                                    ),
                                 ),
                         ),
                     )
                     .child(
-                        resizable_panel().child(
-                            markdown(self.input_state.read(cx).value().clone())
-                                .code_block_actions(|code_block, _window, _cx| {
-                                    let code = code_block.code();
-                                    let lang = code_block.lang();
-
-                                    h_flex()
-                                        .gap_1()
-                                        .child(Clipboard::new("copy").value(code.clone()))
-                                        .when_some(lang, |this, lang| {
-                                            // Only show run terminal button for certain languages
-                                            if lang.as_ref() == "rust" || lang.as_ref() == "python"
-                                            {
-                                                this.child(
-                                                    Button::new("run-terminal")
-                                                        .icon(IconName::SquareTerminal)
-                                                        .ghost()
-                                                        .xsmall()
-                                                        .on_click(move |_, _, _cx| {
-                                                            println!(
-                                                                "Running {} code: {}",
-                                                                lang, code
-                                                            );
-                                                        }),
-                                                )
-                                            } else {
-                                                this
-                                            }
-                                        })
+                        StatusBar::new().right(
+                            Button::new("table-wrap")
+                                .ghost()
+                                .xsmall()
+                                .label(if self.table_wrap {
+                                    "Table: Wrap"
+                                } else {
+                                    "Table: Scroll"
                                 })
-                                .flex_none()
-                                .p_5()
-                                .scrollable(true)
-                                .selectable(true),
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.table_wrap = !this.table_wrap;
+                                    cx.notify();
+                                })),
                         ),
                     ),
             )
