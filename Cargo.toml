@@ -18,6 +18,7 @@ members = [
     "examples/tooltip_top_edge",
     "examples/sidebar",
     "examples/text_selection",
+    "examples/root_borderless",
 ]
 resolver = "2"
 
