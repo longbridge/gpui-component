@@ -7,7 +7,7 @@ description: 用于构建设置页、设置分组和设置项的界面组件。
 
 > Since: v0.5.0
 
-Settings 组件用于构建应用设置界面，支持页面分组、搜索过滤以及多种字段类型，适合实现类似 macOS 或 iOS 设置页的结构。
+Settings 组件用于构建应用设置界面，支持页面分组、按标题/描述/自定义关键词搜索过滤以及多种字段类型，适合实现类似 macOS 或 iOS 设置页的结构。
 
 ## 导入
 
@@ -251,6 +251,30 @@ SettingItem::render(|options, _, _| {
         .into_any_element()
 })
 .disabled(true)
+```
+
+### 搜索关键词
+
+通过 `keywords` 可以为设置项附加额外的搜索关键词。这些关键词仅用于搜索匹配，
+不会被渲染出来。例如，标题为 "Enable Two-factor auth" 的设置项可以通过 "MFA"
+搜索到：
+
+```rust
+SettingItem::new(
+    "Enable Two-factor auth",
+    SettingField::switch(...)
+)
+.keywords(["MFA", "2FA"])
+```
+
+这对于没有标题和描述、但仍希望能被搜索到的 [SettingItem::render] 自定义项同样
+有用：
+
+```rust
+SettingItem::render(|options, _, _| {
+    h_flex().child("Custom content").into_any_element()
+})
+.keywords(["Advanced", "Network"])
 ```
 
 ## Setting Fields

@@ -240,6 +240,8 @@ pub struct HighlightThemeStyle {
     pub editor_line_number: Option<gpui::Hsla>,
     pub editor_active_line_number: Option<gpui::Hsla>,
     pub editor_invisible: Option<gpui::Hsla>,
+    #[serde(rename = "editor.gutter.background")]
+    pub editor_gutter_background: Option<gpui::Hsla>,
     #[serde(flatten)]
     pub status: StatusColors,
     #[serde(rename = "syntax")]

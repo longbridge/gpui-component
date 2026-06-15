@@ -7,17 +7,18 @@ use std::{
 
 use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle,
-    InteractiveElement as _, IntoElement, Length, ObjectFit, ParentElement, SharedString,
-    SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, Window, div, img,
-    prelude::FluentBuilder as _, px, relative, rems,
+    InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement, ScrollHandle,
+    SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, Window, div,
+    img, prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
+    ActiveTheme as _, Icon, IconName, StyledExt, WindowExt as _, h_flex,
     highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
     input::{InputEdit, Point, RopeExt as _},
+    scroll::horizontal_scroll_area,
     text::{
         CodeBlockActionsFn,
         document::NodeRenderOptions,
@@ -221,6 +222,37 @@ impl BlockNode {
         }
 
         text
+    }
+
+    /// Synchronously clear the selection stored in every inline state.
+    ///
+    /// Mirrors the [`selected_text`](Self::selected_text) traversal so the
+    /// selection can be cleared without relying on a repaint.
+    pub(super) fn clear_selection(&self) {
+        match self {
+            BlockNode::Root { children, .. }
+            | BlockNode::Blockquote { children, .. }
+            | BlockNode::List { children, .. }
+            | BlockNode::ListItem { children, .. } => {
+                for child in children.iter() {
+                    child.clear_selection();
+                }
+            }
+            BlockNode::Paragraph(paragraph) => paragraph.clear_selection(),
+            BlockNode::Heading { children, .. } => children.clear_selection(),
+            BlockNode::Table(table) => {
+                for row in table.children.iter() {
+                    for cell in row.children.iter() {
+                        cell.children.clear_selection();
+                    }
+                }
+            }
+            BlockNode::CodeBlock(code_block) => code_block.clear_selection(),
+            BlockNode::Definition { .. }
+            | BlockNode::Break { .. }
+            | BlockNode::HorizontalRule { .. }
+            | BlockNode::Unknown { .. } => {}
+        }
     }
 }
 
@@ -430,6 +462,21 @@ impl Paragraph {
             text.push_str(&node.text);
         }
         text
+    }
+
+    /// Synchronously clear the selection stored in every inline state.
+    ///
+    /// Mirrors the [`selected_text`](Self::selected_text) traversal.
+    pub(super) fn clear_selection(&self) {
+        for c in self.children.iter() {
+            if let Ok(mut state) = c.state.lock() {
+                state.selection = None;
+            }
+        }
+
+        if let Ok(mut state) = self.state.lock() {
+            state.selection = None;
+        }
     }
 }
 
@@ -644,6 +691,15 @@ impl CodeBlock {
             .unwrap_or_default()
     }
 
+    /// Synchronously clear the selection stored in the inline state.
+    ///
+    /// Mirrors the [`selected_text`](Self::selected_text) traversal.
+    pub(super) fn clear_selection(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.selection = None;
+        }
+    }
+
     fn render(
         &self,
         options: &NodeRenderOptions,
@@ -761,7 +817,8 @@ impl Paragraph {
                                 .tooltip(move |window, cx| {
                                     Tooltip::new(title.clone()).build(window, cx)
                                 })
-                                .on_click(move |_, _, cx| {
+                                .on_click(move |_, window, cx| {
+                                    window.end_text_selection(cx);
                                     cx.stop_propagation();
                                     cx.open_url(&link.url);
                                 })
@@ -1148,6 +1205,9 @@ impl BlockNode {
         }
     }
 
+    /// Render a Markdown table. Dispatches to a horizontally scrollable layout
+    /// when `style.table` opts in with overflow-x: scroll, otherwise to the
+    /// default layout that fits the container width and wraps cell content.
     fn render_table(
         item: &BlockNode,
         options: &NodeRenderOptions,
@@ -1156,99 +1216,242 @@ impl BlockNode {
         cx: &mut App,
     ) -> impl IntoElement {
         const DEFAULT_LENGTH: usize = 5;
-        const MAX_LENGTH: usize = 150;
-        let col_lens = match item {
-            BlockNode::Table(table) => {
-                let mut col_lens = vec![];
-                for row in table.children.iter() {
-                    for (ix, cell) in row.children.iter().enumerate() {
-                        if col_lens.len() <= ix {
-                            col_lens.push(DEFAULT_LENGTH);
-                        }
 
-                        let len = cell.children.text_len();
-                        if len > col_lens[ix] {
-                            col_lens[ix] = len;
-                        }
-                    }
-                }
-                col_lens
-            }
-            _ => vec![],
+        let table = match item {
+            BlockNode::Table(table) => table,
+            _ => return div().into_any_element(),
         };
 
-        match item {
-            BlockNode::Table(table) => div()
-                .pb(rems(1.))
-                .w_full()
-                .child(
+        // Per-column max text length (in chars), used to proportion the columns
+        // in the default (wrap) layout.
+        let mut col_lens: Vec<usize> = vec![];
+        for row in table.children.iter() {
+            for (ix, cell) in row.children.iter().enumerate() {
+                if col_lens.len() <= ix {
+                    col_lens.push(DEFAULT_LENGTH);
+                }
+                col_lens[ix] = col_lens[ix].max(cell.children.text_len());
+            }
+        }
+
+        // Scroll mode is opted in via `style.table` overflow-x: scroll.
+        if matches!(node_cx.style.table.overflow.x, Some(Overflow::Scroll)) {
+            Self::render_scroll_table(table, col_lens.len(), options, node_cx, window, cx)
+        } else {
+            Self::render_wrap_table(table, &col_lens, options, node_cx, window, cx)
+        }
+    }
+
+    /// Horizontally scrollable table layout (opt-in via `style.table`
+    /// overflow-x: scroll).
+    ///
+    /// Column widths come from the **measured** shaped text of each cell (the
+    /// widest per column across all rows), so columns line up and fit their
+    /// content exactly — char-count heuristics are inaccurate on proportional
+    /// fonts. A narrow table stretches to fill the frame (cells `flex_grow`
+    /// proportionally); a wide table keeps its content widths and scrolls.
+    fn render_scroll_table(
+        table: &Table,
+        col_count: usize,
+        options: &NodeRenderOptions,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        const CELL_PAD_PX: f32 = 16.0; // px_2 horizontal padding
+        const CELL_MIN_PX: f32 = 48.0;
+        const CELL_MAX_PX: f32 = 480.0;
+
+        // Measure the widest text per column.
+        let text_style = window.text_style();
+        let font_size = text_style.font_size.to_pixels(window.rem_size());
+        let mut col_w = vec![CELL_MIN_PX; col_count];
+        for row in table.children.iter() {
+            for (ix, cell) in row.children.iter().enumerate() {
+                let Some(slot) = col_w.get_mut(ix) else {
+                    continue;
+                };
+                let mut w = 0.0_f32;
+                for line in cell.children.text().split('\n') {
+                    let line = line.trim();
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let run = text_style.to_run(line.len());
+                    let line_w = window
+                        .text_system()
+                        .layout_line(line, font_size, &[run], None)
+                        .width;
+                    w = w.max(f32::from(line_w));
+                }
+                *slot = slot.max((w + CELL_PAD_PX).min(CELL_MAX_PX));
+            }
+        }
+        let total_w: f32 = col_w.iter().sum();
+
+        let style = &node_cx.style;
+        let table_scroll_key = if let Some(span) = table.span {
+            SharedString::from(format!(
+                "{}-table-scroll-{}:{}",
+                window.current_view(),
+                span.start,
+                span.end
+            ))
+        } else {
+            SharedString::from(format!(
+                "{}-table-scroll-{}",
+                window.current_view(),
+                options.ix
+            ))
+        };
+        let scroll_handle = window
+            .use_keyed_state(table_scroll_key, cx, |_, _| ScrollHandle::default())
+            .read(cx)
+            .clone();
+        let row_count = table.children.len();
+        let mut rows = Vec::with_capacity(row_count);
+        for (row_ix, row) in table.children.iter().enumerate() {
+            let mut cells = Vec::with_capacity(row.children.len());
+            for (ix, cell) in row.children.iter().enumerate() {
+                let align = table.column_align(ix);
+                let is_last_col = ix == row.children.len() - 1;
+                let width = col_w.get(ix).copied().unwrap_or(CELL_MIN_PX);
+                cells.push(
                     div()
-                        .id(("table", options.ix))
-                        .w_full()
+                        .id(("cell", ix))
+                        // Measured content width is the flex-basis; `flex_grow`
+                        // (proportional to it) distributes any extra space so a
+                        // narrow table still fills the frame, while `flex_shrink_0`
+                        // keeps columns from collapsing when the table is wider
+                        // than the viewport and scrolls.
+                        .flex_basis(px(width))
+                        .flex_grow(width)
+                        .flex_shrink_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .when(align == ColumnumnAlign::Center, |this| this.text_center())
+                        .when(align == ColumnumnAlign::Right, |this| this.text_right())
+                        .px_2()
+                        .py_1()
+                        .when(!is_last_col, |this| {
+                            this.border_r_1().border_color(cx.theme().border)
+                        })
+                        .refine_style(&style.table_cell)
+                        .child(cell.children.render(node_cx, window, cx)),
+                );
+            }
+            rows.push(
+                div()
+                    .id("row")
+                    .w_full()
+                    .when(row_ix < row_count - 1, |this| this.border_b_1())
+                    .border_color(cx.theme().border)
+                    .flex()
+                    .flex_row()
+                    .children(cells),
+            );
+        }
+
+        div()
+            .pb(rems(1.))
+            .w_full()
+            .child(
+                // Scroll viewport: clips and scrolls horizontally (overflow-x
+                // is handled by `ScrollableMask`, so vertical wheel events keep
+                // bubbling to the parent TextView). No border — the frame is on
+                // the inner track so it wraps the table tightly.
+                horizontal_scroll_area(
+                    ("table", options.ix),
+                    &scroll_handle,
+                    &style.table,
+                    // Bordered track sized to `max(viewport, total table
+                    // width)`: `min_w_full` fills the frame when the table is
+                    // narrow (cells then grow to fill), the definite `w(total_w)`
+                    // lets it exceed the viewport and scroll when the content is
+                    // wider.
+                    div()
+                        .min_w_full()
+                        .w(px(total_w))
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
-                        .overflow_hidden()
-                        .children({
-                            let mut rows = Vec::with_capacity(table.children.len());
-                            for (row_ix, row) in table.children.iter().enumerate() {
-                                rows.push(
-                                    div()
-                                        .id("row")
-                                        .w_full()
-                                        .when(row_ix < table.children.len() - 1, |this| {
-                                            this.border_b_1()
-                                        })
-                                        .border_color(cx.theme().border)
-                                        .flex()
-                                        .flex_row()
-                                        .children({
-                                            let mut cells = Vec::with_capacity(row.children.len());
-                                            for (ix, cell) in row.children.iter().enumerate() {
-                                                let align = table.column_align(ix);
-                                                let is_last_col = ix == row.children.len() - 1;
-                                                let len = col_lens
-                                                    .get(ix)
-                                                    .copied()
-                                                    .unwrap_or(MAX_LENGTH)
-                                                    .min(MAX_LENGTH);
+                        .children(rows),
+                ),
+            )
+            .into_any_element()
+    }
 
-                                                cells.push(
-                                                    div()
-                                                        .id(("cell", ix))
-                                                        .overflow_hidden()
-                                                        .when(
-                                                            align == ColumnumnAlign::Center,
-                                                            |this| this.text_center(),
-                                                        )
-                                                        .when(
-                                                            align == ColumnumnAlign::Right,
-                                                            |this| this.text_right(),
-                                                        )
-                                                        .min_w_16()
-                                                        .w(Length::Definite(relative(len as f32)))
-                                                        .px_2()
-                                                        .py_1()
-                                                        .when(!is_last_col, |this| {
-                                                            this.border_r_1()
-                                                                .border_color(cx.theme().border)
-                                                        })
-                                                        .child(
-                                                            cell.children
-                                                                .render(node_cx, window, cx),
-                                                        ),
-                                                )
-                                            }
-                                            cells
-                                        }),
-                                )
-                            }
-                            rows
-                        }),
-                )
-                .into_any_element(),
-            _ => div().into_any_element(),
+    /// Default table layout: a flex grid whose columns are proportioned by
+    /// content length and shrink to fit the container width (cell text wraps).
+    fn render_wrap_table(
+        table: &Table,
+        col_lens: &[usize],
+        options: &NodeRenderOptions,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        const MAX_LENGTH: usize = 150;
+
+        let style = &node_cx.style;
+        let row_count = table.children.len();
+        let mut rows = Vec::with_capacity(row_count);
+        for (row_ix, row) in table.children.iter().enumerate() {
+            let mut cells = Vec::with_capacity(row.children.len());
+            for (ix, cell) in row.children.iter().enumerate() {
+                let align = table.column_align(ix);
+                let is_last_col = ix == row.children.len() - 1;
+                let len = col_lens
+                    .get(ix)
+                    .copied()
+                    .unwrap_or(MAX_LENGTH)
+                    .min(MAX_LENGTH);
+
+                cells.push(
+                    div()
+                        .id(("cell", ix))
+                        .overflow_hidden()
+                        .when(align == ColumnumnAlign::Center, |this| this.text_center())
+                        .when(align == ColumnumnAlign::Right, |this| this.text_right())
+                        .min_w_16()
+                        .w(Length::Definite(relative(len as f32)))
+                        .px_2()
+                        .py_1()
+                        .when(!is_last_col, |this| {
+                            this.border_r_1().border_color(cx.theme().border)
+                        })
+                        .refine_style(&style.table_cell)
+                        .child(cell.children.render(node_cx, window, cx)),
+                );
+            }
+
+            rows.push(
+                div()
+                    .id("row")
+                    .w_full()
+                    .when(row_ix < row_count - 1, |this| this.border_b_1())
+                    .border_color(cx.theme().border)
+                    .flex()
+                    .flex_row()
+                    .children(cells),
+            );
         }
+
+        div()
+            .pb(rems(1.))
+            .w_full()
+            .child(
+                div()
+                    .id(("table", options.ix))
+                    .w_full()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded(cx.theme().radius)
+                    .overflow_hidden()
+                    .children(rows)
+                    .refine_style(&style.table),
+            )
+            .into_any_element()
     }
 
     pub(crate) fn render_block(

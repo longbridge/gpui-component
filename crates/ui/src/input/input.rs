@@ -2,14 +2,14 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Context, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce,
     StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
 use crate::input::clear_button;
-use crate::menu::PopupMenu;
+use crate::native_menu::NativeMenu;
 use crate::spinner::Spinner;
 use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
@@ -50,9 +50,8 @@ pub struct Input {
 
     /// An optional context menu builder to allow a custom context menu on the input.
     ///
-    /// If set, this will override the built-in context menu.
-    context_menu_builder:
-        Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
+    /// If set, this overrides the built-in context menu.
+    context_menu_builder: Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
 }
 
 impl Sizable for Input {
@@ -159,10 +158,12 @@ impl Input {
         self
     }
 
-    /// Sets the context menu for the input.
+    /// Sets a custom context menu builder for the input, shown as a native OS menu.
+    ///
+    /// If set, this overrides the built-in right-click context menu.
     pub fn context_menu(
         mut self,
-        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+        f: impl Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu + 'static,
     ) -> Self {
         self.context_menu_builder = Some(Rc::new(f));
         self

@@ -1,9 +1,13 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, h_flex,
+    ActiveTheme as _, Icon, IconName, Sizable as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
     input::{Input, InputEvent, InputState},
     resizable::{h_resizable, resizable_panel},
+    separator::Separator,
     sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    status_bar::StatusBar,
     v_flex,
 };
 
@@ -66,6 +70,7 @@ impl Gallery {
                     StoryContainer::panel::<LabelStory>(window, cx),
                     StoryContainer::panel::<ListStory>(window, cx),
                     StoryContainer::panel::<MenuStory>(window, cx),
+                    StoryContainer::panel::<NativeMenuStory>(window, cx),
                     StoryContainer::panel::<NotificationStory>(window, cx),
                     StoryContainer::panel::<NumberInputStory>(window, cx),
                     StoryContainer::panel::<OtpInputStory>(window, cx),
@@ -84,6 +89,7 @@ impl Gallery {
                     StoryContainer::panel::<SkeletonStory>(window, cx),
                     StoryContainer::panel::<SliderStory>(window, cx),
                     StoryContainer::panel::<SpinnerStory>(window, cx),
+                    StoryContainer::panel::<StatusBarStory>(window, cx),
                     StoryContainer::panel::<StepperStory>(window, cx),
                     StoryContainer::panel::<SwitchStory>(window, cx),
                     StoryContainer::panel::<DataTableStory>(window, cx),
@@ -162,7 +168,10 @@ impl Render for Gallery {
                 ("".into(), "".into())
             };
 
-        h_resizable("gallery-container")
+        let current_story = story_name.clone();
+        let total_components: usize = self.stories.iter().map(|(_, items)| items.len()).sum();
+
+        let body = h_resizable("gallery-container")
             .child(
                 resizable_panel()
                     .size(px(255.))
@@ -300,6 +309,31 @@ impl Render for Gallery {
                             }),
                     )
                     .into_any_element(),
+            );
+
+        v_flex()
+            .size_full()
+            .child(div().flex_1().min_h_0().child(body))
+            .child(
+                StatusBar::new()
+                    .child(Icon::new(IconName::GalleryVerticalEnd).xsmall())
+                    .child(format!("{total_components} components"))
+                    .child(Separator::vertical())
+                    .when(!current_story.is_empty(), |this| {
+                        this.child(current_story.clone())
+                    })
+                    .right(cx.theme().theme_name().clone())
+                    .right(format!("v{}", env!("CARGO_PKG_VERSION")))
+                    .right(
+                        Button::new("assistant")
+                            .ghost()
+                            .xsmall()
+                            .icon(IconName::Github)
+                            .tooltip("GPUI Component GitHub repository")
+                            .on_click(|_, _, cx| {
+                                cx.open_url("https://github.com/longbridge/gpui-component")
+                            }),
+                    ),
             )
     }
 }

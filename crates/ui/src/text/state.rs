@@ -2,8 +2,8 @@ use futures::Stream as _;
 use std::{pin::Pin, task::Poll};
 
 use gpui::{
-    App, AppContext as _, Bounds, ClipboardItem, Context, FocusHandle, IntoElement, KeyBinding,
-    ListState, ParentElement as _, Pixels, Point, Render, SharedString, Styled as _, Task, Window,
+    App, AppContext as _, Bounds, Context, FocusHandle, IntoElement, KeyBinding, ListState,
+    ParentElement as _, Pixels, Point, Render, SharedString, Styled as _, Task, Window,
     prelude::FluentBuilder as _, px,
 };
 
@@ -11,7 +11,7 @@ use crate::{
     ActiveTheme, ElementExt,
     async_util::{Receiver, Sender, unbounded},
     highlighter::HighlightTheme,
-    input::{self, Copy, SelectAll},
+    input::{self, SelectAll},
     scroll::AutoScroll,
     text::{
         CodeBlockActionsFn, TextViewStyle,
@@ -48,6 +48,7 @@ pub(super) enum TextViewFormat {
 /// The state of a TextView.
 pub struct TextViewState {
     pub(super) focus_handle: FocusHandle,
+    pub(super) entity_id: gpui::EntityId,
     pub(super) list_state: ListState,
 
     /// The bounds of the text view
@@ -59,8 +60,6 @@ pub struct TextViewState {
     pub(super) code_block_actions: Option<std::sync::Arc<CodeBlockActionsFn>>,
 
     pub(super) is_selecting: bool,
-    /// The local (in TextView) position of the selection.
-    selection_positions: (Option<Point<Pixels>>, Option<Point<Pixels>>),
     multi_click_selection: Option<TextViewMultiClickSelection>,
     selected_text_override: Option<String>,
     select_all: bool,
@@ -88,6 +87,7 @@ impl TextViewState {
     /// Create a new TextViewState.
     fn new(format: TextViewFormat, text: &str, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
+        let entity_id = cx.entity_id();
 
         let (tx, rx) = unbounded::<UpdateOptions>();
         let (tx_result, rx_result) = unbounded::<Result<ParsedContent, SharedString>>();
@@ -120,8 +120,8 @@ impl TextViewState {
 
         let mut this = Self {
             focus_handle,
+            entity_id,
             bounds: Bounds::default(),
-            selection_positions: (None, None),
             multi_click_selection: None,
             selected_text_override: None,
             select_all: false,
@@ -227,13 +227,32 @@ impl TextViewState {
         self.bounds = bounds;
     }
 
+    pub(super) fn bounds(&self) -> Bounds<Pixels> {
+        self.bounds
+    }
+
+    /// Whether this view has a view-local selection (select-all, multi-click, or override),
+    /// independent of the window-level selection.
+    pub(super) fn has_view_selection(&self) -> bool {
+        self.select_all
+            || self.multi_click_selection.is_some()
+            || self.selected_text_override.is_some()
+    }
+
+    pub(super) fn stop_auto_scroll(&mut self) {
+        self.auto_scroll.stop();
+    }
+
     fn reset_selection(&mut self) {
-        self.selection_positions = (None, None);
         self.multi_click_selection = None;
         self.selected_text_override = None;
         self.select_all = false;
         self.is_selecting = false;
         self.auto_scroll.stop();
+        // Clear the inline selection state synchronously, so offscreen
+        // (virtualized) views that won't repaint don't leak stale selection
+        // text into a new cross-view copy.
+        self.parsed_content.document.clear_selection();
     }
 
     /// Clear the current text selection.
@@ -242,7 +261,7 @@ impl TextViewState {
         cx.notify();
     }
 
-    fn scroll_offset(&self) -> Point<Pixels> {
+    pub(super) fn scroll_offset(&self) -> Point<Pixels> {
         if self.scrollable {
             self.list_state.scroll_px_offset_for_scrollbar()
         } else {
@@ -252,7 +271,6 @@ impl TextViewState {
 
     /// Select all rendered text in this view.
     pub fn select_all(&mut self, cx: &mut Context<Self>) {
-        self.selection_positions = (None, None);
         self.multi_click_selection = None;
         self.selected_text_override = None;
         self.select_all = true;
@@ -269,34 +287,9 @@ impl TextViewState {
     ) {
         let scroll_offset = self.scroll_offset();
         let pos = pos - self.bounds.origin - scroll_offset;
-        self.selection_positions = (None, None);
         self.multi_click_selection = Some(TextViewMultiClickSelection { pos, kind });
         self.selected_text_override = Some(selected_text);
         self.select_all = false;
-        self.is_selecting = false;
-        self.auto_scroll.stop();
-    }
-
-    pub(super) fn start_selection(&mut self, pos: Point<Pixels>) {
-        // Store content coordinates (not affected by scrolling)
-        let scroll_offset = self.scroll_offset();
-        let pos = pos - self.bounds.origin - scroll_offset;
-        self.selection_positions = (Some(pos), Some(pos));
-        self.multi_click_selection = None;
-        self.selected_text_override = None;
-        self.select_all = false;
-        self.is_selecting = true;
-    }
-
-    pub(super) fn update_selection(&mut self, pos: Point<Pixels>) {
-        let scroll_offset = self.scroll_offset();
-        let pos = pos - self.bounds.origin - scroll_offset;
-        if let (Some(start), Some(_)) = self.selection_positions {
-            self.selection_positions = (Some(start), Some(pos))
-        }
-    }
-
-    pub(super) fn end_selection(&mut self) {
         self.is_selecting = false;
         self.auto_scroll.stop();
     }
@@ -308,43 +301,32 @@ impl TextViewState {
         });
     }
 
-    pub(crate) fn has_selection(&self) -> bool {
-        if self.select_all {
-            return true;
+    /// Return the window selection (anchor, cursor) in window coordinates if
+    /// this view participates in it.
+    ///
+    /// Single-view fast path: when both endpoints are anchored inside one
+    /// TextView, only that view participates (identical to the previous
+    /// per-view behavior).
+    pub(crate) fn selection_points(
+        &self,
+        window: &Window,
+        cx: &App,
+    ) -> Option<(Point<Pixels>, Point<Pixels>)> {
+        if !self.selectable {
+            return None;
         }
-        if self.multi_click_selection.is_some() {
-            return true;
+        let root = window.root::<crate::Root>().flatten()?;
+        let selection = &root.read(cx).text_selection;
+        if let Some(view_id) = selection.single_view() {
+            if view_id != self.entity_id {
+                return None;
+            }
         }
-        if self.selected_text_override.is_some() {
-            return true;
-        }
-
-        if let (Some(start), Some(end)) = self.selection_positions {
-            start != end
-        } else {
-            false
-        }
+        selection.resolved_points(cx)
     }
 
-    /// Return the selection start/end in window coordinates.
-    pub(crate) fn selection_points(&self) -> Option<(Point<Pixels>, Point<Pixels>)> {
-        let scroll_offset = self.scroll_offset();
-
-        selection_points(
-            self.selection_positions.0,
-            self.selection_positions.1,
-            self.bounds,
-            scroll_offset,
-        )
-    }
-
-    pub(super) fn on_action_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        let selected_text = self.selected_text().trim().to_string();
-        if selected_text.is_empty() {
-            return;
-        }
-
-        cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
+    pub(crate) fn has_selection(&self, window: &Window, cx: &App) -> bool {
+        self.has_view_selection() || self.selection_points(window, cx).is_some()
     }
 
     pub(super) fn on_action_select_all(
@@ -419,10 +401,19 @@ impl Render for TextViewState {
                         .child(err.to_string()),
                 ),
             })
-            .on_prepaint(move |bounds, _, cx| {
+            .on_prepaint(move |bounds, window, cx| {
+                let size_changed = state.read(cx).bounds().size != bounds.size;
+                let id = state.entity_id();
                 state.update(cx, |state, _| {
                     state.update_bounds(bounds);
-                })
+                });
+                if size_changed {
+                    if let Some(root) = window.root::<crate::Root>().flatten() {
+                        root.update(cx, |root, cx| {
+                            root.clear_text_selection_for_resized_view(id, cx);
+                        });
+                    }
+                }
             })
     }
 }
@@ -545,26 +536,10 @@ fn parse_content(
     Ok(content)
 }
 
-fn selection_points(
-    start: Option<Point<Pixels>>,
-    end: Option<Point<Pixels>>,
-    bounds: Bounds<Pixels>,
-    scroll_offset: Point<Pixels>,
-) -> Option<(Point<Pixels>, Point<Pixels>)> {
-    if let (Some(start), Some(end)) = (start, end) {
-        // Convert content coordinates to window coordinates
-        let start = start + scroll_offset + bounds.origin;
-        let end = end + scroll_offset + bounds.origin;
-        return Some((start, end));
-    }
-
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{TestAppContext, point};
+    use gpui::TestAppContext;
 
     #[gpui::test]
     fn set_text_then_push_str_appends_to_replaced_content(cx: &mut TestAppContext) {
@@ -606,7 +581,7 @@ mod tests {
         });
 
         state.read_with(cx, |state, _| {
-            assert!(state.has_selection());
+            assert!(state.has_view_selection());
             assert_eq!(state.selected_text().trim(), "quick value");
         });
 
@@ -615,94 +590,8 @@ mod tests {
         });
 
         state.read_with(cx, |state, _| {
-            assert!(!state.has_selection());
+            assert!(!state.has_view_selection());
             assert_eq!(state.selected_text(), "");
         });
-    }
-
-    #[test]
-    fn test_text_view_state_selection_points() {
-        assert_eq!(
-            selection_points(None, None, Default::default(), Point::default()),
-            None
-        );
-        assert_eq!(
-            selection_points(
-                None,
-                Some(point(px(10.), px(20.))),
-                Default::default(),
-                Point::default()
-            ),
-            None
-        );
-        assert_eq!(
-            selection_points(
-                Some(point(px(10.), px(20.))),
-                None,
-                Default::default(),
-                Point::default()
-            ),
-            None
-        );
-
-        // 10,10 start
-        //   |------|
-        //   |      |
-        //   |------|
-        //         50,50
-        assert_eq!(
-            selection_points(
-                Some(point(px(10.), px(10.))),
-                Some(point(px(50.), px(50.))),
-                Default::default(),
-                Point::default()
-            ),
-            Some((point(px(10.), px(10.)), point(px(50.), px(50.))))
-        );
-
-        // 10,10
-        //   |------|
-        //   |      |
-        //   |------|
-        //         50,50 start
-        assert_eq!(
-            selection_points(
-                Some(point(px(50.), px(50.))),
-                Some(point(px(10.), px(10.))),
-                Default::default(),
-                Point::default()
-            ),
-            Some((point(px(50.), px(50.)), point(px(10.), px(10.))))
-        );
-
-        //        50,10 start
-        //   |------|
-        //   |      |
-        //   |------|
-        // 10,50
-        assert_eq!(
-            selection_points(
-                Some(point(px(50.), px(10.))),
-                Some(point(px(10.), px(50.))),
-                Default::default(),
-                Point::default()
-            ),
-            Some((point(px(50.), px(10.)), point(px(10.), px(50.))))
-        );
-
-        //        50,10
-        //   |------|
-        //   |      |
-        //   |------|
-        // 10,50 start
-        assert_eq!(
-            selection_points(
-                Some(point(px(10.), px(50.))),
-                Some(point(px(50.), px(10.))),
-                Default::default(),
-                Point::default()
-            ),
-            Some((point(px(10.), px(50.)), point(px(50.), px(10.))))
-        );
     }
 }

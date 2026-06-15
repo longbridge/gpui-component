@@ -13,8 +13,8 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme, global_state::GlobalState, input::Selection, text::TextViewMultiClickKind,
-    text::node::LinkMark, text::selection::word_range_at,
+    ActiveTheme, WindowExt as _, global_state::GlobalState, input::Selection,
+    text::TextViewMultiClickKind, text::node::LinkMark, text::selection::word_range_at,
 };
 
 /// A inline element used to render a inline text and support selectable.
@@ -110,8 +110,8 @@ impl Inline {
 
         let text_view_state = text_view_state.read(cx);
         let is_selectable = text_view_state.is_selectable();
-        if !text_view_state.has_selection() {
-            return (is_selectable, false, None);
+        if !is_selectable {
+            return (false, false, None);
         }
 
         if text_view_state.is_all_selected() {
@@ -133,10 +133,12 @@ impl Inline {
             );
         }
 
-        let Some((selection_start, selection_end)) = text_view_state.selection_points() else {
+        let Some((selection_start, selection_end)) = text_view_state.selection_points(window, cx)
+        else {
             return (is_selectable, false, None);
         };
         let line_height = window.line_height();
+        let mask_bounds = window.content_mask().bounds;
 
         // Use for debug selection bounds
         // self.paint_selected_bounds(Bounds::from_corners(selection_start, selection_end), window, cx);
@@ -157,7 +159,15 @@ impl Inline {
                 }
             }
 
-            if point_in_text_selection(pos, char_width, selection_start, selection_end, line_height)
+            let char_center = point(pos.x + char_width.half(), pos.y + line_height.half());
+            if mask_bounds.contains(&char_center)
+                && point_in_text_selection(
+                    pos,
+                    char_width,
+                    selection_start,
+                    selection_end,
+                    line_height,
+                )
             {
                 if selection.is_none() {
                     selection = Some((offset..offset).into());
@@ -437,7 +447,7 @@ impl Element for Inline {
                     }
                     if text_view_state
                         .as_ref()
-                        .is_some_and(|state| state.read(cx).has_selection())
+                        .is_some_and(|state| state.read(cx).has_selection(window, cx))
                     {
                         return;
                     }
@@ -445,6 +455,7 @@ impl Element for Inline {
                     if let Some(link) =
                         Self::link_for_position(&text_layout, &links, event.position)
                     {
+                        window.end_text_selection(cx);
                         cx.stop_propagation();
                         cx.open_url(&link.url);
                     }

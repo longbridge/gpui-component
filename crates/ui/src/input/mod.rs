@@ -31,7 +31,7 @@ pub use input::*;
 pub use lsp::*;
 pub use lsp_types::Position;
 pub use mask_pattern::MaskPattern;
-pub use number_input::{NumberInput, NumberInputEvent, StepAction};
+pub use number_input::{NumberInput, NumberInputEvent, NumberStep, StepAction};
 pub use otp_input::*;
 pub use rope_ext::{InputEdit, Point, RopeExt, RopeLines};
 pub use ropey::Rope;

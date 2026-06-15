@@ -199,6 +199,10 @@ pub struct ThemeColor {
     pub title_bar: Hsla,
     /// TitleBar border color.
     pub title_bar_border: Hsla,
+    /// StatusBar background color, use for the bottom status bar.
+    pub status_bar: Hsla,
+    /// StatusBar border color.
+    pub status_bar_border: Hsla,
     /// Background color for Tiles.
     pub tiles: Hsla,
     /// Warning background color.
