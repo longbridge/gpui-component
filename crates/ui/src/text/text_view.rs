@@ -419,4 +419,84 @@ mod tests {
         let selected_text = view.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
         assert_eq!(selected_text.trim(), "quick select value");
     }
+
+    // Regression: markdown `TextView` items inside an outer `gpui::list` with
+    // `measure_all` must keep a stable total content height while scrolling.
+    // Before synchronous full-replace parsing, off-screen markdown views were
+    // first measured with empty content and the scrollbar thumb jittered as the
+    // total height grew during scrolling.
+    #[gpui::test]
+    fn outer_list_content_total_stable_while_scrolling(cx: &mut TestAppContext) {
+        use gpui::{ListAlignment, ListState, list};
+
+        const ITEMS: &[&str] = &[
+            "# Heading\n\nA paragraph long enough to wrap across several lines and produce a non-trivial height.",
+            "Short.",
+            "Paragraph A\n\nParagraph B\n\nParagraph C with more words to increase the height.",
+            "## Subheading\n\n- One\n- Two\n- Three\n\nClosing paragraph.",
+            "Only one line.",
+            "**Bold**: medium length text with `code` mixed with regular words.",
+            "1. First\n2. Second\n3. Third\n\nA short closing paragraph.",
+            "A long message with enough words to wrap across multiple lines, create a taller item, and verify that off-screen measurement matches visible measurement.",
+        ];
+        let n = 40usize;
+
+        struct ListRoot {
+            state: ListState,
+        }
+        impl Render for ListRoot {
+            fn render(&mut self, _w: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+                div().w(px(360.)).h(px(500.)).child(
+                    list(self.state.clone(), |ix, _w, _cx| {
+                        div()
+                            .w_full()
+                            .child(TextView::markdown(
+                                ("md", ix as u64),
+                                ITEMS[ix % ITEMS.len()],
+                            ))
+                            .into_any_element()
+                    })
+                    .size_full(),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        let state = ListState::new(n, ListAlignment::Top, px(2048.)).measure_all();
+        let probe = state.clone();
+        let (_view, cx) = cx.add_window_view(|_w, _cx| ListRoot { state });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|w, cx| {
+            let _ = w.draw(cx);
+        });
+        cx.run_until_parked();
+        cx.update(|w, cx| {
+            let _ = w.draw(cx);
+        });
+
+        let total = |p: &ListState| {
+            f32::from(p.max_offset_for_scrollbar().y + p.viewport_bounds().size.height)
+        };
+        let mut totals = vec![total(&probe)];
+        for _ in 0..20 {
+            probe.scroll_by(px(150.));
+            cx.update(|w, cx| {
+                let _ = w.draw(cx);
+            });
+            cx.run_until_parked();
+            totals.push(total(&probe));
+        }
+        let min = totals.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = totals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        println!(
+            "OUTER_LIST_PROBE min={min:.1} max={max:.1} delta={:.1}",
+            max - min
+        );
+        assert!(
+            (max - min) < 2.0,
+            "list content total jittered while scrolling: min={min} max={max} totals={totals:?}"
+        );
+    }
 }
