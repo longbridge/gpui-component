@@ -1,0 +1,14 @@
+[package]
+name = "root_borderless"
+description = "Example demonstrating disabling Root's window border wrapper."
+version = "0.5.1"
+publish = false
+edition.workspace = true
+
+[dependencies]
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component = { workspace = true }
+
+[lints]
+workspace = true

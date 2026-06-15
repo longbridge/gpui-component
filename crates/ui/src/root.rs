@@ -12,9 +12,9 @@ use crate::{
 };
 use gpui::{
     Anchor, AnyView, App, AppContext, ClipboardItem, Context, DefiniteLength, ElementId, Entity,
-    EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle,
-    Window, actions, div, prelude::FluentBuilder as _,
+    EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding, ParentElement as _,
+    Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle, Window, actions, div,
+    prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, collections::HashMap, rc::Rc};
 
@@ -46,8 +46,8 @@ pub struct Root {
     pub(crate) native_menu_overlay: Entity<FallbackMenuOverlay>,
     sheet_size: Option<DefiniteLength>,
     window_shadow_size: Pixels,
-    /// Skip Linux CSD `window_border` wrapper (layer-shell fullscreen, etc.).
-    borderless: bool,
+    /// Render the Linux CSD `window_border` wrapper.
+    bordered: bool,
     /// The focus handle that will be restored after a dialog is closed with animation.
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
@@ -102,16 +102,19 @@ impl Root {
             native_menu_overlay: cx.new(|_| FallbackMenuOverlay::new()),
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
-            borderless: false,
+            bordered: true,
             pending_focus_restore: None,
             text_selection: WindowTextSelection::default(),
             selectable_text_views: HashMap::new(),
         }
     }
 
-    /// Skip Linux CSD `window_border` wrapper (layer-shell fullscreen, etc.).
-    pub fn borderless(mut self, borderless: bool) -> Self {
-        self.borderless = borderless;
+    /// Enable or disable the Linux client-side window border wrapper.
+    ///
+    /// Defaults to `true`. Use `bordered(false)` for layer-shell fullscreen windows
+    /// or other surfaces that should not render GPUI Component's window border.
+    pub fn bordered(mut self, bordered: bool) -> Self {
+        self.bordered = bordered;
         self
     }
 
@@ -551,13 +554,50 @@ impl Render for Root {
             .child(self.tooltip_overlay.clone())
             .child(self.native_menu_overlay.clone());
 
-        if self.borderless {
-            inner.into_any_element()
-        } else {
+        if self.bordered {
             window_border()
                 .shadow_size(self.window_shadow_size)
                 .child(inner)
                 .into_any_element()
+        } else {
+            inner.into_any_element()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::TestAppContext;
+
+    struct TestView;
+
+    impl Render for TestView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+        }
+    }
+
+    #[gpui::test]
+    fn bordered_builder_toggles_window_border(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        let (default_root, _) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|_| TestView);
+            Root::new(view, window, cx)
+        });
+        assert!(default_root.read_with(cx, |root, _| root.bordered));
+
+        let (root, _) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|_| TestView);
+            Root::new(view, window, cx).bordered(false)
+        });
+        assert!(!root.read_with(cx, |root, _| root.bordered));
+
+        let (root, _) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|_| TestView);
+            Root::new(view, window, cx).bordered(false).bordered(true)
+        });
+        assert!(root.read_with(cx, |root, _| root.bordered));
     }
 }
