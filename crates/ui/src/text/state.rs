@@ -227,10 +227,10 @@ impl TextViewState {
         // Full-replace updates (initial content / `set_text`) parse
         // synchronously on the main thread so the first layout already has the
         // correct height. Otherwise parsing finishes later on a background task
-        // and the first layout sees an empty `parsed_content` (≈0 height); when
+        // and the first layout sees an empty `parsed_content` (~0 height); when
         // this `TextView` is an item inside an outer `list` with `measure_all`,
         // off-screen items get measured at that empty height and the total
-        // content height keeps growing as items scroll into view — the scrollbar
+        // content height keeps growing as items scroll into view; the scrollbar
         // thumb jitters. Streaming appends stay async to avoid re-parsing the
         // whole document on every chunk.
         if !append {

@@ -420,22 +420,24 @@ mod tests {
         assert_eq!(selected_text.trim(), "quick select value");
     }
 
-    // 回归：把多条 markdown `TextView` 放进开了 `measure_all` 的外层 `gpui::list`，
-    // 程序化滚动时内容总高必须稳定。修复前 markdown 异步解析使离屏项首测为空高，
-    // 滚动时总高不断增长、滚动条 thumb 抖动；同步解析后总高从首帧即正确、恒定。
+    // Regression: markdown `TextView` items inside an outer `gpui::list` with
+    // `measure_all` must keep a stable total content height while scrolling.
+    // Before synchronous full-replace parsing, off-screen markdown views were
+    // first measured with empty content and the scrollbar thumb jittered as the
+    // total height grew during scrolling.
     #[gpui::test]
     fn outer_list_content_total_stable_while_scrolling(cx: &mut TestAppContext) {
         use gpui::{ListAlignment, ListState, list};
 
         const ITEMS: &[&str] = &[
-            "# 标题\n\n一段会换行好几行的正文，用来制造非平凡高度，再补点字更高一些。",
-            "短。",
-            "段落 A\n\n段落 B\n\n段落 C，更多字更高。",
-            "## 小标题\n\n- 一\n- 二\n- 三\n\n收尾。",
-            "只有一行。",
-            "**粗体**：中等长度说明，含 `code` 与普通文字混排足够长。",
-            "1. 第一\n2. 第二\n3. 第三\n\n收尾段落补字。",
-            "很长的一条消息，包含很多文字足够换行很多次占据较大高度，验证离屏测量与可视重测一致，继续补字确保够高够长够多行。",
+            "# Heading\n\nA paragraph long enough to wrap across several lines and produce a non-trivial height.",
+            "Short.",
+            "Paragraph A\n\nParagraph B\n\nParagraph C with more words to increase the height.",
+            "## Subheading\n\n- One\n- Two\n- Three\n\nClosing paragraph.",
+            "Only one line.",
+            "**Bold**: medium length text with `code` mixed with regular words.",
+            "1. First\n2. Second\n3. Third\n\nA short closing paragraph.",
+            "A long message with enough words to wrap across multiple lines, create a taller item, and verify that off-screen measurement matches visible measurement.",
         ];
         let n = 40usize;
 
