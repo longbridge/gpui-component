@@ -127,7 +127,11 @@ impl TextViewState {
             select_all: false,
             selectable: false,
             scrollable: false,
-            list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)),
+            // Measure all blocks (not just visible ones) so the scrollbar
+            // thumb size stays stable. Without this, off-screen blocks count
+            // as zero height until scrolled into view, which makes the
+            // scrollbar jitter as more blocks get measured during scrolling.
+            list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)).measure_all(),
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
             is_selecting: false,
