@@ -417,7 +417,7 @@ impl RenderOnce for Input {
                         .id("suffix")
                         .gap(gap_x)
                         .items_center()
-                        .when(!state.disabled, |this| this.opacity(0.5))
+                        .when(state.disabled, |this| this.opacity(0.5))
                         .when(state.loading, |this| {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
                         })
