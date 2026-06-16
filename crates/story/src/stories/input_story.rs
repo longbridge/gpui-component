@@ -21,6 +21,8 @@ pub struct InputStory {
     prefix_input1: Entity<InputState>,
     suffix_input1: Entity<InputState>,
     both_input1: Entity<InputState>,
+    complete_input: Entity<InputState>,
+    complete_disabled_input: Entity<InputState>,
     large_input: Entity<InputState>,
     small_input: Entity<InputState>,
     phone_input: Entity<InputState>,
@@ -82,6 +84,16 @@ impl InputStory {
         });
         let both_input1 = cx.new(|cx| {
             InputState::new(window, cx).placeholder("This input have prefix and suffix.")
+        });
+        let complete_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Search account...")
+                .default_value("jane.doe@example.com")
+        });
+        let complete_disabled_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Search account...")
+                .default_value("disabled.account@example.com")
         });
 
         let phone_input = cx.new(|cx| InputState::new(window, cx).mask_pattern("(999)-999-9999"));
@@ -149,6 +161,8 @@ impl InputStory {
             prefix_input1,
             suffix_input1,
             both_input1,
+            complete_input,
+            complete_disabled_input,
             phone_input,
             mask_input2,
             currency_input,
@@ -243,6 +257,33 @@ impl Render for InputStory {
                         Input::new(&self.suffix_input1)
                             .cleanable(true)
                             .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
+                    ),
+            )
+            .child(
+                section("Complete Input")
+                    .max_w_md()
+                    .child(
+                        Input::new(&self.complete_input)
+                            .cleanable(true)
+                            .prefix(Icon::new(IconName::Search).small())
+                            .suffix(
+                                Button::new("complete-input-info")
+                                    .ghost()
+                                    .icon(IconName::Info)
+                                    .xsmall(),
+                            ),
+                    )
+                    .child(
+                        Input::new(&self.complete_disabled_input)
+                            .cleanable(true)
+                            .disabled(true)
+                            .prefix(Icon::new(IconName::Search).small())
+                            .suffix(
+                                Button::new("complete-disabled-input-info")
+                                    .ghost()
+                                    .icon(IconName::Info)
+                                    .xsmall(),
+                            ),
                     ),
             )
             .child(

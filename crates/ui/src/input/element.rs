@@ -1577,11 +1577,13 @@ impl Element for TextElement {
         let placeholder = self.placeholder.clone();
 
         let text_style = window.text_style();
-        let fg = text_style.color;
+        let disabled = state.disabled;
+        let dim = |color: Hsla| if disabled { color.opacity(0.5) } else { color };
+        let fg = dim(text_style.color);
         let (display_text, text_color) = if is_empty {
             (
                 &Rope::from(placeholder.as_str()),
-                cx.theme().muted_foreground,
+                dim(cx.theme().muted_foreground),
             )
         } else if state.masked {
             (
@@ -1675,6 +1677,10 @@ impl Element for TextElement {
                             run.strikethrough = marked_run.strikethrough;
                             run.underline = marked_run.underline;
                         }
+                    }
+
+                    if disabled {
+                        run.color = run.color.opacity(0.5)
                     }
 
                     run
@@ -1934,11 +1940,17 @@ impl Element for TextElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let focus_handle = self.state.read(cx).focus_handle.clone();
-        let show_cursor = self.state.read(cx).show_cursor(window, cx);
+        let (focus_handle, show_cursor, disabled, selected_range) = {
+            let state = self.state.read(cx);
+            (
+                state.focus_handle.clone(),
+                state.show_cursor(window, cx),
+                state.disabled,
+                state.selected_range,
+            )
+        };
         let focused = focus_handle.is_focused(window);
         let bounds = prepaint.bounds;
-        let selected_range = self.state.read(cx).selected_range;
         let text_align = prepaint.last_layout.text_align;
 
         window.handle_input(
@@ -1976,7 +1988,17 @@ impl Element for TextElement {
         let origin = bounds.origin;
 
         let invisible_top_padding = prepaint.last_layout.visible_top;
-        let active_line_color = cx.theme().highlight_theme.style.editor_active_line;
+        let active_line_color = cx
+            .theme()
+            .highlight_theme
+            .style
+            .editor_active_line
+            .map(|color| if disabled { color.opacity(0.5) } else { color });
+        let editor_background = if disabled {
+            cx.theme().editor_background().opacity(0.5)
+        } else {
+            cx.theme().editor_background()
+        };
 
         // Paint active line
         let mut offset_y = px(0.);
@@ -2032,7 +2054,8 @@ impl Element for TextElement {
 
         // Paint document colors
         for (path, color) in prepaint.document_color_paths.iter() {
-            window.paint_path(path.clone(), *color);
+            let color = if disabled { color.opacity(0.5) } else { *color };
+            window.paint_path(path.clone(), color);
         }
 
         // Paint text with inline completion ghost line support
@@ -2097,7 +2120,7 @@ impl Element for TextElement {
                             line_height,
                         ),
                     );
-                    window.paint_quad(fill(ghost_bounds, cx.theme().editor_background()));
+                    window.paint_quad(fill(ghost_bounds, editor_background));
 
                     // Paint ghost line text
                     _ = ghost_line.paint(
@@ -2219,7 +2242,7 @@ impl Element for TextElement {
 
                     // Paint background to cover any existing text
                     let bg_bounds = Bounds::new(p, size(first_line.width + px(4.), line_height));
-                    window.paint_quad(fill(bg_bounds, cx.theme().editor_background()));
+                    window.paint_quad(fill(bg_bounds, editor_background));
 
                     // Paint first line completion text
                     _ = first_line.paint(p, line_height, text_align, None, window, cx);
