@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
-    InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce,
-    StyleRefinement, Styled, TextAlign, Window, div, px, relative,
+    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled,
+    TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -271,6 +271,12 @@ impl RenderOnce for Input {
         } else {
             bg
         };
+        let bg = if state.disabled { bg.opacity(0.5) } else { bg };
+        let border_color = if state.disabled {
+            cx.theme().input.opacity(0.5)
+        } else {
+            cx.theme().input
+        };
 
         let prefix = self.prefix;
         let suffix = self.suffix;
@@ -380,10 +386,9 @@ impl RenderOnce for Input {
             })
             .when(self.appearance, |this| {
                 this.bg(bg)
-                    .when(self.disabled, |this| this.opacity(0.5))
                     .rounded(cx.theme().radius)
                     .when(self.bordered, |this| {
-                        this.border_color(cx.theme().input)
+                        this.border_color(border_color)
                             .border_1()
                             .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(focused && self.focus_bordered, |this| {
