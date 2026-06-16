@@ -259,18 +259,17 @@ impl Element for TextView {
         cx: &mut App,
     ) {
         let state = &request_layout.state;
+        if self.selectable {
+            // Register before painting children so this frame's Inline paint can
+            // repopulate the text bounds after stale ones are cleared.
+            crate::Root::register_selectable_text_view(state, hitbox, window, cx);
+        }
+
         GlobalState::global_mut(cx)
             .text_view_state_stack
             .push(state.clone());
         request_layout.element.paint(window, cx);
         GlobalState::global_mut(cx).text_view_state_stack.pop();
-
-        if self.selectable {
-            // Window-level selection: register this view (with its clipped
-            // hitbox) so the Root selection controller can hit-test and collect
-            // selected text. All mouse handling lives in TextSelectionController.
-            crate::Root::register_selectable_text_view(state, hitbox, window, cx);
-        }
     }
 }
 

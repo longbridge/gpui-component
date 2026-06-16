@@ -11,10 +11,10 @@ use crate::{
     window_border,
 };
 use gpui::{
-    Anchor, AnyView, App, AppContext, ClipboardItem, Context, DefiniteLength, ElementId, Entity,
-    EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding, ParentElement as _,
-    Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle, Window, actions, div,
-    prelude::FluentBuilder as _,
+    Anchor, AnyView, App, AppContext, Bounds, ClipboardItem, Context, DefiniteLength, ElementId,
+    Entity, EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding,
+    ParentElement as _, Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle,
+    Window, actions, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, collections::HashMap, rc::Rc};
 
@@ -55,6 +55,8 @@ pub struct Root {
     pub(crate) text_selection: WindowTextSelection,
     /// Selectable TextViews registered this frame, keyed by entity id.
     pub(crate) selectable_text_views: HashMap<EntityId, (WeakEntity<TextViewState>, Hitbox)>,
+    /// Inline text bounds for selectable TextViews, keyed by parent TextView id.
+    pub(crate) selectable_text_inlines: HashMap<EntityId, Vec<Bounds<Pixels>>>,
 }
 
 #[derive(Clone)]
@@ -106,6 +108,7 @@ impl Root {
             pending_focus_restore: None,
             text_selection: WindowTextSelection::default(),
             selectable_text_views: HashMap::new(),
+            selectable_text_inlines: HashMap::new(),
         }
     }
 
