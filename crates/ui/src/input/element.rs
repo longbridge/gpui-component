@@ -1577,11 +1577,13 @@ impl Element for TextElement {
         let placeholder = self.placeholder.clone();
 
         let text_style = window.text_style();
-        let fg = text_style.color;
+        let disabled = state.disabled;
+        let dim = |color: Hsla| if disabled { color.opacity(0.5) } else { color };
+        let fg = dim(text_style.color);
         let (display_text, text_color) = if is_empty {
             (
                 &Rope::from(placeholder.as_str()),
-                cx.theme().muted_foreground,
+                dim(cx.theme().muted_foreground),
             )
         } else if state.masked {
             (
@@ -1675,6 +1677,10 @@ impl Element for TextElement {
                             run.strikethrough = marked_run.strikethrough;
                             run.underline = marked_run.underline;
                         }
+                    }
+
+                    if disabled {
+                        run.color = run.color.opacity(0.5)
                     }
 
                     run
@@ -2048,7 +2054,8 @@ impl Element for TextElement {
 
         // Paint document colors
         for (path, color) in prepaint.document_color_paths.iter() {
-            window.paint_path(path.clone(), *color);
+            let color = if disabled { color.opacity(0.5) } else { *color };
+            window.paint_path(path.clone(), color);
         }
 
         // Paint text with inline completion ghost line support

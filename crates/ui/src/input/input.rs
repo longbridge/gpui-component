@@ -399,7 +399,11 @@ impl RenderOnce for Input {
             .items_center()
             .gap(gap_x)
             .refine_style(&self.style)
-            .children(prefix)
+            .children(prefix.map(|p| {
+                div()
+                    .when(state.disabled, |this| this.opacity(0.5))
+                    .child(p)
+            }))
             .when(state.mode.is_multi_line(), |mut this| {
                 let paddings = this.style().padding.clone();
                 this.child(Self::render_editor(paddings, &self.state, &state, window))
@@ -413,6 +417,7 @@ impl RenderOnce for Input {
                         .id("suffix")
                         .gap(gap_x)
                         .items_center()
+                        .when(!state.disabled, |this| this.opacity(0.5))
                         .when(state.loading, |this| {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
                         })
