@@ -273,3 +273,20 @@ x^3 + y^3 &= z^3
 $$
 
 This is final paragraph, it includes a code block and a list of items.
+
+### Custom components
+
+A custom element (a hyphenated HTML tag) registered via `TextView::element`
+is rendered as an arbitrary, interactive component. Props are passed as
+attributes. Here a `<stock-quote>` renders a stateful stock card (click the
+star to toggle the watchlist):
+
+<stock-quote symbol="AAPL" />
+
+<stock-quote symbol="TSLA" />
+
+A `<contact-card>` renders a contact card with an avatar and a follow toggle:
+
+<contact-card id="huacnlee" />
+
+<contact-card id="madcodelife" />

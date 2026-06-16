@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
@@ -10,13 +11,21 @@ use gpui::{
 use crate::StyledExt;
 use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
-use crate::text::node::CodeBlock;
+use crate::text::node::{CodeBlock, CustomElement};
 use crate::text::state::TextViewState;
 use crate::{global_state::GlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+
+/// Type for a custom element renderer function.
+///
+/// Registered per custom element tag name. Receives the parsed
+/// [`CustomElement`] (tag name, attributes, raw content) and returns an element
+/// to render in place of the default rendering.
+pub(crate) type ElementRenderFn =
+    dyn Fn(&CustomElement, &mut Window, &mut App) -> AnyElement + Send + Sync;
 
 /// A text view that can render Markdown or HTML.
 ///
@@ -45,6 +54,7 @@ pub struct TextView {
     selectable: bool,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    elements: Arc<HashMap<SharedString, Arc<ElementRenderFn>>>,
 }
 
 impl Styled for TextView {
@@ -66,6 +76,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            elements: Arc::default(),
         }
     }
 
@@ -81,6 +92,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            elements: Arc::default(),
         }
     }
 
@@ -96,6 +108,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            elements: Arc::default(),
         }
     }
 
@@ -140,6 +153,51 @@ impl TextView {
         self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
             f(&code_block, window, cx).into_any_element()
         }));
+        self
+    }
+
+    /// Register a renderer for a custom element, keyed by its tag `name`.
+    ///
+    /// A custom element is written in the source as an HTML tag whose name
+    /// contains a hyphen (the W3C custom-element convention), e.g.
+    /// `<stock-quote symbol="AAPL"></stock-quote>`. Standard HTML tags never
+    /// contain a hyphen, so this never collides with normal markup. When the
+    /// tag name matches `name`, the given closure renders it; the closure
+    /// receives the parsed [`CustomElement`] (attributes / props and raw inner
+    /// content) and returns any element, so the result can be an arbitrary
+    /// component (an image, a tag, a stock card, a contact, ...).
+    ///
+    /// Call this multiple times to register different elements. Custom elements
+    /// without a registered renderer fall back to their raw text content.
+    ///
+    /// Currently only block-level custom elements are supported: write the tag
+    /// on its own line (with blank lines around it) so the parser treats it as
+    /// an HTML block, e.g. `<x-foo bar="1" />`. An open/close pair on a single
+    /// line (`<x-foo></x-foo>`) is parsed as inline HTML and won't match.
+    ///
+    /// To embed stateful / interactive components, create or reuse an `Entity`
+    /// inside the closure via [`Window::use_keyed_state`].
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// markdown(source)
+    ///     .element("stock-quote", |el, _window, _cx| {
+    ///         StockCard::new(el.attr("symbol").unwrap_or_default())
+    ///     })
+    ///     .element("contact-card", |el, _window, _cx| {
+    ///         ContactCard::new(el.attr("id").unwrap_or_default())
+    ///     });
+    /// ```
+    pub fn element<F, E>(mut self, name: impl Into<SharedString>, f: F) -> Self
+    where
+        F: Fn(&CustomElement, &mut Window, &mut App) -> E + Send + Sync + 'static,
+        E: IntoElement,
+    {
+        Arc::make_mut(&mut self.elements).insert(
+            name.into(),
+            Arc::new(move |element, window, cx| f(element, window, cx).into_any_element()),
+        );
         self
     }
 }
@@ -199,6 +257,7 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
+            state.elements = self.elements.clone();
             state.selectable = self.selectable;
             state.scrollable = self.scrollable;
             state.text_view_style = self.text_view_style.clone();

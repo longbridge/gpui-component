@@ -10,8 +10,8 @@ use markup5ever_rcdom::{Node, NodeData, RcDom};
 
 use crate::text::document::ParsedDocument;
 use crate::text::node::{
-    self, BlockNode, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Table, TableRow,
-    TextMark,
+    self, BlockNode, CustomElement, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Table,
+    TableRow, TextMark,
 };
 
 const BLOCK_ELEMENTS: [&str; 35] = [
@@ -99,6 +99,19 @@ fn attr_value(attrs: &RefCell<Vec<html5ever::Attribute>>, name: LocalName) -> Op
             None
         }
     })
+}
+
+/// Recursively collect the raw text content of an element's descendants.
+fn element_text(node: &Rc<Node>) -> String {
+    let mut text = String::new();
+    for child in node.children.borrow().iter() {
+        match &child.data {
+            NodeData::Text { contents } => text.push_str(&contents.borrow()),
+            NodeData::Element { .. } => text.push_str(&element_text(child)),
+            _ => {}
+        }
+    }
+    text
 }
 
 /// Get style properties to HashMap
@@ -233,18 +246,23 @@ fn trim_text(text: &str) -> String {
     out
 }
 
-fn parse_paragraph(
-    paragraph: &mut Paragraph,
-    node: &Rc<Node>,
-) {
-    fn push_merged(paragraph: &mut Paragraph, text: String, marks: Vec<(Range<usize>, TextMark)>, new_mark: Option<TextMark>) {
+fn parse_paragraph(paragraph: &mut Paragraph, node: &Rc<Node>) {
+    fn push_merged(
+        paragraph: &mut Paragraph,
+        text: String,
+        marks: Vec<(Range<usize>, TextMark)>,
+        new_mark: Option<TextMark>,
+    ) {
         if text.is_empty() {
             return;
         }
         let mut node = InlineNode::new(text).marks(marks);
         if let Some(new_mark) = new_mark {
             let len = node.text.len();
-            if let Some(last) = node.marks.last_mut() && last.0.start == 0 && last.0.end == len {
+            if let Some(last) = node.marks.last_mut()
+                && last.0.start == 0
+                && last.0.end == len
+            {
                 last.1.merge(new_mark);
             } else {
                 node.marks.push((0..node.text.len(), new_mark));
@@ -253,7 +271,11 @@ fn parse_paragraph(
         paragraph.push(node);
     }
 
-    fn merge_children_with_mark(node: &Node, paragraph: &mut Paragraph, new_mark: Option<TextMark>) {
+    fn merge_children_with_mark(
+        node: &Node,
+        paragraph: &mut Paragraph,
+        new_mark: Option<TextMark>,
+    ) {
         let mut merged_text = String::new();
         let mut merged_marks = Vec::new();
 
@@ -265,7 +287,7 @@ fn parse_paragraph(
                 let offset = merged_text.len();
                 merged_text.push_str(&node.text);
                 for (range, child_mark) in node.marks {
-                    merged_marks.push((range.start+offset .. range.end+offset, child_mark));
+                    merged_marks.push((range.start + offset..range.end + offset, child_mark));
                 }
 
                 if let Some(mut image) = node.image {
@@ -273,8 +295,12 @@ fn parse_paragraph(
                         image.link = Some(link_mark);
                     }
 
-                    push_merged(paragraph, std::mem::take(&mut merged_text),
-                        std::mem::take(&mut merged_marks), new_mark.clone());
+                    push_merged(
+                        paragraph,
+                        std::mem::take(&mut merged_text),
+                        std::mem::take(&mut merged_marks),
+                        new_mark.clone(),
+                    );
 
                     paragraph.push(InlineNode::image(image));
                 }
@@ -297,7 +323,11 @@ fn parse_paragraph(
                 merge_children_with_mark(node, paragraph, Some(TextMark::default().bold()));
             }
             local_name!("del") | local_name!("s") => {
-                merge_children_with_mark(node, paragraph, Some(TextMark::default().strikethrough()));
+                merge_children_with_mark(
+                    node,
+                    paragraph,
+                    Some(TextMark::default().strikethrough()),
+                );
             }
             local_name!("u") => {
                 merge_children_with_mark(node, paragraph, Some(TextMark::default().underline()));
@@ -314,7 +344,11 @@ fn parse_paragraph(
                     ..Default::default()
                 };
 
-                merge_children_with_mark(node, paragraph, Some(TextMark::default().link(link_mark)));
+                merge_children_with_mark(
+                    node,
+                    paragraph,
+                    Some(TextMark::default().link(link_mark)),
+                );
             }
             local_name!("img") => {
                 let Some(src) = attr_value(attrs, local_name!("src")) else {
@@ -524,6 +558,40 @@ fn parse_node(
                 })
             }
             local_name!("style") | local_name!("script") => None,
+            _ if name.local.contains('-') => {
+                // Custom element (W3C convention: tag name contains a hyphen).
+                // Capture tag name, attributes (props) and raw inner text; the
+                // renderer registered via `TextView::element` dispatches by name.
+                let mut children = vec![];
+                consume_paragraph(&mut children, paragraph);
+
+                let attributes = attrs
+                    .borrow()
+                    .iter()
+                    .map(|attr| {
+                        (
+                            SharedString::from(attr.name.local.to_string()),
+                            SharedString::from(attr.value.to_string()),
+                        )
+                    })
+                    .collect();
+                let custom = BlockNode::Custom(CustomElement::new(
+                    name.local.to_string(),
+                    attributes,
+                    element_text(node),
+                    None,
+                ));
+
+                if children.is_empty() {
+                    Some(custom)
+                } else {
+                    children.push(custom);
+                    Some(BlockNode::Root {
+                        children,
+                        span: None,
+                    })
+                }
+            }
             _ => {
                 if BLOCK_ELEMENTS.contains(&name.local.trim()) {
                     let mut children: Vec<BlockNode> = vec![];

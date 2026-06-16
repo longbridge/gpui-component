@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _, IconName, Sizable as _,
+    ActiveTheme as _, Icon, IconName, Sizable as _,
+    avatar::Avatar,
     button::{Button, ButtonVariants as _},
     clipboard::Clipboard,
     h_flex,
@@ -263,6 +264,194 @@ impl Render for Example {
                                                             this
                                                         }
                                                     })
+                                            })
+                                            // Register a custom, stateful component for the
+                                            // <stock-quote symbol="…"> element. The rendered
+                                            // result can be any element (here a stock quote
+                                            // card with a watchlist toggle persisted per
+                                            // symbol via `window.use_keyed_state`).
+                                            .element("stock-quote", |el, window, cx| {
+                                                // Demo data keyed by the `symbol` prop; a real
+                                                // app would fetch a live quote here.
+                                                let symbol = el.attr("symbol").unwrap_or_default();
+                                                let (name, price, change) = match symbol {
+                                                    "AAPL" => ("Apple Inc.", 229.87, 1.24),
+                                                    "TSLA" => ("Tesla, Inc.", 412.05, -2.13),
+                                                    _ => ("—", 0.0, 0.0),
+                                                };
+                                                let up = change >= 0.0;
+                                                let trend = if up {
+                                                    cx.theme().green
+                                                } else {
+                                                    cx.theme().red
+                                                };
+
+                                                let starred = window.use_keyed_state(
+                                                    SharedString::from(format!(
+                                                        "quote-star-{symbol}"
+                                                    )),
+                                                    cx,
+                                                    |_, _| false,
+                                                );
+                                                let is_starred = *starred.read(cx);
+
+                                                h_flex()
+                                                    .w(px(300.))
+                                                    .justify_between()
+                                                    .items_center()
+                                                    .gap_4()
+                                                    .px_4()
+                                                    .py_3()
+                                                    .rounded(cx.theme().radius_lg)
+                                                    .border_1()
+                                                    .border_color(cx.theme().border)
+                                                    .child(
+                                                        v_flex()
+                                                            .gap_1()
+                                                            .child(
+                                                                h_flex()
+                                                                    .items_center()
+                                                                    .gap_2()
+                                                                    .child(
+                                                                        div()
+                                                                            .font_weight(
+                                                                                FontWeight::SEMIBOLD,
+                                                                            )
+                                                                            .child(symbol.to_string()),
+                                                                    )
+                                                                    .child(
+                                                                        div()
+                                                                            .text_xs()
+                                                                            .text_color(
+                                                                                cx.theme()
+                                                                                    .muted_foreground,
+                                                                            )
+                                                                            .child(name),
+                                                                    ),
+                                                            )
+                                                            .child(
+                                                                div()
+                                                                    .text_xl()
+                                                                    .font_weight(
+                                                                        FontWeight::SEMIBOLD,
+                                                                    )
+                                                                    .child(format!("${price:.2}")),
+                                                            ),
+                                                    )
+                                                    .child(
+                                                        v_flex()
+                                                            .gap_2()
+                                                            .items_end()
+                                                            .child(
+                                                                Button::new(SharedString::from(
+                                                                    format!("star-{symbol}"),
+                                                                ))
+                                                                .ghost()
+                                                                .xsmall()
+                                                                .icon(if is_starred {
+                                                                    IconName::StarFill
+                                                                } else {
+                                                                    IconName::Star
+                                                                })
+                                                                .on_click(move |_, _, cx| {
+                                                                    starred.update(cx, |v, cx| {
+                                                                        *v = !*v;
+                                                                        cx.notify();
+                                                                    });
+                                                                }),
+                                                            )
+                                                            .child(
+                                                                h_flex()
+                                                                    .items_center()
+                                                                    .gap_1()
+                                                                    .text_color(trend)
+                                                                    .child(
+                                                                        Icon::new(if up {
+                                                                            IconName::ArrowUp
+                                                                        } else {
+                                                                            IconName::ArrowDown
+                                                                        })
+                                                                        .xsmall(),
+                                                                    )
+                                                                    .child(
+                                                                        div()
+                                                                            .text_sm()
+                                                                            .font_weight(
+                                                                                FontWeight::MEDIUM,
+                                                                            )
+                                                                            .child(format!(
+                                                                                "{change:+.2}%"
+                                                                            )),
+                                                                    ),
+                                                            ),
+                                                    )
+                                            })
+                                            // Another custom component: a <contact-card id="…">
+                                            // element renders a contact card with an `Avatar`
+                                            // and a follow toggle persisted per id.
+                                            .element("contact-card", |el, window, cx| {
+                                                let id = el.attr("id").unwrap_or_default();
+                                                let (name, avatar) = match id {
+                                                    "huacnlee" => (
+                                                        "Jason Lee",
+                                                        "https://avatars.githubusercontent.com/u/5518?v=4",
+                                                    ),
+                                                    "madcodelife" => (
+                                                        "Floyd Wang",
+                                                        "https://avatars.githubusercontent.com/u/28998859?v=4",
+                                                    ),
+                                                    _ => ("Unknown", ""),
+                                                };
+
+                                                let following = window.use_keyed_state(
+                                                    SharedString::from(format!(
+                                                        "contact-follow-{id}"
+                                                    )),
+                                                    cx,
+                                                    |_, _| false,
+                                                );
+                                                let is_following = *following.read(cx);
+
+                                                h_flex()
+                                                    .w(px(300.))
+                                                    .items_center()
+                                                    .gap_3()
+                                                    .px_4()
+                                                    .py_3()
+                                                    .rounded(cx.theme().radius_lg)
+                                                    .border_1()
+                                                    .border_color(cx.theme().border)
+                                                    .child(
+                                                        Avatar::new().name(name).large().when(
+                                                            !avatar.is_empty(),
+                                                            |this| this.src(avatar),
+                                                        ),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .flex_1()
+                                                            .font_weight(FontWeight::SEMIBOLD)
+                                                            .child(name),
+                                                    )
+                                                    .child(
+                                                        Button::new(SharedString::from(format!(
+                                                            "follow-{id}"
+                                                        )))
+                                                        .xsmall()
+                                                        .map(|this| {
+                                                            if is_following {
+                                                                this.outline().label("Following")
+                                                            } else {
+                                                                this.primary().label("Follow")
+                                                            }
+                                                        })
+                                                        .on_click(move |_, _, cx| {
+                                                            following.update(cx, |v, cx| {
+                                                                *v = !*v;
+                                                                cx.notify();
+                                                            });
+                                                        }),
+                                                    )
                                             })
                                             // Tables scroll horizontally by default; the
                                             // status bar toggle switches to wrapping.
