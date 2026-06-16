@@ -152,8 +152,9 @@ impl Inline {
                 continue;
             };
 
+            let next_offset = offset + c.len_utf8();
             let mut char_width = line_height.half();
-            if let Some(next_pos) = text_layout.position_for_index(offset + 1) {
+            if let Some(next_pos) = text_layout.position_for_index(next_offset) {
                 if next_pos.y == pos.y {
                     char_width = next_pos.x - pos.x;
                 }
@@ -173,16 +174,66 @@ impl Inline {
                     selection = Some((offset..offset).into());
                 }
 
-                let next_offset = offset + c.len_utf8();
                 if let Some(selection) = selection.as_mut() {
                     selection.end = next_offset;
                 }
             }
 
-            offset += c.len_utf8();
+            offset = next_offset;
         }
 
         (true, true, selection)
+    }
+
+    fn text_line_bounds(
+        &self,
+        text_layout: &TextLayout,
+        line_height: Pixels,
+        mask_bounds: Bounds<Pixels>,
+    ) -> Vec<Bounds<Pixels>> {
+        let mut line_bounds = Vec::new();
+        let mut current_line_y = None;
+        let mut current_bounds: Option<Bounds<Pixels>> = None;
+        let mut offset = 0;
+
+        for c in self.text.chars() {
+            let next_offset = offset + c.len_utf8();
+            let Some(pos) = text_layout.position_for_index(offset) else {
+                offset = next_offset;
+                continue;
+            };
+
+            let mut char_width = line_height.half();
+            if let Some(next_pos) = text_layout.position_for_index(next_offset) {
+                if next_pos.y == pos.y {
+                    char_width = next_pos.x - pos.x;
+                }
+            }
+
+            let bounds = Bounds::from_corners(pos, point(pos.x + char_width, pos.y + line_height))
+                .intersect(&mask_bounds);
+            if bounds.size.width > px(0.) && bounds.size.height > px(0.) {
+                if current_line_y == Some(pos.y) {
+                    if let Some(current) = current_bounds.as_mut() {
+                        *current = current.union(&bounds);
+                    }
+                } else {
+                    if let Some(current) = current_bounds.take() {
+                        line_bounds.push(current);
+                    }
+                    current_line_y = Some(pos.y);
+                    current_bounds = Some(bounds);
+                }
+            }
+
+            offset = next_offset;
+        }
+
+        if let Some(current) = current_bounds {
+            line_bounds.push(current);
+        }
+
+        line_bounds
     }
 
     /// Paint the selection background.
@@ -367,6 +418,20 @@ impl Element for Inline {
         }
 
         if is_selectable {
+            if let Some(text_view_state) = GlobalState::global(cx).text_view_state().cloned() {
+                let text_bounds = self.text_line_bounds(
+                    &text_layout,
+                    text_layout.line_height(),
+                    window.content_mask().bounds,
+                );
+                crate::Root::register_selectable_text_inline(
+                    &text_view_state,
+                    text_bounds,
+                    window,
+                    cx,
+                );
+            }
+
             window.on_mouse_event({
                 let hitbox = hitbox.clone();
                 let text_layout = text_layout.clone();
