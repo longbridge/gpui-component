@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{App, Bounds, Hsla, Pixels, Point, SharedString, TextAlign, Window, point};
+use gpui::{App, Bounds, Hsla, Pixels, SharedString, TextAlign, Window, point};
 use gpui_component_macros::IntoPlot;
 use num_traits::Zero;
 
@@ -8,7 +8,7 @@ use crate::{
     ActiveTheme,
     plot::{
         Plot,
-        label::{PlotLabel, TEXT_SIZE, Text},
+        label::{PlotLabel, TEXT_HEIGHT, TEXT_SIZE, Text},
         polygon,
         shape::{Arc, ArcData, Pie},
     },
@@ -204,84 +204,126 @@ impl<T> Plot for PieChart<T> {
         let label_color = self.label_color.unwrap_or(cx.theme().foreground);
         let default_line_color = cx.theme().border;
 
-        let mut labels = vec![];
-        let mut polylines = vec![];
-        let mut last_end_angle = 0.;
-        let mut last_point = Point::<f32>::default();
+        // First pass: collect a layout candidate per visible slice, split by
+        // side. `y` is the target vertical position relative to the center and
+        // gets adjusted later to remove overlaps.
+        let mut right: Vec<LabelLayout> = vec![];
+        let mut left: Vec<LabelLayout> = vec![];
         for a in &arcs {
-            // Skip tiny slices (< 0.5°).
-            if a.end_angle - last_end_angle < std::f32::consts::PI / 360. {
+            // Skip tiny slices (< 0.5°) that are too thin to label.
+            if a.end_angle - a.start_angle < std::f32::consts::PI / 360. {
                 continue;
             }
 
             let centroid = label_arc.centroid(a);
-            let Point {
-                x: label_x,
-                y: label_y,
-            } = centroid;
-            let Point { x: arc_x, y: arc_y } = edge_arc.centroid(a);
-            let is_right = label_x > 0.;
+            let edge = edge_arc.centroid(a);
+            let is_right = centroid.x > 0.;
+            let line_color = self
+                .label_line_color
+                .as_ref()
+                .map(|f| f(a.data))
+                .unwrap_or(default_line_color);
 
-            // Adjacent labels on the same side that are too close get nudged
-            // vertically by half a text height.
-            let safe_label_y = if centroid.x.signum() == last_point.x.signum()
-                && (last_point.y - centroid.y).abs() < TEXT_SIZE
-            {
-                if centroid.y < last_point.y {
-                    label_y - TEXT_SIZE
-                } else {
-                    label_y + TEXT_SIZE
-                }
-            } else {
-                label_y
+            let layout = LabelLayout {
+                arc_x: edge.x,
+                arc_y: edge.y,
+                label_x: centroid.x,
+                y: centroid.y,
+                text: label_fn(a.data),
+                line_color,
             };
+            if is_right { &mut right } else { &mut left }.push(layout);
+        }
 
-            // Leader line: ring edge -> centroid -> horizontal pull to ±label_radius.
-            let pts = [
-                point(arc_x + center_x, arc_y + center_y),
-                point(label_x + center_x, safe_label_y + center_y),
-                point(
-                    (if is_right {
-                        label_radius
-                    } else {
-                        -label_radius
-                    }) + center_x,
-                    safe_label_y + center_y,
-                ),
-            ];
-            if let Some(p) = polygon(&pts, &bounds) {
-                let line_color = if let Some(line_color_fn) = self.label_line_color.as_ref() {
-                    line_color_fn(a.data)
-                } else {
-                    default_line_color
-                };
-                polylines.push((p, line_color));
-            }
+        // Second pass: spread labels on each side so neighbors keep at least one
+        // text height apart, clamped within the vertical bounds.
+        let top = -center_y + TEXT_HEIGHT / 2.;
+        let bottom = center_y - TEXT_HEIGHT / 2.;
+        spread_labels(&mut right, top, bottom);
+        spread_labels(&mut left, top, bottom);
 
-            // Text sits 4px further out, aligned by side.
-            let origin = point(
-                (if is_right {
-                    label_radius + 4.
-                } else {
-                    -label_radius - 4.
-                }) + center_x,
-                safe_label_y - TEXT_SIZE / 2. + center_y,
-            );
-            labels.push(
-                Text::new(label_fn(a.data), origin, label_color).align(if is_right {
+        // Third pass: paint leader lines first, then the text on top.
+        let mut labels = vec![];
+        for (side, items) in [(1., &right), (-1., &left)] {
+            for item in items {
+                // Leader line: ring edge -> label anchor -> horizontal pull to
+                // ±label_radius.
+                let pts = [
+                    point(item.arc_x + center_x, item.arc_y + center_y),
+                    point(item.label_x + center_x, item.y + center_y),
+                    point(side * label_radius + center_x, item.y + center_y),
+                ];
+                if let Some(p) = polygon(&pts, &bounds) {
+                    window.paint_path(p, item.line_color);
+                }
+
+                // Text sits 4px further out, aligned by side.
+                let origin = point(
+                    side * (label_radius + 4.) + center_x,
+                    item.y - TEXT_SIZE / 2. + center_y,
+                );
+                let align = if side > 0. {
                     TextAlign::Left
                 } else {
                     TextAlign::Right
-                }),
-            );
-
-            last_end_angle = a.end_angle;
-            last_point = centroid;
+                };
+                labels.push(Text::new(item.text.clone(), origin, label_color).align(align));
+            }
         }
 
-        for (path, color) in polylines {
-            window.paint_path(path, color);
-        }
         PlotLabel::new(labels).paint(&bounds, window, cx);
+    }
+}
+
+/// A resolved label position before overlap adjustment.
+struct LabelLayout {
+    /// Anchor on the ring edge (relative to center).
+    arc_x: f32,
+    arc_y: f32,
+    /// Centroid x at the label radius (relative to center).
+    label_x: f32,
+    /// Target/adjusted vertical position (relative to center).
+    y: f32,
+    text: SharedString,
+    line_color: Hsla,
+}
+
+/// Spread `items` vertically so that adjacent labels keep at least
+/// [`TEXT_HEIGHT`] apart, clamped within `[top, bottom]`.
+///
+/// Uses a two-direction relaxation: a top-down pass pushes crowded labels down,
+/// then a bottom-up pass (anchored at `bottom`) pushes them back up. This
+/// resolves cascading overlaps that a single-neighbor nudge cannot.
+fn spread_labels(items: &mut [LabelLayout], top: f32, bottom: f32) {
+    let n = items.len();
+    if n == 0 {
+        return;
+    }
+
+    // Sort by target position so neighbors in the slice are neighbors in y.
+    items.sort_by(|a, b| a.y.total_cmp(&b.y));
+
+    // Top-down: enforce the minimum gap by pushing labels down.
+    for i in 1..n {
+        let min_y = items[i - 1].y + TEXT_HEIGHT;
+        if items[i].y < min_y {
+            items[i].y = min_y;
+        }
+    }
+
+    // Bottom-up: clamp the bottom-most label, then pull overflowing labels up.
+    if items[n - 1].y > bottom {
+        items[n - 1].y = bottom;
+    }
+    for i in (0..n - 1).rev() {
+        let max_y = items[i + 1].y - TEXT_HEIGHT;
+        if items[i].y > max_y {
+            items[i].y = max_y;
+        }
+    }
+
+    // Keep the top-most label within bounds.
+    if items[0].y < top {
+        items[0].y = top;
     }
 }
