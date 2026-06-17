@@ -126,207 +126,6 @@ fn ticker_symbol(value: &str) -> Option<&str> {
     Some(symbol)
 }
 
-fn parse_ticker_block(
-    node: &markdown_ast::Node,
-    cx: &MarkdownParseContext<'_>,
-) -> Option<MarkdownNode> {
-    let markdown_ast::Node::Paragraph(paragraph) = node else {
-        return None;
-    };
-    let [markdown_ast::Node::Text(text)] = paragraph.children.as_slice() else {
-        return None;
-    };
-    let symbol = ticker_symbol(&text.value)?;
-    Some(
-        MarkdownNode::new("ticker")
-            .with_text(format!("${symbol}"))
-            .with_markdown(cx.node_source(node).unwrap_or(text.value.as_str()))
-            .with_data(TickerNode {
-                symbol: symbol.to_string(),
-            }),
-    )
-}
-
-fn parse_user_card_block(
-    node: &markdown_ast::Node,
-    cx: &MarkdownParseContext<'_>,
-) -> Option<MarkdownNode> {
-    match node {
-        markdown_ast::Node::MdxJsxFlowElement(element)
-            if element.name.as_deref() == Some("UserCard") =>
-        {
-            let id = mdx_attr(&element.attributes, "id")?;
-            Some(
-                MarkdownNode::new("user-card")
-                    .with_text(id.clone())
-                    .with_markdown(cx.node_source(node).unwrap_or_default())
-                    .with_data(UserCardNode { id }),
-            )
-        }
-        markdown_ast::Node::Html(raw) if html_tag_name(&raw.value) == Some("UserCard") => {
-            let id = html_attr(&raw.value, "id")?;
-            Some(
-                MarkdownNode::new("user-card")
-                    .with_text(id.clone())
-                    .with_markdown(cx.node_source(node).unwrap_or(raw.value.as_str()))
-                    .with_data(UserCardNode { id }),
-            )
-        }
-        _ => None,
-    }
-}
-
-fn render_ticker_quote(
-    node: &MarkdownNode,
-    plugin: &TickerPlugin,
-    cx: &mut App,
-) -> impl IntoElement {
-    let ticker = node
-        .data::<TickerNode>()
-        .expect("ticker markdown node data");
-    let symbol = ticker.symbol.as_str();
-    let quote = plugin.quote(symbol);
-    let up = quote.change >= 0.0;
-    let trend = if up { cx.theme().green } else { cx.theme().red };
-
-    v_flex()
-        .w(px(240.))
-        .gap_1p5()
-        .px_3()
-        .py_2()
-        .rounded(cx.theme().radius)
-        .border_1()
-        .border_color(cx.theme().border)
-        .bg(cx.theme().background)
-        .child(
-            h_flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    v_flex()
-                        .gap_1()
-                        .child(
-                            div()
-                                .text_sm()
-                                .line_height(relative(1.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .child(format!("${symbol}")),
-                        )
-                        .child(
-                            div()
-                                .text_xs()
-                                .line_height(relative(1.))
-                                .text_color(cx.theme().muted_foreground)
-                                .child(quote.name),
-                        ),
-                )
-                .child(
-                    h_flex()
-                        .items_center()
-                        .gap_0p5()
-                        .px_1()
-                        .py_0p5()
-                        .rounded(cx.theme().radius)
-                        .bg(trend.opacity(0.12))
-                        .text_xs()
-                        .line_height(relative(1.))
-                        .text_color(trend)
-                        .child(
-                            Icon::new(if up {
-                                IconName::ArrowUp
-                            } else {
-                                IconName::ArrowDown
-                            })
-                            .xsmall(),
-                        )
-                        .child(
-                            div()
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(format!("{:+.1}%", quote.change)),
-                        ),
-                ),
-        )
-        .child(
-            h_flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_lg()
-                        .line_height(relative(1.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(format!("{:.2}", quote.price)),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .line_height(relative(1.))
-                        .text_color(cx.theme().muted_foreground)
-                        .child("Last"),
-                ),
-        )
-}
-
-fn render_user_card(node: &MarkdownNode, window: &mut Window, cx: &mut App) -> impl IntoElement {
-    let user = node
-        .data::<UserCardNode>()
-        .expect("user-card markdown node data");
-    let id = user.id.as_str();
-    let (name, avatar) = match id {
-        "huacnlee" => (
-            "Jason Lee",
-            "https://avatars.githubusercontent.com/u/5518?v=4",
-        ),
-        "madcodelife" => (
-            "Floyd Wang",
-            "https://avatars.githubusercontent.com/u/28998859?v=4",
-        ),
-        _ => ("Unknown", ""),
-    };
-
-    let following = window.use_keyed_state(
-        SharedString::from(format!("user-card-follow-{id}")),
-        cx,
-        |_, _| false,
-    );
-    let is_following = *following.read(cx);
-
-    h_flex()
-        .w(px(300.))
-        .items_center()
-        .gap_3()
-        .px_3()
-        .py_2()
-        .rounded(cx.theme().radius)
-        .border_1()
-        .border_color(cx.theme().border)
-        .child(
-            Avatar::new()
-                .name(name)
-                .with_size(px(24.))
-                .when(!avatar.is_empty(), |this| this.src(avatar)),
-        )
-        .child(
-            div()
-                .flex_1()
-                .text_sm()
-                .font_weight(FontWeight::MEDIUM)
-                .child(name),
-        )
-        .child(
-            Button::new(SharedString::from(format!("follow-{id}")))
-                .outline()
-                .small()
-                .label(if is_following { "Following" } else { "Follow" })
-                .on_click(move |_, _, cx| {
-                    following.update(cx, |v, cx| {
-                        *v = !*v;
-                        cx.notify();
-                    });
-                }),
-        )
-}
-
 impl MarkdownPlugin for TickerPlugin {
     fn is_block(&self) -> bool {
         true
@@ -341,11 +140,108 @@ impl MarkdownPlugin for TickerPlugin {
         node: &markdown_ast::Node,
         cx: &MarkdownParseContext<'_>,
     ) -> Option<MarkdownNode> {
-        parse_ticker_block(node, cx)
+        let markdown_ast::Node::Paragraph(paragraph) = node else {
+            return None;
+        };
+        let [markdown_ast::Node::Text(text)] = paragraph.children.as_slice() else {
+            return None;
+        };
+        let symbol = ticker_symbol(&text.value)?;
+        Some(
+            MarkdownNode::new("ticker")
+                .with_text(format!("${symbol}"))
+                .with_markdown(cx.node_source(node).unwrap_or(text.value.as_str()))
+                .with_data(TickerNode {
+                    symbol: symbol.to_string(),
+                }),
+        )
     }
 
     fn render(&self, node: &MarkdownNode, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        render_ticker_quote(node, self, cx)
+        let ticker = node
+            .data::<TickerNode>()
+            .expect("ticker markdown node data");
+        let symbol = ticker.symbol.as_str();
+        let quote = self.quote(symbol);
+        let up = quote.change >= 0.0;
+        let trend = if up { cx.theme().green } else { cx.theme().red };
+
+        v_flex()
+            .w(px(240.))
+            .gap_1p5()
+            .px_3()
+            .py_2()
+            .rounded(cx.theme().radius)
+            .border_1()
+            .border_color(cx.theme().border)
+            .bg(cx.theme().background)
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .line_height(relative(1.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(format!("${symbol}")),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .line_height(relative(1.))
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(quote.name),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_0p5()
+                            .px_1()
+                            .py_0p5()
+                            .rounded(cx.theme().radius)
+                            .bg(trend.opacity(0.12))
+                            .text_xs()
+                            .line_height(relative(1.))
+                            .text_color(trend)
+                            .child(
+                                Icon::new(if up {
+                                    IconName::ArrowUp
+                                } else {
+                                    IconName::ArrowDown
+                                })
+                                .xsmall(),
+                            )
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(format!("{:+.1}%", quote.change)),
+                            ),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_lg()
+                            .line_height(relative(1.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(format!("{:.2}", quote.price)),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .line_height(relative(1.))
+                            .text_color(cx.theme().muted_foreground)
+                            .child("Last"),
+                    ),
+            )
     }
 }
 
@@ -363,11 +259,89 @@ impl MarkdownPlugin for UserCardPlugin {
         node: &markdown_ast::Node,
         cx: &MarkdownParseContext<'_>,
     ) -> Option<MarkdownNode> {
-        parse_user_card_block(node, cx)
+        match node {
+            markdown_ast::Node::MdxJsxFlowElement(element)
+                if element.name.as_deref() == Some("UserCard") =>
+            {
+                let id = mdx_attr(&element.attributes, "id")?;
+                Some(
+                    MarkdownNode::new("user-card")
+                        .with_text(id.clone())
+                        .with_markdown(cx.node_source(node).unwrap_or_default())
+                        .with_data(UserCardNode { id }),
+                )
+            }
+            markdown_ast::Node::Html(raw) if html_tag_name(&raw.value) == Some("UserCard") => {
+                let id = html_attr(&raw.value, "id")?;
+                Some(
+                    MarkdownNode::new("user-card")
+                        .with_text(id.clone())
+                        .with_markdown(cx.node_source(node).unwrap_or(raw.value.as_str()))
+                        .with_data(UserCardNode { id }),
+                )
+            }
+            _ => None,
+        }
     }
 
     fn render(&self, node: &MarkdownNode, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        render_user_card(node, window, cx)
+        let user = node
+            .data::<UserCardNode>()
+            .expect("user-card markdown node data");
+        let id = user.id.as_str();
+        let (name, avatar) = match id {
+            "huacnlee" => (
+                "Jason Lee",
+                "https://avatars.githubusercontent.com/u/5518?v=4",
+            ),
+            "madcodelife" => (
+                "Floyd Wang",
+                "https://avatars.githubusercontent.com/u/28998859?v=4",
+            ),
+            _ => ("Unknown", ""),
+        };
+
+        let following = window.use_keyed_state(
+            SharedString::from(format!("user-card-follow-{id}")),
+            cx,
+            |_, _| false,
+        );
+        let is_following = *following.read(cx);
+
+        h_flex()
+            .w(px(300.))
+            .items_center()
+            .gap_3()
+            .px_3()
+            .py_2()
+            .rounded(cx.theme().radius)
+            .border_1()
+            .border_color(cx.theme().border)
+            .child(
+                Avatar::new()
+                    .name(name)
+                    .with_size(px(24.))
+                    .when(!avatar.is_empty(), |this| this.src(avatar)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .text_sm()
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(name),
+            )
+            .child(
+                Button::new(SharedString::from(format!("follow-{id}")))
+                    .outline()
+                    .small()
+                    .label(if is_following { "Following" } else { "Follow" })
+                    .on_click(move |_, _, cx| {
+                        following.update(cx, |v, cx| {
+                            *v = !*v;
+                            cx.notify();
+                        });
+                    }),
+            )
     }
 }
 
