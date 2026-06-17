@@ -208,8 +208,14 @@ impl Tiles {
         cx.notify();
     }
 
+    #[inline]
     pub fn panels(&self) -> &[TileItem] {
         &self.panels
+    }
+
+    #[inline]
+    pub fn panel(&self, id: &EntityId) -> Option<&TileItem> {
+        self.panels.iter().find(|p| &p.id == id)
     }
 
     fn sorted_panels(&self) -> Vec<TileItem> {
@@ -222,11 +228,6 @@ impl Tiles {
     #[inline]
     pub(crate) fn index_of(&self, id: &EntityId) -> Option<usize> {
         self.panels.iter().position(|p| &p.id == id)
-    }
-
-    #[inline]
-    pub(crate) fn panel(&self, id: &EntityId) -> Option<&TileItem> {
-        self.panels.iter().find(|p| &p.id == id)
     }
 
     /// Remove panel from the children.
@@ -358,6 +359,40 @@ impl Tiles {
         (snap_x, snap_y)
     }
 
+    /// Snap a single resizing edge to nearby panel edges.
+    fn calculate_resize_edge_snap(
+        &self,
+        edge_value: Pixels,
+        item_ix: usize,
+        snap_threshold: Pixels,
+        is_horizontal: bool,
+    ) -> Option<Pixels> {
+        let mut min_dist = snap_threshold;
+        let mut snap_pos: Option<Pixels> = None;
+
+        for (ix, other) in self.panels.iter().enumerate() {
+            if ix == item_ix {
+                continue;
+            }
+
+            let candidates = if is_horizontal {
+                [other.bounds.left(), other.bounds.right()]
+            } else {
+                [other.bounds.top(), other.bounds.bottom()]
+            };
+
+            for candidate in candidates {
+                let dist = (edge_value - candidate).abs();
+                if dist < min_dist {
+                    min_dist = dist;
+                    snap_pos = Some(candidate);
+                }
+            }
+        }
+
+        snap_pos
+    }
+
     /// Apply boundary constraints to the panel origin
     fn apply_boundary_constraints(&self, mut origin: Point<Pixels>) -> Point<Pixels> {
         // Top boundary
@@ -447,22 +482,14 @@ impl Tiles {
         };
 
         let previous_bounds = item.bounds;
-        let final_x = if let Some(x) = new_x {
-            round_to_nearest_ten(x, cx)
-        } else {
-            previous_bounds.origin.x
-        };
-        let final_y = if let Some(y) = new_y {
-            round_to_nearest_ten(y, cx)
-        } else {
-            previous_bounds.origin.y
-        };
+        let final_x = new_x.unwrap_or(previous_bounds.origin.x);
+        let final_y = new_y.unwrap_or(previous_bounds.origin.y);
         // When both x and width are provided (left resize)
         let final_width = if new_x.is_some() && new_width.is_some() {
             let right_edge = previous_bounds.origin.x + previous_bounds.size.width;
             (right_edge - final_x).max(MINIMUM_SIZE.width)
         } else if let Some(width) = new_width {
-            round_to_nearest_ten(width, cx)
+            width
         } else {
             previous_bounds.size.width
         };
@@ -472,7 +499,7 @@ impl Tiles {
             let bottom_edge = previous_bounds.origin.y + previous_bounds.size.height;
             (bottom_edge - final_y).max(MINIMUM_SIZE.height)
         } else if let Some(height) = new_height {
-            round_to_nearest_ten(height, cx)
+            height
         } else {
             previous_bounds.size.height
         };
@@ -699,12 +726,23 @@ impl Tiles {
                             }
 
                             let pos = e.event.position;
-                            let delta = drag_data.last_position.x - pos.x;
-                            let new_x = (drag_data.last_bounds.origin.x - delta).max(px(0.0));
-                            let size_delta = drag_data.last_bounds.origin.x - new_x;
-                            let new_width = (drag_data.last_bounds.size.width + size_delta)
-                                .max(MINIMUM_SIZE.width);
-                            this.resize(Some(new_x), None, Some(new_width), None, window, cx);
+                            let last_bounds = drag_data.last_bounds;
+                            let last_pos_x = drag_data.last_position.x;
+                            let delta = last_pos_x - pos.x;
+                            let new_x = (last_bounds.origin.x - delta).max(px(0.0));
+                            let snap_threshold = cx.theme().tile_grid_size;
+                            let item_ix = this
+                                .resizing_id
+                                .and_then(|id| this.panels.iter().position(|p| p.id == id))
+                                .unwrap_or(usize::MAX);
+                            let final_x = this
+                                .calculate_resize_edge_snap(new_x, item_ix, snap_threshold, true)
+                                .map(|snapped| snapped.max(px(0.)))
+                                .unwrap_or(new_x);
+                            let size_delta = last_bounds.origin.x - final_x;
+                            let new_width =
+                                (last_bounds.size.width + size_delta).max(MINIMUM_SIZE.width);
+                            this.resize(Some(final_x), None, Some(new_width), None, window, cx);
                         }
                     },
                 ))
@@ -756,10 +794,29 @@ impl Tiles {
                             }
 
                             let pos = e.event.position;
-                            let delta = pos.x - drag_data.last_position.x;
+                            let last_bounds = drag_data.last_bounds;
+                            let last_pos_x = drag_data.last_position.x;
+                            let delta = pos.x - last_pos_x;
                             let new_width =
-                                (drag_data.last_bounds.size.width + delta).max(MINIMUM_SIZE.width);
-                            this.resize(None, None, Some(new_width), None, window, cx);
+                                (last_bounds.size.width + delta).max(MINIMUM_SIZE.width);
+                            let right_edge = last_bounds.origin.x + new_width;
+                            let snap_threshold = cx.theme().tile_grid_size;
+                            let item_ix = this
+                                .resizing_id
+                                .and_then(|id| this.panels.iter().position(|p| p.id == id))
+                                .unwrap_or(usize::MAX);
+                            let final_width = this
+                                .calculate_resize_edge_snap(
+                                    right_edge,
+                                    item_ix,
+                                    snap_threshold,
+                                    true,
+                                )
+                                .map(|snapped| {
+                                    (snapped - last_bounds.origin.x).max(MINIMUM_SIZE.width)
+                                })
+                                .unwrap_or(new_width);
+                            this.resize(None, None, Some(final_width), None, window, cx);
                         }
                     },
                 ))
@@ -810,12 +867,23 @@ impl Tiles {
                             }
 
                             let pos = e.event.position;
-                            let delta = drag_data.last_position.y - pos.y;
-                            let new_y = (drag_data.last_bounds.origin.y - delta).max(px(0.));
-                            let size_delta = drag_data.last_bounds.origin.y - new_y;
-                            let new_height = (drag_data.last_bounds.size.height + size_delta)
-                                .max(MINIMUM_SIZE.height);
-                            this.resize(None, Some(new_y), None, Some(new_height), window, cx);
+                            let last_bounds = drag_data.last_bounds;
+                            let last_pos_y = drag_data.last_position.y;
+                            let delta = last_pos_y - pos.y;
+                            let new_y = (last_bounds.origin.y - delta).max(px(0.));
+                            let snap_threshold = cx.theme().tile_grid_size;
+                            let item_ix = this
+                                .resizing_id
+                                .and_then(|id| this.panels.iter().position(|p| p.id == id))
+                                .unwrap_or(usize::MAX);
+                            let final_y = this
+                                .calculate_resize_edge_snap(new_y, item_ix, snap_threshold, false)
+                                .map(|snapped| snapped.max(px(0.)))
+                                .unwrap_or(new_y);
+                            let size_delta = last_bounds.origin.y - final_y;
+                            let new_height =
+                                (last_bounds.size.height + size_delta).max(MINIMUM_SIZE.height);
+                            this.resize(None, Some(final_y), None, Some(new_height), window, cx);
                         }
                     },
                 ))
@@ -867,10 +935,29 @@ impl Tiles {
                             }
 
                             let pos = e.event.position;
-                            let delta = pos.y - drag_data.last_position.y;
-                            let new_height = (drag_data.last_bounds.size.height + delta)
-                                .max(MINIMUM_SIZE.height);
-                            this.resize(None, None, None, Some(new_height), window, cx);
+                            let last_bounds = drag_data.last_bounds;
+                            let last_pos_y = drag_data.last_position.y;
+                            let delta = pos.y - last_pos_y;
+                            let new_height =
+                                (last_bounds.size.height + delta).max(MINIMUM_SIZE.height);
+                            let bottom_edge = last_bounds.origin.y + new_height;
+                            let snap_threshold = cx.theme().tile_grid_size;
+                            let item_ix = this
+                                .resizing_id
+                                .and_then(|id| this.panels.iter().position(|p| p.id == id))
+                                .unwrap_or(usize::MAX);
+                            let final_height = this
+                                .calculate_resize_edge_snap(
+                                    bottom_edge,
+                                    item_ix,
+                                    snap_threshold,
+                                    false,
+                                )
+                                .map(|snapped| {
+                                    (snapped - last_bounds.origin.y).max(MINIMUM_SIZE.height)
+                                })
+                                .unwrap_or(new_height);
+                            this.resize(None, None, None, Some(final_height), window, cx);
                         }
                     },
                 ))
@@ -932,19 +1019,52 @@ impl Tiles {
                                         }
 
                                         let pos = e.event.position;
-                                        let delta_x = pos.x - drag_data.last_position.x;
-                                        let delta_y = pos.y - drag_data.last_position.y;
-                                        let new_width = (drag_data.last_bounds.size.width
-                                            + delta_x)
+                                        let last_bounds = drag_data.last_bounds;
+                                        let last_pos = drag_data.last_position;
+                                        let delta_x = pos.x - last_pos.x;
+                                        let delta_y = pos.y - last_pos.y;
+                                        let new_width = (last_bounds.size.width + delta_x)
                                             .max(MINIMUM_SIZE.width);
-                                        let new_height = (drag_data.last_bounds.size.height
-                                            + delta_y)
+                                        let new_height = (last_bounds.size.height + delta_y)
                                             .max(MINIMUM_SIZE.height);
+                                        let right_edge = last_bounds.origin.x + new_width;
+                                        let bottom_edge = last_bounds.origin.y + new_height;
+                                        let snap_threshold = cx.theme().tile_grid_size;
+                                        let item_ix = this
+                                            .resizing_id
+                                            .and_then(|id| {
+                                                this.panels.iter().position(|p| p.id == id)
+                                            })
+                                            .unwrap_or(usize::MAX);
+                                        let final_width = this
+                                            .calculate_resize_edge_snap(
+                                                right_edge,
+                                                item_ix,
+                                                snap_threshold,
+                                                true,
+                                            )
+                                            .map(|snapped| {
+                                                (snapped - last_bounds.origin.x)
+                                                    .max(MINIMUM_SIZE.width)
+                                            })
+                                            .unwrap_or(new_width);
+                                        let final_height = this
+                                            .calculate_resize_edge_snap(
+                                                bottom_edge,
+                                                item_ix,
+                                                snap_threshold,
+                                                false,
+                                            )
+                                            .map(|snapped| {
+                                                (snapped - last_bounds.origin.y)
+                                                    .max(MINIMUM_SIZE.height)
+                                            })
+                                            .unwrap_or(new_height);
                                         this.resize(
                                             None,
                                             None,
-                                            Some(new_width),
-                                            Some(new_height),
+                                            Some(final_width),
+                                            Some(final_height),
                                             window,
                                             cx,
                                         );
@@ -1111,15 +1231,32 @@ impl Tiles {
 
             // Handle resizing
             if let Some(resizing_id) = self.resizing_id {
-                if let Some(drag_data) = &self.resizing_drag_data {
-                    if let Some(item) = self.panel(&resizing_id) {
-                        let initial_bounds = drag_data.last_bounds;
-                        let current_bounds = item.bounds;
-                        if initial_bounds.size != current_bounds.size {
+                if let Some(initial_bounds) = self
+                    .resizing_drag_data
+                    .as_ref()
+                    .map(|data| data.last_bounds)
+                {
+                    if let Some(idx) = self.panels.iter().position(|p| p.id == resizing_id) {
+                        let current_bounds = self.panels[idx].bounds;
+
+                        // Align the resized bounds to the grid on release, mirroring how
+                        // dragging aligns the origin on mouse up.
+                        let aligned_bounds = Bounds {
+                            origin: round_point_to_nearest_ten(current_bounds.origin, cx),
+                            size: Size {
+                                width: round_to_nearest_ten(current_bounds.size.width, cx)
+                                    .max(MINIMUM_SIZE.width),
+                                height: round_to_nearest_ten(current_bounds.size.height, cx)
+                                    .max(MINIMUM_SIZE.height),
+                            },
+                        };
+                        self.panels[idx].bounds = aligned_bounds;
+
+                        if initial_bounds != aligned_bounds {
                             changes_to_push.push(TileChange {
-                                tile_id: item.panel.view().entity_id(),
+                                tile_id: self.panels[idx].panel.view().entity_id(),
                                 old_bounds: Some(initial_bounds),
-                                new_bounds: Some(current_bounds),
+                                new_bounds: Some(aligned_bounds),
                                 old_order: None,
                                 new_order: None,
                                 version: 0,
