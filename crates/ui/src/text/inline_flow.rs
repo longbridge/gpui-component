@@ -400,7 +400,7 @@ fn layout_flow(
                         let subtext = SharedString::from(text[local_start..local_end].to_string());
                         let highlights =
                             slice_ranges(highlights, local_start, local_end, |range, style| {
-                                (range, style.clone())
+                                (range, *style)
                             });
                         let links = slice_ranges(links, local_start, local_end, |range, link| {
                             (range, link.clone())
@@ -528,6 +528,7 @@ fn line_ranges(
     ranges
 }
 
+#[allow(clippy::too_many_arguments)]
 fn measure_image_size(
     ix: usize,
     url: &SharedUri,
