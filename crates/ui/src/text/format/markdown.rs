@@ -139,6 +139,31 @@ fn merge_children_with_mark(
     text
 }
 
+fn append_inline_html_blocks(paragraph: &mut Paragraph, blocks: Vec<BlockNode>) -> Option<String> {
+    let mut text = String::new();
+
+    for block in blocks {
+        match block {
+            BlockNode::Root { children, .. } => {
+                text.push_str(&append_inline_html_blocks(paragraph, children)?);
+            }
+            BlockNode::Paragraph(html_paragraph) => {
+                text.push_str(&html_paragraph.text());
+                for child in html_paragraph.children {
+                    paragraph.push(child);
+                }
+            }
+            BlockNode::Break { .. } => {
+                text.push('\n');
+                paragraph.push(InlineNode::new("\n"));
+            }
+            _ => return None,
+        }
+    }
+
+    Some(text)
+}
+
 fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeContext) -> String {
     let span = node.position().map(|pos| Span {
         start: cx.offset + pos.start.offset,
@@ -169,12 +194,8 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
             );
         }
         Node::Strong(val) => {
-            text = merge_children_with_mark(
-                paragraph,
-                &val.children,
-                TextMark::default().bold(),
-                cx,
-            );
+            text =
+                merge_children_with_mark(paragraph, &val.children, TextMark::default().bold(), cx);
         }
         Node::Delete(val) => {
             text = merge_children_with_mark(
@@ -228,17 +249,11 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
         }
         Node::Html(val) => match super::html::parse(&val.value, cx) {
             Ok(el) => {
-                if el
-                    .blocks
-                    .first()
-                    .map(|node| node.is_break())
-                    .unwrap_or(false)
-                {
-                    text = "\n".to_owned();
-                    paragraph.push(InlineNode::new(&text));
+                if let Some(inline_text) = append_inline_html_blocks(paragraph, el.blocks) {
+                    text = inline_text;
                 } else {
                     if cfg!(debug_assertions) {
-                        tracing::warn!("unsupported inline html tag: {:#?}", el);
+                        tracing::warn!("unsupported inline html tag: {:#?}", val.value);
                     }
                 }
             }
@@ -538,5 +553,62 @@ mod tests {
                 .any(|(_, mark)| mark.bold && mark.italic),
             "nested emphasis should produce a bold and italic mark"
         );
+    }
+
+    #[test]
+    fn test_inline_html_image_stays_in_markdown_paragraph() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            r#"Before <img src="https://example.com/avatar.png" alt="Avatar" width="32" height="32" /> after."#,
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+            panic!("expected paragraph");
+        };
+
+        assert_eq!(paragraph.children.len(), 3);
+        assert_eq!(paragraph.children[0].text.as_ref(), "Before ");
+        assert_eq!(paragraph.children[2].text.as_ref(), " after.");
+
+        let image = paragraph.children[1]
+            .image
+            .as_ref()
+            .expect("expected inline html image");
+        assert_eq!(image.url.as_ref(), "https://example.com/avatar.png");
+        assert_eq!(image.width, Some(gpui::px(32.).into()));
+        assert_eq!(image.height, Some(gpui::px(32.).into()));
+    }
+
+    #[test]
+    fn test_inline_html_image_without_size_stays_in_markdown_paragraph() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            r#"Before <img src="https://avatars.githubusercontent.com/u/5518"> after."#,
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+            panic!("expected paragraph");
+        };
+
+        assert_eq!(paragraph.children.len(), 3);
+        assert_eq!(paragraph.children[0].text.as_ref(), "Before ");
+        assert_eq!(paragraph.children[2].text.as_ref(), " after.");
+
+        let image = paragraph.children[1]
+            .image
+            .as_ref()
+            .expect("expected inline html image");
+        assert_eq!(
+            image.url.as_ref(),
+            "https://avatars.githubusercontent.com/u/5518"
+        );
+        assert_eq!(image.width, None);
+        assert_eq!(image.height, None);
     }
 }

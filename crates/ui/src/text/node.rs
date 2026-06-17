@@ -97,10 +97,6 @@ impl BlockNode {
         matches!(self, Self::ListItem { .. })
     }
 
-    pub(super) fn is_break(&self) -> bool {
-        matches!(self, Self::Break { .. })
-    }
-
     /// Combine all children, omitting the empt parent nodes.
     pub(super) fn compact(self) -> BlockNode {
         match self {
