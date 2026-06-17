@@ -254,3 +254,22 @@ x^3 + y^3 &= z^3
 $$
 
 This is final paragraph, it includes a code block and a list of items.
+
+### Custom components
+
+A custom Markdown parser converts project-specific syntax into typed nodes,
+then registered renderers turn those nodes into arbitrary interactive
+components.
+
+Ticker blocks render as compact one-line quote rows:
+
+$AAPL.US
+
+$TSLA.US
+
+A `<UserCard />` block renders a user card with a 24px avatar and a follow
+button:
+
+<UserCard id="huacnlee" />
+
+<UserCard id="madcodelife" />

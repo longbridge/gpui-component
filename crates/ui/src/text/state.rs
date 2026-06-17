@@ -1,5 +1,5 @@
 use futures::Stream as _;
-use std::{pin::Pin, task::Poll};
+use std::{pin::Pin, sync::Arc, task::Poll};
 
 use gpui::{
     App, AppContext as _, Bounds, Context, FocusHandle, IntoElement, KeyBinding, ListState,
@@ -14,7 +14,7 @@ use crate::{
     input::{self, SelectAll},
     scroll::AutoScroll,
     text::{
-        CodeBlockActionsFn, TextViewStyle,
+        CodeBlockActionsFn, MarkdownExtensions, TextViewStyle,
         document::ParsedDocument,
         format,
         node::{self, NodeContext},
@@ -58,6 +58,7 @@ pub struct TextViewState {
     pub(super) scrollable: bool,
     pub(super) text_view_style: TextViewStyle,
     pub(super) code_block_actions: Option<std::sync::Arc<CodeBlockActionsFn>>,
+    pub(super) markdown_extensions: Arc<MarkdownExtensions>,
 
     pub(super) is_selecting: bool,
     multi_click_selection: Option<TextViewMultiClickSelection>,
@@ -137,6 +138,7 @@ impl TextViewState {
             list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)).measure_all(),
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
+            markdown_extensions: Arc::default(),
             is_selecting: false,
             auto_scroll: AutoScroll::default(),
             parsed_content: Default::default(),
@@ -204,6 +206,22 @@ impl TextViewState {
         self.increment_update(new_text, true, cx);
     }
 
+    pub(crate) fn set_markdown_extensions(
+        &mut self,
+        markdown_extensions: Arc<MarkdownExtensions>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.markdown_extensions.revision() == markdown_extensions.revision() {
+            return;
+        }
+
+        self.markdown_extensions = markdown_extensions;
+        if self.format == TextViewFormat::Markdown {
+            let text = self.text.clone();
+            self.increment_update(&text, false, cx);
+        }
+    }
+
     /// Return the selected text.
     pub fn selected_text(&self) -> String {
         if self.select_all {
@@ -222,6 +240,7 @@ impl TextViewState {
             append,
             pending_text: text.to_string(),
             highlight_theme: cx.theme().highlight_theme.clone(),
+            markdown_extensions: self.markdown_extensions.clone(),
         };
 
         // Full-replace updates (initial content / `set_text`) parse
@@ -413,6 +432,7 @@ impl Render for TextViewState {
         let mut node_cx = self.parsed_content.node_cx.clone();
 
         node_cx.code_block_actions = self.code_block_actions.clone();
+        node_cx.markdown_extensions = self.markdown_extensions.clone();
         node_cx.style = self.text_view_style.clone();
 
         v_flex()
@@ -482,6 +502,7 @@ impl UpdateFuture {
                 append: false,
                 pending_text: String::new(),
                 highlight_theme: cx.theme().highlight_theme.clone(),
+                markdown_extensions: Arc::default(),
             },
             rx: Box::pin(rx),
             tx_result,
@@ -528,6 +549,7 @@ struct UpdateOptions {
     pending_text: String,
     append: bool,
     highlight_theme: std::sync::Arc<HighlightTheme>,
+    markdown_extensions: Arc<MarkdownExtensions>,
 }
 
 fn parse_content(
@@ -536,6 +558,7 @@ fn parse_content(
     options: &UpdateOptions,
 ) -> Result<ParsedContent, SharedString> {
     let mut node_cx = NodeContext {
+        markdown_extensions: options.markdown_extensions.clone(),
         ..NodeContext::default()
     };
 
@@ -573,6 +596,7 @@ fn parse_content(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::text::MarkdownNode;
     use gpui::TestAppContext;
 
     #[gpui::test]
@@ -626,6 +650,43 @@ mod tests {
         state.read_with(cx, |state, _| {
             assert!(!state.has_view_selection());
             assert_eq!(state.selected_text(), "");
+        });
+    }
+
+    #[gpui::test]
+    fn set_markdown_extensions_reparses_existing_text(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown("$TSLA.US", cx)));
+        cx.run_until_parked();
+
+        let extensions = MarkdownExtensions::default().block_parser(|node, cx| {
+            let markdown::mdast::Node::Paragraph(paragraph) = node else {
+                return None;
+            };
+            let [markdown::mdast::Node::Text(text)] = paragraph.children.as_slice() else {
+                return None;
+            };
+            let symbol = text.value.strip_prefix('$')?.to_string();
+            let node_text = format!("${symbol}");
+
+            Some(
+                MarkdownNode::new("ticker", symbol)
+                    .text(node_text)
+                    .markdown(cx.node_source(node).unwrap_or_default()),
+            )
+        });
+
+        state.update(cx, |state, cx| {
+            state.set_markdown_extensions(Arc::new(extensions), cx);
+        });
+        cx.run_until_parked();
+
+        state.read_with(cx, |state, _| {
+            let node::BlockNode::Custom(node) = &state.parsed_content.document.blocks[0] else {
+                panic!("expected custom markdown node");
+            };
+            assert_eq!(node.name(), "ticker");
+            assert_eq!(node.data::<String>().map(String::as_str), Some("TSLA.US"));
         });
     }
 }

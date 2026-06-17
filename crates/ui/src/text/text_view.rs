@@ -10,6 +10,7 @@ use gpui::{
 use crate::StyledExt;
 use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
+use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 use crate::text::node::CodeBlock;
 use crate::text::state::TextViewState;
 use crate::{global_state::GlobalState, text::TextViewStyle};
@@ -45,6 +46,24 @@ pub struct TextView {
     selectable: bool,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    markdown_extensions: Arc<MarkdownExtensions>,
+}
+
+/// A plugin that can configure a [`TextView`].
+pub trait TextViewPlugin {
+    fn setup(self, text_view: TextView) -> TextView;
+}
+
+impl<P> TextViewPlugin for P
+where
+    P: MarkdownPlugin,
+{
+    fn setup(self, mut text_view: TextView) -> TextView {
+        let extensions = Arc::make_mut(&mut text_view.markdown_extensions);
+        let current = std::mem::take(extensions);
+        *extensions = current.plugin(self);
+        text_view
+    }
 }
 
 impl Styled for TextView {
@@ -66,6 +85,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            markdown_extensions: Arc::default(),
         }
     }
 
@@ -81,6 +101,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            markdown_extensions: Arc::default(),
         }
     }
 
@@ -96,6 +117,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            markdown_extensions: Arc::default(),
         }
     }
 
@@ -141,6 +163,63 @@ impl TextView {
             f(&code_block, window, cx).into_any_element()
         }));
         self
+    }
+
+    /// Replace the Markdown extension registry.
+    pub fn markdown_extensions(mut self, extensions: MarkdownExtensions) -> Self {
+        self.markdown_extensions = Arc::new(extensions);
+        self
+    }
+
+    /// Enable MDX JSX/expression parsing.
+    ///
+    /// This disables raw HTML parsing because `markdown-rs` gives HTML
+    /// priority over MDX when both are enabled.
+    pub fn markdown_mdx(mut self) -> Self {
+        let extensions = Arc::make_mut(&mut self.markdown_extensions);
+        *extensions = extensions.clone().mdx();
+        self
+    }
+
+    /// Register a custom block-level Markdown parser.
+    ///
+    /// The parser runs during Markdown AST conversion and must be independent
+    /// of [`Window`] / [`App`]. Store any parsed data in [`MarkdownNode`] and
+    /// render it later with [`Self::markdown_block_renderer`].
+    pub fn markdown_block_parser<F>(mut self, parser: F) -> Self
+    where
+        F: for<'a> Fn(
+                &markdown::mdast::Node,
+                &crate::text::MarkdownParseContext<'a>,
+            ) -> Option<MarkdownNode>
+            + Send
+            + Sync
+            + 'static,
+    {
+        Arc::make_mut(&mut self.markdown_extensions).push_block_parser(parser);
+        self
+    }
+
+    /// Register a renderer for a custom block-level Markdown node name.
+    pub fn markdown_block_renderer<F, E>(
+        mut self,
+        name: impl Into<SharedString>,
+        renderer: F,
+    ) -> Self
+    where
+        F: Fn(&MarkdownNode, &mut Window, &mut App) -> E + Send + Sync + 'static,
+        E: IntoElement,
+    {
+        Arc::make_mut(&mut self.markdown_extensions).push_block_renderer(name, renderer);
+        self
+    }
+
+    /// Apply a reusable text view plugin.
+    pub fn plugin<P>(self, plugin: P) -> Self
+    where
+        P: TextViewPlugin,
+    {
+        plugin.setup(self)
     }
 }
 
@@ -199,6 +278,7 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
+            state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
             state.scrollable = self.scrollable;
             state.text_view_style = self.text_view_style.clone();
@@ -275,7 +355,7 @@ impl Element for TextView {
 
 #[cfg(test)]
 mod tests {
-    use super::TextView;
+    use super::{TextView, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
         AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, MouseDownEvent,
@@ -285,6 +365,15 @@ mod tests {
 
     struct TextViewTestRoot {
         text_view: Entity<TextViewState>,
+    }
+
+    struct DummyTextViewPlugin;
+
+    impl TextViewPlugin for DummyTextViewPlugin {
+        fn setup(self, mut text_view: TextView) -> TextView {
+            text_view.selectable = true;
+            text_view
+        }
     }
 
     impl TextViewTestRoot {
@@ -370,6 +459,13 @@ mod tests {
             inline_bounds[1].left() - inline_bounds[0].right() < px(40.),
             "unloaded inline image fallback should stay generic and compact"
         );
+    }
+  
+    #[test]
+    fn plugin_accepts_text_view_plugins_beyond_markdown() {
+        let view = TextView::markdown("plugin-test", "").plugin(DummyTextViewPlugin);
+
+        assert!(view.selectable);
     }
 
     #[gpui::test]
