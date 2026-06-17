@@ -844,6 +844,13 @@ impl InputState {
         self.disabled = was_disabled;
     }
 
+    /// Refresh Editor LSP state
+    /// 
+    /// This will not trigger any selection changes.
+    pub fn refresh_lsp(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.lsp.update(&self.text, window, cx);
+    }
+
     fn replace_text(
         &mut self,
         text: impl Into<SharedString>,
