@@ -10,8 +10,8 @@ use markup5ever_rcdom::{Node, NodeData, RcDom};
 
 use crate::text::document::ParsedDocument;
 use crate::text::node::{
-    self, BlockNode, CustomElement, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Table,
-    TableRow, TextMark,
+    self, BlockNode, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph, Table, TableRow,
+    TextMark,
 };
 
 const BLOCK_ELEMENTS: [&str; 35] = [
@@ -99,19 +99,6 @@ fn attr_value(attrs: &RefCell<Vec<html5ever::Attribute>>, name: LocalName) -> Op
             None
         }
     })
-}
-
-/// Recursively collect the raw text content of an element's descendants.
-fn element_text(node: &Rc<Node>) -> String {
-    let mut text = String::new();
-    for child in node.children.borrow().iter() {
-        match &child.data {
-            NodeData::Text { contents } => text.push_str(&contents.borrow()),
-            NodeData::Element { .. } => text.push_str(&element_text(child)),
-            _ => {}
-        }
-    }
-    text
 }
 
 /// Get style properties to HashMap
@@ -558,40 +545,6 @@ fn parse_node(
                 })
             }
             local_name!("style") | local_name!("script") => None,
-            _ if name.local.contains('-') => {
-                // Custom element (W3C convention: tag name contains a hyphen).
-                // Capture tag name, attributes (props) and raw inner text; the
-                // renderer registered via `TextView::element` dispatches by name.
-                let mut children = vec![];
-                consume_paragraph(&mut children, paragraph);
-
-                let attributes = attrs
-                    .borrow()
-                    .iter()
-                    .map(|attr| {
-                        (
-                            SharedString::from(attr.name.local.to_string()),
-                            SharedString::from(attr.value.to_string()),
-                        )
-                    })
-                    .collect();
-                let custom = BlockNode::Custom(CustomElement::new(
-                    name.local.to_string(),
-                    attributes,
-                    element_text(node),
-                    None,
-                ));
-
-                if children.is_empty() {
-                    Some(custom)
-                } else {
-                    children.push(custom);
-                    Some(BlockNode::Root {
-                        children,
-                        span: None,
-                    })
-                }
-            }
             _ => {
                 if BLOCK_ELEMENTS.contains(&name.local.trim()) {
                     let mut children: Vec<BlockNode> = vec![];

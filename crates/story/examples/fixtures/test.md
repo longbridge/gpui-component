@@ -276,17 +276,19 @@ This is final paragraph, it includes a code block and a list of items.
 
 ### Custom components
 
-A custom element (a hyphenated HTML tag) registered via `TextView::element`
-is rendered as an arbitrary, interactive component. Props are passed as
-attributes. Here a `<stock-quote>` renders a stateful stock card (click the
-star to toggle the watchlist):
+A custom Markdown parser converts project-specific syntax into typed nodes,
+then registered renderers turn those nodes into arbitrary interactive
+components.
 
-<stock-quote symbol="AAPL" />
+Ticker blocks render as compact one-line quote rows:
 
-<stock-quote symbol="TSLA" />
+$AAPL.US
 
-A `<contact-card>` renders a contact card with an avatar and a follow toggle:
+$TSLA.US
 
-<contact-card id="huacnlee" />
+A `<UserCard />` block renders a user card with a 24px avatar and a follow
+button:
 
-<contact-card id="madcodelife" />
+<UserCard id="huacnlee" />
+
+<UserCard id="madcodelife" />

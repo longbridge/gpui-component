@@ -14,7 +14,9 @@ use gpui_component::{
     },
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
-    text::{TextViewStyle, markdown},
+    text::{
+        MarkdownNode, MarkdownParseContext, MarkdownPlugin, TextViewStyle, markdown, markdown_ast,
+    },
     v_flex,
 };
 use gpui_component_assets::Assets;
@@ -30,6 +32,344 @@ const MARKERS: &[(&str, &str)] = &[
     ("HACK", "function"),
     ("NOTE", "type"),
 ];
+
+#[derive(Clone)]
+struct TickerNode {
+    symbol: String,
+}
+
+#[derive(Clone)]
+struct UserCardNode {
+    id: String,
+}
+
+#[derive(Clone, Copy)]
+struct TickerQuote {
+    name: &'static str,
+    price: f64,
+    change: f64,
+}
+
+#[derive(Clone)]
+struct TickerPlugin {
+    apple_quote: TickerQuote,
+    tesla_quote: TickerQuote,
+}
+
+impl TickerPlugin {
+    fn new(apple_quote: TickerQuote, tesla_quote: TickerQuote) -> Self {
+        Self {
+            apple_quote,
+            tesla_quote,
+        }
+    }
+
+    fn quote(&self, symbol: &str) -> TickerQuote {
+        match symbol {
+            "AAPL.US" => self.apple_quote,
+            "TSLA.US" => self.tesla_quote,
+            _ => TickerQuote {
+                name: "Unknown",
+                price: 0.0,
+                change: 0.0,
+            },
+        }
+    }
+}
+
+#[derive(Clone)]
+struct UserCardPlugin;
+
+impl UserCardPlugin {
+    fn new() -> Self {
+        Self
+    }
+}
+
+fn mdx_attr(attrs: &[markdown_ast::AttributeContent], name: &str) -> Option<String> {
+    attrs.iter().find_map(|attr| match attr {
+        markdown_ast::AttributeContent::Property(prop) if prop.name == name => {
+            match prop.value.as_ref() {
+                Some(markdown_ast::AttributeValue::Literal(value)) => Some(value.clone()),
+                _ => None,
+            }
+        }
+        _ => None,
+    })
+}
+
+fn html_tag_name(value: &str) -> Option<&str> {
+    value
+        .trim()
+        .strip_prefix('<')?
+        .split([' ', '/', '>'])
+        .next()
+}
+
+fn html_attr(value: &str, name: &str) -> Option<String> {
+    let pattern = format!("{name}=\"");
+    let start = value.find(&pattern)? + pattern.len();
+    let end = value[start..].find('"')?;
+    Some(value[start..start + end].to_string())
+}
+
+fn ticker_symbol(value: &str) -> Option<&str> {
+    let symbol = value.strip_prefix('$')?;
+    if symbol.is_empty()
+        || !symbol.contains('.')
+        || !symbol
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '.')
+    {
+        return None;
+    }
+    Some(symbol)
+}
+
+fn parse_ticker_block(
+    node: &markdown_ast::Node,
+    cx: &MarkdownParseContext<'_>,
+) -> Option<MarkdownNode> {
+    let markdown_ast::Node::Paragraph(paragraph) = node else {
+        return None;
+    };
+    let [markdown_ast::Node::Text(text)] = paragraph.children.as_slice() else {
+        return None;
+    };
+    let symbol = ticker_symbol(&text.value)?;
+    Some(
+        MarkdownNode::new("ticker")
+            .with_text(format!("${symbol}"))
+            .with_markdown(cx.node_source(node).unwrap_or(text.value.as_str()))
+            .with_data(TickerNode {
+                symbol: symbol.to_string(),
+            }),
+    )
+}
+
+fn parse_user_card_block(
+    node: &markdown_ast::Node,
+    cx: &MarkdownParseContext<'_>,
+) -> Option<MarkdownNode> {
+    match node {
+        markdown_ast::Node::MdxJsxFlowElement(element)
+            if element.name.as_deref() == Some("UserCard") =>
+        {
+            let id = mdx_attr(&element.attributes, "id")?;
+            Some(
+                MarkdownNode::new("user-card")
+                    .with_text(id.clone())
+                    .with_markdown(cx.node_source(node).unwrap_or_default())
+                    .with_data(UserCardNode { id }),
+            )
+        }
+        markdown_ast::Node::Html(raw) if html_tag_name(&raw.value) == Some("UserCard") => {
+            let id = html_attr(&raw.value, "id")?;
+            Some(
+                MarkdownNode::new("user-card")
+                    .with_text(id.clone())
+                    .with_markdown(cx.node_source(node).unwrap_or(raw.value.as_str()))
+                    .with_data(UserCardNode { id }),
+            )
+        }
+        _ => None,
+    }
+}
+
+fn render_ticker_quote(
+    node: &MarkdownNode,
+    plugin: &TickerPlugin,
+    cx: &mut App,
+) -> impl IntoElement {
+    let ticker = node
+        .data::<TickerNode>()
+        .expect("ticker markdown node data");
+    let symbol = ticker.symbol.as_str();
+    let quote = plugin.quote(symbol);
+    let up = quote.change >= 0.0;
+    let trend = if up { cx.theme().green } else { cx.theme().red };
+
+    v_flex()
+        .w(px(240.))
+        .gap_1()
+        .px_3()
+        .py_2()
+        .rounded(cx.theme().radius)
+        .border_1()
+        .border_color(cx.theme().border)
+        .bg(cx.theme().background)
+        .child(
+            h_flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    v_flex()
+                        .gap_0()
+                        .child(
+                            div()
+                                .text_sm()
+                                .line_height(relative(1.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(format!("${symbol}")),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .line_height(relative(1.))
+                                .text_color(cx.theme().muted_foreground)
+                                .child(quote.name),
+                        ),
+                )
+                .child(
+                    h_flex()
+                        .items_center()
+                        .gap_0p5()
+                        .px_1()
+                        .py_0p5()
+                        .rounded(cx.theme().radius)
+                        .bg(trend.opacity(0.12))
+                        .text_xs()
+                        .line_height(relative(1.))
+                        .text_color(trend)
+                        .child(
+                            Icon::new(if up {
+                                IconName::ArrowUp
+                            } else {
+                                IconName::ArrowDown
+                            })
+                            .xsmall(),
+                        )
+                        .child(
+                            div()
+                                .font_weight(FontWeight::MEDIUM)
+                                .child(format!("{:+.1}%", quote.change)),
+                        ),
+                ),
+        )
+        .child(
+            h_flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_lg()
+                        .line_height(relative(1.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(format!("{:.2}", quote.price)),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .line_height(relative(1.))
+                        .text_color(cx.theme().muted_foreground)
+                        .child("Last"),
+                ),
+        )
+}
+
+fn render_user_card(node: &MarkdownNode, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    let user = node
+        .data::<UserCardNode>()
+        .expect("user-card markdown node data");
+    let id = user.id.as_str();
+    let (name, avatar) = match id {
+        "huacnlee" => (
+            "Jason Lee",
+            "https://avatars.githubusercontent.com/u/5518?v=4",
+        ),
+        "madcodelife" => (
+            "Floyd Wang",
+            "https://avatars.githubusercontent.com/u/28998859?v=4",
+        ),
+        _ => ("Unknown", ""),
+    };
+
+    let following = window.use_keyed_state(
+        SharedString::from(format!("user-card-follow-{id}")),
+        cx,
+        |_, _| false,
+    );
+    let is_following = *following.read(cx);
+
+    h_flex()
+        .w(px(300.))
+        .items_center()
+        .gap_3()
+        .px_3()
+        .py_2()
+        .rounded(cx.theme().radius)
+        .border_1()
+        .border_color(cx.theme().border)
+        .child(
+            Avatar::new()
+                .name(name)
+                .with_size(px(24.))
+                .when(!avatar.is_empty(), |this| this.src(avatar)),
+        )
+        .child(
+            div()
+                .flex_1()
+                .text_sm()
+                .font_weight(FontWeight::MEDIUM)
+                .child(name),
+        )
+        .child(
+            Button::new(SharedString::from(format!("follow-{id}")))
+                .outline()
+                .small()
+                .label(if is_following { "Following" } else { "Follow" })
+                .on_click(move |_, _, cx| {
+                    following.update(cx, |v, cx| {
+                        *v = !*v;
+                        cx.notify();
+                    });
+                }),
+        )
+}
+
+impl MarkdownPlugin for TickerPlugin {
+    fn is_block(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &str {
+        "ticker"
+    }
+
+    fn parse(
+        &self,
+        node: &markdown_ast::Node,
+        cx: &MarkdownParseContext<'_>,
+    ) -> Option<MarkdownNode> {
+        parse_ticker_block(node, cx)
+    }
+
+    fn render(&self, node: &MarkdownNode, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        render_ticker_quote(node, self, cx)
+    }
+}
+
+impl MarkdownPlugin for UserCardPlugin {
+    fn is_block(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &str {
+        "user-card"
+    }
+
+    fn parse(
+        &self,
+        node: &markdown_ast::Node,
+        cx: &MarkdownParseContext<'_>,
+    ) -> Option<MarkdownNode> {
+        parse_user_card_block(node, cx)
+    }
+
+    fn render(&self, node: &MarkdownNode, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        render_user_card(node, window, cx)
+    }
+}
 
 /// Example [`DocumentRangeSemanticTokensProvider`]: tags `TODO` / `FIXME` /
 /// `XXX` / `HACK` / `NOTE` markers anywhere in the document, each with its
@@ -265,194 +605,19 @@ impl Render for Example {
                                                         }
                                                     })
                                             })
-                                            // Register a custom, stateful component for the
-                                            // <stock-quote symbol="…"> element. The rendered
-                                            // result can be any element (here a stock quote
-                                            // card with a watchlist toggle persisted per
-                                            // symbol via `window.use_keyed_state`).
-                                            .element("stock-quote", |el, window, cx| {
-                                                // Demo data keyed by the `symbol` prop; a real
-                                                // app would fetch a live quote here.
-                                                let symbol = el.attr("symbol").unwrap_or_default();
-                                                let (name, price, change) = match symbol {
-                                                    "AAPL" => ("Apple Inc.", 229.87, 1.24),
-                                                    "TSLA" => ("Tesla, Inc.", 412.05, -2.13),
-                                                    _ => ("—", 0.0, 0.0),
-                                                };
-                                                let up = change >= 0.0;
-                                                let trend = if up {
-                                                    cx.theme().green
-                                                } else {
-                                                    cx.theme().red
-                                                };
-
-                                                let starred = window.use_keyed_state(
-                                                    SharedString::from(format!(
-                                                        "quote-star-{symbol}"
-                                                    )),
-                                                    cx,
-                                                    |_, _| false,
-                                                );
-                                                let is_starred = *starred.read(cx);
-
-                                                h_flex()
-                                                    .w(px(300.))
-                                                    .justify_between()
-                                                    .items_center()
-                                                    .gap_4()
-                                                    .px_4()
-                                                    .py_3()
-                                                    .rounded(cx.theme().radius_lg)
-                                                    .border_1()
-                                                    .border_color(cx.theme().border)
-                                                    .child(
-                                                        v_flex()
-                                                            .gap_1()
-                                                            .child(
-                                                                h_flex()
-                                                                    .items_center()
-                                                                    .gap_2()
-                                                                    .child(
-                                                                        div()
-                                                                            .font_weight(
-                                                                                FontWeight::SEMIBOLD,
-                                                                            )
-                                                                            .child(symbol.to_string()),
-                                                                    )
-                                                                    .child(
-                                                                        div()
-                                                                            .text_xs()
-                                                                            .text_color(
-                                                                                cx.theme()
-                                                                                    .muted_foreground,
-                                                                            )
-                                                                            .child(name),
-                                                                    ),
-                                                            )
-                                                            .child(
-                                                                div()
-                                                                    .text_xl()
-                                                                    .font_weight(
-                                                                        FontWeight::SEMIBOLD,
-                                                                    )
-                                                                    .child(format!("${price:.2}")),
-                                                            ),
-                                                    )
-                                                    .child(
-                                                        v_flex()
-                                                            .gap_2()
-                                                            .items_end()
-                                                            .child(
-                                                                Button::new(SharedString::from(
-                                                                    format!("star-{symbol}"),
-                                                                ))
-                                                                .ghost()
-                                                                .xsmall()
-                                                                .icon(if is_starred {
-                                                                    IconName::StarFill
-                                                                } else {
-                                                                    IconName::Star
-                                                                })
-                                                                .on_click(move |_, _, cx| {
-                                                                    starred.update(cx, |v, cx| {
-                                                                        *v = !*v;
-                                                                        cx.notify();
-                                                                    });
-                                                                }),
-                                                            )
-                                                            .child(
-                                                                h_flex()
-                                                                    .items_center()
-                                                                    .gap_1()
-                                                                    .text_color(trend)
-                                                                    .child(
-                                                                        Icon::new(if up {
-                                                                            IconName::ArrowUp
-                                                                        } else {
-                                                                            IconName::ArrowDown
-                                                                        })
-                                                                        .xsmall(),
-                                                                    )
-                                                                    .child(
-                                                                        div()
-                                                                            .text_sm()
-                                                                            .font_weight(
-                                                                                FontWeight::MEDIUM,
-                                                                            )
-                                                                            .child(format!(
-                                                                                "{change:+.2}%"
-                                                                            )),
-                                                                    ),
-                                                            ),
-                                                    )
-                                            })
-                                            // Another custom component: a <contact-card id="…">
-                                            // element renders a contact card with an `Avatar`
-                                            // and a follow toggle persisted per id.
-                                            .element("contact-card", |el, window, cx| {
-                                                let id = el.attr("id").unwrap_or_default();
-                                                let (name, avatar) = match id {
-                                                    "huacnlee" => (
-                                                        "Jason Lee",
-                                                        "https://avatars.githubusercontent.com/u/5518?v=4",
-                                                    ),
-                                                    "madcodelife" => (
-                                                        "Floyd Wang",
-                                                        "https://avatars.githubusercontent.com/u/28998859?v=4",
-                                                    ),
-                                                    _ => ("Unknown", ""),
-                                                };
-
-                                                let following = window.use_keyed_state(
-                                                    SharedString::from(format!(
-                                                        "contact-follow-{id}"
-                                                    )),
-                                                    cx,
-                                                    |_, _| false,
-                                                );
-                                                let is_following = *following.read(cx);
-
-                                                h_flex()
-                                                    .w(px(300.))
-                                                    .items_center()
-                                                    .gap_3()
-                                                    .px_4()
-                                                    .py_3()
-                                                    .rounded(cx.theme().radius_lg)
-                                                    .border_1()
-                                                    .border_color(cx.theme().border)
-                                                    .child(
-                                                        Avatar::new().name(name).large().when(
-                                                            !avatar.is_empty(),
-                                                            |this| this.src(avatar),
-                                                        ),
-                                                    )
-                                                    .child(
-                                                        div()
-                                                            .flex_1()
-                                                            .font_weight(FontWeight::SEMIBOLD)
-                                                            .child(name),
-                                                    )
-                                                    .child(
-                                                        Button::new(SharedString::from(format!(
-                                                            "follow-{id}"
-                                                        )))
-                                                        .xsmall()
-                                                        .map(|this| {
-                                                            if is_following {
-                                                                this.outline().label("Following")
-                                                            } else {
-                                                                this.primary().label("Follow")
-                                                            }
-                                                        })
-                                                        .on_click(move |_, _, cx| {
-                                                            following.update(cx, |v, cx| {
-                                                                *v = !*v;
-                                                                cx.notify();
-                                                            });
-                                                        }),
-                                                    )
-                                            })
+                                            .plugin(TickerPlugin::new(
+                                                TickerQuote {
+                                                    name: "Apple Inc.",
+                                                    price: 300.21,
+                                                    change: 5.2,
+                                                },
+                                                TickerQuote {
+                                                    name: "Tesla, Inc.",
+                                                    price: 412.05,
+                                                    change: -2.13,
+                                                },
+                                            ))
+                                            .plugin(UserCardPlugin::new())
                                             // Tables scroll horizontally by default; the
                                             // status bar toggle switches to wrapping.
                                             .style(self.text_view_style())

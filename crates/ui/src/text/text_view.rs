@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
@@ -11,21 +10,14 @@ use gpui::{
 use crate::StyledExt;
 use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
-use crate::text::node::{CodeBlock, CustomElement};
+use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
+use crate::text::node::CodeBlock;
 use crate::text::state::TextViewState;
 use crate::{global_state::GlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
-
-/// Type for a custom element renderer function.
-///
-/// Registered per custom element tag name. Receives the parsed
-/// [`CustomElement`] (tag name, attributes, raw content) and returns an element
-/// to render in place of the default rendering.
-pub(crate) type ElementRenderFn =
-    dyn Fn(&CustomElement, &mut Window, &mut App) -> AnyElement + Send + Sync;
 
 /// A text view that can render Markdown or HTML.
 ///
@@ -54,7 +46,24 @@ pub struct TextView {
     selectable: bool,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
-    elements: Arc<HashMap<SharedString, Arc<ElementRenderFn>>>,
+    markdown_extensions: Arc<MarkdownExtensions>,
+}
+
+/// A plugin that can configure a [`TextView`].
+pub trait TextViewPlugin {
+    fn setup(self, text_view: TextView) -> TextView;
+}
+
+impl<P> TextViewPlugin for P
+where
+    P: MarkdownPlugin,
+{
+    fn setup(self, mut text_view: TextView) -> TextView {
+        let extensions = Arc::make_mut(&mut text_view.markdown_extensions);
+        let current = std::mem::take(extensions);
+        *extensions = current.plugin(self);
+        text_view
+    }
 }
 
 impl Styled for TextView {
@@ -76,7 +85,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
-            elements: Arc::default(),
+            markdown_extensions: Arc::default(),
         }
     }
 
@@ -92,7 +101,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
-            elements: Arc::default(),
+            markdown_extensions: Arc::default(),
         }
     }
 
@@ -108,7 +117,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
-            elements: Arc::default(),
+            markdown_extensions: Arc::default(),
         }
     }
 
@@ -156,49 +165,61 @@ impl TextView {
         self
     }
 
-    /// Register a renderer for a custom element, keyed by its tag `name`.
+    /// Replace the Markdown extension registry.
+    pub fn markdown_extensions(mut self, extensions: MarkdownExtensions) -> Self {
+        self.markdown_extensions = Arc::new(extensions);
+        self
+    }
+
+    /// Enable MDX JSX/expression parsing.
     ///
-    /// A custom element is written in the source as an HTML tag whose name
-    /// contains a hyphen (the W3C custom-element convention), e.g.
-    /// `<stock-quote symbol="AAPL"></stock-quote>`. Standard HTML tags never
-    /// contain a hyphen, so this never collides with normal markup. When the
-    /// tag name matches `name`, the given closure renders it; the closure
-    /// receives the parsed [`CustomElement`] (attributes / props and raw inner
-    /// content) and returns any element, so the result can be an arbitrary
-    /// component (an image, a tag, a stock card, a contact, ...).
+    /// This disables raw HTML parsing because `markdown-rs` gives HTML
+    /// priority over MDX when both are enabled.
+    pub fn markdown_mdx(mut self) -> Self {
+        let extensions = Arc::make_mut(&mut self.markdown_extensions);
+        *extensions = extensions.clone().mdx();
+        self
+    }
+
+    /// Register a custom block-level Markdown parser.
     ///
-    /// Call this multiple times to register different elements. Custom elements
-    /// without a registered renderer fall back to their raw text content.
-    ///
-    /// Currently only block-level custom elements are supported: write the tag
-    /// on its own line (with blank lines around it) so the parser treats it as
-    /// an HTML block, e.g. `<x-foo bar="1" />`. An open/close pair on a single
-    /// line (`<x-foo></x-foo>`) is parsed as inline HTML and won't match.
-    ///
-    /// To embed stateful / interactive components, create or reuse an `Entity`
-    /// inside the closure via [`Window::use_keyed_state`].
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// markdown(source)
-    ///     .element("stock-quote", |el, _window, _cx| {
-    ///         StockCard::new(el.attr("symbol").unwrap_or_default())
-    ///     })
-    ///     .element("contact-card", |el, _window, _cx| {
-    ///         ContactCard::new(el.attr("id").unwrap_or_default())
-    ///     });
-    /// ```
-    pub fn element<F, E>(mut self, name: impl Into<SharedString>, f: F) -> Self
+    /// The parser runs during Markdown AST conversion and must be independent
+    /// of [`Window`] / [`App`]. Store any parsed data in [`MarkdownNode`] and
+    /// render it later with [`Self::markdown_block_renderer`].
+    pub fn markdown_block_parser<F>(mut self, parser: F) -> Self
     where
-        F: Fn(&CustomElement, &mut Window, &mut App) -> E + Send + Sync + 'static,
+        F: for<'a> Fn(
+                &markdown::mdast::Node,
+                &crate::text::MarkdownParseContext<'a>,
+            ) -> Option<MarkdownNode>
+            + Send
+            + Sync
+            + 'static,
+    {
+        Arc::make_mut(&mut self.markdown_extensions).push_block_parser(parser);
+        self
+    }
+
+    /// Register a renderer for a custom block-level Markdown node name.
+    pub fn markdown_block_renderer<F, E>(
+        mut self,
+        name: impl Into<SharedString>,
+        renderer: F,
+    ) -> Self
+    where
+        F: Fn(&MarkdownNode, &mut Window, &mut App) -> E + Send + Sync + 'static,
         E: IntoElement,
     {
-        Arc::make_mut(&mut self.elements).insert(
-            name.into(),
-            Arc::new(move |element, window, cx| f(element, window, cx).into_any_element()),
-        );
+        Arc::make_mut(&mut self.markdown_extensions).push_block_renderer(name, renderer);
         self
+    }
+
+    /// Apply a reusable text view plugin.
+    pub fn plugin<P>(self, plugin: P) -> Self
+    where
+        P: TextViewPlugin,
+    {
+        plugin.setup(self)
     }
 }
 
@@ -257,7 +278,7 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
-            state.elements = self.elements.clone();
+            state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
             state.scrollable = self.scrollable;
             state.text_view_style = self.text_view_style.clone();
@@ -334,7 +355,7 @@ impl Element for TextView {
 
 #[cfg(test)]
 mod tests {
-    use super::TextView;
+    use super::{TextView, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
         AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, MouseDownEvent,
@@ -344,6 +365,15 @@ mod tests {
 
     struct TextViewTestRoot {
         text_view: Entity<TextViewState>,
+    }
+
+    struct DummyTextViewPlugin;
+
+    impl TextViewPlugin for DummyTextViewPlugin {
+        fn setup(self, mut text_view: TextView) -> TextView {
+            text_view.selectable = true;
+            text_view
+        }
     }
 
     impl TextViewTestRoot {
@@ -366,6 +396,13 @@ mod tests {
                 )
                 .child(div().h(px(40.)).child("footer"))
         }
+    }
+
+    #[test]
+    fn plugin_accepts_text_view_plugins_beyond_markdown() {
+        let view = TextView::markdown("plugin-test", "").plugin(DummyTextViewPlugin);
+
+        assert!(view.selectable);
     }
 
     #[gpui::test]

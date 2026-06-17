@@ -20,7 +20,7 @@ use crate::{
     input::{InputEdit, Point, RopeExt as _},
     scroll::horizontal_scroll_area,
     text::{
-        CodeBlockActionsFn, ElementRenderFn,
+        CodeBlockActionsFn, MarkdownExtensions, MarkdownNode,
         document::NodeRenderOptions,
         inline::{Inline, InlineState},
     },
@@ -67,9 +67,8 @@ pub(crate) enum BlockNode {
         span: Option<Span>,
     },
     CodeBlock(CodeBlock),
-    /// A custom element parsed from a hyphenated HTML tag, rendered by a
-    /// closure registered via [`TextView::element`](crate::text::TextView::element).
-    Custom(CustomElement),
+    /// A custom Markdown node produced by [`MarkdownExtensions`].
+    Custom(MarkdownNode),
     Table(Table),
     Break {
         html: bool,
@@ -210,11 +209,9 @@ impl BlockNode {
                     text.push('\n');
                 }
             }
-            BlockNode::Custom(el) => {
-                // Custom elements have no selectable inline text; only contribute
-                // their raw content to full-text extraction (e.g. copy / to_markdown).
+            BlockNode::Custom(node) => {
                 if let BlockTextKind::All = kind {
-                    let content = el.content();
+                    let content = node.text();
                     if !content.is_empty() {
                         text.push_str(content);
                         text.push('\n');
@@ -760,73 +757,6 @@ impl CodeBlock {
     }
 }
 
-/// A custom element parsed from a hyphenated HTML tag in the source
-/// (e.g. `<stock-quote symbol="AAPL"></stock-quote>`).
-///
-/// Rendered by a closure registered via [`TextView::element`], looked up by
-/// [`name`](Self::name). Unregistered elements fall back to their text content.
-///
-/// [`TextView::element`]: crate::text::TextView::element
-#[derive(Debug, Clone, PartialEq)]
-pub struct CustomElement {
-    name: SharedString,
-    attrs: Vec<(SharedString, SharedString)>,
-    content: SharedString,
-    pub(crate) span: Option<Span>,
-}
-
-impl CustomElement {
-    pub(crate) fn new(
-        name: impl Into<SharedString>,
-        attrs: Vec<(SharedString, SharedString)>,
-        content: impl Into<SharedString>,
-        span: Option<Span>,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            attrs,
-            content: content.into(),
-            span,
-        }
-    }
-
-    /// The tag name, e.g. `"stock-quote"`.
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Get an attribute (prop) value by name.
-    pub fn attr(&self, name: &str) -> Option<&str> {
-        self.attrs
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value.as_ref())
-    }
-
-    /// All attributes (props) in source order.
-    pub fn attrs(&self) -> &[(SharedString, SharedString)] {
-        &self.attrs
-    }
-
-    /// The raw inner text content of the element.
-    pub fn content(&self) -> &str {
-        &self.content
-    }
-
-    fn to_markdown(&self) -> String {
-        let attrs = self
-            .attrs
-            .iter()
-            .map(|(key, value)| {
-                // Escape so values containing `&` or `"` round-trip as valid markup.
-                let value = value.replace('&', "&amp;").replace('"', "&quot;");
-                format!(" {}=\"{}\"", key, value)
-            })
-            .collect::<String>();
-        format!("<{name}{attrs}>{}</{name}>", self.content, name = self.name)
-    }
-}
-
 /// A context for rendering nodes, contains link references.
 #[derive(Default, Clone)]
 pub(crate) struct NodeContext {
@@ -836,7 +766,7 @@ pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
-    pub(crate) elements: Arc<HashMap<SharedString, Arc<ElementRenderFn>>>,
+    pub(crate) markdown_extensions: Arc<MarkdownExtensions>,
 }
 
 impl NodeContext {
@@ -848,8 +778,8 @@ impl NodeContext {
 impl PartialEq for NodeContext {
     fn eq(&self, other: &Self) -> bool {
         self.link_refs == other.link_refs && self.style == other.style
-        // Note: code_block_actions and elements are intentionally not compared
-        // (closures can't be compared)
+        // Note: code_block_actions and markdown_extensions are intentionally
+        // not compared (closures can't be compared)
     }
 }
 
@@ -1146,7 +1076,7 @@ impl BlockNode {
                 }
             }
             BlockNode::HorizontalRule { .. } => "---".to_string(),
-            BlockNode::Custom(el) => el.to_markdown(),
+            BlockNode::Custom(node) => node.to_markdown(),
             BlockNode::Definition {
                 identifier,
                 url,
@@ -1645,12 +1575,10 @@ impl BlockNode {
                 })
                 .into_any_element(),
             BlockNode::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
-            BlockNode::Custom(el) => {
-                // Dispatch to a renderer registered by tag name; unregistered
-                // custom elements fall back to their raw text content.
-                let inner = match node_cx.elements.get(el.name()) {
-                    Some(render) => render(el, window, cx),
-                    None => div().child(el.content().to_string()).into_any_element(),
+            BlockNode::Custom(node) => {
+                let inner = match node_cx.markdown_extensions.render_block(node, window, cx) {
+                    Some(rendered) => rendered,
+                    None => div().child(node.text().to_string()).into_any_element(),
                 };
 
                 div().pb(mb).child(inner).into_any_element()
