@@ -556,7 +556,14 @@ impl Render for NotificationList {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let size = window.viewport_size();
-        let items = self.notifications.iter().rev().take(10).rev().cloned();
+        let max_items = cx.theme().notification.max_items;
+        let items = self
+            .notifications
+            .iter()
+            .rev()
+            .take(max_items)
+            .rev()
+            .cloned();
 
         let placement = cx.theme().notification.placement;
         let margins = &cx.theme().notification.margins;
