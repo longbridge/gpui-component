@@ -77,29 +77,59 @@ impl Render for NotificationStory {
             .size_full()
             .gap_3()
             .child(
-                h_flex().gap_3().child(
-                    Button::new("placement")
-                        .outline()
-                        .label(format!("{:?}", cx.theme().notification.placement))
-                        .dropdown_menu(move |menu, window, cx| {
-                            let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
-                                menu.item(
-                                    PopupMenuItem::new(format!("{:?}", placement))
-                                        .checked(cx.theme().notification.placement == placement)
-                                        .on_click(window.listener_for(
-                                            &view,
-                                            move |_, _, _, cx| {
-                                                Theme::global_mut(cx).notification.placement =
-                                                    placement;
-                                                cx.notify();
-                                            },
-                                        )),
-                                )
-                            });
+                h_flex()
+                    .gap_3()
+                    .child(
+                        Button::new("placement")
+                            .outline()
+                            .label(format!("{:?}", cx.theme().notification.placement))
+                            .dropdown_menu({
+                                let view = view.clone();
+                                move |menu, window, cx| {
+                                    let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
+                                        menu.item(
+                                            PopupMenuItem::new(format!("{:?}", placement))
+                                                .checked(
+                                                    cx.theme().notification.placement == placement,
+                                                )
+                                                .on_click(window.listener_for(
+                                                    &view,
+                                                    move |_, _, _, cx| {
+                                                        Theme::global_mut(cx)
+                                                            .notification
+                                                            .placement = placement;
+                                                        cx.notify();
+                                                    },
+                                                )),
+                                        )
+                                    });
 
-                            menu
-                        }),
-                ),
+                                    menu
+                                }
+                            }),
+                    )
+                    .child(
+                        Button::new("max-items")
+                            .outline()
+                            .label(format!("Max items: {}", cx.theme().notification.max_items))
+                            .dropdown_menu(move |menu, window, cx| {
+                                const MAX_ITEMS: [usize; 5] = [1, 2, 3, 5, 10];
+                                MAX_ITEMS.into_iter().fold(menu, |menu, max_items| {
+                                    menu.item(
+                                        PopupMenuItem::new(format!("{}", max_items))
+                                            .checked(cx.theme().notification.max_items == max_items)
+                                            .on_click(window.listener_for(
+                                                &view,
+                                                move |_, _, _, cx| {
+                                                    Theme::global_mut(cx).notification.max_items =
+                                                        max_items;
+                                                    cx.notify();
+                                                },
+                                            )),
+                                    )
+                                })
+                            }),
+                    ),
             )
             .child(
                 section("Simple Notification").child(
