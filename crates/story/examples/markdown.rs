@@ -191,7 +191,7 @@ fn render_ticker_quote(
 
     v_flex()
         .w(px(240.))
-        .gap_1()
+        .gap_1p5()
         .px_3()
         .py_2()
         .rounded(cx.theme().radius)
@@ -204,7 +204,7 @@ fn render_ticker_quote(
                 .justify_between()
                 .child(
                     v_flex()
-                        .gap_0()
+                        .gap_1()
                         .child(
                             div()
                                 .text_sm()
