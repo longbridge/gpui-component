@@ -23,6 +23,7 @@ use crate::{
         CodeBlockActionsFn,
         document::NodeRenderOptions,
         inline::{Inline, InlineState},
+        inline_flow::{InlineFlow, InlineFlowItem},
     },
     tooltip::Tooltip,
     v_flex,
@@ -769,14 +770,17 @@ impl PartialEq for NodeContext {
 }
 
 impl Paragraph {
-    fn render(
-        &self,
-        node_cx: &NodeContext,
-        _window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
+    fn render(&self, node_cx: &NodeContext, _window: &mut Window, cx: &mut App) -> AnyElement {
         let span = self.span;
         let children = &self.children;
+
+        if self.should_render_inline_flow() {
+            return InlineFlow::new(
+                span.unwrap_or_default(),
+                self.inline_flow_items(node_cx, cx),
+            )
+            .into_any_element();
+        }
 
         let mut child_nodes: Vec<AnyElement> = vec![];
 
@@ -893,7 +897,119 @@ impl Paragraph {
                 .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
         }
 
-        div().id(span.unwrap_or_default()).children(child_nodes)
+        div()
+            .id(span.unwrap_or_default())
+            .children(child_nodes)
+            .into_any_element()
+    }
+
+    fn should_render_inline_flow(&self) -> bool {
+        let has_image = self.children.iter().any(|child| child.image.is_some());
+        let has_text = self.children.iter().any(|child| !child.text.is_empty());
+        has_image && has_text
+    }
+
+    fn inline_flow_items(&self, node_cx: &NodeContext, cx: &mut App) -> Vec<InlineFlowItem> {
+        let mut items = Vec::new();
+        let mut text = String::new();
+        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+        let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
+        let mut offset = 0;
+
+        for inline_node in &self.children {
+            let text_len = inline_node.text.len();
+            text.push_str(&inline_node.text);
+
+            if let Some(image) = &inline_node.image {
+                if !text.is_empty() {
+                    if let Ok(mut state) = inline_node.state.lock() {
+                        state.set_text(text.clone().into());
+                    }
+                    items.push(InlineFlowItem::Text {
+                        state: inline_node.state.clone(),
+                        text: text.clone().into(),
+                        links: links.clone(),
+                        highlights: highlights.clone(),
+                    });
+                }
+
+                items.push(InlineFlowItem::Image {
+                    url: image.url.clone(),
+                    link: image.link.clone(),
+                    title: image.title(),
+                    width: image.width,
+                    height: image.height,
+                });
+
+                text.clear();
+                links.clear();
+                highlights.clear();
+                offset = 0;
+            } else {
+                let mut node_highlights = vec![];
+                for (range, style) in &inline_node.marks {
+                    let inner_range = (offset + range.start)..(offset + range.end);
+
+                    let mut highlight = HighlightStyle::default();
+                    if style.bold {
+                        highlight.font_weight = Some(FontWeight::BOLD);
+                    }
+                    if style.italic {
+                        highlight.font_style = Some(FontStyle::Italic);
+                    }
+                    if style.strikethrough {
+                        highlight.strikethrough = Some(gpui::StrikethroughStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.underline {
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.code {
+                        highlight.background_color = Some(cx.theme().accent);
+                    }
+
+                    if let Some(mut link_mark) = style.link.clone() {
+                        highlight.color = Some(cx.theme().link);
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+
+                        if let Some(identifier) = link_mark.identifier.as_ref()
+                            && let Some(mark) = node_cx.link_refs.get(identifier)
+                        {
+                            link_mark = mark.clone();
+                        }
+
+                        links.push((inner_range.clone(), link_mark));
+                    }
+
+                    node_highlights.push((inner_range, highlight));
+                }
+
+                highlights = gpui::combine_highlights(highlights, node_highlights).collect();
+                offset += text_len;
+            }
+        }
+
+        if !text.is_empty() {
+            if let Ok(mut state) = self.state.lock() {
+                state.set_text(text.clone().into());
+            }
+            items.push(InlineFlowItem::Text {
+                state: self.state.clone(),
+                text: text.into(),
+                links,
+                highlights,
+            });
+        }
+
+        items
     }
 }
 

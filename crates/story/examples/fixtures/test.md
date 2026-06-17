@@ -23,6 +23,8 @@ fn render() {
 
 Build Status [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) of [GPUI Component](https://github.com/longbridge/gpui-component).
 
+Inline image mix: PNG avatar ![Jason Lee avatar](https://avatars.githubusercontent.com/u/5518) stays inside the same text flow, and another SVG badge [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) should wrap with nearby text when the window is resized.
+
 This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text [^1] [^2].
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM]. It includes various stylistic elements and plain text.
