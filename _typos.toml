@@ -1,0 +1,2 @@
+[default]
+extend-ignore-re = ['\\u\{[0-9A-Fa-f]+\}']
