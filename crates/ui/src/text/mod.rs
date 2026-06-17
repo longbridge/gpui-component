@@ -1,6 +1,7 @@
 mod document;
 mod format;
 mod inline;
+mod markdown_ext;
 mod node;
 pub(crate) mod selection;
 mod state;
@@ -10,6 +11,7 @@ mod utils;
 mod window_selection;
 
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
+pub use markdown_ext::*;
 pub use state::*;
 pub use style::*;
 pub use text_view::*;

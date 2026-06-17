@@ -3,7 +3,8 @@ use std::rc::Rc;
 
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _, IconName, Sizable as _,
+    ActiveTheme as _, Icon, IconName, Sizable as _,
+    avatar::Avatar,
     button::{Button, ButtonVariants as _},
     clipboard::Clipboard,
     h_flex,
@@ -13,7 +14,9 @@ use gpui_component::{
     },
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
-    text::{TextViewStyle, markdown},
+    text::{
+        MarkdownNode, MarkdownParseContext, MarkdownPlugin, TextViewStyle, markdown, markdown_ast,
+    },
     v_flex,
 };
 use gpui_component_assets::Assets;
@@ -29,6 +32,318 @@ const MARKERS: &[(&str, &str)] = &[
     ("HACK", "function"),
     ("NOTE", "type"),
 ];
+
+#[derive(Clone)]
+struct TickerNode {
+    symbol: String,
+}
+
+#[derive(Clone)]
+struct UserCardNode {
+    id: String,
+}
+
+#[derive(Clone, Copy)]
+struct TickerQuote {
+    name: &'static str,
+    price: f64,
+    change: f64,
+}
+
+#[derive(Clone)]
+struct TickerPlugin {
+    apple_quote: TickerQuote,
+    tesla_quote: TickerQuote,
+}
+
+impl TickerPlugin {
+    fn new(apple_quote: TickerQuote, tesla_quote: TickerQuote) -> Self {
+        Self {
+            apple_quote,
+            tesla_quote,
+        }
+    }
+
+    fn quote(&self, symbol: &str) -> TickerQuote {
+        match symbol {
+            "AAPL.US" => self.apple_quote,
+            "TSLA.US" => self.tesla_quote,
+            _ => TickerQuote {
+                name: "Unknown",
+                price: 0.0,
+                change: 0.0,
+            },
+        }
+    }
+}
+
+#[derive(Clone)]
+struct UserCardPlugin;
+
+impl UserCardPlugin {
+    fn new() -> Self {
+        Self
+    }
+}
+
+fn mdx_attr(attrs: &[markdown_ast::AttributeContent], name: &str) -> Option<String> {
+    attrs.iter().find_map(|attr| match attr {
+        markdown_ast::AttributeContent::Property(prop) if prop.name == name => {
+            match prop.value.as_ref() {
+                Some(markdown_ast::AttributeValue::Literal(value)) => Some(value.clone()),
+                _ => None,
+            }
+        }
+        _ => None,
+    })
+}
+
+fn html_tag_name(value: &str) -> Option<&str> {
+    value
+        .trim()
+        .strip_prefix('<')?
+        .split([' ', '/', '>'])
+        .next()
+}
+
+fn html_attr(value: &str, name: &str) -> Option<String> {
+    let pattern = format!("{name}=\"");
+    let start = value.find(&pattern)? + pattern.len();
+    let end = value[start..].find('"')?;
+    Some(value[start..start + end].to_string())
+}
+
+fn ticker_symbol(value: &str) -> Option<&str> {
+    let symbol = value.strip_prefix('$')?;
+    if symbol.is_empty()
+        || !symbol.contains('.')
+        || !symbol
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '.')
+    {
+        return None;
+    }
+    Some(symbol)
+}
+
+impl MarkdownPlugin for TickerPlugin {
+    fn is_block(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &str {
+        "ticker"
+    }
+
+    fn parse(
+        &self,
+        node: &markdown_ast::Node,
+        cx: &MarkdownParseContext<'_>,
+    ) -> Option<MarkdownNode> {
+        let markdown_ast::Node::Paragraph(paragraph) = node else {
+            return None;
+        };
+        let [markdown_ast::Node::Text(text)] = paragraph.children.as_slice() else {
+            return None;
+        };
+        let symbol = ticker_symbol(&text.value)?;
+        Some(
+            MarkdownNode::new(
+                "ticker",
+                TickerNode {
+                    symbol: symbol.to_string(),
+                },
+            )
+            .text(format!("${symbol}"))
+            .markdown(cx.node_source(node).unwrap_or(text.value.as_str())),
+        )
+    }
+
+    fn render(&self, node: &MarkdownNode, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let ticker = node
+            .data::<TickerNode>()
+            .expect("ticker markdown node data");
+        let symbol = ticker.symbol.as_str();
+        let quote = self.quote(symbol);
+        let up = quote.change >= 0.0;
+        let trend = if up { cx.theme().green } else { cx.theme().red };
+
+        v_flex()
+            .w(px(240.))
+            .gap_1p5()
+            .px_3()
+            .py_2()
+            .rounded(cx.theme().radius)
+            .border_1()
+            .border_color(cx.theme().border)
+            .bg(cx.theme().background)
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .line_height(relative(1.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(format!("${symbol}")),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .line_height(relative(1.))
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(quote.name),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_0p5()
+                            .px_1()
+                            .py_0p5()
+                            .rounded(cx.theme().radius)
+                            .bg(trend.opacity(0.12))
+                            .text_xs()
+                            .line_height(relative(1.))
+                            .text_color(trend)
+                            .child(
+                                Icon::new(if up {
+                                    IconName::ArrowUp
+                                } else {
+                                    IconName::ArrowDown
+                                })
+                                .xsmall(),
+                            )
+                            .child(
+                                div()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(format!("{:+.1}%", quote.change)),
+                            ),
+                    ),
+            )
+            .child(
+                h_flex()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        div()
+                            .text_lg()
+                            .line_height(relative(1.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(format!("{:.2}", quote.price)),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .line_height(relative(1.))
+                            .text_color(cx.theme().muted_foreground)
+                            .child("Last"),
+                    ),
+            )
+    }
+}
+
+impl MarkdownPlugin for UserCardPlugin {
+    fn is_block(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> &str {
+        "user-card"
+    }
+
+    fn parse(
+        &self,
+        node: &markdown_ast::Node,
+        cx: &MarkdownParseContext<'_>,
+    ) -> Option<MarkdownNode> {
+        match node {
+            markdown_ast::Node::MdxJsxFlowElement(element)
+                if element.name.as_deref() == Some("UserCard") =>
+            {
+                let id = mdx_attr(&element.attributes, "id")?;
+                Some(
+                    MarkdownNode::new("user-card", UserCardNode { id: id.clone() })
+                        .text(id)
+                        .markdown(cx.node_source(node).unwrap_or_default()),
+                )
+            }
+            markdown_ast::Node::Html(raw) if html_tag_name(&raw.value) == Some("UserCard") => {
+                let id = html_attr(&raw.value, "id")?;
+                Some(
+                    MarkdownNode::new("user-card", UserCardNode { id: id.clone() })
+                        .text(id)
+                        .markdown(cx.node_source(node).unwrap_or(raw.value.as_str())),
+                )
+            }
+            _ => None,
+        }
+    }
+
+    fn render(&self, node: &MarkdownNode, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let user = node
+            .data::<UserCardNode>()
+            .expect("user-card markdown node data");
+        let id = user.id.as_str();
+        let (name, avatar) = match id {
+            "huacnlee" => (
+                "Jason Lee",
+                "https://avatars.githubusercontent.com/u/5518?v=4",
+            ),
+            "madcodelife" => (
+                "Floyd Wang",
+                "https://avatars.githubusercontent.com/u/28998859?v=4",
+            ),
+            _ => ("Unknown", ""),
+        };
+
+        let following = window.use_keyed_state(
+            SharedString::from(format!("user-card-follow-{id}")),
+            cx,
+            |_, _| false,
+        );
+        let is_following = *following.read(cx);
+
+        h_flex()
+            .w(px(300.))
+            .items_center()
+            .gap_3()
+            .px_3()
+            .py_2()
+            .rounded(cx.theme().radius)
+            .border_1()
+            .border_color(cx.theme().border)
+            .child(
+                Avatar::new()
+                    .name(name)
+                    .with_size(px(24.))
+                    .when(!avatar.is_empty(), |this| this.src(avatar)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .text_sm()
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(name),
+            )
+            .child(
+                Button::new(SharedString::from(format!("follow-{id}")))
+                    .outline()
+                    .small()
+                    .label(if is_following { "Following" } else { "Follow" })
+                    .on_click(move |_, _, cx| {
+                        following.update(cx, |v, cx| {
+                            *v = !*v;
+                            cx.notify();
+                        });
+                    }),
+            )
+    }
+}
 
 /// Example [`DocumentRangeSemanticTokensProvider`]: tags `TODO` / `FIXME` /
 /// `XXX` / `HACK` / `NOTE` markers anywhere in the document, each with its
@@ -264,6 +579,19 @@ impl Render for Example {
                                                         }
                                                     })
                                             })
+                                            .plugin(TickerPlugin::new(
+                                                TickerQuote {
+                                                    name: "Apple Inc.",
+                                                    price: 300.21,
+                                                    change: 5.2,
+                                                },
+                                                TickerQuote {
+                                                    name: "Tesla, Inc.",
+                                                    price: 412.05,
+                                                    change: -2.13,
+                                                },
+                                            ))
+                                            .plugin(UserCardPlugin::new())
                                             // Tables scroll horizontally by default; the
                                             // status bar toggle switches to wrapping.
                                             .style(self.text_view_style())

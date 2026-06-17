@@ -20,7 +20,7 @@ use crate::{
     input::{InputEdit, Point, RopeExt as _},
     scroll::horizontal_scroll_area,
     text::{
-        CodeBlockActionsFn,
+        CodeBlockActionsFn, MarkdownExtensions, MarkdownNode,
         document::NodeRenderOptions,
         inline::{Inline, InlineState},
     },
@@ -67,6 +67,8 @@ pub(crate) enum BlockNode {
         span: Option<Span>,
     },
     CodeBlock(CodeBlock),
+    /// A custom Markdown node produced by [`MarkdownExtensions`].
+    Custom(MarkdownNode),
     Table(Table),
     Break {
         html: bool,
@@ -118,6 +120,7 @@ impl BlockNode {
             BlockNode::List { span, .. } => *span,
             BlockNode::ListItem { span, .. } => *span,
             BlockNode::CodeBlock(code_block) => code_block.span,
+            BlockNode::Custom(el) => el.span,
             BlockNode::Table(table) => table.span,
             BlockNode::Break { span, .. } => *span,
             BlockNode::HorizontalRule { span, .. } => *span,
@@ -206,6 +209,15 @@ impl BlockNode {
                     text.push('\n');
                 }
             }
+            BlockNode::Custom(node) => {
+                if let BlockTextKind::All = kind {
+                    let content = node.as_text();
+                    if !content.is_empty() {
+                        text.push_str(content);
+                        text.push('\n');
+                    }
+                }
+            }
             BlockNode::Definition { .. }
             | BlockNode::Break { .. }
             | BlockNode::HorizontalRule { .. }
@@ -248,7 +260,8 @@ impl BlockNode {
                 }
             }
             BlockNode::CodeBlock(code_block) => code_block.clear_selection(),
-            BlockNode::Definition { .. }
+            BlockNode::Custom { .. }
+            | BlockNode::Definition { .. }
             | BlockNode::Break { .. }
             | BlockNode::HorizontalRule { .. }
             | BlockNode::Unknown { .. } => {}
@@ -753,6 +766,7 @@ pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    pub(crate) markdown_extensions: Arc<MarkdownExtensions>,
 }
 
 impl NodeContext {
@@ -764,7 +778,8 @@ impl NodeContext {
 impl PartialEq for NodeContext {
     fn eq(&self, other: &Self) -> bool {
         self.link_refs == other.link_refs && self.style == other.style
-        // Note: code_block_buttons is intentionally not compared (closures can't be compared)
+        // Note: code_block_actions and markdown_extensions are intentionally
+        // not compared (closures can't be compared)
     }
 }
 
@@ -1061,6 +1076,7 @@ impl BlockNode {
                 }
             }
             BlockNode::HorizontalRule { .. } => "---".to_string(),
+            BlockNode::Custom(node) => node.to_markdown(),
             BlockNode::Definition {
                 identifier,
                 url,
@@ -1559,6 +1575,14 @@ impl BlockNode {
                 })
                 .into_any_element(),
             BlockNode::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
+            BlockNode::Custom(node) => {
+                let inner = match node_cx.markdown_extensions.render_block(node, window, cx) {
+                    Some(rendered) => rendered,
+                    None => div().child(node.as_text().to_string()).into_any_element(),
+                };
+
+                div().pb(mb).child(inner).into_any_element()
+            }
             BlockNode::Table { .. } => {
                 Self::render_table(self, &options, node_cx, window, cx).into_any_element()
             }

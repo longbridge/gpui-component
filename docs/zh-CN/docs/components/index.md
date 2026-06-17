@@ -16,6 +16,7 @@ collapsed: false
 - [Checkbox](checkbox) - 二元选择控件
 - [Icon](icon) - 图标展示组件
 - [Image](image) - 带回退能力的图片展示
+- [TextView](text-view) - Markdown 与 HTML 文本渲染
 - [Tooltip](tooltip) - 悬浮提示
 
 ## 表单组件
@@ -48,4 +49,3 @@ collapsed: false
 组件页已经预置中文路由结构，尚未完成的页面会先显示中文占位说明，并回链到英文原文：
 
 - [English version](/docs/components/index)
-
