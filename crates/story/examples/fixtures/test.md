@@ -12,6 +12,14 @@ different color:
 - HACK: temporary workaround for footnote ordering
 - NOTE: math blocks require the `$$` fence
 
+## Math
+
+Inline math uses a code-style fallback so it stays selectable, for example $e^{i\pi} + 1 = 0$ and $a^2 + b^2 = c^2$.
+
+$$
+\frac{\alpha + \beta}{\sqrt{\gamma}} = \sum_{i=1}^{n} i^2
+$$
+
 It also catches markers inside inline `code` and fenced blocks:
 
 ```rust

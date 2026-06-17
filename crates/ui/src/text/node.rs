@@ -28,7 +28,11 @@ use crate::{
     v_flex,
 };
 
-use super::{TextViewStyle, utils::list_item_prefix};
+use super::{
+    TextViewStyle,
+    math::{MathDisplay, render_math_image},
+    utils::list_item_prefix,
+};
 
 thread_local! {
     static CODE_BLOCK_HIGHLIGHTERS: RefCell<HashMap<SharedString, SyntaxHighlighter>> =
@@ -67,6 +71,7 @@ pub(crate) enum BlockNode {
         span: Option<Span>,
     },
     CodeBlock(CodeBlock),
+    Math(MathNode),
     Table(Table),
     Break {
         html: bool,
@@ -118,6 +123,7 @@ impl BlockNode {
             BlockNode::List { span, .. } => *span,
             BlockNode::ListItem { span, .. } => *span,
             BlockNode::CodeBlock(code_block) => code_block.span,
+            BlockNode::Math(math) => math.span,
             BlockNode::Table(table) => table.span,
             BlockNode::Break { span, .. } => *span,
             BlockNode::HorizontalRule { span, .. } => *span,
@@ -206,6 +212,12 @@ impl BlockNode {
                     text.push('\n');
                 }
             }
+            BlockNode::Math(math) => {
+                if matches!(kind, BlockTextKind::All) && !math.value.is_empty() {
+                    text.push_str(&math.to_markdown());
+                    text.push('\n');
+                }
+            }
             BlockNode::Definition { .. }
             | BlockNode::Break { .. }
             | BlockNode::HorizontalRule { .. }
@@ -248,6 +260,7 @@ impl BlockNode {
                 }
             }
             BlockNode::CodeBlock(code_block) => code_block.clear_selection(),
+            BlockNode::Math(_) => {}
             BlockNode::Definition { .. }
             | BlockNode::Break { .. }
             | BlockNode::HorizontalRule { .. }
@@ -359,6 +372,70 @@ impl PartialEq for ImageNode {
             && self.alt == other.alt
             && self.width == other.width
             && self.height == other.height
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct MathNode {
+    pub(crate) value: SharedString,
+    pub(crate) display: MathDisplay,
+    pub(crate) span: Option<Span>,
+}
+
+impl MathNode {
+    pub(crate) fn new(
+        value: impl Into<SharedString>,
+        display: MathDisplay,
+        span: Option<impl Into<Span>>,
+    ) -> Self {
+        Self {
+            value: value.into(),
+            display,
+            span: span.map(Into::into),
+        }
+    }
+
+    fn render_image(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let font_size = window.text_style().font_size.to_pixels(window.rem_size());
+        img(render_math_image(
+            &self.value,
+            self.display,
+            f32::from(font_size),
+            cx.theme().foreground,
+        ))
+        .id(self.span.unwrap_or_default())
+        .object_fit(ObjectFit::Contain)
+        .flex_shrink_0()
+    }
+
+    fn to_markdown(&self) -> String {
+        match self.display {
+            MathDisplay::Inline => format!("${}$", self.value),
+            MathDisplay::Block => format!("$$\n{}\n$$", self.value),
+        }
+    }
+
+    fn render_block(
+        &self,
+        options: &NodeRenderOptions,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        div()
+            .when(!options.is_last, |this| {
+                this.pb(node_cx.style.paragraph_gap)
+            })
+            .child(
+                div()
+                    .id(("math", options.ix))
+                    .w_full()
+                    .flex()
+                    .justify_center()
+                    .py_1()
+                    .child(self.render_image(window, cx)),
+            )
+            .into_any_element()
     }
 }
 
@@ -1013,6 +1090,7 @@ impl BlockNode {
                     code_block.code()
                 )
             }
+            BlockNode::Math(math) => math.to_markdown(),
             BlockNode::Table(table) => {
                 let header = table
                     .children
@@ -1559,6 +1637,7 @@ impl BlockNode {
                 })
                 .into_any_element(),
             BlockNode::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
+            BlockNode::Math(math) => math.render_block(&options, node_cx, window, cx),
             BlockNode::Table { .. } => {
                 Self::render_table(self, &options, node_cx, window, cx).into_any_element()
             }

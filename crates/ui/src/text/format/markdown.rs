@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use gpui::SharedString;
 use markdown::{
-    ParseOptions,
+    Constructs, ParseOptions,
     mdast::{self, Node},
 };
 
@@ -10,9 +10,10 @@ use crate::{
     highlighter::HighlightTheme,
     text::{
         document::ParsedDocument,
+        math::MathDisplay,
         node::{
-            self, BlockNode, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph,
-            Span, Table, TableRow, TextMark,
+            self, BlockNode, CodeBlock, ImageNode, InlineNode, LinkMark, MathNode, NodeContext,
+            Paragraph, Span, Table, TableRow, TextMark,
         },
     },
 };
@@ -25,7 +26,14 @@ pub(crate) fn parse(
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
 ) -> Result<ParsedDocument, SharedString> {
-    markdown::to_mdast(&source, &ParseOptions::gfm())
+    let mut options = ParseOptions::gfm();
+    options.constructs = Constructs {
+        math_flow: true,
+        math_text: true,
+        ..options.constructs
+    };
+
+    markdown::to_mdast(&source, &options)
         .map(|n| ast_to_document(source, n, cx, highlight_theme))
         .map_err(|e| e.to_string().into())
 }
@@ -169,12 +177,8 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
             );
         }
         Node::Strong(val) => {
-            text = merge_children_with_mark(
-                paragraph,
-                &val.children,
-                TextMark::default().bold(),
-                cx,
-            );
+            text =
+                merge_children_with_mark(paragraph, &val.children, TextMark::default().bold(), cx);
         }
         Node::Delete(val) => {
             text = merge_children_with_mark(
@@ -216,7 +220,7 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
             });
         }
         Node::InlineMath(raw) => {
-            text = raw.value.clone();
+            text = format!("${}$", raw.value);
             paragraph.push(
                 InlineNode::new(&text).marks(vec![(0..text.len(), TextMark::default().code())]),
             );
@@ -391,10 +395,9 @@ fn ast_to_node(
                 span: new_span(val.position, cx),
             }
         }
-        Node::Math(val) => BlockNode::CodeBlock(CodeBlock::new(
-            val.value.into(),
-            None,
-            highlight_theme,
+        Node::Math(val) => BlockNode::Math(MathNode::new(
+            val.value,
+            MathDisplay::Block,
             new_span(val.position, cx),
         )),
         Node::Html(val) => match super::html::parse(&val.value, cx) {
@@ -538,5 +541,76 @@ mod tests {
                 .any(|(_, mark)| mark.bold && mark.italic),
             "nested emphasis should produce a bold and italic mark"
         );
+    }
+
+    #[test]
+    fn test_inline_math_uses_code_fallback() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            "Euler: $e^{i\\pi} + 1 = 0$.",
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+            panic!("expected paragraph");
+        };
+
+        let formula = paragraph
+            .children
+            .iter()
+            .find(|child| child.text.as_ref() == "$e^{i\\pi} + 1 = 0$")
+            .expect("expected inline math text");
+
+        assert!(
+            formula.marks.iter().any(|(_, mark)| mark.code),
+            "inline math should use the inline code fallback"
+        );
+    }
+
+    #[test]
+    fn test_inline_math_preserves_raw_markdown_text() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            "Euler: $e^{i\\pi} + 1 = 0$.",
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        assert_eq!(document.text().trim(), "Euler: $e^{i\\pi} + 1 = 0$.");
+    }
+
+    #[test]
+    fn test_block_math_is_not_parsed_as_code_block() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            "$$\na^2 + b^2 = c^2\n$$",
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        assert!(
+            !matches!(
+                document.blocks[0],
+                BlockNode::Paragraph(_) | BlockNode::CodeBlock(_)
+            ),
+            "block math should render as math, not as prose or a code block"
+        );
+    }
+
+    #[test]
+    fn test_block_math_preserves_raw_markdown_text() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            "$$\na^2 + b^2 = c^2\n$$",
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        assert_eq!(document.text().trim(), "$$\na^2 + b^2 = c^2\n$$");
     }
 }
