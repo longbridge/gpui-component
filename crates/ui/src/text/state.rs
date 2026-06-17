@@ -667,12 +667,12 @@ mod tests {
                 return None;
             };
             let symbol = text.value.strip_prefix('$')?.to_string();
+            let node_text = format!("${symbol}");
 
             Some(
-                MarkdownNode::new("ticker")
-                    .with_text(format!("${symbol}"))
-                    .with_markdown(cx.node_source(node).unwrap_or_default())
-                    .with_data(symbol),
+                MarkdownNode::new("ticker", symbol)
+                    .text(node_text)
+                    .markdown(cx.node_source(node).unwrap_or_default()),
             )
         });
 

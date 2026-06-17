@@ -211,7 +211,7 @@ impl BlockNode {
             }
             BlockNode::Custom(node) => {
                 if let BlockTextKind::All = kind {
-                    let content = node.text();
+                    let content = node.as_text();
                     if !content.is_empty() {
                         text.push_str(content);
                         text.push('\n');
@@ -1578,7 +1578,7 @@ impl BlockNode {
             BlockNode::Custom(node) => {
                 let inner = match node_cx.markdown_extensions.render_block(node, window, cx) {
                     Some(rendered) => rendered,
-                    None => div().child(node.text().to_string()).into_any_element(),
+                    None => div().child(node.as_text().to_string()).into_any_element(),
                 };
 
                 div().pb(mb).child(inner).into_any_element()

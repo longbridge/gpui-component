@@ -559,12 +559,12 @@ mod tests {
             return None;
         };
         let symbol = text.value.strip_prefix('$')?.to_string();
+        let node_text = format!("${symbol}");
 
         Some(
-            MarkdownNode::new("ticker")
-                .with_text(format!("${symbol}"))
-                .with_markdown(cx.node_source(node).unwrap_or_default())
-                .with_data(Ticker { symbol }),
+            MarkdownNode::new("ticker", Ticker { symbol })
+                .text(node_text)
+                .markdown(cx.node_source(node).unwrap_or_default()),
         )
     }
 
@@ -582,8 +582,8 @@ mod tests {
             panic!("expected custom markdown node");
         };
         assert_eq!(node.name(), "ticker");
-        assert_eq!(node.text(), "$TSLA.US");
-        assert_eq!(node.markdown(), "$TSLA.US");
+        assert_eq!(node.as_text(), "$TSLA.US");
+        assert_eq!(node.as_markdown(), "$TSLA.US");
         assert_eq!(
             node.data::<Ticker>(),
             Some(&Ticker {
@@ -623,7 +623,7 @@ mod tests {
             _window: &mut gpui::Window,
             _cx: &mut gpui::App,
         ) -> impl gpui::IntoElement {
-            gpui::div().child(node.text().to_string())
+            gpui::div().child(node.as_text().to_string())
         }
     }
 

@@ -148,12 +148,14 @@ impl MarkdownPlugin for TickerPlugin {
         };
         let symbol = ticker_symbol(&text.value)?;
         Some(
-            MarkdownNode::new("ticker")
-                .with_text(format!("${symbol}"))
-                .with_markdown(cx.node_source(node).unwrap_or(text.value.as_str()))
-                .with_data(TickerNode {
+            MarkdownNode::new(
+                "ticker",
+                TickerNode {
                     symbol: symbol.to_string(),
-                }),
+                },
+            )
+            .text(format!("${symbol}"))
+            .markdown(cx.node_source(node).unwrap_or(text.value.as_str())),
         )
     }
 
@@ -265,19 +267,17 @@ impl MarkdownPlugin for UserCardPlugin {
             {
                 let id = mdx_attr(&element.attributes, "id")?;
                 Some(
-                    MarkdownNode::new("user-card")
-                        .with_text(id.clone())
-                        .with_markdown(cx.node_source(node).unwrap_or_default())
-                        .with_data(UserCardNode { id }),
+                    MarkdownNode::new("user-card", UserCardNode { id: id.clone() })
+                        .text(id)
+                        .markdown(cx.node_source(node).unwrap_or_default()),
                 )
             }
             markdown_ast::Node::Html(raw) if html_tag_name(&raw.value) == Some("UserCard") => {
                 let id = html_attr(&raw.value, "id")?;
                 Some(
-                    MarkdownNode::new("user-card")
-                        .with_text(id.clone())
-                        .with_markdown(cx.node_source(node).unwrap_or(raw.value.as_str()))
-                        .with_data(UserCardNode { id }),
+                    MarkdownNode::new("user-card", UserCardNode { id: id.clone() })
+                        .text(id)
+                        .markdown(cx.node_source(node).unwrap_or(raw.value.as_str())),
                 )
             }
             _ => None,

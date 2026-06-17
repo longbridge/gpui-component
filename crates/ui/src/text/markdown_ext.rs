@@ -90,13 +90,16 @@ pub struct MarkdownNode {
 }
 
 impl MarkdownNode {
-    /// Create a custom Markdown node with a stable name.
-    pub fn new(name: impl Into<SharedString>) -> Self {
+    /// Create a custom Markdown node with a stable name and typed data.
+    pub fn new<T>(name: impl Into<SharedString>, data: T) -> Self
+    where
+        T: Any + Send + Sync + 'static,
+    {
         Self {
             name: name.into(),
             text: SharedString::default(),
             markdown: SharedString::default(),
-            data: Arc::new(()),
+            data: Arc::new(data),
             span: None,
         }
     }
@@ -106,39 +109,29 @@ impl MarkdownNode {
         &self.name
     }
 
-    /// Text used for copy/select-all and fallback rendering.
-    pub fn text(&self) -> &str {
+    /// Text representation of this custom node.
+    pub fn as_text(&self) -> &str {
         &self.text
     }
 
-    /// Markdown used when converting the parsed document back to Markdown.
-    pub fn markdown(&self) -> &str {
+    /// Markdown representation of this custom node.
+    pub fn as_markdown(&self) -> &str {
         &self.markdown
     }
 
-    /// Attach text used for copy/select-all and fallback rendering.
-    pub fn with_text(mut self, text: impl Into<SharedString>) -> Self {
+    /// Set the text representation of this custom node.
+    pub fn text(mut self, text: impl Into<SharedString>) -> Self {
         self.text = text.into();
         self
     }
 
-    /// Attach Markdown used when converting the parsed document back to
-    /// Markdown.
-    pub fn with_markdown(mut self, markdown: impl Into<SharedString>) -> Self {
+    /// Set the Markdown representation of this custom node.
+    pub fn markdown(mut self, markdown: impl Into<SharedString>) -> Self {
         self.markdown = markdown.into();
         self
     }
 
-    /// Attach typed data produced by the parser and consumed by the renderer.
-    pub fn with_data<T>(mut self, data: T) -> Self
-    where
-        T: Any + Send + Sync + 'static,
-    {
-        self.data = Arc::new(data);
-        self
-    }
-
-    /// Read typed data attached by the parser.
+    /// Read typed data.
     pub fn data<T>(&self) -> Option<&T>
     where
         T: Any + Send + Sync + 'static,
