@@ -1138,6 +1138,7 @@ impl ButtonVariant {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::{linear_color_stop, linear_gradient};
 
     #[gpui::test]
     fn test_button_builder(_cx: &mut gpui::TestAppContext) {
@@ -1328,7 +1329,11 @@ mod tests {
             );
             assert_eq!(
                 ButtonVariant::Danger.normal(false, cx).bg,
-                cx.theme().tokens.button_danger.into()
+                linear_gradient(
+                    180.,
+                    linear_color_stop(crate::try_parse_color("#FEF2F2").unwrap(), 0.),
+                    linear_color_stop(crate::try_parse_color("#FEE2E2").unwrap(), 1.)
+                )
             );
         });
     }

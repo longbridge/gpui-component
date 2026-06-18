@@ -763,6 +763,19 @@ impl ThemeColor {
             fallback = self.background.blend(self.danger.opacity(0.9))
         );
         apply_background_color!(
+            button_danger,
+            fallback = self.danger.mix_oklab(transparent, 0.2)
+        );
+        apply_color!(button_danger_foreground, fallback = self.danger);
+        apply_background_color!(
+            button_danger_hover,
+            fallback = self.danger.mix_oklab(transparent, 0.3)
+        );
+        apply_background_color!(
+            button_danger_active,
+            fallback = self.danger.mix_oklab(transparent, 0.4)
+        );
+        apply_background_color!(
             description_list_label,
             fallback = self.background.blend(self.border.opacity(0.2))
         );
