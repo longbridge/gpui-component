@@ -148,7 +148,7 @@ where
                 &x,
                 band_width,
                 self.tick_margin,
-                cx.theme().muted_foreground,
+                cx.theme().muted_foreground.color,
             );
             axis = axis.x(height).x_label(labels);
         }
@@ -198,9 +198,9 @@ where
             // Determine if bullish (close > open) or bearish (close < open)
             let is_bullish = close > open;
             let color: Hsla = if is_bullish {
-                cx.theme().chart_bullish
+                cx.theme().chart_bullish.color
             } else {
-                cx.theme().chart_bearish
+                cx.theme().chart_bearish.color
             };
 
             // Calculate candlestick body dimensions

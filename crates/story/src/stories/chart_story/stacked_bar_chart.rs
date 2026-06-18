@@ -65,7 +65,7 @@ impl Plot for StackedBarChart {
                 AxisText::new(
                     d.date.clone(),
                     x_tick + band_width / 2.,
-                    cx.theme().muted_foreground,
+                    cx.theme().muted_foreground.color,
                 )
                 .align(TextAlign::Center)
             })

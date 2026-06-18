@@ -329,12 +329,12 @@ pub struct StatusColors {
 impl StatusColors {
     #[inline]
     pub fn error(&self, cx: &App) -> Hsla {
-        self.error.unwrap_or(cx.theme().red)
+        self.error.unwrap_or(cx.theme().red.color)
     }
 
     #[inline]
     pub fn error_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = cx.theme().background.color;
         self.error_background
             .unwrap_or(bg.blend(self.error(cx).alpha(0.2)))
     }
@@ -346,12 +346,12 @@ impl StatusColors {
 
     #[inline]
     pub fn warning(&self, cx: &App) -> Hsla {
-        self.warning.unwrap_or(cx.theme().yellow)
+        self.warning.unwrap_or(cx.theme().yellow.color)
     }
 
     #[inline]
     pub fn warning_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = cx.theme().background.color;
         self.warning_background
             .unwrap_or(bg.blend(self.warning(cx).alpha(0.2)))
     }
@@ -363,12 +363,12 @@ impl StatusColors {
 
     #[inline]
     pub fn info(&self, cx: &App) -> Hsla {
-        self.info.unwrap_or(cx.theme().blue)
+        self.info.unwrap_or(cx.theme().blue.color)
     }
 
     #[inline]
     pub fn info_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = cx.theme().background.color;
         self.info_background
             .unwrap_or(bg.blend(self.info(cx).alpha(0.2)))
     }
@@ -380,12 +380,12 @@ impl StatusColors {
 
     #[inline]
     pub fn success(&self, cx: &App) -> Hsla {
-        self.success.unwrap_or(cx.theme().green)
+        self.success.unwrap_or(cx.theme().green.color)
     }
 
     #[inline]
     pub fn success_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = cx.theme().background.color;
         self.success_background
             .unwrap_or(bg.blend(self.success(cx).alpha(0.2)))
     }
@@ -397,12 +397,12 @@ impl StatusColors {
 
     #[inline]
     pub fn hint(&self, cx: &App) -> Hsla {
-        self.hint.unwrap_or(cx.theme().cyan)
+        self.hint.unwrap_or(cx.theme().cyan.color)
     }
 
     #[inline]
     pub fn hint_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = cx.theme().background.color;
         self.hint_background
             .unwrap_or(bg.blend(self.hint(cx).alpha(0.2)))
     }

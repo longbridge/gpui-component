@@ -144,7 +144,7 @@ where
                 x_fn.as_ref(),
                 &x,
                 self.tick_margin,
-                cx.theme().muted_foreground,
+                cx.theme().muted_foreground.color,
             );
             axis = axis.x(height).x_label(labels);
         }
@@ -160,7 +160,7 @@ where
         }
 
         // Draw line
-        let stroke = self.stroke.unwrap_or(cx.theme().chart_2);
+        let stroke = self.stroke.unwrap_or(cx.theme().chart_2.color);
         let x_fn = x_fn.clone();
         let y_fn = y_fn.clone();
         let mut line = Line::new()

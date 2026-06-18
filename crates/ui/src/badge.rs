@@ -1,9 +1,9 @@
 use gpui::{
-    div, prelude::FluentBuilder, px, relative, AnyElement, App, Hsla, IntoElement, ParentElement,
-    RenderOnce, StyleRefinement, Styled, Window,
+    AnyElement, App, Hsla, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder, px, relative,
 };
 
-use crate::{h_flex, white, ActiveTheme, Icon, Sizable, Size, StyledExt};
+use crate::{ActiveTheme, Icon, Sizable, Size, StyledExt, h_flex, white};
 
 #[derive(Default, Clone)]
 enum BadgeVariant {
@@ -122,7 +122,7 @@ impl RenderOnce for Badge {
                         .justify_center()
                         .items_center()
                         .rounded_full()
-                        .bg(self.color.unwrap_or(cx.theme().red))
+                        .bg(self.color.unwrap_or(cx.theme().red.color))
                         .text_color(white())
                         .text_size(text_size)
                         .map(|this| match self.variant {

@@ -57,8 +57,8 @@ impl Render for SpinnerStory {
             .child(
                 section("Spinner with color")
                     .gap_x_2()
-                    .child(Spinner::new().color(cx.theme().blue))
-                    .child(Spinner::new().color(cx.theme().green)),
+                    .child(Spinner::new().color(cx.theme().blue.color))
+                    .child(Spinner::new().color(cx.theme().green.color)),
             )
             .child(
                 section("Spinner with size")
@@ -77,7 +77,7 @@ impl Render for SpinnerStory {
                         Spinner::new()
                             .icon(IconName::LoaderCircle)
                             .large()
-                            .color(cx.theme().cyan),
+                            .color(cx.theme().cyan.color),
                     ),
             )
             .child(

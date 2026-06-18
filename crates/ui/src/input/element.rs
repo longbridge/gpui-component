@@ -939,7 +939,7 @@ impl TextElement {
             .highlight_theme
             .style
             .editor_invisible
-            .unwrap_or(cx.theme().muted_foreground);
+            .unwrap_or(cx.theme().muted_foreground.color);
 
         let space_font_size = text_size.half();
         let tab_font_size = text_size;
@@ -1583,7 +1583,7 @@ impl Element for TextElement {
         let (display_text, text_color) = if is_empty {
             (
                 &Rope::from(placeholder.as_str()),
-                dim(cx.theme().muted_foreground),
+                dim(cx.theme().muted_foreground.color),
             )
         } else if state.masked {
             (
@@ -1849,7 +1849,7 @@ impl Element for TextElement {
             let other_line_runs = vec![TextRun {
                 len: line_number_len,
                 font: style.font(),
-                color: cx.theme().muted_foreground,
+                color: cx.theme().muted_foreground.color,
                 background_color: None,
                 underline: None,
                 strikethrough: None,
@@ -1857,7 +1857,7 @@ impl Element for TextElement {
             let current_line_runs = vec![TextRun {
                 len: line_number_len,
                 font: style.font(),
-                color: cx.theme().foreground,
+                color: cx.theme().foreground.color,
                 background_color: None,
                 underline: None,
                 strikethrough: None,

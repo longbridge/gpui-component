@@ -170,7 +170,9 @@ impl From<Icon> for AnyElement {
 
 impl Render for Icon {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let text_color = self.text_color.unwrap_or_else(|| cx.theme().foreground);
+        let text_color = self
+            .text_color
+            .unwrap_or_else(|| cx.theme().foreground.color);
         let text_size = window.text_style().font_size.to_pixels(window.rem_size());
         let has_base_size = self.style.size.width.is_some() || self.style.size.height.is_some();
 

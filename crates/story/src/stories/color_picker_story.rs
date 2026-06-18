@@ -47,7 +47,7 @@ impl ColorPickerStory {
 
         Self {
             color,
-            selected_color: Some(cx.theme().primary),
+            selected_color: Some(cx.theme().primary.color),
             _subscriptions,
         }
     }

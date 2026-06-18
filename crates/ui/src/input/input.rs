@@ -23,10 +23,10 @@ pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
     if disabled {
         (
             cx.theme().input.mix_oklab(cx.theme().transparent, 0.8),
-            cx.theme().muted_foreground,
+            cx.theme().muted_foreground.color,
         )
     } else {
-        (cx.theme().input_background(), cx.theme().foreground)
+        (cx.theme().input_background(), cx.theme().foreground.color)
     }
 }
 
@@ -275,7 +275,7 @@ impl RenderOnce for Input {
         let border_color = if state.disabled {
             cx.theme().input.opacity(0.5)
         } else {
-            cx.theme().input
+            cx.theme().input.color
         };
 
         let prefix = self.prefix;
@@ -419,7 +419,7 @@ impl RenderOnce for Input {
                         .items_center()
                         .when(state.disabled, |this| this.opacity(0.5))
                         .when(state.loading, |this| {
-                            this.child(Spinner::new().color(cx.theme().muted_foreground))
+                            this.child(Spinner::new().color(cx.theme().muted_foreground.color))
                         })
                         .when(self.mask_toggle, |this| {
                             this.child(Self::render_toggle_mask_button(&self.state, cx))

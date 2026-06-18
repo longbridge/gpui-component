@@ -143,9 +143,9 @@ impl RenderOnce for Radio {
         let disabled = self.disabled;
 
         let (border_color, bg) = if checked {
-            (cx.theme().primary, cx.theme().primary)
+            (cx.theme().primary.color, cx.theme().primary.color)
         } else {
-            (cx.theme().input, cx.theme().input.opacity(0.5))
+            (cx.theme().input.color, cx.theme().input.opacity(0.5))
         };
         let (border_color, bg) = if disabled {
             (border_color.opacity(0.5), bg.opacity(0.5))
@@ -196,7 +196,8 @@ impl RenderOnce for Radio {
                         .when(cx.theme().shadow && !disabled, |this| this.shadow_xs())
                         .map(|this| match self.checked {
                             false => this.bg(cx.theme().input_background()),
-                            _ => this.bg(bg),
+                            true if disabled => this.bg(bg),
+                            true => this.bg(cx.theme().primary),
                         })
                         .child(checkbox_check_icon(
                             self.id, self.size, checked, disabled, window, cx,

@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use gpui::{
-    div, prelude::FluentBuilder, rems, App, HighlightStyle, IntoElement, ParentElement, RenderOnce,
-    SharedString, StyleRefinement, Styled, StyledText, Window,
+    App, HighlightStyle, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement,
+    Styled, StyledText, Window, div, prelude::FluentBuilder, rems,
 };
 
 use crate::{ActiveTheme, StyledExt};
@@ -164,7 +164,7 @@ impl Label {
             highlights.push((
                 ranges[1].clone(),
                 HighlightStyle {
-                    color: Some(cx.theme().muted_foreground),
+                    color: Some(cx.theme().muted_foreground.color),
                     ..Default::default()
                 },
             ));
@@ -175,7 +175,7 @@ impl Label {
             highlights.push((
                 range.clone(),
                 HighlightStyle {
-                    color: Some(cx.theme().blue),
+                    color: Some(cx.theme().blue.color),
                     ..Default::default()
                 },
             ));

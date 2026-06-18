@@ -17,6 +17,31 @@ cx.theme().foreground
 
 So if you want use the colors from the current theme, you should keep your component or view have [App] context.
 
+## Gradient Backgrounds
+
+Theme color values remain backward compatible with the existing string format:
+
+```json
+{
+  "colors": {
+    "button.primary.background": "#4F46E5"
+  }
+}
+```
+
+Background tokens that opt in to gradient rendering can also use CSS-style two-stop linear gradients:
+
+```json
+{
+  "colors": {
+    "button.primary.background": "linear-gradient(135deg, #4F46E5, #06B6D4)",
+    "button.primary.hover.background": "linear-gradient(to right, red-500 25%, blue-600 75%)"
+  }
+}
+```
+
+Theme tokens, such as `cx.theme().button_primary`, keep the existing top-level access pattern. Passing a token to `.bg(...)` renders its full background, including gradients. Code that needs a solid `Hsla` can use the token's representative color, for example `cx.theme().button_primary.color`, which is the first gradient stop for gradient values.
+
 ## Theme Registry
 
 There have more than 20 built-in themes available in [themes](https://github.com/longbridge/gpui-component/tree/main/themes) folder.

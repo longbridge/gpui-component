@@ -147,7 +147,7 @@ where
                 x_fn.as_ref(),
                 &x,
                 self.tick_margin,
-                cx.theme().muted_foreground,
+                cx.theme().muted_foreground.color,
             );
             axis = axis.x(height).x_label(labels);
         }

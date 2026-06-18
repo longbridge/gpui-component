@@ -3,8 +3,8 @@ use std::ops::Range;
 use crate::{ActiveTheme, AxisExt, ElementExt, StyledExt, h_flex};
 use gpui::{
     Along, App, AppContext as _, Axis, Background, Bounds, Context, Corners, DefiniteLength,
-    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla, InteractiveElement, IntoElement,
-    IsZero, MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
+    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, InteractiveElement, IntoElement, IsZero,
+    MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px, relative,
 };
@@ -437,7 +437,7 @@ impl Slider {
         start: DefiniteLength,
         is_start: bool,
         bar_color: Background,
-        thumb_color: Hsla,
+        thumb_bg: Background,
         radius: Corners<Pixels>,
         window: &mut Window,
         cx: &mut App,
@@ -473,7 +473,7 @@ impl Slider {
                     .flex_shrink_0()
                     .size_full()
                     .corner_radii(radius)
-                    .bg(thumb_color),
+                    .bg(thumb_bg),
             )
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                 cx.stop_propagation();
@@ -529,11 +529,12 @@ impl RenderOnce for Slider {
             .clone()
             .and_then(|bg| bg.color())
             .unwrap_or(cx.theme().slider_bar.into());
-        let thumb_color = self
+        let thumb_bg: Background = self
             .style
             .text
             .color
-            .unwrap_or_else(|| cx.theme().slider_thumb);
+            .map(Into::into)
+            .unwrap_or_else(|| cx.theme().slider_thumb.into());
         let corner_radii = self.style.corner_radii.clone();
         let default_radius = px(999.);
         let mut radius = Corners {
@@ -674,7 +675,7 @@ impl RenderOnce for Slider {
                                     relative(percentage.start),
                                     true,
                                     bar_color,
-                                    thumb_color,
+                                    thumb_bg,
                                     radius,
                                     window,
                                     cx,
@@ -684,7 +685,7 @@ impl RenderOnce for Slider {
                                 relative(percentage.end),
                                 false,
                                 bar_color,
-                                thumb_color,
+                                thumb_bg,
                                 radius,
                                 window,
                                 cx,

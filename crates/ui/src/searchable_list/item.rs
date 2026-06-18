@@ -111,7 +111,7 @@ impl RenderOnce for SearchableListItemElement {
             .refine_style(&self.style)
             .when(!self.disabled, |this| {
                 this.when(!self.selected, |this| {
-                    this.hover(|this| this.bg(cx.theme().accent.alpha(0.7)))
+                    this.hover(|this| this.bg(cx.theme().accent.opacity(0.7)))
                 })
             })
             .when(self.selected, |this| this.bg(cx.theme().accent))

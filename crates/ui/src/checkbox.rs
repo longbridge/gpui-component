@@ -152,7 +152,7 @@ pub(crate) fn checkbox_check_icon(
     let color = if disabled {
         cx.theme().primary_foreground.opacity(0.5)
     } else {
-        cx.theme().primary_foreground
+        cx.theme().primary_foreground.color
     };
 
     svg()
@@ -208,9 +208,9 @@ impl RenderOnce for Checkbox {
         let is_focused = focus_handle.is_focused(window);
 
         let border_color = if checked {
-            cx.theme().primary
+            cx.theme().primary.color
         } else {
-            cx.theme().input
+            cx.theme().input.color
         };
         let color = if self.disabled {
             border_color.opacity(0.5)
@@ -264,7 +264,8 @@ impl RenderOnce for Checkbox {
                         .when(cx.theme().shadow && !self.disabled, |this| this.shadow_xs())
                         .map(|this| match checked {
                             false => this.bg(cx.theme().input_background()),
-                            _ => this.bg(color),
+                            true if self.disabled => this.bg(color),
+                            true => this.bg(cx.theme().primary),
                         })
                         .child(checkbox_check_icon(
                             self.id,

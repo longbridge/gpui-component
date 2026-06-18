@@ -220,7 +220,7 @@ pub(crate) fn overlay_color(overlay: bool, cx: &App) -> Hsla {
         return hsla(0., 0., 0., 0.);
     }
 
-    cx.theme().overlay
+    cx.theme().overlay.color
 }
 
 impl Dialog {

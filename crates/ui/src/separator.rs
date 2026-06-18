@@ -125,7 +125,7 @@ impl Styled for Separator {
 
 impl RenderOnce for Separator {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = self.color.unwrap_or(cx.theme().border);
+        let color = self.color.unwrap_or(cx.theme().border.color);
         let axis = self.axis;
         let line_style = self.line_style;
 

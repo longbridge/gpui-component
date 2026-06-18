@@ -758,12 +758,12 @@ impl Calendar {
                 this.text_color(if disabled {
                     cx.theme().muted_foreground.opacity(0.3)
                 } else {
-                    cx.theme().muted_foreground
+                    cx.theme().muted_foreground.color
                 })
             })
             .when(secondary_active, |this| {
                 this.bg(if muted {
-                    cx.theme().accent.opacity(0.5)
+                    cx.theme().accent.opacity(0.5).into()
                 } else {
                     cx.theme().accent
                 })

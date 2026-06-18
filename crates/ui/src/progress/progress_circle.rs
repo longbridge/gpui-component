@@ -155,12 +155,11 @@ impl RenderOnce for ProgressCircle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let value = self.value;
         let loading = self.loading;
-        let state =
-            window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState::new(value));
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| ProgressState::new(value));
         let prev_target = state.read(cx).target();
         let has_changed = prev_target != value;
 
-        let color = self.color.unwrap_or(cx.theme().progress_bar);
+        let color = self.color.unwrap_or(cx.theme().progress_bar.color);
 
         div()
             .id(self.id.clone())

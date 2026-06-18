@@ -1,8 +1,8 @@
-use crate::{theme::ActiveTheme as _, ColorName, Sizable, Size, StyledExt};
+use crate::{ColorName, Sizable, Size, StyledExt, theme::ActiveTheme as _};
 use gpui::{
-    div, prelude::FluentBuilder as _, relative, rems, transparent_white, AbsoluteLength,
-    AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StyleRefinement, Styled, Window,
+    AbsoluteLength, AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, relative, rems,
+    transparent_white,
 };
 
 /// The variant of the Tag.
@@ -26,12 +26,12 @@ pub enum TagVariant {
 impl TagVariant {
     fn bg(&self, cx: &App) -> Hsla {
         match self {
-            Self::Primary => cx.theme().primary,
-            Self::Secondary => cx.theme().secondary,
-            Self::Danger => cx.theme().danger,
-            Self::Success => cx.theme().success,
-            Self::Warning => cx.theme().warning,
-            Self::Info => cx.theme().info,
+            Self::Primary => cx.theme().primary.color,
+            Self::Secondary => cx.theme().secondary.color,
+            Self::Danger => cx.theme().danger.color,
+            Self::Success => cx.theme().success.color,
+            Self::Warning => cx.theme().warning.color,
+            Self::Info => cx.theme().info.color,
             Self::Color(color) => {
                 if cx.theme().is_dark() {
                     color.scale(950).opacity(0.5)
@@ -45,12 +45,12 @@ impl TagVariant {
 
     fn border(&self, cx: &App) -> Hsla {
         match self {
-            Self::Primary => cx.theme().primary,
-            Self::Secondary => cx.theme().border,
-            Self::Danger => cx.theme().danger,
-            Self::Success => cx.theme().success,
-            Self::Warning => cx.theme().warning,
-            Self::Info => cx.theme().info,
+            Self::Primary => cx.theme().primary.color,
+            Self::Secondary => cx.theme().border.color,
+            Self::Danger => cx.theme().danger.color,
+            Self::Success => cx.theme().success.color,
+            Self::Warning => cx.theme().warning.color,
+            Self::Info => cx.theme().info.color,
             Self::Color(color) => {
                 if cx.theme().is_dark() {
                     color.scale(800).opacity(0.5)
@@ -66,44 +66,44 @@ impl TagVariant {
         match self {
             Self::Primary => {
                 if outline {
-                    cx.theme().primary
+                    cx.theme().primary.color
                 } else {
-                    cx.theme().primary_foreground
+                    cx.theme().primary_foreground.color
                 }
             }
             Self::Secondary => {
                 if outline {
-                    cx.theme().muted_foreground
+                    cx.theme().muted_foreground.color
                 } else {
-                    cx.theme().secondary_foreground
+                    cx.theme().secondary_foreground.color
                 }
             }
             Self::Danger => {
                 if outline {
-                    cx.theme().danger
+                    cx.theme().danger.color
                 } else {
-                    cx.theme().danger_foreground
+                    cx.theme().danger_foreground.color
                 }
             }
             Self::Success => {
                 if outline {
-                    cx.theme().success
+                    cx.theme().success.color
                 } else {
-                    cx.theme().success_foreground
+                    cx.theme().success_foreground.color
                 }
             }
             Self::Warning => {
                 if outline {
-                    cx.theme().warning
+                    cx.theme().warning.color
                 } else {
-                    cx.theme().warning_foreground
+                    cx.theme().warning_foreground.color
                 }
             }
             Self::Info => {
                 if outline {
-                    cx.theme().info
+                    cx.theme().info.color
                 } else {
-                    cx.theme().info_foreground
+                    cx.theme().info_foreground.color
                 }
             }
             Self::Color(color) => {

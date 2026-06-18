@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui::{
-    Anchor, Animation, AnimationExt as _, AnyElement, App, Bounds, Div, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString,
-    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    Anchor, Animation, AnimationExt as _, AnyElement, App, Background, Bounds, Div, Edges,
+    ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle,
+    SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
@@ -337,18 +337,18 @@ impl RenderOnce for TabBar {
             Size::Large => px(16.),
             _ => px(12.),
         };
-        let (bg, paddings, gap) = match self.variant {
+        let (bg, paddings, gap): (Background, _, _) = match self.variant {
             TabVariant::Tab => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().tab_bar, padding, px(0.))
+                (cx.theme().tab_bar.into(), padding, px(0.))
             }
             TabVariant::Outline => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().transparent, padding, default_gap)
+                (cx.theme().transparent.into(), padding, default_gap)
             }
             TabVariant::Pill => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().transparent, padding, px(4.))
+                (cx.theme().transparent.into(), padding, px(4.))
             }
             TabVariant::Segmented => {
                 let padding_x = match self.size {
@@ -362,7 +362,7 @@ impl RenderOnce for TabBar {
                     ..Default::default()
                 };
 
-                (cx.theme().tab_bar_segmented, padding, px(2.))
+                (cx.theme().tab_bar_segmented.into(), padding, px(2.))
             }
             TabVariant::Underline => {
                 // This gap is same as the tab inner_paddings
@@ -373,7 +373,7 @@ impl RenderOnce for TabBar {
                     _ => px(16.),
                 };
 
-                (cx.theme().transparent, Edges::all(px(0.)), gap)
+                (cx.theme().transparent.into(), Edges::all(px(0.)), gap)
             }
         };
 

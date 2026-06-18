@@ -189,7 +189,7 @@ impl Theme {
         if self.is_dark() {
             self.input.mix_oklab(self.transparent, 0.3)
         } else {
-            self.background
+            *self.background
         }
     }
 

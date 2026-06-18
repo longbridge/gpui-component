@@ -123,27 +123,27 @@ impl ControlIcon {
     #[inline]
     fn hover_fg(&self, cx: &App) -> Hsla {
         if self.is_close() {
-            cx.theme().danger_foreground
+            cx.theme().danger_foreground.color
         } else {
-            cx.theme().secondary_foreground
+            cx.theme().secondary_foreground.color
         }
     }
 
     #[inline]
     fn hover_bg(&self, cx: &App) -> Hsla {
         if self.is_close() {
-            cx.theme().danger
+            cx.theme().danger.color
         } else {
-            cx.theme().secondary_hover
+            cx.theme().secondary_hover.color
         }
     }
 
     #[inline]
     fn active_bg(&self, cx: &mut App) -> Hsla {
         if self.is_close() {
-            cx.theme().danger_active
+            cx.theme().danger_active.color
         } else {
-            cx.theme().secondary_active
+            cx.theme().secondary_active.color
         }
     }
 }

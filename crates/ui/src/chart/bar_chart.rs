@@ -1,8 +1,8 @@
 use std::{ops::RangeInclusive, rc::Rc};
 
 use gpui::{
-    App, Background, Bounds, Corners, Hsla, LinearColorStop, Pixels, Point, SharedString, Size, TextAlign,
-    Window, linear_gradient, px,
+    App, Background, Bounds, Corners, Hsla, LinearColorStop, Pixels, Point, SharedString, Size,
+    TextAlign, Window, linear_gradient, px,
 };
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
@@ -11,7 +11,7 @@ use crate::{
     ActiveTheme,
     plot::{
         AXIS_GAP, AxisLabelSide, Grid, Plot, PlotAxis,
-        label::{Text, TEXT_GAP, TEXT_SIZE, measure_text_width},
+        label::{TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::{Bar, BarAlignment},
     },
@@ -31,9 +31,8 @@ where
     value: Option<Rc<dyn Fn(&T) -> V>>,
     fill: Option<Rc<dyn Fn(&T, Bounds<f32>, Bounds<f32>, BarAlignment) -> Background>>,
     #[allow(clippy::type_complexity)]
-    fill_gradient: Option<
-        Rc<dyn Fn(&T, RangeInclusive<f32>, &dyn Fn(f32) -> f32) -> [LinearColorStop; 2]>,
-    >,
+    fill_gradient:
+        Option<Rc<dyn Fn(&T, RangeInclusive<f32>, &dyn Fn(f32) -> f32) -> [LinearColorStop; 2]>>,
     tick_margin: usize,
     label: Option<Rc<dyn Fn(&T) -> SharedString>>,
     label_axis: bool,
@@ -148,8 +147,7 @@ where
     /// [`BarChart::fill`].
     pub fn fill_gradient(
         mut self,
-        fill: impl Fn(&T, RangeInclusive<f32>, &dyn Fn(f32) -> f32) -> [LinearColorStop; 2]
-            + 'static,
+        fill: impl Fn(&T, RangeInclusive<f32>, &dyn Fn(f32) -> f32) -> [LinearColorStop; 2] + 'static,
     ) -> Self {
         self.fill_gradient = Some(Rc::new(fill));
         self.fill = None;
@@ -306,7 +304,7 @@ where
                 &band_scale,
                 band_width,
                 self.tick_margin,
-                cx.theme().muted_foreground,
+                cx.theme().muted_foreground.color,
             );
             axis = match alignment {
                 BarAlignment::Bottom => axis.x(baseline).x_label(labels),
@@ -356,7 +354,7 @@ where
         let default_fill: Background = cx.theme().chart_2.into();
         let fill = self.fill.clone();
         let fill_gradient = self.fill_gradient.clone();
-        let label_color = cx.theme().foreground;
+        let label_color = cx.theme().foreground.color;
 
         // Chart bounds in pixel space, with origin (0, 0) and size equal to
         // the full chart extent. Passed to user `fill` closures so they can
