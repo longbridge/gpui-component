@@ -361,7 +361,13 @@ impl MarkdownPlugin for MathPlugin {
 }
 
 fn render_math_formula(source: &str, inline: bool, font_size: f32, cx: &mut App) -> AnyElement {
-    if let Some(image) = render_math_image(source, inline, font_size, cx.theme().foreground) {
+    if let Some(image) = render_math_image(
+        source,
+        inline,
+        font_size,
+        cx.theme().foreground,
+        cx.theme().background,
+    ) {
         img(image.image)
             .object_fit(ObjectFit::Contain)
             .flex_shrink_0()
@@ -626,12 +632,16 @@ fn render_math_image(
     source: &str,
     inline: bool,
     font_size: f32,
-    color: Hsla,
+    foreground: Hsla,
+    background: Hsla,
 ) -> Option<RenderedMathImage> {
     static CACHE: OnceLock<Mutex<HashMap<String, Option<RenderedMathImage>>>> = OnceLock::new();
 
-    let (fill, opacity) = svg_color(color);
-    let cache_key = format!("{inline}\0{font_size:.2}\0{fill}\0{opacity:.3}\0{source}");
+    let (foreground_fill, foreground_opacity) = svg_color(foreground);
+    let (background_fill, background_opacity) = svg_color(background);
+    let cache_key = format!(
+        "{inline}\0{font_size:.2}\0{foreground_fill}\0{foreground_opacity:.3}\0{background_fill}\0{background_opacity:.3}\0{source}"
+    );
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Ok(cache) = cache.lock()
         && let Some(image) = cache.get(&cache_key)
@@ -639,7 +649,7 @@ fn render_math_image(
         return image.clone();
     }
 
-    let image = render_math_svg(source, inline, font_size, color).map(|svg| {
+    let image = render_math_svg(source, inline, font_size, foreground, background).map(|svg| {
         let width = svg_attr(&svg, "width")
             .and_then(|width| width.parse().ok())
             .unwrap_or(1.0);
@@ -661,7 +671,13 @@ fn render_math_image(
     image
 }
 
-fn render_math_svg(source: &str, inline: bool, font_size: f32, color: Hsla) -> Option<String> {
+fn render_math_svg(
+    source: &str,
+    inline: bool,
+    font_size: f32,
+    foreground: Hsla,
+    background: Hsla,
+) -> Option<String> {
     let root = mathjax_root()?;
     let output = Command::new("node")
         .arg("-e")
@@ -687,15 +703,21 @@ fn render_math_svg(source: &str, inline: bool, font_size: f32, color: Hsla) -> O
     let ex = font_size * 0.5;
     let width = (width * ex).ceil().max(1.0);
     let height = (height * ex).ceil().max(1.0);
-    let (fill, opacity) = svg_color(color);
+    let (foreground_fill, foreground_opacity) = svg_color(foreground);
+    let (background_fill, background_opacity) = svg_color(background);
 
     svg = replace_svg_attr(&svg, "width", &format!("{width:.1}"));
     svg = replace_svg_attr(&svg, "height", &format!("{height:.1}"));
     svg = remove_svg_attr(&svg, "style");
     svg = rewrite_rects_as_paths(&svg);
-    svg = svg.replace("currentColor", &fill);
-    if opacity < 0.999 {
-        svg = svg.replacen("<svg ", &format!(r#"<svg opacity="{opacity:.3}" "#), 1);
+    svg = svg.replace("currentColor", &foreground_fill);
+    svg = inject_svg_background(&svg, &background_fill, background_opacity);
+    if foreground_opacity < 0.999 {
+        svg = svg.replacen(
+            "<g ",
+            &format!(r#"<g opacity="{foreground_opacity:.3}" "#),
+            1,
+        );
     }
 
     Some(svg)
@@ -737,6 +759,45 @@ fn svg_attr<'a>(svg: &'a str, name: &str) -> Option<&'a str> {
     let start = svg.find(&pattern)? + pattern.len();
     let end = svg[start..].find('"')?;
     Some(&svg[start..start + end])
+}
+
+fn inject_svg_background(svg: &str, fill: &str, opacity: f32) -> String {
+    let Some(open_end) = svg.find('>') else {
+        return svg.to_string();
+    };
+    let opacity_attr = if opacity < 0.999 {
+        format!(r#" opacity="{opacity:.3}""#)
+    } else {
+        String::new()
+    };
+    let background = if let Some((x, y, width, height)) = svg_view_box(svg) {
+        format!(
+            r#"<rect data-gpui-math-background="true" x="{x:.3}" y="{y:.3}" width="{width:.3}" height="{height:.3}" fill="{fill}"{opacity_attr}></rect>"#
+        )
+    } else {
+        format!(
+            r#"<rect data-gpui-math-background="true" width="100%" height="100%" fill="{fill}"{opacity_attr}></rect>"#
+        )
+    };
+
+    let mut out = String::with_capacity(svg.len() + background.len());
+    out.push_str(&svg[..open_end + 1]);
+    out.push_str(&background);
+    out.push_str(&svg[open_end + 1..]);
+    out
+}
+
+fn svg_view_box(svg: &str) -> Option<(f32, f32, f32, f32)> {
+    let values = svg_attr(svg, "viewBox")?
+        .split(|ch: char| ch == ',' || ch.is_ascii_whitespace())
+        .filter(|part| !part.is_empty())
+        .map(str::parse::<f32>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let [x, y, width, height] = values.as_slice() else {
+        return None;
+    };
+    Some((*x, *y, *width, *height))
 }
 
 fn replace_svg_attr(svg: &str, name: &str, value: &str) -> String {
@@ -1270,7 +1331,13 @@ mod tests {
 
     #[::core::prelude::v1::test]
     fn math_svg_uses_path_based_renderer() {
-        let Some(svg) = render_math_svg(r"e^{i\pi} + 1 = 0", true, 20.0, Hsla::black()) else {
+        let Some(svg) = render_math_svg(
+            r"e^{i\pi} + 1 = 0",
+            true,
+            20.0,
+            Hsla::black(),
+            Hsla::white(),
+        ) else {
             eprintln!("skipping MathJax SVG test because mathjax-full is not available");
             return;
         };
@@ -1295,7 +1362,13 @@ mod tests {
 
     #[::core::prelude::v1::test]
     fn inline_math_svg_uses_pixel_dimensions_without_glyph_scaling() {
-        let Some(svg) = render_math_svg(r"e^{i\pi} + 1 = 0", true, 20.0, Hsla::black()) else {
+        let Some(svg) = render_math_svg(
+            r"e^{i\pi} + 1 = 0",
+            true,
+            20.0,
+            Hsla::black(),
+            Hsla::white(),
+        ) else {
             eprintln!("skipping MathJax SVG test because mathjax-full is not available");
             return;
         };
@@ -1316,16 +1389,32 @@ mod tests {
             false,
             20.0,
             Hsla::black(),
+            Hsla::white(),
         ) else {
             eprintln!("skipping MathJax SVG test because mathjax-full is not available");
             return;
         };
 
-        assert!(
-            !svg.contains("<rect"),
-            "block math SVG should avoid raw rect elements from MathJax: {svg}"
-        );
+        assert!(!svg.contains(r#"<rect width="543""#));
+        assert!(!svg.contains(r#"<rect width="2628.4""#));
         assert!(svg.contains("<path"));
+    }
+
+    #[::core::prelude::v1::test]
+    fn block_math_svg_includes_theme_background() {
+        let Some(svg) = render_math_svg(
+            r"\frac{\alpha + \beta}{\sqrt{\gamma}} = \sum_{i=1}^{n} i^2",
+            false,
+            20.0,
+            Hsla::black(),
+            Hsla::white(),
+        ) else {
+            eprintln!("skipping MathJax SVG test because mathjax-full is not available");
+            return;
+        };
+
+        assert!(svg.contains(r#"data-gpui-math-background="true""#));
+        assert!(svg.contains("fill=\"#ffffff\""));
     }
 
     #[::core::prelude::v1::test]
@@ -1335,6 +1424,7 @@ mod tests {
             false,
             20.0,
             Hsla::black(),
+            Hsla::white(),
         ) else {
             eprintln!("skipping MathJax image test because mathjax-full is not available");
             return;
