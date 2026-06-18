@@ -242,16 +242,22 @@ This is paragraph of the heading 6.
 
 ### Math
 
-This is an inline math $x^2 + y^2 = z^2$.
-
-This is a block math:
+Inline math renders in the same text flow, for example $e^{i\pi} + 1 = 0$ and $a^2 + b^2 = c^2$.
 
 $$
-\begin{aligned}
-x^2 + y^2 &= z^2 \\
-x^3 + y^3 &= z^3
-\end{aligned}
+\frac{\alpha + \beta}{\sqrt{\gamma}} = \sum_{i=1}^{n} i^2
 $$
+
+## Markers
+
+It also catches markers inside inline `code` and fenced blocks:
+
+```rust
+fn render() {
+    // TODO: cache the parsed AST between frames
+    // FIXME: handle empty input without a panic
+}
+```
 
 This is final paragraph, it includes a code block and a list of items.
 
@@ -273,3 +279,15 @@ button:
 <UserCard id="huacnlee" />
 
 <UserCard id="madcodelife" />
+
+## Task markers
+
+The custom `MarkerHighlighter` (an LSP-style semantic tokens provider)
+highlights these markers in the source editor on the left, each in a
+different color:
+
+- TODO: support nested task lists
+- FIXME: links with parentheses break parsing
+- XXX: revisit the table column-width heuristic
+- HACK: temporary workaround for footnote ordering
+- NOTE: math blocks require the `$$` fence

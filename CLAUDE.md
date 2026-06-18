@@ -164,6 +164,9 @@ Text input system based on Rope data structure:
 - Reference macOS/Windows control API design for naming
 - AI-generated code must be refactored to match project style
 - Mark AI-generated portions when submitting PRs
+- When creating a PR, inspect previous PR titles in the repository and match
+  that style. Do not blindly use conventional prefixes like `fix:` or `feat:`
+  unless the existing PR title style uses them.
 
 ## Icon System
 
