@@ -377,7 +377,6 @@ pub(crate) struct InlineNode {
     /// The text content.
     pub(crate) text: SharedString,
     pub(crate) image: Option<ImageNode>,
-    pub(crate) custom: Option<MarkdownNode>,
     /// The text styles, each tuple contains the range of the text and the style.
     pub(crate) marks: Vec<(Range<usize>, TextMark)>,
 
@@ -386,10 +385,7 @@ pub(crate) struct InlineNode {
 
 impl PartialEq for InlineNode {
     fn eq(&self, other: &Self) -> bool {
-        self.text == other.text
-            && self.image == other.image
-            && self.custom == other.custom
-            && self.marks == other.marks
+        self.text == other.text && self.image == other.image && self.marks == other.marks
     }
 }
 
@@ -398,7 +394,6 @@ impl InlineNode {
         Self {
             text: text.into(),
             image: None,
-            custom: None,
             marks: vec![],
             state: Arc::new(Mutex::new(InlineState::default())),
         }
@@ -407,13 +402,6 @@ impl InlineNode {
     pub(crate) fn image(image: ImageNode) -> Self {
         let mut this = Self::new("");
         this.image = Some(image);
-        this
-    }
-
-    pub(crate) fn custom(node: MarkdownNode) -> Self {
-        let text = node.as_text().to_string();
-        let mut this = Self::new(text);
-        this.custom = Some(node);
         this
     }
 
@@ -585,7 +573,7 @@ impl Paragraph {
             || self
                 .children
                 .iter()
-                .all(|node| node.text.is_empty() && node.image.is_none() && node.custom.is_none())
+                .all(|node| node.text.is_empty() && node.image.is_none())
     }
 
     /// Return length of children text.
@@ -927,13 +915,9 @@ impl Paragraph {
     }
 
     fn should_render_inline_flow(&self) -> bool {
-        let has_custom = self.children.iter().any(|child| child.custom.is_some());
         let has_image = self.children.iter().any(|child| child.image.is_some());
-        let has_text = self
-            .children
-            .iter()
-            .any(|child| child.custom.is_none() && !child.text.is_empty());
-        has_custom || (has_image && has_text)
+        let has_text = self.children.iter().any(|child| !child.text.is_empty());
+        has_image && has_text
     }
 
     fn inline_flow_items(&self, node_cx: &NodeContext, cx: &mut App) -> Vec<InlineFlowItem> {
@@ -944,35 +928,6 @@ impl Paragraph {
         let mut offset = 0;
 
         for inline_node in &self.children {
-            if let Some(custom) = &inline_node.custom {
-                if !text.is_empty() {
-                    if let Ok(mut state) = inline_node.state.lock() {
-                        state.set_text(text.clone().into());
-                    }
-                    items.push(InlineFlowItem::Text {
-                        state: inline_node.state.clone(),
-                        text: text.clone().into(),
-                        links: links.clone(),
-                        highlights: highlights.clone(),
-                    });
-                    text.clear();
-                    links.clear();
-                    highlights.clear();
-                    offset = 0;
-                }
-
-                if let Some(render) = node_cx.markdown_extensions.inline_render_for(custom) {
-                    items.push(InlineFlowItem::Custom {
-                        node: custom.clone(),
-                        render,
-                    });
-                } else {
-                    text.push_str(&inline_node.text);
-                    offset += inline_node.text.len();
-                }
-                continue;
-            }
-
             let text_len = inline_node.text.len();
             text.push_str(&inline_node.text);
 
@@ -1075,10 +1030,6 @@ impl Paragraph {
             .children
             .iter()
             .map(|text_node| {
-                if let Some(custom) = &text_node.custom {
-                    return custom.to_markdown();
-                }
-
                 let mut text = text_node.text.to_string();
                 for (range, style) in &text_node.marks {
                     if style.bold {
@@ -1189,7 +1140,6 @@ impl BlockNode {
                     code_block.code()
                 )
             }
-            BlockNode::Custom(node) => node.to_markdown(),
             BlockNode::Table(table) => {
                 let header = table
                     .children
@@ -1238,6 +1188,7 @@ impl BlockNode {
                 }
             }
             BlockNode::HorizontalRule { .. } => "---".to_string(),
+            BlockNode::Custom(node) => node.to_markdown(),
             BlockNode::Definition {
                 identifier,
                 url,

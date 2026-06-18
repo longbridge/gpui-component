@@ -21,8 +21,7 @@ use gpui_component::{
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
     text::{
-        MarkdownNode, MarkdownParseContext, MarkdownParseOptions, MarkdownPlugin, TextViewStyle,
-        markdown, markdown_ast,
+        MarkdownNode, MarkdownParseContext, MarkdownPlugin, TextViewStyle, markdown, markdown_ast,
     },
     v_flex,
 };
@@ -51,10 +50,16 @@ struct UserCardNode {
     id: String,
 }
 
-#[derive(Clone)]
-struct MathNode {
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum MathNode {
+    Formula { source: String, inline: bool },
+    Paragraph { segments: Vec<MathSegment> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MathSegment {
     source: String,
-    inline: bool,
+    math: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -167,7 +172,7 @@ fn math_markdown(source: &str, inline: bool) -> String {
 fn math_node(source: String, inline: bool, markdown: impl Into<String>) -> MarkdownNode {
     MarkdownNode::new(
         "math",
-        MathNode {
+        MathNode::Formula {
             source: source.clone(),
             inline,
         },
@@ -176,12 +181,113 @@ fn math_node(source: String, inline: bool, markdown: impl Into<String>) -> Markd
     .markdown(markdown.into())
 }
 
-impl MarkdownPlugin for MathPlugin {
-    fn is_block(&self) -> bool {
-        true
+fn math_paragraph_node(markdown: &str, segments: Vec<MathSegment>) -> MarkdownNode {
+    MarkdownNode::new("math", MathNode::Paragraph { segments })
+        .text(markdown.to_string())
+        .markdown(markdown.to_string())
+}
+
+fn block_math_source(source: &str) -> Option<&str> {
+    let source = source.trim();
+    let body = source.strip_prefix("$$")?.strip_suffix("$$")?.trim();
+    (!body.is_empty()).then_some(body)
+}
+
+fn inline_math_segments(source: &str) -> Option<Vec<MathSegment>> {
+    let mut segments = Vec::new();
+    let mut text_start = 0;
+    let mut ix = 0;
+    let mut code_ticks = None;
+
+    while ix < source.len() {
+        if let Some(ticks) = count_run(source, ix, b'`') {
+            if code_ticks == Some(ticks) {
+                code_ticks = None;
+            } else if code_ticks.is_none() {
+                code_ticks = Some(ticks);
+            }
+            ix += ticks;
+            continue;
+        }
+
+        if code_ticks.is_none()
+            && source.as_bytes()[ix] == b'$'
+            && !is_escaped(source, ix)
+            && source.as_bytes().get(ix + 1) != Some(&b'$')
+            && let Some(end_ix) = find_inline_math_end(source, ix + 1)
+        {
+            let math = source[ix + 1..end_ix].trim();
+            if !math.is_empty() {
+                if text_start < ix {
+                    segments.push(MathSegment {
+                        source: source[text_start..ix].to_string(),
+                        math: false,
+                    });
+                }
+                segments.push(MathSegment {
+                    source: math.to_string(),
+                    math: true,
+                });
+                ix = end_ix + 1;
+                text_start = ix;
+                continue;
+            }
+        }
+
+        ix += source[ix..].chars().next().map_or(1, char::len_utf8);
     }
 
-    fn is_inline(&self) -> bool {
+    if segments.iter().all(|segment| !segment.math) {
+        return None;
+    }
+
+    if text_start < source.len() {
+        segments.push(MathSegment {
+            source: source[text_start..].to_string(),
+            math: false,
+        });
+    }
+
+    Some(segments)
+}
+
+fn find_inline_math_end(source: &str, mut ix: usize) -> Option<usize> {
+    while ix < source.len() {
+        if source.as_bytes()[ix] == b'$'
+            && !is_escaped(source, ix)
+            && source.as_bytes().get(ix + 1) != Some(&b'$')
+        {
+            return Some(ix);
+        }
+        ix += source[ix..].chars().next().map_or(1, char::len_utf8);
+    }
+    None
+}
+
+fn count_run(source: &str, ix: usize, needle: u8) -> Option<usize> {
+    if source.as_bytes().get(ix) != Some(&needle) {
+        return None;
+    }
+
+    let mut end = ix + 1;
+    while source.as_bytes().get(end) == Some(&needle) {
+        end += 1;
+    }
+    Some(end - ix)
+}
+
+fn is_escaped(source: &str, ix: usize) -> bool {
+    let mut backslashes = 0;
+    let mut cursor = ix;
+    while cursor > 0 && source.as_bytes()[cursor - 1] == b'\\' {
+        backslashes += 1;
+        cursor -= 1;
+    }
+    backslashes % 2 == 1
+}
+
+impl MarkdownPlugin for MathPlugin {
+    fn is_block(&self) -> bool {
         true
     }
 
@@ -189,62 +295,81 @@ impl MarkdownPlugin for MathPlugin {
         "math"
     }
 
-    fn parse_options(&self, options: &mut MarkdownParseOptions) {
-        options.constructs.math_flow = true;
-        options.constructs.math_text = true;
-    }
-
     fn parse(
         &self,
         node: &markdown_ast::Node,
         cx: &MarkdownParseContext<'_>,
     ) -> Option<MarkdownNode> {
-        match node {
-            markdown_ast::Node::Math(math) => Some(math_node(
+        if let markdown_ast::Node::Math(math) = node {
+            return Some(math_node(
                 math.value.clone(),
                 false,
                 cx.node_source(node)
                     .map(str::to_string)
                     .unwrap_or_else(|| math_markdown(&math.value, false)),
-            )),
-            markdown_ast::Node::InlineMath(math) => Some(math_node(
-                math.value.clone(),
-                true,
-                cx.node_source(node)
-                    .map(str::to_string)
-                    .unwrap_or_else(|| math_markdown(&math.value, true)),
-            )),
-            _ => None,
+            ));
         }
+
+        let markdown_ast::Node::Paragraph(_) = node else {
+            return None;
+        };
+        let source = cx.node_source(node)?;
+
+        if let Some(math) = block_math_source(source) {
+            return Some(math_node(math.to_string(), false, source));
+        }
+
+        inline_math_segments(source).map(|segments| math_paragraph_node(source, segments))
     }
 
     fn render(&self, node: &MarkdownNode, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let math = node.data::<MathNode>().expect("math markdown node data");
         let font_size = f32::from(window.text_style().font_size.to_pixels(window.rem_size()));
-        let content = if let Some(image) =
-            render_math_image(&math.source, math.inline, font_size, cx.theme().foreground)
-        {
-            img(image.image)
-                .object_fit(ObjectFit::Contain)
-                .flex_shrink_0()
-                .w(px(image.width))
-                .h(px(image.height))
-                .into_any_element()
-        } else {
-            render_math_text(&math.source, math.inline, font_size, cx.theme().foreground)
-        };
 
-        if math.inline {
-            content
-        } else {
-            div()
+        match math {
+            MathNode::Formula { source, inline } => {
+                let content = render_math_formula(source, *inline, font_size, cx);
+                if *inline {
+                    content
+                } else {
+                    div()
+                        .w_full()
+                        .flex()
+                        .justify_center()
+                        .py_1()
+                        .child(content)
+                        .into_any_element()
+                }
+            }
+            MathNode::Paragraph { segments } => h_flex()
                 .w_full()
-                .flex()
-                .justify_center()
-                .py_1()
-                .child(content)
-                .into_any_element()
+                .flex_wrap()
+                .items_center()
+                .children(segments.iter().map(|segment| {
+                    if segment.math {
+                        render_math_formula(&segment.source, true, font_size, cx)
+                    } else {
+                        div()
+                            .line_height(relative(1.5))
+                            .child(segment.source.clone())
+                            .into_any_element()
+                    }
+                }))
+                .into_any_element(),
         }
+    }
+}
+
+fn render_math_formula(source: &str, inline: bool, font_size: f32, cx: &mut App) -> AnyElement {
+    if let Some(image) = render_math_image(source, inline, font_size, cx.theme().foreground) {
+        img(image.image)
+            .object_fit(ObjectFit::Contain)
+            .flex_shrink_0()
+            .w(px(image.width))
+            .h(px(image.height))
+            .into_any_element()
+    } else {
+        render_math_text(source, inline, font_size, cx.theme().foreground)
     }
 }
 
@@ -1238,6 +1363,37 @@ mod tests {
     #[::core::prelude::v1::test]
     fn math_markdown_preserves_inline_delimiters() {
         assert_eq!(math_markdown("x^2", true), "$x^2$");
+    }
+
+    #[::core::prelude::v1::test]
+    fn block_math_source_extracts_dollar_fence_body() {
+        assert_eq!(
+            block_math_source(
+                "$$\n\\frac{\\alpha + \\beta}{\\sqrt{\\gamma}} = \\sum_{i=1}^{n} i^2\n$$",
+            ),
+            Some(r"\frac{\alpha + \beta}{\sqrt{\gamma}} = \sum_{i=1}^{n} i^2")
+        );
+    }
+
+    #[::core::prelude::v1::test]
+    fn inline_math_segments_skip_inline_code() {
+        assert_eq!(
+            inline_math_segments("This is $x^2$ and `$ignored$`.").unwrap(),
+            vec![
+                MathSegment {
+                    source: "This is ".to_string(),
+                    math: false,
+                },
+                MathSegment {
+                    source: "x^2".to_string(),
+                    math: true,
+                },
+                MathSegment {
+                    source: " and `$ignored$`.".to_string(),
+                    math: false,
+                },
+            ]
+        );
     }
 
     fn svg_width(svg: &str) -> f32 {

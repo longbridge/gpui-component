@@ -56,8 +56,7 @@ A Markdown plugin implements `MarkdownPlugin`:
 ```rust
 use gpui::{App, IntoElement, ParentElement as _, Window};
 use gpui_component::text::{
-    markdown_ast, MarkdownNode, MarkdownParseContext, MarkdownParseOptions,
-    MarkdownPlugin,
+    markdown_ast, MarkdownNode, MarkdownParseContext, MarkdownPlugin,
 };
 
 struct TickerNode {
@@ -141,28 +140,17 @@ MarkdownNode::new("ticker", TickerNode { symbol })
 - `text` is the plain text representation used by selection and fallback rendering.
 - `markdown` is the Markdown representation used when the document is serialized back to Markdown.
 
-## Block And Inline Plugins
+## Block Plugins
 
-Markdown plugins can produce block nodes, inline nodes, or both. Return `true` from `is_block()` for block rendering, and override `is_inline()` when the same plugin also handles inline syntax:
+Custom Markdown rendering currently supports block plugins. Return `true` from `is_block()` for plugins that should be registered today:
 
 ```rust
 fn is_block(&self) -> bool {
     true
 }
-
-fn is_inline(&self) -> bool {
-    true
-}
 ```
 
-Plugins can also adjust parser constructs before parsing:
-
-```rust
-fn parse_options(&self, options: &mut MarkdownParseOptions) {
-    options.constructs.math_flow = true;
-    options.constructs.math_text = true;
-}
-```
+Inline plugins are reserved for future `TextView` support.
 
 ## Code Block Actions
 

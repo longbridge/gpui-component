@@ -56,8 +56,7 @@ Markdown 插件实现 `MarkdownPlugin`：
 ```rust
 use gpui::{App, IntoElement, ParentElement as _, Window};
 use gpui_component::text::{
-    markdown_ast, MarkdownNode, MarkdownParseContext, MarkdownParseOptions,
-    MarkdownPlugin,
+    markdown_ast, MarkdownNode, MarkdownParseContext, MarkdownPlugin,
 };
 
 struct TickerNode {
@@ -141,28 +140,17 @@ MarkdownNode::new("ticker", TickerNode { symbol })
 - `text` 是纯文本表示，用于选择和未注册 renderer 时的回退渲染。
 - `markdown` 是 Markdown 表示，用于将文档重新序列化为 Markdown。
 
-## Block 与 Inline 插件
+## Block 插件
 
-Markdown 插件可以生成 block 节点、inline 节点，或同时支持两者。需要 block 渲染时从 `is_block()` 返回 `true`；同一个插件也处理 inline 语法时，覆盖 `is_inline()`：
+当前自定义 Markdown 渲染支持 block 插件。现在可注册的插件需要在 `is_block()` 中返回 `true`：
 
 ```rust
 fn is_block(&self) -> bool {
     true
 }
-
-fn is_inline(&self) -> bool {
-    true
-}
 ```
 
-插件也可以在解析前调整 Markdown constructs：
-
-```rust
-fn parse_options(&self, options: &mut MarkdownParseOptions) {
-    options.constructs.math_flow = true;
-    options.constructs.math_text = true;
-}
-```
+Inline 插件保留给未来的 `TextView` 支持。
 
 ## 代码块操作
 
