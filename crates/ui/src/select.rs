@@ -173,11 +173,8 @@ where
                         let new_selection = weak_confirm.update(cx, |this, cx| {
                             this.state.selection = selection;
 
-                            let final_value = this
-                                .state
-                                .selection
-                                .first()
-                                .map(|(_, i)| i.value().clone());
+                            let final_value =
+                                this.state.selection.first().map(|(_, i)| i.value().clone());
 
                             cx.emit(SelectEvent::Confirm(final_value));
                             cx.notify();
@@ -207,9 +204,7 @@ where
                     move |list_state, window, cx| {
                         let committed_ix = weak_cancel
                             .upgrade()
-                            .and_then(|e| {
-                                e.read(cx).state.selection.first().map(|(ix, _)| *ix)
-                            });
+                            .and_then(|e| e.read(cx).state.selection.first().map(|(ix, _)| *ix));
 
                         list_state.set_selected_index(committed_ix, window, cx);
 
@@ -563,7 +558,7 @@ where
                                     v_flex()
                                         .occlude()
                                         .mt_1p5()
-                                        .bg(cx.theme().background)
+                                        .bg(cx.theme().tokens.background)
                                         .border_1()
                                         .border_color(cx.theme().border)
                                         .rounded(popup_radius)
@@ -661,7 +656,9 @@ where
         mut self,
         builder: impl Fn(&mut Window, &App) -> E + 'static,
     ) -> Self {
-        self.empty = Some(Box::new(move |window, cx| builder(window, cx).into_any_element()));
+        self.empty = Some(Box::new(move |window, cx| {
+            builder(window, cx).into_any_element()
+        }));
         self
     }
 

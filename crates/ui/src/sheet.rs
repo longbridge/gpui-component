@@ -204,7 +204,7 @@ impl RenderOnce for Sheet {
                             })
                             .absolute()
                             .occlude()
-                            .bg(cx.theme().background)
+                            .bg(cx.theme().tokens.background)
                             .border_color(cx.theme().border)
                             .shadow_xl()
                             .refine_style(&self.style)

@@ -122,7 +122,7 @@ impl RenderOnce for Badge {
                         .justify_center()
                         .items_center()
                         .rounded_full()
-                        .bg(self.color.unwrap_or(cx.theme().red.color))
+                        .bg(self.color.unwrap_or(cx.theme().red))
                         .text_color(white())
                         .text_size(text_size)
                         .map(|this| match self.variant {

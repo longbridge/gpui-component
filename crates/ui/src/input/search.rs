@@ -4,8 +4,8 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     App, AppContext as _, Context, Empty, Entity, FocusHandle, Focusable, Half,
-    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render, Styled,
-    Subscription, Window, actions, div, prelude::FluentBuilder as _,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render, Styled, Subscription,
+    Window, actions, div, prelude::FluentBuilder as _,
 };
 use ropey::Rope;
 
@@ -481,7 +481,7 @@ impl Render for SearchPanel {
             .px_3()
             .w_full()
             .gap_1()
-            .bg(cx.theme().popover)
+            .bg(cx.theme().tokens.popover)
             .border_b_1()
             .rounded(cx.theme().radius.half())
             .border_color(cx.theme().border)

@@ -117,7 +117,7 @@ impl RenderOnce for Rating {
         let disabled = self.disabled;
         let max = self.max;
         let default_value = self.value;
-        let active_color = self.color.unwrap_or(cx.theme().yellow.color);
+        let active_color = self.color.unwrap_or(cx.theme().yellow);
         let on_click = self.on_click.clone();
 
         let state = window.use_keyed_state(id.clone(), cx, |_, _| RaingState {

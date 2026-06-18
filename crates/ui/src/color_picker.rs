@@ -490,18 +490,18 @@ impl ColorPicker {
 
     fn render_palette_panel(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let featured_colors = self.featured_colors.clone().unwrap_or(vec![
-            cx.theme().red.color,
-            cx.theme().red_light.color,
-            cx.theme().blue.color,
-            cx.theme().blue_light.color,
-            cx.theme().green.color,
-            cx.theme().green_light.color,
-            cx.theme().yellow.color,
-            cx.theme().yellow_light.color,
-            cx.theme().cyan.color,
-            cx.theme().cyan_light.color,
-            cx.theme().magenta.color,
-            cx.theme().magenta_light.color,
+            cx.theme().red,
+            cx.theme().red_light,
+            cx.theme().blue,
+            cx.theme().blue_light,
+            cx.theme().green,
+            cx.theme().green_light,
+            cx.theme().yellow,
+            cx.theme().yellow_light,
+            cx.theme().cyan,
+            cx.theme().cyan_light,
+            cx.theme().magenta,
+            cx.theme().magenta_light,
         ]);
 
         v_flex()
@@ -827,7 +827,7 @@ impl RenderOnce for ColorPickerButton {
                 this.child(
                     div()
                         .id("square")
-                        .bg(cx.theme().background)
+                        .bg(cx.theme().tokens.background)
                         .border_1()
                         .border_color(cx.theme().input)
                         .when(cx.theme().shadow, |this| this.shadow_xs())

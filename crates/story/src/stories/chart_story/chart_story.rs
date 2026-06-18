@@ -152,7 +152,7 @@ fn chart_container(
 
 impl Render for ChartStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let color = cx.theme().chart_3.color;
+        let color = cx.theme().chart_3;
         v_flex()
             .size_full()
             .gap_y_4()

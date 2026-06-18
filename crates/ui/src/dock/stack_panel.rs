@@ -419,7 +419,7 @@ impl Render for StackPanel {
         h_flex()
             .size_full()
             .overflow_hidden()
-            .bg(cx.theme().tab_bar)
+            .bg(cx.theme().tokens.tab_bar)
             .child(
                 ResizablePanelGroup::new("stack-panel-group")
                     .with_state(&self.state)

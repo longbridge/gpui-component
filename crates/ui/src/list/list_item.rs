@@ -199,7 +199,7 @@ impl RenderOnce for ListItem {
                             })
                     })
                     .when(!is_active, |this| {
-                        this.hover(|this| this.bg(cx.theme().list_hover))
+                        this.hover(|this| this.bg(cx.theme().tokens.list_hover))
                     })
             })
             .when(!is_selectable, |this| {

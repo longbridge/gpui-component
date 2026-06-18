@@ -177,7 +177,7 @@ impl<T> Plot for PieChart<T> {
                 if let Some(color_fn) = self.color.as_ref() {
                     color_fn(a.data)
                 } else {
-                    cx.theme().chart_2.color
+                    cx.theme().chart_2
                 },
                 Some(inner_radius),
                 Some(outer_radius),
@@ -201,8 +201,8 @@ impl<T> Plot for PieChart<T> {
             .inner_radius(outer_radius)
             .outer_radius(outer_radius);
 
-        let label_color = self.label_color.unwrap_or(cx.theme().foreground.color);
-        let default_line_color = cx.theme().border.color;
+        let label_color = self.label_color.unwrap_or(cx.theme().foreground);
+        let default_line_color = cx.theme().border;
 
         // First pass: collect a layout candidate per visible slice, split by
         // side. `y` is the target vertical position relative to the center and

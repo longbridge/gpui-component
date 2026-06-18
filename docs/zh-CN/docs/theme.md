@@ -40,7 +40,7 @@ cx.theme().foreground
 }
 ```
 
-`cx.theme().button_primary` 等 token 会继续保留顶层访问方式。传给 `.bg(...)` 时会渲染完整背景，包括渐变；需要纯色 `Hsla` 的代码可以使用代表色，例如 `cx.theme().button_primary.color`，渐变值会取第一个色标作为代表色。
+`cx.theme().button_primary` 等顶层字段仍然是纯色 `Hsla`，保持兼容。需要完整 resolved token 时使用 `cx.theme().tokens.button_primary`；其中 `.color` 是纯色代表色，`.background` 是实际配置的 `Background`，包含渐变。
 
 ## Theme Registry
 

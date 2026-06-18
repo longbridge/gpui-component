@@ -528,13 +528,13 @@ impl RenderOnce for Slider {
             .background
             .clone()
             .and_then(|bg| bg.color())
-            .unwrap_or(cx.theme().slider_bar.into());
+            .unwrap_or(cx.theme().tokens.slider_bar.into());
         let thumb_bg: Background = self
             .style
             .text
             .color
             .map(Into::into)
-            .unwrap_or_else(|| cx.theme().slider_thumb.into());
+            .unwrap_or_else(|| cx.theme().tokens.slider_thumb.into());
         let corner_radii = self.style.corner_radii.clone();
         let default_radius = px(999.);
         let mut radius = Corners {

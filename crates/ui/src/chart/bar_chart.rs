@@ -304,7 +304,7 @@ where
                 &band_scale,
                 band_width,
                 self.tick_margin,
-                cx.theme().muted_foreground.color,
+                cx.theme().muted_foreground,
             );
             axis = match alignment {
                 BarAlignment::Bottom => axis.x(baseline).x_label(labels),
@@ -354,7 +354,7 @@ where
         let default_fill: Background = cx.theme().chart_2.into();
         let fill = self.fill.clone();
         let fill_gradient = self.fill_gradient.clone();
-        let label_color = cx.theme().foreground.color;
+        let label_color = cx.theme().foreground;
 
         // Chart bounds in pixel space, with origin (0, 0) and size equal to
         // the full chart extent. Passed to user `fill` closures so they can

@@ -726,7 +726,7 @@ impl CodeBlock {
                     .id(("codeblock", options.ix))
                     .p_3()
                     .rounded(cx.theme().radius)
-                    .bg(cx.theme().muted)
+                    .bg(cx.theme().tokens.muted)
                     .font_family(cx.theme().mono_font_family.clone())
                     .text_size(cx.theme().mono_font_size)
                     .relative()
@@ -744,7 +744,7 @@ impl CodeBlock {
                                 .absolute()
                                 .top_2()
                                 .right_2()
-                                .bg(cx.theme().muted)
+                                .bg(cx.theme().tokens.muted)
                                 .rounded(cx.theme().radius)
                                 .child(actions(&self, window, cx)),
                         )
@@ -870,11 +870,11 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent.color);
+                        highlight.background_color = Some(cx.theme().accent);
                     }
 
                     if let Some(mut link_mark) = style.link.clone() {
-                        highlight.color = Some(cx.theme().link.color);
+                        highlight.color = Some(cx.theme().link);
                         highlight.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
@@ -981,11 +981,11 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent.color);
+                        highlight.background_color = Some(cx.theme().accent);
                     }
 
                     if let Some(mut link_mark) = style.link.clone() {
-                        highlight.color = Some(cx.theme().link.color);
+                        highlight.color = Some(cx.theme().link);
                         highlight.underline = Some(gpui::UnderlineStyle {
                             thickness: gpui::px(1.),
                             ..Default::default()
@@ -1297,7 +1297,7 @@ impl BlockNode {
                                                     .border_color(cx.theme().primary)
                                                     .text_color(cx.theme().primary_foreground)
                                                     .when(checked, |this| {
-                                                        this.bg(cx.theme().primary).child(
+                                                        this.bg(cx.theme().tokens.primary).child(
                                                             Icon::new(IconName::Check)
                                                                 .size_2()
                                                                 .text_xs(),

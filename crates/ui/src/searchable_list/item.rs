@@ -114,7 +114,7 @@ impl RenderOnce for SearchableListItemElement {
                     this.hover(|this| this.bg(cx.theme().accent.opacity(0.7)))
                 })
             })
-            .when(self.selected, |this| this.bg(cx.theme().accent))
+            .when(self.selected, |this| this.bg(cx.theme().tokens.accent))
             .when(self.disabled, |this| {
                 this.cursor_not_allowed()
                     .text_color(cx.theme().muted_foreground)

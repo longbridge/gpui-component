@@ -275,13 +275,13 @@ impl SidebarItem for SidebarMenuItem {
                     })
                     .when(is_active, |this| {
                         this.font_medium()
-                            .bg(cx.theme().sidebar_accent)
+                            .bg(cx.theme().tokens.sidebar_accent)
                             .text_color(cx.theme().sidebar_accent_foreground)
                     })
                     .when_some(self.icon.clone(), |this, icon| this.child(icon))
                     .when(is_collapsed, |this| {
                         this.justify_center().when(is_active, |this| {
-                            this.bg(cx.theme().sidebar_accent)
+                            this.bg(cx.theme().tokens.sidebar_accent)
                                 .text_color(cx.theme().sidebar_accent_foreground)
                         })
                     })

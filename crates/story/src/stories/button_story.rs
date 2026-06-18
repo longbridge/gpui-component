@@ -87,10 +87,10 @@ impl Render for ButtonStory {
         let toggle_multiple = self.toggle_multiple;
 
         let custom_variant = ButtonCustomVariant::new(cx)
-            .color(cx.theme().magenta.color)
-            .foreground(cx.theme().magenta.color)
+            .color(cx.theme().magenta)
+            .foreground(cx.theme().magenta)
             .hover(cx.theme().magenta.opacity(0.1))
-            .active(cx.theme().magenta.color);
+            .active(cx.theme().magenta);
 
         v_flex()
             .on_action(

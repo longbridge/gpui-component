@@ -40,7 +40,7 @@ Background tokens that opt in to gradient rendering can also use CSS-style two-s
 }
 ```
 
-Theme tokens, such as `cx.theme().button_primary`, keep the existing top-level access pattern. Passing a token to `.bg(...)` renders its full background, including gradients. Code that needs a solid `Hsla` can use the token's representative color, for example `cx.theme().button_primary.color`, which is the first gradient stop for gradient values.
+Top-level theme fields, such as `cx.theme().button_primary`, remain solid `Hsla` values for compatibility. Code that needs the full resolved token can use `cx.theme().tokens.button_primary`; its `.color` field is the solid representative color, and its `.background` field contains the configured `Background`, including gradients.
 
 ## Theme Registry
 

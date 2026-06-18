@@ -125,7 +125,7 @@ impl Styled for Separator {
 
 impl RenderOnce for Separator {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = self.color.unwrap_or(cx.theme().border.color);
+        let color = self.color.unwrap_or(cx.theme().border);
         let axis = self.axis;
         let line_style = self.line_style;
 
@@ -146,7 +146,7 @@ impl RenderOnce for Separator {
                         .py_1()
                         .mx_auto()
                         .text_xs()
-                        .bg(cx.theme().background)
+                        .bg(cx.theme().tokens.background)
                         .text_color(cx.theme().muted_foreground)
                         .child(label),
                 )

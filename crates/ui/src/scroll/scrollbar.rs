@@ -390,9 +390,9 @@ impl Scrollbar {
 
     fn style_for_active(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
         (
-            cx.theme().scrollbar_thumb_hover.into(),
-            cx.theme().scrollbar.color,
-            cx.theme().border.color,
+            cx.theme().tokens.scrollbar_thumb_hover.into(),
+            cx.theme().scrollbar,
+            cx.theme().border,
             THUMB_ACTIVE_WIDTH,
             THUMB_ACTIVE_INSET,
             THUMB_ACTIVE_RADIUS,
@@ -401,9 +401,9 @@ impl Scrollbar {
 
     fn style_for_hovered_thumb(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
         (
-            cx.theme().scrollbar_thumb_hover.into(),
-            cx.theme().scrollbar.color,
-            cx.theme().border.color,
+            cx.theme().tokens.scrollbar_thumb_hover.into(),
+            cx.theme().scrollbar,
+            cx.theme().border,
             THUMB_ACTIVE_WIDTH,
             THUMB_ACTIVE_INSET,
             THUMB_ACTIVE_RADIUS,
@@ -412,8 +412,8 @@ impl Scrollbar {
 
     fn style_for_hovered_bar(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
         (
-            cx.theme().scrollbar_thumb.into(),
-            cx.theme().scrollbar.color,
+            cx.theme().tokens.scrollbar_thumb.into(),
+            cx.theme().scrollbar,
             gpui::transparent_black(),
             THUMB_ACTIVE_WIDTH,
             THUMB_ACTIVE_INSET,
@@ -429,8 +429,8 @@ impl Scrollbar {
         };
 
         (
-            cx.theme().scrollbar_thumb.into(),
-            cx.theme().scrollbar.color,
+            cx.theme().tokens.scrollbar_thumb.into(),
+            cx.theme().scrollbar,
             gpui::transparent_black(),
             width,
             inset,
@@ -637,7 +637,7 @@ impl Element for Scrollbar {
                                 Self::style_for_hovered_bar(cx)
                             };
                         } else if elapsed < FADE_OUT_DELAY {
-                            idle_state.0 = cx.theme().scrollbar_thumb.into();
+                            idle_state.0 = cx.theme().tokens.scrollbar_thumb.into();
 
                             if !state.get().idle_timer_scheduled {
                                 let state = state.clone();
@@ -654,7 +654,12 @@ impl Element for Scrollbar {
                             }
                         } else if elapsed < FADE_OUT_DURATION {
                             let opacity = 1.0 - (elapsed - FADE_OUT_DELAY).powi(10);
-                            idle_state.0 = cx.theme().scrollbar_thumb.background.opacity(opacity);
+                            idle_state.0 = cx
+                                .theme()
+                                .tokens
+                                .scrollbar_thumb
+                                .background
+                                .opacity(opacity);
 
                             window.request_animation_frame();
                         }

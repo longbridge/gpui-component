@@ -537,7 +537,7 @@ impl Panel for StoryContainer {
         if let Some(bg) = self.title_bg {
             Some(TitleStyle {
                 background: bg,
-                foreground: cx.theme().foreground.color,
+                foreground: cx.theme().foreground,
             })
         } else {
             None

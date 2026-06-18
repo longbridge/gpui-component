@@ -217,14 +217,16 @@ impl TabBar {
                     div()
                         .w_full()
                         .h(inner_height)
-                        .bg(cx.theme().background)
+                        .bg(cx.theme().tokens.background)
                         .rounded(inner_radius)
                         .shadow_xs(),
                 ),
-                TabVariant::Pill => el
-                    .flex()
-                    .items_center()
-                    .child(div().size_full().bg(cx.theme().primary).rounded(px(99.))),
+                TabVariant::Pill => el.flex().items_center().child(
+                    div()
+                        .size_full()
+                        .bg(cx.theme().tokens.primary)
+                        .rounded(px(99.)),
+                ),
                 TabVariant::Underline => el.child(
                     div()
                         .absolute()
@@ -232,7 +234,7 @@ impl TabBar {
                         .right_0()
                         .bottom_0()
                         .h(px(2.))
-                        .bg(cx.theme().primary),
+                        .bg(cx.theme().tokens.primary),
                 ),
                 _ => el,
             })
@@ -340,7 +342,7 @@ impl RenderOnce for TabBar {
         let (bg, paddings, gap): (Background, _, _) = match self.variant {
             TabVariant::Tab => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().tab_bar.into(), padding, px(0.))
+                (cx.theme().tokens.tab_bar.into(), padding, px(0.))
             }
             TabVariant::Outline => {
                 let padding = Edges::all(px(0.));
@@ -362,7 +364,7 @@ impl RenderOnce for TabBar {
                     ..Default::default()
                 };
 
-                (cx.theme().tab_bar_segmented.into(), padding, px(2.))
+                (cx.theme().tokens.tab_bar_segmented.into(), padding, px(2.))
             }
             TabVariant::Underline => {
                 // This gap is same as the tab inner_paddings

@@ -91,7 +91,7 @@ impl RenderOnce for Table {
             .w_full()
             .text_sm()
             .overflow_hidden()
-            .bg(cx.theme().table)
+            .bg(cx.theme().tokens.table)
             .refine_style(&self.style)
             .children(
                 self.children
@@ -161,7 +161,7 @@ impl RenderOnce for TableHeader {
         div()
             .id(("table-header", self.ix))
             .w_full()
-            .bg(cx.theme().table_head)
+            .bg(cx.theme().tokens.table_head)
             .text_color(cx.theme().table_head_foreground)
             .refine_style(&self.style)
             .border_b_1()
@@ -303,7 +303,7 @@ impl RenderOnce for TableFooter {
         div()
             .id(("table-footer", self.ix))
             .w_full()
-            .bg(cx.theme().table_foot)
+            .bg(cx.theme().tokens.table_foot)
             .text_color(cx.theme().table_foot_foreground)
             .border_t_1()
             .border_color(cx.theme().table_row_border)

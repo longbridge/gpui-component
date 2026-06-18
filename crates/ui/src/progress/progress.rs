@@ -74,7 +74,7 @@ impl RenderOnce for Progress {
         let bg = self
             .color
             .map(Background::from)
-            .unwrap_or(cx.theme().progress_bar.into());
+            .unwrap_or(cx.theme().tokens.progress_bar.into());
         let value = self.value;
         let loading = self.loading;
 

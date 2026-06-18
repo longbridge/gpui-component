@@ -25,17 +25,17 @@ pub enum AlertVariant {
 impl AlertVariant {
     fn fg(&self, cx: &App) -> Hsla {
         match self {
-            Self::Default => cx.theme().foreground.color,
-            Self::Info => cx.theme().info.color,
-            Self::Success => cx.theme().success.color,
-            Self::Warning => cx.theme().warning.color,
-            Self::Error => cx.theme().danger.color,
+            Self::Default => cx.theme().foreground,
+            Self::Info => cx.theme().info,
+            Self::Success => cx.theme().success,
+            Self::Warning => cx.theme().warning,
+            Self::Error => cx.theme().danger,
         }
     }
 
     fn bg(&self, cx: &App) -> Hsla {
         match self {
-            Self::Default => cx.theme().background.color,
+            Self::Default => cx.theme().background,
             Self::Info => cx.theme().info.mix_oklab(transparent_white(), 0.04),
             Self::Success => cx.theme().success.mix_oklab(transparent_white(), 0.04),
             Self::Warning => cx.theme().warning.mix_oklab(transparent_white(), 0.04),
@@ -45,7 +45,7 @@ impl AlertVariant {
 
     fn border_color(&self, cx: &App) -> Hsla {
         match self {
-            Self::Default => cx.theme().border.color,
+            Self::Default => cx.theme().border,
             Self::Info => cx.theme().info.mix_oklab(transparent_white(), 0.3),
             Self::Success => cx.theme().success.mix_oklab(transparent_white(), 0.3),
             Self::Warning => cx.theme().warning.mix_oklab(transparent_white(), 0.3),
