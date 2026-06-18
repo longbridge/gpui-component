@@ -1,2 +1,5 @@
 [default]
 extend-ignore-re = ['\\u\{[0-9A-Fa-f]+\}']
+
+[files]
+extend-exclude = ["crates/story/src/fixtures/"]
