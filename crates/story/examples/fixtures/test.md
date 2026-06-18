@@ -14,7 +14,7 @@ different color:
 
 ## Math
 
-Inline math uses a code-style fallback so it stays selectable, for example $e^{i\pi} + 1 = 0$ and $a^2 + b^2 = c^2$.
+Inline math renders in the same text flow, for example $e^{i\pi} + 1 = 0$ and $a^2 + b^2 = c^2$.
 
 $$
 \frac{\alpha + \beta}{\sqrt{\gamma}} = \sum_{i=1}^{n} i^2
@@ -30,6 +30,8 @@ fn render() {
 ```
 
 Build Status [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) of [GPUI Component](https://github.com/longbridge/gpui-component).
+
+Inline image mix: larger PNG avatars <img src="https://avatars.githubusercontent.com/u/5518" alt="Jason Lee avatar" width="32" height="32" /> and <img src="https://avatars.githubusercontent.com/u/28998859" alt="GitHub avatar" width="32" height="32" /> stay inside the same text flow, and another SVG badge ![Rust](https://rust-lang.org/static/images/rust-logo-blk.svg) should wrap with nearby text when the window is resized.
 
 This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text [^1] [^2].
 
@@ -281,3 +283,22 @@ x^3 + y^3 &= z^3
 $$
 
 This is final paragraph, it includes a code block and a list of items.
+
+### Custom components
+
+A custom Markdown parser converts project-specific syntax into typed nodes,
+then registered renderers turn those nodes into arbitrary interactive
+components.
+
+Ticker blocks render as compact one-line quote rows:
+
+$AAPL.US
+
+$TSLA.US
+
+A `<UserCard />` block renders a user card with a 24px avatar and a follow
+button:
+
+<UserCard id="huacnlee" />
+
+<UserCard id="madcodelife" />

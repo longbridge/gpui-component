@@ -38,6 +38,7 @@ reqwest_client.workspace = true
 smol.workspace = true
 tree-sitter-navi = "0.2.3"
 color-lsp = "0.2.0"
+resvg = { version = "0.45.0", default-features = false }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true

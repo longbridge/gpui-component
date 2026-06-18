@@ -30,6 +30,7 @@ collapsed: false
 - [Stepper](stepper) - Step-by-step progress indicator
 - [Switch](switch) - Toggle on/off control
 - [Tag](tag) - Labels and categories
+- [TextView](text-view) - Markdown and HTML text rendering
 - [Toggle](toggle) - Toggle button states
 - [Tooltip](tooltip) - Helpful hints on hover
 
