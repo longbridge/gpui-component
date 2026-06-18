@@ -1,22 +1,5 @@
 # Hello, **World**!
 
-## Math
-
-Inline math renders in the same text flow, for example $e^{i\pi} + 1 = 0$ and $a^2 + b^2 = c^2$.
-
-$$
-\frac{\alpha + \beta}{\sqrt{\gamma}} = \sum_{i=1}^{n} i^2
-$$
-
-It also catches markers inside inline `code` and fenced blocks:
-
-```rust
-fn render() {
-    // TODO: cache the parsed AST between frames
-    // FIXME: handle empty input without a panic
-}
-```
-
 Build Status [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) of [GPUI Component](https://github.com/longbridge/gpui-component).
 
 Inline image mix: larger PNG avatars <img src="https://avatars.githubusercontent.com/u/5518" alt="Jason Lee avatar" width="32" height="32" /> and <img src="https://avatars.githubusercontent.com/u/28998859" alt="GitHub avatar" width="32" height="32" /> stay inside the same text flow, and another SVG badge ![Rust](https://rust-lang.org/static/images/rust-logo-blk.svg) should wrap with nearby text when the window is resized.
@@ -259,16 +242,22 @@ This is paragraph of the heading 6.
 
 ### Math
 
-This is an inline math $x^2 + y^2 = z^2$.
-
-This is a block math:
+Inline math renders in the same text flow, for example $e^{i\pi} + 1 = 0$ and $a^2 + b^2 = c^2$.
 
 $$
-\begin{aligned}
-x^2 + y^2 &= z^2 \\
-x^3 + y^3 &= z^3
-\end{aligned}
+\frac{\alpha + \beta}{\sqrt{\gamma}} = \sum_{i=1}^{n} i^2
 $$
+
+## Markers
+
+It also catches markers inside inline `code` and fenced blocks:
+
+```rust
+fn render() {
+    // TODO: cache the parsed AST between frames
+    // FIXME: handle empty input without a panic
+}
+```
 
 This is final paragraph, it includes a code block and a list of items.
 
