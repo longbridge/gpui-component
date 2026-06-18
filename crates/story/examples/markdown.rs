@@ -639,13 +639,19 @@ fn render_math_image(
         return image.clone();
     }
 
-    let image = render_math_svg(source, inline, font_size, color).and_then(|svg| {
-        let bytes = render_math_png(&svg)?;
-        Some(RenderedMathImage {
-            width: svg_attr(&svg, "width")?.parse().ok()?,
-            height: svg_attr(&svg, "height")?.parse().ok()?,
-            image: Arc::new(Image::from_bytes(ImageFormat::Png, bytes)),
-        })
+    let image = render_math_svg(source, inline, font_size, color).map(|svg| {
+        let width = svg_attr(&svg, "width")
+            .and_then(|width| width.parse().ok())
+            .unwrap_or(1.0);
+        let height = svg_attr(&svg, "height")
+            .and_then(|height| height.parse().ok())
+            .unwrap_or(1.0);
+
+        RenderedMathImage {
+            width,
+            height,
+            image: Arc::new(Image::from_bytes(ImageFormat::Svg, svg.into_bytes())),
+        }
     });
 
     if let Ok(mut cache) = cache.lock() {
@@ -693,25 +699,6 @@ fn render_math_svg(source: &str, inline: bool, font_size: f32, color: Hsla) -> O
     }
 
     Some(svg)
-}
-
-fn render_math_png(svg: &str) -> Option<Vec<u8>> {
-    const RASTER_SCALE: f32 = 2.0;
-
-    let tree =
-        resvg::usvg::Tree::from_data(svg.as_bytes(), &resvg::usvg::Options::default()).ok()?;
-    let svg_size = tree.size();
-    let width = (svg_size.width() * RASTER_SCALE).ceil().max(1.0) as u32;
-    let height = (svg_size.height() * RASTER_SCALE).ceil().max(1.0) as u32;
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)?;
-
-    resvg::render(
-        &tree,
-        resvg::tiny_skia::Transform::from_scale(RASTER_SCALE, RASTER_SCALE),
-        &mut pixmap.as_mut(),
-    );
-
-    pixmap.encode_png().ok()
 }
 
 fn render_math_text(source: &str, inline: bool, font_size: f32, color: Hsla) -> AnyElement {
@@ -1353,8 +1340,8 @@ mod tests {
             return;
         };
 
-        assert_eq!(image.image.format, ImageFormat::Png);
-        assert!(image.image.bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert_eq!(image.image.format, ImageFormat::Svg);
+        assert!(image.image.bytes.starts_with(b"<svg"));
         assert!(image.width > 0.0);
         assert!(image.height > 0.0);
         assert!(image.width > image.height);
