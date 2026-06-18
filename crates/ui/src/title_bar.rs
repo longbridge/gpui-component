@@ -4,10 +4,11 @@ use crate::{
     ActiveTheme, Icon, IconName, InteractiveElementExt as _, Sizable as _, StyledExt, h_flex,
 };
 use gpui::{
-    AnyElement, App, ClickEvent, Context, Decorations, Hsla, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, div,
-    prelude::FluentBuilder as _, px,
+    AnyElement, App, Bounds, ClickEvent, Context, Decorations, DispatchPhase, Display, Element,
+    ElementId, GlobalElementId, Hsla, InspectorElementId, InteractiveElement, IntoElement, LayoutId,
+    MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, RenderOnce,
+    StatefulInteractiveElement as _, Style, StyleRefinement, Styled, TitlebarOptions, Window,
+    WindowControlArea, div, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 
@@ -242,6 +243,93 @@ struct TitleBarState {
     should_move: bool,
 }
 
+/// Register a window-level `mouse_up` listener during the paint phase to clear the
+/// CSD title-bar drag flag.
+///
+/// When the pointer leaves the title-bar element mid-drag, the element-level
+/// `on_mouse_up` never fires, so `should_move` stays `true` and the next motion
+/// re-triggers `start_window_move`. Listening at the window level fixes this.
+///
+/// `window.on_mouse_event` may only be called during paint; calling it from
+/// `RenderOnce::render` (the layout phase) panics with "this method can only be
+/// called during paint", so the listener is wrapped in a zero-size `Element`.
+struct TitleBarWindowMouseUpListener {
+    state: gpui::Entity<TitleBarState>,
+}
+
+impl IntoElement for TitleBarWindowMouseUpListener {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for TitleBarWindowMouseUpListener {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        Some(ElementId::Name("title-bar-window-mouse-up".into()))
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        (
+            window.request_layout(
+                Style {
+                    display: Display::None,
+                    ..Default::default()
+                },
+                None,
+                cx,
+            ),
+            (),
+        )
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _state: &mut Self::RequestLayoutState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) {
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        _cx: &mut App,
+    ) {
+        let drag_state = self.state.clone();
+        window.on_mouse_event(move |event: &MouseUpEvent, phase, _window, cx| {
+            if phase != DispatchPhase::Bubble || event.button != MouseButton::Left {
+                return;
+            }
+            drag_state.update(cx, |state, _| {
+                state.should_move = false;
+            });
+        });
+    }
+}
+
 // TODO: Remove this when GPUI has released v0.2.3
 impl Render for TitleBarState {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -258,78 +346,85 @@ impl RenderOnce for TitleBar {
 
         let state = window.use_state(cx, |_, _| TitleBarState { should_move: false });
 
-        div().flex_shrink_0().child(
-            div()
-                .id("title-bar")
-                .flex()
-                .flex_row()
-                .items_center()
-                .justify_between()
-                .h(TITLE_BAR_HEIGHT)
-                .pl(TITLE_BAR_LEFT_PADDING)
-                .border_b_1()
-                .border_color(cx.theme().title_bar_border)
-                .bg(cx.theme().title_bar)
-                .refine_style(&self.style)
-                .when(is_linux, |this| {
-                    this.on_double_click(|_, window, _| window.zoom_window())
+        div()
+            .flex_shrink_0()
+            .when(is_linux && is_client_decorated, |this| {
+                this.child(TitleBarWindowMouseUpListener {
+                    state: state.clone(),
                 })
-                .when(is_macos, |this| {
-                    this.on_double_click(|_, window, _| window.titlebar_double_click())
-                })
-                .on_mouse_down_out(window.listener_for(&state, |state, _, _, _| {
-                    state.should_move = false;
-                }))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    window.listener_for(&state, |state, _, _, _| {
-                        state.should_move = true;
-                    }),
-                )
-                .on_mouse_up(
-                    MouseButton::Left,
-                    window.listener_for(&state, |state, _, _, _| {
+            })
+            .child(
+                div()
+                    .id("title-bar")
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .h(TITLE_BAR_HEIGHT)
+                    .pl(TITLE_BAR_LEFT_PADDING)
+                    .border_b_1()
+                    .border_color(cx.theme().title_bar_border)
+                    .bg(cx.theme().title_bar)
+                    .refine_style(&self.style)
+                    .when(is_linux, |this| {
+                        this.on_double_click(|_, window, _| window.zoom_window())
+                    })
+                    .when(is_macos, |this| {
+                        this.on_double_click(|_, window, _| window.titlebar_double_click())
+                    })
+                    .on_mouse_down_out(window.listener_for(&state, |state, _, _, _| {
                         state.should_move = false;
+                    }))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        window.listener_for(&state, |state, _, _, _| {
+                            state.should_move = true;
+                        }),
+                    )
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        window.listener_for(&state, |state, _: &MouseUpEvent, _, _| {
+                            state.should_move = false;
+                        }),
+                    )
+                    .on_mouse_move(window.listener_for(&state, |state, _: &MouseMoveEvent, window, _| {
+                        if state.should_move {
+                            state.should_move = false;
+                            window.start_window_move();
+                        }
+                    }))
+                    .child(
+                        h_flex()
+                            .id("bar")
+                            .h_full()
+                            .justify_between()
+                            .flex_shrink_0()
+                            .flex_1()
+                            .when(!is_web, |this| {
+                                this.window_control_area(WindowControlArea::Drag)
+                                    .when(window.is_fullscreen(), |this| this.pl_3())
+                                    .when(is_linux && is_client_decorated, |this| {
+                                        this.child(
+                                            div()
+                                                .top_0()
+                                                .left_0()
+                                                .absolute()
+                                                .size_full()
+                                                .h_full()
+                                                .on_mouse_down(
+                                                    MouseButton::Right,
+                                                    move |ev, window, _| {
+                                                        window.show_window_menu(ev.position)
+                                                    },
+                                                ),
+                                        )
+                                    })
+                            })
+                            .children(self.children),
+                    )
+                    .child(WindowControls {
+                        on_close_window: self.on_close_window,
                     }),
-                )
-                .on_mouse_move(window.listener_for(&state, |state, _, window, _| {
-                    if state.should_move {
-                        state.should_move = false;
-                        window.start_window_move();
-                    }
-                }))
-                .child(
-                    h_flex()
-                        .id("bar")
-                        .h_full()
-                        .justify_between()
-                        .flex_shrink_0()
-                        .flex_1()
-                        .when(!is_web, |this| {
-                            this.window_control_area(WindowControlArea::Drag)
-                                .when(window.is_fullscreen(), |this| this.pl_3())
-                                .when(is_linux && is_client_decorated, |this| {
-                                    this.child(
-                                        div()
-                                            .top_0()
-                                            .left_0()
-                                            .absolute()
-                                            .size_full()
-                                            .h_full()
-                                            .on_mouse_down(
-                                                MouseButton::Right,
-                                                move |ev, window, _| {
-                                                    window.show_window_menu(ev.position)
-                                                },
-                                            ),
-                                    )
-                                })
-                        })
-                        .children(self.children),
-                )
-                .child(WindowControls {
-                    on_close_window: self.on_close_window,
-                }),
         )
     }
 }
