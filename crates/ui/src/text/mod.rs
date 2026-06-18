@@ -1,6 +1,7 @@
 mod document;
 mod format;
 mod inline;
+mod inline_flow;
 mod markdown_ext;
 mod node;
 pub(crate) mod selection;
