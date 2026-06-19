@@ -512,7 +512,7 @@ impl Render for ButtonStory {
                             .on_click(Self::on_click),
                     )
                     .child(
-                        Button::new("button-outline-2")
+                        Button::new("button-outline-3")
                             .secondary()
                             .label("Secondary Button")
                             .dropdown_caret(true)
