@@ -194,6 +194,7 @@ objc2-app-kit = { version = "0.3", features = [
     "NSView",
     "NSResponder",
     "NSEvent",
+    "NSImage",
 ] }
 objc2-foundation = { version = "0.3", features = ["NSString", "NSGeometry"] }
 
@@ -203,6 +204,7 @@ raw-window-handle = { workspace = true }
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_GdiPlus",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
