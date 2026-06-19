@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{button::*, checkbox::*, input::*, select::*, separator::*, *};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
@@ -190,7 +190,7 @@ impl SelectStory {
 }
 
 impl Render for SelectStory {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
             .gap_4()
@@ -275,6 +275,11 @@ impl Render for SelectStory {
                         .text_color(cx.theme().secondary_foreground)
                         .w_full()
                         .gap_1()
+                        .when(
+                            self.appearance_select.focus_handle(cx).is_focused(window)
+                                || self.input_state.focus_handle(cx).is_focused(window),
+                            |this| this.focused_border(cx),
+                        )
                         .child(
                             div().w(px(140.)).child(
                                 Select::new(&self.appearance_select)
