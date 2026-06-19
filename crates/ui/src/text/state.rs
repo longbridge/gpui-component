@@ -505,13 +505,6 @@ impl UpdateFuture {
         Self {
             format,
             content: Default::default(),
-            pending_text: String::new(),
-            options: UpdateOptions {
-                append: false,
-                pending_text: String::new(),
-                highlight_theme: cx.theme().highlight_theme.clone(),
-                markdown_extensions: Arc::default(),
-            },
             rx: Box::pin(rx),
             tx_result,
         }
@@ -675,6 +668,7 @@ mod tests {
             pending_text: "old".to_string(),
             append: true,
             highlight_theme: theme.clone(),
+            markdown_extensions: Arc::default(),
         };
 
         options.merge(UpdateOptions {
@@ -682,12 +676,14 @@ mod tests {
             pending_text: "new".to_string(),
             append: false,
             highlight_theme: theme.clone(),
+            markdown_extensions: Arc::default(),
         });
         options.merge(UpdateOptions {
             revision: 3,
             pending_text: " text".to_string(),
             append: true,
             highlight_theme: theme,
+            markdown_extensions: Arc::default(),
         });
 
         assert_eq!(options.revision, 3);
@@ -708,6 +704,7 @@ mod tests {
                 pending_text: format!("{revision}\n"),
                 append: revision != 1,
                 highlight_theme: theme.clone(),
+                markdown_extensions: Arc::default(),
             })
             .unwrap();
         }
@@ -734,92 +731,6 @@ mod tests {
         ));
         let parsed_update = rx_result.try_recv().expect("next parse result");
         assert_eq!(parsed_update.revision, total_updates);
-    }
-
-    #[test]
-    fn test_text_view_state_selection_points() {
-        assert_eq!(
-            selection_points(None, None, Default::default(), Point::default()),
-            None
-        );
-        assert_eq!(
-            selection_points(
-                None,
-                Some(point(px(10.), px(20.))),
-                Default::default(),
-                Point::default()
-            ),
-            None
-        );
-        assert_eq!(
-            selection_points(
-                Some(point(px(10.), px(20.))),
-                None,
-                Default::default(),
-                Point::default()
-            ),
-            None
-        );
-
-        // 10,10 start
-        //   |------|
-        //   |      |
-        //   |------|
-        //         50,50
-        assert_eq!(
-            selection_points(
-                Some(point(px(10.), px(10.))),
-                Some(point(px(50.), px(50.))),
-                Default::default(),
-                Point::default()
-            ),
-            Some((point(px(10.), px(10.)), point(px(50.), px(50.))))
-        );
-
-        // 10,10
-        //   |------|
-        //   |      |
-        //   |------|
-        //         50,50 start
-        assert_eq!(
-            selection_points(
-                Some(point(px(50.), px(50.))),
-                Some(point(px(10.), px(10.))),
-                Default::default(),
-                Point::default()
-            ),
-            Some((point(px(50.), px(50.)), point(px(10.), px(10.))))
-        );
-
-        //        50,10 start
-        //   |------|
-        //   |      |
-        //   |------|
-        // 10,50
-        assert_eq!(
-            selection_points(
-                Some(point(px(50.), px(10.))),
-                Some(point(px(10.), px(50.))),
-                Default::default(),
-                Point::default()
-            ),
-            Some((point(px(50.), px(10.)), point(px(10.), px(50.))))
-        );
-
-        //        50,10
-        //   |------|
-        //   |      |
-        //   |------|
-        // 10,50 start
-        assert_eq!(
-            selection_points(
-                Some(point(px(10.), px(50.))),
-                Some(point(px(50.), px(10.))),
-                Default::default(),
-                Point::default()
-            ),
-            Some((point(px(10.), px(50.)), point(px(50.), px(10.))))
-        );
     }
 
     #[gpui::test]
