@@ -49,6 +49,7 @@ pub mod link;
 pub mod list;
 pub mod menu;
 pub mod native_menu;
+pub mod native_popover;
 pub mod notification;
 pub mod pagination;
 pub mod plot;
