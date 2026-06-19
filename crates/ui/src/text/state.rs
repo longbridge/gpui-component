@@ -22,6 +22,9 @@ use crate::{
 };
 
 const CONTEXT: &'static str = "TextView";
+// Keep coalescing bounded so sustained streams still render intermediate updates.
+const MAX_COALESCED_UPDATES_PER_PARSE: usize = 64;
+
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys(vec![
         #[cfg(target_os = "macos")]
@@ -349,9 +352,8 @@ impl Future for UpdateFuture {
         loop {
             match self.rx.as_mut().poll_next(cx) {
                 Poll::Ready(Some(mut options)) => {
-                    while let Ok(next_options) = self.rx.as_ref().get_ref().try_recv() {
-                        options.merge(next_options);
-                    }
+                    let hit_coalesce_budget =
+                        merge_pending_options(&mut options, self.rx.as_ref().get_ref());
 
                     let res = parse_content(self.format, self.content.clone(), &options);
                     if let Ok(content) = &res {
@@ -361,6 +363,10 @@ impl Future for UpdateFuture {
                         revision: options.revision,
                         result: res,
                     });
+                    if hit_coalesce_budget {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
                     continue;
                 }
                 Poll::Ready(None) => return Poll::Ready(()),
@@ -393,6 +399,22 @@ impl UpdateOptions {
 struct ParsedUpdate {
     revision: usize,
     result: Result<ParsedContent, SharedString>,
+}
+
+fn merge_pending_options(options: &mut UpdateOptions, rx: &Receiver<UpdateOptions>) -> bool {
+    let mut update_count = 1;
+
+    while update_count < MAX_COALESCED_UPDATES_PER_PARSE {
+        match rx.try_recv() {
+            Ok(next_options) => {
+                options.merge(next_options);
+                update_count += 1;
+            }
+            Err(_) => return false,
+        }
+    }
+
+    true
 }
 
 fn parse_content(
@@ -511,6 +533,47 @@ mod tests {
         assert_eq!(options.revision, 3);
         assert_eq!(options.pending_text, "new text");
         assert!(!options.append);
+    }
+
+    #[test]
+    fn update_future_yields_before_coalescing_all_queued_updates() {
+        let theme = HighlightTheme::default_light();
+        let (tx, rx) = unbounded::<UpdateOptions>();
+        let (tx_result, rx_result) = unbounded::<ParsedUpdate>();
+        let total_updates = 128;
+
+        for revision in 1..=total_updates {
+            tx.try_send(UpdateOptions {
+                revision,
+                pending_text: format!("{revision}\n"),
+                append: revision != 1,
+                highlight_theme: theme.clone(),
+            })
+            .unwrap();
+        }
+
+        let mut future = Box::pin(UpdateFuture::new(TextViewFormat::Markdown, rx, tx_result));
+        let waker = futures::task::noop_waker();
+        let mut task_cx = std::task::Context::from_waker(&waker);
+
+        assert!(matches!(
+            std::future::Future::poll(future.as_mut(), &mut task_cx),
+            Poll::Pending
+        ));
+        let parsed_update = rx_result.try_recv().expect("parse result");
+
+        assert!(
+            parsed_update.revision < total_updates,
+            "single poll coalesced every queued update through revision {}",
+            parsed_update.revision
+        );
+
+        assert!(matches!(
+            std::future::Future::poll(future.as_mut(), &mut task_cx),
+            Poll::Pending
+        ));
+        let parsed_update = rx_result.try_recv().expect("next parse result");
+        assert_eq!(parsed_update.revision, total_updates);
     }
 
     #[test]
