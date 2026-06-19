@@ -23,6 +23,9 @@ use crate::{
 };
 
 const CONTEXT: &'static str = "TextView";
+// Keep coalescing bounded so sustained streams still render intermediate updates.
+const MAX_COALESCED_UPDATES_PER_PARSE: usize = 64;
+
 pub(crate) fn init(cx: &mut App) {
     cx.bind_keys(vec![
         #[cfg(target_os = "macos")]
@@ -71,6 +74,7 @@ pub struct TextViewState {
     /// main thread for full-replace updates.
     format: TextViewFormat,
     text: String,
+    revision: usize,
     parsed_error: Option<SharedString>,
     tx: Sender<UpdateOptions>,
     _parse_task: Task<()>,
@@ -94,12 +98,16 @@ impl TextViewState {
         let entity_id = cx.entity_id();
 
         let (tx, rx) = unbounded::<UpdateOptions>();
-        let (tx_result, rx_result) = unbounded::<Result<ParsedContent, SharedString>>();
+        let (tx_result, rx_result) = unbounded::<ParsedUpdate>();
         let _receive_task = cx.spawn({
             async move |weak_self, cx| {
-                while let Ok(parsed_result) = rx_result.recv().await {
+                while let Ok(parsed_update) = rx_result.recv().await {
                     _ = weak_self.update(cx, |state, cx| {
-                        match parsed_result {
+                        if parsed_update.revision != state.revision {
+                            return;
+                        }
+
+                        match parsed_update.result {
                             Ok(content) => {
                                 state.parsed_content = content;
                                 state.parsed_error = None;
@@ -120,7 +128,7 @@ impl TextViewState {
             }
         });
 
-        let _parse_task = cx.background_spawn(UpdateFuture::new(format, rx, tx_result, cx));
+        let _parse_task = cx.background_spawn(UpdateFuture::new(format, rx, tx_result));
 
         let mut this = Self {
             focus_handle,
@@ -145,6 +153,7 @@ impl TextViewState {
             format,
             parsed_error: None,
             text: text.to_string(),
+            revision: 0,
             tx,
             _parse_task,
             _receive_task,
@@ -236,7 +245,9 @@ impl TextViewState {
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
+        self.revision += 1;
         let update_options = UpdateOptions {
+            revision: self.revision,
             append,
             pending_text: text.to_string(),
             highlight_theme: cx.theme().highlight_theme.clone(),
@@ -481,29 +492,19 @@ pub(crate) struct ParsedContent {
 struct UpdateFuture {
     format: TextViewFormat,
     content: ParsedContent,
-    options: UpdateOptions,
-    pending_text: String,
     rx: Pin<Box<Receiver<UpdateOptions>>>,
-    tx_result: Sender<Result<ParsedContent, SharedString>>,
+    tx_result: Sender<ParsedUpdate>,
 }
 
 impl UpdateFuture {
     fn new(
         format: TextViewFormat,
         rx: Receiver<UpdateOptions>,
-        tx_result: Sender<Result<ParsedContent, SharedString>>,
-        cx: &App,
+        tx_result: Sender<ParsedUpdate>,
     ) -> Self {
         Self {
             format,
             content: Default::default(),
-            pending_text: String::new(),
-            options: UpdateOptions {
-                append: false,
-                pending_text: String::new(),
-                highlight_theme: cx.theme().highlight_theme.clone(),
-                markdown_extensions: Arc::default(),
-            },
             rx: Box::pin(rx),
             tx_result,
         }
@@ -516,25 +517,22 @@ impl Future for UpdateFuture {
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         loop {
             match self.rx.as_mut().poll_next(cx) {
-                Poll::Ready(Some(options)) => {
-                    if options.append {
-                        self.pending_text.push_str(options.pending_text.as_str());
-                    } else {
-                        self.pending_text = options.pending_text.clone();
-                    }
-                    self.options = options;
+                Poll::Ready(Some(mut options)) => {
+                    let hit_coalesce_budget =
+                        merge_pending_options(&mut options, self.rx.as_ref().get_ref());
 
-                    // Process immediately without debounce
-                    let pending_text = std::mem::take(&mut self.pending_text);
-                    let options = UpdateOptions {
-                        pending_text,
-                        ..self.options.clone()
-                    };
                     let res = parse_content(self.format, self.content.clone(), &options);
                     if let Ok(content) = &res {
                         self.content = content.clone();
                     }
-                    _ = self.tx_result.try_send(res);
+                    _ = self.tx_result.try_send(ParsedUpdate {
+                        revision: options.revision,
+                        result: res,
+                    });
+                    if hit_coalesce_budget {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
                     continue;
                 }
                 Poll::Ready(None) => return Poll::Ready(()),
@@ -546,10 +544,44 @@ impl Future for UpdateFuture {
 
 #[derive(Clone)]
 struct UpdateOptions {
+    revision: usize,
     pending_text: String,
     append: bool,
     highlight_theme: std::sync::Arc<HighlightTheme>,
     markdown_extensions: Arc<MarkdownExtensions>,
+}
+
+impl UpdateOptions {
+    fn merge(&mut self, next: UpdateOptions) {
+        if next.append {
+            self.pending_text.push_str(&next.pending_text);
+            self.revision = next.revision;
+            self.highlight_theme = next.highlight_theme;
+        } else {
+            *self = next;
+        }
+    }
+}
+
+struct ParsedUpdate {
+    revision: usize,
+    result: Result<ParsedContent, SharedString>,
+}
+
+fn merge_pending_options(options: &mut UpdateOptions, rx: &Receiver<UpdateOptions>) -> bool {
+    let mut update_count = 1;
+
+    while update_count < MAX_COALESCED_UPDATES_PER_PARSE {
+        match rx.try_recv() {
+            Ok(next_options) => {
+                options.merge(next_options);
+                update_count += 1;
+            }
+            Err(_) => return false,
+        }
+    }
+
+    true
 }
 
 fn parse_content(
@@ -626,6 +658,79 @@ mod tests {
             assert_eq!(state.text.as_str(), "");
             assert_eq!(state.source().as_str(), "");
         });
+    }
+
+    #[test]
+    fn update_options_merge_keeps_latest_full_text() {
+        let theme = HighlightTheme::default_light();
+        let mut options = UpdateOptions {
+            revision: 1,
+            pending_text: "old".to_string(),
+            append: true,
+            highlight_theme: theme.clone(),
+            markdown_extensions: Arc::default(),
+        };
+
+        options.merge(UpdateOptions {
+            revision: 2,
+            pending_text: "new".to_string(),
+            append: false,
+            highlight_theme: theme.clone(),
+            markdown_extensions: Arc::default(),
+        });
+        options.merge(UpdateOptions {
+            revision: 3,
+            pending_text: " text".to_string(),
+            append: true,
+            highlight_theme: theme,
+            markdown_extensions: Arc::default(),
+        });
+
+        assert_eq!(options.revision, 3);
+        assert_eq!(options.pending_text, "new text");
+        assert!(!options.append);
+    }
+
+    #[test]
+    fn update_future_yields_before_coalescing_all_queued_updates() {
+        let theme = HighlightTheme::default_light();
+        let (tx, rx) = unbounded::<UpdateOptions>();
+        let (tx_result, rx_result) = unbounded::<ParsedUpdate>();
+        let total_updates = 128;
+
+        for revision in 1..=total_updates {
+            tx.try_send(UpdateOptions {
+                revision,
+                pending_text: format!("{revision}\n"),
+                append: revision != 1,
+                highlight_theme: theme.clone(),
+                markdown_extensions: Arc::default(),
+            })
+            .unwrap();
+        }
+
+        let mut future = Box::pin(UpdateFuture::new(TextViewFormat::Markdown, rx, tx_result));
+        let waker = futures::task::noop_waker();
+        let mut task_cx = std::task::Context::from_waker(&waker);
+
+        assert!(matches!(
+            std::future::Future::poll(future.as_mut(), &mut task_cx),
+            Poll::Pending
+        ));
+        let parsed_update = rx_result.try_recv().expect("parse result");
+
+        assert!(
+            parsed_update.revision < total_updates,
+            "single poll coalesced every queued update through revision {}",
+            parsed_update.revision
+        );
+
+        assert!(matches!(
+            std::future::Future::poll(future.as_mut(), &mut task_cx),
+            Poll::Pending
+        ));
+        let parsed_update = rx_result.try_recv().expect("next parse result");
+        assert_eq!(parsed_update.revision, total_updates);
     }
 
     #[gpui::test]
