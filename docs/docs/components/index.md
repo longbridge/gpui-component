@@ -30,6 +30,7 @@ collapsed: false
 - [Stepper](stepper) - Step-by-step progress indicator
 - [Switch](switch) - Toggle on/off control
 - [Tag](tag) - Labels and categories
+- [TextView](text-view) - Markdown and HTML text rendering
 - [Toggle](toggle) - Toggle button states
 - [Tooltip](tooltip) - Helpful hints on hover
 
@@ -37,6 +38,7 @@ collapsed: false
 
 - [Input](input) - An input field or a component that looks like an input field.
 - [Select](select) - A list of options for the user to pick.
+- [Combobox](combobox) - Searchable single-select or multi-select dropdown.
 - [NumberInput](number-input) - Numeric input with increment/decrement
 - [DatePicker](date-picker) - Date selection with calendar
 - [OtpInput](otp-input) - One-time password input
@@ -55,6 +57,7 @@ collapsed: false
 - [Scrollable](scrollable) - Scrollable containers
 - [Sheet](sheet) - Slide-in panel from edges
 - [Sidebar](sidebar) - Navigation sidebar
+- [StatusBar](status-bar) - Bottom status bar with left/center/right regions
 
 ### Advanced Components
 

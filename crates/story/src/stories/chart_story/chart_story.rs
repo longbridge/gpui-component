@@ -214,6 +214,17 @@ impl Render for ChartStory {
                             .color(move |d| d.color(color)),
                         true,
                         cx,
+                    ))
+                    .child(chart_container(
+                        "Pie Chart - Label",
+                        PieChart::new(self.monthly_devices.clone())
+                            .value(|d| d.desktop as f32)
+                            .inner_radius(50.)
+                            .outer_radius(80.)
+                            .color(move |d| d.color(color))
+                            .label(|d| d.month.clone()),
+                        true,
+                        cx,
                     )),
             )
             .child(Separator::horizontal())

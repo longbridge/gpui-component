@@ -827,7 +827,7 @@ impl RenderOnce for ColorPickerButton {
                 this.child(
                     div()
                         .id("square")
-                        .bg(cx.theme().background)
+                        .bg(cx.theme().tokens.background)
                         .border_1()
                         .border_color(cx.theme().input)
                         .when(cx.theme().shadow, |this| this.shadow_xs())

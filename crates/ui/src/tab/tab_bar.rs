@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 use gpui::{
-    Anchor, Animation, AnimationExt as _, AnyElement, App, Bounds, Div, Edges, ElementId,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, SharedString,
-    Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
+    Anchor, Animation, AnimationExt as _, AnyElement, App, Background, Bounds, Div, Edges,
+    ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle,
+    SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px,
 };
 use rust_i18n::t;
@@ -217,14 +217,16 @@ impl TabBar {
                     div()
                         .w_full()
                         .h(inner_height)
-                        .bg(cx.theme().background)
+                        .bg(cx.theme().tokens.background)
                         .rounded(inner_radius)
                         .shadow_xs(),
                 ),
-                TabVariant::Pill => el
-                    .flex()
-                    .items_center()
-                    .child(div().size_full().bg(cx.theme().primary).rounded(px(99.))),
+                TabVariant::Pill => el.flex().items_center().child(
+                    div()
+                        .size_full()
+                        .bg(cx.theme().tokens.primary)
+                        .rounded(px(99.)),
+                ),
                 TabVariant::Underline => el.child(
                     div()
                         .absolute()
@@ -232,7 +234,7 @@ impl TabBar {
                         .right_0()
                         .bottom_0()
                         .h(px(2.))
-                        .bg(cx.theme().primary),
+                        .bg(cx.theme().tokens.primary),
                 ),
                 _ => el,
             })
@@ -300,15 +302,19 @@ impl TabBar {
             return;
         }
 
-        // Same selection, no bounds yet: initialize position
-        if anim_params.read(cx).3 != px(0.) {
-            return;
-        }
-
         if let Some(to_b) = bounds.tabs.get(selected_ix) {
             let left = to_b.origin.x - container.origin.x;
             let width = to_b.size.width;
-            anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
+            let (_, _, to_left, to_width, epoch) = *anim_params.read(cx);
+
+            if to_width == px(0.) {
+                anim_params.update(cx, |v, _| *v = (left, width, left, width, epoch));
+                return;
+            }
+
+            if left != to_left || width != to_width {
+                anim_params.update(cx, |v, _| *v = (left, width, left, width, epoch));
+            }
         }
     }
 }
@@ -333,18 +339,18 @@ impl RenderOnce for TabBar {
             Size::Large => px(16.),
             _ => px(12.),
         };
-        let (bg, paddings, gap) = match self.variant {
+        let (bg, paddings, gap): (Background, _, _) = match self.variant {
             TabVariant::Tab => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().tab_bar, padding, px(0.))
+                (cx.theme().tokens.tab_bar.into(), padding, px(0.))
             }
             TabVariant::Outline => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().transparent, padding, default_gap)
+                (cx.theme().transparent.into(), padding, default_gap)
             }
             TabVariant::Pill => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().transparent, padding, px(4.))
+                (cx.theme().transparent.into(), padding, px(4.))
             }
             TabVariant::Segmented => {
                 let padding_x = match self.size {
@@ -358,7 +364,7 @@ impl RenderOnce for TabBar {
                     ..Default::default()
                 };
 
-                (cx.theme().tab_bar_segmented, padding, px(2.))
+                (cx.theme().tokens.tab_bar_segmented.into(), padding, px(2.))
             }
             TabVariant::Underline => {
                 // This gap is same as the tab inner_paddings
@@ -369,7 +375,7 @@ impl RenderOnce for TabBar {
                     _ => px(16.),
                 };
 
-                (cx.theme().transparent, Edges::all(px(0.)), gap)
+                (cx.theme().transparent.into(), Edges::all(px(0.)), gap)
             }
         };
 
@@ -395,6 +401,7 @@ impl RenderOnce for TabBar {
         };
 
         let indicator_element = self.render_indicator(&bounds_rc, window, cx);
+        let indicator_ready = indicator_element.is_some();
 
         let has_suffix_or_menu = self.suffix.is_some() || self.menu;
         let mut item_metas: Vec<(Option<SharedString>, Option<Icon>, bool)> = Vec::new();
@@ -456,6 +463,7 @@ impl RenderOnce for TabBar {
                                 .with_variant(self.variant)
                                 .with_size(self.size);
                             tab.indicator_active = has_indicator;
+                            tab.indicator_ready = indicator_ready;
                             let tab = tab
                                 .when_some(self.selected_index, |this, selected_ix| {
                                     this.selected(selected_ix == ix)

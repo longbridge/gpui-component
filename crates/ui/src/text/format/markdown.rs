@@ -1,15 +1,13 @@
 use std::ops::Range;
 
 use gpui::SharedString;
-use markdown::{
-    ParseOptions,
-    mdast::{self, Node},
-};
+use markdown::mdast::{self, Node};
 
 use crate::{
     highlighter::HighlightTheme,
     text::{
         document::ParsedDocument,
+        markdown_ext::MarkdownParseContext,
         node::{
             self, BlockNode, CodeBlock, ImageNode, InlineNode, LinkMark, NodeContext, Paragraph,
             Span, Table, TableRow, TextMark,
@@ -25,7 +23,8 @@ pub(crate) fn parse(
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
 ) -> Result<ParsedDocument, SharedString> {
-    markdown::to_mdast(&source, &ParseOptions::gfm())
+    let options = cx.markdown_extensions.parse_options();
+    markdown::to_mdast(&source, &options)
         .map(|n| ast_to_document(source, n, cx, highlight_theme))
         .map_err(|e| e.to_string().into())
 }
@@ -139,6 +138,31 @@ fn merge_children_with_mark(
     text
 }
 
+fn append_inline_html_blocks(paragraph: &mut Paragraph, blocks: Vec<BlockNode>) -> Option<String> {
+    let mut text = String::new();
+
+    for block in blocks {
+        match block {
+            BlockNode::Root { children, .. } => {
+                text.push_str(&append_inline_html_blocks(paragraph, children)?);
+            }
+            BlockNode::Paragraph(html_paragraph) => {
+                text.push_str(&html_paragraph.text());
+                for child in html_paragraph.children {
+                    paragraph.push(child);
+                }
+            }
+            BlockNode::Break { .. } => {
+                text.push('\n');
+                paragraph.push(InlineNode::new("\n"));
+            }
+            _ => return None,
+        }
+    }
+
+    Some(text)
+}
+
 fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeContext) -> String {
     let span = node.position().map(|pos| Span {
         start: cx.offset + pos.start.offset,
@@ -169,12 +193,8 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
             );
         }
         Node::Strong(val) => {
-            text = merge_children_with_mark(
-                paragraph,
-                &val.children,
-                TextMark::default().bold(),
-                cx,
-            );
+            text =
+                merge_children_with_mark(paragraph, &val.children, TextMark::default().bold(), cx);
         }
         Node::Delete(val) => {
             text = merge_children_with_mark(
@@ -228,17 +248,11 @@ fn parse_paragraph(paragraph: &mut Paragraph, node: &mdast::Node, cx: &mut NodeC
         }
         Node::Html(val) => match super::html::parse(&val.value, cx) {
             Ok(el) => {
-                if el
-                    .blocks
-                    .first()
-                    .map(|node| node.is_break())
-                    .unwrap_or(false)
-                {
-                    text = "\n".to_owned();
-                    paragraph.push(InlineNode::new(&text));
+                if let Some(inline_text) = append_inline_html_blocks(paragraph, el.blocks) {
+                    text = inline_text;
                 } else {
                     if cfg!(debug_assertions) {
-                        tracing::warn!("unsupported inline html tag: {:#?}", el);
+                        tracing::warn!("unsupported inline html tag: {:#?}", val.value);
                     }
                 }
             }
@@ -301,7 +315,7 @@ fn ast_to_document(
     let blocks = root
         .children
         .into_iter()
-        .map(|c| ast_to_node(c, cx, highlight_theme))
+        .map(|c| ast_to_node(source, c, cx, highlight_theme))
         .collect();
     ParsedDocument {
         source: source.to_string().into(),
@@ -319,10 +333,18 @@ fn new_span(pos: Option<markdown::unist::Position>, cx: &NodeContext) -> Option<
 }
 
 fn ast_to_node(
+    source: &str,
     value: mdast::Node,
     cx: &mut NodeContext,
     highlight_theme: &HighlightTheme,
 ) -> BlockNode {
+    let span = new_span(value.position().cloned(), cx);
+    let parse_cx = MarkdownParseContext::new(source, cx.offset);
+    if let Some(mut node) = cx.markdown_extensions.parse_block(&value, &parse_cx) {
+        node.set_span(span);
+        return BlockNode::Custom(node);
+    }
+
     match value {
         Node::Root(_) => unreachable!("node::Root should be handled separately"),
         Node::Paragraph(val) => {
@@ -337,7 +359,7 @@ fn ast_to_node(
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, cx, highlight_theme))
+                .map(|c| ast_to_node(source, c, cx, highlight_theme))
                 .collect();
             BlockNode::Blockquote {
                 children,
@@ -348,7 +370,7 @@ fn ast_to_node(
             let children = list
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, cx, highlight_theme))
+                .map(|c| ast_to_node(source, c, cx, highlight_theme))
                 .collect();
             BlockNode::List {
                 ordered: list.ordered,
@@ -360,7 +382,7 @@ fn ast_to_node(
             let children = val
                 .children
                 .into_iter()
-                .map(|c| ast_to_node(c, cx, highlight_theme))
+                .map(|c| ast_to_node(source, c, cx, highlight_theme))
                 .collect();
             BlockNode::ListItem {
                 children,
@@ -510,6 +532,9 @@ fn ast_to_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui::ParentElement;
+
+    use crate::text::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 
     #[test]
     fn test_nested_emphasis_merges_text_marks() {
@@ -537,6 +562,166 @@ mod tests {
                 .iter()
                 .any(|(_, mark)| mark.bold && mark.italic),
             "nested emphasis should produce a bold and italic mark"
+        );
+    }
+
+    #[test]
+    fn test_inline_html_image_stays_in_markdown_paragraph() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            r#"Before <img src="https://example.com/avatar.png" alt="Avatar" width="32" height="32" /> after."#,
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+            panic!("expected paragraph");
+        };
+
+        assert_eq!(paragraph.children.len(), 3);
+        assert_eq!(paragraph.children[0].text.as_ref(), "Before ");
+        assert_eq!(paragraph.children[2].text.as_ref(), " after.");
+
+        let image = paragraph.children[1]
+            .image
+            .as_ref()
+            .expect("expected inline html image");
+        assert_eq!(image.url.as_ref(), "https://example.com/avatar.png");
+        assert_eq!(image.width, Some(gpui::px(32.).into()));
+        assert_eq!(image.height, Some(gpui::px(32.).into()));
+    }
+
+    #[test]
+    fn test_inline_html_image_without_size_stays_in_markdown_paragraph() {
+        let mut cx = NodeContext::default();
+        let document = parse(
+            r#"Before <img src="https://avatars.githubusercontent.com/u/5518"> after."#,
+            &mut cx,
+            &HighlightTheme::default_light(),
+        )
+        .unwrap();
+
+        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
+            panic!("expected paragraph");
+        };
+
+        assert_eq!(paragraph.children.len(), 3);
+        assert_eq!(paragraph.children[0].text.as_ref(), "Before ");
+        assert_eq!(paragraph.children[2].text.as_ref(), " after.");
+
+        let image = paragraph.children[1]
+            .image
+            .as_ref()
+            .expect("expected inline html image");
+        assert_eq!(
+            image.url.as_ref(),
+            "https://avatars.githubusercontent.com/u/5518"
+        );
+        assert_eq!(image.width, None);
+        assert_eq!(image.height, None);
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct Ticker {
+        symbol: String,
+    }
+
+    fn parse_ticker_block(node: &Node, cx: &MarkdownParseContext<'_>) -> Option<MarkdownNode> {
+        let Node::Paragraph(paragraph) = node else {
+            return None;
+        };
+        let [Node::Text(text)] = paragraph.children.as_slice() else {
+            return None;
+        };
+        let symbol = text.value.strip_prefix('$')?.to_string();
+        let node_text = format!("${symbol}");
+
+        Some(
+            MarkdownNode::new("ticker", Ticker { symbol })
+                .text(node_text)
+                .markdown(cx.node_source(node).unwrap_or_default()),
+        )
+    }
+
+    #[test]
+    fn custom_block_parser_converts_ticker_syntax_to_custom_node() {
+        let extensions = MarkdownExtensions::default().block_parser(parse_ticker_block);
+
+        let mut cx = NodeContext {
+            markdown_extensions: extensions.into(),
+            ..NodeContext::default()
+        };
+        let document = parse("$TSLA.US", &mut cx, &HighlightTheme::default_light()).unwrap();
+
+        let BlockNode::Custom(node) = &document.blocks[0] else {
+            panic!("expected custom markdown node");
+        };
+        assert_eq!(node.name(), "ticker");
+        assert_eq!(node.as_text(), "$TSLA.US");
+        assert_eq!(node.as_markdown(), "$TSLA.US");
+        assert_eq!(
+            node.data::<Ticker>(),
+            Some(&Ticker {
+                symbol: "TSLA.US".to_string()
+            })
+        );
+        assert_eq!(document.text(), "$TSLA.US\n");
+        assert_eq!(document.to_markdown(), "$TSLA.US");
+    }
+
+    struct TickerPlugin {
+        name: &'static str,
+    }
+
+    impl TickerPlugin {
+        fn new(name: &'static str) -> Self {
+            Self { name }
+        }
+    }
+
+    impl MarkdownPlugin for TickerPlugin {
+        fn is_block(&self) -> bool {
+            true
+        }
+
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn parse(&self, node: &Node, cx: &MarkdownParseContext<'_>) -> Option<MarkdownNode> {
+            parse_ticker_block(node, cx)
+        }
+
+        fn render(
+            &self,
+            node: &MarkdownNode,
+            _window: &mut gpui::Window,
+            _cx: &mut gpui::App,
+        ) -> impl gpui::IntoElement {
+            gpui::div().child(node.as_text().to_string())
+        }
+    }
+
+    #[test]
+    fn custom_block_plugin_registers_parser_and_renderer() {
+        let extensions = MarkdownExtensions::default().plugin(TickerPlugin::new("ticker"));
+
+        let mut cx = NodeContext {
+            markdown_extensions: extensions.into(),
+            ..NodeContext::default()
+        };
+        let document = parse("$TSLA.US", &mut cx, &HighlightTheme::default_light()).unwrap();
+
+        let BlockNode::Custom(node) = &document.blocks[0] else {
+            panic!("expected custom markdown node");
+        };
+        assert_eq!(node.name(), "ticker");
+        assert_eq!(
+            node.data::<Ticker>(),
+            Some(&Ticker {
+                symbol: "TSLA.US".to_string()
+            })
         );
     }
 }

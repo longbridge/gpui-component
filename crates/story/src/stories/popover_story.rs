@@ -1,7 +1,7 @@
 use gpui::{
     Action, Anchor, App, AppContext, Context, DismissEvent, Entity, EventEmitter, FocusHandle,
     Focusable, Half, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement as _,
-    Render, Styled as _, Window, actions, div, px,
+    Render, Styled as _, WeakEntity, Window, actions, div, px,
 };
 use gpui_component::{
     ActiveTheme, StyledExt, WindowExt,
@@ -45,14 +45,14 @@ pub fn init(cx: &mut App) {
 }
 
 struct Form {
-    parent: Entity<PopoverStory>,
+    parent: WeakEntity<PopoverStory>,
     input1: Entity<InputState>,
 }
 
 impl Form {
-    fn new(parent: Entity<PopoverStory>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+    fn new(parent: WeakEntity<PopoverStory>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
-            parent,
+            parent: parent,
             input1: cx.new(|cx| InputState::new(window, cx)),
         })
     }
@@ -65,8 +65,9 @@ impl Focusable for Form {
 }
 
 struct DropdownListDelegate {
-    parent: Entity<PopoverStory>,
+    parent: WeakEntity<PopoverStory>,
 }
+
 impl ListDelegate for DropdownListDelegate {
     type Item = ListItem;
 
@@ -92,17 +93,17 @@ impl ListDelegate for DropdownListDelegate {
     }
 
     fn confirm(&mut self, _: bool, _: &mut Window, cx: &mut Context<ListState<Self>>) {
-        self.parent.update(cx, |this, cx| {
+        let _ = self.parent.update(cx, |this, cx| {
             this.list_popover_open = false;
             cx.notify();
-        })
+        });
     }
 
     fn cancel(&mut self, _: &mut Window, cx: &mut Context<ListState<Self>>) {
-        self.parent.update(cx, |this, cx| {
+        let _ = self.parent.update(cx, |this, cx| {
             this.list_popover_open = false;
             cx.notify();
-        })
+        });
     }
 }
 
@@ -123,10 +124,10 @@ impl Render for Form {
                     .label("Submit")
                     .primary()
                     .on_click(cx.listener(move |_, _, _, cx| {
-                        parent.update(cx, |this, cx| {
+                        let _ = parent.update(cx, |this, cx| {
                             this.form_popover_open = false;
                             cx.notify();
-                        })
+                        });
                     })),
             )
     }
@@ -162,10 +163,11 @@ impl PopoverStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let form = Form::new(cx.entity(), window, cx);
-        let parent = cx.entity();
-        let list = cx
-            .new(|cx| ListState::new(DropdownListDelegate { parent }, window, cx).searchable(true));
+        let form = Form::new(cx.weak_entity(), window, cx);
+        let parent = cx.weak_entity();
+        let list = cx.new(|cx| {
+            ListState::new(DropdownListDelegate { parent: parent }, window, cx).searchable(true)
+        });
 
         cx.focus_self(window);
 

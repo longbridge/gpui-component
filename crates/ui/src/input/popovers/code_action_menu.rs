@@ -90,7 +90,7 @@ impl RenderOnce for MenuItem {
             .rounded(cx.theme().radius.half())
             .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
             .when(self.selected, |this| {
-                this.bg(cx.theme().accent)
+                this.bg(cx.theme().tokens.accent)
                     .text_color(cx.theme().accent_foreground)
             })
             .child(
@@ -219,7 +219,7 @@ impl CodeActionMenu {
         }
 
         cx.propagate();
-        if action.partial_eq(&input::Enter { secondary: false }) {
+        if input::Enter::is_primary(&*action) {
             self.on_action_enter(window, cx);
         } else if action.partial_eq(&input::Escape) {
             self.on_action_escape(window, cx);

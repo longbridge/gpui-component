@@ -98,6 +98,7 @@ anyhow.workspace = true
 gpui = { workspace = true }
 gpui_macros.workspace = true
 gpui-component-macros = { workspace = true }
+gpui-component-assets = { workspace = true }
 notify.workspace = true
 ropey.workspace = true
 rust-i18n.workspace = true
@@ -184,6 +185,27 @@ tree-sitter-zig = { version = "1.1.2", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-text = "=21.0.0"
+# Native menu (NativeMenu) — drives AppKit NSMenu via objc2.
+raw-window-handle = { workspace = true }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = [
+    "NSMenu",
+    "NSMenuItem",
+    "NSView",
+    "NSResponder",
+    "NSEvent",
+] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSGeometry"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Native menu (NativeMenu) — drives Win32 popup menus.
+raw-window-handle = { workspace = true }
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
@@ -191,3 +213,12 @@ indoc = "2"
 
 [lints]
 workspace = true
+
+# `gpui-component-assets` ships the canonical icon set whose variants we
+# enumerate to generate `IconName` at build time. Cargo's
+# `DEP_<links>_<key>` propagation (the bridge that hands the icons-dir
+# path from the assets crate's build.rs into our own) only works through
+# *regular* dependencies, not build-deps, so this has to live here even
+# though our use is entirely build-time.
+[package.metadata.cargo-machete]
+ignored = ["gpui-component-assets"]

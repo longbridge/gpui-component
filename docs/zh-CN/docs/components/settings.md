@@ -7,7 +7,7 @@ description: 用于构建设置页、设置分组和设置项的界面组件。
 
 > Since: v0.5.0
 
-Settings 组件用于构建应用设置界面，支持页面分组、搜索过滤以及多种字段类型，适合实现类似 macOS 或 iOS 设置页的结构。
+Settings 组件用于构建应用设置界面，支持页面分组、按标题/描述/自定义关键词搜索过滤以及多种字段类型，适合实现类似 macOS 或 iOS 设置页的结构。
 
 ## 导入
 
@@ -219,6 +219,62 @@ SettingItem::new(
     SettingField::element(...)
 )
 .description(markdown("Rust doc for the `gpui-component` crate."))
+```
+
+### 禁用状态
+
+通过 `disabled(true)` 可以将设置项置为不可交互状态：整行会变暗，内置字段
+（Switch、Checkbox、Input、Dropdown、NumberInput）也会被自动禁用。
+
+```rust
+SettingItem::new(
+    "Dark Mode",
+    SettingField::switch(...)
+)
+.description("Switch between light and dark themes.")
+.disabled(true)
+```
+
+对于 [SettingItem::render] 自定义项，整行同样会自动变暗，但其中可交互的控件
+需要渲染闭包通过 `options.disabled` 自行处理：
+
+```rust
+SettingItem::render(|options, _, _| {
+    h_flex()
+        .child("Custom content")
+        .child(
+            Button::new("action")
+                .label("Action")
+                .with_size(options.size)
+                .disabled(options.disabled)
+        )
+        .into_any_element()
+})
+.disabled(true)
+```
+
+### 搜索关键词
+
+通过 `keywords` 可以为设置项附加额外的搜索关键词。这些关键词仅用于搜索匹配，
+不会被渲染出来。例如，标题为 "Enable Two-factor auth" 的设置项可以通过 "MFA"
+搜索到：
+
+```rust
+SettingItem::new(
+    "Enable Two-factor auth",
+    SettingField::switch(...)
+)
+.keywords(["MFA", "2FA"])
+```
+
+这对于没有标题和描述、但仍希望能被搜索到的 [SettingItem::render] 自定义项同样
+有用：
+
+```rust
+SettingItem::render(|options, _, _| {
+    h_flex().child("Custom content").into_any_element()
+})
+.keywords(["Advanced", "Network"])
 ```
 
 ## Setting Fields

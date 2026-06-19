@@ -524,7 +524,7 @@ impl RenderOnce for Dialog {
                             .id(layer_ix)
                             .track_focus(&self.focus_handle)
                             .focus_trap(format!("dialog-{}", layer_ix), &self.focus_handle)
-                            .bg(cx.theme().background)
+                            .bg(cx.theme().tokens.background)
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded(cx.theme().radius_lg)
@@ -652,12 +652,14 @@ impl RenderOnce for Dialog {
                                         offset: point(px(0.), px(20.)),
                                         blur_radius: px(25.),
                                         spread_radius: px(-5.),
+                                        inset: false,
                                     },
                                     BoxShadow {
                                         color: hsla(0., 0., 0., 0.1 * delta),
                                         offset: point(px(0.), px(8.)),
                                         blur_radius: px(10.),
                                         spread_radius: px(-6.),
+                                        inset: false,
                                     },
                                 ];
                                 this.top(y * delta).shadow(shadow)

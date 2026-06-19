@@ -18,6 +18,10 @@ use tree_sitter::{
 /// When a node spans more than this many bytes beyond the requested query
 /// range, we recurse into its children instead of querying it directly.
 const LARGE_NODE_THRESHOLD: usize = 8 * 1024;
+const MAX_INJECTION_LAYERS: usize = 256;
+const MAX_INJECTION_RANGES: usize = 4096;
+const MAX_INJECTION_BYTES: usize = 512 * 1024;
+const INJECTION_PARSE_TIMEOUT: Duration = Duration::from_millis(20);
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
 /// and caching of highlight results.
@@ -126,6 +130,48 @@ impl<'a> Iterator for ByteChunks<'a> {
 
         Some(&chunk[start_in_chunk..end_in_chunk])
     }
+}
+
+fn injection_range_len(range: &tree_sitter::Range) -> usize {
+    range.end_byte.saturating_sub(range.start_byte)
+}
+
+fn injection_ranges_byte_count(ranges: &[tree_sitter::Range]) -> usize {
+    ranges.iter().map(injection_range_len).sum()
+}
+
+fn injection_ranges_within_limits(ranges: &[tree_sitter::Range]) -> bool {
+    ranges.len() <= MAX_INJECTION_RANGES
+        && injection_ranges_byte_count(ranges) <= MAX_INJECTION_BYTES
+}
+
+fn should_include_injection_range(
+    language_name: &SharedString,
+    range: &tree_sitter::Range,
+    text: &Rope,
+) -> bool {
+    if language_name.as_ref() != "markdown_inline" {
+        return true;
+    }
+
+    markdown_inline_range_has_trigger(text, range.start_byte..range.end_byte)
+}
+
+/// Returns whether an inline range contains any byte that could start a
+/// Markdown inline construct, so plain prose ranges skip the injected parse.
+///
+/// The byte set must stay a superset of the trigger characters for every node
+/// captured by `languages/markdown_inline/highlights.scm` (emphasis, code
+/// spans, links, images, autolinks). If that query gains a construct with a new
+/// trigger character (e.g. GFM bare autolinks), add it here or the construct
+/// will silently lose highlighting.
+fn markdown_inline_range_has_trigger(text: &Rope, range: Range<usize>) -> bool {
+    text.slice(range).bytes().any(|byte| {
+        matches!(
+            byte,
+            b'*' | b'_' | b'`' | b'[' | b']' | b'(' | b')' | b'<' | b'>' | b'!' | b'~' | b'$'
+        )
+    })
 }
 
 #[derive(Debug, Default, Clone)]
@@ -483,6 +529,31 @@ impl SyntaxHighlighter {
         tree: &Tree,
         text: &Rope,
     ) -> Vec<InjectionLayer> {
+        struct CombinedRanges {
+            ranges: Vec<tree_sitter::Range>,
+            byte_count: usize,
+        }
+
+        impl CombinedRanges {
+            /// Ranges are already filtered by `should_include_injection_range`
+            /// before being pushed here; this only enforces the count/byte caps.
+            fn push_limited(&mut self, ranges: Vec<tree_sitter::Range>) {
+                for range in ranges {
+                    if self.ranges.len() >= MAX_INJECTION_RANGES {
+                        break;
+                    }
+
+                    let range_len = injection_range_len(&range);
+                    if self.byte_count.saturating_add(range_len) > MAX_INJECTION_BYTES {
+                        break;
+                    }
+
+                    self.byte_count += range_len;
+                    self.ranges.push(range);
+                }
+            }
+        }
+
         fn sort_ranges(ranges: &mut [tree_sitter::Range]) {
             ranges.sort_unstable_by(|a, b| {
                 a.start_byte
@@ -492,17 +563,14 @@ impl SyntaxHighlighter {
         }
 
         fn ranges_cache_key(ranges: &[tree_sitter::Range]) -> Vec<(usize, usize)> {
-            ranges
-                .iter()
-                .map(|r| (r.start_byte, r.end_byte))
-                .collect()
+            ranges.iter().map(|r| (r.start_byte, r.end_byte)).collect()
         }
 
         let root_node = tree.root_node();
         let mut cursor = QueryCursor::new();
         let mut matches = cursor.matches(&data.query, root_node, TextProvider(text));
 
-        let mut combined_ranges: HashMap<SharedString, Vec<tree_sitter::Range>> = HashMap::new();
+        let mut combined_ranges: HashMap<SharedString, CombinedRanges> = HashMap::new();
         let old_layer_trees: HashMap<_, _> = data
             .old_layers
             .iter()
@@ -555,14 +623,27 @@ impl SyntaxHighlighter {
             if ranges.is_empty() {
                 continue;
             }
+            ranges.retain(|range| should_include_injection_range(&language_name, range, text));
+            if ranges.is_empty() {
+                continue;
+            }
             sort_ranges(&mut ranges);
 
             if combined {
                 combined_ranges
                     .entry(language_name.clone())
-                    .or_default()
-                    .extend(ranges);
+                    .or_insert_with(|| CombinedRanges {
+                        ranges: Vec::new(),
+                        byte_count: 0,
+                    })
+                    .push_limited(ranges);
             } else {
+                if new_layers.len() >= MAX_INJECTION_LAYERS
+                    || !injection_ranges_within_limits(&ranges)
+                {
+                    continue;
+                }
+
                 let old_tree = old_layer_trees
                     .get(&(language_name.clone(), ranges_cache_key(&ranges)))
                     .copied();
@@ -574,7 +655,12 @@ impl SyntaxHighlighter {
             }
         }
 
-        for (language_name, mut ranges) in combined_ranges {
+        for (language_name, combined) in combined_ranges {
+            if new_layers.len() >= MAX_INJECTION_LAYERS {
+                break;
+            }
+
+            let mut ranges = combined.ranges;
             if ranges.is_empty() {
                 continue;
             }
@@ -608,6 +694,17 @@ impl SyntaxHighlighter {
         let mut parser = Parser::new();
         parser.set_language(&config.language).ok()?;
         parser.set_included_ranges(&ranges).ok()?;
+        let parse_start = Instant::now();
+        let mut timed_out = false;
+        let mut progress = |_: &tree_sitter::ParseState| -> ControlFlow<()> {
+            if parse_start.elapsed() > INJECTION_PARSE_TIMEOUT {
+                timed_out = true;
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        };
+        let options = ParseOptions::new().progress_callback(&mut progress);
 
         let new_tree = parser.parse_with_options(
             &mut |offset, _| {
@@ -619,8 +716,11 @@ impl SyntaxHighlighter {
                 }
             },
             old_tree,
-            None,
+            Some(options),
         )?;
+        if timed_out {
+            return None;
+        }
 
         let byte_range = bounding_byte_range(&ranges)?;
         Some(InjectionLayer {
@@ -821,6 +921,9 @@ impl SyntaxHighlighter {
             if node_range.start > node_range.end {
                 node_range.end = node_range.start;
             }
+            if node_range.is_empty() {
+                continue;
+            }
 
             styles.push((node_range, theme.style(name.as_ref()).unwrap_or_default()));
         }
@@ -860,6 +963,11 @@ pub(crate) fn unique_styles(
     total_range: &Range<usize>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
+    let styles: Vec<_> = styles
+        .into_iter()
+        .filter(|(range, _)| !range.is_empty())
+        .collect();
+
     if styles.is_empty() {
         return styles;
     }
@@ -986,7 +1094,6 @@ fn collect_query_nodes_inner<'a>(
 
     out.push(node);
 }
-
 
 /// Merge other style (Other on top)
 fn merge_highlight_style(style: &mut HighlightStyle, other: &HighlightStyle) {
@@ -1182,6 +1289,46 @@ $x = 1;
 
     #[test]
     #[cfg(feature = "tree-sitter-languages")]
+    fn test_markdown_inline_injection_layers_are_bounded() {
+        let markdown = (0..(MAX_INJECTION_RANGES + 1024))
+            .map(|i| format!("paragraph {i} *x*\n\n"))
+            .collect::<String>();
+        let rope = Rope::from_str(markdown.as_str());
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+
+        assert!(highlighter.update(None, &rope, None));
+        assert!(
+            highlighter.injection_layers.len() <= 1,
+            "markdown_inline should be combined instead of one layer per inline node"
+        );
+
+        if let Some(layer) = highlighter
+            .injection_layers
+            .iter()
+            .find(|layer| layer.language_name.as_ref() == "markdown_inline")
+        {
+            assert!(layer.ranges.len() <= MAX_INJECTION_RANGES);
+            assert!(injection_ranges_byte_count(&layer.ranges) <= MAX_INJECTION_BYTES);
+        }
+
+        let plain_markdown = (0..1024)
+            .map(|i| format!("paragraph {i} plain\n\n"))
+            .collect::<String>();
+        let plain_rope = Rope::from_str(plain_markdown.as_str());
+        let mut plain_highlighter = SyntaxHighlighter::new("markdown");
+
+        assert!(plain_highlighter.update(None, &plain_rope, None));
+        assert!(
+            plain_highlighter
+                .injection_layers
+                .iter()
+                .all(|layer| layer.language_name.as_ref() != "markdown_inline"),
+            "plain inline ranges should not create markdown_inline injection layers"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
     fn test_highlight_allow_overlap_property_combines_nested_captures() {
         let markdown = "This has ***bold and italic*** and **bold _with_ italic** text.";
         let rope = Rope::from_str(markdown);
@@ -1252,6 +1399,12 @@ $x = 1;
                 (45..60, blue),
                 (60..65, clean),
             ],
+        );
+
+        assert_unique_styles(
+            0..10,
+            vec![(2..2, red), (4..6, green)],
+            vec![(0..4, clean), (4..6, green), (6..10, clean)],
         );
     }
 }

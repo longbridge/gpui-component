@@ -8,7 +8,7 @@ description: A settings UI with grouped setting items and pages.
 > Since: v0.5.0
 
 The Settings component provides a UI for managing application settings. It includes grouped setting items and pages.
-We can search by title and description to filter the settings to display only relevant settings (Like this macOS, iOS Settings).
+We can search by title, description, and custom keywords to filter the settings to display only relevant settings (Like this macOS, iOS Settings).
 
 ## Import
 
@@ -224,6 +224,64 @@ SettingItem::new(
     SettingField::element(...)
 )
 .description(markdown("Rust doc for the `gpui-component` crate."))
+```
+
+### Disabled
+
+Use `disabled(true)` to render a setting item in a non-interactive state. The
+whole row is dimmed and the built-in field (Switch, Checkbox, Input, Dropdown,
+NumberInput) is automatically disabled.
+
+```rust
+SettingItem::new(
+    "Dark Mode",
+    SettingField::switch(...)
+)
+.description("Switch between light and dark themes.")
+.disabled(true)
+```
+
+For [SettingItem::render] custom items, the row is still dimmed automatically,
+but the renderer is responsible for honoring the disabled state on any
+interactive controls inside it via `options.disabled`:
+
+```rust
+SettingItem::render(|options, _, _| {
+    h_flex()
+        .child("Custom content")
+        .child(
+            Button::new("action")
+                .label("Action")
+                .with_size(options.size)
+                .disabled(options.disabled)
+        )
+        .into_any_element()
+})
+.disabled(true)
+```
+
+### Search Keywords
+
+Use `keywords` to attach additional search terms to an item. They are only used
+for search matching and are never rendered. For example, an item titled "Enable
+Two-factor auth" can be made searchable via "MFA":
+
+```rust
+SettingItem::new(
+    "Enable Two-factor auth",
+    SettingField::switch(...)
+)
+.keywords(["MFA", "2FA"])
+```
+
+This is also useful for [SettingItem::render] custom items that have no title or
+description but should still appear in search results:
+
+```rust
+SettingItem::render(|options, _, _| {
+    h_flex().child("Custom content").into_any_element()
+})
+.keywords(["Advanced", "Network"])
 ```
 
 ## Setting Fields

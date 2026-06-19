@@ -1,11 +1,11 @@
 use gpui::{
     App, AppContext, Axis, Context, Element, Entity, FocusHandle, Focusable, Global, IntoElement,
-    ParentElement as _, Render, SharedString, Styled, Window, px,
+    ParentElement as _, Render, SharedString, Styled, Window, prelude::FluentBuilder, px,
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Sizable, Size, Theme, ThemeMode,
-    button::Button,
+    ActiveTheme, Disableable, Icon, IconName, Sizable, Size, Theme, ThemeMode,
+    button::{Button, ButtonVariants},
     group_box::GroupBoxVariant,
     h_flex,
     label::Label,
@@ -23,9 +23,13 @@ struct AppSettings {
     font_family: SharedString,
     font_size: f64,
     line_height: f64,
+    /// Demonstrates a custom element field driving its own state, with reset
+    /// support wired up via [`SettingField::on_reset`].
+    density: SharedString,
     notifications_enabled: bool,
     auto_update: bool,
     resettable: bool,
+    disabled: bool,
 }
 
 impl Default for AppSettings {
@@ -36,9 +40,11 @@ impl Default for AppSettings {
             font_family: "Arial".into(),
             font_size: 14.0,
             line_height: 12.0,
+            density: "Comfortable".into(),
             notifications_enabled: true,
             auto_update: true,
             resettable: true,
+            disabled: false,
         }
     }
 }
@@ -126,6 +132,7 @@ impl SettingsStory {
         let view = cx.entity();
         let default_settings = AppSettings::default();
         let resettable = AppSettings::global(cx).resettable;
+        let disabled = AppSettings::global(cx).disabled;
 
         vec![
             SettingPage::new("General")
@@ -150,7 +157,8 @@ impl SettingsStory {
                             )
                             .default_value(false),
                         )
-                        .description("Switch between light and dark themes."),
+                        .description("Switch between light and dark themes.")
+                        .disabled(disabled),
                         SettingItem::new(
                             "Auto Switch Theme",
                             SettingField::checkbox(
@@ -161,7 +169,8 @@ impl SettingsStory {
                             )
                             .default_value(default_settings.auto_switch_theme),
                         )
-                        .description("Automatically switch theme based on system settings."),
+                        .description("Automatically switch theme based on system settings.")
+                        .disabled(disabled),
                         SettingItem::new(
                             "resettable",
                             SettingField::switch(
@@ -171,7 +180,8 @@ impl SettingsStory {
                                 },
                             ),
                         )
-                        .description("Enable/Disable reset button for settings."),
+                        .description("Enable/Disable reset button for settings.")
+                        .disabled(disabled),
                         SettingItem::new(
                             "Group Variant",
                             SettingField::dropdown(
@@ -201,7 +211,8 @@ impl SettingsStory {
                             )
                             .default_value(GroupBoxVariant::Outline.as_str().to_string()),
                         )
-                        .description("Select the variant for setting groups."),
+                        .description("Select the variant for setting groups.")
+                        .disabled(disabled),
                         SettingItem::new(
                             "Group Size",
                             SettingField::dropdown(
@@ -228,7 +239,8 @@ impl SettingsStory {
                             )
                             .default_value(Size::default().as_str().to_string()),
                         )
-                        .description("Select the size for the setting group."),
+                        .description("Select the size for the setting group.")
+                        .disabled(disabled),
                     ]),
                     SettingGroup::new()
                         .title("Font")
@@ -249,7 +261,8 @@ impl SettingsStory {
                                 )
                                 .default_value(default_settings.font_family),
                             )
-                            .description("Select the font family for the story."),
+                            .description("Select the font family for the story.")
+                            .disabled(disabled),
                         )
                         .item(
                             SettingItem::new(
@@ -269,7 +282,8 @@ impl SettingsStory {
                             )
                             .description(
                                 "Adjust the font size for better readability between 8 and 72.",
-                            ),
+                            )
+                            .disabled(disabled),
                         )
                         .item(
                             SettingItem::new(
@@ -289,9 +303,33 @@ impl SettingsStory {
                             )
                             .description(
                                 "Adjust the line height for better readability between 8 and 32.",
-                            ),
+                            )
+                            .disabled(disabled),
                         ),
                     SettingGroup::new().title("Other").items(vec![
+                        SettingItem::new(
+                            "Disable Settings",
+                            SettingField::switch(
+                                |cx: &App| AppSettings::global(cx).disabled,
+                                |checked: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).disabled = checked
+                                },
+                            )
+                            .default_value(false),
+                        )
+                        .description("Lock the other settings."),
+                        SettingItem::new(
+                            "Foo",
+                            SettingField::switch(
+                                |cx: &App| AppSettings::global(cx).disabled,
+                                |checked: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).disabled = checked
+                                },
+                            )
+                            .default_value(false),
+                        )
+                        .description("Find me by searching for my sibling")
+                        .keywords(["Bar"]),
                         SettingItem::render(|options, _, _| {
                             h_flex()
                                 .w_full()
@@ -299,12 +337,14 @@ impl SettingsStory {
                                 .flex_wrap()
                                 .gap_3()
                                 .child("This is a custom element item by use SettingItem::element.")
+                                .when(options.disabled, |this| this.opacity(0.5))
                                 .child(
                                     Button::new("action")
                                         .icon(IconName::Globe)
                                         .label("Repository...")
                                         .outline()
                                         .with_size(options.size)
+                                        .disabled(options.disabled)
                                         .on_click(|_, _, cx| {
                                             cx.open_url(
                                                 "https://github.com/longbridge/gpui-component",
@@ -312,7 +352,50 @@ impl SettingsStory {
                                         }),
                                 )
                                 .into_any_element()
-                        }),
+                        })
+                        .disabled(disabled),
+                        SettingItem::new(
+                            "Density",
+                            SettingField::render(|options, _window, cx| {
+                                let current = AppSettings::global(cx).density.clone();
+                                h_flex()
+                                    .gap_1()
+                                    .children(["Comfortable", "Compact"].map(|value| {
+                                        Button::new(value)
+                                            .label(value)
+                                            .with_size(options.size)
+                                            .map(|this| {
+                                                if current == value {
+                                                    this.primary()
+                                                } else {
+                                                    this.outline()
+                                                }
+                                            })
+                                            .on_click(move |_, _, cx| {
+                                                AppSettings::global_mut(cx).density = value.into();
+                                            })
+                                    }))
+                            })
+                            // A custom element field manages its own state, so reset
+                            // support must be wired up explicitly via `on_reset`.
+                            .on_reset(
+                                {
+                                    let default_density = default_settings.density.clone();
+                                    move |cx: &App| {
+                                        AppSettings::global(cx).density != default_density
+                                    }
+                                },
+                                {
+                                    let default_density = default_settings.density.clone();
+                                    move |_window, cx: &mut App| {
+                                        AppSettings::global_mut(cx).density =
+                                            default_density.clone();
+                                    }
+                                },
+                            ),
+                        )
+                        .description("A custom element field with reset support via `on_reset`.")
+                        .disabled(disabled),
                         SettingItem::new(
                             "CLI Path",
                             SettingField::input(
@@ -329,7 +412,8 @@ impl SettingsStory {
                             "Path to the CLI executable. \n\
                         This item uses Vertical layout. The title,\
                         description, and field are all aligned vertically with width 100%.",
-                        ),
+                        )
+                        .disabled(disabled),
                     ]),
                 ]),
             SettingPage::new("Software Update")
@@ -346,7 +430,8 @@ impl SettingsStory {
                         )
                         .default_value(default_settings.notifications_enabled),
                     )
-                    .description("Receive notifications about updates and news."),
+                    .description("Receive notifications about updates and news.")
+                    .disabled(disabled),
                     SettingItem::new(
                         "Auto Update",
                         SettingField::switch(
@@ -357,7 +442,8 @@ impl SettingsStory {
                         )
                         .default_value(default_settings.auto_update),
                     )
-                    .description("Automatically download and install updates."),
+                    .description("Automatically download and install updates.")
+                    .disabled(disabled),
                 ])]),
             SettingPage::new("About")
                 .resettable(resettable)

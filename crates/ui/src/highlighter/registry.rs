@@ -13,7 +13,7 @@ use crate::{
     highlighter::{Language, languages},
 };
 
-pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
+pub(super) const HIGHLIGHT_NAMES: [&str; 41] = [
     "attribute",
     "boolean",
     "comment",
@@ -48,6 +48,7 @@ pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
     "string.special.symbol",
     "tag",
     "tag.doctype",
+    "text.code.span",
     "text.literal",
     "title",
     "type",
@@ -138,6 +139,8 @@ pub struct SyntaxColors {
     pub tag: Option<ThemeStyle>,
     #[serde(rename = "tag.doctype")]
     pub tag_doctype: Option<ThemeStyle>,
+    #[serde(rename = "text.code.span")]
+    pub text_code_span: Option<ThemeStyle>,
     #[serde(rename = "text.literal")]
     pub text_literal: Option<ThemeStyle>,
     pub title: Option<ThemeStyle>,
@@ -256,6 +259,7 @@ impl SyntaxColors {
             "string.special.symbol" => self.string_special_symbol,
             "tag" => self.tag,
             "tag.doctype" => self.tag_doctype,
+            "text.code.span" => self.text_code_span,
             "text.literal" => self.text_literal,
             "title" => self.title,
             "type" => self.type_,
@@ -423,6 +427,10 @@ pub struct HighlightThemeStyle {
     pub editor_active_line_number: Option<Hsla>,
     #[serde(rename = "editor.invisible")]
     pub editor_invisible: Option<Hsla>,
+    /// Optional background color for the gutter (line-number column).
+    /// Falls back to [`Self::editor_background`] when unset.
+    #[serde(rename = "editor.gutter.background")]
+    pub editor_gutter_background: Option<Hsla>,
     #[serde(flatten)]
     pub status: StatusColors,
     #[serde(rename = "syntax")]

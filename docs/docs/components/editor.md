@@ -153,6 +153,29 @@ let state = cx.new(|cx|
 );
 ```
 
+### Scroll Behavior
+
+In `code_editor` mode you can tune how the editor scrolls around the cursor and the end of the document. Both options mirror the equivalent VSCode / JetBrains settings and only take effect in `code_editor` mode.
+
+- `scroll_beyond_last_line(Option<usize>)` — empty rows reserved below the last line ("scroll beyond last line", like VSCode's `editor.scrollBeyondLastLine`). `None` (default) keeps the historical heuristic of roughly half the viewport; `Some(0)` removes the trailing space so the cursor sits flush with the last line; `Some(n)` reserves exactly `n` rows.
+- `cursor_surrounding_lines(Option<usize>)` — minimum number of lines the cursor is kept clear of the viewport's top/bottom edge before auto-scroll engages (like VSCode's `editor.cursorSurroundingLines`). `None` (default) keeps the historical heuristic; `Some(n)` keeps exactly `n` lines.
+
+```rust
+let state = cx.new(|cx|
+    InputState::new(window, cx)
+        .code_editor("rust")
+        // Reserve 3 empty rows below the last line.
+        .scroll_beyond_last_line(Some(3))
+        // Keep the cursor at least 1 line from the top/bottom edge.
+        .cursor_surrounding_lines(Some(1))
+);
+
+Input::new(&state)
+    .h_full()
+```
+
+Both can also be changed at runtime via `set_scroll_beyond_last_line` and `set_cursor_surrounding_lines`.
+
 ### Text Manipulation
 
 ```rust

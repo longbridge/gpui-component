@@ -6,9 +6,9 @@ use gpui::{
 };
 use gpui::{
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, MouseMoveEvent, Path, Pixels, Point, Position, ShapedLine, SharedString, Size,
-    Style, Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window, fill, point, px,
-    relative, size,
+    MouseButton, MouseMoveEvent, MouseUpEvent, Path, Pixels, Point, Position, ShapedLine,
+    SharedString, Size, Style, Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window,
+    fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
@@ -217,6 +217,60 @@ fn masked_display_offset(text: &Rope, original_offset: usize) -> usize {
     text.offset_to_char_index(original_offset) * MASK_CHAR.len_utf8()
 }
 
+/// Minimum pixel padding the cursor is kept clear of the viewport's
+/// top/bottom edges before auto-scroll engages. Backs
+/// [`InputState::cursor_surrounding_lines`].
+///
+/// Auto-grow uses one line. Otherwise `None` falls back to the historical
+/// heuristic ([`BOTTOM_MARGIN_ROWS`] lines, or one line on small
+/// viewports); `Some(n)` uses `n` lines. The result is saturated against
+/// half the viewport so an oversized override can't invert the
+/// top/bottom thresholds into a scroll feedback loop.
+pub(super) fn cursor_surrounding_padding(
+    is_auto_grow: bool,
+    override_lines: Option<usize>,
+    visible_lines: usize,
+    line_height: Pixels,
+) -> Pixels {
+    if is_auto_grow {
+        return line_height;
+    }
+    let raw = match override_lines {
+        Some(lines) => lines as f32 * line_height,
+        None => {
+            if visible_lines < BOTTOM_MARGIN_ROWS * 8 {
+                line_height
+            } else {
+                BOTTOM_MARGIN_ROWS * line_height
+            }
+        }
+    };
+    // Saturate against half the viewport so top + bottom margins can coexist.
+    let viewport_half = (visible_lines as f32 * line_height).half();
+    raw.min(viewport_half)
+}
+
+/// Pixel height of the empty area below the last line in the editor's
+/// scrollable region. Backs [`InputState::scroll_beyond_last_line`].
+///
+/// `0` outside code-editor mode. Inside it, `None` is half the viewport
+/// (floored at [`BOTTOM_MARGIN_ROWS`] line-heights); `Some(n)` is exactly
+/// `n` line-heights.
+fn empty_bottom_height(
+    is_code_editor: bool,
+    override_rows: Option<usize>,
+    viewport_height: Pixels,
+    line_height: Pixels,
+) -> Pixels {
+    if !is_code_editor {
+        return px(0.);
+    }
+    match override_rows {
+        Some(rows) => rows as f32 * line_height,
+        None => viewport_height.half().max(BOTTOM_MARGIN_ROWS * line_height),
+    }
+}
+
 /// Layout information for fold icons.
 struct FoldIconLayout {
     /// Hitbox for the line number area (used for hover detection)
@@ -254,6 +308,21 @@ impl TextElement {
                         state.on_drag_move(event, window, cx);
                     });
                 }
+            }
+        });
+
+        window.on_mouse_event({
+            let state = self.state.clone();
+            move |_: &MouseUpEvent, phase, _, cx| {
+                if !phase.bubble() {
+                    return;
+                }
+
+                // Stop auto-scroll when mouse up, and also stop selecting.
+                state.update(cx, |state, _| {
+                    state.auto_scroll.stop();
+                    state.selecting = false;
+                });
             }
         });
     }
@@ -298,14 +367,14 @@ impl TextElement {
         let mut scroll_offset = state.scroll_handle.offset();
         let mut cursor_bounds = None;
 
-        // If the input has a fixed height (Otherwise is auto-grow), we need to add a bottom margin to the input.
-        let top_bottom_margin = if state.mode.is_auto_grow() {
-            line_height
-        } else if visible_range.len() < BOTTOM_MARGIN_ROWS * 8 {
-            line_height
-        } else {
-            BOTTOM_MARGIN_ROWS * line_height
-        };
+        // Padding kept between the cursor and the viewport's top/bottom
+        // edges, used by the auto-scroll-into-view computation below.
+        let top_bottom_margin = cursor_surrounding_padding(
+            state.mode.is_auto_grow(),
+            state.cursor_surrounding_lines,
+            visible_range.len(),
+            line_height,
+        );
 
         // The cursor corresponds to the current cursor position in the text no only the line.
         let mut cursor_pos = None;
@@ -387,6 +456,7 @@ impl TextElement {
             (cursor_pos, cursor_start, cursor_end)
         {
             let selection_changed = state.last_selected_range != Some(selected_range);
+            let auto_scrolling = state.auto_scroll.is_active();
             if selection_changed && !is_selected_all {
                 // For Right alignment use 0 margin: cursor is clamped to bounds separately,
                 // so we never scroll the text for cursor-at-edge, avoiding a first-click jump.
@@ -408,10 +478,14 @@ impl TextElement {
                     scroll_offset.x
                 };
 
-                // If we change the scroll_offset.y, GPUI will render and trigger the next run loop.
-                // So, here we just adjust offset by `line_height` for move smooth.
-                scroll_offset.y =
-                    if scroll_offset.y + cursor_pos.y > bounds.size.height - top_bottom_margin {
+                // Vertical cursor-follow is suppressed while auto-scroll manages the y axis,
+                // to prevent fighting the background scroll task.
+                if !auto_scrolling {
+                    // If we change the scroll_offset.y, GPUI will render and trigger the next run loop.
+                    // So, here we just adjust offset by `line_height` for move smooth.
+                    scroll_offset.y = if scroll_offset.y + cursor_pos.y
+                        > bounds.size.height - top_bottom_margin
+                    {
                         // cursor is out of bottom
                         scroll_offset.y - line_height
                     } else if scroll_offset.y + cursor_pos.y < top_bottom_margin {
@@ -420,6 +494,7 @@ impl TextElement {
                     } else {
                         scroll_offset.y
                     };
+                }
 
                 // For selection to move scroll
                 if state.selection_reversed {
@@ -427,7 +502,7 @@ impl TextElement {
                         // selection start is out of left
                         scroll_offset.x = -cursor_start.x;
                     }
-                    if scroll_offset.y + cursor_start.y < px(0.) {
+                    if !auto_scrolling && scroll_offset.y + cursor_start.y < px(0.) {
                         // selection start is out of top
                         scroll_offset.y = -cursor_start.y;
                     }
@@ -438,7 +513,7 @@ impl TextElement {
                         // selection end is out of left
                         scroll_offset.x = -cursor_end.x;
                     }
-                    if scroll_offset.y + cursor_end.y <= px(0.) {
+                    if !auto_scrolling && scroll_offset.y + cursor_end.y <= px(0.) {
                         // selection end is out of top
                         scroll_offset.y = -cursor_end.y;
                     }
@@ -1260,7 +1335,8 @@ impl TextElement {
 
         let mut styles = Vec::with_capacity(visible_buffer_lines.len());
 
-        // Helper to flush a contiguous range of lines
+        // Helper to flush a contiguous range of lines. These ranges are disjoint,
+        // so appending avoids repeatedly cloning and recombining prior styles.
         let flush_range = |start_line: usize, end_line: usize, skip: bool, styles: &mut Vec<_>| {
             let byte_start = text.line_start_offset(start_line);
             let byte_end = if is_multi_line {
@@ -1275,7 +1351,7 @@ impl TextElement {
                 highlighter.styles(&(byte_start..byte_end), &cx.theme().highlight_theme)
             };
 
-            *styles = gpui::combine_highlights(styles.clone(), range_styles).collect();
+            styles.extend(range_styles);
         };
 
         // Group contiguous visible lines into ranges and call styles() once per range
@@ -1313,12 +1389,25 @@ impl TextElement {
 
         let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
 
+        // Range semantic tokens, resolved from the LSP provider's cached
+        // result through the active highlight theme so it shares the same
+        // colour vocabulary as the tree-sitter path. Empty Vec when no
+        // provider is set, so `combine_highlights` short-circuits.
+        let custom_styles = state.lsp.semantic_tokens_for_range(
+            text,
+            &visible_byte_range,
+            &cx.theme().highlight_theme,
+        );
+
         // hover definition style
         if let Some(hover_style) = self.layout_hover_definition(cx) {
             styles.push(hover_style);
         }
 
-        // Combine marker styles
+        // Compose order: tree-sitter (base) -> custom (overlay) -> diagnostics (top).
+        // Diagnostics keep highest priority so errors remain visible regardless
+        // of language coloring.
+        styles = gpui::combine_highlights(custom_styles, styles).collect();
         styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
 
         Some(styles)
@@ -1488,11 +1577,13 @@ impl Element for TextElement {
         let placeholder = self.placeholder.clone();
 
         let text_style = window.text_style();
-        let fg = text_style.color;
+        let disabled = state.disabled;
+        let dim = |color: Hsla| if disabled { color.opacity(0.5) } else { color };
+        let fg = dim(text_style.color);
         let (display_text, text_color) = if is_empty {
             (
                 &Rope::from(placeholder.as_str()),
-                cx.theme().muted_foreground,
+                dim(cx.theme().muted_foreground),
             )
         } else if state.masked {
             (
@@ -1588,6 +1679,10 @@ impl Element for TextElement {
                         }
                     }
 
+                    if disabled {
+                        run.color = run.color.opacity(0.5)
+                    }
+
                     run
                 }));
 
@@ -1674,24 +1769,25 @@ impl Element for TextElement {
         let ghost_lines_height = ghost_line_count as f32 * line_height;
 
         let total_wrapped_lines = state.display_map.wrap_row_count();
-        let empty_bottom_height = if state.mode.is_code_editor() {
-            bounds
-                .size
-                .height
-                .half()
-                .max(BOTTOM_MARGIN_ROWS * line_height)
-        } else {
-            px(0.)
-        };
+        let empty_bottom_height = empty_bottom_height(
+            state.mode.is_code_editor(),
+            state.scroll_beyond_last_line,
+            bounds.size.height,
+            line_height,
+        );
 
+        // Empty bottom and ghost lines both describe extra height past the
+        // last content row, so take the max rather than summing — summing
+        // left a band of empty space the cursor could never reach.
         let mut scroll_size = size(
             if longest_line_width + line_number_width + RIGHT_MARGIN > bounds.size.width {
                 longest_line_width + line_number_width + RIGHT_MARGIN
             } else {
                 longest_line_width
             },
-            (total_wrapped_lines as f32 * line_height + empty_bottom_height + ghost_lines_height)
-                .max(bounds.size.height),
+            (total_wrapped_lines as f32 * line_height
+                + empty_bottom_height.max(ghost_lines_height))
+            .max(bounds.size.height),
         );
 
         // TODO: should be add some gap to right, to convenient to focus on boundary position
@@ -1844,11 +1940,17 @@ impl Element for TextElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let focus_handle = self.state.read(cx).focus_handle.clone();
-        let show_cursor = self.state.read(cx).show_cursor(window, cx);
+        let (focus_handle, show_cursor, disabled, selected_range) = {
+            let state = self.state.read(cx);
+            (
+                state.focus_handle.clone(),
+                state.show_cursor(window, cx),
+                state.disabled,
+                state.selected_range,
+            )
+        };
         let focused = focus_handle.is_focused(window);
         let bounds = prepaint.bounds;
-        let selected_range = self.state.read(cx).selected_range;
         let text_align = prepaint.last_layout.text_align;
 
         window.handle_input(
@@ -1886,7 +1988,17 @@ impl Element for TextElement {
         let origin = bounds.origin;
 
         let invisible_top_padding = prepaint.last_layout.visible_top;
-        let active_line_color = cx.theme().highlight_theme.style.editor_active_line;
+        let active_line_color = cx
+            .theme()
+            .highlight_theme
+            .style
+            .editor_active_line
+            .map(|color| if disabled { color.opacity(0.5) } else { color });
+        let editor_background = if disabled {
+            cx.theme().editor_background().opacity(0.5)
+        } else {
+            cx.theme().editor_background()
+        };
 
         // Paint active line
         let mut offset_y = px(0.);
@@ -1942,7 +2054,8 @@ impl Element for TextElement {
 
         // Paint document colors
         for (path, color) in prepaint.document_color_paths.iter() {
-            window.paint_path(path.clone(), *color);
+            let color = if disabled { color.opacity(0.5) } else { *color };
+            window.paint_path(path.clone(), color);
         }
 
         // Paint text with inline completion ghost line support
@@ -2007,7 +2120,7 @@ impl Element for TextElement {
                             line_height,
                         ),
                     );
-                    window.paint_quad(fill(ghost_bounds, cx.theme().editor_background()));
+                    window.paint_quad(fill(ghost_bounds, editor_background));
 
                     // Paint ghost line text
                     _ = ghost_line.paint(
@@ -2035,6 +2148,15 @@ impl Element for TextElement {
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             offset_y += invisible_top_padding;
 
+            // Gutter background: prefer the dedicated `editor.gutter.background`
+            // theme key, falling back to the editor background so existing
+            // themes render unchanged.
+            let gutter_bg = cx
+                .theme()
+                .highlight_theme
+                .style
+                .editor_gutter_background
+                .unwrap_or_else(|| cx.theme().editor_background());
             window.paint_quad(fill(
                 Bounds {
                     origin: input_bounds.origin,
@@ -2043,7 +2165,7 @@ impl Element for TextElement {
                         input_bounds.size.height + prepaint.ghost_lines_height,
                     ),
                 },
-                cx.theme().editor_background(),
+                gutter_bg,
             ));
 
             // Each item is the normal lines.
@@ -2120,7 +2242,7 @@ impl Element for TextElement {
 
                     // Paint background to cover any existing text
                     let bg_bounds = Bounds::new(p, size(first_line.width + px(4.), line_height));
-                    window.paint_quad(fill(bg_bounds, cx.theme().editor_background()));
+                    window.paint_quad(fill(bg_bounds, editor_background));
 
                     // Paint first line completion text
                     _ = first_line.paint(p, line_height, text_align, None, window, cx);
@@ -2446,5 +2568,154 @@ mod tests {
         assert_eq!(result[3].color, gpui::black());
         assert_eq!(result[4].color, gpui::black());
         assert_eq!(result[5].color, gpui::blue());
+    }
+
+    #[test]
+    fn test_empty_bottom_height_outside_code_editor() {
+        // Single-line / plain-text / auto-grow modes never reserve empty
+        // bottom space, regardless of any override.
+        for override_rows in [None, Some(0), Some(3), Some(99)] {
+            assert_eq!(
+                empty_bottom_height(false, override_rows, px(800.), px(20.)),
+                px(0.),
+            );
+        }
+    }
+
+    #[test]
+    fn test_empty_bottom_height_code_editor_default() {
+        // `None`: roughly half the viewport, floored at
+        // `BOTTOM_MARGIN_ROWS * line_height` so the empty area never
+        // collapses to "less than a few lines" on tiny viewports.
+        let line_height = px(20.);
+
+        // Viewport much taller than the floor → half-viewport wins.
+        assert_eq!(
+            empty_bottom_height(true, None, px(800.), line_height),
+            px(400.),
+        );
+
+        // Viewport shorter than 2 × floor → floor wins.
+        let floor = BOTTOM_MARGIN_ROWS * line_height;
+        assert_eq!(empty_bottom_height(true, None, px(40.), line_height), floor);
+    }
+
+    #[test]
+    fn test_empty_bottom_height_explicit_row_count() {
+        // `Some(n)`: exactly `n` line-heights. Caller fully controls
+        // the trailing empty space; viewport size doesn't amplify it.
+        let line_height = px(20.);
+
+        for rows in [0_usize, 1, 3, 8, 64] {
+            let expected = rows as f32 * line_height;
+            assert_eq!(
+                empty_bottom_height(true, Some(rows), px(800.), line_height),
+                expected,
+            );
+            // Tiny viewport: still exactly `n × line_height`, no floor
+            // applied when caller supplied an explicit count.
+            assert_eq!(
+                empty_bottom_height(true, Some(rows), px(20.), line_height),
+                expected,
+            );
+        }
+    }
+
+    #[test]
+    fn test_cursor_surrounding_padding_auto_grow() {
+        // Auto-grow inputs always pad by one line, regardless of any
+        // override or visible-lines count.
+        let line_height = px(20.);
+        for override_lines in [None, Some(0), Some(3), Some(99)] {
+            for visible_lines in [0_usize, 1, 8, 64] {
+                assert_eq!(
+                    cursor_surrounding_padding(true, override_lines, visible_lines, line_height,),
+                    line_height,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_cursor_surrounding_padding_default() {
+        // `None`: historical heuristic — `BOTTOM_MARGIN_ROWS` for normal
+        // viewports, falls back to one line on small viewports (less
+        // than `BOTTOM_MARGIN_ROWS × 8` rows tall).
+        let line_height = px(20.);
+
+        // Small viewport → 1-line fallback.
+        let small = BOTTOM_MARGIN_ROWS * 8 - 1;
+        assert_eq!(
+            cursor_surrounding_padding(false, None, small, line_height),
+            line_height,
+        );
+
+        // Boundary at `BOTTOM_MARGIN_ROWS × 8` flips to the full margin.
+        let boundary = BOTTOM_MARGIN_ROWS * 8;
+        assert_eq!(
+            cursor_surrounding_padding(false, None, boundary, line_height),
+            BOTTOM_MARGIN_ROWS * line_height,
+        );
+
+        // Comfortably-large viewport.
+        assert_eq!(
+            cursor_surrounding_padding(false, None, 100, line_height),
+            BOTTOM_MARGIN_ROWS * line_height,
+        );
+    }
+
+    #[test]
+    fn test_cursor_surrounding_padding_explicit() {
+        // `Some(n)`: exactly `n × line_height` when the viewport has
+        // room for it; saturated against half the viewport when it
+        // doesn't.
+        let line_height = px(20.);
+
+        for lines in [0_usize, 1, 2, 5, 50] {
+            let raw = lines as f32 * line_height;
+            for visible_lines in [0_usize, 1, 8, 100] {
+                let viewport_half = (visible_lines as f32 * line_height).half();
+                assert_eq!(
+                    cursor_surrounding_padding(false, Some(lines), visible_lines, line_height,),
+                    raw.min(viewport_half),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_cursor_surrounding_padding_saturates_against_viewport() {
+        // An aggressive override on a small viewport must not produce a
+        // padding larger than half the visible region — otherwise the
+        // bottom-edge auto-scroll-into-view threshold sinks below the
+        // top-edge threshold and the per-frame scroll adjustment loses
+        // a stable fixed point.
+        let line_height = px(20.);
+
+        // Override much larger than viewport → clamped to half.
+        let visible_lines = 10;
+        let viewport_half = (visible_lines as f32 * line_height).half();
+        assert_eq!(
+            cursor_surrounding_padding(false, Some(50), visible_lines, line_height),
+            viewport_half,
+        );
+
+        // Override that fits → returned unchanged.
+        let visible_lines = 40;
+        assert_eq!(
+            cursor_surrounding_padding(false, Some(3), visible_lines, line_height),
+            3.0 * line_height,
+        );
+
+        // Default heuristic still saturates if BOTTOM_MARGIN_ROWS would
+        // exceed the half-viewport bound (only possible at extreme
+        // sizes — kept for defensive completeness).
+        let visible_lines = BOTTOM_MARGIN_ROWS * 8;
+        let half = (visible_lines as f32 * line_height).half();
+        let raw = BOTTOM_MARGIN_ROWS * line_height;
+        assert_eq!(
+            cursor_surrounding_padding(false, None, visible_lines, line_height),
+            raw.min(half),
+        );
     }
 }

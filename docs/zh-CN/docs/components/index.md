@@ -16,12 +16,14 @@ collapsed: false
 - [Checkbox](checkbox) - 二元选择控件
 - [Icon](icon) - 图标展示组件
 - [Image](image) - 带回退能力的图片展示
+- [TextView](text-view) - Markdown 与 HTML 文本渲染
 - [Tooltip](tooltip) - 悬浮提示
 
 ## 表单组件
 
 - [Input](input) - 文本输入与类输入控件
 - [Select](select) - 选项选择器
+- [Combobox](combobox) - 可搜索的单选或多选下拉组件
 - [NumberInput](number-input) - 数字输入
 - [DatePicker](date-picker) - 日期选择器
 - [OtpInput](otp-input) - 一次性验证码输入
@@ -36,6 +38,7 @@ collapsed: false
 - [Resizable](resizable) - 可调整大小的面板
 - [Scrollable](scrollable) - 可滚动容器
 - [Sidebar](sidebar) - 侧边栏导航
+- [StatusBar](status-bar) - 底部状态栏,含左/中/右三区
 - [Chart](chart) - 图表组件
 - [DataTable](data-table) - 高性能数据表格
 - [Tree](tree) - 树形结构组件
@@ -46,4 +49,3 @@ collapsed: false
 组件页已经预置中文路由结构，尚未完成的页面会先显示中文占位说明，并回链到英文原文：
 
 - [English version](/docs/components/index)
-

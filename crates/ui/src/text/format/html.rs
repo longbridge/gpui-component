@@ -233,18 +233,23 @@ fn trim_text(text: &str) -> String {
     out
 }
 
-fn parse_paragraph(
-    paragraph: &mut Paragraph,
-    node: &Rc<Node>,
-) {
-    fn push_merged(paragraph: &mut Paragraph, text: String, marks: Vec<(Range<usize>, TextMark)>, new_mark: Option<TextMark>) {
+fn parse_paragraph(paragraph: &mut Paragraph, node: &Rc<Node>) {
+    fn push_merged(
+        paragraph: &mut Paragraph,
+        text: String,
+        marks: Vec<(Range<usize>, TextMark)>,
+        new_mark: Option<TextMark>,
+    ) {
         if text.is_empty() {
             return;
         }
         let mut node = InlineNode::new(text).marks(marks);
         if let Some(new_mark) = new_mark {
             let len = node.text.len();
-            if let Some(last) = node.marks.last_mut() && last.0.start == 0 && last.0.end == len {
+            if let Some(last) = node.marks.last_mut()
+                && last.0.start == 0
+                && last.0.end == len
+            {
                 last.1.merge(new_mark);
             } else {
                 node.marks.push((0..node.text.len(), new_mark));
@@ -253,7 +258,11 @@ fn parse_paragraph(
         paragraph.push(node);
     }
 
-    fn merge_children_with_mark(node: &Node, paragraph: &mut Paragraph, new_mark: Option<TextMark>) {
+    fn merge_children_with_mark(
+        node: &Node,
+        paragraph: &mut Paragraph,
+        new_mark: Option<TextMark>,
+    ) {
         let mut merged_text = String::new();
         let mut merged_marks = Vec::new();
 
@@ -265,7 +274,7 @@ fn parse_paragraph(
                 let offset = merged_text.len();
                 merged_text.push_str(&node.text);
                 for (range, child_mark) in node.marks {
-                    merged_marks.push((range.start+offset .. range.end+offset, child_mark));
+                    merged_marks.push((range.start + offset..range.end + offset, child_mark));
                 }
 
                 if let Some(mut image) = node.image {
@@ -273,8 +282,12 @@ fn parse_paragraph(
                         image.link = Some(link_mark);
                     }
 
-                    push_merged(paragraph, std::mem::take(&mut merged_text),
-                        std::mem::take(&mut merged_marks), new_mark.clone());
+                    push_merged(
+                        paragraph,
+                        std::mem::take(&mut merged_text),
+                        std::mem::take(&mut merged_marks),
+                        new_mark.clone(),
+                    );
 
                     paragraph.push(InlineNode::image(image));
                 }
@@ -297,7 +310,14 @@ fn parse_paragraph(
                 merge_children_with_mark(node, paragraph, Some(TextMark::default().bold()));
             }
             local_name!("del") | local_name!("s") => {
-                merge_children_with_mark(node, paragraph, Some(TextMark::default().strikethrough()));
+                merge_children_with_mark(
+                    node,
+                    paragraph,
+                    Some(TextMark::default().strikethrough()),
+                );
+            }
+            local_name!("u") => {
+                merge_children_with_mark(node, paragraph, Some(TextMark::default().underline()));
             }
             local_name!("code") => {
                 merge_children_with_mark(node, paragraph, Some(TextMark::default().code()));
@@ -311,7 +331,11 @@ fn parse_paragraph(
                     ..Default::default()
                 };
 
-                merge_children_with_mark(node, paragraph, Some(TextMark::default().link(link_mark)));
+                merge_children_with_mark(
+                    node,
+                    paragraph,
+                    Some(TextMark::default().link(link_mark)),
+                );
             }
             local_name!("img") => {
                 let Some(src) = attr_value(attrs, local_name!("src")) else {

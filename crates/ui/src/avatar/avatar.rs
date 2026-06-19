@@ -100,7 +100,7 @@ impl RenderOnce for Avatar {
             .flex_shrink_0()
             .rounded_full()
             .overflow_hidden()
-            .bg(cx.theme().secondary)
+            .bg(cx.theme().tokens.secondary)
             .text_color(cx.theme().background)
             .border_1()
             .border_color(cx.theme().border)

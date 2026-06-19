@@ -1,6 +1,8 @@
 use std::{collections::HashMap, fmt::Display};
 
-use gpui::{Hsla, SharedString, hsla};
+use gpui::{
+    Background, Hsla, LinearColorStop, SharedString, hsla, linear_color_stop, linear_gradient,
+};
 use serde::{Deserialize, Deserializer, de::Error as _};
 
 use anyhow::{Error, Result, anyhow};
@@ -738,6 +740,159 @@ pub fn try_parse_color(color: &str) -> Result<Hsla> {
     Ok(hsla)
 }
 
+/// Try to parse a theme background value.
+///
+/// Supports all values accepted by [`try_parse_color`] and CSS-style two-stop
+/// `linear-gradient(...)` values.
+pub fn try_parse_background(background: &str) -> Result<Background> {
+    if let Ok(color) = try_parse_color(background) {
+        return Ok(color.into());
+    }
+
+    let gradient = parse_linear_gradient(background)?;
+    Ok(linear_gradient(gradient.angle, gradient.from, gradient.to))
+}
+
+pub(crate) fn try_parse_theme_color(color: &str) -> Result<Hsla> {
+    if let Ok(color) = try_parse_color(color) {
+        return Ok(color);
+    }
+
+    Ok(parse_linear_gradient(color)?.from.color)
+}
+
+struct ParsedLinearGradient {
+    angle: f32,
+    from: LinearColorStop,
+    to: LinearColorStop,
+}
+
+fn parse_linear_gradient(background: &str) -> Result<ParsedLinearGradient> {
+    const PREFIX: &str = "linear-gradient(";
+
+    let background = background.trim();
+    if !background.to_ascii_lowercase().starts_with(PREFIX) || !background.ends_with(')') {
+        return Err(anyhow!("Unsupported background value"));
+    }
+
+    let inner = &background[PREFIX.len()..background.len() - 1];
+    let parts = split_top_level_commas(inner);
+    let (angle, from, to) = match parts.as_slice() {
+        [from, to] => (
+            180.,
+            parse_linear_color_stop(from, 0.)?,
+            parse_linear_color_stop(to, 1.)?,
+        ),
+        [angle, from, to] => (
+            parse_linear_gradient_angle(angle)?,
+            parse_linear_color_stop(from, 0.)?,
+            parse_linear_color_stop(to, 1.)?,
+        ),
+        _ => {
+            return Err(anyhow!(
+                "Expected linear-gradient with two color stops, e.g. linear-gradient(135deg, #000, #fff)"
+            ));
+        }
+    };
+
+    Ok(ParsedLinearGradient { angle, from, to })
+}
+
+fn split_top_level_commas(value: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+
+    for (ix, ch) in value.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(value[start..ix].trim().to_string());
+                start = ix + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+
+    parts.push(value[start..].trim().to_string());
+    parts
+}
+
+fn parse_linear_gradient_angle(angle: &str) -> Result<f32> {
+    let angle = angle.trim().to_ascii_lowercase();
+
+    if let Some(degrees) = angle.strip_suffix("deg") {
+        return Ok(degrees.trim().parse::<f32>()?.rem_euclid(360.));
+    }
+
+    if let Some(direction) = angle.strip_prefix("to ") {
+        return parse_linear_gradient_direction(direction);
+    }
+
+    Err(anyhow!("Unsupported linear-gradient angle: {angle}"))
+}
+
+fn parse_linear_gradient_direction(direction: &str) -> Result<f32> {
+    let mut top = false;
+    let mut right = false;
+    let mut bottom = false;
+    let mut left = false;
+
+    for part in direction.split_whitespace() {
+        match part {
+            "top" => top = true,
+            "right" => right = true,
+            "bottom" => bottom = true,
+            "left" => left = true,
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported linear-gradient direction: {direction}"
+                ));
+            }
+        }
+    }
+
+    match (top, right, bottom, left) {
+        (true, false, false, false) => Ok(0.),
+        (false, true, false, false) => Ok(90.),
+        (false, false, true, false) => Ok(180.),
+        (false, false, false, true) => Ok(270.),
+        (true, true, false, false) => Ok(45.),
+        (false, true, true, false) => Ok(135.),
+        (false, false, true, true) => Ok(225.),
+        (true, false, false, true) => Ok(315.),
+        _ => Err(anyhow!(
+            "Unsupported linear-gradient direction: {direction}"
+        )),
+    }
+}
+
+fn parse_linear_color_stop(stop: &str, default_percentage: f32) -> Result<LinearColorStop> {
+    let stop = stop.trim();
+    let mut parts = stop.split_whitespace().collect::<Vec<_>>();
+    let percentage = parts
+        .last()
+        .and_then(|part| part.strip_suffix('%'))
+        .map(|part| part.parse::<f32>().map(|value| value / 100.))
+        .transpose()?
+        .unwrap_or(default_percentage);
+
+    if stop.ends_with('%') {
+        parts.pop();
+    }
+
+    let color = parts.join(" ");
+    if color.is_empty() {
+        return Err(anyhow!("Expected color in linear-gradient color stop"));
+    }
+
+    Ok(linear_color_stop(
+        try_parse_color(&color)?,
+        percentage.clamp(0., 1.),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use gpui::{rgb, rgba};
@@ -913,6 +1068,33 @@ mod tests {
         assert_eq!(
             try_parse_color("orange-300/66").ok(),
             Some(crate::orange_300().opacity(0.66))
+        );
+    }
+
+    #[test]
+    fn test_try_parse_background_linear_gradient() {
+        let from = try_parse_color("#4F46E5").unwrap();
+        let to = try_parse_color("#06B6D4").unwrap();
+
+        assert_eq!(
+            try_parse_background("linear-gradient(135deg, #4F46E5, #06B6D4)").unwrap(),
+            gpui::linear_gradient(
+                135.,
+                gpui::linear_color_stop(from, 0.),
+                gpui::linear_color_stop(to, 1.)
+            )
+        );
+    }
+
+    #[test]
+    fn test_try_parse_background_linear_gradient_direction_and_stops() {
+        assert_eq!(
+            try_parse_background("linear-gradient(to right, red-500 25%, blue-600 75%)").unwrap(),
+            gpui::linear_gradient(
+                90.,
+                gpui::linear_color_stop(crate::red_500(), 0.25),
+                gpui::linear_color_stop(crate::blue_600(), 0.75)
+            )
         );
     }
 }

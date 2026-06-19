@@ -76,11 +76,11 @@ impl RenderOnce for SidebarFooter {
             .justify_between()
             .rounded(cx.theme().radius)
             .hover(|this| {
-                this.bg(cx.theme().sidebar_accent)
+                this.bg(cx.theme().tokens.sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .when(self.selected, |this| {
-                this.bg(cx.theme().sidebar_accent)
+                this.bg(cx.theme().tokens.sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .child(self.base)

@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme as _, IconName, Selectable as _, Sizable, Size,
+    ActiveTheme as _, Icon, IconName, Selectable as _, Sizable, Size,
     button::{Button, ButtonGroup, ButtonVariants},
     checkbox::Checkbox,
     h_flex,
@@ -17,6 +17,9 @@ use crate::section;
 pub struct TabsStory {
     focus_handle: FocusHandle,
     active_tab_ix: usize,
+    dynamic_active_tab_ix: usize,
+    dynamic_tabs: Vec<usize>,
+    dynamic_next_tab_id: usize,
     size: Size,
     menu: bool,
 }
@@ -44,6 +47,9 @@ impl TabsStory {
         Self {
             focus_handle: cx.focus_handle(),
             active_tab_ix: 0,
+            dynamic_active_tab_ix: 0,
+            dynamic_tabs: vec![0, 1, 2],
+            dynamic_next_tab_id: 3,
             size: Size::default(),
             menu: false,
         }
@@ -56,6 +62,31 @@ impl TabsStory {
 
     fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
         self.size = size;
+        cx.notify();
+    }
+
+    fn set_dynamic_active_tab(&mut self, ix: usize, _: &mut Window, cx: &mut Context<Self>) {
+        self.dynamic_active_tab_ix = ix;
+        cx.notify();
+    }
+
+    fn add_dynamic_tab(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let id = self.dynamic_next_tab_id;
+        self.dynamic_next_tab_id += 1;
+        self.dynamic_tabs.push(id);
+        self.dynamic_active_tab_ix = self.dynamic_tabs.len() - 1;
+        cx.notify();
+    }
+
+    fn remove_last_dynamic_tab(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        if self.dynamic_tabs.len() <= 1 {
+            return;
+        }
+
+        self.dynamic_tabs.pop();
+        if self.dynamic_active_tab_ix >= self.dynamic_tabs.len() {
+            self.dynamic_active_tab_ix = self.dynamic_tabs.len() - 1;
+        }
         cx.notify();
     }
 }
@@ -247,6 +278,56 @@ impl Render for TabsStory {
                         .child(IconName::Map)
                         .children(vec!["Appearance", "Settings", "About", "License"]),
                 ),
+            )
+            .child(
+                section("Segmented Tabs (Dynamic with suffix and prefix)")
+                    .max_w_md()
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Button::new("add-tab")
+                                    .outline()
+                                    .compact()
+                                    .label("Add Tab")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.add_dynamic_tab(window, cx);
+                                    })),
+                            )
+                            .child(
+                                Button::new("remove-tab")
+                                    .outline()
+                                    .compact()
+                                    .label("Remove Last")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.remove_last_dynamic_tab(window, cx);
+                                    })),
+                            ),
+                    )
+                    .child(
+                        TabBar::new("segmented-dynamic")
+                            .w_full()
+                            .segmented()
+                            .with_size(self.size)
+                            .selected_index(self.dynamic_active_tab_ix)
+                            .on_click(cx.listener(|this, ix: &usize, window, cx| {
+                                this.set_dynamic_active_tab(*ix, window, cx);
+                            }))
+                            .children(self.dynamic_tabs.iter().enumerate().map(|(ix, id)| {
+                                let label = format!("Tab {id}");
+                                Tab::new()
+                                    .px_2()
+                                    .prefix(Icon::new(IconName::BookOpen))
+                                    .label(label)
+                                    .suffix(
+                                        Button::new(format!("dynamic-tab-close-{id}"))
+                                            .ghost()
+                                            .xsmall()
+                                            .icon(IconName::Close),
+                                    )
+                                    .selected(self.dynamic_active_tab_ix == ix)
+                            })),
+                    ),
             )
             .child(
                 section("Segmented Tabs (With filling space)")

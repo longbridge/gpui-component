@@ -196,7 +196,8 @@ impl RenderOnce for Radio {
                         .when(cx.theme().shadow && !disabled, |this| this.shadow_xs())
                         .map(|this| match self.checked {
                             false => this.bg(cx.theme().input_background()),
-                            _ => this.bg(bg),
+                            true if disabled => this.bg(bg),
+                            true => this.bg(cx.theme().tokens.primary),
                         })
                         .child(checkbox_check_icon(
                             self.id, self.size, checked, disabled, window, cx,
