@@ -98,8 +98,7 @@ impl NativeMenu {
     /// - **macOS**: loaded into an `NSImage` as a template image, so it tints with the item text
     /// and assigned to the item ([`NSMenuItem::image`]).
     /// - **Windows**: loaded into an `HBITMAP` and set as the item's
-    /// content bitmap (`MENUITEMINFOW::hbmpItem`), shown beside the label. GDI+ is used to decode,
-    /// so common raster formats (PNG, JPEG, BMP,...) work but SVG doesn't.
+    /// content bitmap (`MENUITEMINFOW::hbmpItem`), shown beside the label. SVG files are rasterized, with `resvg`; other formats (PNG, JPEG, BMP, ...) are decoded by GDI+.
     /// **Other platforms** (fallback): rendered as the menu item's [`crate::Icon`]; works best
     /// with SVG assets.
     ///

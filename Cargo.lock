@@ -3125,6 +3125,7 @@ dependencies = [
  "paste",
  "raw-window-handle",
  "regex",
+ "resvg",
  "ropey",
  "rust-i18n",
  "rust_decimal",
