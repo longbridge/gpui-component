@@ -23,6 +23,8 @@ cx.theme().foreground
 
 你可以通过 [ThemeRegistry] 来加载和监听这些主题文件：
 
+从 registry 查找主题时使用 `themes` 数组中条目的 `name`，例如 `Ayu Light`。
+
 ```rs
 use std::path::PathBuf;
 use gpui::{App, SharedString};

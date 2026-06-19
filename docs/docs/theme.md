@@ -25,6 +25,8 @@ https://github.com/longbridge/gpui-component/tree/main/themes
 
 And we have a [ThemeRegistry] to help us to load themes.
 
+Use the `name` of an entry in the `themes` array, such as `Ayu Light`, when looking up a theme from the registry.
+
 ```rs
 use std::path::PathBuf;
 use gpui::{App, SharedString};
