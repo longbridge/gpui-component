@@ -58,7 +58,7 @@ impl Render for DragPanel {
             .border_color(cx.theme().border)
             .rounded(cx.theme().radius)
             .text_color(cx.theme().tab_foreground)
-            .bg(cx.theme().tab_active)
+            .bg(cx.theme().tokens.tab_active)
             .opacity(0.75)
             .child(self.panel.title(window, cx))
     }
@@ -720,7 +720,7 @@ impl TabPanel {
                         .border_b_1()
                         .h_full()
                         .border_color(cx.theme().border)
-                        .bg(cx.theme().tab_bar)
+                        .bg(cx.theme().tokens.tab_bar)
                         .px_2()
                         .children(left_dock_button)
                         .children(bottom_dock_button),
@@ -801,7 +801,7 @@ impl TabPanel {
                     .min_w_16()
                     .when(state.droppable, |this| {
                         this.drag_over::<DragPanel>(|this, _, _, cx| {
-                            this.bg(cx.theme().drop_target)
+                            this.bg(cx.theme().tokens.drop_target)
                         })
                         .on_drop(cx.listener(
                             move |this, drag: &DragPanel, window, cx| {
@@ -828,7 +828,7 @@ impl TabPanel {
                         .border_b_1()
                         .h_full()
                         .border_color(cx.theme().border)
-                        .bg(cx.theme().tab_bar)
+                        .bg(cx.theme().tokens.tab_bar)
                         .px_2()
                         .gap_1()
                         .children(
@@ -881,7 +881,7 @@ impl TabPanel {
                         div()
                             .invisible()
                             .absolute()
-                            .bg(cx.theme().drop_target)
+                            .bg(cx.theme().tokens.drop_target)
                             .map(|this| match self.will_split_placement {
                                 Some(placement) => {
                                     let size = relative(0.5);
@@ -1207,7 +1207,7 @@ impl Render for TabPanel {
             .tab_group()
             .size_full()
             .overflow_hidden()
-            .bg(cx.theme().background)
+            .bg(cx.theme().tokens.background)
             .child(self.render_title_bar(&state, window, cx))
             .child(self.render_active_panel(&state, window, cx))
     }

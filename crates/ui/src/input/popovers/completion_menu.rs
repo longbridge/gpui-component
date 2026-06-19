@@ -111,7 +111,7 @@ impl RenderOnce for CompletionMenuItem {
             .when(item.deprecated.unwrap_or(false), |this| this.line_through())
             .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
             .when(self.selected, |this| {
-                this.bg(cx.theme().accent)
+                this.bg(cx.theme().tokens.accent)
                     .text_color(cx.theme().accent_foreground)
             })
             .child(div().child(StyledText::new(item.label.clone()).with_highlights(highlights)))

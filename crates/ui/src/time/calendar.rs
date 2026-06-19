@@ -763,7 +763,7 @@ impl Calendar {
             })
             .when(secondary_active, |this| {
                 this.bg(if muted {
-                    cx.theme().accent.opacity(0.5)
+                    cx.theme().accent.opacity(0.5).into()
                 } else {
                     cx.theme().accent
                 })
@@ -771,12 +771,12 @@ impl Calendar {
             })
             .when(!active && !disabled, |this| {
                 this.hover(|this| {
-                    this.bg(cx.theme().accent)
+                    this.bg(cx.theme().tokens.accent)
                         .text_color(cx.theme().accent_foreground)
                 })
             })
             .when(active, |this| {
-                this.bg(cx.theme().primary)
+                this.bg(cx.theme().tokens.primary)
                     .text_color(cx.theme().primary_foreground)
             })
             .child(label.into())

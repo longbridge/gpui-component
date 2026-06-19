@@ -1,10 +1,58 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use crate::{ThemeMode, theme::DEFAULT_THEME_COLORS};
 
-use gpui::Hsla;
+use gpui::{Background, Fill, Hsla};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+/// A theme token that keeps a solid representative color and its renderable background.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ThemeToken {
+    pub color: Hsla,
+    pub background: Background,
+}
+
+impl ThemeToken {
+    pub fn new(color: Hsla, background: Background) -> Self {
+        Self { color, background }
+    }
+}
+
+impl Deref for ThemeToken {
+    type Target = Hsla;
+
+    fn deref(&self) -> &Self::Target {
+        &self.color
+    }
+}
+
+impl From<Hsla> for ThemeToken {
+    fn from(color: Hsla) -> Self {
+        Self {
+            color,
+            background: color.into(),
+        }
+    }
+}
+
+impl From<ThemeToken> for Hsla {
+    fn from(token: ThemeToken) -> Self {
+        token.color
+    }
+}
+
+impl From<ThemeToken> for Background {
+    fn from(token: ThemeToken) -> Self {
+        token.background
+    }
+}
+
+impl From<ThemeToken> for Fill {
+    fn from(token: ThemeToken) -> Self {
+        Fill::Color(token.background)
+    }
+}
 
 /// Theme colors used throughout the UI components.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, JsonSchema)]
@@ -21,6 +69,30 @@ pub struct ThemeColor {
     pub background: Hsla,
     /// Default border color
     pub border: Hsla,
+    /// Default Button background color.
+    pub button: Hsla,
+    /// Default Button active background color.
+    pub button_active: Hsla,
+    /// Default Button text color.
+    pub button_foreground: Hsla,
+    /// Default Button hover background color.
+    pub button_hover: Hsla,
+    /// Button danger background color, fallback to `danger`.
+    pub button_danger: Hsla,
+    /// Button danger active background color, fallback to `danger_active`.
+    pub button_danger_active: Hsla,
+    /// Button danger text color, fallback to `danger_foreground`.
+    pub button_danger_foreground: Hsla,
+    /// Button danger hover background color, fallback to `danger_hover`.
+    pub button_danger_hover: Hsla,
+    /// Button info background color, fallback to `info`.
+    pub button_info: Hsla,
+    /// Button info active background color, fallback to `info_active`.
+    pub button_info_active: Hsla,
+    /// Button info text color, fallback to `info_foreground`.
+    pub button_info_foreground: Hsla,
+    /// Button info hover background color, fallback to `info_hover`.
+    pub button_info_hover: Hsla,
     /// Button primary background color, fallback to `primary`.
     pub button_primary: Hsla,
     /// Button primary active background color, fallback to `primary_active`.
@@ -29,6 +101,30 @@ pub struct ThemeColor {
     pub button_primary_foreground: Hsla,
     /// Button primary hover background color, fallback to `primary_hover`.
     pub button_primary_hover: Hsla,
+    /// Button secondary background color, fallback to `secondary`.
+    pub button_secondary: Hsla,
+    /// Button secondary active background color, fallback to `secondary_active`.
+    pub button_secondary_active: Hsla,
+    /// Button secondary text color, fallback to `secondary_foreground`.
+    pub button_secondary_foreground: Hsla,
+    /// Button secondary hover background color, fallback to `secondary_hover`.
+    pub button_secondary_hover: Hsla,
+    /// Button success background color, fallback to `success`.
+    pub button_success: Hsla,
+    /// Button success active background color, fallback to `success_active`.
+    pub button_success_active: Hsla,
+    /// Button success text color, fallback to `success_foreground`.
+    pub button_success_foreground: Hsla,
+    /// Button success hover background color, fallback to `success_hover`.
+    pub button_success_hover: Hsla,
+    /// Button warning background color, fallback to `warning`.
+    pub button_warning: Hsla,
+    /// Button warning active background color, fallback to `warning_active`.
+    pub button_warning_active: Hsla,
+    /// Button warning text color, fallback to `warning_foreground`.
+    pub button_warning_foreground: Hsla,
+    /// Button warning hover background color, fallback to `warning_hover`.
+    pub button_warning_hover: Hsla,
     /// Background color for GroupBox.
     pub group_box: Hsla,
     /// Text color for GroupBox.
@@ -246,6 +342,174 @@ pub struct ThemeColor {
     pub cyan: Hsla,
     /// The base cyan light color.
     pub cyan_light: Hsla,
+}
+
+macro_rules! define_theme_tokens {
+    ($($field:ident),+ $(,)?) => {
+        /// Resolved theme tokens used when a value needs both a solid representative
+        /// color and the configured paint background.
+        #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, JsonSchema)]
+        pub struct ThemeTokens {
+            $(pub $field: ThemeToken,)+
+        }
+
+        impl From<ThemeColor> for ThemeTokens {
+            fn from(colors: ThemeColor) -> Self {
+                Self {
+                    $($field: colors.$field.into(),)+
+                }
+            }
+        }
+
+        impl From<&ThemeColor> for ThemeTokens {
+            fn from(colors: &ThemeColor) -> Self {
+                Self::from(*colors)
+            }
+        }
+    };
+}
+
+define_theme_tokens! {
+    accent,
+    accent_foreground,
+    accordion,
+    accordion_hover,
+    background,
+    border,
+    button,
+    button_active,
+    button_foreground,
+    button_hover,
+    button_danger,
+    button_danger_active,
+    button_danger_foreground,
+    button_danger_hover,
+    button_info,
+    button_info_active,
+    button_info_foreground,
+    button_info_hover,
+    button_primary,
+    button_primary_active,
+    button_primary_foreground,
+    button_primary_hover,
+    button_secondary,
+    button_secondary_active,
+    button_secondary_foreground,
+    button_secondary_hover,
+    button_success,
+    button_success_active,
+    button_success_foreground,
+    button_success_hover,
+    button_warning,
+    button_warning_active,
+    button_warning_foreground,
+    button_warning_hover,
+    group_box,
+    group_box_foreground,
+    caret,
+    chart_1,
+    chart_2,
+    chart_3,
+    chart_4,
+    chart_5,
+    chart_bullish,
+    chart_bearish,
+    danger,
+    danger_active,
+    danger_foreground,
+    danger_hover,
+    description_list_label,
+    description_list_label_foreground,
+    drag_border,
+    drop_target,
+    foreground,
+    info,
+    info_active,
+    info_foreground,
+    info_hover,
+    input,
+    link,
+    link_active,
+    link_hover,
+    list,
+    list_active,
+    list_active_border,
+    list_even,
+    list_head,
+    list_hover,
+    muted,
+    muted_foreground,
+    popover,
+    popover_foreground,
+    primary,
+    primary_active,
+    primary_foreground,
+    primary_hover,
+    progress_bar,
+    ring,
+    scrollbar,
+    scrollbar_thumb,
+    scrollbar_thumb_hover,
+    secondary,
+    secondary_active,
+    secondary_foreground,
+    secondary_hover,
+    selection,
+    sidebar,
+    sidebar_accent,
+    sidebar_accent_foreground,
+    sidebar_border,
+    sidebar_foreground,
+    sidebar_primary,
+    sidebar_primary_foreground,
+    skeleton,
+    slider_bar,
+    slider_thumb,
+    success,
+    success_foreground,
+    success_hover,
+    success_active,
+    switch,
+    switch_thumb,
+    tab,
+    tab_active,
+    tab_active_foreground,
+    tab_bar,
+    tab_bar_segmented,
+    tab_foreground,
+    table,
+    table_active,
+    table_active_border,
+    table_even,
+    table_head,
+    table_head_foreground,
+    table_foot,
+    table_foot_foreground,
+    table_hover,
+    table_row_border,
+    title_bar,
+    title_bar_border,
+    status_bar,
+    status_bar_border,
+    tiles,
+    warning,
+    warning_active,
+    warning_hover,
+    warning_foreground,
+    overlay,
+    window_border,
+    red,
+    red_light,
+    green,
+    green_light,
+    blue,
+    blue_light,
+    yellow,
+    yellow_light,
+    magenta,
+    magenta_light,
+    cyan,
+    cyan_light,
 }
 
 impl ThemeColor {

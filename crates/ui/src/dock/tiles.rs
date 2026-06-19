@@ -1043,7 +1043,7 @@ impl Tiles {
 
         v_flex()
             .occlude()
-            .bg(cx.theme().background)
+            .bg(cx.theme().tokens.background)
             .border_1()
             .border_color(cx.theme().border)
             .absolute()
@@ -1186,7 +1186,7 @@ impl Render for Tiles {
 
         div()
             .relative()
-            .bg(cx.theme().tiles)
+            .bg(cx.theme().tokens.tiles)
             .child(
                 div()
                     .id("tiles")

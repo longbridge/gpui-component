@@ -726,7 +726,7 @@ impl CodeBlock {
                     .id(("codeblock", options.ix))
                     .p_3()
                     .rounded(cx.theme().radius)
-                    .bg(cx.theme().muted)
+                    .bg(cx.theme().tokens.muted)
                     .font_family(cx.theme().mono_font_family.clone())
                     .text_size(cx.theme().mono_font_size)
                     .relative()
@@ -744,7 +744,7 @@ impl CodeBlock {
                                 .absolute()
                                 .top_2()
                                 .right_2()
-                                .bg(cx.theme().muted)
+                                .bg(cx.theme().tokens.muted)
                                 .rounded(cx.theme().radius)
                                 .child(actions(&self, window, cx)),
                         )
@@ -1297,7 +1297,7 @@ impl BlockNode {
                                                     .border_color(cx.theme().primary)
                                                     .text_color(cx.theme().primary_foreground)
                                                     .when(checked, |this| {
-                                                        this.bg(cx.theme().primary).child(
+                                                        this.bg(cx.theme().tokens.primary).child(
                                                             Icon::new(IconName::Check)
                                                                 .size_2()
                                                                 .text_xs(),

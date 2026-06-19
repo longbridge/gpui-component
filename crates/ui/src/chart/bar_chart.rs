@@ -1,8 +1,8 @@
 use std::{ops::RangeInclusive, rc::Rc};
 
 use gpui::{
-    App, Background, Bounds, Corners, Hsla, LinearColorStop, Pixels, Point, SharedString, Size, TextAlign,
-    Window, linear_gradient, px,
+    App, Background, Bounds, Corners, Hsla, LinearColorStop, Pixels, Point, SharedString, Size,
+    TextAlign, Window, linear_gradient, px,
 };
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
@@ -11,7 +11,7 @@ use crate::{
     ActiveTheme,
     plot::{
         AXIS_GAP, AxisLabelSide, Grid, Plot, PlotAxis,
-        label::{Text, TEXT_GAP, TEXT_SIZE, measure_text_width},
+        label::{TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::{Bar, BarAlignment},
     },
@@ -31,9 +31,8 @@ where
     value: Option<Rc<dyn Fn(&T) -> V>>,
     fill: Option<Rc<dyn Fn(&T, Bounds<f32>, Bounds<f32>, BarAlignment) -> Background>>,
     #[allow(clippy::type_complexity)]
-    fill_gradient: Option<
-        Rc<dyn Fn(&T, RangeInclusive<f32>, &dyn Fn(f32) -> f32) -> [LinearColorStop; 2]>,
-    >,
+    fill_gradient:
+        Option<Rc<dyn Fn(&T, RangeInclusive<f32>, &dyn Fn(f32) -> f32) -> [LinearColorStop; 2]>>,
     tick_margin: usize,
     label: Option<Rc<dyn Fn(&T) -> SharedString>>,
     label_axis: bool,
@@ -148,8 +147,7 @@ where
     /// [`BarChart::fill`].
     pub fn fill_gradient(
         mut self,
-        fill: impl Fn(&T, RangeInclusive<f32>, &dyn Fn(f32) -> f32) -> [LinearColorStop; 2]
-            + 'static,
+        fill: impl Fn(&T, RangeInclusive<f32>, &dyn Fn(f32) -> f32) -> [LinearColorStop; 2] + 'static,
     ) -> Self {
         self.fill_gradient = Some(Rc::new(fill));
         self.fill = None;

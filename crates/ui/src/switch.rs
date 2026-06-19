@@ -3,9 +3,9 @@ use crate::{
     tooltip::ComponentTooltip,
 };
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, Hsla, InteractiveElement, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    Animation, AnimationExt as _, App, Background, ElementId, Hsla, InteractiveElement,
+    IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _, px,
 };
 use std::{rc::Rc, time::Duration};
 
@@ -103,16 +103,22 @@ impl RenderOnce for Switch {
         let on_click = self.on_click.clone();
         let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
 
-        let checked_bg = self.color.unwrap_or(cx.theme().primary);
-        let (bg, toggle_bg) = match checked {
-            true => (checked_bg, cx.theme().switch_thumb),
-            false => (cx.theme().switch, cx.theme().switch_thumb),
+        let checked_bg = self
+            .color
+            .map(Background::from)
+            .unwrap_or(cx.theme().tokens.primary.into());
+        let (bg, toggle_bg): (Background, Background) = match checked {
+            true => (checked_bg, cx.theme().tokens.switch_thumb.into()),
+            false => (
+                cx.theme().tokens.switch.into(),
+                cx.theme().tokens.switch_thumb.into(),
+            ),
         };
 
         let (bg, toggle_bg) = if self.disabled {
             (
-                if checked { bg.alpha(0.5) } else { bg },
-                toggle_bg.alpha(0.35),
+                if checked { bg.opacity(0.5) } else { bg },
+                toggle_bg.opacity(0.35),
             )
         } else {
             (bg, toggle_bg)

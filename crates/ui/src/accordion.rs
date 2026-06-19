@@ -229,7 +229,7 @@ impl RenderOnce for AccordionItem {
         div().flex_1().child(
             v_flex()
                 .w_full()
-                .bg(cx.theme().accordion)
+                .bg(cx.theme().tokens.accordion)
                 .overflow_hidden()
                 .when(self.bordered, |this| {
                     this.border_1()
@@ -275,7 +275,7 @@ impl RenderOnce for AccordionItem {
                                 .child(self.title),
                         )
                         .when(!self.disabled, |this| {
-                            this.hover(|this| this.bg(cx.theme().accordion_hover))
+                            this.hover(|this| this.bg(cx.theme().tokens.accordion_hover))
                                 .child(
                                     Icon::new(if self.open {
                                         IconName::ChevronUp

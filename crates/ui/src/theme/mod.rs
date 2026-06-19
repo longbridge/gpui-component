@@ -44,6 +44,8 @@ impl ActiveTheme for App {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Theme {
     pub colors: ThemeColor,
+    #[serde(default)]
+    pub tokens: ThemeTokens,
     pub highlight_theme: Arc<HighlightTheme>,
     pub light_theme: Rc<ThemeConfig>,
     pub dark_theme: Rc<ThemeConfig>,
@@ -229,6 +231,7 @@ impl From<&ThemeColor> for Theme {
             tile_radius: px(0.),
             list: ListSettings::default(),
             colors: *colors,
+            tokens: ThemeTokens::from(colors),
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),
             highlight_theme: HighlightTheme::default_light(),

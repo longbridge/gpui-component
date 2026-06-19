@@ -89,7 +89,7 @@ impl RenderOnce for StatusBar {
             .px_2()
             .border_t_1()
             .border_color(cx.theme().status_bar_border)
-            .bg(cx.theme().status_bar)
+            .bg(cx.theme().tokens.status_bar)
             .text_xs()
             .text_color(cx.theme().muted_foreground)
             .refine_style(&self.style)

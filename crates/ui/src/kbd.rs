@@ -222,11 +222,11 @@ impl RenderOnce for Kbd {
 
         div()
             .text_color(cx.theme().muted_foreground)
-            .bg(cx.theme().muted)
+            .bg(cx.theme().tokens.muted)
             .when(self.outline, |this| {
                 this.border_1()
                     .border_color(cx.theme().border)
-                    .bg(cx.theme().background)
+                    .bg(cx.theme().tokens.background)
             })
             .py_0p5()
             .px_1()

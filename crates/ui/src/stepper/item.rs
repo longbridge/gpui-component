@@ -257,6 +257,6 @@ impl RenderOnce for StepperSeparator {
             })
             .refine_style(&self.style)
             .bg(cx.theme().border)
-            .when(self.checked, |this| this.bg(cx.theme().primary))
+            .when(self.checked, |this| this.bg(cx.theme().tokens.primary))
     }
 }

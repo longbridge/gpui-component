@@ -184,17 +184,17 @@ impl RenderOnce for Toggle {
                     .when(self.border_edges.top, |this| this.border_t_1())
                     .when(self.border_edges.bottom, |this| this.border_b_1())
                     .border_color(cx.theme().border)
-                    .bg(cx.theme().background)
+                    .bg(cx.theme().tokens.background)
                     .when(cx.theme().shadow, |this| this.shadow_xs())
             })
             .when(hoverable, |this| {
                 this.hover(|this| {
-                    this.bg(cx.theme().accent)
+                    this.bg(cx.theme().tokens.accent)
                         .text_color(cx.theme().accent_foreground)
                 })
             })
             .when(checked, |this| {
-                this.bg(cx.theme().accent)
+                this.bg(cx.theme().tokens.accent)
                     .text_color(cx.theme().accent_foreground)
             })
             .refine_style(&self.style)
