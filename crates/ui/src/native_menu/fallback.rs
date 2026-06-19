@@ -11,6 +11,7 @@ use gpui::{
 
 use crate::menu::{PopupMenu, PopupMenuItem};
 use crate::root::Root;
+use crate::Icon;
 
 use super::NativeMenuItem;
 
@@ -78,7 +79,15 @@ fn build_popup(
                 NativeMenuItem::Item {
                     label,
                     disabled,
+                    checked: _,
+                    image: Some(image),
+                    action: Some(action),
+                } => menu.menu_with_icon_and_disabled(label, Icon::default().path(image), action, disabled),
+                NativeMenuItem::Item {
+                    label,
+                    disabled,
                     checked,
+                    image: None,
                     action: Some(action),
                 } => menu.menu_with_check_and_disabled(label, checked, action, disabled),
                 NativeMenuItem::Item { action: None, .. } => menu,
