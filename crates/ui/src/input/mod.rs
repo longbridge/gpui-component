@@ -4,6 +4,7 @@ pub(super) const MASK_CHAR: char = '•';
 mod blink_cursor;
 mod change;
 mod clear_button;
+mod content_type;
 mod cursor;
 mod display_map;
 mod element;
@@ -24,6 +25,7 @@ mod selection;
 mod state;
 
 pub(crate) use clear_button::*;
+pub use content_type::*;
 pub use cursor::*;
 #[cfg(target_family = "wasm")]
 pub use display_map::folding::Tree;
