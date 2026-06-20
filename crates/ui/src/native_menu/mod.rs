@@ -22,7 +22,17 @@
 //!     .show(position, window, cx);
 //! ```
 
+use crate::Icon;
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use gpui::AssetSource;
 use gpui::{Action, App, Pixels, Point, SharedString, Window};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    path::Path,
+};
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -40,8 +50,8 @@ enum NativeMenuItem {
         label: SharedString,
         disabled: bool,
         checked: bool,
-        /// Path to an image shown next to the label
-        image: Option<SharedString>,
+        /// Icon shown next to the label.
+        icon: Option<Box<Icon>>,
         /// Action dispatched when the item is selected.
         action: Option<Box<dyn Action>>,
     },
@@ -49,6 +59,25 @@ enum NativeMenuItem {
         label: SharedString,
         disabled: bool,
         items: Vec<NativeMenuItem>,
+    },
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+enum ResolvedNativeMenuItem {
+    Separator,
+    Item {
+        label: SharedString,
+        disabled: bool,
+        checked: bool,
+        /// Filesystem path to an image shown next to the label.
+        image: Option<SharedString>,
+        /// Action dispatched when the item is selected.
+        action: Option<Box<dyn Action>>,
+    },
+    Submenu {
+        label: SharedString,
+        disabled: bool,
+        items: Vec<ResolvedNativeMenuItem>,
     },
 }
 
@@ -92,31 +121,71 @@ impl NativeMenu {
         self.menu_with(label, false, checked, None, Some(action))
     }
 
-    /// Append an item showing `image` next to its label.
+    /// Append an item showing `icon` next to its label.
     ///
-    /// `image` is a filesystem path to an image file.
-    /// - **macOS**: loaded into an `NSImage` as a template image, so it tints with the item text
-    /// and assigned to the item ([`NSMenuItem::image`]).
+    /// Native platform menus render the icon by loading the [`Icon`]'s path.
+    /// File-backed icons such as [`crate::IconName`] work across all backends.
+    /// - **macOS**: loaded into an `NSImage` as a template image, so it tints with the item
+    /// text and assigned to the item ([`NSMenuItem::image`]).
     /// - **Windows**: loaded into an `HBITMAP` and set as the item's
     /// content bitmap (`MENUITEMINFOW::hbmpItem`), shown beside the label. SVG files are
     /// rasterized, with `resvg`; other formats (PNG, JPEG, BMP, ...) are decoded by GDI+.
-    /// **Other platforms** (fallback): rendered as the menu item's [`crate::Icon`]; works best
-    /// with SVG assets.
+    /// **Other platforms** (fallback): rendered as the menu item's [`crate::Icon`].
     ///
-    /// Note: this is the menu item's *content* image, not its state/check-mark indicator.
+    /// Note: this is the menu item's *content* icon, not its state/check-mark indicator.
+    pub fn menu_with_icon(
+        self,
+        label: impl Into<SharedString>,
+        icon: impl Into<Icon>,
+        action: Box<dyn Action>,
+    ) -> Self {
+        self.menu_with(label, false, false, Some(icon.into()), Some(action))
+    }
+
+    /// Append an item showing `icon` next to its label, controlling its `disabled` state.
+    ///
+    /// Same icon behavior as [`Self::menu_with_icon`]. Use this when an item
+    /// carries an icon but should be greyed out.
+    pub fn menu_with_icon_disabled(
+        self,
+        label: impl Into<SharedString>,
+        icon: impl Into<Icon>,
+        disabled: bool,
+        action: Box<dyn Action>,
+    ) -> Self {
+        self.menu_with(label, disabled, false, Some(icon.into()), Some(action))
+    }
+
+    /// Add Menu Item with Icon and disabled state.
+    ///
+    /// Alias for [`Self::menu_with_icon_disabled`], matching [`crate::menu::PopupMenu`].
+    pub fn menu_with_icon_and_disabled(
+        self,
+        label: impl Into<SharedString>,
+        icon: impl Into<Icon>,
+        action: Box<dyn Action>,
+        disabled: bool,
+    ) -> Self {
+        self.menu_with_icon_disabled(label, icon, disabled, action)
+    }
+
+    /// Append an item showing an image file next to its label.
+    ///
+    /// Prefer [`Self::menu_with_icon`] for consistency with [`crate::menu::PopupMenu`].
+    #[deprecated(note = "use NativeMenu::menu_with_icon instead")]
     pub fn menu_with_image(
         self,
         label: impl Into<SharedString>,
         image: impl Into<SharedString>,
         action: Box<dyn Action>,
     ) -> Self {
-        self.menu_with(label, false, false, Some(image.into()), Some(action))
+        self.menu_with_icon(label, Icon::default().path(image), action)
     }
 
-    /// Append an item showing `image` next to its label, controlling its `disabled` state.
+    /// Append an item showing an image file next to its label, controlling its `disabled` state.
     ///
-    /// Same image behavior as [`Self::menu_with_image`]. Use this when an item
-    /// carries an icon but should be greyed out.
+    /// Prefer [`Self::menu_with_icon_disabled`] for consistency with [`crate::menu::PopupMenu`].
+    #[deprecated(note = "use NativeMenu::menu_with_icon_disabled instead")]
     pub fn menu_with_image_disabled(
         self,
         label: impl Into<SharedString>,
@@ -124,7 +193,7 @@ impl NativeMenu {
         disabled: bool,
         action: Box<dyn Action>,
     ) -> Self {
-        self.menu_with(label, disabled, false, Some(image.into()), Some(action))
+        self.menu_with_icon_disabled(label, Icon::default().path(image), disabled, action)
     }
 
     fn menu_with(
@@ -132,14 +201,14 @@ impl NativeMenu {
         label: impl Into<SharedString>,
         disabled: bool,
         checked: bool,
-        image: Option<SharedString>,
+        icon: Option<Icon>,
         action: Option<Box<dyn Action>>,
     ) -> Self {
         self.items.push(NativeMenuItem::Item {
             label: label.into(),
             disabled,
             checked,
-            image,
+            icon: icon.map(Box::new),
             action,
         });
         self
@@ -177,12 +246,95 @@ impl NativeMenu {
         }
 
         #[cfg(target_os = "macos")]
-        macos::show(self.items, position, window, cx);
+        macos::show(
+            resolve_platform_items(self.items, cx.asset_source().as_ref()),
+            position,
+            window,
+            cx,
+        );
         #[cfg(target_os = "windows")]
-        windows::show(self.items, position, window, cx);
+        windows::show(
+            resolve_platform_items(self.items, cx.asset_source().as_ref()),
+            position,
+            window,
+            cx,
+        );
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         fallback::show(self.items, position, window, cx);
     }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn resolve_platform_items(
+    items: Vec<NativeMenuItem>,
+    asset_source: &dyn AssetSource,
+) -> Vec<ResolvedNativeMenuItem> {
+    items
+        .into_iter()
+        .map(|item| match item {
+            NativeMenuItem::Separator => ResolvedNativeMenuItem::Separator,
+            NativeMenuItem::Item {
+                label,
+                disabled,
+                checked,
+                icon,
+                action,
+            } => ResolvedNativeMenuItem::Item {
+                label,
+                disabled,
+                checked,
+                image: icon
+                    .as_deref()
+                    .and_then(|icon| resolve_icon_path(icon, asset_source)),
+                action,
+            },
+            NativeMenuItem::Submenu {
+                label,
+                disabled,
+                items,
+            } => ResolvedNativeMenuItem::Submenu {
+                label,
+                disabled,
+                items: resolve_platform_items(items, asset_source),
+            },
+        })
+        .collect()
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn resolve_icon_path(icon: &Icon, asset_source: &dyn AssetSource) -> Option<SharedString> {
+    let path = icon.path_ref();
+    if path.is_empty() {
+        return None;
+    }
+
+    if Path::new(path.as_ref()).is_file() {
+        return Some(path.clone());
+    }
+
+    let bytes = asset_source.load(path.as_ref()).ok().flatten()?;
+    materialize_icon_asset(path, &bytes).ok()
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn materialize_icon_asset(path: &str, bytes: &[u8]) -> std::io::Result<SharedString> {
+    let mut hasher = DefaultHasher::new();
+    path.hash(&mut hasher);
+    bytes.hash(&mut hasher);
+
+    let extension = Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("img");
+    let dir = std::env::temp_dir().join("gpui-component-native-menu-icons");
+    std::fs::create_dir_all(&dir)?;
+
+    let file = dir.join(format!("{:016x}.{}", hasher.finish(), extension));
+    if !file.is_file() {
+        std::fs::write(&file, bytes)?;
+    }
+
+    Ok(file.to_string_lossy().to_string().into())
 }
 
 /// Reuse an existing GPUI menu definition as a native menu.
@@ -206,7 +358,7 @@ impl From<gpui::Menu> for NativeMenu {
                     label: name,
                     disabled,
                     checked,
-                    image: None,
+                    icon: None,
                     action: Some(action),
                 }),
                 gpui::MenuItem::Submenu(submenu) => native.items.push(NativeMenuItem::Submenu {
@@ -218,5 +370,77 @@ impl From<gpui::Menu> for NativeMenu {
             }
         }
         native
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::IconName;
+    use serde::Deserialize;
+
+    #[derive(Action, Clone, PartialEq, Deserialize)]
+    #[action(namespace = native_menu_tests, no_json)]
+    struct TestAction;
+
+    #[test]
+    fn test_native_menu_builder_accepts_icon() {
+        let menu =
+            NativeMenu::new().menu_with_icon("Github", IconName::Github, Box::new(TestAction));
+
+        assert_eq!(menu.items.len(), 1);
+        let NativeMenuItem::Item {
+            label,
+            disabled,
+            checked,
+            icon: Some(icon),
+            action: Some(_),
+        } = &menu.items[0]
+        else {
+            panic!("expected an actionable item with an icon");
+        };
+
+        assert_eq!(label, "Github");
+        assert!(!disabled);
+        assert!(!checked);
+        assert!(icon.path_ref().ends_with("github.svg"));
+    }
+
+    #[test]
+    fn test_native_menu_builder_accepts_icon_and_disabled_alias() {
+        let menu = NativeMenu::new().menu_with_icon_and_disabled(
+            "Inbox",
+            IconName::Inbox,
+            Box::new(TestAction),
+            true,
+        );
+
+        assert_eq!(menu.items.len(), 1);
+        let NativeMenuItem::Item {
+            label,
+            disabled,
+            checked,
+            icon: Some(icon),
+            action: Some(_),
+        } = &menu.items[0]
+        else {
+            panic!("expected a disabled actionable item with an icon");
+        };
+
+        assert_eq!(label, "Inbox");
+        assert!(disabled);
+        assert!(!checked);
+        assert!(icon.path_ref().ends_with("inbox.svg"));
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn test_native_menu_icon_asset_resolves_to_file_path() {
+        let icon = Icon::new(IconName::Github);
+        let path = resolve_icon_path(&icon, &gpui_component_assets::Assets)
+            .expect("icon asset should resolve");
+
+        assert_ne!(path.as_ref(), icon.path_ref().as_ref());
+        assert!(std::path::Path::new(path.as_ref()).is_file());
     }
 }

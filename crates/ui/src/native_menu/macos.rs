@@ -10,7 +10,7 @@ use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSView};
 use objc2_foundation::{NSPoint, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-use super::NativeMenuItem;
+use super::ResolvedNativeMenuItem;
 
 /// Side length (in points) menu item images are scaled to. AppKit does not resize the image to fit
 /// the row, so a large file would otherwise overflow it.
@@ -51,7 +51,7 @@ impl MenuTarget {
 /// The AppKit tracking loop is run from a foreground task so that GPUI is not
 /// borrowed while the menu is open.
 pub(super) fn show(
-    items: Vec<NativeMenuItem>,
+    items: Vec<ResolvedNativeMenuItem>,
     position: Point<Pixels>,
     window: &mut Window,
     cx: &mut App,
@@ -86,7 +86,7 @@ pub(super) fn show(
 /// selected item's action.
 fn run_menu(
     view_ptr: usize,
-    items: &[NativeMenuItem],
+    items: &[ResolvedNativeMenuItem],
     position: Point<Pixels>,
 ) -> Option<Box<dyn Action>> {
     let mtm = MainThreadMarker::new()?;
@@ -118,7 +118,7 @@ fn run_menu(
 /// Recursively build an `NSMenu`. Each actionable leaf item is given a tag equal
 /// to its index in `actions`, so the selected tag maps back to its action.
 fn build_menu<'a>(
-    items: &'a [NativeMenuItem],
+    items: &'a [ResolvedNativeMenuItem],
     target: &MenuTarget,
     mtm: MainThreadMarker,
     actions: &mut Vec<&'a Box<dyn Action>>,
@@ -129,8 +129,8 @@ fn build_menu<'a>(
 
     for item in items {
         match item {
-            NativeMenuItem::Separator => menu.addItem(&NSMenuItem::separatorItem(mtm)),
-            NativeMenuItem::Item {
+            ResolvedNativeMenuItem::Separator => menu.addItem(&NSMenuItem::separatorItem(mtm)),
+            ResolvedNativeMenuItem::Item {
                 label,
                 disabled,
                 checked,
@@ -167,7 +167,7 @@ fn build_menu<'a>(
                 }
                 menu.addItem(&ns_item);
             }
-            NativeMenuItem::Submenu {
+            ResolvedNativeMenuItem::Submenu {
                 label,
                 disabled,
                 items,

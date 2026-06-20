@@ -22,7 +22,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::PCWSTR;
 
-use super::NativeMenuItem;
+use super::ResolvedNativeMenuItem;
 
 /// Side length (in **logical pixels**) menu item images are scaled to. The
 /// physical bitmap size is this multiplied by the window's scale factor (see
@@ -34,7 +34,7 @@ const MENU_IMAGE_SIZE: u32 = 16;
 /// The Win32 tracking loop (`TrackPopupMenuEx`) blocks, so — like macOS — it is
 /// run from a foreground task to avoid re-entering GPUI while it is borrowed.
 pub(super) fn show(
-    items: Vec<NativeMenuItem>,
+    items: Vec<ResolvedNativeMenuItem>,
     position: Point<Pixels>,
     window: &mut Window,
     cx: &mut App,
@@ -70,7 +70,7 @@ pub(super) fn show(
 /// selected item's action.
 fn run_menu(
     hwnd: isize,
-    items: &[NativeMenuItem],
+    items: &[ResolvedNativeMenuItem],
     client_x: i32,
     client_y: i32,
     image_px: u32,
@@ -134,7 +134,7 @@ fn run_menu(
 /// # Safety
 /// Win32 menu creation; the returned `HMENU` must be destroyed by the caller.
 unsafe fn build_menu<'a>(
-    items: &'a [NativeMenuItem],
+    items: &'a [ResolvedNativeMenuItem],
     actions: &mut Vec<&'a Box<dyn Action>>,
     bitmaps: &mut Vec<HBITMAP>,
     image_px: u32,
@@ -146,11 +146,11 @@ unsafe fn build_menu<'a>(
     let mut position: u32 = 0;
     for item in items {
         match item {
-            NativeMenuItem::Separator => {
+            ResolvedNativeMenuItem::Separator => {
                 let _ = unsafe { AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null()) };
                 position += 1;
             }
-            NativeMenuItem::Item {
+            ResolvedNativeMenuItem::Item {
                 label,
                 disabled,
                 checked,
@@ -188,7 +188,7 @@ unsafe fn build_menu<'a>(
                 }
                 position += 1;
             }
-            NativeMenuItem::Submenu {
+            ResolvedNativeMenuItem::Submenu {
                 label,
                 disabled,
                 items,
