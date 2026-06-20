@@ -28,7 +28,9 @@ use crate::Icon;
 use gpui::AssetSource;
 use gpui::{Action, App, Pixels, Point, SharedString, Window};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use std::path::Path;
+use gpui::{Image, ImageFormat};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use std::{path::Path, sync::Arc};
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -61,13 +63,7 @@ enum NativeMenuItem {
 struct NativeMenuIcon {
     icon: Icon,
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    source: Option<NativeMenuIconSource>,
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-enum NativeMenuIconSource {
-    File(SharedString),
-    Bytes(Vec<u8>),
+    image: Option<Arc<Image>>,
 }
 
 impl NativeMenuIcon {
@@ -75,7 +71,7 @@ impl NativeMenuIcon {
         Self {
             icon,
             #[cfg(any(target_os = "macos", target_os = "windows"))]
-            source: None,
+            image: None,
         }
     }
 
@@ -89,8 +85,8 @@ impl NativeMenuIcon {
     }
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
-    fn source(&self) -> Option<&NativeMenuIconSource> {
-        self.source.as_ref()
+    fn image(&self) -> Option<&Image> {
+        self.image.as_deref()
     }
 }
 
@@ -259,9 +255,9 @@ fn resolve_platform_icons(items: &mut [NativeMenuItem], asset_source: &dyn Asset
                 let Some(icon) = icon_slot.as_mut() else {
                     continue;
                 };
-                let source = resolve_icon_source(icon.path_ref(), asset_source);
-                if source.is_some() {
-                    icon.source = source;
+                let image = resolve_icon_image(icon.path_ref(), asset_source);
+                if image.is_some() {
+                    icon.image = image;
                 } else {
                     *icon_slot = None;
                 }
@@ -272,20 +268,84 @@ fn resolve_platform_icons(items: &mut [NativeMenuItem], asset_source: &dyn Asset
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn resolve_icon_source(
-    path: &SharedString,
-    asset_source: &dyn AssetSource,
-) -> Option<NativeMenuIconSource> {
+fn resolve_icon_image(path: &SharedString, asset_source: &dyn AssetSource) -> Option<Arc<Image>> {
     if path.is_empty() {
         return None;
     }
 
-    if Path::new(path.as_ref()).is_file() {
-        return Some(NativeMenuIconSource::File(path.clone()));
+    let bytes = if Path::new(path.as_ref()).is_file() {
+        std::fs::read(path.as_ref()).ok()?
+    } else {
+        asset_source
+            .load(path.as_ref())
+            .ok()
+            .flatten()?
+            .into_owned()
+    };
+    let format = image_format(path.as_ref(), &bytes)?;
+    Some(Arc::new(Image::from_bytes(format, bytes)))
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn image_format(path: &str, bytes: &[u8]) -> Option<ImageFormat> {
+    if let Some(extension) = Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+    {
+        let format = match extension.to_ascii_lowercase().as_str() {
+            "png" => ImageFormat::Png,
+            "jpg" | "jpeg" => ImageFormat::Jpeg,
+            "webp" => ImageFormat::Webp,
+            "gif" => ImageFormat::Gif,
+            "svg" => ImageFormat::Svg,
+            "bmp" => ImageFormat::Bmp,
+            "tif" | "tiff" => ImageFormat::Tiff,
+            "ico" => ImageFormat::Ico,
+            "pbm" | "pgm" | "ppm" | "pnm" => ImageFormat::Pnm,
+            _ => return None,
+        };
+        return Some(format);
     }
 
-    let bytes = asset_source.load(path.as_ref()).ok().flatten()?;
-    Some(NativeMenuIconSource::Bytes(bytes.into_owned()))
+    image_format_from_bytes(bytes)
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn image_format_from_bytes(bytes: &[u8]) -> Option<ImageFormat> {
+    let bytes = bytes.strip_prefix(b"\xef\xbb\xbf").unwrap_or(bytes);
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(ImageFormat::Png)
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        Some(ImageFormat::Jpeg)
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some(ImageFormat::Gif)
+    } else if bytes.starts_with(b"BM") {
+        Some(ImageFormat::Bmp)
+    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+        Some(ImageFormat::Webp)
+    } else if bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*") {
+        Some(ImageFormat::Tiff)
+    } else if bytes.starts_with(b"\0\0\x01\0") || bytes.starts_with(b"\0\0\x02\0") {
+        Some(ImageFormat::Ico)
+    } else if is_svg_bytes(bytes) {
+        Some(ImageFormat::Svg)
+    } else if matches!(
+        bytes.get(0..2),
+        Some(b"P1" | b"P2" | b"P3" | b"P4" | b"P5" | b"P6")
+    ) {
+        Some(ImageFormat::Pnm)
+    } else {
+        None
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn is_svg_bytes(bytes: &[u8]) -> bool {
+    let text = match std::str::from_utf8(&bytes[..bytes.len().min(256)]) {
+        Ok(text) => text.trim_start(),
+        Err(_) => return false,
+    };
+    text.starts_with("<svg") || text.starts_with("<?xml")
 }
 
 /// Reuse an existing GPUI menu definition as a native menu.
@@ -388,12 +448,10 @@ mod tests {
     #[test]
     fn test_native_menu_icon_asset_resolves_to_bytes() {
         let icon = Icon::new(IconName::Github);
-        let source = resolve_icon_source(icon.path_ref(), &gpui_component_assets::Assets)
+        let image = resolve_icon_image(icon.path_ref(), &gpui_component_assets::Assets)
             .expect("icon asset should resolve");
 
-        let NativeMenuIconSource::Bytes(bytes) = source else {
-            panic!("expected asset-backed icon to resolve to bytes");
-        };
-        assert!(!bytes.is_empty());
+        assert_eq!(image.format, ImageFormat::Svg);
+        assert!(!image.bytes.is_empty());
     }
 }
