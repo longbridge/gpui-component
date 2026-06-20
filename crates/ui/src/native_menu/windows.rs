@@ -1,18 +1,20 @@
 //! Windows native menu implementation (Win32 popup menus).
 
-use std::ffi::c_void;
+use std::{ffi::c_void, sync::Arc};
 
-use gpui::{Action, App, Pixels, Point, Window};
+use gpui::{Action, App, AssetSource, ImageFormat, Pixels, Point, SharedString, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::{BOOL, HANDLE, HWND, LPARAM, POINT, WPARAM};
+use windows::Win32::Foundation::{BOOL, GlobalFree, HANDLE, HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, ClientToScreen, CreateDIBSection, DIB_RGB_COLORS,
     DeleteObject, HBITMAP, HDC, HGDIOBJ,
 };
 use windows::Win32::Graphics::GdiPlus::{
-    GdipCreateBitmapFromFile, GdipCreateHBITMAPFromBitmap, GdipDisposeImage, GdipGetImageThumbnail,
-    GdiplusShutdown, GdiplusStartup, GdiplusStartupInput, GpBitmap, GpImage,
+    GdipCreateBitmapFromStream, GdipCreateHBITMAPFromBitmap, GdipDisposeImage,
+    GdipGetImageThumbnail, GdiplusShutdown, GdiplusStartup, GdiplusStartupInput, GpBitmap, GpImage,
 };
+use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
+use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::UI::Input::KeyboardAndMouse::SetCapture;
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, HMENU, MENUITEMINFOW, MF_CHECKED, MF_GRAYED,
@@ -22,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::PCWSTR;
 
-use super::NativeMenuItem;
+use super::{NativeMenuItem, resolve_icon_image};
 
 /// Side length (in **logical pixels**) menu item images are scaled to. The
 /// physical bitmap size is this multiplied by the window's scale factor (see
@@ -35,6 +37,7 @@ const MENU_IMAGE_SIZE: u32 = 16;
 /// run from a foreground task to avoid re-entering GPUI while it is borrowed.
 pub(super) fn show(
     items: Vec<NativeMenuItem>,
+    asset_source: Arc<dyn AssetSource>,
     position: Point<Pixels>,
     window: &mut Window,
     cx: &mut App,
@@ -54,7 +57,14 @@ pub(super) fn show(
     let handle = Window::window_handle(window);
 
     cx.spawn(async move |cx| {
-        let Some(action) = run_menu(hwnd, &items, client_x, client_y, image_px) else {
+        let Some(action) = run_menu(
+            hwnd,
+            &items,
+            asset_source.as_ref(),
+            client_x,
+            client_y,
+            image_px,
+        ) else {
             return;
         };
         cx.update(move |app| {
@@ -71,6 +81,7 @@ pub(super) fn show(
 fn run_menu(
     hwnd: isize,
     items: &[NativeMenuItem],
+    asset_source: &dyn AssetSource,
     client_x: i32,
     client_y: i32,
     image_px: u32,
@@ -87,7 +98,7 @@ fn run_menu(
 
         // Bitmaps attached to menu items must outlive the menu; freed below.
         let mut bitmaps: Vec<HBITMAP> = Vec::new();
-        let menu = build_menu(items, &mut actions, &mut bitmaps, image_px)?;
+        let menu = build_menu(items, asset_source, &mut actions, &mut bitmaps, image_px)?;
 
         let mut point = POINT {
             x: client_x,
@@ -135,6 +146,7 @@ fn run_menu(
 /// Win32 menu creation; the returned `HMENU` must be destroyed by the caller.
 unsafe fn build_menu<'a>(
     items: &'a [NativeMenuItem],
+    asset_source: &dyn AssetSource,
     actions: &mut Vec<&'a Box<dyn Action>>,
     bitmaps: &mut Vec<HBITMAP>,
     image_px: u32,
@@ -154,7 +166,7 @@ unsafe fn build_menu<'a>(
                 label,
                 disabled,
                 checked,
-                image,
+                icon,
                 action,
             } => {
                 let mut flags = MF_STRING;
@@ -174,8 +186,10 @@ unsafe fn build_menu<'a>(
                     _ => 0,
                 };
                 let _ = unsafe { AppendMenuW(menu, flags, id, PCWSTR(wide.as_ptr())) };
-                if let Some(image) = image {
-                    if let Some(bitmap) = unsafe { load_hbitmap(image, image_px) } {
+                if let Some(icon) = icon {
+                    if let Some(bitmap) =
+                        unsafe { load_hbitmap(icon.path_ref(), asset_source, image_px) }
+                    {
                         let info = MENUITEMINFOW {
                             cbSize: std::mem::size_of::<MENUITEMINFOW>() as u32,
                             fMask: MIIM_BITMAP,
@@ -193,7 +207,8 @@ unsafe fn build_menu<'a>(
                 disabled,
                 items,
             } => {
-                let Some(submenu) = (unsafe { build_menu(items, actions, bitmaps, image_px) })
+                let Some(submenu) =
+                    (unsafe { build_menu(items, asset_source, actions, bitmaps, image_px) })
                 else {
                     continue;
                 };
@@ -247,7 +262,7 @@ impl Drop for GdiplusSession {
     }
 }
 
-/// Load an image file into an `HBITMAP`, scaled to `image_px` square so it
+/// Load an image into an `HBITMAP`, scaled to `image_px` square so it
 /// doesn't overflow the menu row.
 ///
 /// SVG files are rasterized with `resvg` (see [`rasterize_svg`]); GDI+ has no
@@ -259,22 +274,31 @@ impl Drop for GdiplusSession {
 ///
 /// # Safety
 /// Calls GDI+ /GDI flat APIs; the returned handle is owned by the caller.
-unsafe fn load_hbitmap(path: &str, image_px: u32) -> Option<HBITMAP> {
-    // GDI+ can't decode SVG, so rasterize it ourselves.
-    if std::path::Path::new(path)
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("svg"))
-    {
-        return unsafe { rasterize_svg(path, image_px) };
+unsafe fn load_hbitmap(
+    path: &SharedString,
+    asset_source: &dyn AssetSource,
+    image_px: u32,
+) -> Option<HBITMAP> {
+    let image = resolve_icon_image(path, asset_source)?;
+    if image.bytes.is_empty() {
+        return None;
     }
 
-    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    if image.format == ImageFormat::Svg {
+        return unsafe { rasterize_svg(&image.bytes, image_px) };
+    }
+
+    let stream = unsafe { stream_from_bytes(&image.bytes) }?;
     let mut gp_bitmap: *mut GpBitmap = std::ptr::null_mut();
-    let status = unsafe { GdipCreateBitmapFromFile(PCWSTR(wide.as_ptr()), &mut gp_bitmap) };
+    let status = unsafe { GdipCreateBitmapFromStream(&stream, &mut gp_bitmap) };
     if status.0 != 0 || gp_bitmap.is_null() {
         return None;
     }
 
+    unsafe { thumbnail_hbitmap(gp_bitmap, image_px) }
+}
+
+unsafe fn thumbnail_hbitmap(gp_bitmap: *mut GpBitmap, image_px: u32) -> Option<HBITMAP> {
     // Scale to a menu icon sized thumbnail; GDI+ does not resize on display.
     let mut thumb: *mut GpImage = std::ptr::null_mut();
     let status = unsafe {
@@ -306,6 +330,26 @@ unsafe fn load_hbitmap(path: &str, image_px: u32) -> Option<HBITMAP> {
     }
 }
 
+unsafe fn stream_from_bytes(bytes: &[u8]) -> Option<windows::Win32::System::Com::IStream> {
+    let hglobal = unsafe { GlobalAlloc(GMEM_MOVEABLE, bytes.len()) }.ok()?;
+    let data = unsafe { GlobalLock(hglobal) };
+    if data.is_null() {
+        let _ = unsafe { GlobalFree(hglobal) };
+        return None;
+    }
+
+    unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), data.cast::<u8>(), bytes.len()) };
+    let _ = unsafe { GlobalUnlock(hglobal) };
+
+    match unsafe { CreateStreamOnHGlobal(hglobal, BOOL(1)) } {
+        Ok(stream) => Some(stream),
+        Err(_) => {
+            let _ = unsafe { GlobalFree(hglobal) };
+            None
+        }
+    }
+}
+
 /// Extract the Win32 `HWND` (as an `isize`) from the window's raw handle.
 fn hwnd_ptr(window: &Window) -> Option<isize> {
     let handle = HasWindowHandle::window_handle(window).ok()?;
@@ -315,20 +359,19 @@ fn hwnd_ptr(window: &Window) -> Option<isize> {
     Some(handle.hwnd.get())
 }
 
-/// Rasterize an SVG file into an `HBITMAP`, scaled to `image_px` square.
+/// Rasterize SVG bytes into an `HBITMAP`, scaled to `image_px` square.
 ///
-/// GDI+ has no SVG codec, so SVG paths are rendered with `resvg` and wrapped in
-/// a 32-bit DIB section. The SVG is scaled uniformly to fit the square and
-/// centered. Returns `None` if the file can't be read or parsed. The returned
-/// bitmap must be freed with `DeleteObject`.
+/// GDI+ has no SVG codec, so SVG data is rendered with `resvg` and wrapped in a
+/// 32-bit DIB section. The SVG is scaled uniformly to fit the square and centered.
+/// Returns `None` if the SVG can't be parsed. The returned bitmap must be freed
+/// with `DeleteObject`.
 ///
 /// # Safety
 /// Creates a GDI DIB section; the returned handle is owned by the caller.
-unsafe fn rasterize_svg(path: &str, image_px: u32) -> Option<HBITMAP> {
+unsafe fn rasterize_svg(data: &[u8], image_px: u32) -> Option<HBITMAP> {
     use resvg::{tiny_skia, usvg};
 
-    let data = std::fs::read(path).ok()?;
-    let tree = usvg::Tree::from_data(&data, &usvg::Options::default()).ok()?;
+    let tree = usvg::Tree::from_data(data, &usvg::Options::default()).ok()?;
 
     let size = image_px;
     let mut pixmap = tiny_skia::Pixmap::new(size, size)?;
