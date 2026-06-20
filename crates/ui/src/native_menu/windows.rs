@@ -193,7 +193,8 @@ unsafe fn build_menu<'a>(
                 disabled,
                 items,
             } => {
-                let Some(submenu) = (unsafe { build_menu(items, actions, bitmaps, image_px) }) else {
+                let Some(submenu) = (unsafe { build_menu(items, actions, bitmaps, image_px) })
+                else {
                     continue;
                 };
                 let mut flags = MF_POPUP;

@@ -17,6 +17,10 @@ use crate::section;
 #[action(namespace = native_menu_story, no_json)]
 struct MenuClick(SharedString);
 
+#[derive(Action, Clone, PartialEq, Deserialize)]
+#[action(namespace = native_menu_story, no_json)]
+struct OpenGitHub;
+
 const CONTEXT: &str = "NativeMenuStory";
 
 /// A menu item dispatching `MenuClick(label)`.
@@ -26,11 +30,11 @@ fn click(label: &str) -> Box<dyn Action> {
 
 /// Absolute path to a bounded icon.
 fn icon_path(name: &str) -> String {
-  format!(
-    "{}/../assets/assets/icons/{}",
-    env!("CARGO_MANIFEST_DIR"),
-    name
-  )
+    format!(
+        "{}/../assets/assets/icons/{}",
+        env!("CARGO_MANIFEST_DIR"),
+        name
+    )
 }
 
 /// Demo menu: normal items, a disabled item, a checked item (reflecting
@@ -41,7 +45,7 @@ fn demo_menu(word_wrap: bool) -> NativeMenu {
         .menu("Copy", click("Copy"))
         .menu("Paste", click("Paste"))
         .separator()
-        .menu_with_image("Github", icon_path("github.svg"), click("Disabled"))
+        .menu_with_image("Github", icon_path("github.svg"), Box::new(OpenGitHub))
         .menu_with_image("Inbox", icon_path("inbox.svg"), click("Inbox"))
         .separator()
         .menu_with_disabled("Disabled item", true, click("Disabled"))
@@ -107,6 +111,10 @@ impl NativeMenuStory {
         cx.notify();
     }
 
+    fn open_github(&mut self, _: &OpenGitHub, _: &mut Window, cx: &mut Context<Self>) {
+        cx.open_url("https://github.com");
+    }
+
     fn trigger(&self, label: &str, cx: &mut App) -> Div {
         div()
             .flex()
@@ -142,6 +150,7 @@ impl Render for NativeMenuStory {
             .track_focus(&self.focus_handle)
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_click))
+            .on_action(cx.listener(Self::open_github))
             .size_full()
             .gap_6()
             .child(
