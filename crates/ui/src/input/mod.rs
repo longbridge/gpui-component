@@ -13,6 +13,8 @@ mod lsp;
 mod mask_pattern;
 mod mode;
 mod movement;
+#[cfg(target_os = "macos")]
+mod native;
 mod number_input;
 mod otp_input;
 pub(crate) mod popovers;
