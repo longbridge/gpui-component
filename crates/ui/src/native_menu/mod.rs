@@ -150,33 +150,6 @@ impl NativeMenu {
         self.menu_with_icon_disabled(label, icon, disabled, action)
     }
 
-    /// Append an item showing an image file next to its label.
-    ///
-    /// Prefer [`Self::menu_with_icon`] for consistency with [`crate::menu::PopupMenu`].
-    #[deprecated(note = "use NativeMenu::menu_with_icon instead")]
-    pub fn menu_with_image(
-        self,
-        label: impl Into<SharedString>,
-        image: impl Into<SharedString>,
-        action: Box<dyn Action>,
-    ) -> Self {
-        self.menu_with_icon(label, Icon::default().path(image), action)
-    }
-
-    /// Append an item showing an image file next to its label, controlling its `disabled` state.
-    ///
-    /// Prefer [`Self::menu_with_icon_disabled`] for consistency with [`crate::menu::PopupMenu`].
-    #[deprecated(note = "use NativeMenu::menu_with_icon_disabled instead")]
-    pub fn menu_with_image_disabled(
-        self,
-        label: impl Into<SharedString>,
-        image: impl Into<SharedString>,
-        disabled: bool,
-        action: Box<dyn Action>,
-    ) -> Self {
-        self.menu_with_icon_disabled(label, Icon::default().path(image), disabled, action)
-    }
-
     fn menu_with(
         mut self,
         label: impl Into<SharedString>,
