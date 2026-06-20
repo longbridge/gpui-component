@@ -84,7 +84,7 @@ fn build_popup(
                     action: Some(action),
                 } => menu.menu_with_icon_and_disabled(
                     label,
-                    Icon::default().path(image),
+                    Icon::default().external_path(image),
                     action,
                     disabled,
                 ),

@@ -52,6 +52,9 @@ pub struct Icon {
     base: Svg,
     style: StyleRefinement,
     path: SharedString,
+    /// Filesystem path to an SVG file, loaded as bytes at render time.
+    /// When `Some`, takes precedence over [`Self::path`] (an asset-bundle path).
+    external_path: Option<SharedString>,
     text_color: Option<Hsla>,
     size: Option<Size>,
     rotation: Option<Radians>,
@@ -63,6 +66,7 @@ impl Default for Icon {
             base: svg().flex_none().size_4(),
             style: StyleRefinement::default(),
             path: "".into(),
+            external_path: None,
             text_color: None,
             size: None,
             rotation: None,
@@ -72,7 +76,9 @@ impl Default for Icon {
 
 impl Clone for Icon {
     fn clone(&self) -> Self {
-        let mut this = Self::default().path(self.path.clone());
+        let mut this = Self::default()
+            .path(self.path.clone())
+            .external_path_opt(self.external_path.clone());
         this.style = self.style.clone();
         this.rotation = self.rotation;
         this.size = self.size;
@@ -95,6 +101,21 @@ impl Icon {
     /// For example: `icons/foo.svg`
     pub fn path(mut self, path: impl Into<SharedString>) -> Self {
         self.path = path.into();
+        self
+    }
+
+    /// Set the icon to a filesystem path to an SVG file.
+    ///
+    /// Unlike [`Self::path`], which resolves through the asset bundle, this
+    /// loads the SVG bytes directly from the filesystem at render time.
+    /// Use this when the icon lives outside the asset bundle (e.g. user assets).
+    pub fn external_path(mut self, path: impl Into<SharedString>) -> Self {
+        self.external_path = Some(path.into());
+        self
+    }
+
+    fn external_path_opt(mut self, path: Option<SharedString>) -> Self {
+        self.external_path = path;
         self
     }
 
@@ -148,6 +169,8 @@ impl RenderOnce for Icon {
         let mut base = self.base;
         *base.style() = self.style;
 
+        let base = apply_svg_source(base, self.path, self.external_path);
+
         base.flex_shrink_0()
             .text_color(text_color)
             .when(!has_base_size, |this| this.size(text_size))
@@ -158,7 +181,6 @@ impl RenderOnce for Icon {
                 Size::Medium => this.size_4(),
                 Size::Large => this.size_6(),
             })
-            .path(self.path)
     }
 }
 
@@ -177,6 +199,8 @@ impl Render for Icon {
         let mut base = svg().flex_none();
         *base.style() = self.style.clone();
 
+        let base = apply_svg_source(base, self.path.clone(), self.external_path.clone());
+
         base.flex_shrink_0()
             .text_color(text_color)
             .when(!has_base_size, |this| this.size(text_size))
@@ -187,9 +211,24 @@ impl Render for Icon {
                 Size::Medium => this.size_4(),
                 Size::Large => this.size_6(),
             })
-            .path(self.path.clone())
             .when_some(self.rotation, |this, rotation| {
                 this.with_transformation(Transformation::rotate(rotation))
             })
     }
+}
+
+/// Attach either an asset-bundle `path` or a filesystem `external_path` to the
+/// Svg. `external_path` takes precedence when set, so callers can pass
+/// arbitrary filesystem paths without conflicting with the asset bundle.
+fn apply_svg_source(
+    mut base: Svg,
+    path: SharedString,
+    external_path: Option<SharedString>,
+) -> Svg {
+    if let Some(external) = external_path {
+        base = base.external_path(external);
+    } else if !path.is_empty() {
+        base = base.path(path);
+    }
+    base
 }
