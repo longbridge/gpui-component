@@ -196,7 +196,7 @@ objc2-app-kit = { version = "0.3", features = [
     "NSEvent",
     "NSImage",
 ] }
-objc2-foundation = { version = "0.3", features = ["NSString", "NSGeometry"] }
+objc2-foundation = { version = "0.3", features = ["NSData", "NSString", "NSGeometry"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Native menu (NativeMenu) — drives Win32 popup menus.
@@ -206,6 +206,9 @@ windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_GdiPlus",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Memory",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }

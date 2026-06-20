@@ -28,11 +28,7 @@ use crate::Icon;
 use gpui::AssetSource;
 use gpui::{Action, App, Pixels, Point, SharedString, Window};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-    path::Path,
-};
+use std::path::Path;
 
 #[cfg(target_os = "macos")]
 mod macos;
@@ -51,7 +47,7 @@ enum NativeMenuItem {
         disabled: bool,
         checked: bool,
         /// Icon shown next to the label.
-        icon: Option<Box<Icon>>,
+        icon: Option<Box<NativeMenuIcon>>,
         /// Action dispatched when the item is selected.
         action: Option<Box<dyn Action>>,
     },
@@ -60,6 +56,42 @@ enum NativeMenuItem {
         disabled: bool,
         items: Vec<NativeMenuItem>,
     },
+}
+
+struct NativeMenuIcon {
+    icon: Icon,
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    source: Option<NativeMenuIconSource>,
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+enum NativeMenuIconSource {
+    File(SharedString),
+    Bytes(Vec<u8>),
+}
+
+impl NativeMenuIcon {
+    fn new(icon: Icon) -> Self {
+        Self {
+            icon,
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            source: None,
+        }
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows", test))]
+    fn path_ref(&self) -> &SharedString {
+        self.icon.path_ref()
+    }
+
+    fn into_icon(self) -> Icon {
+        self.icon
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn source(&self) -> Option<&NativeMenuIconSource> {
+        self.source.as_ref()
+    }
 }
 
 /// A menu rendered by the operating system.
@@ -104,8 +136,8 @@ impl NativeMenu {
 
     /// Append an item showing `icon` next to its label.
     ///
-    /// Native platform menus render the icon by loading the [`Icon`]'s path.
-    /// File-backed icons such as [`crate::IconName`] work across all backends.
+    /// Native platform menus render file-backed icons from their filesystem path
+    /// and asset-backed icons from memory. [`crate::IconName`] works across all backends.
     /// - **macOS**: loaded into an `NSImage` as a template image, so it tints with the item
     /// text and assigned to the item ([`NSMenuItem::image`]).
     /// - **Windows**: loaded into an `HBITMAP` and set as the item's
@@ -162,7 +194,7 @@ impl NativeMenu {
             label: label.into(),
             disabled,
             checked,
-            icon: icon.map(Box::new),
+            icon: icon.map(NativeMenuIcon::new).map(Box::new),
             action,
         });
         self
@@ -221,16 +253,17 @@ fn resolve_platform_icons(items: &mut [NativeMenuItem], asset_source: &dyn Asset
     for item in items {
         match item {
             NativeMenuItem::Separator => {}
-            NativeMenuItem::Item { icon, .. } => {
-                let resolved_path = icon
-                    .as_deref()
-                    .and_then(|icon| resolve_icon_path(icon, asset_source));
-                if let Some(resolved_path) = resolved_path {
-                    if let Some(icon) = icon.as_mut() {
-                        **icon = icon.as_ref().clone().path(resolved_path);
-                    }
+            NativeMenuItem::Item {
+                icon: icon_slot, ..
+            } => {
+                let Some(icon) = icon_slot.as_mut() else {
+                    continue;
+                };
+                let source = resolve_icon_source(icon.path_ref(), asset_source);
+                if source.is_some() {
+                    icon.source = source;
                 } else {
-                    *icon = None;
+                    *icon_slot = None;
                 }
             }
             NativeMenuItem::Submenu { items, .. } => resolve_platform_icons(items, asset_source),
@@ -239,39 +272,20 @@ fn resolve_platform_icons(items: &mut [NativeMenuItem], asset_source: &dyn Asset
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn resolve_icon_path(icon: &Icon, asset_source: &dyn AssetSource) -> Option<SharedString> {
-    let path = icon.path_ref();
+fn resolve_icon_source(
+    path: &SharedString,
+    asset_source: &dyn AssetSource,
+) -> Option<NativeMenuIconSource> {
     if path.is_empty() {
         return None;
     }
 
     if Path::new(path.as_ref()).is_file() {
-        return Some(path.clone());
+        return Some(NativeMenuIconSource::File(path.clone()));
     }
 
     let bytes = asset_source.load(path.as_ref()).ok().flatten()?;
-    materialize_icon_asset(path, &bytes).ok()
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-fn materialize_icon_asset(path: &str, bytes: &[u8]) -> std::io::Result<SharedString> {
-    let mut hasher = DefaultHasher::new();
-    path.hash(&mut hasher);
-    bytes.hash(&mut hasher);
-
-    let extension = Path::new(path)
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .unwrap_or("img");
-    let dir = std::env::temp_dir().join("gpui-component-native-menu-icons");
-    std::fs::create_dir_all(&dir)?;
-
-    let file = dir.join(format!("{:016x}.{}", hasher.finish(), extension));
-    if !file.is_file() {
-        std::fs::write(&file, bytes)?;
-    }
-
-    Ok(file.to_string_lossy().to_string().into())
+    Some(NativeMenuIconSource::Bytes(bytes.into_owned()))
 }
 
 /// Reuse an existing GPUI menu definition as a native menu.
@@ -372,12 +386,14 @@ mod tests {
 
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     #[test]
-    fn test_native_menu_icon_asset_resolves_to_file_path() {
+    fn test_native_menu_icon_asset_resolves_to_bytes() {
         let icon = Icon::new(IconName::Github);
-        let path = resolve_icon_path(&icon, &gpui_component_assets::Assets)
+        let source = resolve_icon_source(icon.path_ref(), &gpui_component_assets::Assets)
             .expect("icon asset should resolve");
 
-        assert_ne!(path.as_ref(), icon.path_ref().as_ref());
-        assert!(std::path::Path::new(path.as_ref()).is_file());
+        let NativeMenuIconSource::Bytes(bytes) = source else {
+            panic!("expected asset-backed icon to resolve to bytes");
+        };
+        assert!(!bytes.is_empty());
     }
 }

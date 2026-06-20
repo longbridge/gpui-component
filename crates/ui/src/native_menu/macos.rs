@@ -7,10 +7,10 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker, define_class, msg_send, sel};
 use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSView};
-use objc2_foundation::{NSPoint, NSSize, NSString};
+use objc2_foundation::{NSData, NSPoint, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-use super::NativeMenuItem;
+use super::{NativeMenuIconSource, NativeMenuItem};
 
 /// Side length (in points) menu item images are scaled to. AppKit does not resize the image to fit
 /// the row, so a large file would otherwise overflow it.
@@ -142,10 +142,7 @@ fn build_menu<'a>(
                     ns_item.setTitle(&NSString::from_str(label));
                     ns_item.setEnabled(!*disabled);
                     if let Some(icon) = icon {
-                        if let Some(ns_image) = NSImage::initWithContentsOfFile(
-                            NSImage::alloc(),
-                            &NSString::from_str(icon.path_ref()),
-                        ) {
+                        if let Some(ns_image) = ns_image_for_icon(icon.source()) {
                             ns_image.setSize(NSSize::new(MENU_IMAGE_SIZE, MENU_IMAGE_SIZE));
                             ns_image.setTemplate(true);
                             ns_item.setImage(Some(&ns_image));
@@ -183,6 +180,23 @@ fn build_menu<'a>(
     }
 
     menu
+}
+
+fn ns_image_for_icon(source: Option<&NativeMenuIconSource>) -> Option<Retained<NSImage>> {
+    match source? {
+        NativeMenuIconSource::File(path) => {
+            NSImage::initWithContentsOfFile(NSImage::alloc(), &NSString::from_str(path))
+        }
+        NativeMenuIconSource::Bytes(bytes) => {
+            if bytes.is_empty() {
+                return None;
+            }
+
+            let data =
+                unsafe { NSData::dataWithBytes_length(bytes.as_ptr().cast(), bytes.len() as _) };
+            NSImage::initWithData(NSImage::alloc(), &data)
+        }
+    }
 }
 
 /// Extract the AppKit `NSView` pointer from the window's raw handle.
