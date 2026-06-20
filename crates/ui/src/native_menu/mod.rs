@@ -62,25 +62,6 @@ enum NativeMenuItem {
     },
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-enum ResolvedNativeMenuItem {
-    Separator,
-    Item {
-        label: SharedString,
-        disabled: bool,
-        checked: bool,
-        /// Filesystem path to an image shown next to the label.
-        image: Option<SharedString>,
-        /// Action dispatched when the item is selected.
-        action: Option<Box<dyn Action>>,
-    },
-    Submenu {
-        label: SharedString,
-        disabled: bool,
-        items: Vec<ResolvedNativeMenuItem>,
-    },
-}
-
 /// A menu rendered by the operating system.
 ///
 /// Build it with the [`NativeMenu::menu`] / [`NativeMenu::separator`] builders,
@@ -246,59 +227,42 @@ impl NativeMenu {
         }
 
         #[cfg(target_os = "macos")]
-        macos::show(
-            resolve_platform_items(self.items, cx.asset_source().as_ref()),
-            position,
-            window,
-            cx,
-        );
+        {
+            let mut items = self.items;
+            resolve_platform_icons(&mut items, cx.asset_source().as_ref());
+            macos::show(items, position, window, cx);
+        }
         #[cfg(target_os = "windows")]
-        windows::show(
-            resolve_platform_items(self.items, cx.asset_source().as_ref()),
-            position,
-            window,
-            cx,
-        );
+        {
+            let mut items = self.items;
+            resolve_platform_icons(&mut items, cx.asset_source().as_ref());
+            windows::show(items, position, window, cx);
+        }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         fallback::show(self.items, position, window, cx);
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn resolve_platform_items(
-    items: Vec<NativeMenuItem>,
-    asset_source: &dyn AssetSource,
-) -> Vec<ResolvedNativeMenuItem> {
-    items
-        .into_iter()
-        .map(|item| match item {
-            NativeMenuItem::Separator => ResolvedNativeMenuItem::Separator,
-            NativeMenuItem::Item {
-                label,
-                disabled,
-                checked,
-                icon,
-                action,
-            } => ResolvedNativeMenuItem::Item {
-                label,
-                disabled,
-                checked,
-                image: icon
+fn resolve_platform_icons(items: &mut [NativeMenuItem], asset_source: &dyn AssetSource) {
+    for item in items {
+        match item {
+            NativeMenuItem::Separator => {}
+            NativeMenuItem::Item { icon, .. } => {
+                let resolved_path = icon
                     .as_deref()
-                    .and_then(|icon| resolve_icon_path(icon, asset_source)),
-                action,
-            },
-            NativeMenuItem::Submenu {
-                label,
-                disabled,
-                items,
-            } => ResolvedNativeMenuItem::Submenu {
-                label,
-                disabled,
-                items: resolve_platform_items(items, asset_source),
-            },
-        })
-        .collect()
+                    .and_then(|icon| resolve_icon_path(icon, asset_source));
+                if let Some(resolved_path) = resolved_path {
+                    if let Some(icon) = icon.as_mut() {
+                        **icon = icon.as_ref().clone().path(resolved_path);
+                    }
+                } else {
+                    *icon = None;
+                }
+            }
+            NativeMenuItem::Submenu { items, .. } => resolve_platform_icons(items, asset_source),
+        }
+    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]

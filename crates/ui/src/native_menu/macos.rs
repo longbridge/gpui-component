@@ -10,7 +10,7 @@ use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSView};
 use objc2_foundation::{NSPoint, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-use super::ResolvedNativeMenuItem;
+use super::NativeMenuItem;
 
 /// Side length (in points) menu item images are scaled to. AppKit does not resize the image to fit
 /// the row, so a large file would otherwise overflow it.
@@ -51,7 +51,7 @@ impl MenuTarget {
 /// The AppKit tracking loop is run from a foreground task so that GPUI is not
 /// borrowed while the menu is open.
 pub(super) fn show(
-    items: Vec<ResolvedNativeMenuItem>,
+    items: Vec<NativeMenuItem>,
     position: Point<Pixels>,
     window: &mut Window,
     cx: &mut App,
@@ -86,7 +86,7 @@ pub(super) fn show(
 /// selected item's action.
 fn run_menu(
     view_ptr: usize,
-    items: &[ResolvedNativeMenuItem],
+    items: &[NativeMenuItem],
     position: Point<Pixels>,
 ) -> Option<Box<dyn Action>> {
     let mtm = MainThreadMarker::new()?;
@@ -118,7 +118,7 @@ fn run_menu(
 /// Recursively build an `NSMenu`. Each actionable leaf item is given a tag equal
 /// to its index in `actions`, so the selected tag maps back to its action.
 fn build_menu<'a>(
-    items: &'a [ResolvedNativeMenuItem],
+    items: &'a [NativeMenuItem],
     target: &MenuTarget,
     mtm: MainThreadMarker,
     actions: &mut Vec<&'a Box<dyn Action>>,
@@ -129,22 +129,22 @@ fn build_menu<'a>(
 
     for item in items {
         match item {
-            ResolvedNativeMenuItem::Separator => menu.addItem(&NSMenuItem::separatorItem(mtm)),
-            ResolvedNativeMenuItem::Item {
+            NativeMenuItem::Separator => menu.addItem(&NSMenuItem::separatorItem(mtm)),
+            NativeMenuItem::Item {
                 label,
                 disabled,
                 checked,
-                image,
+                icon,
                 action,
             } => {
                 let ns_item = NSMenuItem::new(mtm);
                 unsafe {
                     ns_item.setTitle(&NSString::from_str(label));
                     ns_item.setEnabled(!*disabled);
-                    if let Some(image) = image {
+                    if let Some(icon) = icon {
                         if let Some(ns_image) = NSImage::initWithContentsOfFile(
                             NSImage::alloc(),
-                            &NSString::from_str(image),
+                            &NSString::from_str(icon.path_ref()),
                         ) {
                             ns_image.setSize(NSSize::new(MENU_IMAGE_SIZE, MENU_IMAGE_SIZE));
                             ns_image.setTemplate(true);
@@ -167,7 +167,7 @@ fn build_menu<'a>(
                 }
                 menu.addItem(&ns_item);
             }
-            ResolvedNativeMenuItem::Submenu {
+            NativeMenuItem::Submenu {
                 label,
                 disabled,
                 items,
