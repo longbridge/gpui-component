@@ -6,11 +6,15 @@ use gpui::{Action, App, Pixels, Point, Window};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker, define_class, msg_send, sel};
-use objc2_app_kit::{NSMenu, NSMenuItem, NSView};
-use objc2_foundation::{NSPoint, NSString};
+use objc2_app_kit::{NSImage, NSMenu, NSMenuItem, NSView};
+use objc2_foundation::{NSPoint, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use super::NativeMenuItem;
+
+/// Side length (in points) menu item images are scaled to. AppKit does not resize the image to fit
+/// the row, so a large file would otherwise overflow it.
+const MENU_IMAGE_SIZE: f64 = 16.0;
 
 /// Ivars for [`MenuTarget`]: the tag of the selected item, or `-1` if none.
 struct MenuTargetIvars {
@@ -130,12 +134,24 @@ fn build_menu<'a>(
                 label,
                 disabled,
                 checked,
+                image,
                 action,
             } => {
                 let ns_item = NSMenuItem::new(mtm);
                 unsafe {
                     ns_item.setTitle(&NSString::from_str(label));
                     ns_item.setEnabled(!*disabled);
+                    if let Some(image) = image {
+                        if let Some(ns_image) = NSImage::initWithContentsOfFile(
+                            NSImage::alloc(),
+                            &NSString::from_str(image),
+                        ) {
+                            ns_image.setSize(NSSize::new(MENU_IMAGE_SIZE, MENU_IMAGE_SIZE));
+                            ns_image.setTemplate(true);
+                            ns_item.setImage(Some(&ns_image));
+                        }
+                    }
+
                     if *checked {
                         // `NSControlStateValueOn`
                         ns_item.setState(1);

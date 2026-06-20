@@ -40,6 +40,8 @@ enum NativeMenuItem {
         label: SharedString,
         disabled: bool,
         checked: bool,
+        /// Path to an image shown next to the label
+        image: Option<SharedString>,
         /// Action dispatched when the item is selected.
         action: Option<Box<dyn Action>>,
     },
@@ -67,7 +69,7 @@ impl NativeMenu {
 
     /// Append a clickable item that dispatches `action` when selected.
     pub fn menu(self, label: impl Into<SharedString>, action: Box<dyn Action>) -> Self {
-        self.menu_with(label, false, false, Some(action))
+        self.menu_with(label, false, false, None, Some(action))
     }
 
     /// Append an item, controlling its `disabled` state.
@@ -77,7 +79,7 @@ impl NativeMenu {
         disabled: bool,
         action: Box<dyn Action>,
     ) -> Self {
-        self.menu_with(label, disabled, false, Some(action))
+        self.menu_with(label, disabled, false, None, Some(action))
     }
 
     /// Append an item, controlling its `checked` state (a check mark is shown).
@@ -87,7 +89,42 @@ impl NativeMenu {
         checked: bool,
         action: Box<dyn Action>,
     ) -> Self {
-        self.menu_with(label, false, checked, Some(action))
+        self.menu_with(label, false, checked, None, Some(action))
+    }
+
+    /// Append an item showing `image` next to its label.
+    ///
+    /// `image` is a filesystem path to an image file.
+    /// - **macOS**: loaded into an `NSImage` as a template image, so it tints with the item text
+    /// and assigned to the item ([`NSMenuItem::image`]).
+    /// - **Windows**: loaded into an `HBITMAP` and set as the item's
+    /// content bitmap (`MENUITEMINFOW::hbmpItem`), shown beside the label. SVG files are
+    /// rasterized, with `resvg`; other formats (PNG, JPEG, BMP, ...) are decoded by GDI+.
+    /// **Other platforms** (fallback): rendered as the menu item's [`crate::Icon`]; works best
+    /// with SVG assets.
+    ///
+    /// Note: this is the menu item's *content* image, not its state/check-mark indicator.
+    pub fn menu_with_image(
+        self,
+        label: impl Into<SharedString>,
+        image: impl Into<SharedString>,
+        action: Box<dyn Action>,
+    ) -> Self {
+        self.menu_with(label, false, false, Some(image.into()), Some(action))
+    }
+
+    /// Append an item showing `image` next to its label, controlling its `disabled` state.
+    ///
+    /// Same image behavior as [`Self::menu_with_image`]. Use this when an item
+    /// carries an icon but should be greyed out.
+    pub fn menu_with_image_disabled(
+        self,
+        label: impl Into<SharedString>,
+        image: impl Into<SharedString>,
+        disabled: bool,
+        action: Box<dyn Action>,
+    ) -> Self {
+        self.menu_with(label, disabled, false, Some(image.into()), Some(action))
     }
 
     fn menu_with(
@@ -95,12 +132,14 @@ impl NativeMenu {
         label: impl Into<SharedString>,
         disabled: bool,
         checked: bool,
+        image: Option<SharedString>,
         action: Option<Box<dyn Action>>,
     ) -> Self {
         self.items.push(NativeMenuItem::Item {
             label: label.into(),
             disabled,
             checked,
+            image,
             action,
         });
         self
@@ -167,6 +206,7 @@ impl From<gpui::Menu> for NativeMenu {
                     label: name,
                     disabled,
                     checked,
+                    image: None,
                     action: Some(action),
                 }),
                 gpui::MenuItem::Submenu(submenu) => native.items.push(NativeMenuItem::Submenu {

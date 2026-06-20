@@ -5,10 +5,11 @@
 //! the [`super::NativeMenu`] API working on every platform.
 
 use gpui::{
-    App, Context, DismissEvent, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Pixels, Point, Render, Subscription, Window, anchored, deferred, div, px,
+    App, Context, DismissEvent, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Pixels,
+    Point, Render, Subscription, Window, anchored, deferred, div, px,
 };
 
+use crate::Icon;
 use crate::menu::{PopupMenu, PopupMenuItem};
 use crate::root::Root;
 
@@ -78,7 +79,20 @@ fn build_popup(
                 NativeMenuItem::Item {
                     label,
                     disabled,
+                    checked: _,
+                    image: Some(image),
+                    action: Some(action),
+                } => menu.menu_with_icon_and_disabled(
+                    label,
+                    Icon::default().path(image),
+                    action,
+                    disabled,
+                ),
+                NativeMenuItem::Item {
+                    label,
+                    disabled,
                     checked,
+                    image: None,
                     action: Some(action),
                 } => menu.menu_with_check_and_disabled(label, checked, action, disabled),
                 NativeMenuItem::Item { action: None, .. } => menu,
