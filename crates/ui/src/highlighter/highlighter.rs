@@ -1330,7 +1330,7 @@ $x = 1;
     #[test]
     #[cfg(feature = "tree-sitter-languages")]
     fn test_highlight_allow_overlap_property_combines_nested_captures() {
-        let markdown = "This has ***bold and italic*** and **bold _with_ italic** text.";
+        let markdown = "This has **_bold and italic_** and **bold _with_ italic** text.";
         let rope = Rope::from_str(markdown);
         let mut highlighter = SyntaxHighlighter::new("markdown");
         highlighter.update(None, &rope, None);
