@@ -83,7 +83,7 @@ fn build_popup(
                     action: Some(action),
                 } => menu.item(
                     PopupMenuItem::new(label)
-                        .icon((*icon).into_icon())
+                        .icon(*icon)
                         .action(action)
                         .disabled(disabled)
                         .checked(checked),

@@ -1,8 +1,8 @@
 //! Windows native menu implementation (Win32 popup menus).
 
-use std::ffi::c_void;
+use std::{ffi::c_void, sync::Arc};
 
-use gpui::{Action, App, Image, ImageFormat, Pixels, Point, Window};
+use gpui::{Action, App, AssetSource, ImageFormat, Pixels, Point, SharedString, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Win32::Foundation::{BOOL, GlobalFree, HANDLE, HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -24,7 +24,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::PCWSTR;
 
-use super::NativeMenuItem;
+use super::{NativeMenuItem, resolve_icon_image};
 
 /// Side length (in **logical pixels**) menu item images are scaled to. The
 /// physical bitmap size is this multiplied by the window's scale factor (see
@@ -37,6 +37,7 @@ const MENU_IMAGE_SIZE: u32 = 16;
 /// run from a foreground task to avoid re-entering GPUI while it is borrowed.
 pub(super) fn show(
     items: Vec<NativeMenuItem>,
+    asset_source: Arc<dyn AssetSource>,
     position: Point<Pixels>,
     window: &mut Window,
     cx: &mut App,
@@ -56,7 +57,14 @@ pub(super) fn show(
     let handle = Window::window_handle(window);
 
     cx.spawn(async move |cx| {
-        let Some(action) = run_menu(hwnd, &items, client_x, client_y, image_px) else {
+        let Some(action) = run_menu(
+            hwnd,
+            &items,
+            asset_source.as_ref(),
+            client_x,
+            client_y,
+            image_px,
+        ) else {
             return;
         };
         cx.update(move |app| {
@@ -73,6 +81,7 @@ pub(super) fn show(
 fn run_menu(
     hwnd: isize,
     items: &[NativeMenuItem],
+    asset_source: &dyn AssetSource,
     client_x: i32,
     client_y: i32,
     image_px: u32,
@@ -89,7 +98,7 @@ fn run_menu(
 
         // Bitmaps attached to menu items must outlive the menu; freed below.
         let mut bitmaps: Vec<HBITMAP> = Vec::new();
-        let menu = build_menu(items, &mut actions, &mut bitmaps, image_px)?;
+        let menu = build_menu(items, asset_source, &mut actions, &mut bitmaps, image_px)?;
 
         let mut point = POINT {
             x: client_x,
@@ -137,6 +146,7 @@ fn run_menu(
 /// Win32 menu creation; the returned `HMENU` must be destroyed by the caller.
 unsafe fn build_menu<'a>(
     items: &'a [NativeMenuItem],
+    asset_source: &dyn AssetSource,
     actions: &mut Vec<&'a Box<dyn Action>>,
     bitmaps: &mut Vec<HBITMAP>,
     image_px: u32,
@@ -177,7 +187,9 @@ unsafe fn build_menu<'a>(
                 };
                 let _ = unsafe { AppendMenuW(menu, flags, id, PCWSTR(wide.as_ptr())) };
                 if let Some(icon) = icon {
-                    if let Some(bitmap) = unsafe { load_hbitmap(icon.image(), image_px) } {
+                    if let Some(bitmap) =
+                        unsafe { load_hbitmap(icon.path_ref(), asset_source, image_px) }
+                    {
                         let info = MENUITEMINFOW {
                             cbSize: std::mem::size_of::<MENUITEMINFOW>() as u32,
                             fMask: MIIM_BITMAP,
@@ -195,7 +207,8 @@ unsafe fn build_menu<'a>(
                 disabled,
                 items,
             } => {
-                let Some(submenu) = (unsafe { build_menu(items, actions, bitmaps, image_px) })
+                let Some(submenu) =
+                    (unsafe { build_menu(items, asset_source, actions, bitmaps, image_px) })
                 else {
                     continue;
                 };
@@ -261,8 +274,12 @@ impl Drop for GdiplusSession {
 ///
 /// # Safety
 /// Calls GDI+ /GDI flat APIs; the returned handle is owned by the caller.
-unsafe fn load_hbitmap(image: Option<&Image>, image_px: u32) -> Option<HBITMAP> {
-    let image = image?;
+unsafe fn load_hbitmap(
+    path: &SharedString,
+    asset_source: &dyn AssetSource,
+    image_px: u32,
+) -> Option<HBITMAP> {
+    let image = resolve_icon_image(path, asset_source)?;
     if image.bytes.is_empty() {
         return None;
     }

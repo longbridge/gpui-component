@@ -49,7 +49,7 @@ enum NativeMenuItem {
         disabled: bool,
         checked: bool,
         /// Icon shown next to the label.
-        icon: Option<Box<NativeMenuIcon>>,
+        icon: Option<Box<Icon>>,
         /// Action dispatched when the item is selected.
         action: Option<Box<dyn Action>>,
     },
@@ -58,36 +58,6 @@ enum NativeMenuItem {
         disabled: bool,
         items: Vec<NativeMenuItem>,
     },
-}
-
-struct NativeMenuIcon {
-    icon: Icon,
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    image: Option<Arc<Image>>,
-}
-
-impl NativeMenuIcon {
-    fn new(icon: Icon) -> Self {
-        Self {
-            icon,
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
-            image: None,
-        }
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "windows", test))]
-    fn path_ref(&self) -> &SharedString {
-        self.icon.path_ref()
-    }
-
-    fn into_icon(self) -> Icon {
-        self.icon
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
-    fn image(&self) -> Option<&Image> {
-        self.image.as_deref()
-    }
 }
 
 /// A menu rendered by the operating system.
@@ -190,7 +160,7 @@ impl NativeMenu {
             label: label.into(),
             disabled,
             checked,
-            icon: icon.map(NativeMenuIcon::new).map(Box::new),
+            icon: icon.map(Box::new),
             action,
         });
         self
@@ -229,15 +199,11 @@ impl NativeMenu {
 
         #[cfg(target_os = "macos")]
         {
-            let mut items = self.items;
-            resolve_platform_icons(&mut items, cx.asset_source().as_ref());
-            macos::show(items, position, window, cx);
+            macos::show(self.items, cx.asset_source().clone(), position, window, cx);
         }
         #[cfg(target_os = "windows")]
         {
-            let mut items = self.items;
-            resolve_platform_icons(&mut items, cx.asset_source().as_ref());
-            windows::show(items, position, window, cx);
+            windows::show(self.items, cx.asset_source().clone(), position, window, cx);
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         fallback::show(self.items, position, window, cx);
@@ -245,30 +211,10 @@ impl NativeMenu {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn resolve_platform_icons(items: &mut [NativeMenuItem], asset_source: &dyn AssetSource) {
-    for item in items {
-        match item {
-            NativeMenuItem::Separator => {}
-            NativeMenuItem::Item {
-                icon: icon_slot, ..
-            } => {
-                let Some(icon) = icon_slot.as_mut() else {
-                    continue;
-                };
-                let image = resolve_icon_image(icon.path_ref(), asset_source);
-                if image.is_some() {
-                    icon.image = image;
-                } else {
-                    *icon_slot = None;
-                }
-            }
-            NativeMenuItem::Submenu { items, .. } => resolve_platform_icons(items, asset_source),
-        }
-    }
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-fn resolve_icon_image(path: &SharedString, asset_source: &dyn AssetSource) -> Option<Arc<Image>> {
+pub(super) fn resolve_icon_image(
+    path: &SharedString,
+    asset_source: &dyn AssetSource,
+) -> Option<Arc<Image>> {
     if path.is_empty() {
         return None;
     }
