@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, App, Div, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
+    SharedString, Size, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
 };
 
 use crate::{ActiveTheme, StyledExt, h_flex, v_flex};
@@ -221,6 +221,9 @@ pub struct Tooltip {
     appearance: bool,
     title: Option<SharedString>,
     rows: Vec<TooltipRow>,
+    /// When set, the tooltip follows the cursor: `(anchor point, container size)`.
+    /// The box hugs the anchor and flips toward the center near each edge.
+    anchor: Option<(Point<Pixels>, Size<Pixels>)>,
 }
 
 impl Tooltip {
@@ -235,7 +238,18 @@ impl Tooltip {
             appearance: true,
             title: None,
             rows: Vec::new(),
+            anchor: None,
         }
+    }
+
+    /// Make the tooltip follow the cursor, anchored at `point` within a `within`-sized plot.
+    ///
+    /// The box hugs the anchor and flips toward the center near each edge (so it never
+    /// overflows the near side). Without this, the tooltip is pinned to the plot edge via
+    /// [`Tooltip::position`].
+    pub fn anchor(mut self, point: Point<Pixels>, within: Size<Pixels>) -> Self {
+        self.anchor = Some((point, within));
+        self
     }
 
     /// Set a bold title row shown at the top of the tooltip (e.g. the hovered x value).
@@ -313,6 +327,7 @@ impl RenderOnce for Tooltip {
             appearance,
             title,
             rows,
+            anchor,
         } = self;
 
         // Structured content (title + rows) takes precedence over freeform `base` children.
@@ -353,20 +368,37 @@ impl RenderOnce for Tooltip {
             .when_some(cross_line, |this, cross_line| this.child(cross_line))
             .when_some(dots, |this, dots| this.children(dots))
             .child(content.map(|this| {
-                if appearance {
-                    this.absolute()
-                        .min_w(px(150.))
-                        .popover_style(cx)
-                        .p_2()
-                        .when_some(position, |this, position| {
-                            if position == TooltipPosition::Left {
-                                this.left(gap)
+                if !appearance {
+                    return this.size_full().relative();
+                }
+
+                let card = this.absolute().min_w(px(150.)).popover_style(cx).p_2();
+
+                match anchor {
+                    // Follow mode: hug the anchor, flipping toward the center near each edge.
+                    Some((p, within)) => card
+                        .map(|c| {
+                            if p.x < within.width * 0.5 {
+                                c.left(p.x + gap)
                             } else {
-                                this.right(gap)
+                                c.right(within.width - p.x + gap)
                             }
                         })
-                } else {
-                    this.size_full().relative()
+                        .map(|c| {
+                            if p.y < within.height * 0.5 {
+                                c.top(p.y + gap)
+                            } else {
+                                c.bottom(within.height - p.y + gap)
+                            }
+                        }),
+                    // Edge-pinned mode (backward compatible default).
+                    None => card.when_some(position, |c, position| {
+                        if position == TooltipPosition::Left {
+                            c.left(gap)
+                        } else {
+                            c.right(gap)
+                        }
+                    }),
                 }
             }))
     }

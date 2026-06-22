@@ -244,6 +244,7 @@ where
     fn render_tooltip(
         &self,
         state: &TooltipState,
+        bounds: Bounds<Pixels>,
         _window: &mut Window,
         cx: &mut App,
     ) -> Option<AnyElement> {
@@ -256,7 +257,10 @@ where
 
         Some(
             Tooltip::new()
-                .position(state.position)
+                // Follow the cursor: hug the crosshair (data point x) horizontally and
+                // track the cursor vertically, flipping toward the center near each edge.
+                .anchor(state.cross_line, bounds.size)
+                .gap(px(8.))
                 .cross_line(CrossLine::new(state.cross_line))
                 .dots(
                     state

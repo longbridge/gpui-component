@@ -75,7 +75,8 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                 let Some(state) = <Self as Plot>::hit_test(self, position, bounds, cx) else {
                     return None;
                 };
-                let Some(mut overlay) = <Self as Plot>::render_tooltip(self, &state, window, cx)
+                let Some(mut overlay) =
+                    <Self as Plot>::render_tooltip(self, &state, bounds, window, cx)
                 else {
                     return None;
                 };

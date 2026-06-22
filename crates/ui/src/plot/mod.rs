@@ -51,11 +51,14 @@ pub trait Plot: IntoElement {
 
     /// Render the tooltip overlay for the active [`TooltipState`].
     ///
-    /// Return the overlay element (typically built with [`tooltip::Tooltip::new`]); it is
-    /// painted absolutely positioned above the plot. The default returns `None`.
+    /// `bounds` is the plot's painted area, so the tooltip can position itself relative to
+    /// the cursor (e.g. via [`tooltip::Tooltip::anchor`]). Return the overlay element
+    /// (typically built with [`tooltip::Tooltip::new`]); it is painted absolutely
+    /// positioned above the plot. The default returns `None`.
     fn render_tooltip(
         &self,
         _state: &TooltipState,
+        _bounds: Bounds<Pixels>,
         _window: &mut Window,
         _cx: &mut App,
     ) -> Option<AnyElement> {
