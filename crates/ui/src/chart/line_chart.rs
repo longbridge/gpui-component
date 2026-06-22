@@ -72,7 +72,7 @@ where
         self
     }
 
-    /// Set the series name shown in the hover tooltip row (e.g. "Desktop").
+    /// Set the series name shown in the hover tooltip row (e.g. "Foo").
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
         self
@@ -133,7 +133,7 @@ where
 
     /// Build the x (point) and y (linear) scales for the given bounds.
     ///
-    /// Shared by `paint` and `hit_test` so the two stay in sync. Returns `None` when the
+    /// Shared by `paint` and `tooltip_state` so the two stay in sync. Returns `None` when the
     /// x/y accessors have not been set.
     fn scales(&self, bounds: Bounds<Pixels>) -> Option<(ScalePoint<X>, ScaleLinear<Y>)> {
         let (x_fn, y_fn) = (self.x.as_ref()?, self.y.as_ref()?);
@@ -215,11 +215,11 @@ where
         line.paint(&bounds, window);
     }
 
-    fn plot_id(&self) -> Option<ElementId> {
+    fn id(&self) -> Option<ElementId> {
         self.id.clone()
     }
 
-    fn hit_test(
+    fn tooltip_state(
         &self,
         position: Point<Pixels>,
         bounds: Bounds<Pixels>,
@@ -241,7 +241,7 @@ where
         ))
     }
 
-    fn render_tooltip(
+    fn tooltip(
         &self,
         state: &TooltipState,
         bounds: Bounds<Pixels>,

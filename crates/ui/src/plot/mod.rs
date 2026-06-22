@@ -28,11 +28,11 @@ pub trait Plot: IntoElement {
     /// Return `Some(id)` to opt in to tooltips; the id must be unique among sibling
     /// elements. Returning `None` (the default) disables all tooltip behavior, leaving
     /// the plot a pure, non-interactive element identical to the pre-tooltip behavior.
-    fn plot_id(&self) -> Option<ElementId> {
+    fn id(&self) -> Option<ElementId> {
         None
     }
 
-    /// Hit-test the cursor against the plot's data.
+    /// Map the cursor to the tooltip state to display.
     ///
     /// `position` is the cursor position relative to the plot's top-left origin (already
     /// origin-subtracted), and `bounds` is the painted area. Return the [`TooltipState`]
@@ -40,7 +40,7 @@ pub trait Plot: IntoElement {
     /// nothing. Only called while the cursor is inside `bounds`.
     ///
     /// The default returns `None`.
-    fn hit_test(
+    fn tooltip_state(
         &self,
         _position: Point<Pixels>,
         _bounds: Bounds<Pixels>,
@@ -55,7 +55,7 @@ pub trait Plot: IntoElement {
     /// the cursor (e.g. via [`tooltip::Tooltip::anchor`]). Return the overlay element
     /// (typically built with [`tooltip::Tooltip::new`]); it is painted absolutely
     /// positioned above the plot. The default returns `None`.
-    fn render_tooltip(
+    fn tooltip(
         &self,
         _state: &TooltipState,
         _bounds: Bounds<Pixels>,

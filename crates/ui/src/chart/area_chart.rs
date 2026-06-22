@@ -74,7 +74,7 @@ where
 
     /// Set the name of the most recently added series, shown in its tooltip row.
     ///
-    /// Call after the matching [`AreaChart::y`] (e.g. `.y(..).stroke(..).label("Desktop")`).
+    /// Call after the matching [`AreaChart::y`] (e.g. `.y(..).stroke(..).label("Foo")`).
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.labels.push(label.into());
         self
@@ -135,7 +135,7 @@ where
 
     /// Build the x (point) and y (linear) scales for the given bounds.
     ///
-    /// Shared by `paint` and `hit_test` so the two stay in sync. Returns `None` when there
+    /// Shared by `paint` and `tooltip_state` so the two stay in sync. Returns `None` when there
     /// is no x accessor or no series.
     fn scales(&self, bounds: Bounds<Pixels>) -> Option<(ScalePoint<X>, ScaleLinear<Y>)> {
         let x_fn = self.x.as_ref()?;
@@ -230,11 +230,11 @@ where
         }
     }
 
-    fn plot_id(&self) -> Option<ElementId> {
+    fn id(&self) -> Option<ElementId> {
         self.id.clone()
     }
 
-    fn hit_test(
+    fn tooltip_state(
         &self,
         position: Point<Pixels>,
         bounds: Bounds<Pixels>,
@@ -262,7 +262,7 @@ where
         ))
     }
 
-    fn render_tooltip(
+    fn tooltip(
         &self,
         state: &TooltipState,
         bounds: Bounds<Pixels>,

@@ -24,7 +24,7 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
             fn id(&self) -> Option<gpui::ElementId> {
                 // `Some` opts the plot in to interactive tooltips; `None` (the default)
                 // keeps the element a pure, non-interactive plot identical to before.
-                <Self as Plot>::plot_id(self)
+                <Self as Plot>::id(self)
             }
 
             fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
@@ -83,7 +83,7 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     anim.set(None);
                     return None;
                 };
-                let Some(state) = <Self as Plot>::hit_test(self, position, bounds, cx) else {
+                let Some(state) = <Self as Plot>::tooltip_state(self, position, bounds, cx) else {
                     anim.set(None);
                     return None;
                 };
@@ -107,9 +107,7 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     }
                 };
 
-                let Some(overlay) =
-                    <Self as Plot>::render_tooltip(self, &state, bounds, window, cx)
-                else {
+                let Some(overlay) = <Self as Plot>::tooltip(self, &state, bounds, window, cx) else {
                     return None;
                 };
 
