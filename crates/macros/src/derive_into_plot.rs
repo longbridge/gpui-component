@@ -69,16 +69,75 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     (cell.get(), cell)
                 });
 
+                // Per-plot slide-animation state: (last hovered index, that point's x, a
+                // monotonic epoch, and the slide's start offset for the current epoch).
+                let anim = window.with_element_state::<
+                    std::rc::Rc<std::cell::Cell<Option<(usize, gpui::Pixels, u64, gpui::Pixels)>>>,
+                    _,
+                >(global_id, |prev, _| {
+                    let cell = prev.unwrap_or_default();
+                    (cell.clone(), cell)
+                });
+
                 let Some(position) = position else {
+                    anim.set(None);
                     return None;
                 };
                 let Some(state) = <Self as Plot>::hit_test(self, position, bounds, cx) else {
+                    anim.set(None);
                     return None;
                 };
-                let Some(mut overlay) =
+
+                // Start a fresh eased slide (from the previous data point's x to the new one,
+                // under a new epoch id) only when the hovered data point changes; otherwise keep
+                // the current epoch so an in-flight slide runs to completion. The vertical axis
+                // follows the cursor directly, so only the horizontal jump is animated.
+                let (epoch, slide_from) = match anim.get() {
+                    Some((last_index, _, epoch, slide_from)) if last_index == state.index => {
+                        (epoch, slide_from)
+                    }
+                    Some((_, prev_x, epoch, _)) => {
+                        let next = (epoch.wrapping_add(1), prev_x - state.cross_line.x);
+                        anim.set(Some((state.index, state.cross_line.x, next.0, next.1)));
+                        next
+                    }
+                    None => {
+                        anim.set(Some((state.index, state.cross_line.x, 0, gpui::px(0.))));
+                        (0, gpui::px(0.))
+                    }
+                };
+
+                let Some(overlay) =
                     <Self as Plot>::render_tooltip(self, &state, bounds, window, cx)
                 else {
                     return None;
+                };
+
+                let mut overlay = if slide_from.abs() > gpui::px(0.5) {
+                    // Ease the whole overlay horizontally from the previous data point to the
+                    // new one (self-driving via the animation's `request_animation_frame`).
+                    use gpui::{
+                        AnimationExt as _, IntoElement as _, ParentElement as _, Styled as _,
+                    };
+                    let animated = gpui::div()
+                        .absolute()
+                        .size_full()
+                        .child(overlay)
+                        .with_animation(
+                            gpui::ElementId::NamedInteger("plot-tooltip-slide".into(), epoch),
+                            gpui::Animation::new(std::time::Duration::from_millis(300))
+                                .with_easing(gpui::ease_in_out),
+                            move |el, delta| el.left(slide_from * (1.0 - delta)),
+                        );
+                    // Wrap in a root container so the animated child's `left` offset is honored:
+                    // a root element's own position insets are dropped by `prepaint_as_root`.
+                    gpui::div()
+                        .absolute()
+                        .size_full()
+                        .child(animated)
+                        .into_any_element()
+                } else {
+                    overlay
                 };
 
                 overlay.prepaint_as_root(bounds.origin, bounds.size.into(), window, cx);
