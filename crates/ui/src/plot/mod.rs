@@ -9,14 +9,58 @@ pub use gpui_component_macros::IntoPlot;
 
 use std::{fmt::Debug, ops::Add};
 
-use gpui::{App, Bounds, IntoElement, Path, PathBuilder, Pixels, Point, Window, point, px};
+use gpui::{
+    AnyElement, App, Bounds, ElementId, IntoElement, Path, PathBuilder, Pixels, Point, Window,
+    point, px,
+};
 
 pub use axis::{AXIS_GAP, AxisLabelSide, AxisText, PlotAxis};
 pub use grid::Grid;
 pub use label::PlotLabel;
 
+use tooltip::TooltipState;
+
 pub trait Plot: IntoElement {
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App);
+
+    /// A stable element id that enables interactive tooltip support for this plot.
+    ///
+    /// Return `Some(id)` to opt in to tooltips; the id must be unique among sibling
+    /// elements. Returning `None` (the default) disables all tooltip behavior, leaving
+    /// the plot a pure, non-interactive element identical to the pre-tooltip behavior.
+    fn plot_id(&self) -> Option<ElementId> {
+        None
+    }
+
+    /// Hit-test the cursor against the plot's data.
+    ///
+    /// `position` is the cursor position relative to the plot's top-left origin (already
+    /// origin-subtracted), and `bounds` is the painted area. Return the [`TooltipState`]
+    /// to display (highlighted index, crosshair point, dots, side), or `None` to show
+    /// nothing. Only called while the cursor is inside `bounds`.
+    ///
+    /// The default returns `None`.
+    fn hit_test(
+        &self,
+        _position: Point<Pixels>,
+        _bounds: Bounds<Pixels>,
+        _cx: &App,
+    ) -> Option<TooltipState> {
+        None
+    }
+
+    /// Render the tooltip overlay for the active [`TooltipState`].
+    ///
+    /// Return the overlay element (typically built with [`tooltip::Tooltip::new`]); it is
+    /// painted absolutely positioned above the plot. The default returns `None`.
+    fn render_tooltip(
+        &self,
+        _state: &TooltipState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Option<AnyElement> {
+        None
+    }
 }
 
 #[derive(Clone, Copy, Default)]

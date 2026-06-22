@@ -456,10 +456,12 @@ impl Render for ChartStory {
                     .flex_wrap()
                     .gap_4()
                     .child(chart_container(
-                        "Line Chart",
+                        "Line Chart - Tooltip",
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
-                            .y(|d| d.desktop),
+                            .y(|d| d.desktop)
+                            .label("Desktop")
+                            .id("line-chart-tooltip"),
                         false,
                         cx,
                     ))

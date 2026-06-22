@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use gpui::{App, Bounds, Hsla, Pixels, SharedString, Window, px};
+use gpui::{
+    AnyElement, App, Bounds, ElementId, Hsla, IntoElement, Pixels, Point, SharedString, Window,
+    point, px,
+};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
@@ -10,6 +13,7 @@ use crate::{
         AXIS_GAP, Grid, Plot, PlotAxis, StrokeStyle,
         scale::{Scale, ScaleLinear, ScalePoint, Sealed},
         shape::Line,
+        tooltip::{CrossLine, Dot, Tooltip, TooltipPosition, TooltipState},
     },
 };
 
@@ -31,6 +35,8 @@ where
     tick_margin: usize,
     x_axis: bool,
     grid: bool,
+    id: Option<ElementId>,
+    label: Option<SharedString>,
 }
 
 impl<T, X, Y> LineChart<T, X, Y>
@@ -52,7 +58,24 @@ where
             tick_margin: 1,
             x_axis: true,
             grid: true,
+            id: None,
+            label: None,
         }
+    }
+
+    /// Enable an interactive hover tooltip (with crosshair and a data dot) for this chart.
+    ///
+    /// The `id` must be unique among sibling elements. Without it, the chart stays a
+    /// non-interactive plot.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Set the series name shown in the hover tooltip row (e.g. "Desktop").
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        self.label = Some(label.into());
+        self
     }
 
     pub fn x(mut self, x: impl Fn(&T) -> X + 'static) -> Self {
@@ -107,6 +130,31 @@ where
         self.grid = grid;
         self
     }
+
+    /// Build the x (point) and y (linear) scales for the given bounds.
+    ///
+    /// Shared by `paint` and `hit_test` so the two stay in sync. Returns `None` when the
+    /// x/y accessors have not been set.
+    fn scales(&self, bounds: Bounds<Pixels>) -> Option<(ScalePoint<X>, ScaleLinear<Y>)> {
+        let (x_fn, y_fn) = (self.x.as_ref()?, self.y.as_ref()?);
+
+        let width = bounds.size.width.as_f32();
+        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
+        let height = bounds.size.height.as_f32() - axis_gap;
+
+        let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);
+        // Y scale, ensure start from 0.
+        let y = ScaleLinear::new(
+            self.data
+                .iter()
+                .map(|v| y_fn(v))
+                .chain(Some(Y::zero()))
+                .collect(),
+            vec![height, 10.],
+        );
+
+        Some((x, y))
+    }
 }
 
 impl<T, X, Y> Plot for LineChart<T, X, Y>
@@ -118,23 +166,12 @@ where
         let (Some(x_fn), Some(y_fn)) = (self.x.as_ref(), self.y.as_ref()) else {
             return;
         };
+        let Some((x, y)) = self.scales(bounds) else {
+            return;
+        };
 
-        let width = bounds.size.width.as_f32();
         let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
         let height = bounds.size.height.as_f32() - axis_gap;
-
-        // X scale
-        let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);
-
-        // Y scale, ensure start from 0.
-        let y = ScaleLinear::new(
-            self.data
-                .iter()
-                .map(|v| y_fn(v))
-                .chain(Some(Y::zero()))
-                .collect(),
-            vec![height, 10.],
-        );
 
         // Draw X axis
         let mut axis = PlotAxis::new().stroke(cx.theme().border);
@@ -176,5 +213,60 @@ where
         }
 
         line.paint(&bounds, window);
+    }
+
+    fn plot_id(&self) -> Option<ElementId> {
+        self.id.clone()
+    }
+
+    fn hit_test(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        _cx: &App,
+    ) -> Option<TooltipState> {
+        let (x_fn, y_fn) = (self.x.as_ref()?, self.y.as_ref()?);
+        let (x, y) = self.scales(bounds)?;
+
+        let index = x.least_index(position.x.as_f32());
+        let d = self.data.get(index)?;
+        let x_tick = x.tick(&x_fn(d))?;
+        let y_tick = y.tick(&y_fn(d))?;
+
+        Some(TooltipState::new(
+            index,
+            point(px(x_tick), position.y),
+            vec![point(px(x_tick), px(y_tick))],
+            TooltipPosition::for_index(index, self.data.len()),
+        ))
+    }
+
+    fn render_tooltip(
+        &self,
+        state: &TooltipState,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        let (x_fn, y_fn) = (self.x.as_ref()?, self.y.as_ref()?);
+        let d = self.data.get(state.index)?;
+        let title: SharedString = x_fn(d).into();
+        let value = y_fn(d).to_f64()?;
+        let stroke = self.stroke.unwrap_or(cx.theme().chart_2);
+        let label = self.label.clone().unwrap_or_default();
+
+        Some(
+            Tooltip::new()
+                .position(state.position)
+                .cross_line(CrossLine::new(state.cross_line))
+                .dots(
+                    state
+                        .dots
+                        .iter()
+                        .map(|p| Dot::new(*p).stroke(cx.theme().background).fill(stroke)),
+                )
+                .title(title)
+                .row(stroke, label, format!("{}", value))
+                .into_any_element(),
+        )
     }
 }

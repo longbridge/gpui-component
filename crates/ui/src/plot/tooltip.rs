@@ -1,9 +1,9 @@
 use gpui::{
-    AnyElement, App, Div, Half as _, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
+    AnyElement, App, Div, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
+    SharedString, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
 };
 
-use crate::{ActiveTheme, v_flex};
+use crate::{ActiveTheme, StyledExt, h_flex, v_flex};
 
 #[derive(Default)]
 pub enum CrossLineAxis {
@@ -168,6 +168,18 @@ pub enum TooltipPosition {
     Right,
 }
 
+impl TooltipPosition {
+    /// Place the tooltip on the right while the hovered `index` is in the first half of
+    /// `len` items, otherwise on the left, so it stays clear of the screen edge.
+    pub fn for_index(index: usize, len: usize) -> Self {
+        if index < len / 2 {
+            Self::Right
+        } else {
+            Self::Left
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct TooltipState {
     pub index: usize,
@@ -192,6 +204,13 @@ impl TooltipState {
     }
 }
 
+/// A single labelled row in a [`Tooltip`]: a colored swatch, a muted label, and a value.
+struct TooltipRow {
+    color: Hsla,
+    label: SharedString,
+    value: SharedString,
+}
+
 #[derive(IntoElement)]
 pub struct Tooltip {
     base: Div,
@@ -200,6 +219,8 @@ pub struct Tooltip {
     cross_line: Option<CrossLine>,
     dots: Option<Vec<Dot>>,
     appearance: bool,
+    title: Option<SharedString>,
+    rows: Vec<TooltipRow>,
 }
 
 impl Tooltip {
@@ -212,7 +233,30 @@ impl Tooltip {
             cross_line: None,
             dots: None,
             appearance: true,
+            title: None,
+            rows: Vec::new(),
         }
+    }
+
+    /// Set a bold title row shown at the top of the tooltip (e.g. the hovered x value).
+    pub fn title(mut self, title: impl Into<SharedString>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+
+    /// Append a series row: a colored swatch, a muted `label`, and a right-aligned `value`.
+    pub fn row(
+        mut self,
+        color: impl Into<Hsla>,
+        label: impl Into<SharedString>,
+        value: impl Into<SharedString>,
+    ) -> Self {
+        self.rows.push(TooltipRow {
+            color: color.into(),
+            label: label.into(),
+            value: value.into(),
+        });
+        self
     }
 
     /// Set the position of the tooltip.
@@ -260,27 +304,65 @@ impl ParentElement for Tooltip {
 
 impl RenderOnce for Tooltip {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let Tooltip {
+            base,
+            position,
+            gap,
+            cross_line,
+            dots,
+            appearance,
+            title,
+            rows,
+        } = self;
+
+        // Structured content (title + rows) takes precedence over freeform `base` children.
+        let content = if title.is_some() || !rows.is_empty() {
+            v_flex()
+                .text_sm()
+                .gap_1()
+                .when_some(title, |this, title| {
+                    this.child(div().font_semibold().child(title))
+                })
+                .children(rows.into_iter().map(|row| {
+                    h_flex()
+                        .items_center()
+                        .justify_between()
+                        .gap_3()
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .gap_1p5()
+                                .child(div().size_2().rounded_sm().bg(row.color))
+                                .child(
+                                    div()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(row.label),
+                                ),
+                        )
+                        .child(div().child(row.value))
+                }))
+        } else {
+            base
+        };
+
         div()
             .size_full()
             .absolute()
             .top_0()
             .left_0()
-            .when_some(self.cross_line, |this, cross_line| this.child(cross_line))
-            .when_some(self.dots, |this, dots| this.children(dots))
-            .child(self.base.map(|this| {
-                if self.appearance {
+            .when_some(cross_line, |this, cross_line| this.child(cross_line))
+            .when_some(dots, |this, dots| this.children(dots))
+            .child(content.map(|this| {
+                if appearance {
                     this.absolute()
-                        .min_w(px(168.))
+                        .min_w(px(150.))
+                        .popover_style(cx)
                         .p_2()
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .rounded(cx.theme().radius.half())
-                        .bg(cx.theme().background.opacity(0.9))
-                        .when_some(self.position, |this, position| {
+                        .when_some(position, |this, position| {
                             if position == TooltipPosition::Left {
-                                this.left(self.gap)
+                                this.left(gap)
                             } else {
-                                this.right(self.gap)
+                                this.right(gap)
                             }
                         })
                 } else {
