@@ -169,6 +169,7 @@ impl Render for ChartStory {
                             linear_color_stop(cx.theme().chart_1.opacity(0.4), 1.),
                             linear_color_stop(cx.theme().background.opacity(0.3), 0.),
                         ))
+                        .label("Desktop")
                         .y(|d| d.mobile)
                         .stroke(cx.theme().chart_2)
                         .fill(linear_gradient(
@@ -176,7 +177,9 @@ impl Render for ChartStory {
                             linear_color_stop(cx.theme().chart_2.opacity(0.4), 1.),
                             linear_color_stop(cx.theme().background.opacity(0.3), 0.),
                         ))
-                        .tick_margin(8),
+                        .label("Mobile")
+                        .tick_margin(8)
+                        .id("area-chart-tooltip"),
                     false,
                     cx,
                 )),
