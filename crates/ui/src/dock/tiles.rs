@@ -442,51 +442,38 @@ impl Tiles {
         let Some(resizing_id) = self.resizing_id else {
             return;
         };
+
+        let grid_size = cx.theme().tile_grid_size;
+        // Neighbor bounds drive magnetic edge snapping (exclude the resizing panel).
+        let other_bounds: Vec<Bounds<Pixels>> = self
+            .panels
+            .iter()
+            .filter(|item| item.id != resizing_id)
+            .map(|item| item.bounds)
+            .collect();
+
         let Some(item) = self.panels.iter_mut().find(|item| item.id == resizing_id) else {
             return;
         };
 
         let previous_bounds = item.bounds;
-        let final_x = if let Some(x) = new_x {
-            round_to_nearest_ten(x, cx)
-        } else {
-            previous_bounds.origin.x
-        };
-        let final_y = if let Some(y) = new_y {
-            round_to_nearest_ten(y, cx)
-        } else {
-            previous_bounds.origin.y
-        };
-        // When both x and width are provided (left resize)
-        let final_width = if new_x.is_some() && new_width.is_some() {
-            let right_edge = previous_bounds.origin.x + previous_bounds.size.width;
-            (right_edge - final_x).max(MINIMUM_SIZE.width)
-        } else if let Some(width) = new_width {
-            round_to_nearest_ten(width, cx)
-        } else {
-            previous_bounds.size.width
-        };
+        let new_bounds = compute_resized_bounds(
+            previous_bounds,
+            new_x,
+            new_y,
+            new_width,
+            new_height,
+            &other_bounds,
+            grid_size,
+        );
 
-        // When both y and height are provided (top resize)
-        let final_height = if new_y.is_some() && new_height.is_some() {
-            let bottom_edge = previous_bounds.origin.y + previous_bounds.size.height;
-            (bottom_edge - final_y).max(MINIMUM_SIZE.height)
-        } else if let Some(height) = new_height {
-            round_to_nearest_ten(height, cx)
-        } else {
-            previous_bounds.size.height
-        };
-
-        // Only push to history if size has changed
-        if final_width != item.bounds.size.width
-            || final_height != item.bounds.size.height
-            || final_x != item.bounds.origin.x
-            || final_y != item.bounds.origin.y
+        // Only push to history if the geometry actually changed.
+        if new_bounds.origin.x != previous_bounds.origin.x
+            || new_bounds.origin.y != previous_bounds.origin.y
+            || new_bounds.size.width != previous_bounds.size.width
+            || new_bounds.size.height != previous_bounds.size.height
         {
-            item.bounds.origin.x = final_x;
-            item.bounds.origin.y = final_y;
-            item.bounds.size.width = final_width;
-            item.bounds.size.height = final_height;
+            item.bounds = new_bounds;
 
             // Only push if not during history operations
             if !self.history.ignore {
@@ -1145,9 +1132,108 @@ impl Tiles {
     }
 }
 
+/// Snap `edge` to the nearest value in `candidates` whose distance is strictly
+/// below `threshold`. Returns `None` when nothing is close enough.
+fn snap_edge(edge: Pixels, candidates: &[Pixels], threshold: Pixels) -> Option<Pixels> {
+    let mut best: Option<Pixels> = None;
+    let mut best_dist = threshold;
+    for &candidate in candidates {
+        let dist = (edge - candidate).abs();
+        if dist < best_dist {
+            best_dist = dist;
+            best = Some(candidate);
+        }
+    }
+    best
+}
+
+/// Compute the final bounds for a resize, applying magnetic edge snapping to
+/// neighboring panels and falling back to grid rounding when no neighbor edge
+/// is within `grid_size`.
+///
+/// Which edges move is inferred from the provided `Option`s, mirroring
+/// `Tiles::resize`:
+/// - `new_x` set                  => left edge moves (right edge pinned)
+/// - `new_width` set, `new_x` not => right edge moves (left edge pinned)
+/// - `new_y` set                  => top edge moves (bottom edge pinned)
+/// - `new_height` set, `new_y` not => bottom edge moves (top edge pinned)
+fn compute_resized_bounds(
+    previous: Bounds<Pixels>,
+    new_x: Option<Pixels>,
+    new_y: Option<Pixels>,
+    new_width: Option<Pixels>,
+    new_height: Option<Pixels>,
+    other_bounds: &[Bounds<Pixels>],
+    grid_size: Pixels,
+) -> Bounds<Pixels> {
+    // Candidate snap edges from neighbouring panels.
+    let mut x_edges = Vec::with_capacity(other_bounds.len() * 2);
+    let mut y_edges = Vec::with_capacity(other_bounds.len() * 2);
+    for bounds in other_bounds {
+        x_edges.push(bounds.left());
+        x_edges.push(bounds.right());
+        y_edges.push(bounds.top());
+        y_edges.push(bounds.bottom());
+    }
+
+    let prev_right = previous.origin.x + previous.size.width;
+    let prev_bottom = previous.origin.y + previous.size.height;
+
+    // --- X axis ---
+    let (final_x, final_width) = if let Some(x) = new_x {
+        // Left edge moving; right edge pinned. Canvas-left (0) is also a target.
+        let raw_left = x.max(px(0.));
+        let mut candidates = x_edges.clone();
+        candidates.push(px(0.));
+        let snapped_left = snap_edge(raw_left, &candidates, grid_size)
+            .unwrap_or_else(|| round_to_nearest_ten_with(raw_left, grid_size));
+        let width = (prev_right - snapped_left).max(MINIMUM_SIZE.width);
+        (snapped_left, width)
+    } else if let Some(width) = new_width {
+        // Right edge moving; left edge pinned.
+        let raw_right = previous.origin.x + width;
+        let snapped_right = snap_edge(raw_right, &x_edges, grid_size)
+            .unwrap_or_else(|| round_to_nearest_ten_with(raw_right, grid_size));
+        let width = (snapped_right - previous.origin.x).max(MINIMUM_SIZE.width);
+        (previous.origin.x, width)
+    } else {
+        (previous.origin.x, previous.size.width)
+    };
+
+    // --- Y axis ---
+    let (final_y, final_height) = if let Some(y) = new_y {
+        // Top edge moving; bottom edge pinned. Canvas-top (0) is also a target.
+        let raw_top = y.max(px(0.));
+        let mut candidates = y_edges.clone();
+        candidates.push(px(0.));
+        let snapped_top = snap_edge(raw_top, &candidates, grid_size)
+            .unwrap_or_else(|| round_to_nearest_ten_with(raw_top, grid_size));
+        let height = (prev_bottom - snapped_top).max(MINIMUM_SIZE.height);
+        (snapped_top, height)
+    } else if let Some(height) = new_height {
+        // Bottom edge moving; top edge pinned.
+        let raw_bottom = previous.origin.y + height;
+        let snapped_bottom = snap_edge(raw_bottom, &y_edges, grid_size)
+            .unwrap_or_else(|| round_to_nearest_ten_with(raw_bottom, grid_size));
+        let height = (snapped_bottom - previous.origin.y).max(MINIMUM_SIZE.height);
+        (previous.origin.y, height)
+    } else {
+        (previous.origin.y, previous.size.height)
+    };
+
+    Bounds {
+        origin: Point { x: final_x, y: final_y },
+        size: Size { width: final_width, height: final_height },
+    }
+}
+
+fn round_to_nearest_ten_with(value: Pixels, grid_size: Pixels) -> Pixels {
+    (value / grid_size).round() * grid_size
+}
+
 #[inline]
 fn round_to_nearest_ten(value: Pixels, cx: &App) -> Pixels {
-    (value / cx.theme().tile_grid_size).round() * cx.theme().tile_grid_size
+    round_to_nearest_ten_with(value, cx.theme().tile_grid_size)
 }
 
 #[inline]
@@ -1227,5 +1313,117 @@ impl Render for Tiles {
                     ),
             )
             .size_full()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{px, Bounds, Pixels, Point, Size};
+
+    fn b(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
+        Bounds {
+            origin: Point {
+                x: px(x),
+                y: px(y),
+            },
+            size: Size {
+                width: px(w),
+                height: px(h),
+            },
+        }
+    }
+
+    #[test]
+    fn test_snap_edge_within_threshold() {
+        // 102 is 2px from 100 (< 8) -> snaps to 100.
+        assert_eq!(snap_edge(px(102.), &[px(100.), px(300.)], px(8.)), Some(px(100.)));
+    }
+
+    #[test]
+    fn test_snap_edge_outside_threshold() {
+        // 120 is 20px from nearest candidate (>= 8) -> no snap.
+        assert_eq!(snap_edge(px(120.), &[px(100.), px(300.)], px(8.)), None);
+    }
+
+    #[test]
+    fn test_snap_edge_picks_nearest() {
+        // 303 is 3px from 300 and 5px from 308 -> picks 300.
+        assert_eq!(snap_edge(px(303.), &[px(308.), px(300.)], px(8.)), Some(px(300.)));
+    }
+
+    #[test]
+    fn test_snap_edge_empty_candidates() {
+        assert_eq!(snap_edge(px(50.), &[], px(8.)), None);
+    }
+
+    #[test]
+    fn test_resize_right_edge_snaps_to_neighbor_left() {
+        // Panel A: x=0 w=196 (right edge 196). Neighbour B starts at x=200.
+        // Dragging right edge to 197 should snap right edge to 200 -> width 200.
+        let prev = b(0., 0., 196., 100.);
+        let neighbor = b(200., 0., 100., 100.);
+        let out = compute_resized_bounds(prev, None, None, Some(px(197.)), None, &[neighbor], px(8.));
+        assert_eq!(out.origin.x, px(0.));
+        assert_eq!(out.size.width, px(200.));
+    }
+
+    #[test]
+    fn test_resize_bottom_edge_snaps_to_neighbor_top() {
+        let prev = b(0., 0., 100., 196.);
+        let neighbor = b(0., 200., 100., 100.);
+        let out = compute_resized_bounds(prev, None, None, None, Some(px(197.)), &[neighbor], px(8.));
+        assert_eq!(out.origin.y, px(0.));
+        assert_eq!(out.size.height, px(200.));
+    }
+
+    #[test]
+    fn test_resize_left_edge_snaps_and_pins_right() {
+        // Panel: x=200 w=100 (right edge 300). Neighbour right edge at 100.
+        // Drag left edge to 103 -> snaps to 100 -> width = 300 - 100 = 200.
+        let prev = b(200., 0., 100., 100.);
+        let neighbor = b(0., 0., 100., 100.);
+        let out = compute_resized_bounds(prev, Some(px(103.)), None, Some(px(197.)), None, &[neighbor], px(8.));
+        assert_eq!(out.origin.x, px(100.));
+        assert_eq!(out.size.width, px(200.));
+    }
+
+    #[test]
+    fn test_resize_corner_snaps_both_edges() {
+        // Right edge -> neighbour-right at 300; bottom edge -> neighbour-bottom at 250.
+        let prev = b(0., 0., 196., 196.);
+        let right_neighbor = b(100., 0., 200., 100.); // right edge = 300
+        let bottom_neighbor = b(0., 100., 100., 150.); // bottom edge = 250
+        let out = compute_resized_bounds(
+            prev, None, None, Some(px(298.)), Some(px(248.)),
+            &[right_neighbor, bottom_neighbor], px(8.),
+        );
+        assert_eq!(out.size.width, px(300.));
+        assert_eq!(out.size.height, px(250.));
+    }
+
+    #[test]
+    fn test_resize_grid_rounds_when_no_neighbor_close() {
+        // No neighbours; raw right edge 153 -> grid round to 152 (nearest multiple of 8).
+        let prev = b(0., 0., 100., 100.);
+        let out = compute_resized_bounds(prev, None, None, Some(px(153.)), None, &[], px(8.));
+        assert_eq!(out.size.width, px(152.));
+    }
+
+    #[test]
+    fn test_resize_respects_minimum_size() {
+        let prev = b(0., 0., 100., 100.);
+        let out = compute_resized_bounds(prev, None, None, Some(px(10.)), None, &[], px(8.));
+        assert_eq!(out.size.width, MINIMUM_SIZE.width);
+    }
+
+    #[test]
+    fn test_resize_no_change_returns_previous_geometry() {
+        let prev = b(0., 0., 100., 100.);
+        let out = compute_resized_bounds(prev, None, None, None, None, &[], px(8.));
+        assert_eq!(out.origin.x, px(0.));
+        assert_eq!(out.origin.y, px(0.));
+        assert_eq!(out.size.width, px(100.));
+        assert_eq!(out.size.height, px(100.));
     }
 }
