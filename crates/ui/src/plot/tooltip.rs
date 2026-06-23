@@ -34,6 +34,13 @@ pub struct CrossLine {
     start: f32,
     /// Length along the cross axis; `None` spans the full extent.
     length: Option<f32>,
+    /// Band thickness perpendicular to the line (solid band mode only).
+    thickness: Pixels,
+    /// Explicit color; when `None`, falls back to a themed default (a subtle `border` for
+    /// the dashed hairline, a translucent highlight for the solid band).
+    color: Option<Hsla>,
+    /// `true` (default) draws a dashed hairline; `false` a solid band of `thickness`.
+    dashed: bool,
     direction: CrossLineAxis,
 }
 
@@ -43,8 +50,27 @@ impl CrossLine {
             point,
             start: 0.,
             length: None,
+            thickness: px(1.),
+            color: None,
+            dashed: true,
             direction: Default::default(),
         }
+    }
+
+    /// Render a solid highlight band of `thickness` (centered on `point`) instead of the
+    /// default dashed hairline. Use the bar/band width to highlight the hovered column or
+    /// row. The fill defaults to a translucent highlight; use [`CrossLine::color`] to override.
+    pub fn band(mut self, thickness: impl Into<Pixels>) -> Self {
+        self.thickness = thickness.into();
+        self.dashed = false;
+        self
+    }
+
+    /// Override the line/band color. Defaults: a subtle `border` for the dashed hairline,
+    /// a translucent highlight for the solid band.
+    pub fn color(mut self, color: impl Into<Hsla>) -> Self {
+        self.color = Some(color.into());
+        self
     }
 
     /// Set the cross line axis to horizontal.
@@ -80,41 +106,68 @@ impl From<Point<Pixels>> for CrossLine {
     }
 }
 
+impl CrossLine {
+    /// Build a single line along one axis: `vertical` runs top→bottom at the data point's
+    /// `x`; otherwise left→right at its `y`. A dashed hairline draws a 1px dashed border; a
+    /// solid band fills a `thickness`-wide strip centered on the data point.
+    fn line(&self, vertical: bool, cx: &App) -> Div {
+        let color = self.color.unwrap_or_else(|| {
+            if self.dashed {
+                cx.theme().border
+            } else {
+                cx.theme().foreground.opacity(0.08)
+            }
+        });
+        // The dashed hairline is a zero-width strip drawn entirely by its 1px border.
+        let thickness = if self.dashed { px(0.) } else { self.thickness };
+
+        let el = div().absolute();
+        let el = if vertical {
+            el.left(self.point.x - thickness * 0.5)
+                .w(thickness)
+                .top(px(self.start))
+                .map(|el| match self.length {
+                    Some(length) => el.h(px(length)),
+                    None => el.h_full(),
+                })
+        } else {
+            el.top(self.point.y - thickness * 0.5)
+                .h(thickness)
+                .left(px(self.start))
+                .map(|el| match self.length {
+                    Some(length) => el.w(px(length)),
+                    None => el.w_full(),
+                })
+        };
+
+        if self.dashed {
+            let el = if vertical {
+                el.border_l_1()
+            } else {
+                el.border_t_1()
+            };
+            el.border_dashed().border_color(color)
+        } else {
+            el.bg(color)
+        }
+    }
+}
+
 impl RenderOnce for CrossLine {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let vertical = self.direction.show_vertical().then(|| self.line(true, cx));
+        let horizontal = self
+            .direction
+            .show_horizontal()
+            .then(|| self.line(false, cx));
+
         div()
             .size_full()
             .absolute()
             .top_0()
             .left_0()
-            .when(self.direction.show_vertical(), |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .w(px(1.))
-                        .bg(cx.theme().border)
-                        .left(self.point.x)
-                        .top(px(self.start))
-                        .map(|this| match self.length {
-                            Some(length) => this.h(px(length)),
-                            None => this.h_full(),
-                        }),
-                )
-            })
-            .when(self.direction.show_horizontal(), |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .h(px(1.))
-                        .bg(cx.theme().border)
-                        .top(self.point.y)
-                        .left(px(self.start))
-                        .map(|this| match self.length {
-                            Some(length) => this.w(px(length)),
-                            None => this.w_full(),
-                        }),
-                )
-            })
+            .children(vertical)
+            .children(horizontal)
     }
 }
 

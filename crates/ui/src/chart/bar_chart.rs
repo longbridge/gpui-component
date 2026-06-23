@@ -218,6 +218,25 @@ where
         self
     }
 
+    /// The band scale (matching `paint`): spans the height for horizontal bars, the width
+    /// otherwise. Shared by `tooltip_state` and `tooltip`.
+    fn band_scale(&self, bounds: Bounds<Pixels>) -> Option<ScaleBand<B>> {
+        let band_fn = self.band.as_ref()?;
+        let band_extent = if self.alignment.is_horizontal() {
+            bounds.size.height.as_f32()
+        } else {
+            bounds.size.width.as_f32()
+        };
+        Some(
+            ScaleBand::new(
+                self.data.iter().map(|v| band_fn(v)).collect(),
+                vec![0., band_extent],
+            )
+            .padding_inner(0.4)
+            .padding_outer(0.2),
+        )
+    }
+
     /// Label gaps `(band_side, value_end_side)` reserved along the value axis for
     /// horizontal bars, measured from the actual label text. Shared by `paint` and the
     /// tooltip so the crosshair lines up with the bar region.
@@ -464,21 +483,10 @@ where
         let band_fn = self.band.as_ref()?;
         self.value.as_ref()?;
 
-        // The band axis runs along the height for horizontal bars, the width otherwise.
         // Only the band scale is needed to hit-test which bar is hovered, so no text
         // measurement (and thus no `window`) is required.
         let is_horizontal = self.alignment.is_horizontal();
-        let band_extent = if is_horizontal {
-            bounds.size.height.as_f32()
-        } else {
-            bounds.size.width.as_f32()
-        };
-        let band_scale = ScaleBand::new(
-            self.data.iter().map(|v| band_fn(v)).collect(),
-            vec![0., band_extent],
-        )
-        .padding_inner(0.4)
-        .padding_outer(0.2);
+        let band_scale = self.band_scale(bounds)?;
         let band_width = band_scale.band_width();
 
         let cursor_band = if is_horizontal {
@@ -522,9 +530,9 @@ where
         let value = value_fn(d).to_f64()?;
         let name = self.name.clone().unwrap_or_default();
 
-        // Confine the crosshair to the bar region so it doesn't cross the axis labels.
-        // Horizontal bars get a horizontal line (spanning the value axis between the band
-        // and value-end label gaps); vertical bars a vertical line (spanning the plot height).
+        // Highlight the hovered bar with a translucent band the width of the bar, instead
+        // of a hairline. Confined to the plot area so it doesn't cover the axis labels.
+        let band_width = self.band_scale(bounds)?.band_width();
         let cross_line = if self.alignment.is_horizontal() {
             let (band_gap, value_end_gap) = self.horizontal_gaps(window);
             let length = (bounds.size.width.as_f32() - band_gap - value_end_gap).max(0.);
@@ -536,6 +544,7 @@ where
             CrossLine::new(state.cross_line)
                 .horizontal()
                 .span(start, length)
+                .band(px(band_width))
         } else {
             let axis_gap = if self.label_axis { AXIS_GAP } else { 0. };
             let start = if matches!(self.alignment, BarAlignment::Top) {
@@ -543,7 +552,9 @@ where
             } else {
                 0.
             };
-            CrossLine::new(state.cross_line).span(start, bounds.size.height.as_f32() - axis_gap)
+            CrossLine::new(state.cross_line)
+                .span(start, bounds.size.height.as_f32() - axis_gap)
+                .band(px(band_width))
         };
 
         Some(

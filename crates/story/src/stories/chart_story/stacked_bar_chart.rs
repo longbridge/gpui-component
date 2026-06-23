@@ -168,12 +168,23 @@ impl Plot for StackedBarChart {
             ],
         );
 
+        // Highlight the hovered column with a translucent band the width of the bars,
+        // confined to the plot height so it doesn't cover the x-axis labels.
+        let band_width = ScaleBand::new(
+            self.data.iter().map(|v| v.date.clone()).collect(),
+            vec![0., bounds.size.width.as_f32()],
+        )
+        .padding_inner(0.4)
+        .padding_outer(0.2)
+        .band_width();
+
         let mut tooltip = Tooltip::new()
             .anchor(state.cross_line, bounds.size)
             .gap(px(8.))
-            // Confine the crosshair to the plot area so it doesn't cross the x-axis.
             .cross_line(
-                CrossLine::new(state.cross_line).height(bounds.size.height.as_f32() - AXIS_GAP),
+                CrossLine::new(state.cross_line)
+                    .height(bounds.size.height.as_f32() - AXIS_GAP)
+                    .band(px(band_width)),
             )
             .title(d.date.clone());
 
