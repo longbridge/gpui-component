@@ -1,8 +1,8 @@
 use std::{ops::RangeInclusive, rc::Rc};
 
 use gpui::{
-    App, Background, Bounds, Corners, Hsla, LinearColorStop, Pixels, Point, SharedString, Size,
-    TextAlign, Window, linear_gradient, px,
+    AnyElement, App, Background, Bounds, Corners, ElementId, Hsla, IntoElement, LinearColorStop,
+    Pixels, Point, SharedString, Size, TextAlign, Window, linear_gradient, point, px,
 };
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
@@ -14,6 +14,7 @@ use crate::{
         label::{TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::{Bar, BarAlignment},
+        tooltip::{CrossLine, Tooltip, TooltipPosition, TooltipState},
     },
 };
 
@@ -39,6 +40,7 @@ where
     grid: bool,
     alignment: BarAlignment,
     corner_radii: Corners<Pixels>,
+    id: Option<ElementId>,
 }
 
 impl<T, B, V> BarChart<T, B, V>
@@ -62,7 +64,18 @@ where
             grid: true,
             alignment: BarAlignment::default(),
             corner_radii: Corners::all(px(0.)),
+            id: None,
         }
+    }
+
+    /// Enable an interactive hover tooltip (crosshair + category/value) for this chart.
+    ///
+    /// The `id` must be unique among sibling elements. Without it, the chart stays a
+    /// non-interactive plot. Only vertical bars ([`BarAlignment::Bottom`] / [`BarAlignment::Top`])
+    /// currently show a tooltip.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
     }
 
     /// Map each datum to its band-axis value (the categorical/ordinal axis).
@@ -421,6 +434,70 @@ where
         }
 
         bar.paint(&bounds, window, cx);
+    }
+
+    fn id(&self) -> Option<ElementId> {
+        self.id.clone()
+    }
+
+    fn tooltip_state(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        _cx: &App,
+    ) -> Option<TooltipState> {
+        let band_fn = self.band.as_ref()?;
+        self.value.as_ref()?;
+
+        // Only vertical bars are hit-tested for now (horizontal bars need text
+        // measurement to position the value axis, which isn't available here).
+        if self.alignment.is_horizontal() {
+            return None;
+        }
+
+        // Band scale matches `paint`: spans the full width, same padding.
+        let band_scale = ScaleBand::new(
+            self.data.iter().map(|v| band_fn(v)).collect(),
+            vec![0., bounds.size.width.as_f32()],
+        )
+        .padding_inner(0.4)
+        .padding_outer(0.2);
+        let band_width = band_scale.band_width();
+
+        let index = band_scale.least_index(position.x.as_f32());
+        let d = self.data.get(index)?;
+        let center_x = band_scale.tick(&band_fn(d))? + band_width / 2.;
+
+        Some(TooltipState::new(
+            index,
+            point(px(center_x), position.y),
+            vec![],
+            TooltipPosition::for_index(index, self.data.len()),
+        ))
+    }
+
+    fn tooltip(
+        &self,
+        state: &TooltipState,
+        bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        let (band_fn, value_fn) = (self.band.as_ref()?, self.value.as_ref()?);
+        let d = self.data.get(state.index)?;
+        let title: SharedString = band_fn(d).into();
+        let value = value_fn(d).to_f64()?;
+
+        Some(
+            Tooltip::new()
+                // Follow the cursor: hug the bar's center, track the cursor vertically.
+                .anchor(state.cross_line, bounds.size)
+                .gap(px(8.))
+                .cross_line(CrossLine::new(state.cross_line))
+                .title(title)
+                .row(cx.theme().chart_2, "", format!("{}", value))
+                .into_any_element(),
+        )
     }
 }
 

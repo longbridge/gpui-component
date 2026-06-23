@@ -239,7 +239,8 @@ impl Render for ChartStory {
                         "Bar Chart",
                         BarChart::new(self.monthly_devices.clone())
                             .band(|d| d.month.clone())
-                            .value(|d| d.desktop),
+                            .value(|d| d.desktop)
+                            .id("bar-chart-tooltip"),
                         false,
                         cx,
                     ))
