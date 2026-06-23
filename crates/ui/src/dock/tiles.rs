@@ -1185,9 +1185,10 @@ impl Tiles {
             // Here must be mouse up for avoid conflict with Drag event
             .on_mouse_up(
                 MouseButton::Left,
-                cx.listener(move |this, _, _, cx| {
-                    if this.dragging_id == Some(item_id) {
-                        this.dragging_id = None;
+                cx.listener(move |this, _, window, cx| {
+                    let bring_to_front = this.dragging_id == Some(item_id);
+                    this.on_mouse_up(window, cx);
+                    if bring_to_front {
                         this.bring_to_front(Some(item_id), cx);
                     }
                 }),
@@ -1231,23 +1232,46 @@ impl Tiles {
 
             // Handle resizing
             if let Some(resizing_id) = self.resizing_id {
-                if let Some(initial_bounds) = self
+                if let Some((side, initial_bounds)) = self
                     .resizing_drag_data
                     .as_ref()
-                    .map(|data| data.last_bounds)
+                    .map(|data| (data.side.clone(), data.last_bounds))
                 {
                     if let Some(idx) = self.panels.iter().position(|p| p.id == resizing_id) {
                         let current_bounds = self.panels[idx].bounds;
+                        let snap_threshold = cx.theme().tile_grid_size;
 
-                        // Align the resized bounds to the grid on release, mirroring how
-                        // dragging aligns the origin on mouse up.
+                        let mut left = current_bounds.left();
+                        let mut top = current_bounds.top();
+                        let mut right = current_bounds.right();
+                        let mut bottom = current_bounds.bottom();
+
+                        let finalize_h = |edge: Pixels| {
+                            self.calculate_resize_edge_snap(edge, idx, snap_threshold, true)
+                                .unwrap_or_else(|| round_to_nearest_ten(edge, cx))
+                        };
+                        match side {
+                            ResizeSide::Left => left = finalize_h(left),
+                            ResizeSide::Right => right = finalize_h(right),
+                            ResizeSide::BottomRight => right = finalize_h(right),
+                            _ => {}
+                        }
+                        let finalize_v = |edge: Pixels| {
+                            self.calculate_resize_edge_snap(edge, idx, snap_threshold, false)
+                                .unwrap_or_else(|| round_to_nearest_ten(edge, cx))
+                        };
+                        match side {
+                            ResizeSide::Top => top = finalize_v(top),
+                            ResizeSide::Bottom => bottom = finalize_v(bottom),
+                            ResizeSide::BottomRight => bottom = finalize_v(bottom),
+                            _ => {}
+                        }
+
                         let aligned_bounds = Bounds {
-                            origin: round_point_to_nearest_ten(current_bounds.origin, cx),
+                            origin: Point { x: left, y: top },
                             size: Size {
-                                width: round_to_nearest_ten(current_bounds.size.width, cx)
-                                    .max(MINIMUM_SIZE.width),
-                                height: round_to_nearest_ten(current_bounds.size.height, cx)
-                                    .max(MINIMUM_SIZE.height),
+                                width: (right - left).max(MINIMUM_SIZE.width),
+                                height: (bottom - top).max(MINIMUM_SIZE.height),
                             },
                         };
                         self.panels[idx].bounds = aligned_bounds;
