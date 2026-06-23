@@ -303,6 +303,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Left aligned",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-left")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
@@ -313,6 +315,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Right aligned",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-right")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
@@ -372,6 +376,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Left)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-left")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -394,6 +400,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Right)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-right")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())

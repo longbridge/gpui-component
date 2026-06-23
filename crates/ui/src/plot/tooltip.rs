@@ -180,12 +180,26 @@ impl TooltipPosition {
     }
 }
 
+/// The axis the data points are laid out along; the follow animation slides along it.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum TooltipAxis {
+    /// Data points run along the x-axis (line, area, vertical bars). The default.
+    #[default]
+    X,
+    /// Data points run along the y-axis (horizontal bars).
+    Y,
+}
+
 #[derive(Clone)]
 pub struct TooltipState {
     pub index: usize,
     pub cross_line: Point<Pixels>,
     pub dots: Vec<Point<Pixels>>,
     pub position: TooltipPosition,
+    /// The axis the data points snap along. Describes how `cross_line` is read: the
+    /// coordinate on this axis is the snapped (data-point) one the follow animation eases,
+    /// while the other tracks the cursor live.
+    pub axis: TooltipAxis,
 }
 
 impl TooltipState {
@@ -200,7 +214,19 @@ impl TooltipState {
             cross_line,
             dots,
             position,
+            axis: TooltipAxis::X,
         }
+    }
+
+    /// Set the axis the data points snap along (default [`TooltipAxis::X`]).
+    pub fn axis(mut self, axis: TooltipAxis) -> Self {
+        self.axis = axis;
+        self
+    }
+
+    /// Whether the follow animation slides vertically (i.e. the snap axis is y).
+    pub fn slides_vertically(&self) -> bool {
+        matches!(self.axis, TooltipAxis::Y)
     }
 }
 

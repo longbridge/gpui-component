@@ -14,7 +14,7 @@ use crate::{
         label::{TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::{Bar, BarAlignment},
-        tooltip::{CrossLine, Tooltip, TooltipPosition, TooltipState},
+        tooltip::{CrossLine, Tooltip, TooltipAxis, TooltipPosition, TooltipState},
     },
 };
 
@@ -73,8 +73,8 @@ where
     /// Enable an interactive hover tooltip (crosshair + category/value) for this chart.
     ///
     /// The `id` must be unique among sibling elements. Without it, the chart stays a
-    /// non-interactive plot. Only vertical bars ([`BarAlignment::Bottom`] / [`BarAlignment::Top`])
-    /// currently show a tooltip.
+    /// non-interactive plot. Works for every [`BarAlignment`] (vertical bars get a
+    /// vertical crosshair, horizontal bars a horizontal one).
     pub fn id(mut self, id: impl Into<ElementId>) -> Self {
         self.id = Some(id.into());
         self
@@ -457,31 +457,49 @@ where
         let band_fn = self.band.as_ref()?;
         self.value.as_ref()?;
 
-        // Only vertical bars are hit-tested for now (horizontal bars need text
-        // measurement to position the value axis, which isn't available here).
-        if self.alignment.is_horizontal() {
-            return None;
-        }
-
-        // Band scale matches `paint`: spans the full width, same padding.
+        // The band axis runs along the height for horizontal bars, the width otherwise.
+        // Only the band scale is needed to hit-test which bar is hovered, so no text
+        // measurement (and thus no `window`) is required.
+        let is_horizontal = self.alignment.is_horizontal();
+        let band_extent = if is_horizontal {
+            bounds.size.height.as_f32()
+        } else {
+            bounds.size.width.as_f32()
+        };
         let band_scale = ScaleBand::new(
             self.data.iter().map(|v| band_fn(v)).collect(),
-            vec![0., bounds.size.width.as_f32()],
+            vec![0., band_extent],
         )
         .padding_inner(0.4)
         .padding_outer(0.2);
         let band_width = band_scale.band_width();
 
-        let index = band_scale.least_index(position.x.as_f32());
+        let cursor_band = if is_horizontal {
+            position.y
+        } else {
+            position.x
+        };
+        let index = band_scale.least_index(cursor_band.as_f32());
         let d = self.data.get(index)?;
-        let center_x = band_scale.tick(&band_fn(d))? + band_width / 2.;
+        let center = band_scale.tick(&band_fn(d))? + band_width / 2.;
 
-        Some(TooltipState::new(
-            index,
-            point(px(center_x), position.y),
-            vec![],
-            TooltipPosition::for_index(index, self.data.len()),
-        ))
+        // Vertical bars: vertical crosshair at the bar's x, box tracks the cursor y.
+        // Horizontal bars: horizontal crosshair at the bar's y, box tracks the cursor x.
+        let (cross_line, axis) = if is_horizontal {
+            (point(position.x, px(center)), TooltipAxis::Y)
+        } else {
+            (point(px(center), position.y), TooltipAxis::X)
+        };
+
+        Some(
+            TooltipState::new(
+                index,
+                cross_line,
+                vec![],
+                TooltipPosition::for_index(index, self.data.len()),
+            )
+            .axis(axis),
+        )
     }
 
     fn tooltip(
@@ -497,12 +515,20 @@ where
         let value = value_fn(d).to_f64()?;
         let name = self.name.clone().unwrap_or_default();
 
+        // Horizontal bars get a horizontal crosshair; vertical bars a vertical one.
+        let cross_line = CrossLine::new(state.cross_line);
+        let cross_line = if self.alignment.is_horizontal() {
+            cross_line.horizontal()
+        } else {
+            cross_line
+        };
+
         Some(
             Tooltip::new()
-                // Follow the cursor: hug the bar's center, track the cursor vertically.
+                // Follow the cursor, hugging the bar's center along the band axis.
                 .anchor(state.cross_line, bounds.size)
                 .gap(px(8.))
-                .cross_line(CrossLine::new(state.cross_line))
+                .cross_line(cross_line)
                 .title(title)
                 .row(cx.theme().chart_2, name, format!("{}", value))
                 .into_any_element(),

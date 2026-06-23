@@ -92,17 +92,25 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                 // under a new epoch id) only when the hovered data point changes; otherwise keep
                 // the current epoch so an in-flight slide runs to completion. The vertical axis
                 // follows the cursor directly, so only the horizontal jump is animated.
+                // Animate along whichever axis the plot's data points snap along.
+                let vertical = state.slides_vertically();
+                let coord = if vertical {
+                    state.cross_line.y
+                } else {
+                    state.cross_line.x
+                };
+
                 let (epoch, slide_from) = match anim.get() {
                     Some((last_index, _, epoch, slide_from)) if last_index == state.index => {
                         (epoch, slide_from)
                     }
-                    Some((_, prev_x, epoch, _)) => {
-                        let next = (epoch.wrapping_add(1), prev_x - state.cross_line.x);
-                        anim.set(Some((state.index, state.cross_line.x, next.0, next.1)));
+                    Some((_, prev_coord, epoch, _)) => {
+                        let next = (epoch.wrapping_add(1), prev_coord - coord);
+                        anim.set(Some((state.index, coord, next.0, next.1)));
                         next
                     }
                     None => {
-                        anim.set(Some((state.index, state.cross_line.x, 0, gpui::px(0.))));
+                        anim.set(Some((state.index, coord, 0, gpui::px(0.))));
                         (0, gpui::px(0.))
                     }
                 };
@@ -112,8 +120,8 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                 };
 
                 let mut overlay = if slide_from.abs() > gpui::px(0.5) {
-                    // Ease the whole overlay horizontally from the previous data point to the
-                    // new one (self-driving via the animation's `request_animation_frame`).
+                    // Ease the whole overlay from the previous data point to the new one along
+                    // the snap axis (self-driving via the animation's `request_animation_frame`).
                     use gpui::{
                         AnimationExt as _, IntoElement as _, ParentElement as _, Styled as _,
                     };
@@ -125,7 +133,14 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                             gpui::ElementId::NamedInteger("plot-tooltip-slide".into(), epoch),
                             gpui::Animation::new(std::time::Duration::from_millis(300))
                                 .with_easing(gpui::ease_in_out),
-                            move |el, delta| el.left(slide_from * (1.0 - delta)),
+                            move |el, delta| {
+                                let offset = slide_from * (1.0 - delta);
+                                if vertical {
+                                    el.top(offset)
+                                } else {
+                                    el.left(offset)
+                                }
+                            },
                         );
                     // Wrap in a root container so the animated child's `left` offset is honored:
                     // a root element's own position insets are dropped by `prepaint_as_root`.
