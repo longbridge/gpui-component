@@ -217,6 +217,38 @@ where
         self.corner_radii = corner_radii.into();
         self
     }
+
+    /// Label gaps `(band_side, value_end_side)` reserved along the value axis for
+    /// horizontal bars, measured from the actual label text. Shared by `paint` and the
+    /// tooltip so the crosshair lines up with the bar region.
+    fn horizontal_gaps(&self, window: &mut Window) -> (f32, f32) {
+        let Some(band_fn) = self.band.as_ref() else {
+            return (0., 0.);
+        };
+        let font_size = px(TEXT_SIZE);
+        let band_gap = if self.label_axis {
+            self.data
+                .iter()
+                .map(|v| {
+                    let s: SharedString = band_fn(v).into();
+                    measure_text_width(&s, font_size, window)
+                })
+                .fold(0f32, f32::max)
+                + TEXT_GAP * 2.
+        } else {
+            0.
+        };
+        let value_end_gap = if let Some(label_fn) = self.label.as_ref() {
+            self.data
+                .iter()
+                .map(|v| measure_text_width(&label_fn(v), font_size, window))
+                .fold(0f32, f32::max)
+                + TEXT_GAP * 2.
+        } else {
+            TEXT_GAP * 4.
+        };
+        (band_gap, value_end_gap)
+    }
 }
 
 impl<T, B, V> Plot for BarChart<T, B, V>
@@ -260,32 +292,7 @@ where
         // Similarly, value labels (numbers) at the bar ends are measured so the
         // scale range is always shrunk by exactly the right amount.
         let (band_gap, value_end_gap) = if is_horizontal {
-            let font_size = px(TEXT_SIZE);
-            let band_gap = if self.label_axis {
-                let max_w = self
-                    .data
-                    .iter()
-                    .map(|v| {
-                        let s: SharedString = band_fn(v).into();
-                        measure_text_width(&s, font_size, window)
-                    })
-                    .fold(0f32, f32::max);
-                // TEXT_GAP: space between axis line and label start/end.
-                max_w + TEXT_GAP * 2.
-            } else {
-                0.
-            };
-            let value_end_gap = if let Some(label_fn) = self.label.as_ref() {
-                let max_w = self
-                    .data
-                    .iter()
-                    .map(|v| measure_text_width(&label_fn(v), font_size, window))
-                    .fold(0f32, f32::max);
-                max_w + TEXT_GAP * 2.
-            } else {
-                TEXT_GAP * 4.
-            };
-            (band_gap, value_end_gap)
+            self.horizontal_gaps(window)
         } else {
             (axis_gap, 10.)
         };
@@ -506,7 +513,7 @@ where
         &self,
         state: &TooltipState,
         bounds: Bounds<Pixels>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut App,
     ) -> Option<AnyElement> {
         let (band_fn, value_fn) = (self.band.as_ref()?, self.value.as_ref()?);
@@ -515,12 +522,28 @@ where
         let value = value_fn(d).to_f64()?;
         let name = self.name.clone().unwrap_or_default();
 
-        // Horizontal bars get a horizontal crosshair; vertical bars a vertical one.
-        let cross_line = CrossLine::new(state.cross_line);
+        // Confine the crosshair to the bar region so it doesn't cross the axis labels.
+        // Horizontal bars get a horizontal line (spanning the value axis between the band
+        // and value-end label gaps); vertical bars a vertical line (spanning the plot height).
         let cross_line = if self.alignment.is_horizontal() {
-            cross_line.horizontal()
+            let (band_gap, value_end_gap) = self.horizontal_gaps(window);
+            let length = (bounds.size.width.as_f32() - band_gap - value_end_gap).max(0.);
+            let start = if matches!(self.alignment, BarAlignment::Left) {
+                band_gap
+            } else {
+                value_end_gap
+            };
+            CrossLine::new(state.cross_line)
+                .horizontal()
+                .span(start, length)
         } else {
-            cross_line
+            let axis_gap = if self.label_axis { AXIS_GAP } else { 0. };
+            let start = if matches!(self.alignment, BarAlignment::Top) {
+                axis_gap
+            } else {
+                0.
+            };
+            CrossLine::new(state.cross_line).span(start, bounds.size.height.as_f32() - axis_gap)
         };
 
         Some(

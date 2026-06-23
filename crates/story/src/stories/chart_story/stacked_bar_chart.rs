@@ -171,7 +171,10 @@ impl Plot for StackedBarChart {
         let mut tooltip = Tooltip::new()
             .anchor(state.cross_line, bounds.size)
             .gap(px(8.))
-            .cross_line(CrossLine::new(state.cross_line))
+            // Confine the crosshair to the plot area so it doesn't cross the x-axis.
+            .cross_line(
+                CrossLine::new(state.cross_line).height(bounds.size.height.as_f32() - AXIS_GAP),
+            )
             .title(d.date.clone());
 
         // One row per stacked series (its segment value at this band).

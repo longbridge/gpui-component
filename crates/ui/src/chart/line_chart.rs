@@ -261,7 +261,12 @@ where
                 // track the cursor vertically, flipping toward the center near each edge.
                 .anchor(state.cross_line, bounds.size)
                 .gap(px(8.))
-                .cross_line(CrossLine::new(state.cross_line))
+                // Confine the crosshair to the plot area so it doesn't cross the x-axis.
+                .cross_line(
+                    CrossLine::new(state.cross_line).height(
+                        bounds.size.height.as_f32() - if self.x_axis { AXIS_GAP } else { 0. },
+                    ),
+                )
                 .dots(
                     state
                         .dots

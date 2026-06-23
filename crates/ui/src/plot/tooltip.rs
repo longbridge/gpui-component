@@ -30,7 +30,10 @@ impl CrossLineAxis {
 #[derive(IntoElement)]
 pub struct CrossLine {
     point: Point<Pixels>,
-    height: Option<f32>,
+    /// Start offset along the cross axis (vertical line: y; horizontal line: x).
+    start: f32,
+    /// Length along the cross axis; `None` spans the full extent.
+    length: Option<f32>,
     direction: CrossLineAxis,
 }
 
@@ -38,7 +41,8 @@ impl CrossLine {
     pub fn new(point: Point<Pixels>) -> Self {
         Self {
             point,
-            height: None,
+            start: 0.,
+            length: None,
             direction: Default::default(),
         }
     }
@@ -55,9 +59,17 @@ impl CrossLine {
         self
     }
 
-    /// Set the height of the cross line.
+    /// Set the length of the cross line along its axis (from the start edge).
     pub fn height(mut self, height: f32) -> Self {
-        self.height = Some(height);
+        self.length = Some(height);
+        self
+    }
+
+    /// Confine the cross line to `[start, start + length]` along its axis (vertical
+    /// line: y; horizontal line: x), so it stays within the plot area.
+    pub fn span(mut self, start: f32, length: f32) -> Self {
+        self.start = start;
+        self.length = Some(length);
         self
     }
 }
@@ -81,14 +93,11 @@ impl RenderOnce for CrossLine {
                         .absolute()
                         .w(px(1.))
                         .bg(cx.theme().border)
-                        .top_0()
                         .left(self.point.x)
-                        .map(|this| {
-                            if let Some(height) = self.height {
-                                this.h(px(height))
-                            } else {
-                                this.h_full()
-                            }
+                        .top(px(self.start))
+                        .map(|this| match self.length {
+                            Some(length) => this.h(px(length)),
+                            None => this.h_full(),
                         }),
                 )
             })
@@ -96,11 +105,14 @@ impl RenderOnce for CrossLine {
                 this.child(
                     div()
                         .absolute()
-                        .w_full()
                         .h(px(1.))
                         .bg(cx.theme().border)
-                        .left_0()
-                        .top(self.point.y),
+                        .top(self.point.y)
+                        .left(px(self.start))
+                        .map(|this| match self.length {
+                            Some(length) => this.w(px(length)),
+                            None => this.w_full(),
+                        }),
                 )
             })
     }
