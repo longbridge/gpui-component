@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use gpui::{App, Background, Bounds, Hsla, Pixels, SharedString, Window, px};
+use gpui::{
+    AnyElement, App, Background, Bounds, ElementId, Hsla, IntoElement, Pixels, Point, SharedString,
+    Window, point, px,
+};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
 
@@ -10,6 +13,7 @@ use crate::{
         AXIS_GAP, Grid, Plot, PlotAxis, StrokeStyle,
         scale::{Scale, ScaleLinear, ScalePoint, Sealed},
         shape::Area,
+        tooltip::{CrossLine, Dot, Tooltip, TooltipState},
     },
 };
 
@@ -28,9 +32,11 @@ where
     strokes: Vec<Hsla>,
     stroke_styles: Vec<StrokeStyle>,
     fills: Vec<Background>,
+    names: Vec<SharedString>,
     tick_margin: usize,
     x_axis: bool,
     grid: bool,
+    id: Option<ElementId>,
 }
 
 impl<T, X, Y> AreaChart<T, X, Y>
@@ -47,12 +53,31 @@ where
             stroke_styles: vec![],
             strokes: vec![],
             fills: vec![],
+            names: vec![],
             tick_margin: 1,
             x: None,
             y: vec![],
             x_axis: true,
             grid: true,
+            id: None,
         }
+    }
+
+    /// Enable an interactive hover tooltip (crosshair + a dot and row per series).
+    ///
+    /// The `id` must be unique among sibling elements. Without it, the chart stays a
+    /// non-interactive plot.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Set the name of the most recently added series, shown in its tooltip row.
+    ///
+    /// Call after the matching [`AreaChart::y`] (e.g. `.y(..).stroke(..).name("Desktop")`).
+    pub fn name(mut self, name: impl Into<SharedString>) -> Self {
+        self.names.push(name.into());
+        self
     }
 
     pub fn x(mut self, x: impl Fn(&T) -> X + 'static) -> Self {
@@ -107,6 +132,32 @@ where
         self.grid = grid;
         self
     }
+
+    /// Build the x (point) and y (linear) scales for the given bounds.
+    ///
+    /// Shared by `paint` and `tooltip_state` so the two stay in sync. Returns `None` when there
+    /// is no x accessor or no series.
+    fn scales(&self, bounds: Bounds<Pixels>) -> Option<(ScalePoint<X>, ScaleLinear<Y>)> {
+        let x_fn = self.x.as_ref()?;
+        if self.y.is_empty() {
+            return None;
+        }
+
+        let width = bounds.size.width.as_f32();
+        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
+        let height = bounds.size.height.as_f32() - axis_gap;
+
+        let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);
+        let domain = self
+            .data
+            .iter()
+            .flat_map(|v| self.y.iter().map(|y_fn| y_fn(v)))
+            .chain(Some(Y::zero()))
+            .collect::<Vec<_>>();
+        let y = ScaleLinear::new(domain, vec![height, 10.]);
+
+        Some((x, y))
+    }
 }
 
 impl<T, X, Y> Plot for AreaChart<T, X, Y>
@@ -118,26 +169,12 @@ where
         let Some(x_fn) = self.x.as_ref() else {
             return;
         };
-
-        if self.y.len() == 0 {
+        let Some((x, y)) = self.scales(bounds) else {
             return;
-        }
+        };
 
-        let width = bounds.size.width.as_f32();
         let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
         let height = bounds.size.height.as_f32() - axis_gap;
-
-        // X scale
-        let x = ScalePoint::new(self.data.iter().map(|v| x_fn(v)).collect(), vec![0., width]);
-
-        // Y scale
-        let domain = self
-            .data
-            .iter()
-            .flat_map(|v| self.y.iter().map(|y_fn| y_fn(v)))
-            .chain(Some(Y::zero()))
-            .collect::<Vec<_>>();
-        let y = ScaleLinear::new(domain, vec![height, 10.]);
 
         // Draw X axis
         let mut axis = PlotAxis::new().stroke(cx.theme().border);
@@ -191,5 +228,85 @@ where
                 .fill(fill)
                 .paint(&bounds, window);
         }
+    }
+
+    fn id(&self) -> Option<ElementId> {
+        self.id.clone()
+    }
+
+    fn tooltip_state(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        _cx: &App,
+    ) -> Option<TooltipState> {
+        let x_fn = self.x.as_ref()?;
+        let (x, y) = self.scales(bounds)?;
+
+        // Ignore the x-axis label gutter so hovering the labels doesn't show a tooltip.
+        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
+        if position.y.as_f32() > bounds.size.height.as_f32() - axis_gap {
+            return None;
+        }
+
+        let index = x.least_index(position.x.as_f32());
+        let d = self.data.get(index)?;
+        let x_tick = x.tick(&x_fn(d))?;
+
+        // One dot per series at the hovered x.
+        let dots = self
+            .y
+            .iter()
+            .filter_map(|y_fn| Some(point(px(x_tick), px(y.tick(&y_fn(d))?))))
+            .collect();
+
+        Some(TooltipState::new(
+            index,
+            point(px(x_tick), position.y),
+            dots,
+        ))
+    }
+
+    fn tooltip(
+        &self,
+        state: &TooltipState,
+        cursor: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        let x_fn = self.x.as_ref()?;
+        let d = self.data.get(state.index)?;
+        let title: SharedString = x_fn(d).into();
+
+        let default_color = cx.theme().chart_2;
+        let dot_stroke = cx.theme().background;
+        let color = |i: usize| *self.strokes.get(i).unwrap_or(&default_color);
+
+        // Follow the cursor; the crosshair and dots stay snapped to the data point.
+        let mut tooltip = Tooltip::new(cursor, bounds.size)
+            .gap(px(8.))
+            // Confine the crosshair to the plot area so it doesn't cross the x-axis.
+            .cross_line(
+                CrossLine::new(state.cross_line)
+                    .height(bounds.size.height.as_f32() - if self.x_axis { AXIS_GAP } else { 0. }),
+            )
+            .dots(
+                state
+                    .dots
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| Dot::new(*p).stroke(dot_stroke).fill(color(i))),
+            )
+            .title(title);
+
+        // One row per series: swatch + label + value.
+        for (i, y_fn) in self.y.iter().enumerate() {
+            let name = self.names.get(i).cloned().unwrap_or_default();
+            let value = y_fn(d).to_f64()?;
+            tooltip = tooltip.row(color(i), name, format!("{}", value));
+        }
+
+        Some(tooltip.into_any_element())
     }
 }
