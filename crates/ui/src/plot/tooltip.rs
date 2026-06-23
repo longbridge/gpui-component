@@ -36,9 +36,6 @@ pub struct CrossLine {
     length: Option<f32>,
     /// Band thickness perpendicular to the line (solid band mode only).
     thickness: Pixels,
-    /// Explicit color; when `None`, falls back to a themed default (a subtle `border` for
-    /// the dashed hairline, a translucent highlight for the solid band).
-    color: Option<Hsla>,
     /// `true` (default) draws a dashed hairline; `false` a solid band of `thickness`.
     dashed: bool,
     direction: CrossLineAxis,
@@ -51,25 +48,17 @@ impl CrossLine {
             start: 0.,
             length: None,
             thickness: px(1.),
-            color: None,
             dashed: true,
             direction: Default::default(),
         }
     }
 
-    /// Render a solid highlight band of `thickness` (centered on `point`) instead of the
-    /// default dashed hairline. Use the bar/band width to highlight the hovered column or
-    /// row. The fill defaults to a translucent highlight; use [`CrossLine::color`] to override.
+    /// Render a solid translucent highlight band of `thickness` (centered on `point`)
+    /// instead of the default dashed hairline. Use the bar/band width to highlight the
+    /// hovered column or row.
     pub fn band(mut self, thickness: impl Into<Pixels>) -> Self {
         self.thickness = thickness.into();
         self.dashed = false;
-        self
-    }
-
-    /// Override the line/band color. Defaults: a subtle `border` for the dashed hairline,
-    /// a translucent highlight for the solid band.
-    pub fn color(mut self, color: impl Into<Hsla>) -> Self {
-        self.color = Some(color.into());
         self
     }
 
@@ -111,13 +100,11 @@ impl CrossLine {
     /// `x`; otherwise left→right at its `y`. A dashed hairline draws a 1px dashed border; a
     /// solid band fills a `thickness`-wide strip centered on the data point.
     fn line(&self, vertical: bool, cx: &App) -> Div {
-        let color = self.color.unwrap_or_else(|| {
-            if self.dashed {
-                cx.theme().border
-            } else {
-                cx.theme().foreground.opacity(0.08)
-            }
-        });
+        let color = if self.dashed {
+            cx.theme().border
+        } else {
+            cx.theme().foreground.opacity(0.08)
+        };
         // The dashed hairline is a zero-width strip drawn entirely by its 1px border.
         let thickness = if self.dashed { px(0.) } else { self.thickness };
 
@@ -231,9 +218,6 @@ pub struct TooltipState {
     pub index: usize,
     pub cross_line: Point<Pixels>,
     pub dots: Vec<Point<Pixels>>,
-    /// Live cursor position (relative to the plot origin); the tooltip box hugs it so it
-    /// follows the cursor smoothly. Set by the `IntoPlot` macro; defaults to `cross_line`.
-    pub cursor: Point<Pixels>,
 }
 
 impl TooltipState {
@@ -242,7 +226,6 @@ impl TooltipState {
             index,
             cross_line,
             dots,
-            cursor: cross_line,
         }
     }
 }

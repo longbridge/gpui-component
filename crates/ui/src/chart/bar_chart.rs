@@ -286,18 +286,11 @@ where
         let alignment = self.alignment;
         let is_horizontal = alignment.is_horizontal();
 
-        // Band scale spans the full extent perpendicular to the value axis.
-        let band_extent = if is_horizontal {
-            total_height
-        } else {
-            total_width
+        // Band scale spans the full extent perpendicular to the value axis. Shared with the
+        // tooltip via `band_scale()` so the bars and the hover crosshair stay aligned.
+        let Some(band_scale) = self.band_scale(bounds) else {
+            return;
         };
-        let band_scale = ScaleBand::new(
-            self.data.iter().map(|v| band_fn(v)).collect(),
-            vec![0., band_extent],
-        )
-        .padding_inner(0.4)
-        .padding_outer(0.2);
         let band_width = band_scale.band_width();
 
         let value_dim = if is_horizontal {
@@ -512,6 +505,7 @@ where
     fn tooltip(
         &self,
         state: &TooltipState,
+        cursor: Point<Pixels>,
         bounds: Bounds<Pixels>,
         window: &mut Window,
         cx: &mut App,
@@ -533,25 +527,34 @@ where
             } else {
                 value_end_gap
             };
+            // Skip the tooltip when the cursor is over the value-axis labels, not a bar.
+            if cursor.x.as_f32() < start || cursor.x.as_f32() > start + length {
+                return None;
+            }
             CrossLine::new(state.cross_line)
                 .horizontal()
                 .span(start, length)
                 .band(px(band_width))
         } else {
             let axis_gap = if self.label_axis { AXIS_GAP } else { 0. };
+            let length = bounds.size.height.as_f32() - axis_gap;
             let start = if matches!(self.alignment, BarAlignment::Top) {
                 axis_gap
             } else {
                 0.
             };
+            // Skip the tooltip when the cursor is over the band-axis labels, not a bar.
+            if cursor.y.as_f32() < start || cursor.y.as_f32() > start + length {
+                return None;
+            }
             CrossLine::new(state.cross_line)
-                .span(start, bounds.size.height.as_f32() - axis_gap)
+                .span(start, length)
                 .band(px(band_width))
         };
 
         Some(
             // Follow the cursor; the highlight band stays snapped to the bar.
-            Tooltip::new(state.cursor, bounds.size)
+            Tooltip::new(cursor, bounds.size)
                 .gap(px(8.))
                 .cross_line(cross_line)
                 .title(title)

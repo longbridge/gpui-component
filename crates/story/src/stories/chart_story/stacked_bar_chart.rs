@@ -136,6 +136,11 @@ impl Plot for StackedBarChart {
         .padding_outer(0.2);
         let band_width = x.band_width();
 
+        // Ignore the x-axis label gutter so hovering the labels doesn't show a tooltip.
+        if position.y.as_f32() > bounds.size.height.as_f32() - AXIS_GAP {
+            return None;
+        }
+
         let index = x.least_index(position.x.as_f32());
         let d = self.data.get(index)?;
         let center_x = x.tick(&d.date.clone())? + band_width / 2.;
@@ -150,6 +155,7 @@ impl Plot for StackedBarChart {
     fn tooltip(
         &self,
         state: &TooltipState,
+        cursor: Point<Pixels>,
         bounds: Bounds<Pixels>,
         _window: &mut Window,
         cx: &mut App,
@@ -177,7 +183,7 @@ impl Plot for StackedBarChart {
         .padding_outer(0.2)
         .band_width();
 
-        let mut tooltip = Tooltip::new(state.cursor, bounds.size)
+        let mut tooltip = Tooltip::new(cursor, bounds.size)
             .gap(px(8.))
             .cross_line(
                 CrossLine::new(state.cross_line)

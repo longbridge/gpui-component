@@ -16,6 +16,23 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
             }
         }
 
+        impl #impl_generics #type_name #type_generics #where_clause {
+            /// Element-local cell holding the last cursor position (plot-relative), shared by
+            /// the generated `prepaint`/`paint` so the cell type lives in a single place.
+            #[doc(hidden)]
+            fn __plot_tooltip_cursor(
+                global_id: &gpui::GlobalElementId,
+                window: &mut gpui::Window,
+            ) -> std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>> {
+                window.with_element_state(global_id, |prev, _| {
+                    let cell: std::rc::Rc<
+                        std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>,
+                    > = prev.unwrap_or_default();
+                    (cell.clone(), cell)
+                })
+            }
+        }
+
         impl #impl_generics gpui::Element for #type_name #type_generics #where_clause {
             type RequestLayoutState = ();
             // Carries the prepainted tooltip overlay (if any) from `prepaint` to `paint`.
@@ -61,27 +78,18 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                 };
 
                 // Read the cursor position recorded by the previous frame's mouse handler.
-                let position = window.with_element_state::<
-                    std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>>,
-                    _,
-                >(global_id, |prev, _| {
-                    let cell = prev.unwrap_or_default();
-                    (cell.get(), cell)
-                });
-
-                let Some(position) = position else {
+                let Some(position) = Self::__plot_tooltip_cursor(global_id, window).get() else {
                     return None;
                 };
-                let Some(mut state) = <Self as Plot>::tooltip_state(self, position, bounds, cx)
+                let Some(state) = <Self as Plot>::tooltip_state(self, position, bounds, cx)
                 else {
                     return None;
                 };
 
-                // Anchor the tooltip box to the live cursor so it follows smoothly; the
-                // crosshair and dots stay snapped to the data point by `tooltip_state`.
-                state.cursor = position;
-
-                let Some(mut overlay) = <Self as Plot>::tooltip(self, &state, bounds, window, cx)
+                // Pass the live cursor so the tooltip box can follow it; the crosshair and
+                // dots in `state` stay snapped to the data point by `tooltip_state`.
+                let Some(mut overlay) =
+                    <Self as Plot>::tooltip(self, &state, position, bounds, window, cx)
                 else {
                     return None;
                 };
@@ -106,13 +114,7 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     // Record the cursor position into element-local state on every move so the
                     // next frame can hit-test it. The handler never touches `self`, satisfying
                     // the `'static` bound; it only captures the (Copy) bounds and the state cell.
-                    let cell = window.with_element_state::<
-                        std::rc::Rc<std::cell::Cell<Option<gpui::Point<gpui::Pixels>>>>,
-                        _,
-                    >(global_id, |prev, _| {
-                        let cell = prev.unwrap_or_default();
-                        (cell.clone(), cell)
-                    });
+                    let cell = Self::__plot_tooltip_cursor(global_id, window);
 
                     window.on_mouse_event(
                         move |e: &gpui::MouseMoveEvent, _, window: &mut gpui::Window, _| {

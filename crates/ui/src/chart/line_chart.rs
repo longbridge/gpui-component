@@ -228,6 +228,12 @@ where
         let (x_fn, y_fn) = (self.x.as_ref()?, self.y.as_ref()?);
         let (x, y) = self.scales(bounds)?;
 
+        // Ignore the x-axis label gutter so hovering the labels doesn't show a tooltip.
+        let axis_gap = if self.x_axis { AXIS_GAP } else { 0. };
+        if position.y.as_f32() > bounds.size.height.as_f32() - axis_gap {
+            return None;
+        }
+
         let index = x.least_index(position.x.as_f32());
         let d = self.data.get(index)?;
         let x_tick = x.tick(&x_fn(d))?;
@@ -243,6 +249,7 @@ where
     fn tooltip(
         &self,
         state: &TooltipState,
+        cursor: Point<Pixels>,
         bounds: Bounds<Pixels>,
         _window: &mut Window,
         cx: &mut App,
@@ -256,7 +263,7 @@ where
 
         Some(
             // Follow the cursor; the crosshair and dot stay snapped to the data point.
-            Tooltip::new(state.cursor, bounds.size)
+            Tooltip::new(cursor, bounds.size)
                 .gap(px(8.))
                 // Confine the crosshair to the plot area so it doesn't cross the x-axis.
                 .cross_line(
