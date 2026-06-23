@@ -41,6 +41,7 @@ where
     alignment: BarAlignment,
     corner_radii: Corners<Pixels>,
     id: Option<ElementId>,
+    name: Option<SharedString>,
 }
 
 impl<T, B, V> BarChart<T, B, V>
@@ -65,6 +66,7 @@ where
             alignment: BarAlignment::default(),
             corner_radii: Corners::all(px(0.)),
             id: None,
+            name: None,
         }
     }
 
@@ -75,6 +77,12 @@ where
     /// currently show a tooltip.
     pub fn id(mut self, id: impl Into<ElementId>) -> Self {
         self.id = Some(id.into());
+        self
+    }
+
+    /// Set the series name shown in the hover tooltip row (e.g. "Desktop").
+    pub fn name(mut self, name: impl Into<SharedString>) -> Self {
+        self.name = Some(name.into());
         self
     }
 
@@ -487,6 +495,7 @@ where
         let d = self.data.get(state.index)?;
         let title: SharedString = band_fn(d).into();
         let value = value_fn(d).to_f64()?;
+        let name = self.name.clone().unwrap_or_default();
 
         Some(
             Tooltip::new()
@@ -495,7 +504,7 @@ where
                 .gap(px(8.))
                 .cross_line(CrossLine::new(state.cross_line))
                 .title(title)
-                .row(cx.theme().chart_2, "", format!("{}", value))
+                .row(cx.theme().chart_2, name, format!("{}", value))
                 .into_any_element(),
         )
     }

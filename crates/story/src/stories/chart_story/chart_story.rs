@@ -169,7 +169,7 @@ impl Render for ChartStory {
                             linear_color_stop(cx.theme().chart_1.opacity(0.4), 1.),
                             linear_color_stop(cx.theme().background.opacity(0.3), 0.),
                         ))
-                        .label("Desktop")
+                        .name("Desktop")
                         .y(|d| d.mobile)
                         .stroke(cx.theme().chart_2)
                         .fill(linear_gradient(
@@ -177,7 +177,7 @@ impl Render for ChartStory {
                             linear_color_stop(cx.theme().chart_2.opacity(0.4), 1.),
                             linear_color_stop(cx.theme().background.opacity(0.3), 0.),
                         ))
-                        .label("Mobile")
+                        .name("Mobile")
                         .tick_margin(8)
                         .id("area-chart-tooltip"),
                     false,
@@ -240,6 +240,7 @@ impl Render for ChartStory {
                         BarChart::new(self.monthly_devices.clone())
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
+                            .name("Desktop")
                             .id("bar-chart-tooltip"),
                         false,
                         cx,
@@ -247,6 +248,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Mixed",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-mixed")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .fill(move |d, _, _, _| d.color(color)),
@@ -265,6 +268,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Rounded corners",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-rounded")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
@@ -275,6 +280,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Bottom aligned",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-bottom")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string()),
@@ -284,6 +291,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Top aligned",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-top")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
@@ -316,6 +325,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Bottom)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-bottom")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -337,6 +348,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Top)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-top")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -403,6 +416,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Per-bar)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-per-bar")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -422,6 +437,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Diagonal, across bars)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-diagonal")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -464,7 +481,7 @@ impl Render for ChartStory {
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .label("Desktop")
+                            .name("Desktop")
                             .id("line-chart-tooltip"),
                         false,
                         cx,
@@ -474,7 +491,8 @@ impl Render for ChartStory {
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .linear(),
+                            .linear()
+                            .id("line-chart-linear"),
                         false,
                         cx,
                     ))
@@ -483,7 +501,8 @@ impl Render for ChartStory {
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .step_after(),
+                            .step_after()
+                            .id("line-chart-step-after"),
                         false,
                         cx,
                     ))
@@ -493,7 +512,8 @@ impl Render for ChartStory {
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
                             .dot()
-                            .stroke(cx.theme().chart_5),
+                            .stroke(cx.theme().chart_5)
+                            .id("line-chart-dots"),
                         false,
                         cx,
                     )),
@@ -507,7 +527,8 @@ impl Render for ChartStory {
                         "Area Chart",
                         AreaChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
-                            .y(|d| d.desktop),
+                            .y(|d| d.desktop)
+                            .id("area-chart"),
                         false,
                         cx,
                     ))
@@ -516,7 +537,8 @@ impl Render for ChartStory {
                         AreaChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .linear(),
+                            .linear()
+                            .id("area-chart-linear"),
                         false,
                         cx,
                     ))
@@ -525,7 +547,8 @@ impl Render for ChartStory {
                         AreaChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .step_after(),
+                            .step_after()
+                            .id("area-chart-step-after"),
                         false,
                         cx,
                     ))
@@ -538,7 +561,8 @@ impl Render for ChartStory {
                                 0.,
                                 linear_color_stop(cx.theme().chart_1.opacity(0.4), 1.),
                                 linear_color_stop(cx.theme().background.opacity(0.3), 0.),
-                            )),
+                            ))
+                            .id("area-chart-gradient"),
                         false,
                         cx,
                     )),

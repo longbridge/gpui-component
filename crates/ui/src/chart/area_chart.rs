@@ -32,7 +32,7 @@ where
     strokes: Vec<Hsla>,
     stroke_styles: Vec<StrokeStyle>,
     fills: Vec<Background>,
-    labels: Vec<SharedString>,
+    names: Vec<SharedString>,
     tick_margin: usize,
     x_axis: bool,
     grid: bool,
@@ -53,7 +53,7 @@ where
             stroke_styles: vec![],
             strokes: vec![],
             fills: vec![],
-            labels: vec![],
+            names: vec![],
             tick_margin: 1,
             x: None,
             y: vec![],
@@ -74,9 +74,9 @@ where
 
     /// Set the name of the most recently added series, shown in its tooltip row.
     ///
-    /// Call after the matching [`AreaChart::y`] (e.g. `.y(..).stroke(..).label("Foo")`).
-    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
-        self.labels.push(label.into());
+    /// Call after the matching [`AreaChart::y`] (e.g. `.y(..).stroke(..).name("Desktop")`).
+    pub fn name(mut self, name: impl Into<SharedString>) -> Self {
+        self.names.push(name.into());
         self
     }
 
@@ -293,9 +293,9 @@ where
 
         // One row per series: swatch + label + value.
         for (i, y_fn) in self.y.iter().enumerate() {
-            let label = self.labels.get(i).cloned().unwrap_or_default();
+            let name = self.names.get(i).cloned().unwrap_or_default();
             let value = y_fn(d).to_f64()?;
-            tooltip = tooltip.row(color(i), label, format!("{}", value));
+            tooltip = tooltip.row(color(i), name, format!("{}", value));
         }
 
         Some(tooltip.into_any_element())

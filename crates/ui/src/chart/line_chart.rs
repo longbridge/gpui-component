@@ -36,7 +36,7 @@ where
     x_axis: bool,
     grid: bool,
     id: Option<ElementId>,
-    label: Option<SharedString>,
+    name: Option<SharedString>,
 }
 
 impl<T, X, Y> LineChart<T, X, Y>
@@ -59,7 +59,7 @@ where
             x_axis: true,
             grid: true,
             id: None,
-            label: None,
+            name: None,
         }
     }
 
@@ -72,9 +72,9 @@ where
         self
     }
 
-    /// Set the series name shown in the hover tooltip row (e.g. "Foo").
-    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
-        self.label = Some(label.into());
+    /// Set the series name shown in the hover tooltip row (e.g. "Desktop").
+    pub fn name(mut self, name: impl Into<SharedString>) -> Self {
+        self.name = Some(name.into());
         self
     }
 
@@ -253,7 +253,7 @@ where
         let title: SharedString = x_fn(d).into();
         let value = y_fn(d).to_f64()?;
         let stroke = self.stroke.unwrap_or(cx.theme().chart_2);
-        let label = self.label.clone().unwrap_or_default();
+        let name = self.name.clone().unwrap_or_default();
 
         Some(
             Tooltip::new()
@@ -269,7 +269,7 @@ where
                         .map(|p| Dot::new(*p).stroke(cx.theme().background).fill(stroke)),
                 )
                 .title(title)
-                .row(stroke, label, format!("{}", value))
+                .row(stroke, name, format!("{}", value))
                 .into_any_element(),
         )
     }
