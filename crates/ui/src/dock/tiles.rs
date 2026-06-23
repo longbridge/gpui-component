@@ -1145,6 +1145,21 @@ impl Tiles {
     }
 }
 
+/// Snap `edge` to the nearest value in `candidates` whose distance is strictly
+/// below `threshold`. Returns `None` when nothing is close enough.
+fn snap_edge(edge: Pixels, candidates: &[Pixels], threshold: Pixels) -> Option<Pixels> {
+    let mut best: Option<Pixels> = None;
+    let mut best_dist = threshold;
+    for &candidate in candidates {
+        let dist = (edge - candidate).abs();
+        if dist < best_dist {
+            best_dist = dist;
+            best = Some(candidate);
+        }
+    }
+    best
+}
+
 #[inline]
 fn round_to_nearest_ten(value: Pixels, cx: &App) -> Pixels {
     (value / cx.theme().tile_grid_size).round() * cx.theme().tile_grid_size
@@ -1227,5 +1242,34 @@ impl Render for Tiles {
                     ),
             )
             .size_full()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::px;
+
+    #[test]
+    fn test_snap_edge_within_threshold() {
+        // 102 is 2px from 100 (< 8) -> snaps to 100.
+        assert_eq!(snap_edge(px(102.), &[px(100.), px(300.)], px(8.)), Some(px(100.)));
+    }
+
+    #[test]
+    fn test_snap_edge_outside_threshold() {
+        // 120 is 20px from nearest candidate (>= 8) -> no snap.
+        assert_eq!(snap_edge(px(120.), &[px(100.), px(300.)], px(8.)), None);
+    }
+
+    #[test]
+    fn test_snap_edge_picks_nearest() {
+        // 303 is 3px from 300 and 5px from 308 -> picks 300.
+        assert_eq!(snap_edge(px(303.), &[px(308.), px(300.)], px(8.)), Some(px(300.)));
+    }
+
+    #[test]
+    fn test_snap_edge_empty_candidates() {
+        assert_eq!(snap_edge(px(50.), &[], px(8.)), None);
     }
 }
