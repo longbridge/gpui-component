@@ -442,51 +442,38 @@ impl Tiles {
         let Some(resizing_id) = self.resizing_id else {
             return;
         };
+
+        let grid_size = cx.theme().tile_grid_size;
+        // Neighbor bounds drive magnetic edge snapping (exclude the resizing panel).
+        let other_bounds: Vec<Bounds<Pixels>> = self
+            .panels
+            .iter()
+            .filter(|item| item.id != resizing_id)
+            .map(|item| item.bounds)
+            .collect();
+
         let Some(item) = self.panels.iter_mut().find(|item| item.id == resizing_id) else {
             return;
         };
 
         let previous_bounds = item.bounds;
-        let final_x = if let Some(x) = new_x {
-            round_to_nearest_ten(x, cx)
-        } else {
-            previous_bounds.origin.x
-        };
-        let final_y = if let Some(y) = new_y {
-            round_to_nearest_ten(y, cx)
-        } else {
-            previous_bounds.origin.y
-        };
-        // When both x and width are provided (left resize)
-        let final_width = if new_x.is_some() && new_width.is_some() {
-            let right_edge = previous_bounds.origin.x + previous_bounds.size.width;
-            (right_edge - final_x).max(MINIMUM_SIZE.width)
-        } else if let Some(width) = new_width {
-            round_to_nearest_ten(width, cx)
-        } else {
-            previous_bounds.size.width
-        };
+        let new_bounds = compute_resized_bounds(
+            previous_bounds,
+            new_x,
+            new_y,
+            new_width,
+            new_height,
+            &other_bounds,
+            grid_size,
+        );
 
-        // When both y and height are provided (top resize)
-        let final_height = if new_y.is_some() && new_height.is_some() {
-            let bottom_edge = previous_bounds.origin.y + previous_bounds.size.height;
-            (bottom_edge - final_y).max(MINIMUM_SIZE.height)
-        } else if let Some(height) = new_height {
-            round_to_nearest_ten(height, cx)
-        } else {
-            previous_bounds.size.height
-        };
-
-        // Only push to history if size has changed
-        if final_width != item.bounds.size.width
-            || final_height != item.bounds.size.height
-            || final_x != item.bounds.origin.x
-            || final_y != item.bounds.origin.y
+        // Only push to history if the geometry actually changed.
+        if new_bounds.origin.x != previous_bounds.origin.x
+            || new_bounds.origin.y != previous_bounds.origin.y
+            || new_bounds.size.width != previous_bounds.size.width
+            || new_bounds.size.height != previous_bounds.size.height
         {
-            item.bounds.origin.x = final_x;
-            item.bounds.origin.y = final_y;
-            item.bounds.size.width = final_width;
-            item.bounds.size.height = final_height;
+            item.bounds = new_bounds;
 
             // Only push if not during history operations
             if !self.history.ignore {
@@ -1161,7 +1148,7 @@ fn snap_edge(edge: Pixels, candidates: &[Pixels], threshold: Pixels) -> Option<P
 }
 
 /// Compute the final bounds for a resize, applying magnetic edge snapping to
-/// neighbouring panels and falling back to grid rounding when no neighbour edge
+/// neighboring panels and falling back to grid rounding when no neighbor edge
 /// is within `grid_size`.
 ///
 /// Which edges move is inferred from the provided `Option`s, mirroring
