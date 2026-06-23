@@ -1,46 +1,41 @@
 [workspace]
-default-members = ["crates/assets", "crates/story", "crates/ui"]
+default-members = ["crates/ui", "crates/story", "crates/assets"]
 members = [
-    "crates/assets",
     "crates/macros",
     "crates/story",
     "crates/story-web",
     "crates/ui",
+    "crates/assets",
     "crates/webview",
     "examples/app_assets",
-    "examples/dialog_overlay",
-    "examples/focus_trap",
     "examples/hello_world",
     "examples/input",
-    "examples/root_borderless",
-    "examples/sidebar",
-    "examples/system_monitor",
-    "examples/text_selection",
-    "examples/tooltip_top_edge",
-    "examples/webview",
     "examples/window_title",
+    "examples/dialog_overlay",
+    "examples/webview",
+    "examples/system_monitor",
+    "examples/focus_trap",
+    "examples/tooltip_top_edge",
+    "examples/sidebar",
+    "examples/text_selection",
+    "examples/root_borderless",
 ]
 resolver = "2"
 
 [workspace.package]
-edition = "2024"
 publish = false
+edition = "2024"
 
 [workspace.dependencies]
 gpui-component = { path = "crates/ui", version = "0.5.2" }
-gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 gpui-component-macros = { path = "crates/macros", version = "0.5.1" }
+gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 story = { path = "crates/story" }
 
 gpui = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe" }
-gpui_macros = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe", features = [
-    "font-kit",
-    "runtime_shaders",
-    "wayland",
-    "x11",
-] }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 gpui_web = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe" }
+gpui_macros = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe" }
 reqwest_client = { git = "https://github.com/zed-industries/zed", rev = "1d217ee39d381ac101b7cf49d3d22451ac1093fe" }
 sum-tree = { version = "0.2.0", package = "zed-sum-tree" }
 # reqwest = { version = "0.12.15-zed", package = "zed-reqwest" }
@@ -104,21 +99,20 @@ debug = "limited"
 split-debuginfo = "unpacked"
 
 [profile.dev.package]
-gpui = { opt-level = 3 }
-gpui-component = { opt-level = 3 }
-gpui_macros = { opt-level = 3 }
-gpui_platform = { opt-level = 3 }
-lsp-types = { opt-level = 3 }
-markdown = { opt-level = 3 }
-reqwest_client = { opt-level = 3 }
 resvg = { opt-level = 3 }
-ropey = { opt-level = 3 }
 rustybuzz = { opt-level = 3 }
-smol = { opt-level = 3 }
-sum_tree = { opt-level = 3 }
 taffy = { opt-level = 3 }
-tree-sitter = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
+smol = { opt-level = 3 }
+gpui = { opt-level = 3 }
+gpui_platform = { opt-level = 3 }
+gpui_macros = { opt-level = 3 }
+tree-sitter = { opt-level = 3 }
+sum_tree = { opt-level = 3 }
+ropey = { opt-level = 3 }
+lsp-types = { opt-level = 3 }
+reqwest_client = { opt-level = 3 }
+markdown = { opt-level = 3 }
 xml5ever = { opt-level = 3 }
 
 [workspace.metadata.typos]
@@ -128,7 +122,7 @@ files.extend-exclude = ["**/fixtures/*"]
 consts = "consts"
 
 [workspace.metadata.cargo-machete]
-ignored = ["anyhow", "log", "serde"]
+ignored = ["log", "anyhow", "serde"]
 
 # Patches for WASM compatibility
 [patch.crates-io]
