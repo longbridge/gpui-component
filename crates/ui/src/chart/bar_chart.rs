@@ -14,7 +14,7 @@ use crate::{
         label::{TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::{Bar, BarAlignment},
-        tooltip::{CrossLine, Tooltip, TooltipAxis, TooltipPosition, TooltipState},
+        tooltip::{CrossLine, Tooltip, TooltipState},
     },
 };
 
@@ -498,23 +498,15 @@ where
         let d = self.data.get(index)?;
         let center = band_scale.tick(&band_fn(d))? + band_width / 2.;
 
-        // Vertical bars: vertical crosshair at the bar's x, box tracks the cursor y.
-        // Horizontal bars: horizontal crosshair at the bar's y, box tracks the cursor x.
-        let (cross_line, axis) = if is_horizontal {
-            (point(position.x, px(center)), TooltipAxis::Y)
+        // Vertical bars: vertical crosshair at the bar's x. Horizontal bars: horizontal
+        // crosshair at the bar's y. The box tracks the cursor either way.
+        let cross_line = if is_horizontal {
+            point(position.x, px(center))
         } else {
-            (point(px(center), position.y), TooltipAxis::X)
+            point(px(center), position.y)
         };
 
-        Some(
-            TooltipState::new(
-                index,
-                cross_line,
-                vec![],
-                TooltipPosition::for_index(index, self.data.len()),
-            )
-            .axis(axis),
-        )
+        Some(TooltipState::new(index, cross_line, vec![]))
     }
 
     fn tooltip(
@@ -558,9 +550,8 @@ where
         };
 
         Some(
-            Tooltip::new()
-                // Follow the cursor, hugging the bar's center along the band axis.
-                .anchor(state.cross_line, bounds.size)
+            // Follow the cursor; the highlight band stays snapped to the bar.
+            Tooltip::new(state.cursor, bounds.size)
                 .gap(px(8.))
                 .cross_line(cross_line)
                 .title(title)

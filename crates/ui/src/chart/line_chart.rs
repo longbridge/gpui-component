@@ -13,7 +13,7 @@ use crate::{
         AXIS_GAP, Grid, Plot, PlotAxis, StrokeStyle,
         scale::{Scale, ScaleLinear, ScalePoint, Sealed},
         shape::Line,
-        tooltip::{CrossLine, Dot, Tooltip, TooltipPosition, TooltipState},
+        tooltip::{CrossLine, Dot, Tooltip, TooltipState},
     },
 };
 
@@ -237,7 +237,6 @@ where
             index,
             point(px(x_tick), position.y),
             vec![point(px(x_tick), px(y_tick))],
-            TooltipPosition::for_index(index, self.data.len()),
         ))
     }
 
@@ -256,10 +255,8 @@ where
         let name = self.name.clone().unwrap_or_default();
 
         Some(
-            Tooltip::new()
-                // Follow the cursor: hug the crosshair (data point x) horizontally and
-                // track the cursor vertically, flipping toward the center near each edge.
-                .anchor(state.cross_line, bounds.size)
+            // Follow the cursor; the crosshair and dot stay snapped to the data point.
+            Tooltip::new(state.cursor, bounds.size)
                 .gap(px(8.))
                 // Confine the crosshair to the plot area so it doesn't cross the x-axis.
                 .cross_line(

@@ -9,7 +9,7 @@ use gpui_component::{
         AXIS_GAP, AxisText, Grid, IntoPlot, Plot, PlotAxis,
         scale::{Scale, ScaleBand, ScaleLinear, ScaleOrdinal},
         shape::{Bar, Stack, StackSeries},
-        tooltip::{CrossLine, Tooltip, TooltipPosition, TooltipState},
+        tooltip::{CrossLine, Tooltip, TooltipState},
     },
 };
 
@@ -144,7 +144,6 @@ impl Plot for StackedBarChart {
             index,
             point(px(center_x), position.y),
             vec![],
-            TooltipPosition::for_index(index, self.data.len()),
         ))
     }
 
@@ -178,8 +177,7 @@ impl Plot for StackedBarChart {
         .padding_outer(0.2)
         .band_width();
 
-        let mut tooltip = Tooltip::new()
-            .anchor(state.cross_line, bounds.size)
+        let mut tooltip = Tooltip::new(state.cursor, bounds.size)
             .gap(px(8.))
             .cross_line(
                 CrossLine::new(state.cross_line)

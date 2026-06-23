@@ -13,7 +13,7 @@ use crate::{
         AXIS_GAP, Grid, Plot, PlotAxis, StrokeStyle,
         scale::{Scale, ScaleLinear, ScalePoint, Sealed},
         shape::Area,
-        tooltip::{CrossLine, Dot, Tooltip, TooltipPosition, TooltipState},
+        tooltip::{CrossLine, Dot, Tooltip, TooltipState},
     },
 };
 
@@ -258,7 +258,6 @@ where
             index,
             point(px(x_tick), position.y),
             dots,
-            TooltipPosition::for_index(index, self.data.len()),
         ))
     }
 
@@ -277,9 +276,8 @@ where
         let dot_stroke = cx.theme().background;
         let color = |i: usize| *self.strokes.get(i).unwrap_or(&default_color);
 
-        let mut tooltip = Tooltip::new()
-            // Follow the cursor: hug the crosshair horizontally, track the cursor vertically.
-            .anchor(state.cross_line, bounds.size)
+        // Follow the cursor; the crosshair and dots stay snapped to the data point.
+        let mut tooltip = Tooltip::new(state.cursor, bounds.size)
             .gap(px(8.))
             // Confine the crosshair to the plot area so it doesn't cross the x-axis.
             .cross_line(

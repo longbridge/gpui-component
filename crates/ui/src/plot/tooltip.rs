@@ -226,72 +226,24 @@ impl RenderOnce for Dot {
     }
 }
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub enum TooltipPosition {
-    #[default]
-    Left,
-    Right,
-}
-
-impl TooltipPosition {
-    /// Place the tooltip on the right while the hovered `index` is in the first half of
-    /// `len` items, otherwise on the left, so it stays clear of the screen edge.
-    pub fn for_index(index: usize, len: usize) -> Self {
-        if index < len / 2 {
-            Self::Right
-        } else {
-            Self::Left
-        }
-    }
-}
-
-/// The axis the data points are laid out along; the follow animation slides along it.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub enum TooltipAxis {
-    /// Data points run along the x-axis (line, area, vertical bars). The default.
-    #[default]
-    X,
-    /// Data points run along the y-axis (horizontal bars).
-    Y,
-}
-
 #[derive(Clone)]
 pub struct TooltipState {
     pub index: usize,
     pub cross_line: Point<Pixels>,
     pub dots: Vec<Point<Pixels>>,
-    pub position: TooltipPosition,
-    /// The axis the data points snap along. Describes how `cross_line` is read: the
-    /// coordinate on this axis is the snapped (data-point) one the follow animation eases,
-    /// while the other tracks the cursor live.
-    pub axis: TooltipAxis,
+    /// Live cursor position (relative to the plot origin); the tooltip box hugs it so it
+    /// follows the cursor smoothly. Set by the `IntoPlot` macro; defaults to `cross_line`.
+    pub cursor: Point<Pixels>,
 }
 
 impl TooltipState {
-    pub fn new(
-        index: usize,
-        cross_line: Point<Pixels>,
-        dots: Vec<Point<Pixels>>,
-        position: TooltipPosition,
-    ) -> Self {
+    pub fn new(index: usize, cross_line: Point<Pixels>, dots: Vec<Point<Pixels>>) -> Self {
         Self {
             index,
             cross_line,
             dots,
-            position,
-            axis: TooltipAxis::X,
+            cursor: cross_line,
         }
-    }
-
-    /// Set the axis the data points snap along (default [`TooltipAxis::X`]).
-    pub fn axis(mut self, axis: TooltipAxis) -> Self {
-        self.axis = axis;
-        self
-    }
-
-    /// Whether the follow animation slides vertically (i.e. the snap axis is y).
-    pub fn slides_vertically(&self) -> bool {
-        matches!(self.axis, TooltipAxis::Y)
     }
 }
 
@@ -305,42 +257,33 @@ struct TooltipRow {
 #[derive(IntoElement)]
 pub struct Tooltip {
     base: Div,
-    position: Option<TooltipPosition>,
     gap: Pixels,
     cross_line: Option<CrossLine>,
     dots: Option<Vec<Dot>>,
     appearance: bool,
     title: Option<SharedString>,
     rows: Vec<TooltipRow>,
-    /// When set, the tooltip follows the cursor: `(anchor point, container size)`.
-    /// The box hugs the anchor and flips toward the center near each edge.
-    anchor: Option<(Point<Pixels>, Size<Pixels>)>,
+    /// Cursor position the box hugs (relative to the plot origin).
+    cursor: Point<Pixels>,
+    /// Plot size, used to flip the box toward the center near each edge so it never
+    /// overflows the near side.
+    within: Size<Pixels>,
 }
 
 impl Tooltip {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    /// Create a tooltip whose box follows the cursor at `cursor` within a `within`-sized plot.
+    pub fn new(cursor: Point<Pixels>, within: Size<Pixels>) -> Self {
         Self {
             base: v_flex().top_0(),
-            position: Default::default(),
             gap: px(0.),
             cross_line: None,
             dots: None,
             appearance: true,
             title: None,
             rows: Vec::new(),
-            anchor: None,
+            cursor,
+            within,
         }
-    }
-
-    /// Make the tooltip follow the cursor, anchored at `point` within a `within`-sized plot.
-    ///
-    /// The box hugs the anchor and flips toward the center near each edge (so it never
-    /// overflows the near side). Without this, the tooltip is pinned to the plot edge via
-    /// [`Tooltip::position`].
-    pub fn anchor(mut self, point: Point<Pixels>, within: Size<Pixels>) -> Self {
-        self.anchor = Some((point, within));
-        self
     }
 
     /// Set a bold title row shown at the top of the tooltip (e.g. the hovered x value).
@@ -361,12 +304,6 @@ impl Tooltip {
             label: label.into(),
             value: value.into(),
         });
-        self
-    }
-
-    /// Set the position of the tooltip.
-    pub fn position(mut self, position: TooltipPosition) -> Self {
-        self.position = Some(position);
         self
     }
 
@@ -411,14 +348,14 @@ impl RenderOnce for Tooltip {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let Tooltip {
             base,
-            position,
             gap,
             cross_line,
             dots,
             appearance,
             title,
             rows,
-            anchor,
+            cursor,
+            within,
         } = self;
 
         // Structured content (title + rows) takes precedence over freeform `base` children.
@@ -463,34 +400,26 @@ impl RenderOnce for Tooltip {
                     return this.size_full().relative();
                 }
 
-                let card = this.absolute().min_w(px(150.)).popover_style(cx).p_2();
-
-                match anchor {
-                    // Follow mode: hug the anchor, flipping toward the center near each edge.
-                    Some((p, within)) => card
-                        .map(|c| {
-                            if p.x < within.width * 0.5 {
-                                c.left(p.x + gap)
-                            } else {
-                                c.right(within.width - p.x + gap)
-                            }
-                        })
-                        .map(|c| {
-                            if p.y < within.height * 0.5 {
-                                c.top(p.y + gap)
-                            } else {
-                                c.bottom(within.height - p.y + gap)
-                            }
-                        }),
-                    // Edge-pinned mode (backward compatible default).
-                    None => card.when_some(position, |c, position| {
-                        if position == TooltipPosition::Left {
-                            c.left(gap)
+                // The box hugs the cursor, flipping toward the center near each edge so it
+                // never overflows the near side.
+                this.absolute()
+                    .min_w(px(150.))
+                    .popover_style(cx)
+                    .p_2()
+                    .map(|c| {
+                        if cursor.x < within.width * 0.5 {
+                            c.left(cursor.x + gap)
                         } else {
-                            c.right(gap)
+                            c.right(within.width - cursor.x + gap)
                         }
-                    }),
-                }
+                    })
+                    .map(|c| {
+                        if cursor.y < within.height * 0.5 {
+                            c.top(cursor.y + gap)
+                        } else {
+                            c.bottom(within.height - cursor.y + gap)
+                        }
+                    })
             }))
     }
 }
