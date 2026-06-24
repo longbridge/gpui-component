@@ -791,11 +791,7 @@ impl InputState {
         self.emit_events = true;
 
         // Ensure cursor to start when set text
-        if self.mode.is_single_line() {
-            self.selected_range = (self.text.len()..self.text.len()).into();
-        } else {
-            self.selected_range.clear();
-        }
+        self.selected_range.clear();
 
         if self.mode.is_code_editor() {
             self._pending_update = true;
@@ -3515,4 +3511,28 @@ ORDER BY id
             });
         });
     }
+
+    #[gpui::test]
+    fn test_set_value_move_cursor_to_start(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value(
+                    "https://example.com/v1/users?firstName=alex&page=10&perPage=100",
+                    window,
+                    cx,
+                );
+
+                assert_eq!(
+                    state.selected_range,
+                    Selection::new(0, 0),
+                    "cursor should be at the start after set_value"
+                );
+            });
+        });
+    }
+
 }
