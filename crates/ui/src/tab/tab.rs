@@ -626,6 +626,28 @@ impl RenderOnce for Tab {
         };
         let inner_shadow = tab_style.shadow && !segmented_indicator_active;
 
+        // When a sliding indicator is active and ready, it alone represents the
+        // selected state. Suppress the selected tab's own active background/border
+        // so the two don't overlap during the switch animation (Segmented already
+        // does this for its `inner_bg` above). Skip disabled tabs so a
+        // disabled-selected tab keeps its dimmed styling instead of the
+        // full-strength indicator color.
+        let suppress_active_visual =
+            self.selected && !self.disabled && self.indicator_active && self.indicator_ready;
+        // Pill paints its active state via the outer `bg`.
+        let outer_bg = if suppress_active_visual && self.variant == TabVariant::Pill {
+            cx.theme().transparent.into()
+        } else {
+            tab_style.bg
+        };
+        // Underline paints its active state via the bottom `border_color`.
+        let outer_border_color = if suppress_active_visual && self.variant == TabVariant::Underline
+        {
+            cx.theme().transparent
+        } else {
+            tab_style.border_color
+        };
+
         self.base
             .id(self.ix)
             .relative()
@@ -642,12 +664,12 @@ impl RenderOnce for Tab {
                 Size::Large => this.text_base(),
                 _ => this.text_sm(),
             })
-            .bg(tab_style.bg)
+            .bg(outer_bg)
             .border_l(tab_style.borders.left)
             .border_r(tab_style.borders.right)
             .border_t(tab_style.borders.top)
             .border_b(tab_style.borders.bottom)
-            .border_color(tab_style.border_color)
+            .border_color(outer_border_color)
             .rounded(radius)
             .when(!self.selected && !self.disabled, |this| {
                 this.hover(|this| {
