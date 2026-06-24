@@ -97,7 +97,8 @@ impl MyView {
         let _task = cx.spawn(async move |this, cx: &mut AsyncApp| {
             // Task automatically cancelled when dropped
             loop {
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+
                 this.update(cx, |state, cx| {
                     state.tick();
                     cx.notify();
@@ -145,7 +146,8 @@ cx.background_spawn(async move {
 ```rust
 cx.spawn(async move |this, cx: &mut AsyncApp| {
     loop {
-        tokio::time::sleep(Duration::from_secs(5)).await;
+        cx.background_executor().timer(Duration::from_secs(5)).await;
+
         this.update(cx, |state, cx| {
             state.tick();
             cx.notify();
