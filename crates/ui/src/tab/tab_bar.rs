@@ -164,12 +164,17 @@ impl TabBar {
     }
 
     /// Render the sliding indicator element for animated tab switching.
+    ///
+    /// Returns the indicator element together with the current animation
+    /// `epoch`, which increments on every tab switch. Tabs key their own
+    /// transitions (e.g. text color fade) on this epoch so they restart in sync
+    /// with the indicator slide.
     fn render_indicator(
         &self,
         bounds_rc: &Option<Rc<RefCell<TabIndicatorBounds>>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> Option<AnyElement> {
+    ) -> Option<(AnyElement, u64)> {
         let has_indicator = matches!(
             self.variant,
             TabVariant::Segmented | TabVariant::Pill | TabVariant::Underline
@@ -248,7 +253,7 @@ impl TabBar {
                 },
             );
 
-        Some(indicator.into_any_element())
+        Some((indicator.into_any_element(), epoch))
     }
 
     /// Update animation parameters based on current and previous selection.
@@ -400,7 +405,9 @@ impl RenderOnce for TabBar {
             None
         };
 
-        let indicator_element = self.render_indicator(&bounds_rc, window, cx);
+        let indicator = self.render_indicator(&bounds_rc, window, cx);
+        let indicator_epoch = indicator.as_ref().map(|(_, epoch)| *epoch).unwrap_or(0);
+        let indicator_element = indicator.map(|(el, _)| el);
         let indicator_ready = indicator_element.is_some();
 
         let has_suffix_or_menu = self.suffix.is_some() || self.menu;
@@ -464,6 +471,7 @@ impl RenderOnce for TabBar {
                                 .with_size(self.size);
                             tab.indicator_active = has_indicator;
                             tab.indicator_ready = indicator_ready;
+                            tab.indicator_epoch = indicator_epoch;
                             let tab = tab
                                 .when_some(self.selected_index, |this, selected_ix| {
                                     this.selected(selected_ix == ix)
