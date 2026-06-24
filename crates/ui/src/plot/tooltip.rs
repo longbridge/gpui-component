@@ -257,7 +257,7 @@ impl Tooltip {
     /// Create a tooltip whose box follows the cursor at `cursor` within a `within`-sized plot.
     pub fn new(cursor: Point<Pixels>, within: Size<Pixels>) -> Self {
         Self {
-            base: v_flex().top_0(),
+            base: v_flex(),
             gap: px(0.),
             cross_line: None,
             dots: None,
