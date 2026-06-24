@@ -1,6 +1,6 @@
 use std::{panic::Location, rc::Rc};
 
-use crate::{StyledExt};
+use crate::StyledExt;
 
 use super::{Scrollbar, ScrollbarAxis, ScrollbarHandle};
 use gpui::{
@@ -122,10 +122,20 @@ where
 
         let root_id = self.id.clone();
         let area_id = (self.id.clone(), "area");
+        let content_id = (self.id.clone(), "content");
         let scrollbar_id = (self.id.clone(), "scrollbar");
 
-        let scroll_area = self
+        let content = self
             .element
+            .id(content_id)
+            .flex_none()
+            .map(|this| match self.axis {
+                ScrollbarAxis::Vertical => this.h_auto().min_h_full(),
+                ScrollbarAxis::Horizontal => this.w_auto().min_w_full(),
+                ScrollbarAxis::Both => this.size_auto().min_size_full(),
+            });
+
+        let scroll_area = div()
             .id(area_id)
             .absolute()
             .top_0()
@@ -133,12 +143,14 @@ where
             .right_0()
             .bottom_0()
             .size_full()
+            .flex()
             .track_scroll(&scroll_handle)
             .map(|this| match self.axis {
-                ScrollbarAxis::Vertical => this.overflow_y_scroll(),
-                ScrollbarAxis::Horizontal => this.overflow_x_scroll(),
+                ScrollbarAxis::Vertical => this.flex_col().overflow_y_scroll(),
+                ScrollbarAxis::Horizontal => this.flex_row().overflow_x_scroll(),
                 ScrollbarAxis::Both => this.overflow_scroll(),
-            });
+            })
+            .child(content);
 
         div()
             .id(root_id)
@@ -231,4 +243,95 @@ fn render_scrollbar<H: ScrollbarHandle + Clone>(
         .right_0()
         .bottom_0()
         .child(Scrollbar::new(scroll_handle).id(id).axis(axis))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{
+        Context, Render, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, point,
+        px,
+    };
+
+    struct SizeFullChildTest;
+
+    impl Render for SizeFullChildTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(100.))
+                .h(px(100.))
+                .overflow_y_scrollbar()
+                .child(
+                    div()
+                        .size_full()
+                        .child(crate::v_flex().children((0..4).map(|ix| {
+                            div().h(px(50.)).flex_shrink_0().when(ix == 3, |this| {
+                                this.debug_selector(|| "last-row".to_string())
+                            })
+                        }))),
+                )
+        }
+    }
+
+    struct GapLayoutTest;
+
+    impl Render for GapLayoutTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::v_flex()
+                .w(px(100.))
+                .h(px(100.))
+                .gap(px(10.))
+                .overflow_y_scrollbar()
+                .child(
+                    div()
+                        .h(px(20.))
+                        .flex_shrink_0()
+                        .debug_selector(|| "first-row".to_string()),
+                )
+                .child(
+                    div()
+                        .h(px(20.))
+                        .flex_shrink_0()
+                        .debug_selector(|| "second-row".to_string()),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn vertical_scrollbar_scrolls_past_a_size_full_child(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| SizeFullChildTest);
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        let initial_y = cx.debug_bounds("last-row").unwrap().origin.y;
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-50.))),
+            ..Default::default()
+        });
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        assert!(cx.debug_bounds("last-row").unwrap().origin.y < initial_y);
+    }
+
+    #[gpui::test]
+    fn vertical_scrollbar_preserves_source_gap(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| GapLayoutTest);
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        let first = cx.debug_bounds("first-row").unwrap();
+        let second = cx.debug_bounds("second-row").unwrap();
+        assert_eq!(second.top() - first.bottom(), px(10.));
+    }
 }
