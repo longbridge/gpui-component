@@ -88,12 +88,18 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
 
                 // Pass the live cursor so the tooltip box can follow it; the crosshair and
                 // dots in `state` stay snapped to the data point by `tooltip_state`.
-                let Some(mut overlay) =
+                let Some(overlay) =
                     <Self as Plot>::tooltip(self, &state, position, bounds, window, cx)
                 else {
                     return None;
                 };
 
+                // Defer the overlay so it paints above sibling content drawn after the plot
+                // (e.g. a chart card's footer text). The tooltip box can extend past the plot
+                // bounds; without deferral those later siblings would cover the overflow.
+                let mut overlay = gpui::IntoElement::into_any_element(
+                    gpui::deferred(overlay),
+                );
                 overlay.prepaint_as_root(bounds.origin, bounds.size.into(), window, cx);
                 Some(overlay)
             }
