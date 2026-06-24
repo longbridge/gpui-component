@@ -73,27 +73,22 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                 cx: &mut gpui::App,
             ) -> Self::PrepaintState {
                 // No id => tooltips disabled => behave exactly like a non-interactive plot.
-                let Some(global_id) = global_id else {
-                    return None;
-                };
+                let global_id = global_id?;
 
                 // Read the cursor position recorded by the previous frame's mouse handler.
-                let Some(position) = Self::__plot_tooltip_cursor(global_id, window).get() else {
-                    return None;
-                };
-                let Some(state) = <Self as Plot>::tooltip_state(self, position, bounds, cx)
-                else {
-                    return None;
-                };
+                let position = Self::__plot_tooltip_cursor(global_id, window).get()?;
+                let state = <Self as Plot>::tooltip_state(self, position, bounds, cx)?;
 
                 // Pass the live cursor so the tooltip box can follow it; the crosshair and
                 // dots in `state` stay snapped to the data point by `tooltip_state`.
-                let Some(mut overlay) =
-                    <Self as Plot>::tooltip(self, &state, position, bounds, window, cx)
-                else {
-                    return None;
-                };
+                let overlay = <Self as Plot>::tooltip(self, &state, position, bounds, window, cx)?;
 
+                // Defer the overlay so it paints above sibling content drawn after the plot
+                // (e.g. a chart card's footer text). The tooltip box can extend past the plot
+                // bounds; without deferral those later siblings would cover the overflow.
+                let mut overlay = gpui::IntoElement::into_any_element(
+                    gpui::deferred(overlay),
+                );
                 overlay.prepaint_as_root(bounds.origin, bounds.size.into(), window, cx);
                 Some(overlay)
             }

@@ -30,10 +30,12 @@ impl CrossLineAxis {
 #[derive(IntoElement)]
 pub struct CrossLine {
     point: Point<Pixels>,
-    /// Start offset along the cross axis (vertical line: y; horizontal line: x).
-    start: f32,
-    /// Length along the cross axis; `None` spans the full extent.
-    length: Option<f32>,
+    /// Span `(start, length)` of the vertical line along the y axis; `length` of `None`
+    /// spans the full height.
+    vertical: (f32, Option<f32>),
+    /// Span `(start, length)` of the horizontal line along the x axis; `length` of `None`
+    /// spans the full width.
+    horizontal: (f32, Option<f32>),
     /// Band thickness perpendicular to the line (solid band mode only).
     thickness: Pixels,
     /// `true` (default) draws a dashed hairline; `false` a solid band of `thickness`.
@@ -45,8 +47,8 @@ impl CrossLine {
     pub fn new(point: Point<Pixels>) -> Self {
         Self {
             point,
-            start: 0.,
-            length: None,
+            vertical: (0., None),
+            horizontal: (0., None),
             thickness: px(1.),
             dashed: true,
             direction: Default::default(),
@@ -74,17 +76,29 @@ impl CrossLine {
         self
     }
 
-    /// Set the length of the cross line along its axis (from the start edge).
+    /// Set the vertical line's length along the y axis (from the top edge).
     pub fn height(mut self, height: f32) -> Self {
-        self.length = Some(height);
+        self.vertical.1 = Some(height);
         self
     }
 
-    /// Confine the cross line to `[start, start + length]` along its axis (vertical
-    /// line: y; horizontal line: x), so it stays within the plot area.
+    /// Set the horizontal line's length along the x axis (from the left edge).
+    pub fn width(mut self, width: f32) -> Self {
+        self.horizontal.1 = Some(width);
+        self
+    }
+
+    /// Confine the vertical line to `[start, start + length]` along the y axis, so it
+    /// stays within the plot area.
     pub fn span(mut self, start: f32, length: f32) -> Self {
-        self.start = start;
-        self.length = Some(length);
+        self.vertical = (start, Some(length));
+        self
+    }
+
+    /// Confine the horizontal line to `[start, start + length]` along the x axis, so it
+    /// stays within the plot area.
+    pub fn h_span(mut self, start: f32, length: f32) -> Self {
+        self.horizontal = (start, Some(length));
         self
     }
 }
@@ -107,21 +121,28 @@ impl CrossLine {
         };
         // The dashed hairline is a zero-width strip drawn entirely by its 1px border.
         let thickness = if self.dashed { px(0.) } else { self.thickness };
+        // Each axis carries its own span so a `both` crosshair can confine the vertical
+        // and horizontal lines independently.
+        let (start, length) = if vertical {
+            self.vertical
+        } else {
+            self.horizontal
+        };
 
         let el = div().absolute();
         let el = if vertical {
             el.left(self.point.x - thickness * 0.5)
                 .w(thickness)
-                .top(px(self.start))
-                .map(|el| match self.length {
+                .top(px(start))
+                .map(|el| match length {
                     Some(length) => el.h(px(length)),
                     None => el.h_full(),
                 })
         } else {
             el.top(self.point.y - thickness * 0.5)
                 .h(thickness)
-                .left(px(self.start))
-                .map(|el| match self.length {
+                .left(px(start))
+                .map(|el| match length {
                     Some(length) => el.w(px(length)),
                     None => el.w_full(),
                 })
@@ -257,7 +278,7 @@ impl Tooltip {
     /// Create a tooltip whose box follows the cursor at `cursor` within a `within`-sized plot.
     pub fn new(cursor: Point<Pixels>, within: Size<Pixels>) -> Self {
         Self {
-            base: v_flex().top_0(),
+            base: v_flex(),
             gap: px(0.),
             cross_line: None,
             dots: None,
