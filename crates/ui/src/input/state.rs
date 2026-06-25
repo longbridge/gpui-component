@@ -777,7 +777,10 @@ impl InputState {
 
     /// Set the text of the input field.
     ///
-    /// And the selection_range will be reset to 0..0.
+    /// For single-line inputs the caret is placed at the end of the text while
+    /// the view is scrolled back to the start, so a long value shows its
+    /// beginning instead of its tail (matching HTML `<input>`). Multi-line
+    /// inputs reset the selection to `0..0`.
     pub fn set_value(
         &mut self,
         value: impl Into<SharedString>,
@@ -790,16 +793,27 @@ impl InputState {
         self.history.ignore = false;
         self.emit_events = true;
 
-        // Ensure cursor to start when set text
-        self.selected_range.clear();
+        // Place the caret at the end for single-line inputs (like HTML
+        // `<input>`); multi-line inputs reset the selection to the start.
+        if self.mode.is_single_line() {
+            let end = self.text.len();
+            self.selected_range = (end..end).into();
+        } else {
+            self.selected_range.clear();
+        }
 
         if self.mode.is_code_editor() {
             self._pending_update = true;
             self.lsp.reset();
         }
 
-        // Move scroll to top
+        // Move scroll to the start. For single-line the caret is at the end, so
+        // override the cursor-follow scroll for the next painted frame to keep
+        // the start visible; the deferred offset is consumed during that paint.
         self.scroll_handle.set_offset(point(px(0.), px(0.)));
+        if self.mode.is_single_line() {
+            self.deferred_scroll_offset = Some(point(px(0.), px(0.)));
+        }
 
         self.history.clear();
         cx.notify();
@@ -3512,27 +3526,53 @@ ORDER BY id
         });
     }
 
+    /// After `set_value` on a single-line input the caret sits at the end (like
+    /// HTML `<input>`), yet the view is scrolled back to the start so a long
+    /// value shows its beginning instead of its tail.
     #[gpui::test]
-    fn test_set_value_move_cursor_to_start(cx: &mut TestAppContext) {
+    fn test_set_value_single_line_caret_at_end_view_at_start(cx: &mut TestAppContext) {
         let input_view = InputView::build(cx, |state| state);
         let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
         let input = input_view.input;
 
+        // Long enough to overflow any reasonable single-line input width.
+        let value = format!("https://example.com/v1/users?{}", "x=1&".repeat(120));
+        let len = value.len();
+
+        // Right after `set_value`, before the next paint consumes the deferred
+        // offset: caret is at the end, and the view is forced back to the start.
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
-                state.set_value(
-                    "https://example.com/v1/users?firstName=alex&page=10&perPage=100",
-                    window,
-                    cx,
-                );
+                state.set_value(value.clone(), window, cx);
 
                 assert_eq!(
                     state.selected_range,
-                    Selection::new(0, 0),
-                    "cursor should be at the start after set_value"
+                    Selection::new(len, len),
+                    "single-line caret should be at the end after set_value"
+                );
+                assert_eq!(
+                    state.deferred_scroll_offset,
+                    Some(point(px(0.), px(0.))),
+                    "the view should be forced back to the start"
+                );
+            });
+        });
+
+        // After a paint, the steady-state view stays at the start (x == 0) even
+        // though the caret is at the far end.
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert!(
+                    state.scroll_size.width > state.input_bounds.size.width,
+                    "value must overflow the input width or this test is vacuous"
+                );
+                assert_eq!(
+                    state.scroll_handle.offset().x,
+                    px(0.),
+                    "long value should display from its start, not its tail"
                 );
             });
         });
     }
-
 }
