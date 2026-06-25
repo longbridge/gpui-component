@@ -3,7 +3,7 @@ use gpui::{
     SharedString, Size, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
 };
 
-use crate::{ActiveTheme, StyledExt, h_flex, v_flex};
+use crate::{ActiveTheme, Colorize, StyledExt, h_flex, v_flex};
 
 #[derive(Default)]
 pub enum CrossLineAxis {
@@ -115,7 +115,7 @@ impl CrossLine {
     /// solid band fills a `thickness`-wide strip centered on the data point.
     fn line(&self, vertical: bool, cx: &App) -> Div {
         let color = if self.dashed {
-            cx.theme().border
+            cx.theme().border.mix(cx.theme().foreground, 0.8)
         } else {
             cx.theme().foreground.opacity(0.08)
         };

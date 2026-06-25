@@ -533,7 +533,7 @@ where
             }
             CrossLine::new(state.cross_line)
                 .horizontal()
-                .span(start, length)
+                .h_span(start, length)
                 .band(px(band_width))
         } else {
             let axis_gap = if self.label_axis { AXIS_GAP } else { 0. };
