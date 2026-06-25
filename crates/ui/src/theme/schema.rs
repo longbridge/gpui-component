@@ -1,6 +1,6 @@
 use std::{rc::Rc, sync::Arc};
 
-use gpui::{SharedString, px};
+use gpui::{Background, Hsla, SharedString, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -852,27 +852,27 @@ impl ThemeColor {
 
         // TODO: Apply default fallback colors to highlight.
 
-        // Ensure opacity for list_active, table_active
-        let list_active_alpha = self.list_active.a.min(0.2);
-        self.list_active = self.list_active.alpha(list_active_alpha);
-        tokens.list_active = ThemeToken::new(
-            self.list_active,
-            tokens.list_active.background.opacity(list_active_alpha),
-        );
+        // Ensure opacity for list_active, table_active, selection.
+        //
+        // `Background::opacity` multiplies the existing alpha, so we must pass a
+        // *factor* (target / base) instead of the absolute target alpha.
+        // Otherwise a base color that already carries alpha (e.g. `#bfdbfe33`
+        // == 0.2) gets attenuated twice and the highlight becomes nearly
+        // invisible. This also keeps gradient stops at their relative opacity.
+        let clamp_alpha = |color: Hsla, background: Background, max: f32| {
+            let base = color.a;
+            let target = base.min(max);
+            let factor = if base > 0. { target / base } else { 1. };
+            let color = color.alpha(target);
+            (color, ThemeToken::new(color, background.opacity(factor)))
+        };
 
-        let table_active_alpha = self.table_active.a.min(0.2);
-        self.table_active = self.table_active.alpha(table_active_alpha);
-        tokens.table_active = ThemeToken::new(
-            self.table_active,
-            tokens.table_active.background.opacity(table_active_alpha),
-        );
-
-        let selection_alpha = self.selection.a.min(0.3);
-        self.selection = self.selection.alpha(selection_alpha);
-        tokens.selection = ThemeToken::new(
-            self.selection,
-            tokens.selection.background.opacity(selection_alpha),
-        );
+        (self.list_active, tokens.list_active) =
+            clamp_alpha(self.list_active, tokens.list_active.background, 0.2);
+        (self.table_active, tokens.table_active) =
+            clamp_alpha(self.table_active, tokens.table_active.background, 0.2);
+        (self.selection, tokens.selection) =
+            clamp_alpha(self.selection, tokens.selection.background, 0.3);
 
         tokens
     }
