@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::highlighter::{HighlightTheme, HighlightThemeStyle};
 
-use super::color::{try_parse_background, try_parse_color, try_parse_theme_color};
+use super::color::{
+    try_parse_background, try_parse_background_clamped, try_parse_color, try_parse_theme_color,
+};
 use super::{Colorize, Theme, ThemeColor, ThemeMode, ThemeToken, ThemeTokens};
 
 fn try_parse_theme_token(value: &str) -> anyhow::Result<ThemeToken> {
@@ -853,26 +855,37 @@ impl ThemeColor {
         // TODO: Apply default fallback colors to highlight.
 
         // Ensure opacity for list_active, table_active, selection.
-        //
-        // `Background::opacity` multiplies the existing alpha, so we must pass a
-        // *factor* (target / base) instead of the absolute target alpha.
-        // Otherwise a base color that already carries alpha (e.g. `#bfdbfe33`
-        // == 0.2) gets attenuated twice and the highlight becomes nearly
-        // invisible. This also keeps gradient stops at their relative opacity.
-        let clamp_alpha = |color: Hsla, background: Background, max: f32| {
+        let clamp_alpha = |raw: Option<&str>, color: Hsla, background: Background, max: f32| {
             let base = color.a;
             let target = base.min(max);
-            let factor = if base > 0. { target / base } else { 1. };
             let color = color.alpha(target);
-            (color, ThemeToken::new(color, background.opacity(factor)))
+            let background = raw
+                .and_then(|value| try_parse_background_clamped(value, max).ok())
+                .unwrap_or_else(|| {
+                    let factor = if base > 0. { target / base } else { 1. };
+                    background.opacity(factor)
+                });
+            (color, ThemeToken::new(color, background))
         };
 
-        (self.list_active, tokens.list_active) =
-            clamp_alpha(self.list_active, tokens.list_active.background, 0.2);
-        (self.table_active, tokens.table_active) =
-            clamp_alpha(self.table_active, tokens.table_active.background, 0.2);
-        (self.selection, tokens.selection) =
-            clamp_alpha(self.selection, tokens.selection.background, 0.3);
+        (self.list_active, tokens.list_active) = clamp_alpha(
+            colors.list_active.as_deref(),
+            self.list_active,
+            tokens.list_active.background,
+            0.2,
+        );
+        (self.table_active, tokens.table_active) = clamp_alpha(
+            colors.table_active.as_deref(),
+            self.table_active,
+            tokens.table_active.background,
+            0.2,
+        );
+        (self.selection, tokens.selection) = clamp_alpha(
+            colors.selection.as_deref(),
+            self.selection,
+            tokens.selection.background,
+            0.3,
+        );
 
         tokens
     }
@@ -1014,5 +1027,56 @@ mod tests {
         );
         assert_ne!(theme.tokens.title_bar.background, theme.title_bar.into());
         assert_ne!(theme.tokens.status_bar.background, theme.status_bar.into());
+    }
+
+    #[test]
+    fn test_apply_config_clamps_highlight_alpha_per_gradient_stop() {
+        let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+            "name": "Highlight",
+            "mode": "light",
+            "colors": {
+                // Solid above the cap: must be capped to 0.2, not attenuated twice.
+                "list.active.background": "#3b82f6",
+                // Gradient with a faint `from` stop and an opaque `to` stop: the
+                // `to` stop must be clamped independently, not left at full alpha.
+                "table.active.background": "linear-gradient(#bfdbfe33, #3b82f6)",
+                // Gradient with a transparent `from` stop: the opaque `to` stop
+                // must still be clamped (the `base == 0` factor fallback used to
+                // leave it untouched).
+                "selection.background": "linear-gradient(#3b82f600, #3b82f6)",
+            }
+        }))
+        .unwrap();
+
+        let mut theme = Theme::default();
+        theme.apply_config(&std::rc::Rc::new(config));
+
+        // Solid: representative color and rendered background both capped at 0.2.
+        let blue = try_parse_color("#3b82f6").unwrap();
+        assert_eq!(theme.list_active, blue.alpha(0.2));
+        assert_eq!(theme.tokens.list_active.background, blue.alpha(0.2).into());
+
+        // Gradient: the opaque `to` stop is clamped to 0.2, not left fully opaque.
+        let faint = try_parse_color("#bfdbfe33").unwrap();
+        assert_eq!(
+            theme.tokens.table_active.background,
+            linear_gradient(
+                180.,
+                linear_color_stop(faint.alpha(faint.a.min(0.2)), 0.),
+                linear_color_stop(blue.alpha(0.2), 1.),
+            )
+        );
+
+        // Gradient: a transparent `from` stop stays transparent while the opaque
+        // `to` stop is still clamped to 0.3 (selection cap).
+        let clear = try_parse_color("#3b82f600").unwrap();
+        assert_eq!(
+            theme.tokens.selection.background,
+            linear_gradient(
+                180.,
+                linear_color_stop(clear.alpha(clear.a.min(0.3)), 0.),
+                linear_color_stop(blue.alpha(0.3), 1.),
+            )
+        );
     }
 }
