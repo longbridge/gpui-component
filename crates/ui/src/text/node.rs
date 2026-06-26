@@ -7,9 +7,9 @@ use std::{
 
 use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle,
-    InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement, ScrollHandle,
-    SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, Window, div,
-    img, prelude::FluentBuilder as _, px, relative, rems,
+    Hsla, InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement,
+    ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _,
+    Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
@@ -282,6 +282,10 @@ pub struct TextMark {
     pub strikethrough: bool,
     pub underline: bool,
     pub code: bool,
+    /// Highlight (`<mark>`) the text with this background color.
+    ///
+    /// `None` means the text is not highlighted.
+    pub highlight: Option<Hsla>,
     pub link: Option<LinkMark>,
 }
 
@@ -311,6 +315,12 @@ impl TextMark {
         self
     }
 
+    /// Mark the text as highlighted (`<mark>`) with the given background color.
+    pub fn highlight(mut self, color: Hsla) -> Self {
+        self.highlight = Some(color);
+        self
+    }
+
     pub fn link(mut self, link: impl Into<LinkMark>) -> Self {
         self.link = Some(link.into());
         self
@@ -322,6 +332,9 @@ impl TextMark {
         self.strikethrough |= other.strikethrough;
         self.underline |= other.underline;
         self.code |= other.code;
+        if other.highlight.is_some() {
+            self.highlight = other.highlight;
+        }
         if let Some(link) = other.link {
             self.link = Some(link);
         }
@@ -872,6 +885,9 @@ impl Paragraph {
                     if style.code {
                         highlight.background_color = Some(cx.theme().accent);
                     }
+                    if let Some(color) = style.highlight {
+                        highlight.background_color = Some(color);
+                    }
 
                     if let Some(mut link_mark) = style.link.clone() {
                         highlight.color = Some(cx.theme().link);
@@ -983,6 +999,9 @@ impl Paragraph {
                     if style.code {
                         highlight.background_color = Some(cx.theme().accent);
                     }
+                    if let Some(color) = style.highlight {
+                        highlight.background_color = Some(color);
+                    }
 
                     if let Some(mut link_mark) = style.link.clone() {
                         highlight.color = Some(cx.theme().link);
@@ -1043,6 +1062,9 @@ impl Paragraph {
                     }
                     if style.code {
                         text = format!("`{}`", &text_node.text[range.clone()]);
+                    }
+                    if style.highlight.is_some() {
+                        text = format!("=={}==", &text_node.text[range.clone()]);
                     }
                     if let Some(link) = &style.link {
                         text = format!("[{}]({})", &text_node.text[range.clone()], link.url);
