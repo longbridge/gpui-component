@@ -87,6 +87,90 @@ impl Lsp {
 }
 
 impl InputState {
+    /// Set the LSP completion provider.
+    pub fn set_lsp_completion_provider(
+        &mut self,
+        provider: Option<Rc<dyn CompletionProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.lsp.completion_provider = provider;
+        self._pending_update = true;
+        cx.notify();
+    }
+
+    /// Set the LSP hover provider.
+    pub fn set_lsp_hover_provider(
+        &mut self,
+        provider: Option<Rc<dyn HoverProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.lsp.hover_provider = provider;
+        self._pending_update = true;
+        cx.notify();
+    }
+
+    /// Set the LSP definition provider.
+    pub fn set_lsp_definition_provider(
+        &mut self,
+        provider: Option<Rc<dyn DefinitionProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.lsp.definition_provider = provider;
+        self._pending_update = true;
+        cx.notify();
+    }
+
+    /// Set the LSP document color provider.
+    pub fn set_lsp_document_color_provider(
+        &mut self,
+        provider: Option<Rc<dyn DocumentColorProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.lsp.document_color_provider = provider;
+        self._pending_update = true;
+        cx.notify();
+    }
+
+    /// Set the LSP semantic tokens provider.
+    pub fn set_lsp_semantic_tokens_provider(
+        &mut self,
+        provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.lsp.semantic_tokens_provider = provider;
+        self._pending_update = true;
+        cx.notify();
+    }
+
+    /// Replace all LSP code action providers.
+    pub fn set_lsp_code_action_providers(
+        &mut self,
+        providers: Vec<Rc<dyn CodeActionProvider>>,
+        cx: &mut Context<Self>,
+    ) {
+        self.lsp.code_action_providers = providers;
+        self._pending_update = true;
+        cx.notify();
+    }
+
+    /// Clear all LSP code action providers.
+    pub fn clear_lsp_code_action_providers(&mut self, cx: &mut Context<Self>) {
+        self.lsp.code_action_providers.clear();
+        self._pending_update = true;
+        cx.notify();
+    }
+
+    /// Append an LSP code action provider.
+    pub fn push_lsp_code_action_provider(
+        &mut self,
+        provider: Rc<dyn CodeActionProvider>,
+        cx: &mut Context<Self>,
+    ) {
+        self.lsp.code_action_providers.push(provider);
+        self._pending_update = true;
+        cx.notify();
+    }
+
     pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
         self.context_menu_content = None;
         self._context_menu_task = Task::ready(Ok(()));

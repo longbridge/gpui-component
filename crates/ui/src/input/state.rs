@@ -432,7 +432,7 @@ pub struct InputState {
     /// A flag to indicate if we have a pending update to the text.
     ///
     /// If true, will call some update (for example LSP, Syntax Highlight) before render.
-    _pending_update: bool,
+    pub(super) _pending_update: bool,
     /// A flag to indicate if we should ignore the next completion event.
     pub(super) silent_replace_text: bool,
     /// A flag to indicate if we should emit InputEvents.
