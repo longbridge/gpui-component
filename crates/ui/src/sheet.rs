@@ -281,9 +281,6 @@ impl RenderOnce for Sheet {
                                     })
                                 },
                             )
-                            // Confine window text selection to this sheet so a
-                            // drag that leaves it (over the overlay) can't select
-                            // content behind.
                             .selection_scope(SelectionScope::Sheet),
                     ),
             )

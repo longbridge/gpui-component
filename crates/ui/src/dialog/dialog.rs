@@ -660,9 +660,6 @@ impl RenderOnce for Dialog {
                                 ];
                                 this.top(y * delta).shadow(shadow)
                             })
-                            // Confine window text selection to this dialog so a
-                            // drag that leaves it (over the overlay) can't select
-                            // content behind.
                             .selection_scope(SelectionScope::Dialog(layer_ix)),
                     )
                     .with_animation("fade-in", animation, move |this, delta| this.opacity(delta)),
