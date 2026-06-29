@@ -20,12 +20,12 @@ impl HelloWorld {
         });
     }
 
-    fn show_drawer(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        window.open_sheet(cx, move |drawer, _, _| {
-            drawer.title("Selectable Drawer").child(
+    fn show_sheet(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        window.open_sheet(cx, move |sheet, _, _| {
+            sheet.title("Selectable Sheet").child(
                 TextView::markdown(
-                    "drawer-text",
-                    "Select **this** text, then drag the mouse *out of the drawer* over \
+                    "sheet-text",
+                    "Select **this** text, then drag the mouse *out of the sheet* over \
                      the paragraph behind it. The text behind must NOT get selected",
                 )
                 .selectable(true),
@@ -39,7 +39,7 @@ impl Render for HelloWorld {
         div()
             .bg(gpui::white())
             .size_full()
-            .child(TitleBar::new().child("dialog & Drawer"))
+            .child(TitleBar::new().child("Dialog & Sheet"))
             .child(
                 div()
                     .p_8()
@@ -58,18 +58,18 @@ impl Render for HelloWorld {
                             .child(
                                 Button::new("btn2")
                                     .outline()
-                                    .label("Open Drawer")
-                                    .on_click(cx.listener(Self::show_drawer)),
+                                    .label("Open Sheet")
+                                    .on_click(cx.listener(Self::show_sheet)),
                             ),
                     )
-                    // Selectable text behind the modals. Open a dialog/drawer,
+                    // Selectable text behind the modals. Open a dialog/sheet,
                     // select its text, drag the mouse out over this paragraph,
                     // and confirm this text is NOT selected.
                     .child(
                         TextView::markdown(
                             "behind-text",
                             "**Background text** behind the modals. While a dialog or \
-                             drawer is open, a selection started inside it must not \
+                             sheet is open, a selection started inside it must not \
                              extend onto this paragraph.",
                         )
                         .selectable(true),
