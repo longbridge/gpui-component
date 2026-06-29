@@ -165,7 +165,7 @@ impl InputState {
             self.handle_hover_popover(offset, window, cx);
         }
 
-        let changed = had_definition != !self.hover_definition.is_empty()
+        let changed = had_definition == self.hover_definition.is_empty()
             || had_popover != self.hover_popover.is_some();
         if changed {
             cx.notify();
