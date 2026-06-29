@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{button::*, menu::ContextMenuExt, *};
+use gpui_component::{button::*, menu::ContextMenuExt, text::TextView, *};
 use gpui_component_assets::Assets;
 
 actions!(class_menu, [Open, Delete, Export, Info]);
@@ -9,13 +9,27 @@ pub struct HelloWorld;
 impl HelloWorld {
     fn show_dialog(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.open_dialog(cx, move |dialog, _, _| {
-            dialog.title("Test dialog").child("Hello from dialog!")
+            dialog.title("Selectable dialog").child(
+                TextView::markdown(
+                    "dialog-text",
+                    "Select **this** text, then drag the mouse *out of the dialog* over \
+                     the paragraph behind it. The text behind must NOT get selected",
+                )
+                .selectable(true),
+            )
         });
     }
 
     fn show_drawer(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.open_sheet(cx, move |drawer, _, _| {
-            drawer.title("Test Drawer").child("Hello from Drawer!")
+            drawer.title("Selectable Drawer").child(
+                TextView::markdown(
+                    "drawer-text",
+                    "Select **this** text, then drag the mouse *out of the drawer* over \
+                     the paragraph behind it. The text behind must NOT get selected",
+                )
+                .selectable(true),
+            )
         });
     }
 }
@@ -47,6 +61,18 @@ impl Render for HelloWorld {
                                     .label("Open Drawer")
                                     .on_click(cx.listener(Self::show_drawer)),
                             ),
+                    )
+                    // Selectable text behind the modals. Open a dialog/drawer,
+                    // select its text, drag the mouse out over this paragraph,
+                    // and confirm this text is NOT selected.
+                    .child(
+                        TextView::markdown(
+                            "behind-text",
+                            "**Background text** behind the modals. While a dialog or \
+                             drawer is open, a selection started inside it must not \
+                             extend onto this paragraph.",
+                        )
+                        .selectable(true),
                     )
                     .child(
                         div()
