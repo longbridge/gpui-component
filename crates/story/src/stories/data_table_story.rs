@@ -742,6 +742,7 @@ pub struct DataTableStory {
     num_extra_cols_input: Entity<InputState>,
     stripe: bool,
     refresh_data: bool,
+    group_by_enabled: bool,
     size: Size,
 
     _subscriptions: Vec<Subscription>,
@@ -841,6 +842,7 @@ impl DataTableStory {
             num_extra_cols_input,
             stripe: false,
             refresh_data: false,
+            group_by_enabled: false,
             size: Size::default(),
             _subscriptions,
             _load_task,
@@ -964,6 +966,22 @@ impl DataTableStory {
         cx.notify();
     }
 
+    fn toggle_group_by(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.group_by_enabled = *checked;
+        self.table.update(cx, |table, cx| {
+            if *checked {
+                table
+                    .delegate_mut()
+                    .stocks
+                    .sort_by(|a, b| a.counter.market.cmp(&b.counter.market));
+                table.set_group_by(&[1], cx);
+            } else {
+                table.set_group_by(&[], cx);
+            }
+        });
+        cx.notify();
+    }
+
     fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
         self.size = a.0;
         cx.notify();
@@ -1010,6 +1028,9 @@ impl DataTableStory {
             }
             TableEvent::ClearSelection => {
                 println!("Selection cleared");
+            }
+            TableEvent::ToggleGroup(key, expanded) => {
+                println!("Toggle group: {}, expanded={}", key, expanded);
             }
         }
     }
@@ -1166,6 +1187,12 @@ impl Render for DataTableStory {
                             .label("Group Headers")
                             .checked(self.table.read(cx).delegate().show_group_headers)
                             .on_click(cx.listener(Self::toggle_group_headers)),
+                    )
+                    .child(
+                        Checkbox::new("group-by-market")
+                            .label("Group by Market")
+                            .selected(self.group_by_enabled)
+                            .on_click(cx.listener(Self::toggle_group_by)),
                     ),
             )
             .child(
