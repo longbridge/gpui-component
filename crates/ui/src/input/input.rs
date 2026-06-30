@@ -3,8 +3,8 @@ use std::rc::Rc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, StyleRefinement, Styled,
-    TextAlign, Window, div, px, relative,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Rems, RenderOnce,
+    StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -16,7 +16,9 @@ use crate::{IconName, Size};
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
-use super::{InputState, element::EditorScrollbar};
+use super::{
+    InputContentType, InputState, content_type::sync_native_content_type, element::EditorScrollbar,
+};
 
 /// Returns `(background, foreground)` colors for input-like components.
 pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
@@ -47,6 +49,7 @@ pub struct Input {
     focus_bordered: bool,
     tab_index: isize,
     selected: bool,
+    content_type: Option<InputContentType>,
 
     /// An optional context menu builder to allow a custom context menu on the input.
     ///
@@ -90,6 +93,7 @@ impl Input {
             focus_bordered: true,
             tab_index: 0,
             selected: false,
+            content_type: None,
             context_menu_builder: None,
         }
     }
@@ -146,6 +150,15 @@ impl Input {
         self
     }
 
+    /// Set the semantic content type for password managers and autofill.
+    ///
+    /// This is a component-level semantic hint. It does not change the text
+    /// value or masked rendering state.
+    pub fn content_type(mut self, content_type: InputContentType) -> Self {
+        self.content_type = Some(content_type);
+        self
+    }
+
     /// Set to disable the input field.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
@@ -188,6 +201,17 @@ impl Input {
                     })
                 }
             })
+    }
+
+    fn mouse_down_handler(
+        state: Entity<InputState>,
+        content_type: Option<InputContentType>,
+        disabled: bool,
+    ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {
+        move |event, window, cx| {
+            sync_native_content_type(window, content_type, disabled);
+            state.update(cx, |state, cx| state.on_mouse_down(event, window, cx));
+        }
     }
 
     /// This method must after the refine_style.
@@ -258,7 +282,13 @@ impl RenderOnce for Input {
         });
 
         let state = self.state.read(cx);
+        let content_type = self.content_type;
+        let disabled = self.disabled;
         let focused = state.focus_handle.is_focused(window) && !state.disabled;
+        if focused {
+            sync_native_content_type(window, content_type, state.disabled);
+        }
+
         let gap_x = match self.size {
             Size::Small => px(4.),
             Size::Large => px(8.),
@@ -356,11 +386,11 @@ impl RenderOnce for Input {
             .on_key_down(window.listener_for(&self.state, InputState::on_key_down))
             .on_mouse_down(
                 MouseButton::Left,
-                window.listener_for(&self.state, InputState::on_mouse_down),
+                Self::mouse_down_handler(self.state.clone(), content_type, disabled),
             )
             .on_mouse_down(
                 MouseButton::Right,
-                window.listener_for(&self.state, InputState::on_mouse_down),
+                Self::mouse_down_handler(self.state.clone(), content_type, disabled),
             )
             .on_mouse_up(
                 MouseButton::Left,

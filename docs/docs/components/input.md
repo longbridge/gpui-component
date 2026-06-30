@@ -86,6 +86,7 @@ let input = cx.new(|cx|
 );
 
 Input::new(&input)
+    .content_type(InputContentType::Password)
     .mask_toggle() // Shows toggle button to reveal password
 ```
 
