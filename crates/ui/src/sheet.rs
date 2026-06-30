@@ -17,6 +17,7 @@ use crate::{
     dialog::overlay_color,
     h_flex,
     scroll::ScrollableElement as _,
+    text::{SelectionScope, SelectionScopeElement as _},
     title_bar::TITLE_BAR_HEIGHT,
     v_flex,
 };
@@ -279,7 +280,8 @@ impl RenderOnce for Sheet {
                                         Placement::Left => this.left(y),
                                     })
                                 },
-                            ),
+                            )
+                            .selection_scope(SelectionScope::Sheet),
                     ),
             )
     }
