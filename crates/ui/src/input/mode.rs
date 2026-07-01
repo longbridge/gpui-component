@@ -351,7 +351,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(all(not(target_family = "wasm"), feature = "tree-sitter"))]
     fn test_replacement_input_edit_shifts_tree_sitter_included_ranges() {
         let old_source = "[1,2]";
         let new_source = "[1,2";
