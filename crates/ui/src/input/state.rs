@@ -3607,4 +3607,108 @@ ORDER BY id
             });
         });
     }
+
+    /// `replace_all` on a single-line input replaces the text and puts the
+    /// caret at the end, matching `set_value` minus the history clear.
+    #[gpui::test]
+    fn test_replace_all_single_line(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("hello", window, cx);
+                state.replace_all("world", window, cx);
+                assert_eq!(state.value(), "world");
+                assert_eq!(
+                    state.selected_range,
+                    Selection::new(5, 5),
+                    "single-line caret should be at the end after replace_all"
+                );
+            });
+        });
+    }
+
+    /// `replace_all` on a multi-line (non-code-editor) input clears the
+    /// selection to `0..0`.
+    #[gpui::test]
+    fn test_replace_all_multi_line(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.multi_line(true));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("foo\nbar", window, cx);
+                state.replace_all("baz\nqux", window, cx);
+                assert_eq!(state.value(), "baz\nqux");
+                assert_eq!(
+                    state.selected_range,
+                    Selection::new(0, 0),
+                    "multi-line selection should be cleared after replace_all"
+                );
+            });
+        });
+    }
+
+    /// Unlike `set_value`, `replace_all` records the change so the user can
+    /// undo it back to the previous text and redo to the new text.
+    #[gpui::test]
+    fn test_replace_all_preserves_undo_history(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // Seed with a value and clear history so the baseline is clean.
+                state.set_value("first", window, cx);
+                assert!(
+                    state.history.undos().is_empty(),
+                    "history should be empty after set_value"
+                );
+
+                // replace_all records a single undoable change.
+                state.replace_all("second", window, cx);
+                assert_eq!(state.value(), "second");
+                assert!(
+                    !state.history.undos().is_empty(),
+                    "replace_all should record an undo step"
+                );
+
+                // Undo restores the previous text.
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "first");
+
+                // Redo reapplies the replacement.
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "second");
+            });
+        });
+    }
+
+    /// `replace_all` on a code editor marks a pending update and resets LSP
+    /// state, so diagnostics/completions refresh against the new text.
+    #[gpui::test]
+    fn test_replace_all_code_editor(cx: &mut TestAppContext) {
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // Plant a pending-update flag and some LSP state to verify reset.
+                state.set_value("select 1", window, cx);
+                state._pending_update = false;
+
+                state.replace_all("select 2", window, cx);
+                assert_eq!(state.value(), "select 2");
+                assert!(
+                    state._pending_update,
+                    "replace_all on a code editor should request a pending update"
+                );
+            });
+        });
+    }
 }
