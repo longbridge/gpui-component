@@ -819,6 +819,38 @@ impl InputState {
         cx.notify();
     }
 
+    /// Replace the entire text content while preserving undo history.
+    ///
+    /// Unlike [`set_value`](Self::set_value), this method records the
+    /// replacement in the undo stack, allowing the user to undo/redo
+    /// the change. The selection is placed at the end of the new text
+    /// for single-line inputs, or cleared (0..0) for multi-line inputs.
+    ///
+    /// Use this when programmatically replacing the full text but the
+    /// user should still be able to undo the operation — e.g. formatting.
+    pub fn replace_all(
+        &mut self,
+        text: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.replace_text(text, window, cx);
+
+        if self.mode.is_single_line() {
+            let end = self.text.len();
+            self.selected_range = (end..end).into();
+        } else {
+            self.selected_range.clear();
+        }
+
+        if self.mode.is_code_editor() {
+            self._pending_update = true;
+            self.lsp.reset();
+        }
+
+        cx.notify();
+    }
+
     /// Insert text at the current cursor position.
     ///
     /// And the cursor will be moved to the end of inserted text.
