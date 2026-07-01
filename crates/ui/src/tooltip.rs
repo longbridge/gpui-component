@@ -20,6 +20,15 @@ pub(crate) fn init(_cx: &mut App) {
     // No app-level init needed — TooltipOverlay is per-window via Root.
 }
 
+/// Immediately hide the managed tooltip on the current window (e.g. before opening a menu).
+pub fn hide_active_tooltip(window: &mut Window, cx: &mut App) {
+    if let Some(overlay) = Root::tooltip_overlay(window, cx) {
+        overlay.update(cx, |overlay, cx| {
+            overlay.hide(cx);
+        });
+    }
+}
+
 // ── Tooltip view (unchanged API) ────────────────────────────────────────────
 
 enum TooltipContext {
@@ -152,10 +161,25 @@ const ENTER_DURATION: Duration = Duration::from_millis(150);
 const SLIDE_DURATION: Duration = Duration::from_millis(200);
 const TOOLTIP_WINDOW_MARGIN: Pixels = px(4.);
 
+/// Preferred placement of the tooltip relative to its trigger; `Auto` flips between above and below.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TooltipPreferredPlacement {
+    #[default]
+    Auto,
+    Left,
+    Right,
+    Above,
+    Below,
+    /// Anchored at the cursor, the tooltip's bottom edge sits above the pointer and expands upward (for extremely narrow windows).
+    AboveCursor,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum TooltipPlacement {
     Above,
     Below,
+    Left,
+    Right,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -165,6 +189,104 @@ struct TooltipOverlayPosition {
 }
 
 fn tooltip_overlay_position(
+    trigger_bounds: Bounds<Pixels>,
+    tooltip_size: Size<Pixels>,
+    viewport_size: Size<Pixels>,
+    margin: Pixels,
+    preferred: TooltipPreferredPlacement,
+    cursor: Point<Pixels>,
+) -> TooltipOverlayPosition {
+    match preferred {
+        TooltipPreferredPlacement::AboveCursor => {
+            let centered_x = cursor.x - tooltip_size.width.half();
+            let y = cursor.y - tooltip_size.height - margin;
+            TooltipOverlayPosition {
+                bounds: clamp_tooltip_above_cursor(
+                    Bounds::new(point(centered_x, y), tooltip_size),
+                    viewport_size,
+                    margin,
+                ),
+                placement: TooltipPlacement::Above,
+            }
+        }
+        TooltipPreferredPlacement::Left => {
+            let x = trigger_bounds.left() - tooltip_size.width - margin;
+            let y = trigger_bounds.center().y - tooltip_size.height.half();
+            TooltipOverlayPosition {
+                bounds: clamp_tooltip_bounds(
+                    Bounds::new(point(x, y), tooltip_size),
+                    viewport_size,
+                    margin,
+                ),
+                placement: TooltipPlacement::Left,
+            }
+        }
+        TooltipPreferredPlacement::Right => {
+            let x = trigger_bounds.right() + margin;
+            let y = trigger_bounds.center().y - tooltip_size.height.half();
+            TooltipOverlayPosition {
+                bounds: clamp_tooltip_bounds(
+                    Bounds::new(point(x, y), tooltip_size),
+                    viewport_size,
+                    margin,
+                ),
+                placement: TooltipPlacement::Right,
+            }
+        }
+        TooltipPreferredPlacement::Above => {
+            let centered_x = trigger_bounds.center().x - tooltip_size.width.half();
+            let above_bounds = Bounds::new(
+                point(centered_x, trigger_bounds.top() - tooltip_size.height - margin),
+                tooltip_size,
+            );
+            TooltipOverlayPosition {
+                bounds: clamp_tooltip_bounds(above_bounds, viewport_size, margin),
+                placement: TooltipPlacement::Above,
+            }
+        }
+        TooltipPreferredPlacement::Below => {
+            let centered_x = trigger_bounds.center().x - tooltip_size.width.half();
+            let below_bounds = Bounds::new(
+                point(centered_x, trigger_bounds.bottom() + margin),
+                tooltip_size,
+            );
+            TooltipOverlayPosition {
+                bounds: clamp_tooltip_bounds(below_bounds, viewport_size, margin),
+                placement: TooltipPlacement::Below,
+            }
+        }
+        TooltipPreferredPlacement::Auto => tooltip_overlay_position_auto(
+            trigger_bounds,
+            tooltip_size,
+            viewport_size,
+            margin,
+        ),
+    }
+}
+
+/// `AboveCursor` only: clamp horizontally; allow overflow past the top edge, only prevent covering the bottom edge.
+fn clamp_tooltip_above_cursor(
+    mut bounds: Bounds<Pixels>,
+    viewport_size: Size<Pixels>,
+    margin: Pixels,
+) -> Bounds<Pixels> {
+    let right_limit = (viewport_size.width - margin).max(margin);
+    if bounds.right() > right_limit {
+        bounds.origin.x -= bounds.right() - right_limit;
+    }
+    if bounds.left() < margin {
+        bounds.origin.x = margin;
+    }
+
+    let bottom_limit = (viewport_size.height - margin).max(margin);
+    if bounds.bottom() > bottom_limit {
+        bounds.origin.y -= bounds.bottom() - bottom_limit;
+    }
+
+    bounds
+}
+
+fn tooltip_overlay_position_auto(
     trigger_bounds: Bounds<Pixels>,
     tooltip_size: Size<Pixels>,
     viewport_size: Size<Pixels>,
@@ -224,6 +346,8 @@ fn clamp_tooltip_bounds(
 
 struct TooltipOverlayPositioner {
     trigger_bounds: Bounds<Pixels>,
+    preferred_placement: TooltipPreferredPlacement,
+    cursor: Point<Pixels>,
     children: Vec<AnyElement>,
 }
 
@@ -231,9 +355,15 @@ struct TooltipOverlayPositionerState {
     child_layout_ids: Vec<LayoutId>,
 }
 
-fn tooltip_overlay_positioner(trigger_bounds: Bounds<Pixels>) -> TooltipOverlayPositioner {
+fn tooltip_overlay_positioner(
+    trigger_bounds: Bounds<Pixels>,
+    preferred_placement: TooltipPreferredPlacement,
+    cursor: Point<Pixels>,
+) -> TooltipOverlayPositioner {
     TooltipOverlayPositioner {
         trigger_bounds,
+        preferred_placement,
+        cursor,
         children: Vec::new(),
     }
 }
@@ -313,6 +443,8 @@ impl Element for TooltipOverlayPositioner {
             tooltip_size,
             window.viewport_size(),
             TOOLTIP_WINDOW_MARGIN + client_inset,
+            self.preferred_placement,
+            self.cursor,
         );
 
         let offset = tooltip_position.bounds.origin - bounds.origin;
@@ -354,6 +486,8 @@ impl IntoElement for TooltipOverlayPositioner {
 pub(crate) struct TooltipContent {
     pub build: Rc<dyn Fn(&mut Window, &mut App) -> AnyView>,
     pub trigger_bounds: Bounds<Pixels>,
+    pub preferred_placement: TooltipPreferredPlacement,
+    pub cursor: Point<Pixels>,
 }
 
 /// Manages tooltip lifecycle: delay, grace period, animations, and rendering.
@@ -498,8 +632,10 @@ impl Render for TooltipOverlay {
         let is_switching = self.is_switching;
         let prev_trigger_bounds = self.prev_trigger_bounds;
 
+        let preferred = content.preferred_placement;
+        let cursor = content.cursor;
         deferred(
-            tooltip_overlay_positioner(trigger_bounds).child(div().child(content_view).map(|el| {
+            tooltip_overlay_positioner(trigger_bounds, preferred, cursor).child(div().child(content_view).map(|el| {
                 if is_switching {
                     let Some(prev_bounds) = prev_trigger_bounds else {
                         return el.into_any_element();
@@ -556,15 +692,18 @@ pub(crate) struct ComponentTooltip {
         Option<(Rc<Box<dyn Action>>, Option<SharedString>)>,
     )>,
     pub builder: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyView>>,
+    pub preferred_placement: TooltipPreferredPlacement,
 }
 
 impl ComponentTooltip {
     /// Apply this tooltip to a `Stateful<Div>` (or any `ManagedTooltipExt` element).
     pub fn apply<E: ManagedTooltipExt>(self, el: E) -> E {
         if let Some(builder) = self.builder {
-            el.managed_tooltip(move |window, cx| builder(window, cx))
+            el.managed_tooltip_with_placement(self.preferred_placement, move |window, cx| {
+                builder(window, cx)
+            })
         } else if let Some((text, action)) = self.text {
-            el.managed_tooltip(move |window, cx| {
+            el.managed_tooltip_with_placement(self.preferred_placement, move |window, cx| {
                 Tooltip::new(text.clone())
                     .when_some(action.clone(), |this, (action, context)| {
                         this.action(
@@ -589,6 +728,14 @@ pub(crate) trait ManagedTooltipExt:
         self,
         build_tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     ) -> Self {
+        self.managed_tooltip_with_placement(TooltipPreferredPlacement::Auto, build_tooltip)
+    }
+
+    fn managed_tooltip_with_placement(
+        self,
+        preferred_placement: TooltipPreferredPlacement,
+        build_tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    ) -> Self {
         let build_tooltip = Rc::new(build_tooltip);
         let trigger_bounds_cell: Rc<Cell<Bounds<Pixels>>> = Rc::new(Cell::new(Bounds::default()));
         let bounds_writer = trigger_bounds_cell.clone();
@@ -603,11 +750,14 @@ pub(crate) trait ManagedTooltipExt:
                 if let Some(overlay) = Root::tooltip_overlay(window, cx) {
                     if *hovered {
                         let bounds = trigger_bounds_cell.get();
+                        let cursor = window.mouse_position();
                         overlay.update(cx, |o: &mut TooltipOverlay, cx| {
                             o.request_show(
                                 TooltipContent {
                                     build: build_tooltip.clone(),
                                     trigger_bounds: bounds,
+                                    preferred_placement,
+                                    cursor,
                                 },
                                 window,
                                 cx,
@@ -622,11 +772,13 @@ pub(crate) trait ManagedTooltipExt:
             }
         })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            if let Some(overlay) = Root::tooltip_overlay(window, cx) {
-                overlay.update(cx, |overlay, cx| {
-                    overlay.hide(cx);
-                });
-            }
+            hide_active_tooltip(window, cx);
+        })
+        .on_mouse_down(MouseButton::Right, move |_, window, cx| {
+            hide_active_tooltip(window, cx);
+        })
+        .on_mouse_down(MouseButton::Middle, move |_, window, cx| {
+            hide_active_tooltip(window, cx);
         })
     }
 }
@@ -642,6 +794,8 @@ mod tests {
         TooltipContent {
             build: Rc::new(|window, cx| Tooltip::new("Test tooltip").build(window, cx)),
             trigger_bounds: bounds,
+            preferred_placement: TooltipPreferredPlacement::Auto,
+            cursor: bounds.center(),
         }
     }
 
@@ -680,6 +834,8 @@ mod tests {
             test_size(120., 30.),
             test_size(300., 200.),
             TOOLTIP_WINDOW_MARGIN,
+            TooltipPreferredPlacement::Auto,
+            trigger_bounds.center(),
         );
 
         assert_eq!(position.placement, TooltipPlacement::Above);
@@ -696,6 +852,8 @@ mod tests {
             test_size(240., 32.),
             test_size(520., 260.),
             TOOLTIP_WINDOW_MARGIN,
+            TooltipPreferredPlacement::Auto,
+            trigger_bounds.center(),
         );
 
         assert_eq!(position.placement, TooltipPlacement::Below);
@@ -711,6 +869,8 @@ mod tests {
             test_size(120., 30.),
             test_size(300., 200.),
             TOOLTIP_WINDOW_MARGIN,
+            TooltipPreferredPlacement::Auto,
+            trigger_bounds.center(),
         );
 
         assert_eq!(position.placement, TooltipPlacement::Above);
@@ -725,10 +885,46 @@ mod tests {
             test_size(160., 120.),
             test_size(300., 100.),
             TOOLTIP_WINDOW_MARGIN,
+            TooltipPreferredPlacement::Auto,
+            trigger_bounds.center(),
         );
 
         assert_eq!(position.placement, TooltipPlacement::Below);
         assert_eq!(position.bounds.top(), TOOLTIP_WINDOW_MARGIN);
         assert_eq!(position.bounds.left(), px(60.));
+    }
+
+    #[test]
+    fn tooltip_overlay_position_left_of_trigger() {
+        let trigger_bounds = test_bounds(1800., 8., 32., 32.);
+        let position = tooltip_overlay_position(
+            trigger_bounds,
+            test_size(120., 28.),
+            test_size(1920., 48.),
+            TOOLTIP_WINDOW_MARGIN,
+            TooltipPreferredPlacement::Left,
+            trigger_bounds.center(),
+        );
+
+        assert_eq!(position.placement, TooltipPlacement::Left);
+        assert_eq!(position.bounds.right(), trigger_bounds.left() - TOOLTIP_WINDOW_MARGIN);
+    }
+
+    #[test]
+    fn tooltip_overlay_position_above_cursor() {
+        let trigger_bounds = test_bounds(1780., 8., 32., 32.);
+        let cursor = point(px(1796.), px(36.));
+        let position = tooltip_overlay_position(
+            trigger_bounds,
+            test_size(120., 28.),
+            test_size(1920., 48.),
+            TOOLTIP_WINDOW_MARGIN,
+            TooltipPreferredPlacement::AboveCursor,
+            cursor,
+        );
+
+        assert_eq!(position.placement, TooltipPlacement::Above);
+        assert_eq!(position.bounds.bottom(), cursor.y - TOOLTIP_WINDOW_MARGIN);
+        assert_eq!(position.bounds.center().x, cursor.x);
     }
 }

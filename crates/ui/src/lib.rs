@@ -76,6 +76,7 @@ pub mod tag;
 pub mod text;
 pub mod theme;
 pub mod tooltip;
+pub use tooltip::{hide_active_tooltip, TooltipPreferredPlacement};
 pub mod tree;
 
 pub use crate::Disableable;
