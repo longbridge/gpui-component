@@ -793,29 +793,34 @@ impl InputState {
         self.history.ignore = false;
         self.emit_events = true;
 
-        // Place the caret at the end for single-line inputs (like HTML
-        // `<input>`); multi-line inputs reset the selection to the start.
-        if self.mode.is_single_line() {
-            let end = self.text.len();
-            self.selected_range = (end..end).into();
-        } else {
-            self.selected_range.clear();
-        }
-
-        if self.mode.is_code_editor() {
-            self._pending_update = true;
-            self.lsp.reset();
-        }
-
-        // Move scroll to the start. For single-line the caret is at the end, so
-        // override the cursor-follow scroll for the next painted frame to keep
-        // the start visible; the deferred offset is consumed during that paint.
-        self.scroll_handle.set_offset(point(px(0.), px(0.)));
-        if self.mode.is_single_line() {
-            self.deferred_scroll_offset = Some(point(px(0.), px(0.)));
-        }
+        self.reset_selection();
+        self.reset_lsp_state();
+        self.reset_scroll_to_start();
 
         self.history.clear();
+        cx.notify();
+    }
+
+    /// Replace the entire text content while preserving undo history.
+    ///
+    /// Unlike [`set_value`](Self::set_value), this method records the
+    /// replacement in the undo stack, allowing the user to undo/redo
+    /// the change. The selection is placed at the end of the new text
+    /// for single-line inputs, or cleared (0..0) for multi-line inputs.
+    ///
+    /// Use this when programmatically replacing the full text but the
+    /// user should still be able to undo the operation — e.g. formatting.
+    pub fn replace_all(
+        &mut self,
+        text: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.replace_text(text, window, cx);
+        self.reset_selection();
+        self.reset_lsp_state();
+        self.reset_scroll_to_start();
+
         cx.notify();
     }
 
@@ -867,6 +872,35 @@ impl InputState {
         self.replace_text_in_range_silent(Some(range), &text, window, cx);
         self.reset_highlighter(cx);
         self.disabled = was_disabled;
+    }
+
+    fn reset_selection(&mut self) {
+        // For single-line inputs the caret is placed at the end of the text
+        // (matching HTML `<input>`); multi-line inputs reset the selection to
+        // `0..0`.
+        if self.mode.is_single_line() {
+            let end = self.text.len();
+            self.selected_range = (end..end).into();
+        } else {
+            self.selected_range.clear();
+        }
+    }
+
+    fn reset_lsp_state(&mut self) {
+        if self.mode.is_code_editor() {
+            self._pending_update = true;
+            self.lsp.reset();
+        }
+    }
+
+    fn reset_scroll_to_start(&mut self) {
+        // Move scroll to the start. For single-line the caret is at the end, so
+        // override the cursor-follow scroll for the next painted frame to keep
+        // the start visible; the deferred offset is consumed during that paint.
+        self.scroll_handle.set_offset(point(px(0.), px(0.)));
+        if self.mode.is_single_line() {
+            self.deferred_scroll_offset = Some(point(px(0.), px(0.)));
+        }
     }
 
     /// Set with disabled mode.
@@ -3571,6 +3605,155 @@ ORDER BY id
                     state.scroll_handle.offset().x,
                     px(0.),
                     "long value should display from its start, not its tail"
+                );
+            });
+        });
+    }
+
+    /// `replace_all` on a single-line input replaces the text, puts the
+    /// caret at the end, and — like `set_value` — snaps the view back to the
+    /// start so a long value shows its beginning instead of its tail.
+    #[gpui::test]
+    fn test_replace_all_single_line(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Long enough to overflow any reasonable single-line input width.
+        let value = format!("https://example.com/v1/users?{}", "x=1&".repeat(120));
+        let len = value.len();
+
+        // Right after `replace_all`, before the next paint consumes the
+        // deferred offset: caret is at the end, and the view is forced back
+        // to the start.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("hello", window, cx);
+                state.replace_all(value.clone(), window, cx);
+                assert_eq!(state.value(), value);
+                assert_eq!(
+                    state.selected_range,
+                    Selection::new(len, len),
+                    "single-line caret should be at the end after replace_all"
+                );
+                assert_eq!(
+                    state.scroll_handle.offset(),
+                    point(px(0.), px(0.)),
+                    "the scroll offset should be reset to the start"
+                );
+                assert_eq!(
+                    state.deferred_scroll_offset,
+                    Some(point(px(0.), px(0.))),
+                    "single-line should set a deferred scroll offset to keep the start visible"
+                );
+            });
+        });
+
+        // After a paint, the steady-state view stays at the start (x == 0)
+        // even though the caret is at the far end.
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert!(
+                    state.scroll_size.width > state.input_bounds.size.width,
+                    "value must overflow the input width or this test is vacuous"
+                );
+                assert_eq!(
+                    state.scroll_handle.offset().x,
+                    px(0.),
+                    "long value should display from its start, not its tail"
+                );
+            });
+        });
+    }
+
+    /// `replace_all` on a multi-line (non-code-editor) input clears the
+    /// selection to `0..0` and resets the scroll offset, but does not set a
+    /// deferred scroll offset (single-line only).
+    #[gpui::test]
+    fn test_replace_all_multi_line(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.multi_line(true));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("foo\nbar", window, cx);
+                state.replace_all("baz\nqux", window, cx);
+                assert_eq!(state.value(), "baz\nqux");
+                assert_eq!(
+                    state.selected_range,
+                    Selection::new(0, 0),
+                    "multi-line selection should be cleared after replace_all"
+                );
+                assert_eq!(
+                    state.scroll_handle.offset(),
+                    point(px(0.), px(0.)),
+                    "the scroll offset should be reset to the start"
+                );
+                assert!(
+                    state.deferred_scroll_offset.is_none(),
+                    "multi-line should not set a deferred scroll offset"
+                );
+            });
+        });
+    }
+
+    /// Unlike `set_value`, `replace_all` records the change so the user can
+    /// undo it back to the previous text and redo to the new text.
+    #[gpui::test]
+    fn test_replace_all_preserves_undo_history(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // Seed with a value and clear history so the baseline is clean.
+                state.set_value("first", window, cx);
+                assert!(
+                    state.history.undos().is_empty(),
+                    "history should be empty after set_value"
+                );
+
+                // replace_all records a single undoable change.
+                state.replace_all("second", window, cx);
+                assert_eq!(state.value(), "second");
+                assert!(
+                    !state.history.undos().is_empty(),
+                    "replace_all should record an undo step"
+                );
+
+                // Undo restores the previous text.
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "first");
+
+                // Redo reapplies the replacement.
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "second");
+            });
+        });
+    }
+
+    /// `replace_all` on a code editor marks a pending update and resets LSP
+    /// state, so diagnostics/completions refresh against the new text.
+    #[gpui::test]
+    fn test_replace_all_code_editor(cx: &mut TestAppContext) {
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // Plant a pending-update flag and some LSP state to verify reset.
+                state.set_value("select 1", window, cx);
+                state._pending_update = false;
+
+                state.replace_all("select 2", window, cx);
+                assert_eq!(state.value(), "select 2");
+                assert!(
+                    state._pending_update,
+                    "replace_all on a code editor should request a pending update"
                 );
             });
         });
