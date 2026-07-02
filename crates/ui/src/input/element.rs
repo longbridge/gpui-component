@@ -1562,23 +1562,6 @@ impl Element for TextElement {
         });
 
         let state = self.state.read(cx);
-        let line_height = window.line_height();
-
-        let (visible_range, visible_buffer_lines, visible_top) =
-            self.calculate_visible_range(&state, line_height, bounds.size.height);
-        let visible_start_offset = state.text.line_start_offset(visible_range.start);
-        let visible_end_offset = state
-            .text
-            .line_end_offset(visible_range.end.saturating_sub(1));
-
-        let highlight_styles = self.highlight_lines(
-            &visible_buffer_lines,
-            visible_top,
-            visible_start_offset..visible_end_offset,
-            cx,
-        );
-
-        let state = self.state.read(cx);
         let multi_line = state.mode.is_multi_line();
         let text = state.text.clone();
         let is_empty = text.len() == 0;
@@ -1612,6 +1595,37 @@ impl Element for TextElement {
         } else {
             None
         };
+
+        let wrap_width_changed = state
+            .last_layout
+            .as_ref()
+            .map(|l| l.wrap_width != wrap_width)
+            .unwrap_or(true);
+
+        if wrap_width_changed {
+            self.state.update(cx, |state, cx| {
+                state.display_map.on_layout_changed(wrap_width, cx);
+            });
+        }
+
+        let state = self.state.read(cx);
+        let line_height = window.line_height();
+
+        let (visible_range, visible_buffer_lines, visible_top) =
+            self.calculate_visible_range(&state, line_height, bounds.size.height);
+        let visible_start_offset = state.text.line_start_offset(visible_range.start);
+        let visible_end_offset = state
+            .text
+            .line_end_offset(visible_range.end.saturating_sub(1));
+
+        let highlight_styles = self.highlight_lines(
+            &visible_buffer_lines,
+            visible_top,
+            visible_start_offset..visible_end_offset,
+            cx,
+        );
+
+        let state = self.state.read(cx);
 
         let visible_line_byte_offsets: Vec<usize> = visible_buffer_lines
             .iter()
