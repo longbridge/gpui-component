@@ -11,6 +11,7 @@ use gpui::{
     RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
 };
 use rust_i18n::t;
+use std::rc::Rc;
 
 /// The settings structure containing multiple pages for app settings.
 ///
@@ -34,6 +35,7 @@ pub struct Settings {
     sidebar_style: StyleRefinement,
     default_selected_index: SelectIndex,
     header_style: StyleRefinement,
+    on_page_change: Option<Rc<dyn Fn(usize, &mut App) + 'static>>,
 }
 
 impl Settings {
@@ -48,6 +50,7 @@ impl Settings {
             sidebar_style: StyleRefinement::default(),
             default_selected_index: SelectIndex::default(),
             header_style: StyleRefinement::default(),
+            on_page_change: None,
         }
     }
 
@@ -92,6 +95,15 @@ impl Settings {
     /// Set the style refinement for the header.
     pub fn header_style(mut self, style: &StyleRefinement) -> Self {
         self.header_style = style.clone();
+        self
+    }
+
+    /// Set a callback invoked when the user selects a top-level page in the sidebar.
+    ///
+    /// The first argument is the zero-based page index. This is useful for persisting
+    /// the last-visited page so it can be restored via [`Self::default_selected_index`].
+    pub fn on_page_change(mut self, f: impl Fn(usize, &mut App) + 'static) -> Self {
+        self.on_page_change = Some(Rc::new(f));
         self
     }
 
@@ -153,6 +165,7 @@ impl Settings {
         &self,
         state: &Entity<SettingsState>,
         pages: &Vec<SettingPage>,
+        on_page_change: Option<Rc<dyn Fn(usize, &mut App) + 'static>>,
         _: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement {
@@ -182,6 +195,7 @@ impl Settings {
                         .active(is_page_active)
                         .on_click({
                             let state = state.clone();
+                            let on_page_change = on_page_change.clone();
                             move |_, _, cx| {
                                 state.update(cx, |state, cx| {
                                     state.selected_index = SelectIndex {
@@ -189,7 +203,10 @@ impl Settings {
                                         ..Default::default()
                                     };
                                     cx.notify();
-                                })
+                                });
+                                if let Some(f) = &on_page_change {
+                                    f(page_ix, cx);
+                                }
                             }
                         })
                         .when(page.groups.len() > 1, |this| {
@@ -288,7 +305,7 @@ impl RenderOnce for Settings {
             .child(
                 resizable_panel()
                     .size(self.sidebar_width)
-                    .child(self.render_sidebar(&state, &filtered_pages, window, cx)),
+                    .child(self.render_sidebar(&state, &filtered_pages, self.on_page_change.clone(), window, cx)),
             )
             .child(resizable_panel().child(self.render_active_page(
                 &state,
