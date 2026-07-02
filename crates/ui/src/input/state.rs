@@ -793,27 +793,9 @@ impl InputState {
         self.history.ignore = false;
         self.emit_events = true;
 
-        // Place the caret at the end for single-line inputs (like HTML
-        // `<input>`); multi-line inputs reset the selection to the start.
-        if self.mode.is_single_line() {
-            let end = self.text.len();
-            self.selected_range = (end..end).into();
-        } else {
-            self.selected_range.clear();
-        }
-
-        if self.mode.is_code_editor() {
-            self._pending_update = true;
-            self.lsp.reset();
-        }
-
-        // Move scroll to the start. For single-line the caret is at the end, so
-        // override the cursor-follow scroll for the next painted frame to keep
-        // the start visible; the deferred offset is consumed during that paint.
-        self.scroll_handle.set_offset(point(px(0.), px(0.)));
-        if self.mode.is_single_line() {
-            self.deferred_scroll_offset = Some(point(px(0.), px(0.)));
-        }
+        self.reset_selection();
+        self.reset_lsp_state();
+        self.reset_scroll_to_start();
 
         self.history.clear();
         cx.notify();
@@ -835,23 +817,9 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.replace_text(text, window, cx);
-
-        if self.mode.is_single_line() {
-            let end = self.text.len();
-            self.selected_range = (end..end).into();
-        } else {
-            self.selected_range.clear();
-        }
-
-        if self.mode.is_code_editor() {
-            self._pending_update = true;
-            self.lsp.reset();
-        }
-
-        self.scroll_handle.set_offset(point(px(0.), px(0.)));
-        if self.mode.is_single_line() {
-            self.deferred_scroll_offset = Some(point(px(0.), px(0.)));
-        }
+        self.reset_selection();
+        self.reset_lsp_state();
+        self.reset_scroll_to_start();
 
         cx.notify();
     }
@@ -904,6 +872,35 @@ impl InputState {
         self.replace_text_in_range_silent(Some(range), &text, window, cx);
         self.reset_highlighter(cx);
         self.disabled = was_disabled;
+    }
+
+    fn reset_selection(&mut self) {
+        // For single-line inputs the caret is placed at the end of the text
+        // (matching HTML `<input>`); multi-line inputs reset the selection to
+        // `0..0`.
+        if self.mode.is_single_line() {
+            let end = self.text.len();
+            self.selected_range = (end..end).into();
+        } else {
+            self.selected_range.clear();
+        }
+    }
+
+    fn reset_lsp_state(&mut self) {
+        if self.mode.is_code_editor() {
+            self._pending_update = true;
+            self.lsp.reset();
+        }
+    }
+
+    fn reset_scroll_to_start(&mut self) {
+        // Move scroll to the start. For single-line the caret is at the end, so
+        // override the cursor-follow scroll for the next painted frame to keep
+        // the start visible; the deferred offset is consumed during that paint.
+        self.scroll_handle.set_offset(point(px(0.), px(0.)));
+        if self.mode.is_single_line() {
+            self.deferred_scroll_offset = Some(point(px(0.), px(0.)));
+        }
     }
 
     /// Set with disabled mode.
