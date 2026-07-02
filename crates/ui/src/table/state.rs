@@ -1473,6 +1473,15 @@ where
     ) -> (Range<usize>, Pixels) {
         let total_cols = self.col_groups.len();
 
+        // Virtualization pays off at very large column counts; below this
+        // threshold rendering every header cell is cheap, and skipping
+        // virtualization avoids scroll-time flicker from spacer/offset
+        // mismatches while panning horizontally.
+        const VIRTUALIZE_MIN_COLS: usize = 200;
+        if total_cols - left_columns_count <= VIRTUALIZE_MIN_COLS {
+            return (left_columns_count..total_cols, px(0.));
+        }
+
         if self.bounds.size.width == px(0.) {
             return (left_columns_count..total_cols, px(0.));
         }
