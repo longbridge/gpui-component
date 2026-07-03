@@ -1395,7 +1395,7 @@ impl InputState {
 
         if self.soft_wrap && self.mode.is_code_editor() {
             let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
-            if let Some(line) = self.display_map.lines().get(row)
+            if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_start = logical_start + range.start;
@@ -1423,7 +1423,7 @@ impl InputState {
 
         if self.soft_wrap && self.mode.is_code_editor() {
             let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
-            if let Some(line) = self.display_map.lines().get(row)
+            if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_end = logical_start + range.end;
@@ -1948,16 +1948,8 @@ impl InputState {
 
         let row = point.row;
 
-        let mut row_offset_y = px(0.);
-        for (ix, _wrap_line) in self.display_map.lines().iter().enumerate() {
-            if ix == row {
-                break;
-            }
-
-            // Only accumulate height for visible (non-folded) wrap rows
-            let visible_wrap_rows = self.display_map.visible_wrap_row_count_for_buffer_line(ix);
-            row_offset_y += line_height * visible_wrap_rows;
-        }
+        // Calculate row offset by multiplying the number of lines before it with the line height
+        let mut row_offset_y = line_height * self.display_map.buffer_line_to_display_row(row);
 
         // For Right alignment use 0 margin: the cursor indicator is clamped inside bounds
         // in layout_cursor, so shifting the text here would cause a first-click visual jump.
