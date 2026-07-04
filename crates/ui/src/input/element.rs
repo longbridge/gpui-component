@@ -719,17 +719,11 @@ impl TextElement {
         cx: &mut App,
     ) -> Vec<(Path<Pixels>, bool)> {
         let state = self.state.read(cx);
-        let search_panel = state.search_panel.clone();
-
-        let Some((ranges, current_match_ix)) = search_panel.and_then(|panel| {
-            if let Some(matcher) = panel.read(cx).matcher() {
-                Some((matcher.matched_ranges.clone(), matcher.current_match_ix))
-            } else {
-                None
-            }
-        }) else {
+        let Some(matcher) = state.active_search_matcher() else {
             return vec![];
         };
+        let ranges = matcher.matched_ranges.clone();
+        let current_match_ix = matcher.current_match_ix;
 
         let mut paths = Vec::with_capacity(ranges.as_ref().len());
         for (index, range) in ranges.as_ref().iter().enumerate() {
