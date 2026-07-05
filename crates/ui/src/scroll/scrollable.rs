@@ -375,17 +375,33 @@ mod tests {
         }
     }
 
-    struct BothAxisScrollTest;
+    struct OverflowScrollbarVerticalTest;
 
-    impl Render for BothAxisScrollTest {
+    impl Render for OverflowScrollbarVerticalTest {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div().w(px(100.)).h(px(100.)).overflow_scrollbar().child(
-                div()
-                    .w(px(200.))
-                    .h(px(200.))
-                    .flex_shrink_0()
-                    .debug_selector(|| "both-axis-content".to_string()),
-            )
+            crate::v_flex()
+                .w(px(100.))
+                .h(px(100.))
+                .gap(px(10.))
+                .overflow_scrollbar()
+                .child(row("both-axis-vertical-first-row", 50.))
+                .child(row("both-axis-vertical-second-row", 50.))
+                .child(row("both-axis-vertical-last-row", 50.))
+        }
+    }
+
+    struct OverflowScrollbarHorizontalTest;
+
+    impl Render for OverflowScrollbarHorizontalTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::h_flex()
+                .w(px(100.))
+                .h(px(40.))
+                .gap(px(10.))
+                .overflow_scrollbar()
+                .child(item("both-axis-horizontal-first-item", 50.))
+                .child(item("both-axis-horizontal-second-item", 50.))
+                .child(item("both-axis-horizontal-last-item", 50.))
         }
     }
 
@@ -518,19 +534,50 @@ mod tests {
     }
 
     #[gpui::test]
-    fn overflow_scrollbar_scrolls_both_axes(cx: &mut TestAppContext) {
+    fn overflow_scrollbar_preserves_vertical_source_gap(cx: &mut TestAppContext) {
         cx.update(crate::init);
-        let (_, cx) = cx.add_window_view(|_, _| BothAxisScrollTest);
+        let (_, cx) = cx.add_window_view(|_, _| OverflowScrollbarVerticalTest);
         let cx: &mut VisualTestContext = cx;
         draw(cx);
 
-        let initial = cx.debug_bounds("both-axis-content").unwrap();
+        let first = cx.debug_bounds("both-axis-vertical-first-row").unwrap();
+        let second = cx.debug_bounds("both-axis-vertical-second-row").unwrap();
 
-        scroll(cx, 10., 10., -40., -50.);
+        assert_eq!(second.top() - first.bottom(), px(10.));
+    }
 
-        let after_scroll = cx.debug_bounds("both-axis-content").unwrap();
-        assert!(after_scroll.left() < initial.left());
-        assert!(after_scroll.top() < initial.top());
+    #[gpui::test]
+    fn overflow_scrollbar_preserves_gap_and_scrolls_horizontally(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| OverflowScrollbarHorizontalTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let first = cx.debug_bounds("both-axis-horizontal-first-item").unwrap();
+        let second = cx.debug_bounds("both-axis-horizontal-second-item").unwrap();
+        let last_initial_x = cx
+            .debug_bounds("both-axis-horizontal-last-item")
+            .unwrap()
+            .origin
+            .x;
+
+        assert_eq!(second.left() - first.right(), px(10.));
+
+        scroll(cx, 10., 10., -50., 0.);
+
+        let first_after_scroll = cx.debug_bounds("both-axis-horizontal-first-item").unwrap();
+        let second_after_scroll = cx.debug_bounds("both-axis-horizontal-second-item").unwrap();
+        let last_after_scroll_x = cx
+            .debug_bounds("both-axis-horizontal-last-item")
+            .unwrap()
+            .origin
+            .x;
+
+        assert_eq!(
+            second_after_scroll.left() - first_after_scroll.right(),
+            px(10.)
+        );
+        assert!(last_after_scroll_x < last_initial_x);
     }
 
     #[gpui::test]
