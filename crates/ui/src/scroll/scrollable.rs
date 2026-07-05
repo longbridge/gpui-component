@@ -9,8 +9,10 @@ use gpui::{
     prelude::FluentBuilder,
 };
 
-/// A trait for elements that can be made scrollable with scrollbars. 
-//  The wrapped element is the scroll area itself, rather than being inserted as a child of a new scroll area.
+/// A trait for elements that can be made scrollable with scrollbars.
+///
+/// The wrapped element is the scroll area itself, rather than being inserted as
+/// a child of a new scroll area.
 pub trait ScrollableElement: InteractiveElement + Styled + ParentElement + Element {
     /// Adds a scrollbar to the element.
     #[track_caller]
@@ -253,6 +255,45 @@ mod tests {
         px,
     };
 
+    fn draw(cx: &mut VisualTestContext) {
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+    }
+
+    fn scroll(cx: &mut VisualTestContext, x: f32, y: f32, dx: f32, dy: f32) {
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(x), px(y)),
+            delta: ScrollDelta::Pixels(point(px(dx), px(dy))),
+            ..Default::default()
+        });
+        draw(cx);
+    }
+
+    fn row(selector: &'static str, height: f32) -> Div {
+        div()
+            .h(px(height))
+            .flex_shrink_0()
+            .debug_selector(move || selector.to_string())
+    }
+
+    fn plain_row(height: f32) -> Div {
+        div().h(px(height)).flex_shrink_0()
+    }
+
+    fn item(selector: &'static str, width: f32) -> Div {
+        div()
+            .w(px(width))
+            .h(px(20.))
+            .flex_shrink_0()
+            .debug_selector(move || selector.to_string())
+    }
+
+    fn plain_item(width: f32) -> Div {
+        div().w(px(width)).h(px(20.)).flex_shrink_0()
+    }
+
     struct SizeFullChildTest;
 
     impl Render for SizeFullChildTest {
@@ -282,18 +323,118 @@ mod tests {
                 .h(px(100.))
                 .gap(px(10.))
                 .overflow_y_scrollbar()
+                .child(row("first-row", 20.))
+                .child(row("second-row", 20.))
+        }
+    }
+
+    struct IssueGapRegressionTest;
+
+    impl Render for IssueGapRegressionTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(100.))
+                .h(px(100.))
+                .child(
+                    crate::v_flex()
+                        .flex_1()
+                        .gap(px(30.))
+                        .overflow_y_scrollbar()
+                        .px(px(12.))
+                        .pb(px(16.))
+                        .children((0..5).map(|ix| {
+                            div()
+                                .h(px(20.))
+                                .flex_shrink_0()
+                                .when(ix == 0, |this| {
+                                    this.debug_selector(|| "issue-first-card".to_string())
+                                })
+                                .when(ix == 1, |this| {
+                                    this.debug_selector(|| "issue-second-card".to_string())
+                                })
+                                .when(ix == 4, |this| {
+                                    this.debug_selector(|| "issue-last-card".to_string())
+                                })
+                        })),
+                )
+        }
+    }
+
+    struct HorizontalGapLayoutTest;
+
+    impl Render for HorizontalGapLayoutTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::h_flex()
+                .w(px(100.))
+                .h(px(40.))
+                .gap(px(10.))
+                .overflow_x_scrollbar()
+                .child(item("horizontal-first-item", 50.))
+                .child(item("horizontal-second-item", 50.))
+                .child(item("horizontal-last-item", 50.))
+        }
+    }
+
+    struct BothAxisScrollTest;
+
+    impl Render for BothAxisScrollTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(100.)).h(px(100.)).overflow_scrollbar().child(
+                div()
+                    .w(px(200.))
+                    .h(px(200.))
+                    .flex_shrink_0()
+                    .debug_selector(|| "both-axis-content".to_string()),
+            )
+        }
+    }
+
+    struct IndependentScrollablesTest;
+
+    impl Render for IndependentScrollablesTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::h_flex()
+                .w(px(220.))
+                .h(px(100.))
+                .gap(px(20.))
                 .child(
                     div()
-                        .h(px(20.))
-                        .flex_shrink_0()
-                        .debug_selector(|| "first-row".to_string()),
+                        .w(px(100.))
+                        .h(px(100.))
+                        .overflow_y_scrollbar()
+                        .child(
+                            crate::v_flex()
+                                .child(plain_row(50.))
+                                .child(plain_row(50.))
+                                .child(row("left-scrollable-last-row", 50.)),
+                        ),
                 )
                 .child(
                     div()
-                        .h(px(20.))
-                        .flex_shrink_0()
-                        .debug_selector(|| "second-row".to_string()),
+                        .w(px(100.))
+                        .h(px(100.))
+                        .overflow_y_scrollbar()
+                        .child(
+                            crate::v_flex()
+                                .child(plain_row(50.))
+                                .child(plain_row(50.))
+                                .child(row("right-scrollable-last-row", 50.)),
+                        ),
                 )
+        }
+    }
+
+    struct NoOverflowTest;
+
+    impl Render for NoOverflowTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::v_flex()
+                .w(px(100.))
+                .h(px(100.))
+                .gap(px(10.))
+                .overflow_y_scrollbar()
+                .child(row("no-overflow-first-row", 20.))
+                .child(row("no-overflow-second-row", 20.))
         }
     }
 
@@ -302,20 +443,10 @@ mod tests {
         cx.update(crate::init);
         let (_, cx) = cx.add_window_view(|_, _| SizeFullChildTest);
         let cx: &mut VisualTestContext = cx;
-        cx.run_until_parked();
-        cx.update(|window, cx| {
-            _ = window.draw(cx);
-        });
+        draw(cx);
 
         let initial_y = cx.debug_bounds("last-row").unwrap().origin.y;
-        cx.simulate_event(ScrollWheelEvent {
-            position: point(px(10.), px(10.)),
-            delta: ScrollDelta::Pixels(point(px(0.), px(-50.))),
-            ..Default::default()
-        });
-        cx.update(|window, cx| {
-            _ = window.draw(cx);
-        });
+        scroll(cx, 10., 10., 0., -50.);
 
         assert!(cx.debug_bounds("last-row").unwrap().origin.y < initial_y);
     }
@@ -325,13 +456,166 @@ mod tests {
         cx.update(crate::init);
         let (_, cx) = cx.add_window_view(|_, _| GapLayoutTest);
         let cx: &mut VisualTestContext = cx;
-        cx.run_until_parked();
-        cx.update(|window, cx| {
-            _ = window.draw(cx);
-        });
+        draw(cx);
 
         let first = cx.debug_bounds("first-row").unwrap();
         let second = cx.debug_bounds("second-row").unwrap();
         assert_eq!(second.top() - first.bottom(), px(10.));
+    }
+
+    #[gpui::test]
+    fn overflow_y_scrollbar_preserves_gap_for_exact_issue_chain(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| IssueGapRegressionTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let first = cx.debug_bounds("issue-first-card").unwrap();
+        let second = cx.debug_bounds("issue-second-card").unwrap();
+        let last_initial_y = cx.debug_bounds("issue-last-card").unwrap().origin.y;
+
+        assert_eq!(second.top() - first.bottom(), px(30.));
+        assert_eq!(first.left(), px(12.));
+
+        scroll(cx, 10., 10., 0., -50.);
+
+        let first_after_scroll = cx.debug_bounds("issue-first-card").unwrap();
+        let second_after_scroll = cx.debug_bounds("issue-second-card").unwrap();
+        let last_after_scroll_y = cx.debug_bounds("issue-last-card").unwrap().origin.y;
+
+        assert_eq!(
+            second_after_scroll.top() - first_after_scroll.bottom(),
+            px(30.)
+        );
+        assert_eq!(first_after_scroll.left(), px(12.));
+        assert!(last_after_scroll_y < last_initial_y);
+    }
+
+    #[gpui::test]
+    fn horizontal_scrollbar_preserves_source_gap_and_scrolls(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| HorizontalGapLayoutTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let first = cx.debug_bounds("horizontal-first-item").unwrap();
+        let second = cx.debug_bounds("horizontal-second-item").unwrap();
+        let last_initial_x = cx.debug_bounds("horizontal-last-item").unwrap().origin.x;
+
+        assert_eq!(second.left() - first.right(), px(10.));
+
+        scroll(cx, 10., 10., -50., 0.);
+
+        let first_after_scroll = cx.debug_bounds("horizontal-first-item").unwrap();
+        let second_after_scroll = cx.debug_bounds("horizontal-second-item").unwrap();
+        let last_after_scroll_x = cx.debug_bounds("horizontal-last-item").unwrap().origin.x;
+
+        assert_eq!(
+            second_after_scroll.left() - first_after_scroll.right(),
+            px(10.)
+        );
+        assert!(last_after_scroll_x < last_initial_x);
+    }
+
+    #[gpui::test]
+    fn overflow_scrollbar_scrolls_both_axes(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| BothAxisScrollTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let initial = cx.debug_bounds("both-axis-content").unwrap();
+
+        scroll(cx, 10., 10., -40., -50.);
+
+        let after_scroll = cx.debug_bounds("both-axis-content").unwrap();
+        assert!(after_scroll.left() < initial.left());
+        assert!(after_scroll.top() < initial.top());
+    }
+
+    #[gpui::test]
+    fn multiple_scrollables_keep_independent_scroll_state(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| IndependentScrollablesTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let left_initial = cx.debug_bounds("left-scrollable-last-row").unwrap();
+        let right_initial = cx.debug_bounds("right-scrollable-last-row").unwrap();
+
+        scroll(cx, 10., 10., 0., -50.);
+
+        let left_after_scroll = cx.debug_bounds("left-scrollable-last-row").unwrap();
+        let right_after_scroll = cx.debug_bounds("right-scrollable-last-row").unwrap();
+
+        assert!(left_after_scroll.top() < left_initial.top());
+        assert_eq!(right_after_scroll.top(), right_initial.top());
+    }
+
+    #[gpui::test]
+    fn vertical_scrollbar_does_not_scroll_when_content_does_not_overflow(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| NoOverflowTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let first = cx.debug_bounds("no-overflow-first-row").unwrap();
+        let second = cx.debug_bounds("no-overflow-second-row").unwrap();
+
+        assert_eq!(second.top() - first.bottom(), px(10.));
+
+        scroll(cx, 10., 10., 0., -50.);
+
+        let first_after_scroll = cx.debug_bounds("no-overflow-first-row").unwrap();
+        let second_after_scroll = cx.debug_bounds("no-overflow-second-row").unwrap();
+
+        assert_eq!(first_after_scroll.top(), first.top());
+        assert_eq!(second_after_scroll.top(), second.top());
+        assert_eq!(
+            second_after_scroll.top() - first_after_scroll.bottom(),
+            px(10.)
+        );
+    }
+
+    #[gpui::test]
+    fn horizontal_scrollbar_does_not_scroll_when_content_does_not_overflow(
+        cx: &mut TestAppContext,
+    ) {
+        struct HorizontalNoOverflowTest;
+
+        impl Render for HorizontalNoOverflowTest {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                crate::h_flex()
+                    .w(px(100.))
+                    .h(px(40.))
+                    .gap(px(10.))
+                    .overflow_x_scrollbar()
+                    .child(item("no-overflow-first-item", 20.))
+                    .child(item("no-overflow-second-item", 20.))
+                    .child(plain_item(20.))
+            }
+        }
+
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| HorizontalNoOverflowTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let first = cx.debug_bounds("no-overflow-first-item").unwrap();
+        let second = cx.debug_bounds("no-overflow-second-item").unwrap();
+
+        assert_eq!(second.left() - first.right(), px(10.));
+
+        scroll(cx, 10., 10., -50., 0.);
+
+        let first_after_scroll = cx.debug_bounds("no-overflow-first-item").unwrap();
+        let second_after_scroll = cx.debug_bounds("no-overflow-second-item").unwrap();
+
+        assert_eq!(first_after_scroll.left(), first.left());
+        assert_eq!(second_after_scroll.left(), second.left());
+        assert_eq!(
+            second_after_scroll.left() - first_after_scroll.right(),
+            px(10.)
+        );
     }
 }
