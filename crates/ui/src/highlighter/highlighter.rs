@@ -156,6 +156,12 @@ fn normalize_combined_injection_ranges(
     include_markdown_inline_separator_ranges(ranges)
 }
 
+/// Combined markdown inline injections are parsed as one tree with
+/// `set_included_ranges`. If we include only the inline nodes that contain
+/// trigger bytes, the parser sees those ranges as adjacent and can merge a
+/// closing backtick from one list item with an opening backtick from the next.
+/// Keeping the separator bytes between retained inline ranges preserves the
+/// original boundaries.
 fn include_markdown_inline_separator_ranges(
     ranges: Vec<tree_sitter::Range>,
 ) -> Vec<tree_sitter::Range> {
