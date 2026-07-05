@@ -1384,38 +1384,21 @@ $x = 1;
     #[test]
     #[cfg(feature = "tree-sitter-languages")]
     fn test_markdown_inline_code_spans_in_list_items() {
-        let markdown = r#"Implemented and committed in three groups:
-
-- `965e8f56 Track document render dirtiness`
-- `4040a99d Record document render dirty reasons`
-- `b0f607ab Detect EGL damage support`
-
-What changed:
-- Added per-document render dirty tracking while preserving current full-context rendering.
-- Added coarse dirty reasons: visual, layout, position, stacking, full.
-- Added tests for document-scoped dirty behavior and reason clearing.
-- Added EGL damage capability detection for buffer age and swap-with-damage function loading.
-- Started querying buffer age during present, but still uses plain `eglSwapBuffers`.
-"#;
+        let markdown = "- `one`\n- `two`\n- `three`\n\nLater `four`\n";
         let rope = Rope::from_str(markdown);
         let mut highlighter = SyntaxHighlighter::new("markdown");
         highlighter.update(None, &rope, None);
 
         let highlights = highlighter.match_styles(0..markdown.len());
-        for text in [
-            "965e8f56 Track document render dirtiness",
-            "4040a99d Record document render dirty reasons",
-            "b0f607ab Detect EGL damage support",
-            "eglSwapBuffers",
-        ] {
+        for text in ["one", "two", "three", "four"] {
             assert!(
                 has_highlight_covering(&highlights, markdown, text, "text.code.span"),
                 "{text:?} should be highlighted as a code span"
             );
         }
 
-        let prose_start = markdown.find("What changed:").unwrap();
-        let prose_end = prose_start + "What changed:".len();
+        let prose_start = markdown.find("Later").unwrap();
+        let prose_end = prose_start + "Later".len();
         assert!(
             !highlights.iter().any(|item| {
                 item.name.as_ref() == "text.code.span"
