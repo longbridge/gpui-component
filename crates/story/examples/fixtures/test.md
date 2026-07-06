@@ -136,7 +136,10 @@ See the way the text is aligned, depending on the position of `':'`
 
   - Bullet 2.2
 
-- Bullet 3
+- Bullet 3 `https://deepwiki.com/longbridge/gpui-component`
+- Bullet 4
+- `https://github.com/longbridge/gpui-component` Bullet 5 
+- Bullet 6
 
 ### Numbered List
 
