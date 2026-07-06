@@ -17,6 +17,7 @@ use crate::{
     dialog::overlay_color,
     h_flex,
     scroll::ScrollableElement as _,
+    text::{SelectionScope, SelectionScopeElement as _},
     title_bar::TITLE_BAR_HEIGHT,
     v_flex,
 };
@@ -267,11 +268,6 @@ impl RenderOnce for Sheet {
                                         .child(footer),
                                 )
                             })
-                            .on_any_mouse_down({
-                                |_, _, cx| {
-                                    cx.stop_propagation();
-                                }
-                            })
                             .with_animation(
                                 "slide",
                                 Animation::new(Duration::from_secs_f64(0.15)),
@@ -284,7 +280,8 @@ impl RenderOnce for Sheet {
                                         Placement::Left => this.left(y),
                                     })
                                 },
-                            ),
+                            )
+                            .selection_scope(SelectionScope::Sheet),
                     ),
             )
     }

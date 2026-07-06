@@ -10,8 +10,8 @@ use crate::{
 use gpui::{
     AnyElement, App, Background, ClickEvent, Corners, Div, Edges, ElementId, Hsla,
     InteractiveElement, Interactivity, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce,
-    SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px, relative, transparent_white,
+    Role, SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _, px, relative, transparent_white,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -461,6 +461,15 @@ impl RenderOnce for Button {
         };
 
         self.base
+            .role(if self.variant.is_link() {
+                Role::Link
+            } else {
+                Role::Button
+            })
+            .when_some(self.label.as_ref(), |this, label| {
+                this.aria_label(label.clone())
+            })
+            .aria_selected(self.selected)
             .when(!self.disabled, |this| {
                 this.track_focus(
                     &focus_handle

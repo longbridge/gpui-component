@@ -1,11 +1,12 @@
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
+use crate::animation::{Lerp, ease_in_out_cubic};
 use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Background, ClickEvent, Div, Edges, Hsla, InteractiveElement, IntoElement,
-    MouseButton, ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement,
-    Styled, Window, div, px, relative,
+    Animation, AnimationExt as _, AnyElement, App, Background, ClickEvent, Div, Edges, ElementId,
+    Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement, Styled, Window, div, px, relative,
 };
 
 /// Tab variants.
@@ -394,6 +395,7 @@ pub struct Tab {
     ix: usize,
     base: Div,
     pub(super) label: Option<SharedString>,
+    aria_label: Option<SharedString>,
     pub(super) icon: Option<Icon>,
     prefix: Option<AnyElement>,
     pub(super) tab_bar_prefix: Option<bool>,
@@ -405,6 +407,10 @@ pub struct Tab {
     pub(super) selected: bool,
     pub(super) indicator_active: bool,
     pub(super) indicator_ready: bool,
+    /// Animation epoch of the [`super::TabBar`] indicator; increments on every
+    /// tab switch. Used to key the selected tab's text color fade so it
+    /// restarts in sync with the indicator slide.
+    pub(super) indicator_epoch: u64,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
 }
 
@@ -444,6 +450,7 @@ impl Default for Tab {
             ix: 0,
             base: div(),
             label: None,
+            aria_label: None,
             icon: None,
             tab_bar_prefix: None,
             children: Vec::new(),
@@ -451,6 +458,7 @@ impl Default for Tab {
             selected: false,
             indicator_active: false,
             indicator_ready: true,
+            indicator_epoch: 0,
             prefix: None,
             suffix: None,
             variant: TabVariant::default(),
@@ -470,6 +478,16 @@ impl Tab {
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
         self
+    }
+
+    /// Set the accessible label for the tab.
+    pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.aria_label = Some(label.into());
+        self
+    }
+
+    fn a11y_label(&self) -> Option<SharedString> {
+        self.aria_label.clone().or_else(|| self.label.clone())
     }
 
     /// Set icon for the tab.
@@ -611,6 +629,7 @@ impl RenderOnce for Tab {
         let inner_margins = self.variant.inner_margins(self.size);
         let inner_height = self.variant.inner_height(self.size);
         let height = self.variant.height(self.size);
+        let aria_label = self.a11y_label();
 
         let segmented_indicator_active =
             self.variant == TabVariant::Segmented && self.indicator_active;
@@ -626,8 +645,91 @@ impl RenderOnce for Tab {
         };
         let inner_shadow = tab_style.shadow && !segmented_indicator_active;
 
+        // When a sliding indicator is active and ready, it alone represents the
+        // selected state. Suppress the selected tab's own active background/border
+        // so the two don't overlap during the switch animation (Segmented already
+        // does this for its `inner_bg` above). Skip disabled tabs so a
+        // disabled-selected tab keeps its dimmed styling instead of the
+        // full-strength indicator color.
+        let suppress_active_visual =
+            self.selected && !self.disabled && self.indicator_active && self.indicator_ready;
+        // Pill paints its active state via the outer `bg`.
+        let outer_bg = if suppress_active_visual && self.variant == TabVariant::Pill {
+            cx.theme().transparent.into()
+        } else {
+            tab_style.bg
+        };
+        // Underline paints its active state via the bottom `border_color`.
+        let outer_border_color = if suppress_active_visual && self.variant == TabVariant::Underline
+        {
+            cx.theme().transparent
+        } else {
+            tab_style.border_color
+        };
+
+        // For Pill, the newly selected tab's text color (`primary_foreground`)
+        // would otherwise snap to white instantly while the indicator is still
+        // sliding into place. Fade it from the normal color in sync with the
+        // indicator slide (keyed on the indicator epoch so it restarts on each
+        // switch). `epoch == 0` is the initial layout (no slide), so we skip it.
+        let animate_fg = self.selected
+            && !self.disabled
+            && self.variant == TabVariant::Pill
+            && self.indicator_active
+            && self.indicator_ready
+            && self.indicator_epoch > 0;
+        let fg_from = self.variant.normal(cx).fg;
+        let fg_to = tab_style.fg;
+
+        let inner_content = h_flex()
+            .flex_1()
+            .h(inner_height)
+            .line_height(relative(1.))
+            .whitespace_nowrap()
+            .items_center()
+            .justify_center()
+            .overflow_hidden()
+            .margins(inner_margins)
+            .flex_shrink_0()
+            .map(|this| match self.icon {
+                Some(icon) => this
+                    .w(inner_height * 1.25)
+                    .child(icon.map(|this| match self.size {
+                        Size::XSmall => this.size_2p5(),
+                        Size::Small => this.size_3p5(),
+                        Size::Large => this.size_4(),
+                        _ => this.size_4(),
+                    })),
+                None => this
+                    .paddings(inner_paddings)
+                    .map(|this| match self.label {
+                        Some(label) => this.child(label),
+                        None => this,
+                    })
+                    .children(self.children),
+            })
+            .bg(inner_bg)
+            .rounded(inner_radius)
+            .when(inner_shadow, |this| this.shadow_xs())
+            .hover(|this| this.bg(hover_inner_bg).rounded(inner_radius));
+
+        let inner_element = if animate_fg {
+            inner_content
+                .with_animation(
+                    ElementId::NamedInteger("tab-fg".into(), self.indicator_epoch),
+                    Animation::new(Duration::from_millis(200)).with_easing(ease_in_out_cubic),
+                    move |this, delta| this.text_color(Lerp::lerp(&fg_from, &fg_to, delta)),
+                )
+                .into_any_element()
+        } else {
+            inner_content.into_any_element()
+        };
+
         self.base
             .id(self.ix)
+            .role(Role::Tab)
+            .when_some(aria_label, |this, label| this.aria_label(label))
+            .aria_selected(self.selected)
             .relative()
             .flex()
             .flex_wrap()
@@ -642,12 +744,12 @@ impl RenderOnce for Tab {
                 Size::Large => this.text_base(),
                 _ => this.text_sm(),
             })
-            .bg(tab_style.bg)
+            .bg(outer_bg)
             .border_l(tab_style.borders.left)
             .border_r(tab_style.borders.right)
             .border_t(tab_style.borders.top)
             .border_b(tab_style.borders.bottom)
-            .border_color(tab_style.border_color)
+            .border_color(outer_border_color)
             .rounded(radius)
             .when(!self.selected && !self.disabled, |this| {
                 this.hover(|this| {
@@ -682,40 +784,7 @@ impl RenderOnce for Tab {
                 )
             })
             .when_some(self.prefix, |this, prefix| this.child(prefix))
-            .child(
-                h_flex()
-                    .flex_1()
-                    .h(inner_height)
-                    .line_height(relative(1.))
-                    .whitespace_nowrap()
-                    .items_center()
-                    .justify_center()
-                    .overflow_hidden()
-                    .margins(inner_margins)
-                    .flex_shrink_0()
-                    .map(|this| match self.icon {
-                        Some(icon) => {
-                            this.w(inner_height * 1.25)
-                                .child(icon.map(|this| match self.size {
-                                    Size::XSmall => this.size_2p5(),
-                                    Size::Small => this.size_3p5(),
-                                    Size::Large => this.size_4(),
-                                    _ => this.size_4(),
-                                }))
-                        }
-                        None => this
-                            .paddings(inner_paddings)
-                            .map(|this| match self.label {
-                                Some(label) => this.child(label),
-                                None => this,
-                            })
-                            .children(self.children),
-                    })
-                    .bg(inner_bg)
-                    .rounded(inner_radius)
-                    .when(inner_shadow, |this| this.shadow_xs())
-                    .hover(|this| this.bg(hover_inner_bg).rounded(inner_radius)),
-            )
+            .child(inner_element)
             .when_some(self.suffix, |this, suffix| this.child(suffix))
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                 // Stop propagation behavior, for works on TitleBar.
@@ -727,5 +796,24 @@ impl RenderOnce for Tab {
                     this.on_click(move |event, window, cx| on_click(event, window, cx))
                 })
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn a11y_label_defaults_to_visible_label(_cx: &mut gpui::TestAppContext) {
+        let tab = Tab::new().label("Account");
+
+        assert_eq!(tab.a11y_label(), Some("Account".into()));
+    }
+
+    #[gpui::test]
+    fn explicit_a11y_label_overrides_visible_label(_cx: &mut gpui::TestAppContext) {
+        let tab = Tab::new().label("Acct").aria_label("Account settings");
+
+        assert_eq!(tab.a11y_label(), Some("Account settings".into()));
     }
 }

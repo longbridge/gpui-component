@@ -310,7 +310,11 @@ impl ResizableState {
         }
 
         let container_size = self.container_size();
-        let total_size = px(self.sizes.iter().map(|s| s.as_f32()).sum::<f32>());
+        let total = self.sizes.iter().map(|s| s.as_f32()).sum::<f32>();
+        if !total.is_finite() || total <= 0. {
+            return;
+        }
+        let total_size = px(total);
 
         for i in 0..self.panels.len() {
             let size = self.sizes[i];

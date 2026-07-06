@@ -9,14 +9,62 @@ pub use gpui_component_macros::IntoPlot;
 
 use std::{fmt::Debug, ops::Add};
 
-use gpui::{App, Bounds, IntoElement, Path, PathBuilder, Pixels, Point, Window, point, px};
+use gpui::{
+    AnyElement, App, Bounds, ElementId, IntoElement, Path, PathBuilder, Pixels, Point, Window,
+    point, px,
+};
 
 pub use axis::{AXIS_GAP, AxisLabelSide, AxisText, PlotAxis};
 pub use grid::Grid;
 pub use label::PlotLabel;
 
+use tooltip::TooltipState;
+
 pub trait Plot: IntoElement {
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App);
+
+    /// A stable element id that enables interactive tooltip support for this plot.
+    ///
+    /// Return `Some(id)` to opt in to tooltips; the id must be unique among sibling
+    /// elements. Returning `None` (the default) disables all tooltip behavior, leaving
+    /// the plot a pure, non-interactive element identical to the pre-tooltip behavior.
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    /// Map the cursor to the tooltip state to display.
+    ///
+    /// `position` is the cursor position relative to the plot's top-left origin (already
+    /// origin-subtracted), and `bounds` is the painted area. Return the [`TooltipState`]
+    /// to display (highlighted index, crosshair point, dots, side), or `None` to show
+    /// nothing. Only called while the cursor is inside `bounds`.
+    ///
+    /// The default returns `None`.
+    fn tooltip_state(
+        &self,
+        _position: Point<Pixels>,
+        _bounds: Bounds<Pixels>,
+        _cx: &App,
+    ) -> Option<TooltipState> {
+        None
+    }
+
+    /// Render the tooltip overlay for the active [`TooltipState`].
+    ///
+    /// `cursor` is the live cursor position (relative to the plot origin) and `bounds` is the
+    /// plot's painted area, so the tooltip box can follow the cursor (pass `cursor` and
+    /// `bounds.size` to [`tooltip::Tooltip::new`]). Return the overlay element; it is painted
+    /// absolutely positioned above the plot. The default returns `None`.
+    fn tooltip(
+        &self,
+        _state: &TooltipState,
+        _cursor: Point<Pixels>,
+        _bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Option<AnyElement> {
+        None
+    }
 }
 
 #[derive(Clone, Copy, Default)]

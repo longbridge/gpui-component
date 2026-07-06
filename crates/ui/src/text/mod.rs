@@ -18,6 +18,7 @@ pub use style::*;
 pub use text_view::*;
 pub(crate) use window_selection::TextSelectionController;
 pub(crate) use window_selection::WindowTextSelection;
+pub(crate) use window_selection::{SelectionScope, SelectionScopeElement};
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);

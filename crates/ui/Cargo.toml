@@ -17,6 +17,7 @@ doctest = false
 [features]
 decimal = ["dep:rust_decimal"]
 inspector = ["gpui_macros/inspector", "gpui/inspector"]
+tree-sitter = ["dep:tree-sitter", "dep:tree-sitter-json"]
 
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [
@@ -56,42 +57,42 @@ tree-sitter-languages = [
     "tree-sitter-yaml",
     "tree-sitter-zig",
 ]
-tree-sitter-astro = ["dep:tree-sitter-astro-next"]
-tree-sitter-bash = ["dep:tree-sitter-bash"]
-tree-sitter-c = ["dep:tree-sitter-c"]
-tree-sitter-cmake = ["dep:tree-sitter-cmake"]
-tree-sitter-cpp = ["dep:tree-sitter-cpp"]
-tree-sitter-csharp = ["dep:tree-sitter-c-sharp"]
-tree-sitter-css = ["dep:tree-sitter-css"]
-tree-sitter-diff = ["dep:tree-sitter-diff"]
-tree-sitter-ejs = ["dep:tree-sitter-embedded-template"]
-tree-sitter-elixir = ["dep:tree-sitter-elixir"]
-tree-sitter-erb = ["dep:tree-sitter-embedded-template"]
-tree-sitter-go = ["dep:tree-sitter-go"]
-tree-sitter-graphql = ["dep:tree-sitter-graphql"]
-tree-sitter-html = ["dep:tree-sitter-html"]
-tree-sitter-java = ["dep:tree-sitter-java"]
-tree-sitter-javascript = ["dep:tree-sitter-javascript"]
-tree-sitter-jsdoc = ["dep:tree-sitter-jsdoc"]
-tree-sitter-kotlin = ["dep:tree-sitter-kotlin-sg"]
-tree-sitter-lua = ["dep:tree-sitter-lua"]
-tree-sitter-make = ["dep:tree-sitter-make"]
-tree-sitter-markdown = ["dep:tree-sitter-md"]
+tree-sitter-astro = ["tree-sitter", "dep:tree-sitter-astro-next"]
+tree-sitter-bash = ["tree-sitter", "dep:tree-sitter-bash"]
+tree-sitter-c = ["tree-sitter", "dep:tree-sitter-c"]
+tree-sitter-cmake = ["tree-sitter", "dep:tree-sitter-cmake"]
+tree-sitter-cpp = ["tree-sitter", "dep:tree-sitter-cpp"]
+tree-sitter-csharp = ["tree-sitter", "dep:tree-sitter-c-sharp"]
+tree-sitter-css = ["tree-sitter", "dep:tree-sitter-css"]
+tree-sitter-diff = ["tree-sitter", "dep:tree-sitter-diff"]
+tree-sitter-ejs = ["tree-sitter", "dep:tree-sitter-embedded-template"]
+tree-sitter-elixir = ["tree-sitter", "dep:tree-sitter-elixir"]
+tree-sitter-erb = ["tree-sitter", "dep:tree-sitter-embedded-template"]
+tree-sitter-go = ["tree-sitter", "dep:tree-sitter-go"]
+tree-sitter-graphql = ["tree-sitter", "dep:tree-sitter-graphql"]
+tree-sitter-html = ["tree-sitter", "dep:tree-sitter-html"]
+tree-sitter-java = ["tree-sitter", "dep:tree-sitter-java"]
+tree-sitter-javascript = ["tree-sitter", "dep:tree-sitter-javascript"]
+tree-sitter-jsdoc = ["tree-sitter", "dep:tree-sitter-jsdoc"]
+tree-sitter-kotlin = ["tree-sitter", "dep:tree-sitter-kotlin-sg"]
+tree-sitter-lua = ["tree-sitter", "dep:tree-sitter-lua"]
+tree-sitter-make = ["tree-sitter", "dep:tree-sitter-make"]
+tree-sitter-markdown = ["tree-sitter", "dep:tree-sitter-md"]
 tree-sitter-markdown-inline = ["tree-sitter-markdown"]
-tree-sitter-php = ["dep:tree-sitter-php"]
-tree-sitter-proto = ["dep:tree-sitter-proto"]
-tree-sitter-python = ["dep:tree-sitter-python"]
-tree-sitter-ruby = ["dep:tree-sitter-ruby"]
-tree-sitter-rust = ["dep:tree-sitter-rust"]
-tree-sitter-scala = ["dep:tree-sitter-scala"]
-tree-sitter-sql = ["dep:tree-sitter-sequel"]
-tree-sitter-svelte = ["dep:tree-sitter-svelte-next"]
-tree-sitter-swift = ["dep:tree-sitter-swift"]
-tree-sitter-toml = ["dep:tree-sitter-toml-ng"]
-tree-sitter-tsx = ["dep:tree-sitter-typescript"]
-tree-sitter-typescript = ["dep:tree-sitter-typescript"]
-tree-sitter-yaml = ["dep:tree-sitter-yaml"]
-tree-sitter-zig = ["dep:tree-sitter-zig"]
+tree-sitter-php = ["tree-sitter", "dep:tree-sitter-php"]
+tree-sitter-proto = ["tree-sitter", "dep:tree-sitter-proto"]
+tree-sitter-python = ["tree-sitter", "dep:tree-sitter-python"]
+tree-sitter-ruby = ["tree-sitter", "dep:tree-sitter-ruby"]
+tree-sitter-rust = ["tree-sitter", "dep:tree-sitter-rust"]
+tree-sitter-scala = ["tree-sitter", "dep:tree-sitter-scala"]
+tree-sitter-sql = ["tree-sitter", "dep:tree-sitter-sequel"]
+tree-sitter-svelte = ["tree-sitter", "dep:tree-sitter-svelte-next"]
+tree-sitter-swift = ["tree-sitter", "dep:tree-sitter-swift"]
+tree-sitter-toml = ["tree-sitter", "dep:tree-sitter-toml-ng"]
+tree-sitter-tsx = ["tree-sitter", "dep:tree-sitter-typescript"]
+tree-sitter-typescript = ["tree-sitter", "dep:tree-sitter-typescript"]
+tree-sitter-yaml = ["tree-sitter", "dep:tree-sitter-yaml"]
+tree-sitter-zig = ["tree-sitter", "dep:tree-sitter-zig"]
 
 [dependencies]
 anyhow.workspace = true
@@ -147,7 +148,7 @@ instant = { version = "0.1", features = ["wasm-bindgen"] }
 # Native-only dependencies (not available on WASM)
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 smol.workspace = true
-tree-sitter = "0.26"
+tree-sitter = { version = "0.26", optional = true }
 tree-sitter-astro-next = { version="0.1.1", optional = true }
 tree-sitter-bash = { version = "0.23.3", optional = true }
 tree-sitter-c = { version = "0.24.1", optional = true }
@@ -164,7 +165,7 @@ tree-sitter-html = { version = "0.23.2", optional = true }
 tree-sitter-java = { version = "0.23.5", optional = true }
 tree-sitter-javascript = { version = "0.23.1", optional = true }
 tree-sitter-jsdoc = { version = "0.23.2", optional = true }
-tree-sitter-json = "0.24.8"
+tree-sitter-json = { version = "0.24.8", optional = true }
 tree-sitter-kotlin-sg = { version = "0.4.0", optional = true }
 tree-sitter-lua = { version = "0.4.1", optional = true }
 tree-sitter-make = { version = "1.1.1", optional = true }
@@ -192,6 +193,7 @@ objc2-app-kit = { version = "0.3", features = [
     "NSMenu",
     "NSMenuItem",
     "NSView",
+    "NSWindow",
     "NSResponder",
     "NSEvent",
     "NSImage",

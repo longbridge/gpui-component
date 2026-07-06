@@ -4,7 +4,7 @@ Build Status [![Build Status](https://github.com/longbridge/gpui-component/actio
 
 Inline image mix: larger PNG avatars <img src="https://avatars.githubusercontent.com/u/5518" alt="Jason Lee avatar" width="32" height="32" /> and <img src="https://avatars.githubusercontent.com/u/28998859" alt="GitHub avatar" width="32" height="32" /> stay inside the same text flow, and another SVG badge ![Rust](https://rust-lang.org/static/images/rust-logo-blk.svg) should wrap with nearby text when the window is resized.
 
-This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text [^1] [^2].
+This is first paragraph, there have **BOLD**, _italic_, and ~~strikethrough~~, `code` text [^1] [^2].
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM]. It includes various stylistic elements and plain text.
 
@@ -125,11 +125,11 @@ See the way the text is aligned, depending on the position of `':'`
 
 ### Bulleted List
 
-- Bullet 1, this is very long and needs to be wrapped to the next line, display should be wrapped to the next line as well.
+- Bullet 1, this is **very long** and needs to be wrapped to the next line, display should be wrapped to the next line as well.
   Continuation paragraph that should appear below.
-- Bullet 2, the second bullet item is also long and needs to be wrapped to the next line.
+- Bullet 2, the `second` bullet item is also long and needs to be wrapped to the next line.
   - Bullet 2.1
-    This is a deepth continuation paragraph.
+    This is a `deepth continuation` paragraph.
     - Bullet 2.1.1
       - Bullet 2.1.1.1
     - Bullet 2.1.2

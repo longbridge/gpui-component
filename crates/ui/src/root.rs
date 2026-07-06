@@ -6,7 +6,7 @@ use crate::{
     native_menu::FallbackMenuOverlay,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    text::{TextSelectionController, TextViewState, WindowTextSelection},
+    text::{SelectionScope, TextSelectionController, TextViewState, WindowTextSelection},
     tooltip::TooltipOverlay,
     window_border,
 };
@@ -54,7 +54,8 @@ pub struct Root {
     /// Window-level text selection state. See `text::window_selection`.
     pub(crate) text_selection: WindowTextSelection,
     /// Selectable TextViews registered this frame, keyed by entity id.
-    pub(crate) selectable_text_views: HashMap<EntityId, (WeakEntity<TextViewState>, Hitbox)>,
+    pub(crate) selectable_text_views:
+        HashMap<EntityId, (WeakEntity<TextViewState>, Hitbox, SelectionScope)>,
     /// Inline text bounds for selectable TextViews, keyed by parent TextView id.
     pub(crate) selectable_text_inlines: HashMap<EntityId, Vec<Bounds<Pixels>>>,
 }
@@ -93,6 +94,9 @@ impl ActiveDialog {
 impl Root {
     /// Create a new Root view.
     pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        #[cfg(target_os = "macos")]
+        crate::macos_accessibility::install_window_hit_test_forwarder(window);
+
         Self {
             style: StyleRefinement::default(),
             view: view.into(),
@@ -292,6 +296,9 @@ impl Root {
             previous_focused_handle,
             build,
         ));
+        // Opening a modal confines selection to it; drop any background
+        // selection so it cannot linger (or be copied) under the modal.
+        self.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -307,6 +314,7 @@ impl Root {
         if let Some(handle) = self.close_dialog_internal() {
             window.focus(&handle, cx);
         }
+        self.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -330,6 +338,7 @@ impl Root {
             })
             .detach();
         }
+        self.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -343,6 +352,7 @@ impl Root {
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
             window.focus(&handle, cx);
         }
+        self.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -369,6 +379,9 @@ impl Root {
             placement,
             builder: Rc::new(build),
         });
+        // Opening a modal confines selection to it; drop any background
+        // selection so it cannot linger (or be copied) under the modal.
+        self.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -383,6 +396,7 @@ impl Root {
             window.focus(&previous_handle, cx);
         }
         self.active_sheet = None;
+        self.clear_text_selection(cx);
         cx.notify();
     }
 
