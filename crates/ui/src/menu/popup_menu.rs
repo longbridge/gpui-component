@@ -7,8 +7,8 @@ use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
     Action, Anchor, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Edges, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
-    WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
+    ParentElement, Pixels, Render, Role, ScrollHandle, SharedString, StatefulInteractiveElement,
+    Styled, WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
 };
 use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Point, Subscription};
 
@@ -266,6 +266,15 @@ impl PopupMenuItem {
             PopupMenuItem::Item { checked, .. } => *checked,
             PopupMenuItem::ElementItem { checked, .. } => *checked,
             _ => false,
+        }
+    }
+
+    fn a11y_label(&self) -> Option<SharedString> {
+        match self {
+            PopupMenuItem::Item { label, .. }
+            | PopupMenuItem::Label(label)
+            | PopupMenuItem::Submenu { label, .. } => Some(label.clone()),
+            PopupMenuItem::Separator | PopupMenuItem::ElementItem { .. } => None,
         }
     }
 }
@@ -1107,7 +1116,8 @@ impl PopupMenu {
                 }
 
                 cx.notify();
-            }));
+            }))
+            .when_some(item.a11y_label(), |this, label| this.aria_label(label));
 
         match item {
             PopupMenuItem::Separator => this
@@ -1306,6 +1316,7 @@ impl Render for PopupMenu {
 
         v_flex()
             .id("popup-menu")
+            .role(Role::Menu)
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::select_up))
@@ -1346,5 +1357,31 @@ impl Render for PopupMenu {
                 // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will cannot be displayed.
                 this.vertical_scrollbar(&self.scroll_handle)
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn popup_menu_item_a11y_label_uses_visible_label(cx: &mut gpui::TestAppContext) {
+        let submenu = cx.update(|cx| cx.new(|cx| PopupMenu::new(cx)));
+
+        assert_eq!(PopupMenuItem::new("Open").a11y_label(), Some("Open".into()));
+        assert_eq!(
+            PopupMenuItem::link("Docs", "https://example.com").a11y_label(),
+            Some("Docs".into())
+        );
+        assert_eq!(
+            PopupMenuItem::label("Recent files").a11y_label(),
+            Some("Recent files".into())
+        );
+        assert_eq!(
+            PopupMenuItem::submenu("More", submenu).a11y_label(),
+            Some("More".into())
+        );
+        assert_eq!(PopupMenuItem::separator().a11y_label(), None);
+        assert_eq!(PopupMenuItem::element(|_, _| div()).a11y_label(), None);
     }
 }

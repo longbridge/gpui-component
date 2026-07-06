@@ -94,6 +94,9 @@ impl ActiveDialog {
 impl Root {
     /// Create a new Root view.
     pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        #[cfg(target_os = "macos")]
+        crate::macos_accessibility::install_window_hit_test_forwarder(window);
+
         Self {
             style: StyleRefinement::default(),
             view: view.into(),

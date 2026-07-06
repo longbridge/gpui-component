@@ -14,7 +14,7 @@ use crate::{Icon, IndexPath, Selectable, Sizable, StyledExt};
 use crate::{VirtualListScrollHandle, list::ListDelegate, v_virtual_list};
 use gpui::{
     App, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement, EventEmitter,
-    ListSizingBehavior, RenderOnce, ScrollStrategy, SharedString, StatefulInteractiveElement,
+    ListSizingBehavior, RenderOnce, Role, ScrollStrategy, SharedString, StatefulInteractiveElement,
     StyleRefinement, Subscription, px, size,
 };
 use gpui::{
@@ -463,8 +463,14 @@ where
             .unwrap_or(false);
         let id = SharedString::from(format!("list-item-{}", ix));
 
+        let total_items = self.rows_cache.items_count();
+
         div()
             .id(id)
+            .role(Role::ListItem)
+            .aria_position_in_set(ix.row + 1)
+            .aria_size_of_set(total_items)
+            .aria_selected(selected)
             .w_full()
             .relative()
             .overflow_hidden()
@@ -754,6 +760,7 @@ where
 
         div()
             .id("list")
+            .role(Role::List)
             .size_full()
             .refine_style(&self.style)
             .child(self.state.clone())

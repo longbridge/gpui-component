@@ -5,7 +5,7 @@ use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Background, ClickEvent, Div, Edges, ElementId,
-    Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce,
+    Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, Role,
     SharedString, StatefulInteractiveElement, Styled, Window, div, px, relative,
 };
 
@@ -395,6 +395,7 @@ pub struct Tab {
     ix: usize,
     base: Div,
     pub(super) label: Option<SharedString>,
+    aria_label: Option<SharedString>,
     pub(super) icon: Option<Icon>,
     prefix: Option<AnyElement>,
     pub(super) tab_bar_prefix: Option<bool>,
@@ -449,6 +450,7 @@ impl Default for Tab {
             ix: 0,
             base: div(),
             label: None,
+            aria_label: None,
             icon: None,
             tab_bar_prefix: None,
             children: Vec::new(),
@@ -476,6 +478,16 @@ impl Tab {
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
         self
+    }
+
+    /// Set the accessible label for the tab.
+    pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.aria_label = Some(label.into());
+        self
+    }
+
+    fn a11y_label(&self) -> Option<SharedString> {
+        self.aria_label.clone().or_else(|| self.label.clone())
     }
 
     /// Set icon for the tab.
@@ -617,6 +629,7 @@ impl RenderOnce for Tab {
         let inner_margins = self.variant.inner_margins(self.size);
         let inner_height = self.variant.inner_height(self.size);
         let height = self.variant.height(self.size);
+        let aria_label = self.a11y_label();
 
         let segmented_indicator_active =
             self.variant == TabVariant::Segmented && self.indicator_active;
@@ -714,6 +727,9 @@ impl RenderOnce for Tab {
 
         self.base
             .id(self.ix)
+            .role(Role::Tab)
+            .when_some(aria_label, |this, label| this.aria_label(label))
+            .aria_selected(self.selected)
             .relative()
             .flex()
             .flex_wrap()
@@ -780,5 +796,24 @@ impl RenderOnce for Tab {
                     this.on_click(move |event, window, cx| on_click(event, window, cx))
                 })
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn a11y_label_defaults_to_visible_label(_cx: &mut gpui::TestAppContext) {
+        let tab = Tab::new().label("Account");
+
+        assert_eq!(tab.a11y_label(), Some("Account".into()));
+    }
+
+    #[gpui::test]
+    fn explicit_a11y_label_overrides_visible_label(_cx: &mut gpui::TestAppContext) {
+        let tab = Tab::new().label("Acct").aria_label("Account settings");
+
+        assert_eq!(tab.a11y_label(), Some("Account settings".into()));
     }
 }

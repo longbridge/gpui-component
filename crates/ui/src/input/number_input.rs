@@ -5,8 +5,9 @@ use gpui::Corners;
 use gpui::Window;
 use gpui::{AnyElement, App, Context, Edges, Entity, EventEmitter, FocusHandle, Focusable};
 use gpui::{
-    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, SharedString,
-    StyleRefinement, Styled, TextAlign, actions, prelude::FluentBuilder as _,
+    InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, actions,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -296,8 +297,12 @@ impl RenderOnce for NumberInput {
             });
         }
 
+        let numeric_value = self.state.read(cx).value().parse::<f64>().ok();
+
         h_flex()
             .id(("number-input", self.state.entity_id()))
+            .role(Role::SpinButton)
+            .when_some(numeric_value, |this, v| this.aria_numeric_value(v))
             .key_context(CONTEXT)
             .on_action(window.listener_for(&self.state, InputState::on_action_increment))
             .on_action(window.listener_for(&self.state, InputState::on_action_decrement))

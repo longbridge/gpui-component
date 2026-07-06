@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId, Entity,
     EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, KeyBinding,
-    Length, MouseDownEvent, ParentElement, Pixels, Render, RenderOnce, SharedString,
+    Length, MouseDownEvent, ParentElement, Pixels, Render, RenderOnce, Role, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window, anchored, deferred, div,
     prelude::FluentBuilder, px, rems,
 };
@@ -881,8 +881,12 @@ where
             }
         });
 
+        let is_open = self.state.read(cx).state.open;
+
         div()
             .id(self.id.clone())
+            .role(Role::ComboBox)
+            .aria_expanded(is_open)
             .key_context(CONTEXT)
             .when(!disabled, |this| {
                 this.track_focus(&focus_handle.tab_stop(true))

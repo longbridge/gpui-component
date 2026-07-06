@@ -275,6 +275,7 @@ impl AlertDialog {
 
         self.base
             .button_props(button_props.clone())
+            .alert_dialog_role()
             .when(has_header, |this| {
                 this.header(
                     DialogHeader::new().child(
