@@ -49,6 +49,10 @@ impl HoverCard {
     }
 
     /// Set the anchor corner of the hover card, default is [`Anchor::TopCenter`].
+    ///
+    /// Imagine the card has a pointer tip (like a speech bubble's tail). The anchor
+    /// is where that tip sits relative to the trigger — e.g. `Anchor::TopCenter`
+    /// places it at the trigger's top center. The card then hangs off that point.
     pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
         self.anchor = anchor.into();
         self
