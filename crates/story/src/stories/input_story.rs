@@ -396,7 +396,12 @@ impl Render for InputStory {
                 section("Input State")
                     .max_w_md()
                     .child(Input::new(&self.disabled_input).disabled(true))
-                    .child(Input::new(&self.mask_input).mask_toggle().cleanable(true)),
+                    .child(
+                        Input::new(&self.mask_input)
+                            .content_type(InputContentType::Password)
+                            .mask_toggle()
+                            .cleanable(true),
+                    ),
             )
             .child(
                 section("Content Type").max_w_lg().children(
