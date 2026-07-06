@@ -23,7 +23,7 @@ mod state;
 
 pub(crate) use clear_button::*;
 pub use cursor::*;
-#[cfg(any(target_family = "wasm", not(feature = "tree-sitter")))]
+#[cfg(not(feature = "tree-sitter"))]
 pub use display_map::Tree;
 pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange};
 pub use indent::TabSize;

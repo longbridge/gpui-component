@@ -1455,7 +1455,7 @@ mod tests {
         assert_ne!(first, second);
     }
 
-    #[cfg(all(not(target_family = "wasm"), feature = "tree-sitter"))]
+    #[cfg(feature = "tree-sitter")]
     #[test]
     fn code_block_highlighter_cache_refreshes_after_language_registration() {
         let lang = SharedString::from("json-cache-test");

@@ -3,10 +3,10 @@ use std::ops::Range;
 use ropey::{LineType, Rope, RopeSlice};
 use sum_tree::Bias;
 
-#[cfg(all(not(target_family = "wasm"), feature = "tree-sitter"))]
+#[cfg(feature = "tree-sitter")]
 pub use tree_sitter::{InputEdit, Point};
 
-#[cfg(any(target_family = "wasm", not(feature = "tree-sitter")))]
+#[cfg(not(feature = "tree-sitter"))]
 /// Stub type for tree-sitter Point on WASM (tree-sitter not available).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Point {
@@ -14,14 +14,14 @@ pub struct Point {
     pub column: usize,
 }
 
-#[cfg(any(target_family = "wasm", not(feature = "tree-sitter")))]
+#[cfg(not(feature = "tree-sitter"))]
 impl Point {
     pub fn new(row: usize, column: usize) -> Self {
         Self { row, column }
     }
 }
 
-#[cfg(any(target_family = "wasm", not(feature = "tree-sitter")))]
+#[cfg(not(feature = "tree-sitter"))]
 /// Stub type for tree-sitter InputEdit on WASM (tree-sitter not available).
 #[derive(Debug, Clone, Copy)]
 pub struct InputEdit {
