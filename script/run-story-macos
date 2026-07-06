@@ -15,10 +15,10 @@ set -euxo pipefail
 APP=/tmp/GPUIComponentStory.app
 BIN=gpui-component-story
 
-cargo build -p gpui-component-story --release
+cargo build -p gpui-component-story
 
 mkdir -p "$APP/Contents/MacOS"
-cp "target/release/$BIN" "$APP/Contents/MacOS/"
+cp "target/debug/$BIN" "$APP/Contents/MacOS/"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

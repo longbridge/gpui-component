@@ -281,7 +281,6 @@ impl RenderOnce for Field {
                 // This warp for aligning the Label + Input
                 wrap_div(layout)
                     .id(self.id)
-                    .role(Role::Group)
                     .gap(inner_gap)
                     .when_some(self.align_items, |this, align| {
                         this.map(|this| match align {
