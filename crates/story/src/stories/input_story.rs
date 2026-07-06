@@ -1,10 +1,10 @@
 use gpui::{
     App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, Window, div,
+    ParentElement as _, Render, Role, Styled, Subscription, Window, div,
 };
 
 use crate::section;
-use gpui_component::{button::*, input::*, *};
+use gpui_component::{button::*, input::*, label::Label, *};
 
 const CODE_EXAMPLE: &str = r#"{"single_line":"code editor"}"#;
 
@@ -32,8 +32,16 @@ pub struct InputStory {
     custom_menu_input: Entity<InputState>,
     code_input: Entity<InputState>,
     color_input: Entity<InputState>,
+    content_type_inputs: Vec<ContentTypeInput>,
 
     _subscriptions: Vec<Subscription>,
+}
+
+struct ContentTypeInput {
+    label: &'static str,
+    content_type: InputContentType,
+    input: Entity<InputState>,
+    mask_toggle: bool,
 }
 
 impl super::Story for InputStory {
@@ -139,6 +147,117 @@ impl InputStory {
                 .default_value("Right Aligned Text")
         });
 
+        let content_type_inputs = vec![
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Name",
+                InputContentType::Name,
+                "Full name",
+                "Jane Doe",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Username",
+                InputContentType::Username,
+                "Username",
+                "jane.doe",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Password",
+                InputContentType::Password,
+                "Current password",
+                "current-password",
+                true,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "New password",
+                InputContentType::NewPassword,
+                "New password",
+                "new-password",
+                true,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "One-time code",
+                InputContentType::OneTimeCode,
+                "123456",
+                "123456",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Email",
+                InputContentType::EmailAddress,
+                "Email address",
+                "jane.doe@example.com",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Telephone",
+                InputContentType::TelephoneNumber,
+                "Telephone number",
+                "+1 415 555 0198",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "URL",
+                InputContentType::Url,
+                "Website URL",
+                "https://example.com",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Credit card number",
+                InputContentType::CreditCardNumber,
+                "Card number",
+                "4242 4242 4242 4242",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Credit card expiration",
+                InputContentType::CreditCardExpiration,
+                "MM/YY",
+                "12/28",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Credit card security code",
+                InputContentType::CreditCardSecurityCode,
+                "CVC",
+                "123",
+                true,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Postal code",
+                InputContentType::PostalCode,
+                "Postal code",
+                "94107",
+                false,
+            ),
+        ];
+
         let _subscriptions = vec![
             cx.subscribe_in(&input1, window, Self::on_input_event),
             cx.subscribe_in(&input2, window, Self::on_input_event),
@@ -172,8 +291,58 @@ impl InputStory {
             color_input,
             input_text_centered,
             input_text_right,
+            content_type_inputs,
             _subscriptions,
         }
+    }
+
+    fn new_content_type_input(
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        label: &'static str,
+        content_type: InputContentType,
+        placeholder: &'static str,
+        default_value: &'static str,
+        masked: bool,
+    ) -> ContentTypeInput {
+        let input = cx.new(|cx| {
+            let state = InputState::new(window, cx)
+                .placeholder(placeholder)
+                .default_value(default_value);
+
+            if masked { state.masked(true) } else { state }
+        });
+
+        ContentTypeInput {
+            label,
+            content_type,
+            input,
+            mask_toggle: masked,
+        }
+    }
+
+    fn render_content_type_input(item: &ContentTypeInput) -> impl IntoElement {
+        let input = Input::new(&item.input)
+            .content_type(item.content_type)
+            .flex_1();
+        let input = if item.mask_toggle {
+            input.mask_toggle()
+        } else {
+            input
+        };
+
+        h_flex()
+            .w_full()
+            .items_center()
+            .gap_3()
+            .child(
+                Label::new(item.label)
+                    .w_48()
+                    .flex_shrink_0()
+                    .text_sm()
+                    .whitespace_nowrap(),
+            )
+            .child(input)
     }
 
     fn on_input_event(
@@ -221,13 +390,25 @@ impl Render for InputStory {
                 section("Normal Input")
                     .max_w_md()
                     .child(Input::new(&self.input1).cleanable(true))
-                    .child(Input::new(&self.input2)),
+                    .child(Input::new(&self.input2).role(Role::EmailInput)),
             )
             .child(
                 section("Input State")
                     .max_w_md()
                     .child(Input::new(&self.disabled_input).disabled(true))
-                    .child(Input::new(&self.mask_input).mask_toggle().cleanable(true)),
+                    .child(
+                        Input::new(&self.mask_input)
+                            .content_type(InputContentType::Password)
+                            .mask_toggle()
+                            .cleanable(true),
+                    ),
+            )
+            .child(
+                section("Content Type").max_w_lg().children(
+                    self.content_type_inputs
+                        .iter()
+                        .map(Self::render_content_type_input),
+                ),
             )
             .child(
                 section("Text Align").max_w_lg().child(

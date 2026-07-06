@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement as _, Rems, RenderOnce, Role,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Rems, RenderOnce, Role,
     StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
@@ -16,7 +16,9 @@ use crate::{IconName, Size};
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 
-use super::{InputState, element::EditorScrollbar};
+use super::{
+    InputContentType, InputState, content_type::sync_native_content_type, element::EditorScrollbar,
+};
 
 /// Returns `(background, foreground)` colors for input-like components.
 pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
@@ -47,6 +49,8 @@ pub struct Input {
     focus_bordered: bool,
     tab_index: isize,
     selected: bool,
+    content_type: Option<InputContentType>,
+    role: Option<Role>,
 
     /// An optional context menu builder to allow a custom context menu on the input.
     ///
@@ -90,6 +94,8 @@ impl Input {
             focus_bordered: true,
             tab_index: 0,
             selected: false,
+            content_type: None,
+            role: None,
             context_menu_builder: None,
         }
     }
@@ -146,6 +152,23 @@ impl Input {
         self
     }
 
+    /// Set the semantic content type for password managers and autofill.
+    ///
+    /// This is a component-level semantic hint. It does not change the text
+    /// value or masked rendering state.
+    pub fn content_type(mut self, content_type: InputContentType) -> Self {
+        self.content_type = Some(content_type);
+        self
+    }
+
+    /// Override the accessible role for the input.
+    ///
+    /// If unset, the role is inferred from multi-line mode and content type.
+    pub fn role(mut self, role: Role) -> Self {
+        self.role = Some(role);
+        self
+    }
+
     /// Set to disable the input field.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
@@ -188,6 +211,81 @@ impl Input {
                     })
                 }
             })
+    }
+
+    fn mouse_down_handler(
+        state: Entity<InputState>,
+        content_type: Option<InputContentType>,
+        disabled: bool,
+    ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {
+        move |event, window, cx| {
+            sync_native_content_type(window, content_type, disabled);
+            state.update(cx, |state, cx| state.on_mouse_down(event, window, cx));
+        }
+    }
+
+    fn accessibility_role(
+        is_multi_line: bool,
+        content_type: Option<InputContentType>,
+        role: Option<Role>,
+    ) -> Role {
+        if let Some(role) = role {
+            return role;
+        }
+
+        if is_multi_line {
+            return Role::MultilineTextInput;
+        }
+
+        match content_type {
+            None => Role::TextInput,
+            Some(InputContentType::TelephoneNumber) => Role::PhoneNumberInput,
+            Some(InputContentType::EmailAddress) => Role::EmailInput,
+            Some(InputContentType::Url) => Role::UrlInput,
+            Some(InputContentType::Password | InputContentType::NewPassword) => Role::PasswordInput,
+            Some(InputContentType::DateTime) => Role::DateTimeInput,
+            Some(InputContentType::Birthdate) => Role::DateInput,
+            Some(
+                InputContentType::Name
+                | InputContentType::NamePrefix
+                | InputContentType::GivenName
+                | InputContentType::MiddleName
+                | InputContentType::FamilyName
+                | InputContentType::NameSuffix
+                | InputContentType::Nickname
+                | InputContentType::JobTitle
+                | InputContentType::OrganizationName
+                | InputContentType::Location
+                | InputContentType::FullStreetAddress
+                | InputContentType::StreetAddressLine1
+                | InputContentType::StreetAddressLine2
+                | InputContentType::AddressCity
+                | InputContentType::AddressState
+                | InputContentType::AddressCityAndState
+                | InputContentType::Sublocality
+                | InputContentType::CountryName
+                | InputContentType::PostalCode
+                | InputContentType::CreditCardNumber
+                | InputContentType::CreditCardName
+                | InputContentType::CreditCardGivenName
+                | InputContentType::CreditCardMiddleName
+                | InputContentType::CreditCardFamilyName
+                | InputContentType::CreditCardSecurityCode
+                | InputContentType::CreditCardExpiration
+                | InputContentType::CreditCardExpirationMonth
+                | InputContentType::CreditCardExpirationYear
+                | InputContentType::CreditCardType
+                | InputContentType::Username
+                | InputContentType::OneTimeCode
+                | InputContentType::ShipmentTrackingNumber
+                | InputContentType::FlightNumber
+                | InputContentType::BirthdateDay
+                | InputContentType::BirthdateMonth
+                | InputContentType::BirthdateYear
+                | InputContentType::CellularEid
+                | InputContentType::CellularImei,
+            ) => Role::TextInput,
+        }
     }
 
     /// This method must after the refine_style.
@@ -258,7 +356,15 @@ impl RenderOnce for Input {
         });
 
         let state = self.state.read(cx);
+        let content_type = self.content_type;
+        let disabled = self.disabled;
+        let is_multi_line = state.mode.is_multi_line();
+        let accessibility_role = Self::accessibility_role(is_multi_line, content_type, self.role);
         let focused = state.focus_handle.is_focused(window) && !state.disabled;
+        if focused {
+            sync_native_content_type(window, content_type, state.disabled);
+        }
+
         let gap_x = match self.size {
             Size::Small => px(4.),
             Size::Large => px(8.),
@@ -289,11 +395,7 @@ impl RenderOnce for Input {
 
         div()
             .id(("input", self.state.entity_id()))
-            .role(if state.mode.is_multi_line() {
-                Role::MultilineTextInput
-            } else {
-                Role::TextInput
-            })
+            .role(accessibility_role)
             .flex()
             .key_context(crate::input::CONTEXT)
             .track_focus(&state.focus_handle.clone())
@@ -361,11 +463,11 @@ impl RenderOnce for Input {
             .on_key_down(window.listener_for(&self.state, InputState::on_key_down))
             .on_mouse_down(
                 MouseButton::Left,
-                window.listener_for(&self.state, InputState::on_mouse_down),
+                Self::mouse_down_handler(self.state.clone(), content_type, disabled),
             )
             .on_mouse_down(
                 MouseButton::Right,
-                window.listener_for(&self.state, InputState::on_mouse_down),
+                Self::mouse_down_handler(self.state.clone(), content_type, disabled),
             )
             .on_mouse_up(
                 MouseButton::Left,
@@ -443,5 +545,118 @@ impl RenderOnce for Input {
                         .children(suffix),
                 )
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn content_types_map_to_accessibility_roles() {
+        let cases = [
+            (None, Role::TextInput),
+            (Some(InputContentType::Name), Role::TextInput),
+            (Some(InputContentType::NamePrefix), Role::TextInput),
+            (Some(InputContentType::GivenName), Role::TextInput),
+            (Some(InputContentType::MiddleName), Role::TextInput),
+            (Some(InputContentType::FamilyName), Role::TextInput),
+            (Some(InputContentType::NameSuffix), Role::TextInput),
+            (Some(InputContentType::Nickname), Role::TextInput),
+            (Some(InputContentType::JobTitle), Role::TextInput),
+            (Some(InputContentType::OrganizationName), Role::TextInput),
+            (Some(InputContentType::Location), Role::TextInput),
+            (Some(InputContentType::FullStreetAddress), Role::TextInput),
+            (Some(InputContentType::StreetAddressLine1), Role::TextInput),
+            (Some(InputContentType::StreetAddressLine2), Role::TextInput),
+            (Some(InputContentType::AddressCity), Role::TextInput),
+            (Some(InputContentType::AddressState), Role::TextInput),
+            (Some(InputContentType::AddressCityAndState), Role::TextInput),
+            (Some(InputContentType::Sublocality), Role::TextInput),
+            (Some(InputContentType::CountryName), Role::TextInput),
+            (Some(InputContentType::PostalCode), Role::TextInput),
+            (
+                Some(InputContentType::TelephoneNumber),
+                Role::PhoneNumberInput,
+            ),
+            (Some(InputContentType::EmailAddress), Role::EmailInput),
+            (Some(InputContentType::Url), Role::UrlInput),
+            (Some(InputContentType::CreditCardNumber), Role::TextInput),
+            (Some(InputContentType::CreditCardName), Role::TextInput),
+            (Some(InputContentType::CreditCardGivenName), Role::TextInput),
+            (
+                Some(InputContentType::CreditCardMiddleName),
+                Role::TextInput,
+            ),
+            (
+                Some(InputContentType::CreditCardFamilyName),
+                Role::TextInput,
+            ),
+            (
+                Some(InputContentType::CreditCardSecurityCode),
+                Role::TextInput,
+            ),
+            (
+                Some(InputContentType::CreditCardExpiration),
+                Role::TextInput,
+            ),
+            (
+                Some(InputContentType::CreditCardExpirationMonth),
+                Role::TextInput,
+            ),
+            (
+                Some(InputContentType::CreditCardExpirationYear),
+                Role::TextInput,
+            ),
+            (Some(InputContentType::CreditCardType), Role::TextInput),
+            (Some(InputContentType::Username), Role::TextInput),
+            (Some(InputContentType::Password), Role::PasswordInput),
+            (Some(InputContentType::NewPassword), Role::PasswordInput),
+            (Some(InputContentType::OneTimeCode), Role::TextInput),
+            (
+                Some(InputContentType::ShipmentTrackingNumber),
+                Role::TextInput,
+            ),
+            (Some(InputContentType::FlightNumber), Role::TextInput),
+            (Some(InputContentType::DateTime), Role::DateTimeInput),
+            (Some(InputContentType::Birthdate), Role::DateInput),
+            (Some(InputContentType::BirthdateDay), Role::TextInput),
+            (Some(InputContentType::BirthdateMonth), Role::TextInput),
+            (Some(InputContentType::BirthdateYear), Role::TextInput),
+            (Some(InputContentType::CellularEid), Role::TextInput),
+            (Some(InputContentType::CellularImei), Role::TextInput),
+        ];
+
+        for (content_type, role) in cases {
+            assert_eq!(Input::accessibility_role(false, content_type, None), role);
+        }
+    }
+
+    #[test]
+    fn multiline_inputs_keep_multiline_accessibility_role() {
+        assert_eq!(
+            Input::accessibility_role(true, Some(InputContentType::Password), None),
+            Role::MultilineTextInput
+        );
+    }
+
+    #[test]
+    fn explicit_accessibility_role_overrides_defaults() {
+        assert_eq!(
+            Input::accessibility_role(
+                false,
+                Some(InputContentType::Password),
+                Some(Role::TextInput)
+            ),
+            Role::TextInput
+        );
+        assert_eq!(
+            Input::accessibility_role(
+                true,
+                Some(InputContentType::Password),
+                Some(Role::TextInput)
+            ),
+            Role::TextInput
+        );
     }
 }
