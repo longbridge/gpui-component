@@ -145,6 +145,17 @@ fn injection_ranges_within_limits(ranges: &[tree_sitter::Range]) -> bool {
         && injection_ranges_byte_count(ranges) <= MAX_INJECTION_BYTES
 }
 
+/// Combined markdown inline injections are parsed as one tree with
+/// `set_included_ranges`. If we include only the inline nodes that contain
+/// trigger bytes, the parser sees those ranges as adjacent and can merge a
+/// closing backtick from one list item with an opening backtick from the next.
+/// Re-inserting the separator bytes between retained inline ranges preserves
+/// the original boundaries.
+///
+/// The separator bytes count against the same `MAX_INJECTION_RANGES` /
+/// `MAX_INJECTION_BYTES` budget as the content ranges, so on a very large
+/// document the tail ranges may be dropped here even though `push_limited`
+/// already admitted them.
 fn normalize_combined_injection_ranges(
     language_name: &SharedString,
     ranges: Vec<tree_sitter::Range>,
@@ -153,18 +164,6 @@ fn normalize_combined_injection_ranges(
         return ranges;
     }
 
-    include_markdown_inline_separator_ranges(ranges)
-}
-
-/// Combined markdown inline injections are parsed as one tree with
-/// `set_included_ranges`. If we include only the inline nodes that contain
-/// trigger bytes, the parser sees those ranges as adjacent and can merge a
-/// closing backtick from one list item with an opening backtick from the next.
-/// Keeping the separator bytes between retained inline ranges preserves the
-/// original boundaries.
-fn include_markdown_inline_separator_ranges(
-    ranges: Vec<tree_sitter::Range>,
-) -> Vec<tree_sitter::Range> {
     let mut normalized = Vec::with_capacity(ranges.len().min(MAX_INJECTION_RANGES));
     let mut byte_count = 0usize;
     let mut previous_range: Option<tree_sitter::Range> = None;
