@@ -1,16 +1,18 @@
 ---
 title: Chart
-description: Beautiful charts and graphs for data visualization including line, bar, area, pie, and candlestick charts.
+description: Beautiful charts and graphs for data visualization including line, bar, area, pie, candlestick, and sankey charts.
 ---
 
 # Chart
 
-A comprehensive charting library providing Line, Bar, Area, Pie, and Candlestick charts for data visualization. The charts feature smooth animations, customizable styling, tooltips, legends, and automatic theming that adapts to your application's theme.
+A comprehensive charting library providing Line, Bar, Area, Pie, Candlestick, and Sankey charts for data visualization. The charts feature smooth animations, customizable styling, tooltips, legends, and automatic theming that adapts to your application's theme.
 
 ## Import
 
 ```rust
-use gpui_component::chart::{LineChart, BarChart, AreaChart, PieChart, CandlestickChart};
+use gpui_component::chart::{
+    LineChart, BarChart, AreaChart, PieChart, CandlestickChart, SankeyChart,
+};
 ```
 
 ## Chart Types
@@ -374,6 +376,83 @@ The candlestick chart automatically uses theme colors:
 - **Bullish** (close > open): `bullish` color (green)
 - **Bearish** (close < open): `bearish` color (red)
 
+### SankeyChart
+
+A sankey diagram visualizes flows between nodes, ideal for financial statements, energy flows, and traffic analysis. The layout algorithm mirrors [d3-sankey](https://github.com/d3/d3-sankey).
+
+#### Basic Sankey Chart
+
+```rust
+use gpui_component::plot::shape::SankeyLink;
+
+#[derive(Clone)]
+struct FlowNode {
+    pub name: SharedString,
+}
+
+let nodes = vec![
+    FlowNode { name: "Revenue".into() },
+    FlowNode { name: "Gross Profit".into() },
+    FlowNode { name: "Cost".into() },
+];
+
+// Links reference nodes by their index in `nodes`.
+let links = vec![
+    SankeyLink::new(0, 1, 45.0),
+    SankeyLink::new(0, 2, 55.0),
+];
+
+SankeyChart::new(nodes, links)
+    .node_label(|d| d.name.clone())
+    .value_label(|_, value| format!("{:.1}", value).into())
+```
+
+The value label is drawn above the name label. Its closure receives the node's computed throughput (the larger of incoming and outgoing flow).
+
+#### Node Alignment
+
+```rust
+use gpui_component::plot::shape::SankeyAlign;
+
+// Justify (default): nodes without outgoing links move to the last column
+SankeyChart::new(nodes, links).node_align(SankeyAlign::Justify)
+
+// Left: nodes stay at their topological depth
+SankeyChart::new(nodes, links).node_align(SankeyAlign::Left)
+
+// Also available: SankeyAlign::Right, SankeyAlign::Center
+```
+
+#### Sankey Chart Styling
+
+```rust
+SankeyChart::new(nodes, links)
+    .node_width(8.)             // Node bar width (default: 10)
+    .node_padding(20.)          // Vertical gap between nodes in a column (default: 16)
+    .node_corner_radius(px(2.)) // Corner radius of node bars (default: 0)
+    .node_color(|d| d.color)    // Per-node color; defaults to the theme chart palette
+    .link_opacity(0.4)          // Ribbon opacity (default: 0.3)
+    .min_link_width(2.)         // Minimum ribbon thickness (default: 1)
+    .iterations(10)             // Layout relaxation passes (default: 6)
+```
+
+Link ribbons are filled with a horizontal gradient from the source node color to the target node color.
+
+#### Compressing Large Value Ranges
+
+Node heights are linear in flow value, so a large value range (e.g. 200:1) leaves the small flows nearly invisible. Feed compressed values (e.g. square roots) to the layout, and show the real value in the label:
+
+```rust
+let links = raw_links
+    .iter()
+    .map(|l| SankeyLink::new(l.source, l.target, l.value.sqrt()))
+    .collect::<Vec<_>>();
+
+SankeyChart::new(nodes, links)
+    // Show the real value from the datum, not the compressed throughput.
+    .value_label(|d: &FlowNode, _| format!("{:.1}", d.value).into())
+```
+
 ## Data Structures
 
 ### Example Data Types
@@ -410,6 +489,13 @@ struct StockPrice {
     pub low: f64,
     pub close: f64,
     pub volume: u64,
+}
+
+// Sankey flow: nodes are referenced by index (from gpui_component::plot::shape)
+pub struct SankeyLink {
+    pub source: usize,
+    pub target: usize,
+    pub value: f64,
 }
 ```
 
@@ -485,6 +571,7 @@ let chart = LineChart::new(data)
 - [AreaChart]
 - [PieChart]
 - [CandlestickChart]
+- [SankeyChart]
 
 ## Examples
 

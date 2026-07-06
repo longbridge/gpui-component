@@ -1,16 +1,18 @@
 ---
 title: Chart
-description: 支持折线图、柱状图、面积图、饼图和 K 线图的数据可视化组件。
+description: 支持折线图、柱状图、面积图、饼图、K 线图和桑基图的数据可视化组件。
 ---
 
 # Chart
 
-Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie 和 Candlestick 图表。它们支持动画、自定义样式、主题配色和多种展示方式，适合仪表盘、统计分析和行情场景。
+Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie、Candlestick 和 Sankey 图表。它们支持动画、自定义样式、主题配色和多种展示方式，适合仪表盘、统计分析和行情场景。
 
 ## 导入
 
 ```rust
-use gpui_component::chart::{LineChart, BarChart, AreaChart, PieChart, CandlestickChart};
+use gpui_component::chart::{
+    LineChart, BarChart, AreaChart, PieChart, CandlestickChart, SankeyChart,
+};
 ```
 
 ## 图表类型
@@ -354,6 +356,83 @@ CandlestickChart::new(data)
 
 涨跌颜色会自动使用主题中的 bullish 和 bearish 配色。
 
+### SankeyChart
+
+桑基图用于展示节点之间的流量关系，适合财报资金流向、能源流动和流量分析等场景。布局算法对标 [d3-sankey](https://github.com/d3/d3-sankey)。
+
+#### 基础桑基图
+
+```rust
+use gpui_component::plot::shape::SankeyLink;
+
+#[derive(Clone)]
+struct FlowNode {
+    pub name: SharedString,
+}
+
+let nodes = vec![
+    FlowNode { name: "营业收入".into() },
+    FlowNode { name: "毛利润".into() },
+    FlowNode { name: "营业成本".into() },
+];
+
+// 连接通过节点在 `nodes` 中的索引引用节点。
+let links = vec![
+    SankeyLink::new(0, 1, 45.0),
+    SankeyLink::new(0, 2, 55.0),
+];
+
+SankeyChart::new(nodes, links)
+    .node_label(|d| d.name.clone())
+    .value_label(|_, value| format!("{:.1}", value).into())
+```
+
+数值标签显示在名称标签上方，闭包会收到节点的吞吐量（进出流量的较大值）。
+
+#### 节点对齐
+
+```rust
+use gpui_component::plot::shape::SankeyAlign;
+
+// Justify（默认）：没有出边的节点移到最后一列
+SankeyChart::new(nodes, links).node_align(SankeyAlign::Justify)
+
+// Left：节点保持在自己的拓扑深度列
+SankeyChart::new(nodes, links).node_align(SankeyAlign::Left)
+
+// 还支持：SankeyAlign::Right、SankeyAlign::Center
+```
+
+#### 样式
+
+```rust
+SankeyChart::new(nodes, links)
+    .node_width(8.)             // 节点条宽度（默认 10）
+    .node_padding(20.)          // 同列节点垂直间距（默认 16）
+    .node_corner_radius(px(2.)) // 节点条圆角（默认 0）
+    .node_color(|d| d.color)    // 每个节点的颜色，默认循环主题图表配色
+    .link_opacity(0.4)          // 连接带透明度（默认 0.3）
+    .min_link_width(2.)         // 连接带最小粗细（默认 1）
+    .iterations(10)             // 布局松弛迭代次数（默认 6）
+```
+
+连接带使用从源节点颜色到目标节点颜色的水平渐变填充。
+
+#### 压缩数值跨度
+
+节点高度与流量值成线性关系，数值跨度很大时（如 200:1）小流量几乎不可见。可以把压缩后的值（如平方根）交给布局，标签仍显示真实值：
+
+```rust
+let links = raw_links
+    .iter()
+    .map(|l| SankeyLink::new(l.source, l.target, l.value.sqrt()))
+    .collect::<Vec<_>>();
+
+SankeyChart::new(nodes, links)
+    // 标签从数据里取真实值，而不是压缩后的吞吐量。
+    .value_label(|d: &FlowNode, _| format!("{:.1}", d.value).into())
+```
+
 ## 数据结构示例
 
 ```rust
@@ -385,6 +464,13 @@ struct StockPrice {
     pub low: f64,
     pub close: f64,
     pub volume: u64,
+}
+
+// 桑基图连接：通过索引引用节点（来自 gpui_component::plot::shape）
+pub struct SankeyLink {
+    pub source: usize,
+    pub target: usize,
+    pub value: f64,
 }
 ```
 
@@ -455,6 +541,7 @@ let chart = LineChart::new(data)
 - [AreaChart]
 - [PieChart]
 - [CandlestickChart]
+- [SankeyChart]
 
 ## 示例
 
