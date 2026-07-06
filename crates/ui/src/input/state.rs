@@ -34,7 +34,7 @@ use super::{
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::highlighter::DiagnosticSet;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 use crate::highlighter::LanguageRegistry;
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
@@ -2653,7 +2653,7 @@ impl InputState {
     ///
     /// Dropping the returned `Task` (stored in `parse_task`) cancels the
     /// parse, which naturally debounces rapid edits.
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(feature = "tree-sitter")]
     fn dispatch_background_parse(
         pending: super::mode::PendingBackgroundParse,
         window: &mut Window,
@@ -2744,7 +2744,7 @@ impl InputState {
         parse_task_rc.borrow_mut().replace(task);
     }
 
-    #[cfg(target_family = "wasm")]
+    #[cfg(not(feature = "tree-sitter"))]
     fn dispatch_background_parse(
         _pending: super::mode::PendingBackgroundParse,
         _window: &mut Window,
