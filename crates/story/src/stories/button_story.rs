@@ -491,7 +491,7 @@ impl Render for ButtonStory {
                 section("With Dropdown Caret")
                     .max_w_lg()
                     .child(
-                        Button::new("button-outline-1")
+                        Button::new("button-dropdown-caret-primary")
                             .primary()
                             .dropdown_caret(true)
                             .label("Primary Button")
@@ -502,7 +502,7 @@ impl Render for ButtonStory {
                             .on_click(Self::on_click),
                     )
                     .child(
-                        Button::new("button-outline-2")
+                        Button::new("button-dropdown-caret-default")
                             .label("Default Button")
                             .dropdown_caret(true)
                             .disabled(disabled)
@@ -523,7 +523,7 @@ impl Render for ButtonStory {
                             .on_click(Self::on_click),
                     )
                     .child(
-                        Button::new("button-outline-5-ghost")
+                        Button::new("button-dropdown-caret-ghost")
                             .ghost()
                             .dropdown_caret(true)
                             .label("Ghost Button")
@@ -534,7 +534,7 @@ impl Render for ButtonStory {
                             .on_click(Self::on_click),
                     )
                     .child(
-                        Button::new("button-outline-5-link")
+                        Button::new("button-dropdown-caret-link")
                             .link()
                             .dropdown_caret(true)
                             .label("Link Button")
@@ -545,7 +545,7 @@ impl Render for ButtonStory {
                             .on_click(Self::on_click),
                     )
                     .child(
-                        Button::new("button-outline-5-text")
+                        Button::new("button-dropdown-caret-small")
                             .outline()
                             .small()
                             .dropdown_caret(true)
@@ -735,7 +735,7 @@ impl Render for ButtonStory {
                         .layout(Axis::Vertical)
                         .disabled(disabled)
                         .child(
-                            Button::new("button-one")
+                            Button::new("button-vertical-one")
                                 .label("One")
                                 .disabled(disabled)
                                 .selected(selected)
@@ -743,7 +743,7 @@ impl Render for ButtonStory {
                                 .on_click(Self::on_click),
                         )
                         .child(
-                            Button::new("button-two")
+                            Button::new("button-vertical-two")
                                 .label("Two")
                                 .disabled(disabled)
                                 .selected(selected)
@@ -751,7 +751,7 @@ impl Render for ButtonStory {
                                 .on_click(Self::on_click),
                         )
                         .child(
-                            Button::new("button-three")
+                            Button::new("button-vertical-three")
                                 .label("Three")
                                 .disabled(disabled)
                                 .selected(selected)
