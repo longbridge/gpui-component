@@ -88,7 +88,6 @@ impl RenderOnce for Accordion {
 
         v_flex()
             .id(self.id)
-            .role(Role::Group)
             .size_full()
             .when(self.bordered, |this| this.gap_y_2())
             .children(

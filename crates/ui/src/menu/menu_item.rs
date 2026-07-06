@@ -10,6 +10,7 @@ use smallvec::SmallVec;
 pub(crate) struct MenuItemElement {
     id: ElementId,
     group_name: SharedString,
+    aria_label: Option<SharedString>,
     style: StyleRefinement,
     disabled: bool,
     selected: bool,
@@ -25,6 +26,7 @@ impl MenuItemElement {
         Self {
             id: id.clone(),
             group_name: group_name.into(),
+            aria_label: None,
             style: StyleRefinement::default(),
             disabled: false,
             selected: false,
@@ -37,6 +39,12 @@ impl MenuItemElement {
     /// Set ListItem as the selected item style.
     pub(crate) fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
+        self
+    }
+
+    /// Set the accessible label for the menu item.
+    pub(crate) fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.aria_label = Some(label.into());
         self
     }
 
@@ -87,6 +95,7 @@ impl RenderOnce for MenuItemElement {
         h_flex()
             .id(self.id)
             .role(Role::MenuItem)
+            .when_some(self.aria_label, |this, label| this.aria_label(label))
             .aria_selected(self.selected)
             .group(&self.group_name)
             .gap_x_1()
@@ -121,5 +130,17 @@ impl RenderOnce for MenuItemElement {
                 this.text_color(cx.theme().muted_foreground)
             })
             .children(self.children)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn aria_label_sets_accessible_name(_cx: &mut gpui::TestAppContext) {
+        let item = MenuItemElement::new("open", "menu").aria_label("Open");
+
+        assert_eq!(item.aria_label, Some("Open".into()));
     }
 }

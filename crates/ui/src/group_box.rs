@@ -1,7 +1,6 @@
 use gpui::{
     AnyElement, App, Background, ElementId, InteractiveElement as _, IntoElement, ParentElement,
-    RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder, relative,
+    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, relative,
 };
 use smallvec::SmallVec;
 
@@ -140,7 +139,6 @@ impl RenderOnce for GroupBox {
         div().child(
             v_flex()
                 .id(self.id.unwrap_or("group-box".into()))
-                .role(Role::Group)
                 .w_full()
                 .when(has_paddings, |this| this.gap_3())
                 .when(!has_paddings, |this| this.gap_4())
