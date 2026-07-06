@@ -2,9 +2,8 @@ use std::rc::Rc;
 
 use gpui::{
     AlignItems, AnyElement, AnyView, App, Axis, Div, Element, ElementId, InteractiveElement as _,
-    IntoElement, ParentElement, Pixels, Rems, RenderOnce, Role, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    IntoElement, ParentElement, Pixels, Rems, RenderOnce, SharedString, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px,
 };
 
 use crate::{ActiveTheme as _, AxisExt, Size, StyledExt, h_flex, v_flex};
