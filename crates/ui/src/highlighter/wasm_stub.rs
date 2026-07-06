@@ -88,6 +88,7 @@ pub struct LanguageConfig {
 // For WASM, we create minimal stubs here
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::{
     collections::HashMap,
     sync::{LazyLock, Mutex},
@@ -101,7 +102,7 @@ pub enum FontStyle {
     Underline,
 }
 
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, JsonSchema, Serialize_repr, Deserialize_repr)]
 #[repr(u16)]
 pub enum FontWeightContent {
     Thin = 100,
@@ -149,19 +150,173 @@ impl From<ThemeStyle> for HighlightStyle {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
 pub struct SyntaxColors {
-    // Minimal stub - actual fields are in native registry.rs
-    // Adding commonly accessed fields to avoid compilation errors
+    pub attribute: Option<ThemeStyle>,
+    pub boolean: Option<ThemeStyle>,
+    pub comment: Option<ThemeStyle>,
+    pub comment_doc: Option<ThemeStyle>,
+    pub constant: Option<ThemeStyle>,
+    pub constructor: Option<ThemeStyle>,
+    pub embedded: Option<ThemeStyle>,
+    pub emphasis: Option<ThemeStyle>,
+    #[serde(rename = "emphasis.strong")]
+    pub emphasis_strong: Option<ThemeStyle>,
+    #[serde(rename = "enum")]
+    pub enum_: Option<ThemeStyle>,
+    pub function: Option<ThemeStyle>,
+    pub hint: Option<ThemeStyle>,
+    pub keyword: Option<ThemeStyle>,
+    pub label: Option<ThemeStyle>,
     #[serde(rename = "link_text")]
     pub link_text: Option<ThemeStyle>,
+    #[serde(rename = "link_uri")]
+    pub link_uri: Option<ThemeStyle>,
+    pub number: Option<ThemeStyle>,
+    pub operator: Option<ThemeStyle>,
+    pub predictive: Option<ThemeStyle>,
+    pub preproc: Option<ThemeStyle>,
+    pub primary: Option<ThemeStyle>,
+    pub property: Option<ThemeStyle>,
+    pub punctuation: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.bracket")]
+    pub punctuation_bracket: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.delimiter")]
+    pub punctuation_delimiter: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.list_marker")]
+    pub punctuation_list_marker: Option<ThemeStyle>,
+    #[serde(rename = "punctuation.special")]
+    pub punctuation_special: Option<ThemeStyle>,
+    pub string: Option<ThemeStyle>,
+    #[serde(rename = "string.escape")]
+    pub string_escape: Option<ThemeStyle>,
+    #[serde(rename = "string.regex")]
+    pub string_regex: Option<ThemeStyle>,
+    #[serde(rename = "string.special")]
+    pub string_special: Option<ThemeStyle>,
+    #[serde(rename = "string.special.symbol")]
+    pub string_special_symbol: Option<ThemeStyle>,
+    pub tag: Option<ThemeStyle>,
+    #[serde(rename = "tag.doctype")]
+    pub tag_doctype: Option<ThemeStyle>,
+    #[serde(rename = "text.code.span")]
+    pub text_code_span: Option<ThemeStyle>,
+    #[serde(rename = "text.literal")]
+    pub text_literal: Option<ThemeStyle>,
+    pub title: Option<ThemeStyle>,
+    #[serde(rename = "type")]
+    pub type_: Option<ThemeStyle>,
+    pub variable: Option<ThemeStyle>,
+    #[serde(rename = "variable.special")]
+    pub variable_special: Option<ThemeStyle>,
+    pub variant: Option<ThemeStyle>,
 }
 
 impl SyntaxColors {
-    pub fn style(&self, _name: &str) -> Option<HighlightStyle> {
-        None
+    pub fn style(&self, name: &str) -> Option<HighlightStyle> {
+        if name.is_empty() {
+            return None;
+        }
+
+        let style = match name {
+            "attribute" => self.attribute,
+            "boolean" => self.boolean,
+            "comment" => self.comment,
+            "comment.doc" => self.comment_doc,
+            "constant" => self.constant,
+            "constructor" => self.constructor,
+            "embedded" => self.embedded,
+            "emphasis" => self.emphasis,
+            "emphasis.strong" => self.emphasis_strong,
+            "enum" => self.enum_,
+            "function" => self.function,
+            "hint" => self.hint,
+            "keyword" => self.keyword,
+            "label" => self.label,
+            "link_text" => self.link_text,
+            "link_uri" => self.link_uri,
+            "number" => self.number,
+            "operator" => self.operator,
+            "predictive" => self.predictive,
+            "preproc" => self.preproc,
+            "primary" => self.primary,
+            "property" => self.property,
+            "punctuation" => self.punctuation,
+            "punctuation.bracket" => self.punctuation_bracket,
+            "punctuation.delimiter" => self.punctuation_delimiter,
+            "punctuation.list_marker" => self.punctuation_list_marker,
+            "punctuation.special" => self.punctuation_special,
+            "string" => self.string,
+            "string.escape" => self.string_escape,
+            "string.regex" => self.string_regex,
+            "string.special" => self.string_special,
+            "string.special.symbol" => self.string_special_symbol,
+            "tag" => self.tag,
+            "tag.doctype" => self.tag_doctype,
+            "text.code.span" => self.text_code_span,
+            "text.literal" => self.text_literal,
+            "title" => self.title,
+            "type" => self.type_,
+            "variable" => self.variable,
+            "variable.special" => self.variable_special,
+            "variant" => self.variant,
+            _ => None,
+        }
+        .map(|s| s.into());
+
+        if style.is_some() {
+            style
+        } else if name.contains('.') {
+            name.split('.').next().and_then(|prefix| self.style(prefix))
+        } else {
+            None
+        }
     }
 
-    pub fn style_for_index(&self, _index: usize) -> Option<HighlightStyle> {
-        None
+    pub fn style_for_index(&self, index: usize) -> Option<HighlightStyle> {
+        const HIGHLIGHT_NAMES: [&str; 41] = [
+            "attribute",
+            "boolean",
+            "comment",
+            "comment.doc",
+            "constant",
+            "constructor",
+            "embedded",
+            "emphasis",
+            "emphasis.strong",
+            "enum",
+            "function",
+            "hint",
+            "keyword",
+            "label",
+            "link_text",
+            "link_uri",
+            "number",
+            "operator",
+            "predictive",
+            "preproc",
+            "primary",
+            "property",
+            "punctuation",
+            "punctuation.bracket",
+            "punctuation.delimiter",
+            "punctuation.list_marker",
+            "punctuation.special",
+            "string",
+            "string.escape",
+            "string.regex",
+            "string.special",
+            "string.special.symbol",
+            "tag",
+            "tag.doctype",
+            "text.code.span",
+            "text.literal",
+            "title",
+            "type",
+            "variable",
+            "variable.special",
+            "variant",
+        ];
+
+        HIGHLIGHT_NAMES.get(index).and_then(|name| self.style(name))
     }
 }
 

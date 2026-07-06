@@ -141,6 +141,17 @@ HoverCard 支持通过 [Anchor] 设置 6 种定位：
 - BottomCenter
 - BottomRight
 
+可以把卡片想象成有一个箭头尖角（像对话气泡的小三角）。anchor 指的就是这个尖角相对于触发器落在哪个点——`TopCenter` 把它放在触发器的顶部中间，`BottomRight` 放在右下角，以此类推。卡片就从这个点挂出来。
+
+例如 `Anchor::TopLeft` 会让卡片出现在触发器正下方，并与其左对齐：
+
+```text
+[ Trigger ]
+┌──────────────┐
+│  Hover Card  │
+└──────────────┘
+```
+
 ### 使用动态内容构建器
 
 对于较复杂的内容，可以使用 `content` builder，在 HoverCard 打开时再生成内容：

@@ -6,7 +6,9 @@ use gpui::{
     InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels,
     Point, Render, SharedString, Styled as _, Window, div, px,
 };
-use gpui_component::{ActiveTheme as _, ElementExt, button::Button, native_menu::NativeMenu, v_flex};
+use gpui_component::{
+    ActiveTheme as _, ElementExt, IconName, button::Button, native_menu::NativeMenu, v_flex,
+};
 use serde::Deserialize;
 
 use crate::section;
@@ -16,6 +18,10 @@ use crate::section;
 #[derive(Action, Clone, PartialEq, Deserialize)]
 #[action(namespace = native_menu_story, no_json)]
 struct MenuClick(SharedString);
+
+#[derive(Action, Clone, PartialEq, Deserialize)]
+#[action(namespace = native_menu_story, no_json)]
+struct OpenGitHub;
 
 const CONTEXT: &str = "NativeMenuStory";
 
@@ -31,6 +37,9 @@ fn demo_menu(word_wrap: bool) -> NativeMenu {
         .menu("Cut", click("Cut"))
         .menu("Copy", click("Copy"))
         .menu("Paste", click("Paste"))
+        .separator()
+        .menu_with_icon("Github", IconName::Github, Box::new(OpenGitHub))
+        .menu_with_icon("Inbox", IconName::Inbox, click("Inbox"))
         .separator()
         .menu_with_disabled("Disabled item", true, click("Disabled"))
         .menu_with_check("Word Wrap", word_wrap, click("Word Wrap"))
@@ -95,6 +104,10 @@ impl NativeMenuStory {
         cx.notify();
     }
 
+    fn open_github(&mut self, _: &OpenGitHub, _: &mut Window, cx: &mut Context<Self>) {
+        cx.open_url("https://github.com");
+    }
+
     fn trigger(&self, label: &str, cx: &mut App) -> Div {
         div()
             .flex()
@@ -130,6 +143,7 @@ impl Render for NativeMenuStory {
             .track_focus(&self.focus_handle)
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_click))
+            .on_action(cx.listener(Self::open_github))
             .size_full()
             .gap_6()
             .child(

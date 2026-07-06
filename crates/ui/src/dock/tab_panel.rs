@@ -399,6 +399,10 @@ impl TabPanel {
     }
 
     /// Return true if self or parent only have last panel.
+    ///
+    /// Only visible panels are counted, so a hidden panel does not keep the
+    /// last visible panel draggable/closable (which could otherwise leave the
+    /// dock visually empty and undroppable).
     fn is_last_panel(&self, cx: &App) -> bool {
         if let Some(parent) = &self.stack_panel {
             if let Some(stack_panel) = parent.upgrade() {
@@ -408,7 +412,7 @@ impl TabPanel {
             }
         }
 
-        self.panels.len() <= 1
+        self.visible_panels(cx).count() <= 1
     }
 
     /// Return all visible panels

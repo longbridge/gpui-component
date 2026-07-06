@@ -35,15 +35,17 @@ Popover::new("basic-popover")
 
 ### 自定义定位
 
-`anchor` 方法用于指定 Popover 相对于触发器的位置，支持 `Anchor` 和 `Anchor` 两种类型。
+`anchor` 方法用于控制 Popover 如何贴合触发器，使用 [`Anchor`] 类型。
 
-```rust
-use gpui::Anchor;
+可以把 Popover 想象成有一个箭头尖角（像对话气泡的小三角）。anchor 指的就是这个尖角相对于触发器落在哪个点——`Anchor::TopLeft` 把它放在触发器的左上角，`Anchor::BottomRight` 放在右下角，以此类推。Popover 就从这个点挂出来。
 
-Popover::new("positioned-popover")
-    .anchor(Anchor::TopRight)
-    .trigger(Button::new("top-right").label("Top Right").outline())
-    .child("This popover appears at the top right")
+例如 `Anchor::TopLeft` 会让 Popover 出现在触发器正下方，并与其左对齐：
+
+```text
+[ Trigger ]
+┌──────────────┐
+│   Popover    │
+└──────────────┘
 ```
 
 ```rust
@@ -52,7 +54,7 @@ use gpui_component::Anchor;
 Popover::new("top-center")
     .anchor(Anchor::TopCenter)
     .trigger(Button::new("btn").label("Top Center").outline())
-    .child("Anchored to top center")
+    .child("Anchored to the trigger's top-center")
 ```
 
 ### 在 Popover 中渲染 View
@@ -187,3 +189,4 @@ Popover::new("default-open-popover")
 [Render]: https://docs.rs/gpui/latest/gpui/trait.Render.html
 [RenderOnce]: https://docs.rs/gpui/latest/gpui/trait.RenderOnce.html
 [Styled]: https://docs.rs/gpui/latest/gpui/trait.Styled.html
+[`Anchor`]: https://docs.rs/gpui-component/latest/gpui_component/enum.Anchor.html

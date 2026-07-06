@@ -10,7 +10,11 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 
-use crate::{Disableable, IconName, Sizable, Size, StyledExt as _, button::Button, h_flex};
+use crate::{
+    Disableable, IconName, Sizable, Size, StyledExt as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
+};
 
 use super::{Input, InputState, MaskPattern};
 
@@ -308,7 +312,13 @@ impl RenderOnce for NumberInput {
             .when(self.disabled, |this| this.opacity(0.5))
             .child(
                 Button::new("minus")
-                    .outline()
+                    .map(|this| {
+                        if self.appearance {
+                            this.outline()
+                        } else {
+                            this.ghost()
+                        }
+                    })
                     .with_size(self.size)
                     .icon(IconName::Minus)
                     .compact()
@@ -347,7 +357,13 @@ impl RenderOnce for NumberInput {
             )
             .child(
                 Button::new("plus")
-                    .outline()
+                    .map(|this| {
+                        if self.appearance {
+                            this.outline()
+                        } else {
+                            this.ghost()
+                        }
+                    })
                     .with_size(self.size)
                     .icon(IconName::Plus)
                     .compact()

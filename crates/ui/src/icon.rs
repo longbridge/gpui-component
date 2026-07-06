@@ -98,6 +98,11 @@ impl Icon {
         self
     }
 
+    #[cfg(any(target_os = "macos", target_os = "windows", test))]
+    pub(crate) fn path_ref(&self) -> &SharedString {
+        &self.path
+    }
+
     /// Create a new view for the icon
     pub fn view(self, cx: &mut App) -> Entity<Icon> {
         cx.new(|_| self)

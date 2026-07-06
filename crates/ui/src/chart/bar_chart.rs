@@ -1,8 +1,8 @@
 use std::{ops::RangeInclusive, rc::Rc};
 
 use gpui::{
-    App, Background, Bounds, Corners, Hsla, LinearColorStop, Pixels, Point, SharedString, Size,
-    TextAlign, Window, linear_gradient, px,
+    AnyElement, App, Background, Bounds, Corners, ElementId, Hsla, IntoElement, LinearColorStop,
+    Pixels, Point, SharedString, Size, TextAlign, Window, linear_gradient, point, px,
 };
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive};
@@ -14,6 +14,7 @@ use crate::{
         label::{TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::{Bar, BarAlignment},
+        tooltip::{CrossLine, Tooltip, TooltipState},
     },
 };
 
@@ -39,6 +40,8 @@ where
     grid: bool,
     alignment: BarAlignment,
     corner_radii: Corners<Pixels>,
+    id: Option<ElementId>,
+    name: Option<SharedString>,
 }
 
 impl<T, B, V> BarChart<T, B, V>
@@ -62,7 +65,25 @@ where
             grid: true,
             alignment: BarAlignment::default(),
             corner_radii: Corners::all(px(0.)),
+            id: None,
+            name: None,
         }
+    }
+
+    /// Enable an interactive hover tooltip (crosshair + category/value) for this chart.
+    ///
+    /// The `id` must be unique among sibling elements. Without it, the chart stays a
+    /// non-interactive plot. Works for every [`BarAlignment`] (vertical bars get a
+    /// vertical crosshair, horizontal bars a horizontal one).
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Set the series name shown in the hover tooltip row (e.g. "Desktop").
+    pub fn name(mut self, name: impl Into<SharedString>) -> Self {
+        self.name = Some(name.into());
+        self
     }
 
     /// Map each datum to its band-axis value (the categorical/ordinal axis).
@@ -196,6 +217,57 @@ where
         self.corner_radii = corner_radii.into();
         self
     }
+
+    /// The band scale (matching `paint`): spans the height for horizontal bars, the width
+    /// otherwise. Shared by `tooltip_state` and `tooltip`.
+    fn band_scale(&self, bounds: Bounds<Pixels>) -> Option<ScaleBand<B>> {
+        let band_fn = self.band.as_ref()?;
+        let band_extent = if self.alignment.is_horizontal() {
+            bounds.size.height.as_f32()
+        } else {
+            bounds.size.width.as_f32()
+        };
+        Some(
+            ScaleBand::new(
+                self.data.iter().map(|v| band_fn(v)).collect(),
+                vec![0., band_extent],
+            )
+            .padding_inner(0.4)
+            .padding_outer(0.2),
+        )
+    }
+
+    /// Label gaps `(band_side, value_end_side)` reserved along the value axis for
+    /// horizontal bars, measured from the actual label text. Shared by `paint` and the
+    /// tooltip so the crosshair lines up with the bar region.
+    fn horizontal_gaps(&self, window: &mut Window) -> (f32, f32) {
+        let Some(band_fn) = self.band.as_ref() else {
+            return (0., 0.);
+        };
+        let font_size = px(TEXT_SIZE);
+        let band_gap = if self.label_axis {
+            self.data
+                .iter()
+                .map(|v| {
+                    let s: SharedString = band_fn(v).into();
+                    measure_text_width(&s, font_size, window)
+                })
+                .fold(0f32, f32::max)
+                + TEXT_GAP * 2.
+        } else {
+            0.
+        };
+        let value_end_gap = if let Some(label_fn) = self.label.as_ref() {
+            self.data
+                .iter()
+                .map(|v| measure_text_width(&label_fn(v), font_size, window))
+                .fold(0f32, f32::max)
+                + TEXT_GAP * 2.
+        } else {
+            TEXT_GAP * 4.
+        };
+        (band_gap, value_end_gap)
+    }
 }
 
 impl<T, B, V> Plot for BarChart<T, B, V>
@@ -214,18 +286,11 @@ where
         let alignment = self.alignment;
         let is_horizontal = alignment.is_horizontal();
 
-        // Band scale spans the full extent perpendicular to the value axis.
-        let band_extent = if is_horizontal {
-            total_height
-        } else {
-            total_width
+        // Band scale spans the full extent perpendicular to the value axis. Shared with the
+        // tooltip via `band_scale()` so the bars and the hover crosshair stay aligned.
+        let Some(band_scale) = self.band_scale(bounds) else {
+            return;
         };
-        let band_scale = ScaleBand::new(
-            self.data.iter().map(|v| band_fn(v)).collect(),
-            vec![0., band_extent],
-        )
-        .padding_inner(0.4)
-        .padding_outer(0.2);
         let band_width = band_scale.band_width();
 
         let value_dim = if is_horizontal {
@@ -239,32 +304,7 @@ where
         // Similarly, value labels (numbers) at the bar ends are measured so the
         // scale range is always shrunk by exactly the right amount.
         let (band_gap, value_end_gap) = if is_horizontal {
-            let font_size = px(TEXT_SIZE);
-            let band_gap = if self.label_axis {
-                let max_w = self
-                    .data
-                    .iter()
-                    .map(|v| {
-                        let s: SharedString = band_fn(v).into();
-                        measure_text_width(&s, font_size, window)
-                    })
-                    .fold(0f32, f32::max);
-                // TEXT_GAP: space between axis line and label start/end.
-                max_w + TEXT_GAP * 2.
-            } else {
-                0.
-            };
-            let value_end_gap = if let Some(label_fn) = self.label.as_ref() {
-                let max_w = self
-                    .data
-                    .iter()
-                    .map(|v| measure_text_width(&label_fn(v), font_size, window))
-                    .fold(0f32, f32::max);
-                max_w + TEXT_GAP * 2.
-            } else {
-                TEXT_GAP * 4.
-            };
-            (band_gap, value_end_gap)
+            self.horizontal_gaps(window)
         } else {
             (axis_gap, 10.)
         };
@@ -421,6 +461,106 @@ where
         }
 
         bar.paint(&bounds, window, cx);
+    }
+
+    fn id(&self) -> Option<ElementId> {
+        self.id.clone()
+    }
+
+    fn tooltip_state(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        _cx: &App,
+    ) -> Option<TooltipState> {
+        let band_fn = self.band.as_ref()?;
+        self.value.as_ref()?;
+
+        // Only the band scale is needed to hit-test which bar is hovered, so no text
+        // measurement (and thus no `window`) is required.
+        let is_horizontal = self.alignment.is_horizontal();
+        let band_scale = self.band_scale(bounds)?;
+        let band_width = band_scale.band_width();
+
+        let cursor_band = if is_horizontal {
+            position.y
+        } else {
+            position.x
+        };
+        let index = band_scale.least_index(cursor_band.as_f32());
+        let d = self.data.get(index)?;
+        let center = band_scale.tick(&band_fn(d))? + band_width / 2.;
+
+        // Vertical bars: vertical crosshair at the bar's x. Horizontal bars: horizontal
+        // crosshair at the bar's y. The box tracks the cursor either way.
+        let cross_line = if is_horizontal {
+            point(position.x, px(center))
+        } else {
+            point(px(center), position.y)
+        };
+
+        Some(TooltipState::new(index, cross_line, vec![]))
+    }
+
+    fn tooltip(
+        &self,
+        state: &TooltipState,
+        cursor: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        let (band_fn, value_fn) = (self.band.as_ref()?, self.value.as_ref()?);
+        let d = self.data.get(state.index)?;
+        let title: SharedString = band_fn(d).into();
+        let value = value_fn(d).to_f64()?;
+        let name = self.name.clone().unwrap_or_default();
+
+        // Highlight the hovered bar with a translucent band the width of the bar, instead
+        // of a hairline. Confined to the plot area so it doesn't cover the axis labels.
+        let band_width = self.band_scale(bounds)?.band_width();
+        let cross_line = if self.alignment.is_horizontal() {
+            let (band_gap, value_end_gap) = self.horizontal_gaps(window);
+            let length = (bounds.size.width.as_f32() - band_gap - value_end_gap).max(0.);
+            let start = if matches!(self.alignment, BarAlignment::Left) {
+                band_gap
+            } else {
+                value_end_gap
+            };
+            // Skip the tooltip when the cursor is over the value-axis labels, not a bar.
+            if cursor.x.as_f32() < start || cursor.x.as_f32() > start + length {
+                return None;
+            }
+            CrossLine::new(state.cross_line)
+                .horizontal()
+                .h_span(start, length)
+                .band(px(band_width))
+        } else {
+            let axis_gap = if self.label_axis { AXIS_GAP } else { 0. };
+            let length = bounds.size.height.as_f32() - axis_gap;
+            let start = if matches!(self.alignment, BarAlignment::Top) {
+                axis_gap
+            } else {
+                0.
+            };
+            // Skip the tooltip when the cursor is over the band-axis labels, not a bar.
+            if cursor.y.as_f32() < start || cursor.y.as_f32() > start + length {
+                return None;
+            }
+            CrossLine::new(state.cross_line)
+                .span(start, length)
+                .band(px(band_width))
+        };
+
+        Some(
+            // Follow the cursor; the highlight band stays snapped to the bar.
+            Tooltip::new(cursor, bounds.size)
+                .gap(px(8.))
+                .cross_line(cross_line)
+                .title(title)
+                .row(cx.theme().chart_2, name, format!("{}", value))
+                .into_any_element(),
+        )
     }
 }
 

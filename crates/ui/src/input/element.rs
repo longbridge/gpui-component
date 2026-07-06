@@ -527,9 +527,17 @@ impl TextElement {
                 _ => 0.85,
             } * line_height;
 
+            // Match the caret to the deferred scroll target (applied below) that
+            // the text paints at; otherwise the caret follows the cursor-scroll
+            // while the text uses the deferred offset, flashing it mid-field.
+            let cursor_scroll_x = state
+                .deferred_scroll_offset
+                .map(|offset| offset.x)
+                .unwrap_or(scroll_offset.x);
+
             // For Right alignment, clamp cursor within the right edge of bounds so it
             // stays visible without having to shift the text via scroll_offset.
-            let cursor_x = bounds.left() + cursor_pos.x + line_number_width + scroll_offset.x;
+            let cursor_x = bounds.left() + cursor_pos.x + line_number_width + cursor_scroll_x;
             let cursor_x = if last_layout.text_align == TextAlign::Right {
                 cursor_x.min(bounds.right() - CURSOR_WIDTH)
             } else {
@@ -1554,23 +1562,6 @@ impl Element for TextElement {
         });
 
         let state = self.state.read(cx);
-        let line_height = window.line_height();
-
-        let (visible_range, visible_buffer_lines, visible_top) =
-            self.calculate_visible_range(&state, line_height, bounds.size.height);
-        let visible_start_offset = state.text.line_start_offset(visible_range.start);
-        let visible_end_offset = state
-            .text
-            .line_end_offset(visible_range.end.saturating_sub(1));
-
-        let highlight_styles = self.highlight_lines(
-            &visible_buffer_lines,
-            visible_top,
-            visible_start_offset..visible_end_offset,
-            cx,
-        );
-
-        let state = self.state.read(cx);
         let multi_line = state.mode.is_multi_line();
         let text = state.text.clone();
         let is_empty = text.len() == 0;
@@ -1604,6 +1595,37 @@ impl Element for TextElement {
         } else {
             None
         };
+
+        let wrap_width_changed = state
+            .last_layout
+            .as_ref()
+            .map(|l| l.wrap_width != wrap_width)
+            .unwrap_or(true);
+
+        if wrap_width_changed {
+            self.state.update(cx, |state, cx| {
+                state.display_map.on_layout_changed(wrap_width, cx);
+            });
+        }
+
+        let state = self.state.read(cx);
+        let line_height = window.line_height();
+
+        let (visible_range, visible_buffer_lines, visible_top) =
+            self.calculate_visible_range(&state, line_height, bounds.size.height);
+        let visible_start_offset = state.text.line_start_offset(visible_range.start);
+        let visible_end_offset = state
+            .text
+            .line_end_offset(visible_range.end.saturating_sub(1));
+
+        let highlight_styles = self.highlight_lines(
+            &visible_buffer_lines,
+            visible_top,
+            visible_start_offset..visible_end_offset,
+            cx,
+        );
+
+        let state = self.state.read(cx);
 
         let visible_line_byte_offsets: Vec<usize> = visible_buffer_lines
             .iter()

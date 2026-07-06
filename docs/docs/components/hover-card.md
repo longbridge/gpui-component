@@ -141,6 +141,17 @@ HoverCard supports 6 positioning options using the [Anchor] type:
 - BottomCenter
 - BottomRight
 
+Imagine the card has a pointer tip (like a speech bubble's tail). The anchor is where that tip sits relative to the trigger — `TopCenter` places it at the trigger's top center, `BottomRight` at the bottom-right, and so on. The card then hangs off that point.
+
+For example, `Anchor::TopLeft` places the card just below the trigger, left-aligned to it:
+
+```text
+[ Trigger ]
+┌──────────────┐
+│  Hover Card  │
+└──────────────┘
+```
+
 ### Custom Content Builder
 
 For performance optimization, you can provide a content builder function for more complex case, which only calls when the HoverCard is opened:
