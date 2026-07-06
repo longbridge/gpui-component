@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, Window, div,
+    ParentElement as _, Render, Role, Styled, Subscription, Window, div,
 };
 
 use crate::section;
@@ -390,7 +390,7 @@ impl Render for InputStory {
                 section("Normal Input")
                     .max_w_md()
                     .child(Input::new(&self.input1).cleanable(true))
-                    .child(Input::new(&self.input2)),
+                    .child(Input::new(&self.input2).role(Role::EmailInput)),
             )
             .child(
                 section("Input State")
