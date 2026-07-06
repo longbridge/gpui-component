@@ -443,6 +443,14 @@ Link ribbons are filled with a horizontal gradient from the source node color to
 Node heights are linear in flow value, so a large value range (e.g. 200:1) leaves the small flows nearly invisible. Feed compressed values (e.g. square roots) to the layout, and show the real value in the label:
 
 ```rust
+// Nodes carry the real value for the label.
+#[derive(Clone)]
+struct FlowNode {
+    pub name: SharedString,
+    pub value: f64,
+}
+
+// Feed sqrt-compressed values to the layout so small flows stay visible.
 let links = raw_links
     .iter()
     .map(|l| SankeyLink::new(l.source, l.target, l.value.sqrt()))

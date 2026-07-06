@@ -228,8 +228,8 @@ impl Sankey {
 
         compute_node_links(&mut graph);
         compute_node_values(&mut graph);
-        compute_node_depths(&mut graph)?;
-        compute_node_heights(&mut graph)?;
+        compute_node_ranks(&mut graph, true)?;
+        compute_node_ranks(&mut graph, false)?;
         let mut columns = self.compute_node_layers(&mut graph);
         self.compute_node_breadths(&mut graph, &mut columns);
         compute_link_breadths(&mut graph);
@@ -472,39 +472,36 @@ fn compute_node_values(graph: &mut SankeyGraph) {
     }
 }
 
-/// Assign depths by BFS waves; later waves overwrite, yielding the
-/// longest-path depth. More waves than nodes means a cycle.
-fn compute_node_depths(graph: &mut SankeyGraph) -> Result<(), SankeyError> {
+/// Assign topological ranks by BFS waves; later waves overwrite, yielding the
+/// longest-path rank. More waves than nodes means a cycle.
+///
+/// `forward` walks source links to their targets and writes `depth`;
+/// otherwise it walks target links to their sources and writes `height`.
+fn compute_node_ranks(graph: &mut SankeyGraph, forward: bool) -> Result<(), SankeyError> {
     let n = graph.nodes.len();
     let mut current: Vec<usize> = (0..n).collect();
     let mut x = 0;
     while !current.is_empty() {
         let mut next = vec![false; n];
         for &index in &current {
-            graph.nodes[index].depth = x;
-            for &link in &graph.nodes[index].source_links {
-                next[graph.links[link].target] = true;
+            let node = &graph.nodes[index];
+            let links = if forward {
+                &node.source_links
+            } else {
+                &node.target_links
+            };
+            for &link in links {
+                let neighbor = if forward {
+                    graph.links[link].target
+                } else {
+                    graph.links[link].source
+                };
+                next[neighbor] = true;
             }
-        }
-        x += 1;
-        if x > n {
-            return Err(SankeyError::CircularLink);
-        }
-        current = (0..n).filter(|&index| next[index]).collect();
-    }
-    Ok(())
-}
-
-fn compute_node_heights(graph: &mut SankeyGraph) -> Result<(), SankeyError> {
-    let n = graph.nodes.len();
-    let mut current: Vec<usize> = (0..n).collect();
-    let mut x = 0;
-    while !current.is_empty() {
-        let mut next = vec![false; n];
-        for &index in &current {
-            graph.nodes[index].height = x;
-            for &link in &graph.nodes[index].target_links {
-                next[graph.links[link].source] = true;
+            if forward {
+                graph.nodes[index].depth = x;
+            } else {
+                graph.nodes[index].height = x;
             }
         }
         x += 1;

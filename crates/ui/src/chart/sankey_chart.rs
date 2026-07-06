@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    App, Bounds, Corners, ElementId, Hsla, Pixels, SharedString, TextAlign, Window, fill,
-    linear_color_stop, linear_gradient, point, px,
+    App, Bounds, Corners, Hsla, Pixels, SharedString, TextAlign, Window, fill, linear_color_stop,
+    linear_gradient, point, px,
 };
 use gpui_component_macros::IntoPlot;
 
@@ -12,7 +12,6 @@ use crate::{
         Plot,
         label::{PlotLabel, TEXT_GAP, TEXT_HEIGHT, TEXT_SIZE, Text, measure_text_width},
         origin_point,
-        scale::ScaleOrdinal,
         shape::{Sankey, SankeyAlign, SankeyLink, sankey_link_path},
     },
 };
@@ -31,7 +30,6 @@ const MAX_LABEL_MARGIN_RATIO: f32 = 0.6;
 /// indices before constructing.
 #[derive(IntoPlot)]
 pub struct SankeyChart<T: 'static> {
-    id: Option<ElementId>,
     nodes: Vec<T>,
     links: Vec<SankeyLink>,
     node_width: f32,
@@ -54,7 +52,6 @@ impl<T> SankeyChart<T> {
         L: IntoIterator<Item = SankeyLink>,
     {
         Self {
-            id: None,
             nodes: nodes.into_iter().collect(),
             links: links.into_iter().collect(),
             node_width: DEFAULT_NODE_WIDTH,
@@ -69,12 +66,6 @@ impl<T> SankeyChart<T> {
             min_link_width: DEFAULT_MIN_LINK_WIDTH,
             label_gap: DEFAULT_LABEL_GAP,
         }
-    }
-
-    /// Set a stable element id (reserved for future tooltip support).
-    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
-        self.id = Some(id.into());
-        self
     }
 
     /// Set the node rectangle width. Defaults to 10.
@@ -161,10 +152,6 @@ impl<T> SankeyChart<T> {
 }
 
 impl<T> Plot for SankeyChart<T> {
-    fn id(&self) -> Option<ElementId> {
-        self.id.clone()
-    }
-
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
         let width = bounds.size.width.as_f32();
         let height = bounds.size.height.as_f32();
@@ -223,12 +210,22 @@ impl<T> Plot for SankeyChart<T> {
                 right *= k;
             }
         }
-        let top = if has_labels {
+        // Above-node labels are only emitted for middle columns, so reserve
+        // the top band only when such columns exist. Cap the vertical margins
+        // like the horizontal ones so a short chart doesn't collapse the flow.
+        let has_middle_labels = has_labels && layer_count > 2;
+        let mut top = if has_middle_labels {
             2. * TEXT_HEIGHT + TEXT_GAP
         } else {
             0.
         };
-        let bottom = if has_labels { TEXT_GAP } else { 0. };
+        let mut bottom = if has_labels { TEXT_GAP } else { 0. };
+        let max_vertical = height * MAX_LABEL_MARGIN_RATIO;
+        if top + bottom > max_vertical {
+            let k = max_vertical / (top + bottom);
+            top *= k;
+            bottom *= k;
+        }
 
         // Second pass on the final extent.
         let Ok(graph) = self
@@ -244,23 +241,20 @@ impl<T> Plot for SankeyChart<T> {
             return;
         };
 
-        let palette = ScaleOrdinal::new(
-            (0..self.nodes.len()).collect(),
-            vec![
-                cx.theme().chart_1,
-                cx.theme().chart_2,
-                cx.theme().chart_3,
-                cx.theme().chart_4,
-                cx.theme().chart_5,
-            ],
-        );
+        let palette = [
+            cx.theme().chart_1,
+            cx.theme().chart_2,
+            cx.theme().chart_3,
+            cx.theme().chart_4,
+            cx.theme().chart_5,
+        ];
         let colors: Vec<Hsla> = self
             .nodes
             .iter()
             .enumerate()
             .map(|(index, datum)| match &self.node_color {
                 Some(color) => color(datum),
-                None => palette.map(&index).unwrap_or_else(|| cx.theme().chart_1),
+                None => palette[index % palette.len()],
             })
             .collect();
 
@@ -382,7 +376,6 @@ mod tests {
         assert!(chart.value_label.is_none());
 
         let chart = chart
-            .id("sankey")
             .node_width(8.)
             .node_padding(20.)
             .node_align(SankeyAlign::Left)
@@ -394,7 +387,6 @@ mod tests {
             .link_opacity(0.5)
             .min_link_width(2.)
             .label_gap(10.);
-        assert!(chart.id.is_some());
         assert_eq!(chart.node_width, 8.);
         assert_eq!(chart.node_padding, 20.);
         assert_eq!(chart.align, SankeyAlign::Left);

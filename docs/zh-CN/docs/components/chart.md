@@ -423,6 +423,14 @@ SankeyChart::new(nodes, links)
 节点高度与流量值成线性关系，数值跨度很大时（如 200:1）小流量几乎不可见。可以把压缩后的值（如平方根）交给布局，标签仍显示真实值：
 
 ```rust
+// 节点自身携带用于标签的真实值。
+#[derive(Clone)]
+struct FlowNode {
+    pub name: SharedString,
+    pub value: f64,
+}
+
+// 把 sqrt 压缩后的值交给布局，让小流量保持可见。
 let links = raw_links
     .iter()
     .map(|l| SankeyLink::new(l.source, l.target, l.value.sqrt()))
