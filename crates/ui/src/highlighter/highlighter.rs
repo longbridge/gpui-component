@@ -145,6 +145,61 @@ fn injection_ranges_within_limits(ranges: &[tree_sitter::Range]) -> bool {
         && injection_ranges_byte_count(ranges) <= MAX_INJECTION_BYTES
 }
 
+/// Combined markdown inline injections are parsed as one tree with
+/// `set_included_ranges`. If we include only the inline nodes that contain
+/// trigger bytes, the parser sees those ranges as adjacent and can merge a
+/// closing backtick from one list item with an opening backtick from the next.
+/// Re-inserting the separator bytes between retained inline ranges preserves
+/// the original boundaries.
+///
+/// The separator bytes count against the same `MAX_INJECTION_RANGES` /
+/// `MAX_INJECTION_BYTES` budget as the content ranges, so on a very large
+/// document the tail ranges may be dropped here even though `push_limited`
+/// already admitted them.
+fn normalize_combined_injection_ranges(
+    language_name: &SharedString,
+    ranges: Vec<tree_sitter::Range>,
+) -> Vec<tree_sitter::Range> {
+    if language_name.as_ref() != "markdown_inline" || ranges.len() <= 1 {
+        return ranges;
+    }
+
+    let mut normalized = Vec::with_capacity(ranges.len().min(MAX_INJECTION_RANGES));
+    let mut byte_count = 0usize;
+    let mut previous_range: Option<tree_sitter::Range> = None;
+
+    for range in ranges {
+        let mut pending_ranges = Vec::with_capacity(2);
+        if let Some(previous) = previous_range {
+            if previous.end_byte < range.start_byte {
+                pending_ranges.push(tree_sitter::Range {
+                    start_byte: previous.end_byte,
+                    end_byte: range.start_byte,
+                    start_point: previous.end_point,
+                    end_point: range.start_point,
+                });
+            }
+        }
+        pending_ranges.push(range);
+
+        let pending_len = pending_ranges
+            .iter()
+            .map(injection_range_len)
+            .sum::<usize>();
+        if normalized.len().saturating_add(pending_ranges.len()) > MAX_INJECTION_RANGES
+            || byte_count.saturating_add(pending_len) > MAX_INJECTION_BYTES
+        {
+            break;
+        }
+
+        byte_count += pending_len;
+        normalized.extend(pending_ranges);
+        previous_range = Some(range);
+    }
+
+    normalized
+}
+
 fn should_include_injection_range(
     language_name: &SharedString,
     range: &tree_sitter::Range,
@@ -665,6 +720,10 @@ impl SyntaxHighlighter {
                 continue;
             }
             sort_ranges(&mut ranges);
+            ranges = normalize_combined_injection_ranges(&language_name, ranges);
+            if ranges.is_empty() {
+                continue;
+            }
             let old_tree = old_layer_trees
                 .get(&(language_name.clone(), ranges_cache_key(&ranges)))
                 .copied();
@@ -1324,6 +1383,34 @@ $x = 1;
                 .iter()
                 .all(|layer| layer.language_name.as_ref() != "markdown_inline"),
             "plain inline ranges should not create markdown_inline injection layers"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_markdown_inline_code_spans_in_list_items() {
+        let markdown = "- `one`\n- `two`\n- `three`\n\nLater `four`\n";
+        let rope = Rope::from_str(markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+        highlighter.update(None, &rope, None);
+
+        let highlights = highlighter.match_styles(0..markdown.len());
+        for text in ["one", "two", "three", "four"] {
+            assert!(
+                has_highlight_covering(&highlights, markdown, text, "text.code.span"),
+                "{text:?} should be highlighted as a code span"
+            );
+        }
+
+        let prose_start = markdown.find("Later").unwrap();
+        let prose_end = prose_start + "Later".len();
+        assert!(
+            !highlights.iter().any(|item| {
+                item.name.as_ref() == "text.code.span"
+                    && item.range.start <= prose_start
+                    && item.range.end >= prose_end
+            }),
+            "plain prose after the list should not be highlighted as a code span"
         );
     }
 
