@@ -137,7 +137,9 @@ impl Example {
 
             // Install the example range semantic tokens provider, alongside
             // the other LSP providers. It highlights TODO/FIXME/… markers.
-            input_state.lsp.semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
+            input_state
+                .lsp
+                .set_semantic_tokens_provider(Some(Rc::new(MarkerHighlighter)), cx);
 
             input_state
         });

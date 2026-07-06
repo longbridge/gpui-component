@@ -432,7 +432,7 @@ pub struct InputState {
     /// A flag to indicate if we have a pending update to the text.
     ///
     /// If true, will call some update (for example LSP, Syntax Highlight) before render.
-    pub(super) _pending_update: bool,
+    _pending_update: bool,
     /// A flag to indicate if we should ignore the next completion event.
     pub(super) silent_replace_text: bool,
     /// A flag to indicate if we should emit InputEvents.
@@ -1644,8 +1644,8 @@ impl InputState {
             }
 
             let is_enable = !self.disabled;
-            let has_goto_definition = is_enable && self.lsp.definition_provider.is_some();
-            let has_code_action = is_enable && !self.lsp.code_action_providers.is_empty();
+            let has_goto_definition = is_enable && self.lsp.has_definition_provider();
+            let has_code_action = is_enable && self.lsp.has_code_action_providers();
             let is_selected = !self.selected_range.is_empty();
             let has_paste = is_enable && cx.read_from_clipboard().is_some();
 
@@ -2708,6 +2708,12 @@ impl InputState {
     ) {
         // No-op
     }
+
+    /// Whether there is a pending update to the text or the LSP providers,
+    /// that should be applied before the next render.
+    fn has_pending_update(&self) -> bool {
+        self._pending_update || self.lsp.pending_update
+    }
 }
 
 impl EntityInputHandler for InputState {
@@ -3023,17 +3029,21 @@ impl Focusable for InputState {
 
 impl Render for InputState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self._pending_update {
-            let bg = self
-                .mode
-                .update_highlighter(&(0..0), &self.text, &self.text, "", false, cx);
-            if let Some(bg) = bg {
-                Self::dispatch_background_parse(bg, window, cx);
+        if self.has_pending_update() {
+            if self._pending_update {
+                let bg =
+                    self.mode
+                        .update_highlighter(&(0..0), &self.text, &self.text, "", false, cx);
+                if let Some(bg) = bg {
+                    Self::dispatch_background_parse(bg, window, cx);
+                }
+
+                self.update_fold_candidates();
             }
 
-            self.update_fold_candidates();
             self.lsp.update(&self.text, window, cx);
             self._pending_update = false;
+            self.lsp.pending_update = false;
         }
 
         div()

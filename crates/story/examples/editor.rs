@@ -709,11 +709,19 @@ impl Example {
                 .placeholder("Enter your code here...");
 
             let lsp_store = Rc::new(lsp_store.clone());
-            editor.lsp.completion_provider = Some(lsp_store.clone());
-            editor.lsp.code_action_providers = vec![lsp_store.clone(), Rc::new(TextConvertor)];
-            editor.lsp.hover_provider = Some(lsp_store.clone());
-            editor.lsp.definition_provider = Some(lsp_store.clone());
-            editor.lsp.document_color_provider = Some(lsp_store.clone());
+            editor
+                .lsp
+                .set_completion_provider(Some(lsp_store.clone()), cx);
+            editor
+                .lsp
+                .set_code_action_providers(vec![lsp_store.clone(), Rc::new(TextConvertor)], cx);
+            editor.lsp.set_hover_provider(Some(lsp_store.clone()), cx);
+            editor
+                .lsp
+                .set_definition_provider(Some(lsp_store.clone()), cx);
+            editor
+                .lsp
+                .set_document_color_provider(Some(lsp_store.clone()), cx);
 
             editor
         });

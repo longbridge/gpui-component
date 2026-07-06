@@ -99,7 +99,9 @@ impl DivInspector {
                     hard_tabs: false,
                 });
 
-            editor.lsp.completion_provider = Some(lsp_provider.clone());
+            editor
+                .lsp
+                .set_completion_provider(Some(lsp_provider.clone()), cx);
             editor
         });
 

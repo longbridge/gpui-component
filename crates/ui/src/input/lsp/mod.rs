@@ -24,23 +24,24 @@ pub use semantic_tokens::*;
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#serverCapabilities
 pub struct Lsp {
     /// The completion provider.
-    pub completion_provider: Option<Rc<dyn CompletionProvider>>,
+    completion_provider: Option<Rc<dyn CompletionProvider>>,
     /// The code action providers.
-    pub code_action_providers: Vec<Rc<dyn CodeActionProvider>>,
+    code_action_providers: Vec<Rc<dyn CodeActionProvider>>,
     /// The hover provider.
-    pub hover_provider: Option<Rc<dyn HoverProvider>>,
+    hover_provider: Option<Rc<dyn HoverProvider>>,
     /// The definition provider.
-    pub definition_provider: Option<Rc<dyn DefinitionProvider>>,
+    definition_provider: Option<Rc<dyn DefinitionProvider>>,
     /// The document color provider.
-    pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
+    document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
     /// The range semantic tokens provider.
-    pub semantic_tokens_provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
+    semantic_tokens_provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
 
     document_colors: Vec<(lsp_types::Range, Hsla)>,
     /// Cached semantic tokens as absolute position ranges + theme token-type
     /// names. Color is resolved from the name at paint time so theme switches
     /// take effect without a refetch.
     semantic_tokens: Vec<(lsp_types::Range, SharedString)>,
+    pub(crate) pending_update: bool,
     _hover_task: Task<Result<()>>,
     _document_color_task: Task<()>,
     _semantic_tokens_task: Task<()>,
@@ -57,6 +58,7 @@ impl Default for Lsp {
             semantic_tokens_provider: None,
             document_colors: vec![],
             semantic_tokens: vec![],
+            pending_update: false,
             _hover_task: Task::ready(Ok(())),
             _document_color_task: Task::ready(()),
             _semantic_tokens_task: Task::ready(()),
@@ -84,93 +86,103 @@ impl Lsp {
         self._document_color_task = Task::ready(());
         self._semantic_tokens_task = Task::ready(());
     }
+
+    /// Whether a definition provider is set.
+    pub(crate) fn has_definition_provider(&self) -> bool {
+        self.definition_provider.is_some()
+    }
+
+    /// Whether any code action provider is set.
+    pub(crate) fn has_code_action_providers(&self) -> bool {
+        !self.code_action_providers.is_empty()
+    }
+
+    /// Set the completion provider.
+    pub fn set_completion_provider(
+        &mut self,
+        provider: Option<Rc<dyn CompletionProvider>>,
+        cx: &mut Context<InputState>,
+    ) {
+        self.completion_provider = provider;
+        self.pending_update = true;
+        cx.notify();
+    }
+
+    /// Set the hover provider.
+    pub fn set_hover_provider(
+        &mut self,
+        provider: Option<Rc<dyn HoverProvider>>,
+        cx: &mut Context<InputState>,
+    ) {
+        self.hover_provider = provider;
+        self.pending_update = true;
+        cx.notify();
+    }
+
+    /// Set the definition provider.
+    pub fn set_definition_provider(
+        &mut self,
+        provider: Option<Rc<dyn DefinitionProvider>>,
+        cx: &mut Context<InputState>,
+    ) {
+        self.definition_provider = provider;
+        self.pending_update = true;
+        cx.notify();
+    }
+
+    /// Set the document color provider.
+    pub fn set_document_color_provider(
+        &mut self,
+        provider: Option<Rc<dyn DocumentColorProvider>>,
+        cx: &mut Context<InputState>,
+    ) {
+        self.document_color_provider = provider;
+        self.pending_update = true;
+        cx.notify();
+    }
+
+    /// Set the semantic tokens provider.
+    pub fn set_semantic_tokens_provider(
+        &mut self,
+        provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
+        cx: &mut Context<InputState>,
+    ) {
+        self.semantic_tokens_provider = provider;
+        self.pending_update = true;
+        cx.notify();
+    }
+
+    /// Replace all code action providers.
+    pub fn set_code_action_providers(
+        &mut self,
+        providers: Vec<Rc<dyn CodeActionProvider>>,
+        cx: &mut Context<InputState>,
+    ) {
+        self.code_action_providers = providers;
+        self.pending_update = true;
+        cx.notify();
+    }
+
+    /// Clear all code action providers.
+    pub fn clear_code_action_providers(&mut self, cx: &mut Context<InputState>) {
+        self.code_action_providers.clear();
+        self.pending_update = true;
+        cx.notify();
+    }
+
+    /// Append a code action provider.
+    pub fn push_code_action_provider(
+        &mut self,
+        provider: Rc<dyn CodeActionProvider>,
+        cx: &mut Context<InputState>,
+    ) {
+        self.code_action_providers.push(provider);
+        self.pending_update = true;
+        cx.notify();
+    }
 }
 
 impl InputState {
-    /// Set the LSP completion provider.
-    pub fn set_lsp_completion_provider(
-        &mut self,
-        provider: Option<Rc<dyn CompletionProvider>>,
-        cx: &mut Context<Self>,
-    ) {
-        self.lsp.completion_provider = provider;
-        self._pending_update = true;
-        cx.notify();
-    }
-
-    /// Set the LSP hover provider.
-    pub fn set_lsp_hover_provider(
-        &mut self,
-        provider: Option<Rc<dyn HoverProvider>>,
-        cx: &mut Context<Self>,
-    ) {
-        self.lsp.hover_provider = provider;
-        self._pending_update = true;
-        cx.notify();
-    }
-
-    /// Set the LSP definition provider.
-    pub fn set_lsp_definition_provider(
-        &mut self,
-        provider: Option<Rc<dyn DefinitionProvider>>,
-        cx: &mut Context<Self>,
-    ) {
-        self.lsp.definition_provider = provider;
-        self._pending_update = true;
-        cx.notify();
-    }
-
-    /// Set the LSP document color provider.
-    pub fn set_lsp_document_color_provider(
-        &mut self,
-        provider: Option<Rc<dyn DocumentColorProvider>>,
-        cx: &mut Context<Self>,
-    ) {
-        self.lsp.document_color_provider = provider;
-        self._pending_update = true;
-        cx.notify();
-    }
-
-    /// Set the LSP semantic tokens provider.
-    pub fn set_lsp_semantic_tokens_provider(
-        &mut self,
-        provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
-        cx: &mut Context<Self>,
-    ) {
-        self.lsp.semantic_tokens_provider = provider;
-        self._pending_update = true;
-        cx.notify();
-    }
-
-    /// Replace all LSP code action providers.
-    pub fn set_lsp_code_action_providers(
-        &mut self,
-        providers: Vec<Rc<dyn CodeActionProvider>>,
-        cx: &mut Context<Self>,
-    ) {
-        self.lsp.code_action_providers = providers;
-        self._pending_update = true;
-        cx.notify();
-    }
-
-    /// Clear all LSP code action providers.
-    pub fn clear_lsp_code_action_providers(&mut self, cx: &mut Context<Self>) {
-        self.lsp.code_action_providers.clear();
-        self._pending_update = true;
-        cx.notify();
-    }
-
-    /// Append an LSP code action provider.
-    pub fn push_lsp_code_action_provider(
-        &mut self,
-        provider: Rc<dyn CodeActionProvider>,
-        cx: &mut Context<Self>,
-    ) {
-        self.lsp.code_action_providers.push(provider);
-        self._pending_update = true;
-        cx.notify();
-    }
-
     pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
         self.context_menu_content = None;
         self._context_menu_task = Task::ready(Ok(()));
