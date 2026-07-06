@@ -1250,6 +1250,24 @@ impl InputState {
         });
     }
 
+    /// Refresh the input, so the next render re-runs syntax highlighting and
+    /// the LSP providers, not just a redraw.
+    ///
+    /// Assigning the `lsp` providers (or other render-affecting state) at
+    /// runtime does not take effect until the text next changes. Call this
+    /// afterwards to force the refresh on the next render.
+    ///
+    /// ```ignore
+    /// input.update(cx, |state, cx| {
+    ///     state.lsp.hover_provider = Some(provider);
+    ///     state.refresh(cx);
+    /// });
+    /// ```
+    pub fn refresh(&mut self, cx: &mut Context<Self>) {
+        self._pending_update = true;
+        cx.notify();
+    }
+
     pub(super) fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
         self.select_to(self.previous_boundary(self.cursor()), cx);
     }
