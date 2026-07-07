@@ -415,6 +415,7 @@ pub struct Slider {
     axis: Axis,
     style: StyleRefinement,
     disabled: bool,
+    reverse: bool,
 }
 
 impl Slider {
@@ -425,6 +426,7 @@ impl Slider {
             state: state.clone(),
             style: StyleRefinement::default(),
             disabled: false,
+            reverse: false,
         }
     }
 
@@ -443,6 +445,20 @@ impl Slider {
     /// Set the disabled state of the slider, default: false
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Reverse the filled (highlighted) side of the track, default: false.
+    ///
+    /// By default the track is filled from the min end to the thumb. With
+    /// `reverse`, the fill goes from the thumb to the max end instead — useful
+    /// when the slider represents a remaining amount (e.g. time left).
+    ///
+    /// This only changes the visual fill; values, events and interactions are
+    /// unaffected. It applies to single-value sliders and is ignored for
+    /// range sliders.
+    pub fn reverse(mut self) -> Self {
+        self.reverse = true;
         self
     }
 
@@ -534,8 +550,12 @@ impl RenderOnce for Slider {
         let state = self.state.read(cx);
         let is_range = state.value().is_range();
         let percentage = state.percentage.clone();
-        let bar_start = relative(percentage.start);
-        let bar_end = relative(1. - percentage.end);
+        let (bar_start, bar_end) = if self.reverse && !is_range {
+            // Fill from the thumb to the max end (remaining side).
+            (relative(percentage.end), relative(0.))
+        } else {
+            (relative(percentage.start), relative(1. - percentage.end))
+        };
         let rem_size = window.rem_size();
 
         let bar_color = self
