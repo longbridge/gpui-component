@@ -81,14 +81,12 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
 
                 // Pass the live cursor so the tooltip box can follow it; the crosshair and
                 // dots in `state` stay snapped to the data point by `tooltip_state`.
-                let overlay = <Self as Plot>::tooltip(self, &state, position, bounds, window, cx)?;
-
-                // Defer the overlay so it paints above sibling content drawn after the plot
-                // (e.g. a chart card's footer text). The tooltip box can extend past the plot
-                // bounds; without deferral those later siblings would cover the overflow.
-                let mut overlay = gpui::IntoElement::into_any_element(
-                    gpui::deferred(overlay),
-                );
+                //
+                // The overlay paints in the plot's own layer, so the crosshair and dots stay
+                // below content drawn over the plot. The tooltip box defers itself (see
+                // `plot::tooltip::Tooltip`) to paint above sibling content, since it can
+                // extend past the plot bounds.
+                let mut overlay = <Self as Plot>::tooltip(self, &state, position, bounds, window, cx)?;
                 overlay.prepaint_as_root(bounds.origin, bounds.size.into(), window, cx);
                 Some(overlay)
             }
@@ -127,7 +125,8 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     );
                 }
 
-                // Paint the tooltip overlay (crosshair, dots, box) above the plot graphics.
+                // Paint the tooltip overlay (crosshair, dots) above the plot graphics; the
+                // deferred box paints later, above everything.
                 if let Some(overlay) = overlay.as_mut() {
                     overlay.paint(window, cx);
                 }

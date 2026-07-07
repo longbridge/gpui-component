@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, App, Div, Hsla, IntoElement, ParentElement, Pixels, Point, RenderOnce,
-    SharedString, Size, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
+    SharedString, Size, StyleRefinement, Styled, Window, deferred, div, prelude::FluentBuilder, px,
 };
 
 use crate::{ActiveTheme, Colorize, StyledExt, h_flex, v_flex};
@@ -399,7 +399,10 @@ impl RenderOnce for Tooltip {
             .left_0()
             .when_some(cross_line, |this, cross_line| this.child(cross_line))
             .when_some(dots, |this, dots| this.children(dots))
-            .child(content.map(|this| {
+            // Only the box is deferred: it can overflow the plot bounds and must paint above
+            // sibling content, while the crosshair and dots stay in the plot's own layer so
+            // they don't cover elements drawn over the plot.
+            .child(deferred(content.map(|this| {
                 if !appearance {
                     return this.size_full().relative();
                 }
@@ -424,6 +427,6 @@ impl RenderOnce for Tooltip {
                             c.bottom(within.height - cursor.y + gap)
                         }
                     })
-            }))
+            })))
     }
 }
