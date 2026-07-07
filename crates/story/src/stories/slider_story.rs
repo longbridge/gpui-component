@@ -26,6 +26,7 @@ pub struct SliderStory {
     slider_hsl_value: Hsla,
     slider4: Entity<SliderState>,
     slider_logarithmic: Entity<SliderState>,
+    slider_reverse: Entity<SliderState>,
     disabled: bool,
     _subscritions: Vec<Subscription>,
 }
@@ -121,6 +122,14 @@ impl SliderStory {
                 .scale(SliderScale::Logarithmic)
         });
 
+        let slider_reverse = cx.new(|_| {
+            SliderState::new()
+                .min(0.)
+                .max(10.)
+                .step(1.)
+                .default_value(5.)
+        });
+
         let mut _subscritions = vec![
             cx.subscribe(&slider1, |this, _, event: &SliderEvent, cx| match event {
                 SliderEvent::Change(value) => {
@@ -185,6 +194,7 @@ impl SliderStory {
             slider_hsl,
             slider_hsl_value: gpui::red(),
             slider_logarithmic,
+            slider_reverse,
             disabled: false,
             _subscritions,
         }
@@ -242,6 +252,21 @@ impl Render for SliderStory {
                     .child(Slider::new(&self.slider3).disabled(self.disabled))
                     .child(format!("Value: {}", self.slider3.read(cx).value()))
                     .child(format!("Released: {}", self.slider3_released_value)),
+            )
+            .child(
+                section("Reverse Slider (fill thumb..max, e.g. time remaining)")
+                    .max_w_md()
+                    .v_flex()
+                    .child(
+                        Slider::new(&self.slider_reverse)
+                            .horizontal()
+                            .reverse()
+                            .disabled(self.disabled),
+                    )
+                    .child(format!(
+                        "Remaining: {}",
+                        10. - self.slider_reverse.read(cx).value().start()
+                    )),
             )
             .child(
                 section("Vertical with Range")
