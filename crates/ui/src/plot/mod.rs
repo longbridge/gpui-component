@@ -54,7 +54,9 @@ pub trait Plot: IntoElement {
     /// `cursor` is the live cursor position (relative to the plot origin) and `bounds` is the
     /// plot's painted area, so the tooltip box can follow the cursor (pass `cursor` and
     /// `bounds.size` to [`tooltip::Tooltip::new`]). Return the overlay element; it is painted
-    /// absolutely positioned above the plot. The default returns `None`.
+    /// absolutely positioned above the plot graphics but below sibling content drawn after
+    /// the plot ([`tooltip::Tooltip`] defers its box to paint above everything). The default
+    /// returns `None`.
     fn tooltip(
         &self,
         _state: &TooltipState,
