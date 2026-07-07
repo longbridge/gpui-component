@@ -133,7 +133,7 @@ impl ChartStory {
                             .unwrap_or(gpui::black()),
                     })
                     .collect();
-                // Skip links with unknown node keys or unparseable values
+                // Skip links with unknown node keys or unparsable values
                 // instead of panicking on bad fixture data.
                 let links = statement
                     .links
