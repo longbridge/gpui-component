@@ -159,14 +159,14 @@ impl<T> Plot for SankeyChart<T> {
             return;
         }
 
-        // First pass on the unit extent: the topology (layer, value) needed
-        // to measure the label margins.
-        let Ok(graph) = self.sankey().layout(self.nodes.len(), &self.links) else {
+        // First pass: only the topology (layer, value) is needed to measure
+        // the label margins.
+        let Ok(topology) = self.sankey().topology(self.nodes.len(), &self.links) else {
             return;
         };
-        let layer_count = graph.layer_count();
+        let layer_count = topology.layer_count();
 
-        let node_labels: Vec<(Option<SharedString>, Option<SharedString>)> = graph
+        let node_labels: Vec<(Option<SharedString>, Option<SharedString>)> = topology
             .nodes
             .iter()
             .map(|node| {
@@ -184,7 +184,7 @@ impl<T> Plot for SankeyChart<T> {
         let mut left = 0f32;
         let mut right = 0f32;
         if has_labels {
-            for node in &graph.nodes {
+            for node in &topology.nodes {
                 if node.layer != 0 && node.layer + 1 != layer_count {
                     continue;
                 }
@@ -227,8 +227,9 @@ impl<T> Plot for SankeyChart<T> {
             bottom *= k;
         }
 
-        // Second pass on the final extent.
-        let Ok(graph) = self
+        // Second pass: complete the placement on the final extent, reusing
+        // the first pass's topology.
+        let graph = self
             .sankey()
             .extent(
                 left,
@@ -236,10 +237,7 @@ impl<T> Plot for SankeyChart<T> {
                 (width - right).max(left + 1.),
                 (height - bottom).max(top + 1.),
             )
-            .layout(self.nodes.len(), &self.links)
-        else {
-            return;
-        };
+            .layout_from(topology);
 
         let palette = [
             cx.theme().chart_1,
@@ -280,16 +278,14 @@ impl<T> Plot for SankeyChart<T> {
             );
         }
 
+        let corner_radii = Corners::all(self.node_corner_radius.unwrap_or_default());
         for node in &graph.nodes {
-            let corner_radius = self.node_corner_radius.unwrap_or_default();
             let node_bounds = Bounds::from_corners(
                 origin_point(px(node.x0), px(node.y0), bounds.origin),
                 // Keep tiny nodes visible with a minimum 1px height.
                 origin_point(px(node.x1), px(node.y1.max(node.y0 + 1.)), bounds.origin),
             );
-            window.paint_quad(
-                fill(node_bounds, colors[node.index]).corner_radii(Corners::all(corner_radius)),
-            );
+            window.paint_quad(fill(node_bounds, colors[node.index]).corner_radii(corner_radii));
         }
 
         let mut texts = Vec::new();

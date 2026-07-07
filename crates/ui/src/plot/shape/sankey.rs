@@ -182,12 +182,15 @@ impl Sankey {
         self.extent(0., 0., width, height)
     }
 
-    /// Compute the layout.
+    /// Compute the topology only: node `value`, `depth`, `height`, `layer`
+    /// and horizontal positions, without the vertical placement. Much cheaper
+    /// than [`Sankey::layout`] when only the column structure is needed
+    /// (e.g. to measure labels before fixing the extent).
     ///
     /// `node_count` is the number of nodes; links reference nodes by index
     /// (d3-sankey's default `nodeId`). Returns an error if a link references
     /// a node out of range or the graph contains a cycle.
-    pub fn layout(
+    pub fn topology(
         &self,
         node_count: usize,
         links: &[SankeyLink],
@@ -230,11 +233,43 @@ impl Sankey {
         compute_node_values(&mut graph);
         compute_node_ranks(&mut graph, true)?;
         compute_node_ranks(&mut graph, false)?;
-        let mut columns = self.compute_node_layers(&mut graph);
+        self.compute_node_layers(&mut graph);
+
+        Ok(graph)
+    }
+
+    /// Compute the full layout: [`Sankey::topology`] plus the vertical node
+    /// placement and link breadths.
+    pub fn layout(
+        &self,
+        node_count: usize,
+        links: &[SankeyLink],
+    ) -> Result<SankeyGraph, SankeyError> {
+        Ok(self.layout_from(self.topology(node_count, links)?))
+    }
+
+    /// Complete the layout for a graph produced by [`Sankey::topology`],
+    /// avoiding a second topology pass when the extent only becomes known
+    /// after measuring against the column structure (e.g. label margins).
+    ///
+    /// The topological fields are extent-independent; the horizontal and
+    /// vertical positions are recomputed for this generator's extent.
+    pub fn layout_from(&self, mut graph: SankeyGraph) -> SankeyGraph {
+        if graph.nodes.is_empty() {
+            return graph;
+        }
+
+        self.compute_node_layers(&mut graph);
+
+        let mut columns = vec![Vec::new(); graph.layer_count()];
+        for node in &graph.nodes {
+            columns[node.layer].push(node.index);
+        }
+
         self.compute_node_breadths(&mut graph, &mut columns);
         compute_link_breadths(&mut graph);
 
-        Ok(graph)
+        graph
     }
 
     fn align_layer(&self, graph: &SankeyGraph, index: usize, n: usize) -> usize {
@@ -266,7 +301,7 @@ impl Sankey {
         }
     }
 
-    fn compute_node_layers(&self, graph: &mut SankeyGraph) -> Vec<Vec<usize>> {
+    fn compute_node_layers(&self, graph: &mut SankeyGraph) {
         let n = graph
             .nodes
             .iter()
@@ -283,16 +318,12 @@ impl Sankey {
             .map(|index| self.align_layer(graph, index, n).min(n - 1))
             .collect();
 
-        let mut columns = vec![Vec::new(); n];
         for (index, layer) in layers.into_iter().enumerate() {
             let node = &mut graph.nodes[index];
             node.layer = layer;
             node.x0 = self.x0 + layer as f32 * kx;
             node.x1 = node.x0 + self.node_width;
-            columns[layer].push(index);
         }
-
-        columns
     }
 
     fn compute_node_breadths(&self, graph: &mut SankeyGraph, columns: &mut [Vec<usize>]) {
@@ -516,7 +547,9 @@ fn compute_node_ranks(graph: &mut SankeyGraph, forward: bool) -> Result<(), Sank
 /// Sort a node's outgoing links by the target node's `y0` (then link index).
 fn sort_source_links(graph: &mut SankeyGraph, index: usize) {
     let mut links = std::mem::take(&mut graph.nodes[index].source_links);
-    links.sort_by(|&a, &b| {
+    // The link-index tie-break makes the order total, so an unstable sort
+    // is deterministic and avoids the stable sort's scratch allocation.
+    links.sort_unstable_by(|&a, &b| {
         let ya = graph.nodes[graph.links[a].target].y0;
         let yb = graph.nodes[graph.links[b].target].y0;
         ya.partial_cmp(&yb)
@@ -529,7 +562,7 @@ fn sort_source_links(graph: &mut SankeyGraph, index: usize) {
 /// Sort a node's incoming links by the source node's `y0` (then link index).
 fn sort_target_links(graph: &mut SankeyGraph, index: usize) {
     let mut links = std::mem::take(&mut graph.nodes[index].target_links);
-    links.sort_by(|&a, &b| {
+    links.sort_unstable_by(|&a, &b| {
         let ya = graph.nodes[graph.links[a].source].y0;
         let yb = graph.nodes[graph.links[b].source].y0;
         ya.partial_cmp(&yb)
@@ -541,12 +574,17 @@ fn sort_target_links(graph: &mut SankeyGraph, index: usize) {
 
 /// After a node moved, re-sort the link lists of its neighbors on the
 /// opposite ends (d3's reorderNodeLinks).
+///
+/// Iterates by position to avoid cloning the link lists on this hot path;
+/// the sorts only mutate the neighbors' lists, never the one being walked.
 fn reorder_node_links(graph: &mut SankeyGraph, index: usize) {
-    for link in graph.nodes[index].target_links.clone() {
+    for i in 0..graph.nodes[index].target_links.len() {
+        let link = graph.nodes[index].target_links[i];
         let source = graph.links[link].source;
         sort_source_links(graph, source);
     }
-    for link in graph.nodes[index].source_links.clone() {
+    for i in 0..graph.nodes[index].source_links.len() {
+        let link = graph.nodes[index].source_links[i];
         let target = graph.links[link].target;
         sort_target_links(graph, target);
     }
@@ -640,15 +678,15 @@ fn compute_link_breadths(graph: &mut SankeyGraph) {
         let node_y0 = graph.nodes[index].y0;
 
         let mut y0 = node_y0;
-        for link_index in graph.nodes[index].source_links.clone() {
-            let link = &mut graph.links[link_index];
+        for i in 0..graph.nodes[index].source_links.len() {
+            let link = &mut graph.links[graph.nodes[index].source_links[i]];
             link.y0 = y0 + link.width / 2.;
             y0 += link.width;
         }
 
         let mut y1 = node_y0;
-        for link_index in graph.nodes[index].target_links.clone() {
-            let link = &mut graph.links[link_index];
+        for i in 0..graph.nodes[index].target_links.len() {
+            let link = &mut graph.links[graph.nodes[index].target_links[i]];
             link.y1 = y1 + link.width / 2.;
             y1 += link.width;
         }
@@ -763,6 +801,38 @@ mod tests {
         }
         for link in &graph.links {
             assert!((link.width - 100.).abs() < EPSILON);
+        }
+
+        // `topology` agrees with `layout` on the topological fields.
+        let topology = Sankey::new()
+            .node_width(10.)
+            .size(100., 100.)
+            .topology(3, &links(&[(0, 1, 5.), (1, 2, 5.)]))
+            .unwrap();
+        assert_eq!(topology.layer_count(), 3);
+        for (a, b) in topology.nodes.iter().zip(&graph.nodes) {
+            assert_eq!(a.depth, b.depth);
+            assert_eq!(a.height, b.height);
+            assert_eq!(a.layer, b.layer);
+            assert_eq!(a.value, b.value);
+            assert_eq!(a.x0, b.x0);
+        }
+
+        // Completing a unit-extent topology on the final extent (the chart's
+        // two-pass flow) matches a direct layout on that extent.
+        let topology = Sankey::new()
+            .node_width(10.)
+            .topology(3, &links(&[(0, 1, 5.), (1, 2, 5.)]))
+            .unwrap();
+        let completed = Sankey::new()
+            .node_width(10.)
+            .size(100., 100.)
+            .layout_from(topology);
+        for (a, b) in completed.nodes.iter().zip(&graph.nodes) {
+            assert_eq!((a.x0, a.y0, a.x1, a.y1), (b.x0, b.y0, b.x1, b.y1));
+        }
+        for (a, b) in completed.links.iter().zip(&graph.links) {
+            assert_eq!((a.y0, a.y1, a.width), (b.y0, b.y1, b.width));
         }
     }
 

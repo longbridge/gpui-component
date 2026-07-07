@@ -133,15 +133,17 @@ impl ChartStory {
                             .unwrap_or(gpui::black()),
                     })
                     .collect();
+                // Skip links with unknown node keys or unparseable values
+                // instead of panicking on bad fixture data.
                 let links = statement
                     .links
                     .iter()
-                    .map(|link| {
-                        SankeyLink::new(
-                            node_indexes[&link.source],
-                            node_indexes[&link.target],
-                            link.value.parse().unwrap_or(0.),
-                        )
+                    .filter_map(|link| {
+                        Some(SankeyLink::new(
+                            *node_indexes.get(&link.source)?,
+                            *node_indexes.get(&link.target)?,
+                            link.value.parse().ok()?,
+                        ))
                     })
                     .collect();
                 (statement.period.clone(), nodes, links)
