@@ -10,7 +10,7 @@ use crate::{
     ActiveTheme,
     plot::{
         Plot,
-        label::{PlotLabel, TEXT_GAP, TEXT_HEIGHT, TEXT_SIZE, Text, measure_text_width},
+        label::{PlotLabel, TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
         origin_point,
         shape::{Sankey, SankeyAlign, SankeyLink, sankey_link_path},
     },
@@ -23,6 +23,44 @@ const DEFAULT_MIN_LINK_WIDTH: f32 = 1.;
 const DEFAULT_LABEL_GAP: f32 = 6.;
 /// Cap the label margins so very long labels never collapse the flow area.
 const MAX_LABEL_MARGIN_RATIO: f32 = 0.6;
+
+/// A styled line of a sankey node label.
+#[derive(Clone)]
+pub struct SankeyLabel {
+    text: SharedString,
+    color: Option<Hsla>,
+    font_size: Option<f32>,
+}
+
+impl SankeyLabel {
+    pub fn new(text: impl Into<SharedString>) -> Self {
+        Self {
+            text: text.into(),
+            color: None,
+            font_size: None,
+        }
+    }
+
+    /// Set the text color. Defaults to the theme foreground.
+    pub fn color(mut self, color: impl Into<Hsla>) -> Self {
+        self.color = Some(color.into());
+        self
+    }
+
+    /// Set the font size. Defaults to 10.
+    pub fn font_size(mut self, font_size: f32) -> Self {
+        self.font_size = Some(font_size);
+        self
+    }
+
+    fn line_height(&self) -> f32 {
+        self.font_size.unwrap_or(TEXT_SIZE) + TEXT_GAP
+    }
+}
+
+fn block_height(lines: &[SankeyLabel]) -> f32 {
+    lines.iter().map(|line| line.line_height()).sum()
+}
 
 /// A Sankey diagram, layout modeled after [d3-sankey](https://github.com/d3/d3-sankey).
 ///
@@ -40,6 +78,7 @@ pub struct SankeyChart<T: 'static> {
     node_color: Option<Rc<dyn Fn(&T) -> Hsla>>,
     node_label: Option<Rc<dyn Fn(&T) -> SharedString>>,
     value_label: Option<Rc<dyn Fn(&T, f64) -> SharedString>>,
+    labels: Option<Rc<dyn Fn(&T, f64) -> Vec<SankeyLabel>>>,
     link_opacity: f32,
     min_link_width: f32,
     label_gap: f32,
@@ -62,6 +101,7 @@ impl<T> SankeyChart<T> {
             node_color: None,
             node_label: None,
             value_label: None,
+            labels: None,
             link_opacity: DEFAULT_LINK_OPACITY,
             min_link_width: DEFAULT_MIN_LINK_WIDTH,
             label_gap: DEFAULT_LABEL_GAP,
@@ -124,6 +164,16 @@ impl<T> SankeyChart<T> {
         self
     }
 
+    /// Set fully custom node labels, one [`SankeyLabel`] per line, top to
+    /// bottom. Takes precedence over `node_label`/`value_label` when set.
+    ///
+    /// The closure receives the datum and the node's computed throughput
+    /// (max of incoming and outgoing flow).
+    pub fn labels(mut self, labels: impl Fn(&T, f64) -> Vec<SankeyLabel> + 'static) -> Self {
+        self.labels = Some(Rc::new(labels));
+        self
+    }
+
     /// Set the opacity of the link ribbons. Defaults to 0.3.
     pub fn link_opacity(mut self, opacity: f32) -> Self {
         self.link_opacity = opacity;
@@ -166,18 +216,30 @@ impl<T> Plot for SankeyChart<T> {
         };
         let layer_count = topology.layer_count();
 
-        let node_labels: Vec<(Option<SharedString>, Option<SharedString>)> = topology
+        // Collect each node's label lines: the custom `labels` closure wins,
+        // otherwise synthesize the value/name lines with the default styles.
+        let node_labels: Vec<Vec<SankeyLabel>> = topology
             .nodes
             .iter()
             .map(|node| {
                 let datum = &self.nodes[node.index];
-                (
-                    self.value_label.as_ref().map(|f| f(datum, node.value)),
-                    self.node_label.as_ref().map(|f| f(datum)),
-                )
+                if let Some(labels) = &self.labels {
+                    labels(datum, node.value)
+                } else {
+                    let mut lines = Vec::new();
+                    if let Some(value_label) = &self.value_label {
+                        lines.push(SankeyLabel::new(value_label(datum, node.value)));
+                    }
+                    if let Some(node_label) = &self.node_label {
+                        lines.push(
+                            SankeyLabel::new(node_label(datum)).color(cx.theme().muted_foreground),
+                        );
+                    }
+                    lines
+                }
             })
             .collect();
-        let has_labels = self.value_label.is_some() || self.node_label.is_some();
+        let has_labels = node_labels.iter().any(|lines| !lines.is_empty());
 
         // Reserve margins so the labels beside the first/last columns and
         // above the middle columns are not clipped.
@@ -188,13 +250,13 @@ impl<T> Plot for SankeyChart<T> {
                 if node.layer != 0 && node.layer + 1 != layer_count {
                     continue;
                 }
-                let (value_text, name_text) = &node_labels[node.index];
                 let mut label_width = 0f32;
-                if let Some(text) = value_text {
-                    label_width = label_width.max(measure_text_width(text, px(TEXT_SIZE), window));
-                }
-                if let Some(text) = name_text {
-                    label_width = label_width.max(measure_text_width(text, px(TEXT_SIZE), window));
+                for line in &node_labels[node.index] {
+                    label_width = label_width.max(measure_text_width(
+                        &line.text,
+                        px(line.font_size.unwrap_or(TEXT_SIZE)),
+                        window,
+                    ));
                 }
                 if node.layer == 0 {
                     left = left.max(label_width + self.label_gap);
@@ -211,14 +273,21 @@ impl<T> Plot for SankeyChart<T> {
             }
         }
         // Above-node labels are only emitted for middle columns, so reserve
-        // the top band only when such columns exist. Cap the vertical margins
-        // like the horizontal ones so a short chart doesn't collapse the flow.
-        let has_middle_labels = has_labels && layer_count > 2;
-        let mut top = if has_middle_labels {
-            2. * TEXT_HEIGHT + TEXT_GAP
-        } else {
-            0.
-        };
+        // the top band for the tallest such label block. Cap the vertical
+        // margins like the horizontal ones so a short chart doesn't collapse
+        // the flow.
+        let mut top = 0f32;
+        if has_labels && layer_count > 2 {
+            for node in &topology.nodes {
+                if node.layer == 0 || node.layer + 1 == layer_count {
+                    continue;
+                }
+                let block = block_height(&node_labels[node.index]);
+                if block > 0. {
+                    top = top.max(block + TEXT_GAP);
+                }
+            }
+        }
         let mut bottom = if has_labels { TEXT_GAP } else { 0. };
         let max_vertical = height * MAX_LABEL_MARGIN_RATIO;
         if top + bottom > max_vertical {
@@ -290,8 +359,8 @@ impl<T> Plot for SankeyChart<T> {
 
         let mut texts = Vec::new();
         for node in &graph.nodes {
-            let (value_text, name_text) = &node_labels[node.index];
-            if value_text.is_none() && name_text.is_none() {
+            let lines = &node_labels[node.index];
+            if lines.is_empty() {
                 continue;
             }
 
@@ -305,45 +374,26 @@ impl<T> Plot for SankeyChart<T> {
                 ((node.x0 + node.x1) / 2., TextAlign::Center)
             };
 
-            let two_lines = value_text.is_some() && name_text.is_some();
-            let (value_y, name_y) = if is_first || is_last {
-                // Vertically centered beside the node.
-                let cy = (node.y0 + node.y1) / 2.;
-                if two_lines {
-                    (cy - TEXT_HEIGHT, cy)
-                } else {
-                    (cy - TEXT_SIZE / 2., cy - TEXT_SIZE / 2.)
-                }
-            } else if two_lines {
-                // Above the node.
-                (
-                    node.y0 - 2. * TEXT_HEIGHT - TEXT_GAP,
-                    node.y0 - TEXT_HEIGHT - TEXT_GAP,
-                )
+            let block = block_height(lines);
+            let mut y = if is_first || is_last {
+                // Block vertically centered beside the node.
+                (node.y0 + node.y1) / 2. - block / 2.
             } else {
-                let y = node.y0 - TEXT_HEIGHT - TEXT_GAP;
-                (y, y)
+                // Block above the node.
+                node.y0 - block - TEXT_GAP
             };
 
-            if let Some(text) = value_text {
+            for line in lines {
                 texts.push(
                     Text::new(
-                        text.clone(),
-                        point(px(x), px(value_y)),
-                        cx.theme().foreground,
+                        line.text.clone(),
+                        point(px(x), px(y)),
+                        line.color.unwrap_or(cx.theme().foreground),
                     )
+                    .font_size(px(line.font_size.unwrap_or(TEXT_SIZE)))
                     .align(align),
                 );
-            }
-            if let Some(text) = name_text {
-                texts.push(
-                    Text::new(
-                        text.clone(),
-                        point(px(x), px(name_y)),
-                        cx.theme().muted_foreground,
-                    )
-                    .align(align),
-                );
+                y += line.line_height();
             }
         }
         PlotLabel::new(texts).paint(&bounds, window, cx);
@@ -370,6 +420,7 @@ mod tests {
         assert!(chart.node_color.is_none());
         assert!(chart.node_label.is_none());
         assert!(chart.value_label.is_none());
+        assert!(chart.labels.is_none());
 
         let chart = chart
             .node_width(8.)
@@ -380,6 +431,12 @@ mod tests {
             .node_color(|_| gpui::red())
             .node_label(|d| SharedString::from(d.to_string()))
             .value_label(|_, value| SharedString::from(format!("{}", value)))
+            .labels(|d, value| {
+                vec![
+                    SankeyLabel::new(format!("{}", value)),
+                    SankeyLabel::new(d.to_string()),
+                ]
+            })
             .link_opacity(0.5)
             .min_link_width(2.)
             .label_gap(10.);
@@ -394,5 +451,26 @@ mod tests {
         assert!(chart.node_color.is_some());
         assert!(chart.node_label.is_some());
         assert!(chart.value_label.is_some());
+        assert!(chart.labels.is_some());
+    }
+
+    #[test]
+    fn test_sankey_label_builder() {
+        let label = SankeyLabel::new("a");
+        assert_eq!(label.text, "a");
+        assert_eq!(label.color, None);
+        assert_eq!(label.font_size, None);
+        assert_eq!(label.line_height(), TEXT_SIZE + TEXT_GAP);
+
+        let label = SankeyLabel::new("b").color(gpui::red()).font_size(14.);
+        assert_eq!(label.color, Some(gpui::red()));
+        assert_eq!(label.font_size, Some(14.));
+        assert_eq!(label.line_height(), 14. + TEXT_GAP);
+
+        assert_eq!(
+            block_height(&[SankeyLabel::new("a"), SankeyLabel::new("b").font_size(14.)]),
+            TEXT_SIZE + TEXT_GAP + 14. + TEXT_GAP
+        );
+        assert_eq!(block_height(&[]), 0.);
     }
 }

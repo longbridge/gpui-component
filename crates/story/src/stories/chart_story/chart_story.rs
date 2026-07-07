@@ -5,7 +5,7 @@ use gpui::{
 };
 use gpui_component::{
     ActiveTheme, StyledExt,
-    chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart, SankeyChart},
+    chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart, SankeyChart, SankeyLabel},
     dock::PanelControl,
     h_flex,
     plot::shape::{BarAlignment, SankeyAlign, SankeyLink},
@@ -54,6 +54,7 @@ struct TslaStatementNode {
     key: SharedString,
     name: SharedString,
     value: SharedString,
+    growth: SharedString,
     color: SharedString,
 }
 
@@ -82,6 +83,8 @@ pub struct TslaNode {
     /// The real dollar value, for the label; the layout gets sqrt-compressed
     /// link values to keep small flows readable.
     pub value: f64,
+    /// Year-over-year growth in percent, for the label.
+    pub growth: Option<f64>,
     pub color: Hsla,
 }
 
@@ -128,6 +131,7 @@ impl ChartStory {
                     .map(|node| TslaNode {
                         name: node.name.clone(),
                         value: node.value.parse().unwrap_or(0.),
+                        growth: node.growth.parse().ok(),
                         color: Rgba::try_from(node.color.as_ref())
                             .map(Into::into)
                             .unwrap_or(gpui::black()),
@@ -736,19 +740,39 @@ impl Render for ChartStory {
                                 format!("Sankey Chart - TSLA {}", period)
                             };
 
-                            chart_container(
-                                &title,
-                                SankeyChart::new(nodes.clone(), links)
-                                    .node_align(SankeyAlign::Center)
-                                    .node_padding(40.)
-                                    .node_color(|d: &TslaNode| d.color)
-                                    .node_label(|d| d.name.clone())
-                                    .value_label(|d, _| {
-                                        format!("${:.2}B", d.value / 1_000_000_000.).into()
-                                    }),
-                                false,
-                                cx,
-                            )
+                            let chart = SankeyChart::new(nodes.clone(), links)
+                                .node_align(SankeyAlign::Center)
+                                .node_padding(40.)
+                                .node_color(|d: &TslaNode| d.color);
+                            // The sqrt chart uses fully custom three-line
+                            // labels with the year-over-year change; the
+                            // other keeps the default value/name lines.
+                            let chart = if sqrt {
+                                let up = cx.theme().success;
+                                let down = cx.theme().danger;
+                                let muted = cx.theme().muted_foreground;
+                                chart.labels(move |d: &TslaNode, _| {
+                                    let mut lines = vec![SankeyLabel::new(format!(
+                                        "${:.2}B",
+                                        d.value / 1_000_000_000.
+                                    ))];
+                                    if let Some(growth) = d.growth {
+                                        let arrow = if growth >= 0. { "▲" } else { "▼" };
+                                        lines.push(
+                                            SankeyLabel::new(format!("{} {:+.2}%", arrow, growth))
+                                                .color(if growth >= 0. { up } else { down }),
+                                        );
+                                    }
+                                    lines.push(SankeyLabel::new(d.name.clone()).color(muted));
+                                    lines
+                                })
+                            } else {
+                                chart.node_label(|d| d.name.clone()).value_label(|d, _| {
+                                    format!("${:.2}B", d.value / 1_000_000_000.).into()
+                                })
+                            };
+
+                            chart_container(&title, chart, false, cx)
                         })
                         .collect::<Vec<_>>(),
                 ),

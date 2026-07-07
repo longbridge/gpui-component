@@ -438,6 +438,26 @@ SankeyChart::new(nodes, links)
 
 Link ribbons are filled with a horizontal gradient from the source node color to the target node color.
 
+#### Custom Labels
+
+For full control over the label lines, use `labels` — one `SankeyLabel` per line, top to bottom, each with its own color and font size. It takes precedence over `node_label`/`value_label` when set. For example, a financial-statement label with a year-over-year change line:
+
+```rust
+use gpui_component::chart::SankeyLabel;
+
+SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
+    let arrow = if d.growth >= 0. { "▲" } else { "▼" };
+    let growth_color = if d.growth >= 0. { green } else { red };
+    vec![
+        SankeyLabel::new(format!("{:.1}", value)),
+        SankeyLabel::new(format!("{} {:+.2}%", arrow, d.growth)).color(growth_color),
+        SankeyLabel::new(d.name.clone()).color(muted),
+    ]
+})
+```
+
+Line color defaults to the theme foreground and font size to 10; the chart keeps handling placement, alignment and margin reservation.
+
 #### Compressing Large Value Ranges
 
 Node heights are linear in flow value, so a large value range (e.g. 200:1) leaves the small flows nearly invisible. Feed compressed values (e.g. square roots) to the layout, and show the real value in the label:

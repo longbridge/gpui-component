@@ -418,6 +418,26 @@ SankeyChart::new(nodes, links)
 
 连接带使用从源节点颜色到目标节点颜色的水平渐变填充。
 
+#### 自定义标签
+
+需要完全控制标签行时使用 `labels`——每行一个 `SankeyLabel`，从上到下排列，每行可单独设置颜色和字号。设置后优先于 `node_label`/`value_label`。例如带同比涨跌幅行的财报标签：
+
+```rust
+use gpui_component::chart::SankeyLabel;
+
+SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
+    let arrow = if d.growth >= 0. { "▲" } else { "▼" };
+    let growth_color = if d.growth >= 0. { green } else { red };
+    vec![
+        SankeyLabel::new(format!("{:.1}", value)),
+        SankeyLabel::new(format!("{} {:+.2}%", arrow, d.growth)).color(growth_color),
+        SankeyLabel::new(d.name.clone()).color(muted),
+    ]
+})
+```
+
+行颜色默认为主题前景色，字号默认 10；摆位、对齐和边距预留仍由组件负责。
+
 #### 压缩数值跨度
 
 节点高度与流量值成线性关系，数值跨度很大时（如 200:1）小流量几乎不可见。可以把压缩后的值（如平方根）交给布局，标签仍显示真实值：

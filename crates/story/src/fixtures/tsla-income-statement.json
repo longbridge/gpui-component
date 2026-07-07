@@ -10,7 +10,7 @@
           "key": "bus_119884",
           "name": "Automotive",
           "value": "82056000000",
-          "yoy": "-6.33304415323501",
+          "growth": "-6.33304415323501",
           "level": 1,
           "color": "#5A74FF"
         },
@@ -18,7 +18,7 @@
           "key": "bus_130929",
           "name": "Energy Generation and Storage",
           "value": "12771000000",
-          "yoy": "26.62105889351576",
+          "growth": "26.62105889351576",
           "level": 1,
           "color": "#5A74FF"
         },
@@ -26,7 +26,7 @@
           "key": "total_rev",
           "name": "Total Revenue",
           "value": "94827000000",
-          "yoy": "-2.93069915037363",
+          "growth": "-2.93069915037363",
           "level": 2,
           "color": "#5A74FF"
         },
@@ -34,7 +34,7 @@
           "key": "gp",
           "name": "Gross Profit",
           "value": "17094000000",
-          "yoy": "-2.04011461318052",
+          "growth": "-2.04011461318052",
           "level": 3,
           "color": "#35C15C"
         },
@@ -42,7 +42,7 @@
           "key": "cost_rev",
           "name": "Cost Of Revenues",
           "value": "77733000000",
-          "yoy": "-3.12437686939182",
+          "growth": "-3.12437686939182",
           "level": 3,
           "color": "#FFA61F"
         },
@@ -50,7 +50,7 @@
           "key": "other_f41",
           "name": "Other",
           "value": "862000000",
-          "yoy": "",
+          "growth": "",
           "level": 4,
           "color": "#35C15C"
         },
@@ -58,7 +58,7 @@
           "key": "oper_inc",
           "name": "Operating Income",
           "value": "4355000000",
-          "yoy": "-43.13879096487792",
+          "growth": "-43.13879096487792",
           "level": 4,
           "color": "#35C15C"
         },
@@ -66,7 +66,7 @@
           "key": "oper_fee",
           "name": "Operating Exp.",
           "value": "12739000000",
-          "yoy": "30.10928403635992",
+          "growth": "30.10928403635992",
           "level": 4,
           "color": "#FFA61F"
         },
@@ -74,7 +74,7 @@
           "key": "ni",
           "name": "Net Income",
           "value": "3794000000",
-          "yoy": "-46.49555774925962",
+          "growth": "-46.49555774925962",
           "level": 5,
           "color": "#35C15C"
         },
@@ -82,7 +82,7 @@
           "key": "inc_tax",
           "name": "Income Tax Exp.",
           "value": "1423000000",
-          "yoy": "-22.53674469243332",
+          "growth": "-22.53674469243332",
           "level": 5,
           "color": "#FFA61F"
         },
@@ -90,7 +90,7 @@
           "key": "sga",
           "name": "SG& A Exp.",
           "value": "5834000000",
-          "yoy": "13.28155339805825",
+          "growth": "13.28155339805825",
           "level": 5,
           "color": "#FFA61F"
         },
@@ -98,7 +98,7 @@
           "key": "rd_exp",
           "name": "R&D Exp.",
           "value": "6411000000",
-          "yoy": "41.21145374449339",
+          "growth": "41.21145374449339",
           "level": 5,
           "color": "#FFA61F"
         },
@@ -106,7 +106,7 @@
           "key": "other_f42",
           "name": "Other",
           "value": "494000000",
-          "yoy": "",
+          "growth": "",
           "level": 5,
           "color": "#FFA61F"
         }
@@ -184,7 +184,7 @@
           "key": "bus_119884",
           "name": "Automotive",
           "value": "87604000000",
-          "yoy": "-3.45390024025215",
+          "growth": "-3.45390024025215",
           "level": 1,
           "color": "#5A74FF"
         },
@@ -192,7 +192,7 @@
           "key": "bus_130929",
           "name": "Energy Generation and Storage",
           "value": "10086000000",
-          "yoy": "67.12510356255178",
+          "growth": "67.12510356255178",
           "level": 1,
           "color": "#5A74FF"
         },
@@ -200,7 +200,7 @@
           "key": "total_rev",
           "name": "Total Revenue",
           "value": "97690000000",
-          "yoy": "0.94757835346636",
+          "growth": "0.94757835346636",
           "level": 2,
           "color": "#5A74FF"
         },
@@ -208,7 +208,7 @@
           "key": "gp",
           "name": "Gross Profit",
           "value": "17450000000",
-          "yoy": "-1.18912797281993",
+          "growth": "-1.18912797281993",
           "level": 3,
           "color": "#35C15C"
         },
@@ -216,7 +216,7 @@
           "key": "cost_rev",
           "name": "Cost Of Revenues",
           "value": "80240000000",
-          "yoy": "1.42454463868138",
+          "growth": "1.42454463868138",
           "level": 3,
           "color": "#FFA61F"
         },
@@ -224,7 +224,7 @@
           "key": "other_f41",
           "name": "Other",
           "value": "1269000000",
-          "yoy": "",
+          "growth": "",
           "level": 4,
           "color": "#35C15C"
         },
@@ -232,7 +232,7 @@
           "key": "oper_inc",
           "name": "Operating Income",
           "value": "7659000000",
-          "yoy": "-13.85670903160499",
+          "growth": "-13.85670903160499",
           "level": 4,
           "color": "#35C15C"
         },
@@ -240,7 +240,7 @@
           "key": "oper_fee",
           "name": "Operating Exp.",
           "value": "9791000000",
-          "yoy": "11.6546926673509",
+          "growth": "11.6546926673509",
           "level": 4,
           "color": "#FFA61F"
         },
@@ -248,7 +248,7 @@
           "key": "ni",
           "name": "Net Income",
           "value": "7091000000",
-          "yoy": "-52.7172101086884",
+          "growth": "-52.7172101086884",
           "level": 5,
           "color": "#35C15C"
         },
@@ -256,7 +256,7 @@
           "key": "inc_tax",
           "name": "Income Tax Exp.",
           "value": "1837000000",
-          "yoy": "136.73265346930614",
+          "growth": "136.73265346930614",
           "level": 5,
           "color": "#FFA61F"
         },
@@ -264,7 +264,7 @@
           "key": "sga",
           "name": "SG& A Exp.",
           "value": "5150000000",
-          "yoy": "7.29166666666667",
+          "growth": "7.29166666666667",
           "level": 5,
           "color": "#FFA61F"
         },
@@ -272,7 +272,7 @@
           "key": "rd_exp",
           "name": "R&D Exp.",
           "value": "4540000000",
-          "yoy": "14.38649533887629",
+          "growth": "14.38649533887629",
           "level": 5,
           "color": "#FFA61F"
         },
@@ -280,7 +280,7 @@
           "key": "other_f42",
           "name": "Other",
           "value": "101000000",
-          "yoy": "",
+          "growth": "",
           "level": 5,
           "color": "#FFA61F"
         }

@@ -10,7 +10,7 @@ pub use bar_chart::BarChart;
 pub use candlestick_chart::CandlestickChart;
 pub use line_chart::LineChart;
 pub use pie_chart::PieChart;
-pub use sankey_chart::SankeyChart;
+pub use sankey_chart::{SankeyChart, SankeyLabel};
 
 use gpui::{Hsla, SharedString, TextAlign};
 
