@@ -63,7 +63,12 @@ pub struct SankeyNodeLayout {
 /// A link with computed layout.
 ///
 /// Like d3-sankey, `y0` and `y1` are the vertical centers of the ribbon at
-/// the source and target end; the ribbon spans ±`width / 2` around them.
+/// the source and target end. Each end has its own width: the links of a
+/// node's side share the node height in proportion to their values, so both
+/// sides of every node are always fully covered. On a balanced graph
+/// (incoming sum == outgoing sum everywhere) the two ends are equal; on an
+/// imbalanced one (e.g. sqrt-compressed values) the ribbon transitions
+/// smoothly between the two widths.
 #[derive(Clone, Debug)]
 pub struct SankeyLinkLayout {
     pub index: usize,
@@ -72,7 +77,13 @@ pub struct SankeyLinkLayout {
     pub value: f64,
     pub y0: f32,
     pub y1: f32,
+    /// The nominal width from the global value scale, used by the layout
+    /// relaxation; equals both end widths on a balanced graph.
     pub width: f32,
+    /// The ribbon width at the source end.
+    pub source_width: f32,
+    /// The ribbon width at the target end.
+    pub target_width: f32,
 }
 
 /// The computed Sankey layout.
@@ -222,6 +233,8 @@ impl Sankey {
                     y0: 0.,
                     y1: 0.,
                     width: 0.,
+                    source_width: 0.,
+                    target_width: 0.,
                 })
                 .collect(),
         };
@@ -671,31 +684,59 @@ fn source_top(graph: &SankeyGraph, source: usize, target: usize, py: f32) -> f32
     y
 }
 
-/// Assign each link's `y0`/`y1` (ribbon centers) by stacking the sorted link
-/// lists within each node.
+/// Assign each link's `y0`/`y1` (ribbon centers) and per-end widths by
+/// stacking the sorted link lists within each node. Each side shares the
+/// node height in proportion to the link values, so both sides of a node
+/// are fully covered even when the graph is imbalanced (equivalent to the
+/// nominal `width` stacking when it is balanced).
 fn compute_link_breadths(graph: &mut SankeyGraph) {
     for index in 0..graph.nodes.len() {
-        let node_y0 = graph.nodes[index].y0;
+        let node = &graph.nodes[index];
+        let node_y0 = node.y0;
+        let node_height = node.y1 - node.y0;
 
+        let outgoing: f64 = node
+            .source_links
+            .iter()
+            .map(|&link| graph.links[link].value)
+            .sum();
         let mut y0 = node_y0;
         for i in 0..graph.nodes[index].source_links.len() {
             let link = &mut graph.links[graph.nodes[index].source_links[i]];
-            link.y0 = y0 + link.width / 2.;
-            y0 += link.width;
+            let width = if outgoing > 0. {
+                (link.value / outgoing) as f32 * node_height
+            } else {
+                0.
+            };
+            link.source_width = width;
+            link.y0 = y0 + width / 2.;
+            y0 += width;
         }
 
+        let node = &graph.nodes[index];
+        let incoming: f64 = node
+            .target_links
+            .iter()
+            .map(|&link| graph.links[link].value)
+            .sum();
         let mut y1 = node_y0;
         for i in 0..graph.nodes[index].target_links.len() {
             let link = &mut graph.links[graph.nodes[index].target_links[i]];
-            link.y1 = y1 + link.width / 2.;
-            y1 += link.width;
+            let width = if incoming > 0. {
+                (link.value / incoming) as f32 * node_height
+            } else {
+                0.
+            };
+            link.target_width = width;
+            link.y1 = y1 + width / 2.;
+            y1 += width;
         }
     }
 }
 
 /// Build the filled ribbon path for a link — the equivalent of d3-sankey's
 /// `sankeyLinkHorizontal()`: a horizontal cubic bezier with control points at
-/// the horizontal midpoint, thickened to the link width (clamped to
+/// the horizontal midpoint, thickened to the per-end link widths (clamped to
 /// `min_width` so tiny flows stay visible).
 pub fn sankey_link_path(
     source: &SankeyNodeLayout,
@@ -704,23 +745,24 @@ pub fn sankey_link_path(
     min_width: f32,
     origin: Point<Pixels>,
 ) -> Option<Path<Pixels>> {
-    let half = link.width.max(min_width) / 2.;
+    let source_half = link.source_width.max(min_width) / 2.;
+    let target_half = link.target_width.max(min_width) / 2.;
     let sx = source.x1;
     let tx = target.x0;
     let mx = (sx + tx) / 2.;
 
     let mut builder = PathBuilder::fill();
-    builder.move_to(origin_point(px(sx), px(link.y0 - half), origin));
+    builder.move_to(origin_point(px(sx), px(link.y0 - source_half), origin));
     builder.cubic_bezier_to(
-        origin_point(px(tx), px(link.y1 - half), origin),
-        origin_point(px(mx), px(link.y0 - half), origin),
-        origin_point(px(mx), px(link.y1 - half), origin),
+        origin_point(px(tx), px(link.y1 - target_half), origin),
+        origin_point(px(mx), px(link.y0 - source_half), origin),
+        origin_point(px(mx), px(link.y1 - target_half), origin),
     );
-    builder.line_to(origin_point(px(tx), px(link.y1 + half), origin));
+    builder.line_to(origin_point(px(tx), px(link.y1 + target_half), origin));
     builder.cubic_bezier_to(
-        origin_point(px(sx), px(link.y0 + half), origin),
-        origin_point(px(mx), px(link.y1 + half), origin),
-        origin_point(px(mx), px(link.y0 + half), origin),
+        origin_point(px(sx), px(link.y0 + source_half), origin),
+        origin_point(px(mx), px(link.y1 + target_half), origin),
+        origin_point(px(mx), px(link.y0 + source_half), origin),
     );
     builder.close();
     builder.build().ok()
@@ -801,6 +843,9 @@ mod tests {
         }
         for link in &graph.links {
             assert!((link.width - 100.).abs() < EPSILON);
+            // The chain is balanced, so both ribbon ends span the nodes.
+            assert!((link.source_width - 100.).abs() < EPSILON);
+            assert!((link.target_width - 100.).abs() < EPSILON);
         }
 
         // `topology` agrees with `layout` on the topological fields.
@@ -881,15 +926,41 @@ mod tests {
         } else {
             (&graph.links[1], &graph.links[0])
         };
-        assert!((first.y0 - first.width / 2. - source.y0).abs() < EPSILON);
-        assert!((first.y0 + first.width / 2. - (second.y0 - second.width / 2.)).abs() < EPSILON);
+        assert!((first.y0 - first.source_width / 2. - source.y0).abs() < EPSILON);
+        assert!(
+            (first.y0 + first.source_width / 2. - (second.y0 - second.source_width / 2.)).abs()
+                < EPSILON
+        );
 
         // Each target has a single incoming ribbon filling its full height.
         for link in &graph.links {
             let target = &graph.nodes[link.target];
-            assert!((link.y1 - link.width / 2. - target.y0).abs() < EPSILON);
-            assert!((link.y1 + link.width / 2. - target.y1).abs() < EPSILON);
+            assert!((link.y1 - link.target_width / 2. - target.y0).abs() < EPSILON);
+            assert!((link.y1 + link.target_width / 2. - target.y1).abs() < EPSILON);
         }
+    }
+
+    #[test]
+    fn test_sankey_imbalanced_link_widths() {
+        // A -> B (10) but B -> C (7): B is sized by its incoming flow, and
+        // its single outgoing ribbon is stretched to cover its outgoing side
+        // while the ribbon's target end matches C's height.
+        let graph = Sankey::new()
+            .size(100., 100.)
+            .layout(3, &links(&[(0, 1, 10.), (1, 2, 7.)]))
+            .unwrap();
+
+        let node_b = &graph.nodes[1];
+        let node_c = &graph.nodes[2];
+        let out_link = &graph.links[1];
+        assert!((out_link.source_width - (node_b.y1 - node_b.y0)).abs() < EPSILON);
+        assert!((out_link.target_width - (node_c.y1 - node_c.y0)).abs() < EPSILON);
+        // The two ends differ: B is taller (value 10) than C (value 7).
+        assert!(out_link.source_width > out_link.target_width);
+
+        // Both ends stay centered on their nodes' filled ranges.
+        assert!((out_link.y0 - (node_b.y0 + node_b.y1) / 2.).abs() < EPSILON);
+        assert!((out_link.y1 - (node_c.y0 + node_c.y1) / 2.).abs() < EPSILON);
     }
 
     #[test]
