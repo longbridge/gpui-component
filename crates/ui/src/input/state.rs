@@ -2669,6 +2669,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        const PARSE_DEBOUNCE: Duration = Duration::from_millis(150);
+
         let highlighter_rc = pending.highlighter;
         let parse_task_rc = pending.parse_task;
         let language = pending.language;
@@ -2687,8 +2693,22 @@ impl InputState {
             .as_ref()
             .and_then(|h| h.injection_parse_data());
 
+        let cancel = Arc::new(AtomicBool::new(false));
+
         let text_for_apply = text.clone();
         let task = cx.spawn_in(window, async move |entity, cx| {
+            struct CancelOnDrop(Arc<AtomicBool>);
+            impl Drop for CancelOnDrop {
+                fn drop(&mut self) {
+                    self.0.store(true, Ordering::Relaxed);
+                }
+            }
+            let _cancel_guard = CancelOnDrop(cancel.clone());
+
+            // Debounce
+            cx.background_executor().timer(PARSE_DEBOUNCE).await;
+
+            let parse_cancel = cancel.clone();
             let result = cx
                 .background_executor()
                 .spawn(async move {
@@ -2701,6 +2721,15 @@ impl InputState {
                         return None;
                     }
 
+                    let mut progress = |_: &tree_sitter::ParseState| -> std::ops::ControlFlow<()> {
+                        if parse_cancel.load(Ordering::Relaxed) {
+                            std::ops::ControlFlow::Break(())
+                        } else {
+                            std::ops::ControlFlow::Continue(())
+                        }
+                    };
+                    let options = tree_sitter::ParseOptions::new().progress_callback(&mut progress);
+
                     let new_tree = parser.parse_with_options(
                         &mut |offset, _| {
                             if offset >= text.len() {
@@ -2711,8 +2740,13 @@ impl InputState {
                             }
                         },
                         old_tree.as_ref(),
-                        None,
+                        Some(options),
                     )?;
+
+                    // Disrcard the partial result on cancel
+                    if parse_cancel.load(Ordering::Relaxed) {
+                        return None;
+                    }
 
                     // Compute injection layers in the background to avoid blocking the
                     // main thread with combined-injection parsing (e.g. PHP, HTML+JS/CSS).

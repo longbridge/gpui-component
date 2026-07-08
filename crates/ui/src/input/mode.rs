@@ -256,7 +256,14 @@ impl InputMode {
                 let edit = replacement_input_edit(old_text, new_text, selected_range, change_text);
 
                 const SYNC_PARSE_TIMEOUT: Duration = Duration::from_millis(2);
-                let completed = h.update(Some(edit), new_text, Some(SYNC_PARSE_TIMEOUT));
+                // Skip parsing in the foreground above this threshold
+                const SYNC_PARSE_MAX_BYTES: usize = 256 * 1024;
+                let completed = if new_text.len() > SYNC_PARSE_MAX_BYTES {
+                    h.edit_tree(Some(edit), new_text);
+                    false
+                } else {
+                    h.update(Some(edit), new_text, Some(SYNC_PARSE_TIMEOUT))
+                };
                 if completed {
                     // Sync parse succeeded, cancel any pending background parse.
                     parse_task.borrow_mut().take();
