@@ -137,13 +137,12 @@ where
                 ScrollbarAxis::Both => this.size_auto().min_size_full(),
             });
 
+        // Keep the scroll area in the normal flow: its content size must
+        // propagate to auto-sized ancestors (e.g. a Dialog that grows with
+        // its content). An absolutely positioned scroll area would collapse
+        // such ancestors to zero height.
         let scroll_area = div()
             .id(area_id)
-            .absolute()
-            .top_0()
-            .left_0()
-            .right_0()
-            .bottom_0()
             .size_full()
             .flex()
             .track_scroll(&scroll_handle)
@@ -157,12 +156,8 @@ where
         div()
             .id(root_id)
             .size_full()
-            .flex_1()
-            .min_w_0()
-            .min_h_0()
             .refine_style(&root_style)
             .relative()
-            .overflow_hidden()
             .child(scroll_area)
             .child(render_scrollbar(
                 scrollbar_id,
@@ -212,13 +207,22 @@ fn scroll_handle_for(id: &ElementId, window: &mut Window, cx: &mut App) -> Scrol
         .clone()
 }
 
+/// Copies the outer layout styles from the element, so the wrapper can
+/// participate in the parent's layout the same way the source element would.
 #[inline]
 fn root_style_from<E>(element: &mut E) -> StyleRefinement
 where
     E: Styled,
 {
+    let style = element.style();
     StyleRefinement {
-        size: element.style().size.clone(),
+        size: style.size.clone(),
+        min_size: style.min_size.clone(),
+        max_size: style.max_size.clone(),
+        flex_grow: style.flex_grow,
+        flex_shrink: style.flex_shrink,
+        flex_basis: style.flex_basis,
+        align_self: style.align_self,
         ..Default::default()
     }
 }
@@ -314,6 +318,84 @@ mod tests {
         }
     }
 
+    struct AutoHeightParentTest;
+
+    impl Render for AutoHeightParentTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            // Mimics Dialog: the panel height is auto (content-driven), the
+            // body is flex_1 + overflow_hidden, and the scrollable content
+            // should give the panel its intrinsic height.
+            crate::v_flex()
+                .w(px(200.))
+                .child(
+                    crate::v_flex().flex_1().overflow_hidden().child(
+                        div().flex_1().overflow_hidden().child(
+                            crate::v_flex()
+                                .size_full()
+                                .overflow_y_scrollbar()
+                                .child(plain_row(50.))
+                                .child(plain_row(50.)),
+                        ),
+                    ),
+                )
+                .child(row("auto-height-footer", 10.))
+        }
+    }
+
+    struct MaxHeightParentTest;
+
+    impl Render for MaxHeightParentTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            // Mimics a Dialog with `max_h`: the panel grows with content up
+            // to the max height, then the body starts scrolling.
+            crate::v_flex()
+                .w(px(200.))
+                .max_h(px(100.))
+                .child(
+                    crate::v_flex().flex_1().overflow_hidden().child(
+                        div().flex_1().overflow_hidden().child(
+                            crate::v_flex()
+                                .size_full()
+                                .overflow_y_scrollbar()
+                                .child(plain_row(50.))
+                                .child(plain_row(50.))
+                                .child(row("max-height-last-row", 50.)),
+                        ),
+                    ),
+                )
+                .child(row("max-height-footer", 10.))
+        }
+    }
+
+    #[gpui::test]
+    fn auto_height_parent_gets_content_height(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| AutoHeightParentTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        // The two 50px rows should push the footer down to y = 100.
+        let footer = cx.debug_bounds("auto-height-footer").unwrap();
+        assert_eq!(footer.top(), px(100.));
+    }
+
+    #[gpui::test]
+    fn max_height_parent_clamps_and_scrolls(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| MaxHeightParentTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        // Content (150) + footer (10) exceeds max_h(100): the footer is
+        // pinned at the bottom and the body gets the remaining 90px viewport.
+        let footer = cx.debug_bounds("max-height-footer").unwrap();
+        assert_eq!(footer.top(), px(90.));
+
+        let last_initial_y = cx.debug_bounds("max-height-last-row").unwrap().origin.y;
+        scroll(cx, 10., 10., 0., -50.);
+        assert!(cx.debug_bounds("max-height-last-row").unwrap().origin.y < last_initial_y);
+    }
+
     struct GapLayoutTest;
 
     impl Render for GapLayoutTest {
@@ -332,31 +414,28 @@ mod tests {
 
     impl Render for IssueGapRegressionTest {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div()
-                .w(px(100.))
-                .h(px(100.))
-                .child(
-                    crate::v_flex()
-                        .flex_1()
-                        .gap(px(30.))
-                        .overflow_y_scrollbar()
-                        .px(px(12.))
-                        .pb(px(16.))
-                        .children((0..5).map(|ix| {
-                            div()
-                                .h(px(20.))
-                                .flex_shrink_0()
-                                .when(ix == 0, |this| {
-                                    this.debug_selector(|| "issue-first-card".to_string())
-                                })
-                                .when(ix == 1, |this| {
-                                    this.debug_selector(|| "issue-second-card".to_string())
-                                })
-                                .when(ix == 4, |this| {
-                                    this.debug_selector(|| "issue-last-card".to_string())
-                                })
-                        })),
-                )
+            div().w(px(100.)).h(px(100.)).child(
+                crate::v_flex()
+                    .flex_1()
+                    .gap(px(30.))
+                    .overflow_y_scrollbar()
+                    .px(px(12.))
+                    .pb(px(16.))
+                    .children((0..5).map(|ix| {
+                        div()
+                            .h(px(20.))
+                            .flex_shrink_0()
+                            .when(ix == 0, |this| {
+                                this.debug_selector(|| "issue-first-card".to_string())
+                            })
+                            .when(ix == 1, |this| {
+                                this.debug_selector(|| "issue-second-card".to_string())
+                            })
+                            .when(ix == 4, |this| {
+                                this.debug_selector(|| "issue-last-card".to_string())
+                            })
+                    })),
+            )
         }
     }
 
@@ -414,28 +493,20 @@ mod tests {
                 .h(px(100.))
                 .gap(px(20.))
                 .child(
-                    div()
-                        .w(px(100.))
-                        .h(px(100.))
-                        .overflow_y_scrollbar()
-                        .child(
-                            crate::v_flex()
-                                .child(plain_row(50.))
-                                .child(plain_row(50.))
-                                .child(row("left-scrollable-last-row", 50.)),
-                        ),
+                    div().w(px(100.)).h(px(100.)).overflow_y_scrollbar().child(
+                        crate::v_flex()
+                            .child(plain_row(50.))
+                            .child(plain_row(50.))
+                            .child(row("left-scrollable-last-row", 50.)),
+                    ),
                 )
                 .child(
-                    div()
-                        .w(px(100.))
-                        .h(px(100.))
-                        .overflow_y_scrollbar()
-                        .child(
-                            crate::v_flex()
-                                .child(plain_row(50.))
-                                .child(plain_row(50.))
-                                .child(row("right-scrollable-last-row", 50.)),
-                        ),
+                    div().w(px(100.)).h(px(100.)).overflow_y_scrollbar().child(
+                        crate::v_flex()
+                            .child(plain_row(50.))
+                            .child(plain_row(50.))
+                            .child(row("right-scrollable-last-row", 50.)),
+                    ),
                 )
         }
     }
