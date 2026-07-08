@@ -944,6 +944,86 @@ mod tests {
     }
 
     #[test]
+    fn test_wrap_row_buffer_line_boundaries() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.), None);
+        wrapper.text = Rope::from("aa\nbbbb\nc");
+        wrapper.lines = SumTree::from_iter(
+            vec![
+                LineItem {
+                    len: 2,
+                    wrapped_lines: smallvec::smallvec![0..2],
+                },
+                LineItem {
+                    len: 4,
+                    wrapped_lines: smallvec::smallvec![0..2, 2..4],
+                },
+                LineItem {
+                    len: 1,
+                    wrapped_lines: smallvec::smallvec![0..1],
+                },
+            ],
+            &(),
+        );
+
+        assert_eq!(wrapper.lines_count(), 3);
+        assert_eq!(wrapper.len(), 4);
+
+        assert_eq!(wrapper.buffer_line_to_first_wrap_row(0), 0);
+        assert_eq!(wrapper.buffer_line_to_first_wrap_row(1), 1);
+        assert_eq!(wrapper.buffer_line_to_first_wrap_row(2), 3);
+        assert_eq!(wrapper.buffer_line_to_first_wrap_row(3), 4);
+
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(0), 0..1);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(1), 1..3);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(2), 3..4);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(3), 4..4);
+
+        assert_eq!(wrapper.wrap_row_to_buffer_line(0), 0);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(1), 1);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(2), 1);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(3), 2);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(4), 2);
+    }
+
+    #[test]
+    fn test_wrap_row_queries_after_incremental_splice() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.), Some(px(10.)));
+        let mut text = Rope::from("aa\nbbbb\nc");
+        let mut fake_wrap_line = |line: &str, _wrap_width: Pixels| {
+            if line.len() > 2 {
+                vec![Boundary {
+                    ix: 2,
+                    next_indent: 0,
+                }]
+            } else {
+                vec![]
+            }
+        };
+
+        wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(0), 0..1);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(1), 1..3);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(2), 3..4);
+
+        let range = text.line_start_offset(1)..text.line_end_offset(1);
+        let new_text = "dd\neeee";
+        text.replace(range.clone(), new_text);
+        wrapper._update(&text, &range, &Rope::from(new_text), &mut fake_wrap_line);
+
+        assert_eq!(wrapper.lines_count(), 4);
+        assert_eq!(wrapper.len(), 5);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(0), 0..1);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(1), 1..2);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(2), 2..4);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(3), 4..5);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(0), 0);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(1), 1);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(2), 2);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(3), 2);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(4), 3);
+    }
+
+    #[test]
     fn test_line_layout() {
         let mut line_layout = LineLayout::new();
 
