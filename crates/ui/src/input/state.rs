@@ -1242,24 +1242,6 @@ impl InputState {
         self.focus(window, cx);
     }
 
-    /// Set the selected range using UTF-8 byte offsets.
-    pub fn set_selected_range(
-        &mut self,
-        range: Range<usize>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let len = self.text.len();
-        let start = range.start.min(len);
-        let end = range.end.min(len);
-
-        self.move_to(start, None, cx);
-        self.selection_reversed = false;
-        self.selected_word_range = None;
-        self.select_to(end, cx);
-        self.focus(window, cx);
-    }
-
     /// Focus the input field.
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_handle.focus(window, cx);
@@ -2163,6 +2145,18 @@ impl InputState {
     /// in the underlying rope's byte units.
     pub fn selected_range(&self) -> std::ops::Range<usize> {
         self.selected_range.into()
+    }
+
+    /// Set the selected range using UTF-8 byte offsets.
+    pub fn set_selected_range(&mut self, range: Range<usize>, cx: &mut Context<Self>) {
+        let len = self.text.len();
+        let start = range.start.min(len);
+        let end = range.end.min(len);
+
+        self.move_to(start, None, cx);
+        self.selection_reversed = false;
+        self.selected_word_range = None;
+        self.select_to(end, cx);
     }
 
     pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
@@ -3801,17 +3795,17 @@ ORDER BY id
         let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
         let input = input_view.input;
 
-        cx.update(|window, cx| {
+        cx.update(|_, cx| {
             input.update(cx, |s, cx| {
-                s.set_selected_range(0..5, window, cx);
+                s.set_selected_range(0..5, cx);
                 assert_eq!(s.selected_range(), 0..5);
                 assert_eq!(s.selected_text().to_string(), "hello");
 
-                s.set_selected_range(6..11, window, cx);
+                s.set_selected_range(6..11, cx);
                 assert_eq!(s.selected_text().to_string(), "world");
 
                 // clamped + collapsed
-                s.set_selected_range(100..100, window, cx);
+                s.set_selected_range(100..100, cx);
                 assert_eq!(s.selected_range(), 11..11);
             });
         });
