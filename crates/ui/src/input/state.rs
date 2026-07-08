@@ -1395,7 +1395,7 @@ impl InputState {
 
         if self.soft_wrap && self.mode.is_code_editor() {
             let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
-            if let Some(line) = self.display_map.lines().get(row)
+            if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_start = logical_start + range.start;
@@ -1423,7 +1423,7 @@ impl InputState {
 
         if self.soft_wrap && self.mode.is_code_editor() {
             let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
-            if let Some(line) = self.display_map.lines().get(row)
+            if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_end = logical_start + range.end;
@@ -1948,16 +1948,8 @@ impl InputState {
 
         let row = point.row;
 
-        let mut row_offset_y = px(0.);
-        for (ix, _wrap_line) in self.display_map.lines().iter().enumerate() {
-            if ix == row {
-                break;
-            }
-
-            // Only accumulate height for visible (non-folded) wrap rows
-            let visible_wrap_rows = self.display_map.visible_wrap_row_count_for_buffer_line(ix);
-            row_offset_y += line_height * visible_wrap_rows;
-        }
+        // Calculate row offset by multiplying the number of lines before it with the line height
+        let mut row_offset_y = line_height * self.display_map.buffer_line_to_display_row(row);
 
         // For Right alignment use 0 margin: the cursor indicator is clamped inside bounds
         // in layout_cursor, so shifting the text here would cause a first-click visual jump.
@@ -2677,6 +2669,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        const PARSE_DEBOUNCE: Duration = Duration::from_millis(150);
+
         let highlighter_rc = pending.highlighter;
         let parse_task_rc = pending.parse_task;
         let language = pending.language;
@@ -2695,8 +2693,22 @@ impl InputState {
             .as_ref()
             .and_then(|h| h.injection_parse_data());
 
+        let cancel = Arc::new(AtomicBool::new(false));
+
         let text_for_apply = text.clone();
         let task = cx.spawn_in(window, async move |entity, cx| {
+            struct CancelOnDrop(Arc<AtomicBool>);
+            impl Drop for CancelOnDrop {
+                fn drop(&mut self) {
+                    self.0.store(true, Ordering::Relaxed);
+                }
+            }
+            let _cancel_guard = CancelOnDrop(cancel.clone());
+
+            // Debounce
+            cx.background_executor().timer(PARSE_DEBOUNCE).await;
+
+            let parse_cancel = cancel.clone();
             let result = cx
                 .background_executor()
                 .spawn(async move {
@@ -2709,6 +2721,15 @@ impl InputState {
                         return None;
                     }
 
+                    let mut progress = |_: &tree_sitter::ParseState| -> std::ops::ControlFlow<()> {
+                        if parse_cancel.load(Ordering::Relaxed) {
+                            std::ops::ControlFlow::Break(())
+                        } else {
+                            std::ops::ControlFlow::Continue(())
+                        }
+                    };
+                    let options = tree_sitter::ParseOptions::new().progress_callback(&mut progress);
+
                     let new_tree = parser.parse_with_options(
                         &mut |offset, _| {
                             if offset >= text.len() {
@@ -2719,8 +2740,13 @@ impl InputState {
                             }
                         },
                         old_tree.as_ref(),
-                        None,
+                        Some(options),
                     )?;
+
+                    // Disrcard the partial result on cancel
+                    if parse_cancel.load(Ordering::Relaxed) {
+                        return None;
+                    }
 
                     // Compute injection layers in the background to avoid blocking the
                     // main thread with combined-injection parsing (e.g. PHP, HTML+JS/CSS).

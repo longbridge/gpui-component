@@ -37,6 +37,10 @@ impl SyntaxHighlighter {
         true
     }
 
+    pub fn edit_tree(&mut self, _edit: Option<crate::input::InputEdit>, _text: &ropey::Rope) {
+        // No-op in WASM
+    }
+
     pub fn language(&self) -> &SharedString {
         static EMPTY: SharedString = SharedString::new_static("");
         &EMPTY

@@ -15,31 +15,17 @@ use super::{BufferPoint, WrapPoint};
 use crate::input::rope_ext::RopeExt;
 
 /// WrapMap manages soft-wrapping and provides buffer ↔ wrap coordinate mapping.
+///
+/// Buffer line ↔ wrap row mapping is backed by the [`TextWrapper`]'s `SumTree`.
 pub struct WrapMap {
     /// The underlying text wrapper (reuses existing implementation)
     wrapper: TextWrapper,
-
-    /// Prefix sum cache: buffer_line_starts[line] = first wrap_row for buffer line `line`
-    /// This allows O(1) lookup of buffer_line → wrap_row
-    buffer_line_starts: Vec<usize>,
-
-    /// Cached line count from last rebuild
-    cached_line_count: usize,
-
-    /// Cached total wrap row count from last rebuild.
-    /// Used together with `cached_line_count` to detect if the cache is stale.
-    /// When soft wrap changes a line's wrap count without changing buffer line count,
-    /// this catches the staleness.
-    cached_wrap_row_count: usize,
 }
 
 impl WrapMap {
     pub fn new(font: Font, font_size: Pixels, wrap_width: Option<Pixels>) -> Self {
         Self {
             wrapper: TextWrapper::new(font, font_size, wrap_width),
-            buffer_line_starts: Vec::new(),
-            cached_line_count: 0,
-            cached_wrap_row_count: 0,
         }
     }
 
@@ -52,7 +38,7 @@ impl WrapMap {
     /// Get total number of buffer lines (logical lines)
     #[inline]
     pub fn buffer_line_count(&self) -> usize {
-        self.wrapper.lines.len()
+        self.wrapper.lines_count()
     }
 
     /// Convert buffer position to wrap position
@@ -61,7 +47,7 @@ impl WrapMap {
 
         // Clamp to valid range
         let line = line.min(self.buffer_line_count().saturating_sub(1));
-        let line_item = self.wrapper.lines.get(line);
+        let line_item = self.wrapper.line(line);
 
         let col = if let Some(line_item) = line_item {
             col.min(line_item.len())
@@ -100,34 +86,17 @@ impl WrapMap {
 
     /// Get the buffer line for a given wrap row
     pub fn wrap_row_to_buffer_line(&self, wrap_row: usize) -> usize {
-        if wrap_row >= self.wrap_row_count() {
-            return self.buffer_line_count().saturating_sub(1);
-        }
-
-        // Binary search in prefix sum cache
-        match self.buffer_line_starts.binary_search(&wrap_row) {
-            Ok(line) => line,
-            Err(insert_pos) => insert_pos.saturating_sub(1),
-        }
+        self.wrapper.wrap_row_to_buffer_line(wrap_row)
     }
 
     /// Get the first wrap row for a given buffer line
     pub fn buffer_line_to_first_wrap_row(&self, line: usize) -> usize {
-        if line >= self.buffer_line_starts.len() {
-            return self.wrap_row_count();
-        }
-        self.buffer_line_starts[line]
+        self.wrapper.buffer_line_to_first_wrap_row(line)
     }
 
     /// Get the wrap row range for a buffer line: [start, end)
     pub fn buffer_line_to_wrap_row_range(&self, line: usize) -> Range<usize> {
-        let start = self.buffer_line_to_first_wrap_row(line);
-        let end = if line + 1 < self.buffer_line_starts.len() {
-            self.buffer_line_starts[line + 1]
-        } else {
-            self.wrap_row_count()
-        };
-        start..end
+        self.wrapper.buffer_line_to_wrap_row_range(line)
     }
 
     /// Update text (incremental or full)
@@ -139,62 +108,27 @@ impl WrapMap {
         cx: &mut App,
     ) {
         self.wrapper.update(changed_text, range, new_text, cx);
-        self.rebuild_cache();
     }
 
     /// Update layout parameters (wrap width or font)
     pub fn on_layout_changed(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
         self.wrapper.set_wrap_width(wrap_width, cx);
-        self.rebuild_cache();
     }
 
     /// Set font parameters
     pub fn set_font(&mut self, font: Font, font_size: Pixels, cx: &mut App) {
         self.wrapper.set_font(font, font_size, cx);
-        self.rebuild_cache();
     }
 
     /// Ensure text is prepared (initializes wrapper if needed)
     pub fn ensure_text_prepared(&mut self, text: &Rope, cx: &mut App) -> bool {
-        let did_initialize = self.wrapper.prepare_if_need(text, cx);
-        if did_initialize {
-            self.rebuild_cache();
-        }
-        did_initialize
+        self.wrapper.prepare_if_need(text, cx)
     }
 
     /// Initialize with text
     pub fn set_text(&mut self, text: &Rope, cx: &mut App) {
         self.wrapper.set_default_text(text);
         self.wrapper.prepare_if_need(text, cx);
-        self.rebuild_cache();
-    }
-
-    /// Rebuild the prefix sum cache: buffer_line_starts
-    fn rebuild_cache(&mut self) {
-        let line_count = self.wrapper.lines.len();
-        let wrap_row_count = self.wrapper.len();
-
-        // Skip if nothing changed: both buffer line count and total wrap row count must match.
-        // Checking wrap_row_count is essential because soft-wrap can change the number of
-        // wrap rows per line without changing the buffer line count.
-        if line_count == self.cached_line_count
-            && wrap_row_count == self.cached_wrap_row_count
-            && !self.buffer_line_starts.is_empty()
-        {
-            return;
-        }
-
-        self.buffer_line_starts.clear();
-
-        let mut wrap_row = 0;
-        for line_item in &self.wrapper.lines {
-            self.buffer_line_starts.push(wrap_row);
-            wrap_row += line_item.lines_len();
-        }
-
-        self.cached_line_count = line_count;
-        self.cached_wrap_row_count = wrap_row_count;
     }
 
     /// Get access to the underlying wrapper (for rendering/hit-testing)
@@ -202,9 +136,10 @@ impl WrapMap {
         &self.wrapper
     }
 
-    /// Get access to line items (for rendering)
-    pub(crate) fn lines(&self) -> &[LineItem] {
-        &self.wrapper.lines
+    /// Get the line item by buffer row index.
+    #[inline]
+    pub(crate) fn line(&self, row: usize) -> Option<&LineItem> {
+        self.wrapper.line(row)
     }
 
     /// Get the rope text
