@@ -1242,6 +1242,29 @@ impl InputState {
         self.focus(window, cx);
     }
 
+    /// Set the selection to the given UTF-8 byte range.
+    pub fn set_selection(
+        &mut self,
+        start: usize,
+        end: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>
+    ) {
+        let len = self.text.len();
+        let start = start.clamp(0, len);
+        let end: usize = end.clamp(0, len);
+
+        self.move_to(start, None, cx);
+        self.selection_reversed = false;
+        self.select_to(end, cx);
+        self.focus(window, cx);
+    }
+
+    /// Return the current selection as a UTF-8 byte range.
+    pub fn selection(&self) -> Range<usize> {
+        self.selected_range.into()
+    }
+
     /// Focus the input field.
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_handle.focus(window, cx);
@@ -3773,6 +3796,28 @@ ORDER BY id
                     state._pending_update,
                     "replace_all on a code editor should request a pending update"
                 );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_set_selection(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.default_value("hello world"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |s, cx| {
+                s.set_selection(0, 5, window, cx);
+                assert_eq!(s.selection(), 0..5);
+                assert_eq!(s.selected_text().to_string(), "hello");
+
+                s.set_selection(6, 11, window, cx);
+                assert_eq!(s.selected_text().to_string(), "world");
+
+                // clamped + collapsed
+                s.set_selection(100, 100, window, cx);
+                assert_eq!(s.selection(), 11..11);
             });
         });
     }
