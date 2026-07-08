@@ -376,8 +376,12 @@ impl<T> Plot for SankeyChart<T> {
 
             let block = block_height(lines);
             let mut y = if is_first || is_last {
-                // Block vertically centered beside the node.
-                (node.y0 + node.y1) / 2. - block / 2.
+                // Block vertically centered beside the node, clamped into
+                // the plot area so labels of nodes near the top or bottom
+                // edge are not clipped.
+                ((node.y0 + node.y1) / 2. - block / 2.)
+                    .min(height - block)
+                    .max(0.)
             } else {
                 // Block above the node.
                 node.y0 - block - TEXT_GAP
