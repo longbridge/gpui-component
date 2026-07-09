@@ -281,8 +281,54 @@ impl Sankey {
 
         self.compute_node_breadths(&mut graph, &mut columns);
         compute_link_breadths(&mut graph);
+        self.center_columns(&mut graph);
 
         graph
+    }
+
+    /// Vertically center each column's stack of nodes within the extent.
+    ///
+    /// When a crowded column forces a small scale, the sparser columns don't
+    /// fill the height and the relaxation aligns them to their flows' weighted
+    /// center, which leaves the trunk sitting high with empty space below.
+    /// d3-sankey doesn't correct this; centering each column (translating it,
+    /// so the relaxation's within-column arrangement and the ribbon fits are
+    /// preserved) keeps the diagram balanced on the canvas.
+    fn center_columns(&self, graph: &mut SankeyGraph) {
+        let layers = graph.layer_count();
+        if layers == 0 {
+            return;
+        }
+
+        // Per-layer bounding box, then the offset that centers it.
+        let mut lo = vec![f32::INFINITY; layers];
+        let mut hi = vec![f32::NEG_INFINITY; layers];
+        for node in &graph.nodes {
+            lo[node.layer] = lo[node.layer].min(node.y0);
+            hi[node.layer] = hi[node.layer].max(node.y1);
+        }
+        let offsets: Vec<f32> = (0..layers)
+            .map(|l| {
+                if lo[l].is_finite() && hi[l] > lo[l] {
+                    (self.y0 + self.y1 - lo[l] - hi[l]) / 2.
+                } else {
+                    0.
+                }
+            })
+            .collect();
+
+        // Precompute each node's offset so the link loop can read it without
+        // borrowing `nodes` while mutating `links`.
+        let node_offset: Vec<f32> = graph.nodes.iter().map(|n| offsets[n.layer]).collect();
+        for node in &mut graph.nodes {
+            let dy = node_offset[node.index];
+            node.y0 += dy;
+            node.y1 += dy;
+        }
+        for link in &mut graph.links {
+            link.y0 += node_offset[link.source];
+            link.y1 += node_offset[link.target];
+        }
     }
 
     fn align_layer(&self, graph: &SankeyGraph, index: usize, n: usize) -> usize {
@@ -977,6 +1023,33 @@ mod tests {
             assert!(node.y0 <= node.y1);
             assert!(node.y0 >= -EPSILON);
             assert!(node.y1 <= 100. + EPSILON);
+        }
+    }
+
+    #[test]
+    fn test_sankey_vertical_centering() {
+        // Each column's stack must be centered in the extent: its midpoint
+        // equals the extent midpoint. A chain that fans out at the end leaves
+        // the sparse early columns off-center before centering.
+        let graph = Sankey::new()
+            .node_padding(20.)
+            .extent(0., 10., 100., 90.)
+            .layout(
+                5,
+                &links(&[(0, 1, 40.), (1, 2, 40.), (2, 3, 20.), (2, 4, 20.)]),
+            )
+            .unwrap();
+
+        let layers = graph.layer_count();
+        let mut lo = vec![f32::INFINITY; layers];
+        let mut hi = vec![f32::NEG_INFINITY; layers];
+        for node in &graph.nodes {
+            lo[node.layer] = lo[node.layer].min(node.y0);
+            hi[node.layer] = hi[node.layer].max(node.y1);
+        }
+        // Extent is [10, 90], midpoint 50; every column's midpoint matches.
+        for l in 0..layers {
+            assert!(((lo[l] + hi[l]) / 2. - 50.).abs() < EPSILON);
         }
     }
 
