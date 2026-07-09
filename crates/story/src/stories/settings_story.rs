@@ -65,6 +65,7 @@ pub struct SettingsStory {
     focus_handle: FocusHandle,
     group_variant: GroupBoxVariant,
     size: Size,
+    last_page_index: usize,
 }
 
 struct OpenURLSettingField {
@@ -125,6 +126,7 @@ impl SettingsStory {
             focus_handle: cx.focus_handle(),
             group_variant: GroupBoxVariant::Outline,
             size: Size::default(),
+            last_page_index: 0,
         }
     }
 
@@ -513,9 +515,20 @@ impl Focusable for SettingsStory {
 
 impl Render for SettingsStory {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let entity = cx.entity();
         Settings::new("app-settings")
             .with_size(self.size)
             .with_group_variant(self.group_variant)
+            .default_selected_index(gpui_component::setting::SelectIndex {
+                page_ix: self.last_page_index,
+                group_ix: None,
+            })
+            .on_page_change(move |ix, cx| {
+                entity.update(cx, |this, cx| {
+                    this.last_page_index = ix;
+                    cx.notify();
+                });
+            })
             .pages(self.setting_pages(window, cx))
     }
 }
