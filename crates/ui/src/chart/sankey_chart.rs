@@ -405,12 +405,12 @@ impl<T> Plot for SankeyChart<T> {
 
             let is_first = node.layer == 0;
             let is_last = node.layer + 1 == layer_count;
-            // `x`/`align` place the label beside (first/last) or above
-            // (middle) the node. First/last labels are bounded to their
-            // reserved margin so a long one is truncated with an ellipsis
-            // instead of drawn outside the plot; middle labels sit above
-            // interior nodes and never reach the plot edge, so they are left
-            // untruncated (`INFINITY` makes the truncation a no-op).
+            // `x`/`align` place the label beside (first/last) or centered above
+            // (middle) the node, and `max_width` bounds it so a long label is
+            // truncated with an ellipsis instead of drawn outside the plot:
+            // first/last to their reserved margin, middle to twice the smaller
+            // gap to the plot edge (generous for interior nodes, only bites a
+            // label long enough to actually run off-plot).
             let (x, align, max_width) = if is_first {
                 (
                     node.x0 - self.label_gap,
@@ -424,7 +424,9 @@ impl<T> Plot for SankeyChart<T> {
                     right - self.label_gap,
                 )
             } else {
-                ((node.x0 + node.x1) / 2., TextAlign::Center, f32::INFINITY)
+                let center = (node.x0 + node.x1) / 2.;
+                let edge_budget = 2. * center.min(width - center);
+                (center, TextAlign::Center, edge_budget)
             };
 
             let block = block_height(lines);
@@ -531,5 +533,40 @@ mod tests {
             TEXT_SIZE + TEXT_GAP + 14. + TEXT_GAP
         );
         assert_eq!(block_height(&[]), 0.);
+    }
+
+    #[test]
+    fn test_sankey_chart_raw_throughput() {
+        // A(out 30) -> B, B -> C(20) + D(10): B's throughput is max(in, out).
+        let chart = SankeyChart::new(
+            vec!["a", "b", "c", "d"],
+            vec![
+                SankeyLink::new(0, 1, 30.),
+                SankeyLink::new(1, 2, 20.),
+                SankeyLink::new(1, 3, 10.),
+            ],
+        );
+        let raw = chart.raw_throughput();
+        assert_eq!(raw, vec![30., 30., 20., 10.]);
+
+        // Under Sqrt the layout's node value is scaled, but raw_throughput
+        // (used for labels) must stay in raw units — the two must differ.
+        let sqrt = chart
+            .value_scale(SankeyValueScale::Sqrt)
+            .sankey()
+            .layout(4, &chart_links())
+            .unwrap();
+        // Node A: layout value is sqrt-scaled (30 -> sqrt(30)), raw is 30.
+        assert!((sqrt.nodes[0].value - 30f64.sqrt()).abs() < 1e-6);
+        assert!((raw[0] - 30.).abs() < 1e-6);
+        assert!(raw[0] != sqrt.nodes[0].value);
+    }
+
+    fn chart_links() -> Vec<SankeyLink> {
+        vec![
+            SankeyLink::new(0, 1, 30.),
+            SankeyLink::new(1, 2, 20.),
+            SankeyLink::new(1, 3, 10.),
+        ]
     }
 }

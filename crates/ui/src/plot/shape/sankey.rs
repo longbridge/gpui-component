@@ -1190,6 +1190,11 @@ mod tests {
         for l in 0..layers {
             assert!(((lo[l] + hi[l]) / 2. - 50.).abs() < EPSILON);
         }
+        // Centering keeps every node within the extent.
+        for node in &graph.nodes {
+            assert!(node.y0 >= 10. - EPSILON);
+            assert!(node.y1 <= 90. + EPSILON);
+        }
     }
 
     #[test]
@@ -1221,6 +1226,25 @@ mod tests {
         for node in &graph.nodes {
             assert!(node.y0 >= -EPSILON);
             assert!(node.y1 <= 100. + EPSILON);
+        }
+
+        // After the stagger's per-layer shift, each ribbon end must still be
+        // attached to its node: `y0` centered on the source node's outgoing
+        // stack, `y1` on the target node's incoming stack. (Guards against a
+        // source/target mix-up in `apply_layer_offsets`.)
+        for node in &graph.nodes {
+            let mut y = node.y0;
+            for &l in &node.source_links {
+                let link = &graph.links[l];
+                assert!((link.y0 - (y + link.source_width / 2.)).abs() < EPSILON);
+                y += link.source_width;
+            }
+            let mut y = node.y0;
+            for &l in &node.target_links {
+                let link = &graph.links[l];
+                assert!((link.y1 - (y + link.target_width / 2.)).abs() < EPSILON);
+                y += link.target_width;
+            }
         }
     }
 
