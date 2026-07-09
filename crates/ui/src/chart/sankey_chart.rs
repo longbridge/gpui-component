@@ -21,7 +21,10 @@ const DEFAULT_NODE_PADDING: f32 = 16.;
 const DEFAULT_LINK_OPACITY: f32 = 0.3;
 const DEFAULT_MIN_LINK_WIDTH: f32 = 1.;
 const DEFAULT_LABEL_GAP: f32 = 6.;
-/// Cap the label margins so very long labels never collapse the flow area.
+/// Cap each side's label margin (as a fraction of width) so a long label is
+/// truncated to a modest column beside the flow instead of dominating it.
+const MAX_LABEL_WIDTH_RATIO: f32 = 0.2;
+/// Cap the reserved top+bottom label band as a fraction of height.
 const MAX_LABEL_MARGIN_RATIO: f32 = 0.6;
 
 /// A styled line of a sankey node label.
@@ -265,12 +268,11 @@ impl<T> Plot for SankeyChart<T> {
                 }
             }
 
-            let max_margin = width * MAX_LABEL_MARGIN_RATIO;
-            if left + right > max_margin {
-                let k = max_margin / (left + right);
-                left *= k;
-                right *= k;
-            }
+            // Cap each side independently so one long label is truncated to a
+            // modest column rather than eating into the flow area.
+            let side_cap = width * MAX_LABEL_WIDTH_RATIO;
+            left = left.min(side_cap);
+            right = right.min(side_cap);
         }
         // Above-node labels are only emitted for middle columns, so reserve
         // the top band for the tallest such label block. Cap the vertical
