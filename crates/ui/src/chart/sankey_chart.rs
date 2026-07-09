@@ -36,6 +36,7 @@ pub struct SankeyLabel {
 }
 
 impl SankeyLabel {
+    /// Create a label line with the default color and font size.
     pub fn new(text: impl Into<SharedString>) -> Self {
         Self {
             text: text.into(),
@@ -89,6 +90,8 @@ pub struct SankeyChart<T: 'static> {
 }
 
 impl<T> SankeyChart<T> {
+    /// Create a chart from nodes and links; links reference nodes by their
+    /// index in `nodes` (map string ids to indices before constructing).
     pub fn new<I, L>(nodes: I, links: L) -> Self
     where
         I: IntoIterator<Item = T>,
@@ -164,26 +167,29 @@ impl<T> SankeyChart<T> {
         self
     }
 
-    /// Set the name label of each node, drawn in muted foreground.
+    /// Set the name label of each node, drawn in muted foreground. No name
+    /// label is drawn unless set.
     pub fn node_label(mut self, label: impl Fn(&T) -> SharedString + 'static) -> Self {
         self.node_label = Some(Rc::new(label));
         self
     }
 
-    /// Set the value label of each node, drawn above the name label.
+    /// Set the value label of each node, drawn above the name label. No value
+    /// label is drawn unless set.
     ///
-    /// The closure receives the datum and the node's computed throughput
-    /// (max of incoming and outgoing flow).
+    /// The closure receives the datum and the node's raw computed throughput
+    /// (max of incoming and outgoing flow, in unscaled units).
     pub fn value_label(mut self, label: impl Fn(&T, f64) -> SharedString + 'static) -> Self {
         self.value_label = Some(Rc::new(label));
         self
     }
 
     /// Set fully custom node labels, one [`SankeyLabel`] per line, top to
-    /// bottom. Takes precedence over `node_label`/`value_label` when set.
+    /// bottom. Takes precedence over `node_label`/`value_label` when set;
+    /// unset by default.
     ///
-    /// The closure receives the datum and the node's computed throughput
-    /// (max of incoming and outgoing flow).
+    /// The closure receives the datum and the node's raw computed throughput
+    /// (max of incoming and outgoing flow, in unscaled units).
     pub fn labels(mut self, labels: impl Fn(&T, f64) -> Vec<SankeyLabel> + 'static) -> Self {
         self.labels = Some(Rc::new(labels));
         self
@@ -246,8 +252,8 @@ impl<T> Plot for SankeyChart<T> {
             return;
         }
 
-        // First pass: only the topology (layer, value) is needed to measure
-        // the label margins.
+        // First pass: only the topology (each node's `layer`) is needed to
+        // measure the label margins; label values come from `raw_throughput`.
         let Ok(topology) = self.sankey().topology(self.nodes.len(), &self.links) else {
             return;
         };

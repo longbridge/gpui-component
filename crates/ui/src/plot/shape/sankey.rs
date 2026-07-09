@@ -33,6 +33,8 @@ pub struct SankeyLink {
 }
 
 impl SankeyLink {
+    /// Create a link from the `source` node index to the `target` node index
+    /// carrying `value`.
     pub fn new(source: usize, target: usize, value: f64) -> Self {
         Self {
             source,
@@ -112,6 +114,7 @@ impl SankeyGraph {
     }
 }
 
+/// A reason a Sankey layout could not be computed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SankeyError {
     /// A link references a node index out of range.
@@ -183,6 +186,7 @@ impl Default for Sankey {
 }
 
 impl Sankey {
+    /// Create a generator with the d3-sankey defaults (see [`Sankey::default`]).
     pub fn new() -> Self {
         Self::default()
     }
