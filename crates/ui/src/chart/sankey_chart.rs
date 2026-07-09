@@ -10,7 +10,7 @@ use crate::{
     ActiveTheme,
     plot::{
         Plot,
-        label::{PlotLabel, TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
+        label::{PlotLabel, TEXT_GAP, TEXT_SIZE, Text, measure_text_width, truncate_text_to_width},
         origin_point,
         shape::{Sankey, SankeyAlign, SankeyLink, sankey_link_path},
     },
@@ -366,12 +366,26 @@ impl<T> Plot for SankeyChart<T> {
 
             let is_first = node.layer == 0;
             let is_last = node.layer + 1 == layer_count;
-            let (x, align) = if is_first {
-                (node.x0 - self.label_gap, TextAlign::Right)
+            // `x`/`align` place the label beside (first/last) or above
+            // (middle) the node. First/last labels are bounded to their
+            // reserved margin so a long one is truncated with an ellipsis
+            // instead of drawn outside the plot; middle labels sit above
+            // interior nodes and never reach the plot edge, so they are left
+            // untruncated (`INFINITY` makes the truncation a no-op).
+            let (x, align, max_width) = if is_first {
+                (
+                    node.x0 - self.label_gap,
+                    TextAlign::Right,
+                    left - self.label_gap,
+                )
             } else if is_last {
-                (node.x1 + self.label_gap, TextAlign::Left)
+                (
+                    node.x1 + self.label_gap,
+                    TextAlign::Left,
+                    right - self.label_gap,
+                )
             } else {
-                ((node.x0 + node.x1) / 2., TextAlign::Center)
+                ((node.x0 + node.x1) / 2., TextAlign::Center, f32::INFINITY)
             };
 
             let block = block_height(lines);
@@ -388,13 +402,15 @@ impl<T> Plot for SankeyChart<T> {
             };
 
             for line in lines {
+                let font_size = px(line.font_size.unwrap_or(TEXT_SIZE));
+                let text = truncate_text_to_width(&line.text, font_size, max_width, window);
                 texts.push(
                     Text::new(
-                        line.text.clone(),
+                        text,
                         point(px(x), px(y)),
                         line.color.unwrap_or(cx.theme().foreground),
                     )
-                    .font_size(px(line.font_size.unwrap_or(TEXT_SIZE)))
+                    .font_size(font_size)
                     .align(align),
                 );
                 y += line.line_height();

@@ -456,7 +456,7 @@ SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
 })
 ```
 
-Line color defaults to the theme foreground and font size to 10; the chart keeps handling placement, alignment and margin reservation.
+Line color defaults to the theme foreground and font size to 10; the chart keeps handling placement, alignment and margin reservation. A first/last-column label wider than its reserved margin is truncated with a trailing ellipsis rather than drawn outside the plot, so break or shorten long labels yourself if you want the full text on multiple lines.
 
 #### Compressing Large Value Ranges
 
