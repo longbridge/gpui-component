@@ -4,6 +4,10 @@ use gpui::{Path, PathBuilder, Pixels, Point, px};
 
 use crate::plot::origin_point;
 
+/// Vertical offset, as a fraction of node height, applied to stagger runs of
+/// equal-height single-node columns so their otherwise-flat ribbons curve.
+const STAGGER_RATIO: f32 = 0.15;
+
 /// Horizontal alignment of nodes across layers.
 ///
 /// Mirrors d3-sankey's `sankeyLeft` / `sankeyRight` / `sankeyCenter` /
@@ -282,6 +286,7 @@ impl Sankey {
         self.compute_node_breadths(&mut graph, &mut columns);
         compute_link_breadths(&mut graph);
         self.center_columns(&mut graph);
+        self.stagger_flat_columns(&mut graph);
 
         graph
     }
@@ -317,18 +322,59 @@ impl Sankey {
             })
             .collect();
 
-        // Precompute each node's offset so the link loop can read it without
-        // borrowing `nodes` while mutating `links`.
-        let node_offset: Vec<f32> = graph.nodes.iter().map(|n| offsets[n.layer]).collect();
-        for node in &mut graph.nodes {
-            let dy = node_offset[node.index];
-            node.y0 += dy;
-            node.y1 += dy;
+        apply_layer_offsets(graph, &offsets);
+    }
+
+    /// Nudge runs of adjacent single-node columns of (near-)equal height off
+    /// the shared center line. Centering aligns such columns exactly, so the
+    /// ribbon between them is a flat rectangle; a small alternating stagger
+    /// turns it into a gentle S-curve. Only the flat single-node case is
+    /// touched, so multi-node or unequal columns (which already curve) are
+    /// left alone.
+    fn stagger_flat_columns(&self, graph: &mut SankeyGraph) {
+        let layers = graph.layer_count();
+        if layers < 2 {
+            return;
         }
-        for link in &mut graph.links {
-            link.y0 += node_offset[link.source];
-            link.y1 += node_offset[link.target];
+
+        let mut count = vec![0usize; layers];
+        let mut single = vec![usize::MAX; layers];
+        for node in &graph.nodes {
+            count[node.layer] += 1;
+            single[node.layer] = node.index;
         }
+        let heights: Vec<f32> = (0..layers)
+            .map(|l| {
+                if count[l] == 1 {
+                    let n = &graph.nodes[single[l]];
+                    n.y1 - n.y0
+                } else {
+                    0.
+                }
+            })
+            .collect();
+
+        // Offset the odd columns of each flat run, leaving the even ones on
+        // the center line, so consecutive ribbons bend down then back up.
+        let mut offsets = vec![0f32; layers];
+        let mut run = 0usize;
+        for l in 1..layers {
+            let flat =
+                count[l] == 1 && count[l - 1] == 1 && (heights[l] - heights[l - 1]).abs() < 1e-3;
+            if flat {
+                run += 1;
+                if run % 2 == 1 {
+                    // Bound the nudge by the slack so the node stays inside
+                    // the extent (a column that fills the height can't move).
+                    let slack = (self.y1 - self.y0 - heights[l]).max(0.);
+                    offsets[l] = (heights[l] * STAGGER_RATIO).min(slack / 2.);
+                }
+            } else {
+                run = 0;
+            }
+        }
+
+        apply_layer_offsets(graph, &offsets);
     }
 
     fn align_layer(&self, graph: &SankeyGraph, index: usize, n: usize) -> usize {
@@ -535,6 +581,23 @@ impl Sankey {
         push_down(graph, &column[i + 1..], subject_y1 + py, beta, py);
         push_up(graph, column, self.y1, beta, py);
         push_down(graph, column, self.y0, beta, py);
+    }
+}
+
+/// Shift every node (and its attached link ends) by its layer's offset.
+/// Used by both column centering and flat-run staggering.
+fn apply_layer_offsets(graph: &mut SankeyGraph, offsets: &[f32]) {
+    // Precompute per-node offsets so the link loop doesn't borrow `nodes`
+    // while mutating `links`.
+    let node_offset: Vec<f32> = graph.nodes.iter().map(|n| offsets[n.layer]).collect();
+    for node in &mut graph.nodes {
+        let dy = node_offset[node.index];
+        node.y0 += dy;
+        node.y1 += dy;
+    }
+    for link in &mut graph.links {
+        link.y0 += node_offset[link.source];
+        link.y1 += node_offset[link.target];
     }
 }
 
@@ -1028,15 +1091,15 @@ mod tests {
 
     #[test]
     fn test_sankey_vertical_centering() {
-        // Each column's stack must be centered in the extent: its midpoint
-        // equals the extent midpoint. A chain that fans out at the end leaves
-        // the sparse early columns off-center before centering.
+        // Each column's stack is centered in the extent: its midpoint equals
+        // the extent midpoint. Uses multi-node columns so the flat-run stagger
+        // (which only touches equal single-node columns) does not apply.
         let graph = Sankey::new()
             .node_padding(20.)
             .extent(0., 10., 100., 90.)
             .layout(
                 5,
-                &links(&[(0, 1, 40.), (1, 2, 40.), (2, 3, 20.), (2, 4, 20.)]),
+                &links(&[(0, 2, 40.), (1, 2, 10.), (2, 3, 25.), (2, 4, 25.)]),
             )
             .unwrap();
 
@@ -1050,6 +1113,38 @@ mod tests {
         // Extent is [10, 90], midpoint 50; every column's midpoint matches.
         for l in 0..layers {
             assert!(((lo[l] + hi[l]) / 2. - 50.).abs() < EPSILON);
+        }
+    }
+
+    #[test]
+    fn test_sankey_stagger_flat_columns() {
+        // Two equal single-node columns feeding a fan-out: the sparse trunk
+        // columns don't fill the height, so the equal pair is staggered off
+        // the center line to curve the otherwise-flat ribbon between them.
+        let graph = Sankey::new()
+            .node_padding(20.)
+            .size(100., 100.)
+            .layout(
+                6,
+                &links(&[
+                    (0, 1, 100.),
+                    (1, 2, 40.),
+                    (1, 3, 30.),
+                    (1, 4, 20.),
+                    (1, 5, 10.),
+                ]),
+            )
+            .unwrap();
+
+        // Nodes 0 and 1 are the equal single-node columns; one is nudged off
+        // center so their centers differ (the ribbon is no longer flat), but
+        // both stay within the extent.
+        let c0 = (graph.nodes[0].y0 + graph.nodes[0].y1) / 2.;
+        let c1 = (graph.nodes[1].y0 + graph.nodes[1].y1) / 2.;
+        assert!((c0 - c1).abs() > EPSILON);
+        for node in &graph.nodes {
+            assert!(node.y0 >= -EPSILON);
+            assert!(node.y1 <= 100. + EPSILON);
         }
     }
 
