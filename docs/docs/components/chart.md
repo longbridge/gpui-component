@@ -460,26 +460,15 @@ Line color defaults to the theme foreground and font size to 10; the chart keeps
 
 #### Compressing Large Value Ranges
 
-Node heights are linear in flow value, so a large value range (e.g. 200:1) leaves the small flows nearly invisible. Feed compressed values (e.g. square roots) to the layout, and show the real value in the label:
+Node heights are linear in flow value by default, so a large value range (e.g. 200:1) leaves the small flows nearly invisible and the dominant flow oversized. Set `value_scale(SankeyValueScale::Sqrt)` to compress the range — the component sizes nodes by the square root of the value, so small flows stay visible without pre-transforming the data, and labels still receive the raw values:
 
 ```rust
-// Nodes carry the real value for the label.
-#[derive(Clone)]
-struct FlowNode {
-    pub name: SharedString,
-    pub value: f64,
-}
+use gpui_component::plot::shape::SankeyValueScale;
 
-// Feed sqrt-compressed values to the layout so small flows stay visible.
-let links = raw_links
-    .iter()
-    .map(|l| SankeyLink::new(l.source, l.target, l.value.sqrt()))
-    .collect::<Vec<_>>();
-
-SankeyChart::new(nodes, links)
-    // Show the real value from the datum, not the compressed throughput.
-    .value_label(|d: &FlowNode, _| format!("{:.1}", d.value).into())
+SankeyChart::new(nodes, links).value_scale(SankeyValueScale::Sqrt)
 ```
+
+Every node stays exactly filled by its ribbons under either scale, so children always match their parent's height.
 
 ## Data Structures
 

@@ -12,7 +12,7 @@ use crate::{
         Plot,
         label::{PlotLabel, TEXT_GAP, TEXT_SIZE, Text, measure_text_width, truncate_text_to_width},
         origin_point,
-        shape::{Sankey, SankeyAlign, SankeyLink, sankey_link_path},
+        shape::{Sankey, SankeyAlign, SankeyLink, SankeyValueScale, sankey_link_path},
     },
 };
 
@@ -77,6 +77,7 @@ pub struct SankeyChart<T: 'static> {
     node_padding: f32,
     align: SankeyAlign,
     iterations: usize,
+    value_scale: SankeyValueScale,
     node_corner_radius: Option<Pixels>,
     node_color: Option<Rc<dyn Fn(&T) -> Hsla>>,
     node_label: Option<Rc<dyn Fn(&T) -> SharedString>>,
@@ -100,6 +101,7 @@ impl<T> SankeyChart<T> {
             node_padding: DEFAULT_NODE_PADDING,
             align: SankeyAlign::default(),
             iterations: 6,
+            value_scale: SankeyValueScale::default(),
             node_corner_radius: None,
             node_color: None,
             node_label: None,
@@ -132,6 +134,16 @@ impl<T> SankeyChart<T> {
     /// Set the number of relaxation passes. Defaults to 6.
     pub fn iterations(mut self, iterations: usize) -> Self {
         self.iterations = iterations;
+        self
+    }
+
+    /// Set how flow values map to node heights.
+    ///
+    /// Defaults to [`SankeyValueScale::Linear`]. Use [`SankeyValueScale::Sqrt`]
+    /// to keep a dominant flow from dwarfing the small ones without
+    /// pre-transforming the data; labels still receive the raw values.
+    pub fn value_scale(mut self, value_scale: SankeyValueScale) -> Self {
+        self.value_scale = value_scale;
         self
     }
 
@@ -201,6 +213,28 @@ impl<T> SankeyChart<T> {
             .node_padding(self.node_padding)
             .node_align(self.align)
             .iterations(self.iterations)
+            .value_scale(self.value_scale)
+    }
+
+    /// Raw per-node throughput (max of raw incoming and outgoing sums), for
+    /// labels — the layout's `node.value` is in scaled units under a
+    /// non-linear value scale, so labels must not use it.
+    fn raw_throughput(&self) -> Vec<f64> {
+        let mut incoming = vec![0f64; self.nodes.len()];
+        let mut outgoing = vec![0f64; self.nodes.len()];
+        for link in &self.links {
+            if let (Some(o), Some(i)) =
+                (outgoing.get_mut(link.source), incoming.get_mut(link.target))
+            {
+                *o += link.value;
+                *i += link.value;
+            }
+        }
+        incoming
+            .into_iter()
+            .zip(outgoing)
+            .map(|(i, o)| i.max(o))
+            .collect()
     }
 }
 
@@ -218,6 +252,8 @@ impl<T> Plot for SankeyChart<T> {
             return;
         };
         let layer_count = topology.layer_count();
+        // Labels get the raw throughput, not the layout's (possibly scaled) value.
+        let raw_value = self.raw_throughput();
 
         // Collect each node's label lines: the custom `labels` closure wins,
         // otherwise synthesize the value/name lines with the default styles.
@@ -226,12 +262,13 @@ impl<T> Plot for SankeyChart<T> {
             .iter()
             .map(|node| {
                 let datum = &self.nodes[node.index];
+                let value = raw_value[node.index];
                 if let Some(labels) = &self.labels {
-                    labels(datum, node.value)
+                    labels(datum, value)
                 } else {
                     let mut lines = Vec::new();
                     if let Some(value_label) = &self.value_label {
-                        lines.push(SankeyLabel::new(value_label(datum, node.value)));
+                        lines.push(SankeyLabel::new(value_label(datum, value)));
                     }
                     if let Some(node_label) = &self.node_label {
                         lines.push(

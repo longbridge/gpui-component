@@ -8,7 +8,7 @@ use gpui_component::{
     chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart, SankeyChart, SankeyLabel},
     dock::PanelControl,
     h_flex,
-    plot::shape::{BarAlignment, SankeyAlign, SankeyLink},
+    plot::shape::{BarAlignment, SankeyAlign, SankeyLink, SankeyValueScale},
     separator::Separator,
     v_flex,
 };
@@ -720,34 +720,17 @@ impl Render for ChartStory {
                         .iter()
                         .enumerate()
                         .map(|(index, (period, nodes, links))| {
-                            // The first chart sqrt-compresses the link values
-                            // so the huge revenue flows don't dwarf the small
-                            // profit flows; the second keeps them linear.
-                            let sqrt = index == 0;
-                            let links: Vec<SankeyLink> = if sqrt {
-                                links
-                                    .iter()
-                                    .map(|link| {
-                                        SankeyLink::new(link.source, link.target, link.value.sqrt())
-                                    })
-                                    .collect()
-                            } else {
-                                links.clone()
-                            };
-                            let title = if sqrt {
-                                format!("Sankey Chart - TSLA {} (sqrt values)", period)
-                            } else {
-                                format!("Sankey Chart - TSLA {}", period)
-                            };
-
-                            let chart = SankeyChart::new(nodes.clone(), links)
+                            // Sqrt value scale keeps the huge revenue flow from
+                            // dwarfing the small profit/expense ones.
+                            let chart = SankeyChart::new(nodes.clone(), links.clone())
                                 .node_align(SankeyAlign::Center)
                                 .node_padding(40.)
+                                .value_scale(SankeyValueScale::Sqrt)
                                 .node_color(|d: &TslaNode| d.color);
-                            // The sqrt chart uses fully custom three-line
-                            // labels with the year-over-year change; the
-                            // other keeps the default value/name lines.
-                            let chart = if sqrt {
+                            // The first chart shows fully custom three-line
+                            // labels with the year-over-year change; the other
+                            // keeps the default value/name lines.
+                            let chart = if index == 0 {
                                 let up = cx.theme().success;
                                 let down = cx.theme().danger;
                                 let muted = cx.theme().muted_foreground;
@@ -772,7 +755,12 @@ impl Render for ChartStory {
                                 })
                             };
 
-                            chart_container(&title, chart, false, cx)
+                            chart_container(
+                                &format!("Sankey Chart - TSLA {}", period),
+                                chart,
+                                false,
+                                cx,
+                            )
                         })
                         .collect::<Vec<_>>(),
                 ),

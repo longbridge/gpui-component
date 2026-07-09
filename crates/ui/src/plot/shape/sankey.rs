@@ -46,7 +46,9 @@ impl SankeyLink {
 #[derive(Clone, Debug, Default)]
 pub struct SankeyNodeLayout {
     pub index: usize,
-    /// The node's throughput: max(sum of incoming values, sum of outgoing values).
+    /// The node's throughput in the layout's value space: max(sum of incoming,
+    /// sum of outgoing). With a non-linear [`SankeyValueScale`] this is in
+    /// scaled units, not raw values — read raw values from the input links.
     pub value: f64,
     /// Topological distance from any source node (longest path).
     pub depth: usize,
@@ -78,6 +80,8 @@ pub struct SankeyLinkLayout {
     pub index: usize,
     pub source: usize,
     pub target: usize,
+    /// The flow value in the layout's value space (scaled by
+    /// [`SankeyValueScale`]; equals the raw input value under `Linear`).
     pub value: f64,
     pub y0: f32,
     pub y1: f32,
@@ -127,12 +131,35 @@ impl std::fmt::Display for SankeyError {
 
 impl std::error::Error for SankeyError {}
 
+/// How flow values map to node heights and ribbon widths.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SankeyValueScale {
+    /// Height is proportional to the value (standard sankey semantics).
+    #[default]
+    Linear,
+    /// Height is proportional to the square root of the value, compressing a
+    /// wide value range so a dominant flow doesn't dwarf the small ones (and
+    /// the small ones stay visible) without the caller pre-transforming data.
+    Sqrt,
+}
+
+impl SankeyValueScale {
+    fn apply(self, value: f64) -> f64 {
+        match self {
+            Self::Linear => value,
+            // Guard against tiny negatives from bad data.
+            Self::Sqrt => value.max(0.).sqrt(),
+        }
+    }
+}
+
 /// The Sankey layout generator.
 pub struct Sankey {
     node_width: f32,
     node_padding: f32,
     align: SankeyAlign,
     iterations: usize,
+    value_scale: SankeyValueScale,
     x0: f32,
     y0: f32,
     x1: f32,
@@ -146,6 +173,7 @@ impl Default for Sankey {
             node_padding: 8.,
             align: SankeyAlign::default(),
             iterations: 6,
+            value_scale: SankeyValueScale::default(),
             x0: 0.,
             y0: 0.,
             x1: 1.,
@@ -180,6 +208,12 @@ impl Sankey {
     /// Set the number of relaxation passes. Defaults to 6.
     pub fn iterations(mut self, iterations: usize) -> Self {
         self.iterations = iterations;
+        self
+    }
+
+    /// Set how values map to heights. Defaults to [`SankeyValueScale::Linear`].
+    pub fn value_scale(mut self, value_scale: SankeyValueScale) -> Self {
+        self.value_scale = value_scale;
         self
     }
 
@@ -233,7 +267,11 @@ impl Sankey {
                     index,
                     source: link.source,
                     target: link.target,
-                    value: link.value,
+                    // Layout works in scaled value space; all downstream math
+                    // (node values, widths, breadths) stays coherent because
+                    // it is additive in this space, so nodes remain exactly
+                    // filled by their ribbons regardless of the scale.
+                    value: self.value_scale.apply(link.value),
                     y0: 0.,
                     y1: 0.,
                     width: 0.,
@@ -1070,6 +1108,44 @@ mod tests {
         // Both ends stay centered on their nodes' filled ranges.
         assert!((out_link.y0 - (node_b.y0 + node_b.y1) / 2.).abs() < EPSILON);
         assert!((out_link.y1 - (node_c.y0 + node_c.y1) / 2.).abs() < EPSILON);
+    }
+
+    #[test]
+    fn test_sankey_sqrt_scale_fills_nodes() {
+        // With the sqrt scale, a node's children must still exactly fill it:
+        // the incoming and outgoing ribbon widths each sum to the node height
+        // (no gaps), and the diagram is compressed vs linear.
+        let links = links(&[(0, 1, 90.), (1, 2, 40.), (1, 3, 50.)]);
+        let sqrt = Sankey::new()
+            .value_scale(SankeyValueScale::Sqrt)
+            .size(100., 100.)
+            .layout(4, &links)
+            .unwrap();
+
+        for node in &sqrt.nodes {
+            let node_height = node.y1 - node.y0;
+            let incoming: f32 = node
+                .target_links
+                .iter()
+                .map(|&l| sqrt.links[l].target_width)
+                .sum();
+            let outgoing: f32 = node
+                .source_links
+                .iter()
+                .map(|&l| sqrt.links[l].source_width)
+                .sum();
+            if !node.target_links.is_empty() {
+                assert!((incoming - node_height).abs() < EPSILON);
+            }
+            if !node.source_links.is_empty() {
+                assert!((outgoing - node_height).abs() < EPSILON);
+            }
+        }
+
+        // Two leaf nodes (50 and 40) show the sqrt compression directly:
+        // their height ratio is sqrt(50/40), not the linear 50/40.
+        let ratio = (sqrt.nodes[3].y1 - sqrt.nodes[3].y0) / (sqrt.nodes[2].y1 - sqrt.nodes[2].y0);
+        assert!((ratio - (50f32 / 40.).sqrt()).abs() < 0.02);
     }
 
     #[test]

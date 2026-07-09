@@ -13,6 +13,6 @@ pub use line::Line;
 pub use pie::Pie;
 pub use sankey::{
     Sankey, SankeyAlign, SankeyError, SankeyGraph, SankeyLink, SankeyLinkLayout, SankeyNodeLayout,
-    sankey_link_path,
+    SankeyValueScale, sankey_link_path,
 };
 pub use stack::{Stack, StackPoint, StackSeries};

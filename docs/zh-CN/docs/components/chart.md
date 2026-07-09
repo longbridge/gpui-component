@@ -440,26 +440,15 @@ SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
 
 #### 压缩数值跨度
 
-节点高度与流量值成线性关系，数值跨度很大时（如 200:1）小流量几乎不可见。可以把压缩后的值（如平方根）交给布局，标签仍显示真实值：
+节点高度默认与流量值成线性关系，数值跨度很大时（如 200:1）小流量几乎不可见、主流量过大。设置 `value_scale(SankeyValueScale::Sqrt)` 即可压缩跨度——组件按值的平方根来定节点高度，小流量保持可见，且无需预处理数据，标签仍显示真实值：
 
 ```rust
-// 节点自身携带用于标签的真实值。
-#[derive(Clone)]
-struct FlowNode {
-    pub name: SharedString,
-    pub value: f64,
-}
+use gpui_component::plot::shape::SankeyValueScale;
 
-// 把 sqrt 压缩后的值交给布局，让小流量保持可见。
-let links = raw_links
-    .iter()
-    .map(|l| SankeyLink::new(l.source, l.target, l.value.sqrt()))
-    .collect::<Vec<_>>();
-
-SankeyChart::new(nodes, links)
-    // 标签从数据里取真实值，而不是压缩后的吞吐量。
-    .value_label(|d: &FlowNode, _| format!("{:.1}", d.value).into())
+SankeyChart::new(nodes, links).value_scale(SankeyValueScale::Sqrt)
 ```
+
+无论用哪种缩放，每个节点都被其连接精确填满，所以子节点高度始终与父节点匹配。
 
 ## 数据结构示例
 
