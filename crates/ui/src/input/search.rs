@@ -633,6 +633,48 @@ impl Render for SearchPanel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Root, theme::Theme};
+    use gpui::{TestAppContext, VisualTestContext};
+
+    #[gpui::test]
+    fn test_search_open_with_multiline_selection(cx: &mut TestAppContext) {
+        let mut input: Option<Entity<InputState>> = None;
+
+        let window_handle = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                cx.set_global(Theme::default());
+                super::super::init(cx);
+                input = Some(cx.new(|cx| InputState::new(window, cx).searchable(true)));
+                cx.new(|cx| Root::new(input.clone().unwrap(), window, cx))
+            })
+            .unwrap()
+        });
+
+        let mut cx = VisualTestContext::from_window(window_handle.into(), cx);
+        let input = input.unwrap();
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("first line\nsecond line\nthird line", window, cx);
+                state.set_selected_range(0..22, cx); // "first line\nsecond line"
+            });
+        });
+
+        // must not panic with multi-line selection
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.on_action_search(&Search, window, cx);
+            });
+        });
+
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, cx| {
+                let panel = state.search_panel.as_ref().expect("search panel should be open");
+                let value = panel.read(cx).search_input.read(cx).value();
+                assert_eq!(value.as_ref(), "first line");
+            });
+        });
+    }
 
     #[test]
     fn test_search() {
