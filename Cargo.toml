@@ -32,7 +32,7 @@ gpui-component-macros = { path = "crates/macros", version = "0.5.1" }
 gpui-component-assets = { path = "crates/assets", version = "0.5.1" }
 story = { path = "crates/story" }
 
-gpui = { git = "https://github.com/zed-industries/zed" }
+gpui = { path = "gpui-patch" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 gpui_web = { git = "https://github.com/zed-industries/zed" }
 gpui_macros = { git = "https://github.com/zed-industries/zed" }
@@ -128,7 +128,3 @@ ignored = ["log", "anyhow", "serde"]
 [patch.crates-io]
 # Use stacker's psm version which may have better WASM support
 psm = { git = "https://github.com/rust-lang/stacker", branch = "master" }
-
-# Patch gpui to remove std::hint::cold_path() calls (unstable on Rust < 1.87)
-[patch."https://github.com/zed-industries/zed"]
-gpui = { path = "gpui-patch" }
