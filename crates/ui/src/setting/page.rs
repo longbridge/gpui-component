@@ -154,10 +154,9 @@ impl SettingPage {
                         |this| {
                             this.child(
                                 Button::new("reset")
-                                    .icon(IconName::Undo2)
+                                    .label(t!("Settings.Reset All"))
                                     .ghost()
                                     .small()
-                                    .tooltip(t!("Settings.Reset All"))
                                     .on_click({
                                         let page = self.clone();
                                         move |_, window, cx| {
