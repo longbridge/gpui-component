@@ -1,7 +1,7 @@
 [package]
 name = "gpui"
 version = "0.2.2"
-edition.workspace = true
+edition = "2024"
 authors = ["Nathan Sobo <nathan@zed.dev>"]
 description = "Zed's GPU-accelerated UI framework"
 repository = "https://github.com/zed-industries/zed"
@@ -11,10 +11,6 @@ homepage = "https://gpui.rs"
 readme = "README.md"
 keywords = ["desktop", "gui", "immediate"]
 categories = ["gui"]
-
-
-[lints]
-workspace = true
 
 [features]
 default = ["font-kit", "wayland", "x11", "windows-manifest"]
@@ -47,97 +43,95 @@ path = "src/gpui.rs"
 doctest = false
 
 [dependencies]
-accesskit.workspace = true
-anyhow.workspace = true
+accesskit = "0.24"
+anyhow = "1"
 async-task = "4.7"
-backtrace = { workspace = true, optional = true }
-bitflags = { workspace = true, optional = true }
+backtrace = { version = "0.3", optional = true }
+bitflags = { version = "2", optional = true }
 
-collections.workspace = true
-criterion = { workspace = true, optional = true }
-ctor.workspace = true
-derive_more.workspace = true
+collections = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+criterion = { version = "0.5", optional = true }
+ctor = "1"
+derive_more = "2"
 etagere = "0.2"
-futures.workspace = true
-futures-concurrency.workspace = true
-gpui_macros.workspace = true
-gpui_shared_string.workspace = true
-http_client.workspace = true
-image.workspace = true
-inventory.workspace = true
-itertools.workspace = true
-log.workspace = true
+futures = "0.3"
+futures-concurrency = "7"
+gpui_macros = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+gpui_shared_string = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+http_client = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+image = "0.25"
+inventory = "0.3"
+itertools = "0.14"
+log = "0.4"
 num_cpus = "1.13"
 parking = "2.0.0"
-parking_lot.workspace = true
-postage.workspace = true
-proptest = { workspace = true, optional = true }
-chrono.workspace = true
-profiling.workspace = true
-rand.workspace = true
+parking_lot = "0.12"
+postage = "0.5"
+proptest = { version = "1", optional = true }
+chrono = "0.4"
+profiling = "1"
+rand = "0.9"
 raw-window-handle = "0.6"
-regex.workspace = true
-refineable.workspace = true
-scheduler.workspace = true
-resvg.workspace = true
-usvg.workspace = true
+regex = "1"
+refineable = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+scheduler = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+resvg = "0.46"
+usvg = "0.46"
 ttf-parser = "0.25"
-util_macros.workspace = true
-schemars.workspace = true
+util_macros = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+schemars = "1"
 seahash = "4.1"
-serde.workspace = true
-serde_json.workspace = true
-slotmap.workspace = true
-smallvec.workspace = true
-async-channel.workspace = true
-stacksafe.workspace = true
-strum.workspace = true
-sum_tree.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+slotmap = "1"
+smallvec = "1"
+async-channel = "2"
+stacksafe = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+strum = "0.27"
+sum_tree = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 taffy = "=0.10.1"
-thiserror.workspace = true
-gpui_util.workspace = true
-hdrhistogram = { workspace = true, optional = true }
+thiserror = "2"
+gpui_util = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+hdrhistogram = { version = "7", optional = true }
 waker-fn = "1.2.0"
 lyon = "1.0"
 pin-project = "1.1.10"
 spin = "0.10.0"
-pollster.workspace = true
-url.workspace = true
-uuid.workspace = true
-web-time.workspace = true
-heapless.workspace = true
+pollster = "0.4"
+url = "2"
+uuid = "1"
+web-time = "1"
+heapless = "0.9"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 getrandom = { version = "0.3.4", features = ["wasm_js"] }
-uuid = { workspace = true, features = ["js"] }
+uuid = { version = "1", features = ["js"] }
 
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block = "0.1"
-cocoa.workspace = true
-cocoa-foundation.workspace = true
-core-foundation.workspace = true
-core-foundation-sys.workspace = true
+cocoa = "0.26"
+cocoa-foundation = "0.2"
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
 core-graphics = "0.24"
-core-video.workspace = true
+core-video = "0.5"
 core-text = "21"
-# WARNING: If you change this, you must also publish a new version of zed-font-kit to crates.io
 font-kit = { git = "https://github.com/zed-industries/font-kit", rev = "94b0f28166665e8fd2f53ff6d268a14955c82269", package = "zed-font-kit", version = "0.14.1-zed", optional = true }
 foreign-types = "0.5"
-log.workspace = true
-media.workspace = true
-objc.workspace = true
-objc2 = { workspace = true, optional = true }
+log = "0.4"
+media = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+objc = "0.2"
+objc2 = { version = "0.5", optional = true }
 objc2-metal = { version = "0.3", optional = true }
-mach2.workspace = true
-#TODO: replace with "objc2"
-metal.workspace = true
+mach2 = "0.5"
+metal = "0.33"
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "macos"))'.dependencies]
 pathfinder_geometry = "0.5"
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "windows"))'.dependencies]
-scap = { workspace = true, optional = true }
+scap = { git = "https://github.com/zed-industries/scap", rev = "4afea48c3b002197176fb19cd0f9b180dd36eaac", package = "zed-scap", optional = true }
 
 
 
@@ -146,24 +140,24 @@ windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Powe
 
 
 [dev-dependencies]
-backtrace.workspace = true
-collections = { workspace = true, features = ["test-support"] }
-env_logger.workspace = true
-gpui_platform = { workspace = true, features = ["font-kit", "wayland", "x11"] }
-gpui_util = { workspace = true }
+backtrace = "0.3"
+collections = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["test-support"] }
+env_logger = "0.11"
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["font-kit", "wayland", "x11"] }
+gpui_util = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 lyon = { version = "1.0", features = ["extra"] }
-rand.workspace = true
-scheduler = { workspace = true, features = ["test-support"] }
-unicode-segmentation = { workspace = true }
+rand = "0.9"
+scheduler = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["test-support"] }
+unicode-segmentation = "1"
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-http_client = { workspace = true, features = ["test-support"] }
-proptest = { workspace = true }
-reqwest_client = { workspace = true, features = ["test-support"] }
+http_client = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["test-support"] }
+proptest = "1"
+reqwest_client = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["test-support"] }
 
 [target.'cfg(target_family = "wasm")'.dev-dependencies]
-wasm-bindgen = { workspace = true }
-gpui_web.workspace = true
+wasm-bindgen = "0.2"
+gpui_web = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 
 [build-dependencies]
 embed-resource = { version = "3.0", optional = true }
@@ -171,10 +165,6 @@ embed-resource = { version = "3.0", optional = true }
 [target.'cfg(target_os = "macos")'.build-dependencies]
 bindgen = "0.71"
 cbindgen = { version = "0.28.0", default-features = false }
-
-
-
-
 
 
 [[example]]
