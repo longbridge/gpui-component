@@ -1,0 +1,5 @@
+Name: XProto
+Description: X protocol and ancillary headers
+Version: 7.0.31
+Cflags: 
+Libs: 

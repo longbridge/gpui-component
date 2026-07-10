@@ -1,0 +1,5 @@
+Name: KBProto
+Description: KB extension headers
+Version: 1.0.7
+Cflags: 
+Libs: 

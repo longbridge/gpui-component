@@ -1,0 +1,5 @@
+Name: GTK+
+Description: GIMP Tool Kit
+Version: 3.24.0
+Cflags: 
+Libs: 

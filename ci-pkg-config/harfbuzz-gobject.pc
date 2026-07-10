@@ -1,0 +1,5 @@
+Name: HarfBuzz GObject
+Description: HarfBuzz GObject integration
+Version: 7.0.0
+Cflags: 
+Libs: 

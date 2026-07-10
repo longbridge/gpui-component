@@ -1,0 +1,5 @@
+Name: ATK
+Description: Accessibility Tool Kit
+Version: 2.38.0
+Cflags: 
+Libs: 

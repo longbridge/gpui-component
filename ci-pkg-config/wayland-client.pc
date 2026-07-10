@@ -1,0 +1,5 @@
+Name: Wayland Client
+Description: Wayland client protocol
+Version: 1.22.0
+Cflags: 
+Libs: 

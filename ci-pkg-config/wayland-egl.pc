@@ -1,0 +1,5 @@
+Name: Wayland EGL
+Description: Wayland EGL backend
+Version: 1.22.0
+Cflags: 
+Libs: 

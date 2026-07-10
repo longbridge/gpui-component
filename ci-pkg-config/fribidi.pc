@@ -1,0 +1,5 @@
+Name: FriBidi
+Description: Unicode Bidirectional Algorithm
+Version: 1.0.12
+Cflags: 
+Libs: 

@@ -1,0 +1,5 @@
+Name: xkbcommon-x11
+Description: XKB API common to servers and clients (x11)
+Version: 1.5.0
+Cflags: 
+Libs: 

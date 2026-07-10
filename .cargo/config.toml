@@ -1,2 +1,9 @@
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "link-arg=/STACK:8000000"]
+
+[env]
+# Provide fake pkg-config stubs for the GTK/WebKit ecosystem so that
+# cargo clippy --workspace succeeds in CI environments that lack GTK headers.
+# These stubs satisfy version requirements; actual linking is not needed for
+# clippy (no executable is produced).
+PKG_CONFIG_PATH = { value = "ci-pkg-config:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig", force = true, relative = true }

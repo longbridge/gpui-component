@@ -1,0 +1,5 @@
+Name: PangoFT2
+Description: Pango FreeType2 backend
+Version: 1.50.0
+Cflags: 
+Libs: 

@@ -1,0 +1,5 @@
+Name: JavaScriptCoreGTK
+Description: JavaScript Core for GTK+
+Version: 2.40.0
+Cflags: 
+Libs: 

@@ -1,0 +1,5 @@
+Name: Wayland Cursor
+Description: Wayland cursor library
+Version: 1.22.0
+Cflags: 
+Libs: 

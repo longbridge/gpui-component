@@ -1,0 +1,5 @@
+Name: GDK
+Description: GTK+ Drawing Kit
+Version: 3.24.0
+Cflags: 
+Libs: 

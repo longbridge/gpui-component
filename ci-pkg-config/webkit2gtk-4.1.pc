@@ -1,0 +1,5 @@
+Name: WebKit2GTK
+Description: WebKit2 for GTK+
+Version: 2.40.0
+Cflags: 
+Libs: 

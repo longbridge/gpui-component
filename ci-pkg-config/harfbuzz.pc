@@ -1,0 +1,5 @@
+Name: HarfBuzz
+Description: HarfBuzz text shaping library
+Version: 7.0.0
+Cflags: 
+Libs: 

@@ -1,0 +1,5 @@
+Name: libsoup
+Description: HTTP client/server library
+Version: 3.4.0
+Cflags: 
+Libs: 

@@ -1,0 +1,5 @@
+Name: Pango
+Description: Text rendering library
+Version: 1.50.0
+Cflags: 
+Libs: 

@@ -1,0 +1,5 @@
+Name: InputProto
+Description: Input extension wire protocol
+Version: 2.3.2
+Cflags: 
+Libs: 

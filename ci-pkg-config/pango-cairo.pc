@@ -1,0 +1,5 @@
+Name: PangoCairo
+Description: Pango Cairo backend
+Version: 1.50.0
+Cflags: 
+Libs: 
