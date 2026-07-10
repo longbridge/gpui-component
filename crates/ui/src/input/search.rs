@@ -643,7 +643,7 @@ mod tests {
         let window_handle = cx.update(|cx| {
             cx.open_window(Default::default(), |window, cx| {
                 cx.set_global(Theme::default());
-                super::super::init(cx);
+                crate::init(cx);
                 input = Some(cx.new(|cx| InputState::new(window, cx).searchable(true)));
                 cx.new(|cx| Root::new(input.clone().unwrap(), window, cx))
             })
