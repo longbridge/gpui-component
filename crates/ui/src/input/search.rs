@@ -297,7 +297,6 @@ impl SearchPanel {
                     .unwrap_or("")
                     .to_string();
                 if !first_line.is_empty() {
-                    // Set value will emit to update_search_query
                     this.set_value(first_line, window, cx);
                 }
             }
@@ -656,11 +655,10 @@ mod tests {
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
                 state.set_value("first line\nsecond line\nthird line", window, cx);
-                state.set_selected_range(0..22, cx); // "first line\nsecond line"
+                state.set_selected_range(0..22, cx);
             });
         });
 
-        // must not panic with multi-line selection
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
                 state.on_action_search(&Search, window, cx);
