@@ -290,8 +290,16 @@ impl SearchPanel {
 
         self.search_input.update(cx, |this, cx| {
             if selected_text.len() > 0 {
-                // Set value will emit to update_search_query
-                this.set_value(selected_text.to_string(), window, cx);
+                let first_line = selected_text
+                    .to_string()
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                if !first_line.is_empty() {
+                    // Set value will emit to update_search_query
+                    this.set_value(first_line, window, cx);
+                }
             }
             this.select_all(&super::SelectAll, window, cx);
         });
