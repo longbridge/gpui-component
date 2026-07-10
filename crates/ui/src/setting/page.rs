@@ -1,5 +1,7 @@
+use std::rc::Rc;
+
 use gpui::{
-    App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState,
+    AnyElement, App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState,
     ParentElement as _, SharedString, StyleRefinement, Styled, Window, div, list,
     prelude::FluentBuilder as _, px,
 };
@@ -25,6 +27,7 @@ pub struct SettingPage {
     pub(super) description: Option<SharedString>,
     pub(super) groups: Vec<SettingGroup>,
     pub(super) header_style: StyleRefinement,
+    title_suffix: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
 }
 
 impl SettingPage {
@@ -37,6 +40,7 @@ impl SettingPage {
             description: None,
             groups: Vec::new(),
             header_style: StyleRefinement::default(),
+            title_suffix: None,
         }
     }
 
@@ -87,6 +91,15 @@ impl SettingPage {
     /// Set the style refinement for the header of the setting page.
     pub fn header_style(mut self, style: &StyleRefinement) -> Self {
         self.header_style = style.clone();
+        self
+    }
+
+    /// Set a suffix element rendered in the title row, to the left of the reset button.
+    pub fn title_suffix(
+        mut self,
+        f: impl Fn(&mut Window, &mut App) -> AnyElement + 'static,
+    ) -> Self {
+        self.title_suffix = Some(Rc::new(f));
         self
     }
 
@@ -149,24 +162,31 @@ impl SettingPage {
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .refine_style(&self.header_style)
-                    .child(h_flex().justify_between().child(self.title.clone()).when(
-                        self.is_resettable(cx),
-                        |this| {
-                            this.child(
-                                Button::new("reset")
-                                    .icon(IconName::Undo2)
-                                    .ghost()
-                                    .small()
-                                    .tooltip(t!("Settings.Reset All"))
-                                    .on_click({
-                                        let page = self.clone();
-                                        move |_, window, cx| {
-                                            page.reset_all(window, cx);
-                                        }
-                                    }),
-                            )
-                        },
-                    ))
+                    .child({
+                        let title_suffix = self.title_suffix.clone();
+                        h_flex().justify_between().child(self.title.clone()).child(
+                            h_flex()
+                                .gap_1()
+                                .when_some(title_suffix, |this, suffix| {
+                                    this.child(suffix(window, cx))
+                                })
+                                .when(self.is_resettable(cx), |this| {
+                                    this.child(
+                                        Button::new("reset")
+                                            .icon(IconName::Undo2)
+                                            .ghost()
+                                            .small()
+                                            .tooltip(t!("Settings.Reset All"))
+                                            .on_click({
+                                                let page = self.clone();
+                                                move |_, window, cx| {
+                                                    page.reset_all(window, cx);
+                                                }
+                                            }),
+                                    )
+                                }),
+                        )
+                    })
                     .when_some(self.description.clone(), |this, description| {
                         this.child(
                             Label::new(description)
