@@ -48,7 +48,7 @@ impl Settings {
             group_variant: GroupBoxVariant::default(),
             size: Size::default(),
             sidebar_width: px(250.0),
-            sidebar_size_range: px(200.0)..px(360.0),
+            sidebar_size_range: px(160.0)..px(360.0),
             sidebar_style: StyleRefinement::default(),
             default_selected_index: SelectIndex::default(),
             header_style: StyleRefinement::default(),
@@ -61,7 +61,7 @@ impl Settings {
         self
     }
 
-    /// Set the resize range of the sidebar, default is `200px..360px`.
+    /// Set the resize range of the sidebar, default is `160px..360px`.
     pub fn sidebar_size_range(mut self, range: impl Into<Range<Pixels>>) -> Self {
         self.sidebar_size_range = range.into();
         self
