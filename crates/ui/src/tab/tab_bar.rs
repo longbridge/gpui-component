@@ -20,18 +20,39 @@ use crate::{
 struct TabIndicatorBounds {
     container: Bounds<Pixels>,
     tabs: Vec<Bounds<Pixels>>,
+    labels: Vec<Option<SharedString>>,
 }
 
 impl TabIndicatorBounds {
-    fn new(num_tabs: usize) -> Self {
+    fn new() -> Self {
         Self {
             container: Bounds::default(),
-            tabs: vec![Bounds::default(); num_tabs],
+            tabs: Vec::new(),
+            labels: Vec::new(),
         }
     }
 
-    fn resize(&mut self, num_tabs: usize) {
-        self.tabs.resize(num_tabs, Bounds::default());
+    fn sync_tabs(&mut self, tabs: &[Tab]) -> bool {
+        let labels_changed = self.labels.len() != tabs.len()
+            || self
+                .labels
+                .iter()
+                .zip(tabs)
+                .any(|(label, tab)| label != &tab.label);
+
+        if !labels_changed {
+            return false;
+        }
+
+        // Replacing a tab can change its width without changing the selected
+        // index. Discard the previous geometry until prepaint measures the new
+        // tab, otherwise the old indicator is briefly clipped by the new bar.
+        self.container = Bounds::default();
+        self.tabs.resize(tabs.len(), Bounds::default());
+        self.tabs.fill(Bounds::default());
+        self.labels.clear();
+        self.labels.extend(tabs.iter().map(|tab| tab.label.clone()));
+        true
     }
 }
 
@@ -165,16 +186,16 @@ impl TabBar {
 
     /// Render the sliding indicator element for animated tab switching.
     ///
-    /// Returns the indicator element together with the current animation
-    /// `epoch`, which increments on every tab switch. Tabs key their own
-    /// transitions (e.g. text color fade) on this epoch so they restart in sync
-    /// with the indicator slide.
+    /// Returns the indicator element, the current animation `epoch`, and
+    /// whether the indicator is moving. Tabs key their own transitions (e.g.
+    /// text color fade) on this epoch so they restart in sync with the indicator
+    /// slide.
     fn render_indicator(
         &self,
         bounds_rc: &Option<Rc<RefCell<TabIndicatorBounds>>>,
         window: &mut Window,
         cx: &mut App,
-    ) -> Option<(AnyElement, u64)> {
+    ) -> Option<(AnyElement, u64, bool)> {
         let has_indicator = matches!(
             self.variant,
             TabVariant::Segmented | TabVariant::Pill | TabVariant::Underline
@@ -203,10 +224,23 @@ impl TabBar {
 
         self.update_anim_params(selected_ix, bounds_rc, &prev_selected, &anim_params, cx);
 
+        let bounds_ready = bounds_rc.as_ref().is_some_and(|rc| {
+            let bounds = rc.borrow();
+            bounds.container.size.width > px(0.)
+                && bounds
+                    .tabs
+                    .get(selected_ix)
+                    .is_some_and(|bounds| bounds.size.width > px(0.))
+        });
+        if !bounds_ready {
+            return None;
+        }
+
         let (from_left, from_width, to_left, to_width, epoch) = *anim_params.read(cx);
         if to_width <= px(0.) {
             return None;
         }
+        let indicator_moving = from_left != to_left || from_width != to_width;
 
         let variant = self.variant;
         let size = self.size;
@@ -253,7 +287,7 @@ impl TabBar {
                 },
             );
 
-        Some((indicator.into_any_element(), epoch))
+        Some((indicator.into_any_element(), epoch, indicator_moving))
     }
 
     /// Update animation parameters based on current and previous selection.
@@ -395,19 +429,26 @@ impl RenderOnce for TabBar {
         let bounds_rc = if has_indicator && num_tabs > 0 {
             let rc: Rc<RefCell<TabIndicatorBounds>> = window
                 .use_keyed_state(format!("{}-tab-bounds", self.id), cx, |_, _| {
-                    Rc::new(RefCell::new(TabIndicatorBounds::new(num_tabs)))
+                    Rc::new(RefCell::new(TabIndicatorBounds::new()))
                 })
                 .read(cx)
                 .clone();
-            rc.borrow_mut().resize(num_tabs);
+            let labels_changed = rc.borrow_mut().sync_tabs(&self.children);
+            if labels_changed {
+                window.refresh();
+            }
             Some(rc)
         } else {
             None
         };
 
         let indicator = self.render_indicator(&bounds_rc, window, cx);
-        let indicator_epoch = indicator.as_ref().map(|(_, epoch)| *epoch).unwrap_or(0);
-        let indicator_element = indicator.map(|(el, _)| el);
+        let indicator_epoch = indicator.as_ref().map(|(_, epoch, _)| *epoch).unwrap_or(0);
+        let indicator_moving = indicator
+            .as_ref()
+            .map(|(_, _, moving)| *moving)
+            .unwrap_or(false);
+        let indicator_element = indicator.map(|(el, _, _)| el);
         let indicator_ready = indicator_element.is_some();
 
         let has_suffix_or_menu = self.suffix.is_some() || self.menu;
@@ -472,6 +513,7 @@ impl RenderOnce for TabBar {
                                 .with_size(self.size);
                             tab.indicator_active = has_indicator;
                             tab.indicator_ready = indicator_ready;
+                            tab.indicator_moving = indicator_moving;
                             tab.indicator_epoch = indicator_epoch;
                             let tab = tab
                                 .when_some(self.selected_index, |this, selected_ix| {
