@@ -49,16 +49,16 @@ async-task = "4.7"
 backtrace = { version = "0.3", optional = true }
 bitflags = { version = "2", optional = true }
 
-collections = { git = "https://github.com/zed-industries/zed" }
+collections = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 criterion = { version = "0.5", optional = true }
 ctor = "1"
 derive_more = "2"
 etagere = "0.2"
 futures = "0.3"
 futures-concurrency = "7"
-gpui_macros = { git = "https://github.com/zed-industries/zed" }
-gpui_shared_string = { git = "https://github.com/zed-industries/zed" }
-http_client = { git = "https://github.com/zed-industries/zed" }
+gpui_macros = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+gpui_shared_string = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+http_client = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 image = "0.25"
 inventory = "0.3"
 itertools = "0.14"
@@ -73,12 +73,12 @@ profiling = "1"
 rand = "0.9"
 raw-window-handle = "0.6"
 regex = "1"
-refineable = { git = "https://github.com/zed-industries/zed" }
-scheduler = { git = "https://github.com/zed-industries/zed" }
+refineable = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
+scheduler = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 resvg = "0.46"
 usvg = "0.46"
 ttf-parser = "0.25"
-util_macros = { git = "https://github.com/zed-industries/zed" }
+util_macros = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 schemars = "1"
 seahash = "4.1"
 serde = { version = "1", features = ["derive"] }
@@ -88,10 +88,10 @@ smallvec = "1"
 async-channel = "2"
 stacksafe = "0.1"
 strum = "0.27"
-sum_tree = { git = "https://github.com/zed-industries/zed" }
+sum_tree = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 taffy = "=0.10.1"
 thiserror = "2"
-gpui_util = { git = "https://github.com/zed-industries/zed" }
+gpui_util = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 hdrhistogram = { version = "7", optional = true }
 waker-fn = "1.2.0"
 lyon = "1.0"
@@ -120,7 +120,7 @@ core-text = "21"
 font-kit = { git = "https://github.com/zed-industries/font-kit", rev = "94b0f28166665e8fd2f53ff6d268a14955c82269", package = "zed-font-kit", version = "0.14.1-zed", optional = true }
 foreign-types = "0.5"
 log = "0.4"
-media = { git = "https://github.com/zed-industries/zed" }
+media = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 objc = "0.2"
 objc2 = { version = "0.5", optional = true }
 objc2-metal = { version = "0.3", optional = true }
@@ -141,23 +141,23 @@ windows = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Powe
 
 [dev-dependencies]
 backtrace = "0.3"
-collections = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
+collections = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["test-support"] }
 env_logger = "0.11"
-gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "wayland", "x11"] }
-gpui_util = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["font-kit", "wayland", "x11"] }
+gpui_util = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 lyon = { version = "1.0", features = ["extra"] }
 rand = "0.9"
-scheduler = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
+scheduler = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["test-support"] }
 unicode-segmentation = "1"
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-http_client = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
+http_client = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["test-support"] }
 proptest = "1"
-reqwest_client = { git = "https://github.com/zed-industries/zed", features = ["test-support"] }
+reqwest_client = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c", features = ["test-support"] }
 
 [target.'cfg(target_family = "wasm")'.dev-dependencies]
 wasm-bindgen = "0.2"
-gpui_web = { git = "https://github.com/zed-industries/zed" }
+gpui_web = { git = "https://github.com/zed-industries/zed", rev = "c545fb67d0ce13e335bff76f7c08986000333f2c" }
 
 [build-dependencies]
 embed-resource = { version = "3.0", optional = true }
