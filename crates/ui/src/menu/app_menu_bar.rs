@@ -139,6 +139,7 @@ pub(super) struct AppMenu {
     name: SharedString,
     menu: OwnedMenu,
     popup_menu: Option<Entity<PopupMenu>>,
+    dismiss_in_progress: bool,
 
     _subscription: Option<Subscription>,
 }
@@ -157,8 +158,13 @@ impl AppMenu {
             name,
             menu: menu.clone(),
             popup_menu: None,
+            dismiss_in_progress: false,
             _subscription: None,
         })
+    }
+
+    fn is_selected(&self, cx: &App) -> bool {
+        self.menu_bar.read(cx).selected_index == Some(self.ix)
     }
 
     fn build_popup_menu(
@@ -218,12 +224,17 @@ impl AppMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let is_selected = self.menu_bar.read(cx).selected_index == Some(self.ix);
-
+        let is_selected = self.is_selected(cx);
         _ = self.menu_bar.update(cx, |state, cx| {
-            let new_ix = if is_selected { None } else { Some(self.ix) };
+            let new_ix = if self.dismiss_in_progress || is_selected {
+                None
+            } else {
+                Some(self.ix)
+            };
             state.set_selected_index(new_ix, window, cx);
         });
+
+        self.dismiss_in_progress = false;
     }
 
     fn handle_hover(&mut self, hovered: &bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -244,8 +255,7 @@ impl AppMenu {
 
 impl Render for AppMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let menu_bar = self.menu_bar.read(cx);
-        let is_selected = menu_bar.selected_index == Some(self.ix);
+        let is_selected = self.is_selected(cx);
 
         div()
             .id(self.ix)
@@ -258,11 +268,18 @@ impl Render for AppMenu {
                     .ghost()
                     .label(self.name.clone())
                     .selected(is_selected)
-                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
-                        // Stop propagation to avoid dragging the window.
-                        window.prevent_default();
-                        cx.stop_propagation();
-                    })
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        window.listener_for(&cx.entity(), move |this, _, window, cx| {
+                            // Stop propagation to avoid dragging the window.
+                            window.prevent_default();
+                            cx.stop_propagation();
+
+                            if is_selected {
+                                this.dismiss_in_progress = true;
+                            }
+                        }),
+                    )
                     .on_click(cx.listener(Self::handle_trigger_click)),
             )
             .on_hover(cx.listener(Self::handle_hover))
