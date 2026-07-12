@@ -224,17 +224,16 @@ impl AppMenu {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.dismiss_in_progress {
+            self.dismiss_in_progress = false;
+            return;
+        }
+
         let is_selected = self.is_selected(cx);
         _ = self.menu_bar.update(cx, |state, cx| {
-            let new_ix = if self.dismiss_in_progress || is_selected {
-                None
-            } else {
-                Some(self.ix)
-            };
+            let new_ix = if is_selected { None } else { Some(self.ix) };
             state.set_selected_index(new_ix, window, cx);
         });
-
-        self.dismiss_in_progress = false;
     }
 
     fn handle_hover(&mut self, hovered: &bool, window: &mut Window, cx: &mut Context<Self>) {
