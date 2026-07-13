@@ -426,9 +426,8 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
             })
             .when_some(self.header.take(), |this, header| {
                 this.child(
-                    div()
+                    h_flex()
                         .id("header")
-                        .w_full()
                         .pt_3()
                         .px_3()
                         .gap_2()
