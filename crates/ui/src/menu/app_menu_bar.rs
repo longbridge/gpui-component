@@ -139,6 +139,7 @@ pub(super) struct AppMenu {
     name: SharedString,
     menu: OwnedMenu,
     popup_menu: Option<Entity<PopupMenu>>,
+
     _subscription: Option<Subscription>,
 }
 
