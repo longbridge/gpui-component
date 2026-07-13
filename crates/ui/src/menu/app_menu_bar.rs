@@ -139,8 +139,6 @@ pub(super) struct AppMenu {
     name: SharedString,
     menu: OwnedMenu,
     popup_menu: Option<Entity<PopupMenu>>,
-    dismiss_in_progress: bool,
-
     _subscription: Option<Subscription>,
 }
 
@@ -158,7 +156,6 @@ impl AppMenu {
             name,
             menu: menu.clone(),
             popup_menu: None,
-            dismiss_in_progress: false,
             _subscription: None,
         })
     }
@@ -220,15 +217,18 @@ impl AppMenu {
 
     fn handle_trigger_click(
         &mut self,
-        _: &ClickEvent,
+        event: &ClickEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.dismiss_in_progress {
-            self.dismiss_in_progress = false;
+        if matches!(event, ClickEvent::Mouse(_)) {
             return;
         }
 
+        self.toggle(window, cx);
+    }
+
+    fn toggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let is_selected = self.is_selected(cx);
         _ = self.menu_bar.update(cx, |state, cx| {
             let new_ix = if is_selected { None } else { Some(self.ix) };
@@ -273,10 +273,7 @@ impl Render for AppMenu {
                             // Stop propagation to avoid dragging the window.
                             window.prevent_default();
                             cx.stop_propagation();
-
-                            if is_selected {
-                                this.dismiss_in_progress = true;
-                            }
+                            this.toggle(window, cx);
                         }),
                     )
                     .on_click(cx.listener(Self::handle_trigger_click)),
