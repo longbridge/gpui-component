@@ -1,14 +1,14 @@
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window, div, linear_color_stop, linear_gradient,
+    Render, Rgba, SharedString, Styled, Window, div, linear_color_stop, linear_gradient,
     prelude::FluentBuilder, px,
 };
 use gpui_component::{
     ActiveTheme, StyledExt,
-    chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart},
+    chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart, SankeyChart, SankeyLabel},
     dock::PanelControl,
     h_flex,
-    plot::shape::BarAlignment,
+    plot::shape::{BarAlignment, SankeyAlign, SankeyLink, SankeyValueScale},
     separator::Separator,
     v_flex,
 };
@@ -48,11 +48,52 @@ pub struct StockPrice {
     pub close: f64,
 }
 
+/// TSLA income statement data, values and colors as strings like the real API.
+#[derive(Clone, Deserialize)]
+struct TslaStatementNode {
+    key: SharedString,
+    name: SharedString,
+    value: SharedString,
+    growth: SharedString,
+    color: SharedString,
+}
+
+#[derive(Clone, Deserialize)]
+struct TslaStatementLink {
+    source: SharedString,
+    target: SharedString,
+    value: SharedString,
+}
+
+#[derive(Clone, Deserialize)]
+struct TslaStatement {
+    period: SharedString,
+    nodes: Vec<TslaStatementNode>,
+    links: Vec<TslaStatementLink>,
+}
+
+#[derive(Clone, Deserialize)]
+struct TslaIncomeStatement {
+    list: Vec<TslaStatement>,
+}
+
+#[derive(Clone)]
+pub struct TslaNode {
+    pub name: SharedString,
+    /// The real dollar value, for the label; the layout gets sqrt-compressed
+    /// link values to keep small flows readable.
+    pub value: f64,
+    /// Year-over-year growth in percent, for the label.
+    pub growth: Option<f64>,
+    pub color: Hsla,
+}
+
 pub struct ChartStory {
     focus_handle: FocusHandle,
     daily_devices: Vec<DailyDevice>,
     monthly_devices: Vec<MonthlyDevice>,
     stock_prices: Vec<StockPrice>,
+    tsla_statements: Vec<(SharedString, Vec<TslaNode>, Vec<SankeyLink>)>,
 }
 
 impl ChartStory {
@@ -69,11 +110,55 @@ impl ChartStory {
             "../../fixtures/stock-prices.json"
         ))
         .unwrap();
+        let tsla = serde_json::from_str::<TslaIncomeStatement>(include_str!(
+            "../../fixtures/tsla-income-statement.json"
+        ))
+        .unwrap();
+        let tsla_statements = tsla
+            .list
+            .iter()
+            .map(|statement| {
+                // Map the fixture's string keys to node indices for `SankeyLink`.
+                let node_indexes: std::collections::HashMap<SharedString, usize> = statement
+                    .nodes
+                    .iter()
+                    .enumerate()
+                    .map(|(index, node)| (node.key.clone(), index))
+                    .collect();
+                let nodes = statement
+                    .nodes
+                    .iter()
+                    .map(|node| TslaNode {
+                        name: node.name.clone(),
+                        value: node.value.parse().unwrap_or(0.),
+                        growth: node.growth.parse().ok(),
+                        color: Rgba::try_from(node.color.as_ref())
+                            .map(Into::into)
+                            .unwrap_or(gpui::black()),
+                    })
+                    .collect();
+                // Skip links with unknown node keys or unparsable values
+                // instead of panicking on bad fixture data.
+                let links = statement
+                    .links
+                    .iter()
+                    .filter_map(|link| {
+                        Some(SankeyLink::new(
+                            *node_indexes.get(&link.source)?,
+                            *node_indexes.get(&link.target)?,
+                            link.value.parse().ok()?,
+                        ))
+                    })
+                    .collect();
+                (statement.period.clone(), nodes, links)
+            })
+            .collect();
 
         Self {
             daily_devices,
             monthly_devices,
             stock_prices,
+            tsla_statements,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -107,12 +192,12 @@ impl Focusable for ChartStory {
     }
 }
 
-fn chart_container(
+fn chart_container<C: IntoElement>(
     title: &str,
-    chart: impl IntoElement,
+    chart: C,
     center: bool,
     cx: &mut Context<ChartStory>,
-) -> impl IntoElement {
+) -> impl IntoElement + use<C> {
     v_flex()
         .flex_1()
         .h(px(400.))
@@ -627,6 +712,58 @@ impl Render for ChartStory {
                         false,
                         cx,
                     )),
+            )
+            .child(Separator::horizontal())
+            .child(
+                h_flex().flex_wrap().gap_4().children(
+                    self.tsla_statements
+                        .iter()
+                        .enumerate()
+                        .map(|(index, (period, nodes, links))| {
+                            // Sqrt value scale keeps the huge revenue flow from
+                            // dwarfing the small profit/expense ones.
+                            let chart = SankeyChart::new(nodes.clone(), links.clone())
+                                .node_align(SankeyAlign::Center)
+                                .node_padding(40.)
+                                .value_scale(SankeyValueScale::Sqrt)
+                                .node_color(|d: &TslaNode| d.color);
+                            // The first chart shows fully custom three-line
+                            // labels with the year-over-year change; the other
+                            // keeps the default value/name lines.
+                            let chart = if index == 0 {
+                                let up = cx.theme().success;
+                                let down = cx.theme().danger;
+                                let muted = cx.theme().muted_foreground;
+                                chart.labels(move |d: &TslaNode, _| {
+                                    let mut lines = vec![SankeyLabel::new(format!(
+                                        "${:.2}B",
+                                        d.value / 1_000_000_000.
+                                    ))];
+                                    if let Some(growth) = d.growth {
+                                        let arrow = if growth >= 0. { "▲" } else { "▼" };
+                                        lines.push(
+                                            SankeyLabel::new(format!("{} {:+.2}%", arrow, growth))
+                                                .color(if growth >= 0. { up } else { down }),
+                                        );
+                                    }
+                                    lines.push(SankeyLabel::new(d.name.clone()).color(muted));
+                                    lines
+                                })
+                            } else {
+                                chart.node_label(|d| d.name.clone()).value_label(|d, _| {
+                                    format!("${:.2}B", d.value / 1_000_000_000.).into()
+                                })
+                            };
+
+                            chart_container(
+                                &format!("Sankey Chart - TSLA {}", period),
+                                chart,
+                                false,
+                                cx,
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                ),
             )
     }
 }
