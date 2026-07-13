@@ -127,6 +127,23 @@ SettingPage::new("General")
     .groups(vec![...])
 ```
 
+### Title Suffix
+
+Use `title_suffix` to render a custom element after the title in the page header,
+for example an info icon button that opens the help documentation:
+
+```rust
+SettingPage::new("General")
+    .title_suffix(|_, _| {
+        Button::new("help")
+            .icon(IconName::Info)
+            .ghost()
+            .xsmall()
+            .on_click(|_, _, cx| cx.open_url("https://example.com/help"))
+    })
+    .groups(vec![...])
+```
+
 ### Default Open
 
 ```rust

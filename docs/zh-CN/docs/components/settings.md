@@ -126,6 +126,22 @@ SettingPage::new("General")
     .groups(vec![...])
 ```
 
+### 标题后缀
+
+使用 `title_suffix` 在页头标题后渲染自定义元素，例如一个点击后打开帮助文档的 info 图标按钮：
+
+```rust
+SettingPage::new("General")
+    .title_suffix(|_, _| {
+        Button::new("help")
+            .icon(IconName::Info)
+            .ghost()
+            .xsmall()
+            .on_click(|_, _, cx| cx.open_url("https://example.com/help"))
+    })
+    .groups(vec![...])
+```
+
 ### 默认展开
 
 ```rust

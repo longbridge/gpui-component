@@ -139,6 +139,15 @@ impl SettingsStory {
                 .resettable(resettable)
                 .default_open(true)
                 .icon(Icon::new(IconName::Settings2))
+                .title_suffix(|_, _| {
+                    Button::new("help")
+                        .icon(IconName::Info)
+                        .ghost()
+                        .xsmall()
+                        .on_click(|_, _, cx| {
+                            cx.open_url("https://longbridge.github.io/gpui-component/")
+                        })
+                })
                 .groups(vec![
                     SettingGroup::new().title("Appearance").items(vec![
                         SettingItem::new(
