@@ -1,6 +1,6 @@
 use std::{borrow::Cow, rc::Rc};
 
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate, Weekday};
 use gpui::{
     App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle,
     InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful,
@@ -266,6 +266,8 @@ pub struct Calendar {
     style: StyleRefinement,
     /// Number of the months view to show.
     number_of_months: usize,
+    /// The first day of the week. Defaults to Sunday.
+    first_day_of_week: Weekday,
 }
 
 /// Use to store the state of the calendar.
@@ -411,10 +413,14 @@ impl CalendarState {
     }
 
     /// Returns the days of the month in a 2D vector to render on calendar.
-    fn days(&self) -> Vec<Vec<NaiveDate>> {
+    fn days(&self, first_day: Weekday) -> Vec<Vec<NaiveDate>> {
         (0..self.number_of_months)
             .flat_map(|offset| {
-                days_in_month(self.current_year, self.current_month as u32 + offset as u32)
+                days_in_month(
+                    self.current_year,
+                    self.current_month as u32 + offset as u32,
+                    first_day,
+                )
             })
             .collect()
     }
@@ -539,12 +545,19 @@ impl Calendar {
             state: state.clone(),
             style: StyleRefinement::default(),
             number_of_months: 1,
+            first_day_of_week: Weekday::Sun,
         }
     }
 
     /// Set number of months to show, default is 1.
     pub fn number_of_months(mut self, number_of_months: usize) -> Self {
         self.number_of_months = number_of_months;
+        self
+    }
+
+    /// Set the first day of the week for the calendar.
+    pub fn first_day_of_week(mut self, day: Weekday) -> Self {
+        self.first_day_of_week = day;
         self
     }
 
@@ -803,7 +816,7 @@ impl Calendar {
             .justify_between()
             .children(
                 state
-                    .days()
+                    .days(self.first_day_of_week)
                     .chunks(5)
                     .enumerate()
                     .map(|(offset_month, days)| {
