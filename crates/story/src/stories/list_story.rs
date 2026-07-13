@@ -103,14 +103,14 @@ impl CompanyListItem {
             }
         });
 
-        self.base = self
-            .base
-            .on_drop(move |dragged_company: &Rc<Company>, _window, _cx| {
+        self.base = self.base.on_drop(
+            move |dragged_company: &Rc<Company>, _window, _cx| {
                 println!(
                     "✓ Dropped '{}' onto '{}'",
                     dragged_company.name, company_for_drop.name
                 );
-            });
+            },
+        );
 
         self
     }
