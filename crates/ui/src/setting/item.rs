@@ -263,50 +263,58 @@ impl SettingItem {
                     disabled,
                     field,
                     ..
-                } => div()
-                    .w_full()
-                    .overflow_hidden()
-                    .when(disabled, |this| this.opacity(0.5))
-                    .map(|this| {
-                        if layout.is_horizontal() {
-                            this.h_flex().justify_between().items_start()
-                        } else {
-                            this.v_flex()
-                        }
-                    })
-                    .gap_3()
-                    .child(
-                        v_flex()
-                            .map(|this| {
-                                if layout.is_horizontal() {
-                                    this.flex_1().max_w_3_5()
-                                } else {
-                                    this.w_full()
-                                }
-                            })
-                            .gap_1()
-                            .child(Label::new(title.clone()).text_sm())
-                            .when_some(description.clone(), |this, description| {
-                                this.child(
-                                    div()
-                                        .size_full()
-                                        .text_sm()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(description),
-                                )
-                            }),
-                    )
-                    .child(div().id("field").child(Self::render_field(
-                        field,
-                        RenderOptions {
-                            layout,
-                            disabled,
-                            ..*options
-                        },
-                        window,
-                        cx,
-                    )))
-                    .into_any_element(),
+                } => {
+                    let layout = if options.layout.is_vertical() {
+                        Axis::Vertical
+                    } else {
+                        layout
+                    };
+
+                    div()
+                        .w_full()
+                        .overflow_hidden()
+                        .when(disabled, |this| this.opacity(0.5))
+                        .map(|this| {
+                            if layout.is_horizontal() {
+                                this.h_flex().justify_between().items_start()
+                            } else {
+                                this.v_flex()
+                            }
+                        })
+                        .gap_3()
+                        .child(
+                            v_flex()
+                                .map(|this| {
+                                    if layout.is_horizontal() {
+                                        this.flex_1().max_w_3_5()
+                                    } else {
+                                        this.w_full()
+                                    }
+                                })
+                                .gap_1()
+                                .child(Label::new(title).text_sm())
+                                .when_some(description, |this, description| {
+                                    this.child(
+                                        div()
+                                            .size_full()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(description),
+                                    )
+                                }),
+                        )
+                        .child(div().id("field").child(Self::render_field(
+                            field,
+                            RenderOptions {
+                                layout,
+                                disabled,
+                                ..*options
+                            },
+                            window,
+                            cx,
+                        )))
+                        .into_any_element()
+                }
                 SettingItem::Element {
                     disabled, render, ..
                 } => div()
