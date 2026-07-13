@@ -126,6 +126,7 @@ fn language_menu(_: &App) -> MenuItem {
         items: vec![
             MenuItem::action("English", SelectLocale("en".into())).checked(locale == "en"),
             MenuItem::action("简体中文", SelectLocale("zh-CN".into())).checked(locale == "zh-CN"),
+            MenuItem::action("Français", SelectLocale("fr".into())).checked(locale == "fr"),
         ],
         disabled: false,
     })
