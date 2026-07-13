@@ -470,6 +470,15 @@ impl SyntaxHighlighter {
         self.tree.as_ref()
     }
 
+    /// Apply only the structural `edit` to the existing tree and update the stored text,
+    /// without re-parsing.
+    pub fn edit_tree(&mut self, edit: Option<InputEdit>, text: &Rope) {
+        if let (Some(edit), Some(tree)) = (edit, self.tree.as_mut()) {
+            tree.edit(&edit);
+        }
+        self.text = text.clone();
+    }
+
     /// Returns the language name for this highlighter.
     pub fn language(&self) -> &SharedString {
         &self.language

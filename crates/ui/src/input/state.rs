@@ -1395,7 +1395,7 @@ impl InputState {
 
         if self.soft_wrap && self.mode.is_code_editor() {
             let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
-            if let Some(line) = self.display_map.lines().get(row)
+            if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_start = logical_start + range.start;
@@ -1423,7 +1423,7 @@ impl InputState {
 
         if self.soft_wrap && self.mode.is_code_editor() {
             let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
-            if let Some(line) = self.display_map.lines().get(row)
+            if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_end = logical_start + range.end;
@@ -1948,16 +1948,8 @@ impl InputState {
 
         let row = point.row;
 
-        let mut row_offset_y = px(0.);
-        for (ix, _wrap_line) in self.display_map.lines().iter().enumerate() {
-            if ix == row {
-                break;
-            }
-
-            // Only accumulate height for visible (non-folded) wrap rows
-            let visible_wrap_rows = self.display_map.visible_wrap_row_count_for_buffer_line(ix);
-            row_offset_y += line_height * visible_wrap_rows;
-        }
+        // Calculate row offset by multiplying the number of lines before it with the line height
+        let mut row_offset_y = line_height * self.display_map.buffer_line_to_display_row(row);
 
         // For Right alignment use 0 margin: the cursor indicator is clamped inside bounds
         // in layout_cursor, so shifting the text here would cause a first-click visual jump.
@@ -2145,6 +2137,18 @@ impl InputState {
     /// in the underlying rope's byte units.
     pub fn selected_range(&self) -> std::ops::Range<usize> {
         self.selected_range.into()
+    }
+
+    /// Set the selected range using UTF-8 byte offsets.
+    pub fn set_selected_range(&mut self, range: Range<usize>, cx: &mut Context<Self>) {
+        let len = self.text.len();
+        let start = range.start.min(len);
+        let end = range.end.min(len);
+
+        self.move_to(start, None, cx);
+        self.selection_reversed = false;
+        self.selected_word_range = None;
+        self.select_to(end, cx);
     }
 
     pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
@@ -2677,6 +2681,12 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        const PARSE_DEBOUNCE: Duration = Duration::from_millis(150);
+
         let highlighter_rc = pending.highlighter;
         let parse_task_rc = pending.parse_task;
         let language = pending.language;
@@ -2695,8 +2705,22 @@ impl InputState {
             .as_ref()
             .and_then(|h| h.injection_parse_data());
 
+        let cancel = Arc::new(AtomicBool::new(false));
+
         let text_for_apply = text.clone();
         let task = cx.spawn_in(window, async move |entity, cx| {
+            struct CancelOnDrop(Arc<AtomicBool>);
+            impl Drop for CancelOnDrop {
+                fn drop(&mut self) {
+                    self.0.store(true, Ordering::Relaxed);
+                }
+            }
+            let _cancel_guard = CancelOnDrop(cancel.clone());
+
+            // Debounce
+            cx.background_executor().timer(PARSE_DEBOUNCE).await;
+
+            let parse_cancel = cancel.clone();
             let result = cx
                 .background_executor()
                 .spawn(async move {
@@ -2709,6 +2733,15 @@ impl InputState {
                         return None;
                     }
 
+                    let mut progress = |_: &tree_sitter::ParseState| -> std::ops::ControlFlow<()> {
+                        if parse_cancel.load(Ordering::Relaxed) {
+                            std::ops::ControlFlow::Break(())
+                        } else {
+                            std::ops::ControlFlow::Continue(())
+                        }
+                    };
+                    let options = tree_sitter::ParseOptions::new().progress_callback(&mut progress);
+
                     let new_tree = parser.parse_with_options(
                         &mut |offset, _| {
                             if offset >= text.len() {
@@ -2719,8 +2752,13 @@ impl InputState {
                             }
                         },
                         old_tree.as_ref(),
-                        None,
+                        Some(options),
                     )?;
+
+                    // Disrcard the partial result on cancel
+                    if parse_cancel.load(Ordering::Relaxed) {
+                        return None;
+                    }
 
                     // Compute injection layers in the background to avoid blocking the
                     // main thread with combined-injection parsing (e.g. PHP, HTML+JS/CSS).
@@ -3773,6 +3811,28 @@ ORDER BY id
                     state._pending_update,
                     "replace_all on a code editor should request a pending update"
                 );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_set_selected_range(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.default_value("hello world"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|_, cx| {
+            input.update(cx, |s, cx| {
+                s.set_selected_range(0..5, cx);
+                assert_eq!(s.selected_range(), 0..5);
+                assert_eq!(s.selected_text().to_string(), "hello");
+
+                s.set_selected_range(6..11, cx);
+                assert_eq!(s.selected_text().to_string(), "world");
+
+                // clamped + collapsed
+                s.set_selected_range(100..100, cx);
+                assert_eq!(s.selected_range(), 11..11);
             });
         });
     }

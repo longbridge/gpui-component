@@ -1,31 +1,31 @@
-use std::ops::Range;
 use gpui::Half;
+use std::ops::Range;
 
 use gpui::{
-    App, Font, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px,
-    size,
+    App, Font, LineFragment, Pixels, Point, ShapedLine, Size, TextAlign, Window, point, px, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
+use sum_tree::{Bias, Dimensions, SumTree};
 
 use crate::input::{LastLayout, Point as TreeSitterPoint, RopeExt, WhitespaceIndicators};
 
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
 pub(crate) struct LineItem {
-    /// The original line text, without end `\n`.
-    line: Rope,
-    /// The soft wrapped lines relative byte range (0..line.len) of this line (Include first line).
+    /// The byte length of the line, without the end `\n`.
+    len: usize,
+    /// The soft wrapped lines relative byte range (0..len) of this line (Include first line).
     ///
     /// Not contains the line end `\n`.
-    pub(crate) wrapped_lines: Vec<Range<usize>>,
+    pub(crate) wrapped_lines: SmallVec<[Range<usize>; 1]>,
 }
 
 impl LineItem {
     /// Get the bytes length of this line.
     #[inline]
     pub(crate) fn len(&self) -> usize {
-        self.line.len()
+        self.len
     }
 
     /// Get number of soft wrapped lines of this line (include the first line).
@@ -35,12 +35,86 @@ impl LineItem {
     }
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct LongestRow {
-    /// The 0-based row index.
-    pub row: usize,
-    /// The bytes length of the longest line.
-    pub len: usize,
+/// Summary of a subtree of [`LineItem`]s, maintained incrementally by the [`SumTree`].
+#[derive(Debug, Clone)]
+pub(crate) struct LineSummary {
+    /// Number of buffer lines.
+    buffer_rows: usize,
+    /// Number of wrap rows (sum of each line's `lines_len()`).
+    wrap_rows: usize,
+    /// Sum of byte lengths of the buffer lines (without the trailing `\n`).
+    bytes: usize,
+    /// Byte length of the longest line in this subtree.
+    max_line_len: usize,
+    /// Buffer row (relative to this subtree) of the first line achieving `max_line_len`.
+    longest_row: usize,
+}
+
+impl sum_tree::Summary for LineSummary {
+    type Context<'a> = &'a ();
+
+    fn zero(_: &()) -> Self {
+        LineSummary {
+            buffer_rows: 0,
+            wrap_rows: 0,
+            bytes: 0,
+            max_line_len: 0,
+            longest_row: 0,
+        }
+    }
+
+    fn add_summary(&mut self, other: &Self, _: &()) {
+        // Keep the leftmost row that achieves a strictly greater length
+        if other.max_line_len > self.max_line_len {
+            self.longest_row = self.buffer_rows + other.longest_row;
+            self.max_line_len = other.max_line_len;
+        }
+        self.buffer_rows += other.buffer_rows;
+        self.wrap_rows += other.wrap_rows;
+        self.bytes += other.bytes;
+    }
+}
+
+impl sum_tree::Item for LineItem {
+    type Summary = LineSummary;
+
+    fn summary(&self, _: &()) -> LineSummary {
+        LineSummary {
+            buffer_rows: 1,
+            wrap_rows: self.lines_len(),
+            bytes: self.len(),
+            max_line_len: self.len(),
+            longest_row: 0,
+        }
+    }
+}
+
+/// Cursor dimension counting buffer rows.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct BufferRows(pub usize);
+
+impl<'a> sum_tree::Dimension<'a, LineSummary> for BufferRows {
+    fn zero(_: &()) -> Self {
+        BufferRows(0)
+    }
+
+    fn add_summary(&mut self, summary: &'a LineSummary, _: &()) {
+        self.0 += summary.buffer_rows;
+    }
+}
+
+/// Cursor dimension counting wrap rows.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct WrapRows(pub usize);
+
+impl<'a> sum_tree::Dimension<'a, LineSummary> for WrapRows {
+    fn zero(_: &()) -> Self {
+        WrapRows(0)
+    }
+
+    fn add_summary(&mut self, summary: &'a LineSummary, _: &()) {
+        self.0 += summary.wrap_rows;
+    }
 }
 
 /// Used to prepare the text with soft wrap to be get lines to displayed in the Editor.
@@ -48,16 +122,12 @@ pub(crate) struct LongestRow {
 /// After use lines to calculate the scroll size of the Editor.
 pub(crate) struct TextWrapper {
     text: Rope,
-    /// Total wrapped lines (Inlucde the first line), value is start and end index of the line.
-    soft_lines: usize,
     font: Font,
     font_size: Pixels,
     /// If is none, it means the text is not wrapped
     wrap_width: Option<Pixels>,
-    /// The longest (row, bytes len) in characters, used to calculate the horizontal scroll width.
-    pub(crate) longest_row: LongestRow,
     /// The lines by split \n
-    pub(crate) lines: Vec<LineItem>,
+    pub(crate) lines: SumTree<LineItem>,
 
     _initialized: bool,
 }
@@ -70,9 +140,7 @@ impl TextWrapper {
             font,
             font_size,
             wrap_width,
-            soft_lines: 0,
-            longest_row: LongestRow::default(),
-            lines: Vec::new(),
+            lines: SumTree::new(&()),
             _initialized: false,
         }
     }
@@ -91,13 +159,60 @@ impl TextWrapper {
     /// Get the total number of lines including wrapped lines.
     #[inline]
     pub(crate) fn len(&self) -> usize {
-        self.soft_lines
+        self.lines.summary().wrap_rows
     }
 
-    /// Get the line item by row index.
+    /// Get the total number of buffer lines.
+    #[inline]
+    pub(crate) fn lines_count(&self) -> usize {
+        self.lines.summary().buffer_rows
+    }
+
+    /// Get the 0-based row index of the longest line (by byte length).
+    #[inline]
+    pub(crate) fn longest_row(&self) -> usize {
+        self.lines.summary().longest_row
+    }
+
+    /// Get the line item by buffer row index.
     #[inline]
     pub(crate) fn line(&self, row: usize) -> Option<&LineItem> {
-        self.lines.iter().skip(row).next()
+        let mut cursor = self.lines.cursor::<BufferRows>(&());
+        cursor.seek(&BufferRows(row), Bias::Right);
+        cursor.item()
+    }
+
+    /// Iterate buffer lines in order.
+    #[inline]
+    pub(crate) fn iter_lines(&self) -> impl Iterator<Item = &LineItem> {
+        self.lines.iter()
+    }
+
+    /// First wrap row of buffer line `row`. Returns the total wrap row count if `row` is
+    /// out of range.
+    pub(crate) fn buffer_line_to_first_wrap_row(&self, row: usize) -> usize {
+        let mut cursor = self.lines.cursor::<Dimensions<BufferRows, WrapRows>>(&());
+        cursor.seek(&BufferRows(row), Bias::Right);
+        cursor.start().1.0
+    }
+
+    /// Wrap row range of buffer line `row`.
+    pub(crate) fn buffer_line_to_wrap_row_range(&self, row: usize) -> Range<usize> {
+        let mut cursor = self.lines.cursor::<Dimensions<BufferRows, WrapRows>>(&());
+        cursor.seek(&BufferRows(row), Bias::Right);
+        let start = cursor.start().1.0;
+        let len = cursor.item().map(|l| l.lines_len()).unwrap_or(0);
+        start..start + len
+    }
+
+    /// Buffer line containing wrap row `wrap_row`, clamped to the last line.
+    pub(crate) fn wrap_row_to_buffer_line(&self, wrap_row: usize) -> usize {
+        let mut cursor = self.lines.cursor::<Dimensions<WrapRows, BufferRows>>(&());
+        cursor.seek(&WrapRows(wrap_row), Bias::Right);
+        match cursor.item() {
+            Some(_) => cursor.start().1.0,
+            None => self.lines_count().saturating_sub(1),
+        }
     }
 
     pub(crate) fn set_wrap_width(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
@@ -169,18 +284,11 @@ impl TextWrapper {
         F: FnMut(&str, Pixels) -> Vec<gpui::Boundary>,
     {
         // Remove the old changed lines.
+        let buffer_line_count = self.lines_count();
         let start_row = self.text.offset_to_point(range.start).row;
-        let start_row = start_row.min(self.lines.len().saturating_sub(1));
+        let start_row = start_row.min(buffer_line_count.saturating_sub(1));
         let end_row = self.text.offset_to_point(range.end).row;
-        let end_row = end_row.min(self.lines.len().saturating_sub(1));
-        let rows_range = start_row..=end_row;
-
-        if rows_range.contains(&self.longest_row.row) {
-            self.longest_row = LongestRow::default();
-        }
-
-        let mut longest_row_ix = self.longest_row.row;
-        let mut longest_row_len = self.longest_row.len;
+        let end_row = end_row.min(buffer_line_count.saturating_sub(1));
 
         // To add the new lines.
         let new_start_row = changed_text.offset_to_point(range.start).row;
@@ -195,18 +303,10 @@ impl TextWrapper {
         let wrap_width = self.wrap_width;
 
         // line not contains `\n`.
-        for (ix, line) in Rope::from(changed_text.slice(new_range))
-            .iter_lines()
-            .enumerate()
-        {
+        for line in Rope::from(changed_text.slice(new_range)).iter_lines() {
             let line_str = line.to_string();
-            let mut wrapped_lines = vec![];
+            let mut wrapped_lines = SmallVec::<[Range<usize>; 1]>::new();
             let mut prev_boundary_ix = 0;
-
-            if line_str.len() > longest_row_len {
-                longest_row_ix = new_start_row + ix;
-                longest_row_len = line_str.len();
-            }
 
             // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
             if let Some(wrap_width) = wrap_width {
@@ -223,23 +323,26 @@ impl TextWrapper {
             }
 
             new_lines.push(LineItem {
-                line: Rope::from(line),
+                len: line.len(),
                 wrapped_lines,
             });
         }
 
-        if self.lines.len() == 0 {
-            self.lines = new_lines;
+        if self.lines.is_empty() {
+            self.lines = SumTree::from_iter(new_lines, &());
         } else {
-            self.lines.splice(rows_range, new_lines);
+            let mut cursor = self.lines.cursor::<BufferRows>(&());
+            let mut new_tree = cursor.slice(&BufferRows(start_row), Bias::Right);
+            // Skip the replaced rows
+            cursor.seek_forward(&BufferRows(end_row + 1), Bias::Right);
+            new_tree.extend(new_lines, &());
+            // Untouched rows after the edit
+            new_tree.append(cursor.suffix(), &());
+            drop(cursor);
+            self.lines = new_tree;
         }
 
         self.text = changed_text.clone();
-        self.soft_lines = self.lines.iter().map(|l| l.lines_len()).sum();
-        self.longest_row = LongestRow {
-            row: longest_row_ix,
-            len: longest_row_len,
-        }
     }
 
     /// Update the text wrapper and recalculate the wrapped lines.
@@ -255,14 +358,14 @@ impl TextWrapper {
     pub(crate) fn offset_to_display_point(&self, offset: usize) -> WrapDisplayPoint {
         let row = self.text.offset_to_point(offset).row;
         let start = self.text.line_start_offset(row);
-        let line = &self.lines[row];
 
-        let mut wrapped_row = self
-            .lines
-            .iter()
-            .take(row)
-            .map(|l| l.lines_len())
-            .sum::<usize>();
+        // Seek to buffer row
+        let mut cursor = self.lines.cursor::<Dimensions<BufferRows, WrapRows>>(&());
+        cursor.seek(&BufferRows(row), Bias::Right);
+        let wrapped_row = cursor.start().1.0;
+        let Some(line) = cursor.item() else {
+            return WrapDisplayPoint::new(wrapped_row, 0, 0);
+        };
 
         let local_offset = offset.saturating_sub(start);
         for (ix, range) in line.wrapped_lines.iter().enumerate() {
@@ -285,23 +388,23 @@ impl TextWrapper {
     ///
     /// Panics if the `point.row` is out of bounds.
     pub(crate) fn display_point_to_offset(&self, point: WrapDisplayPoint) -> usize {
-        let mut wrapped_row = 0;
-        for (row, line) in self.lines.iter().enumerate() {
-            if wrapped_row + line.lines_len() > point.row {
-                let line_start = self.text.line_start_offset(row);
-                let local_row = point.row.saturating_sub(wrapped_row);
-                if let Some(range) = line.wrapped_lines.get(local_row) {
-                    return line_start + (range.start + point.column).min(range.end);
-                } else {
-                    // If not found, return the end of the line.
-                    return line_start + line.len();
-                }
-            }
+        // Seek to wrap row `point.row`
+        let mut cursor = self.lines.cursor::<Dimensions<WrapRows, BufferRows>>(&());
+        cursor.seek(&WrapRows(point.row), Bias::Right);
+        let Some(line) = cursor.item() else {
+            return self.text.len();
+        };
+        let wrapped_row = cursor.start().0.0;
+        let row = cursor.start().1.0;
 
-            wrapped_row += line.lines_len();
+        let line_start = self.text.line_start_offset(row);
+        let local_row = point.row.saturating_sub(wrapped_row);
+        if let Some(range) = line.wrapped_lines.get(local_row) {
+            line_start + (range.start + point.column).min(range.end)
+        } else {
+            // If not found, return the end of the line.
+            line_start + line.len()
         }
-
-        return self.text.len();
     }
 
     pub(crate) fn display_point_to_point(&self, point: WrapDisplayPoint) -> TreeSitterPoint {
@@ -611,7 +714,7 @@ mod tests {
         fn assert_wrapper_lines(text: &Rope, wrapper: &TextWrapper, expected_lines: &[&[&str]]) {
             let mut actual_lines = vec![];
             let mut offset = 0;
-            for line in wrapper.lines.iter() {
+            for line in wrapper.iter_lines() {
                 actual_lines.push(
                     line.wrapped_lines
                         .iter()
@@ -625,7 +728,7 @@ mod tests {
         }
 
         wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
-        assert_eq!(wrapper.lines.len(), 4);
+        assert_eq!(wrapper.lines_count(), 4);
         assert_wrapper_lines(
             &text,
             &wrapper,
@@ -646,8 +749,8 @@ mod tests {
             text.to_string(),
             "Hello, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
         );
-        assert_eq!(wrapper.lines.len(), 4);
-        assert_eq!(wrapper.lines.len(), 4);
+        assert_eq!(wrapper.lines_count(), 4);
+        assert_eq!(wrapper.lines_count(), 4);
         assert_wrapper_lines(
             &text,
             &wrapper,
@@ -668,7 +771,7 @@ mod tests {
             text.to_string(),
             "AAA, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。New text"
         );
-        assert_eq!(wrapper.lines.len(), 4);
+        assert_eq!(wrapper.lines_count(), 4);
         assert_wrapper_lines(
             &text,
             &wrapper,
@@ -690,7 +793,7 @@ mod tests {
             text.to_string(),
             "AAA, 世界!\r\nThis is third line.\n这里是第 4 行。New text"
         );
-        assert_eq!(wrapper.lines.len(), 3);
+        assert_eq!(wrapper.lines_count(), 3);
         assert_wrapper_lines(
             &text,
             &wrapper,
@@ -710,7 +813,7 @@ mod tests {
             text.to_string(),
             "This is a new line.\nThis is new line 2.\n这里是第 4 行。New text"
         );
-        assert_eq!(wrapper.lines.len(), 3);
+        assert_eq!(wrapper.lines_count(), 3);
         assert_wrapper_lines(
             &text,
             &wrapper,
@@ -730,7 +833,7 @@ mod tests {
             text.to_string(),
             "This is a new line.\nThis is new line 2.\n这里是第 4 行。New text\nThis is a new line at the end."
         );
-        assert_eq!(wrapper.lines.len(), 4);
+        assert_eq!(wrapper.lines_count(), 4);
         assert_wrapper_lines(
             &text,
             &wrapper,
@@ -751,7 +854,7 @@ mod tests {
             text.to_string(),
             "This is a new line at the beginning.\nThis is a new line.\nThis is new line 2.\n这里是第 4 行。New text\nThis is a new line at the end."
         );
-        assert_eq!(wrapper.lines.len(), 5);
+        assert_eq!(wrapper.lines_count(), 5);
         assert_wrapper_lines(
             &text,
             &wrapper,
@@ -770,8 +873,8 @@ mod tests {
         text.replace(range.clone(), new_text);
         wrapper._update(&text, &range, &Rope::from(new_text), &mut fake_wrap_line);
         assert_eq!(text.to_string(), "");
-        assert_eq!(wrapper.lines.len(), 1);
-        assert_eq!(wrapper.lines[0].wrapped_lines, vec![0..0]);
+        assert_eq!(wrapper.lines_count(), 1);
+        assert_eq!(wrapper.line(0).unwrap().wrapped_lines.as_slice(), [0..0]);
 
         // Test update_all
         let range = 0..text.len();
@@ -782,7 +885,142 @@ mod tests {
             text.to_string(),
             "This is a full text.\nThis is a second line."
         );
-        assert_eq!(wrapper.lines.len(), 2);
+        assert_eq!(wrapper.lines_count(), 2);
+    }
+
+    fn test_font() -> gpui::Font {
+        gpui::Font {
+            family: "Arial".into(),
+            weight: FontWeight::default(),
+            style: FontStyle::Normal,
+            features: FontFeatures::default(),
+            fallbacks: None,
+        }
+    }
+
+    /// The longest-row summary stays exact when the previously-longest line is shrunk.
+    #[test]
+    fn test_longest_row_after_shrink() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.), None);
+        let mut text = Rope::from("aa\nthis is the longest line\nbb");
+        wrapper._update(&text, &(0..text.len()), &text, &mut |_, _| vec![]);
+        assert_eq!(wrapper.longest_row(), 1);
+
+        // Shrink line 1 so line 2-equivalent isn't longest.
+        // Make line 0 the longest now.
+        let start = text.line_start_offset(0);
+        let end = text.line_end_offset(0);
+        let range = start..end;
+        let new_text = "a very very long first line now";
+        text.replace(range.clone(), new_text);
+        wrapper._update(&text, &range, &Rope::from(new_text), &mut |_, _| vec![]);
+        assert_eq!(wrapper.longest_row(), 0);
+    }
+
+    /// Editing the last line and deleting everything must keep the tree consistent.
+    #[test]
+    fn test_edit_last_line_and_full_delete() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.), None);
+        let mut text = Rope::from("one\ntwo\nthree");
+        wrapper._update(&text, &(0..text.len()), &text, &mut |_, _| vec![]);
+        assert_eq!(wrapper.lines_count(), 3);
+
+        // Replace the last line only.
+        let start = text.line_start_offset(2);
+        let range = start..text.len();
+        let new_text = "THREE EDITED";
+        text.replace(range.clone(), new_text);
+        wrapper._update(&text, &range, &Rope::from(new_text), &mut |_, _| vec![]);
+        assert_eq!(wrapper.lines_count(), 3);
+        assert_eq!(wrapper.line(2).unwrap().len(), "THREE EDITED".len());
+
+        // Delete everything.
+        let range = 0..text.len();
+        text.replace(range.clone(), "");
+        wrapper._update(&text, &range, &Rope::from(""), &mut |_, _| vec![]);
+        assert_eq!(wrapper.lines_count(), 1);
+        assert_eq!(wrapper.len(), 1);
+        assert_eq!(wrapper.line(0).unwrap().wrapped_lines.as_slice(), [0..0]);
+    }
+
+    #[test]
+    fn test_wrap_row_buffer_line_boundaries() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.), None);
+        wrapper.text = Rope::from("aa\nbbbb\nc");
+        wrapper.lines = SumTree::from_iter(
+            vec![
+                LineItem {
+                    len: 2,
+                    wrapped_lines: smallvec::smallvec![0..2],
+                },
+                LineItem {
+                    len: 4,
+                    wrapped_lines: smallvec::smallvec![0..2, 2..4],
+                },
+                LineItem {
+                    len: 1,
+                    wrapped_lines: smallvec::smallvec![0..1],
+                },
+            ],
+            &(),
+        );
+
+        assert_eq!(wrapper.lines_count(), 3);
+        assert_eq!(wrapper.len(), 4);
+
+        assert_eq!(wrapper.buffer_line_to_first_wrap_row(0), 0);
+        assert_eq!(wrapper.buffer_line_to_first_wrap_row(1), 1);
+        assert_eq!(wrapper.buffer_line_to_first_wrap_row(2), 3);
+        assert_eq!(wrapper.buffer_line_to_first_wrap_row(3), 4);
+
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(0), 0..1);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(1), 1..3);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(2), 3..4);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(3), 4..4);
+
+        assert_eq!(wrapper.wrap_row_to_buffer_line(0), 0);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(1), 1);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(2), 1);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(3), 2);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(4), 2);
+    }
+
+    #[test]
+    fn test_wrap_row_queries_after_incremental_splice() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.), Some(px(10.)));
+        let mut text = Rope::from("aa\nbbbb\nc");
+        let mut fake_wrap_line = |line: &str, _wrap_width: Pixels| {
+            if line.len() > 2 {
+                vec![Boundary {
+                    ix: 2,
+                    next_indent: 0,
+                }]
+            } else {
+                vec![]
+            }
+        };
+
+        wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(0), 0..1);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(1), 1..3);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(2), 3..4);
+
+        let range = text.line_start_offset(1)..text.line_end_offset(1);
+        let new_text = "dd\neeee";
+        text.replace(range.clone(), new_text);
+        wrapper._update(&text, &range, &Rope::from(new_text), &mut fake_wrap_line);
+
+        assert_eq!(wrapper.lines_count(), 4);
+        assert_eq!(wrapper.len(), 5);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(0), 0..1);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(1), 1..2);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(2), 2..4);
+        assert_eq!(wrapper.buffer_line_to_wrap_row_range(3), 4..5);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(0), 0);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(1), 1);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(2), 2);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(3), 2);
+        assert_eq!(wrapper.wrap_row_to_buffer_line(4), 3);
     }
 
     #[test]
@@ -841,28 +1079,31 @@ mod tests {
         wrapper.text = Rope::from(
             "Hello, 世界!\r\nThis is second line.\nThis is third line.\n这里是第 4 行。",
         );
-        wrapper.lines = vec![
-            // range: 0..15
-            LineItem {
-                line: Rope::from("Hello, 世界!\r"),
-                wrapped_lines: vec![0..15],
-            },
-            // range: 16..36
-            LineItem {
-                line: Rope::from("This is second line."),
-                wrapped_lines: vec![0..10, 10..20],
-            },
-            // range: 37..56
-            LineItem {
-                line: Rope::from("This is third line."),
-                wrapped_lines: vec![0..9, 9..15, 15..20],
-            },
-            // range: 57..79
-            LineItem {
-                line: Rope::from("这里是第 4 行。"),
-                wrapped_lines: vec![0..22],
-            },
-        ];
+        wrapper.lines = SumTree::from_iter(
+            vec![
+                // range: 0..15
+                LineItem {
+                    len: Rope::from("Hello, 世界!\r").len(),
+                    wrapped_lines: smallvec::smallvec![0..15],
+                },
+                // range: 16..36
+                LineItem {
+                    len: Rope::from("This is second line.\n").len(),
+                    wrapped_lines: smallvec::smallvec![0..10, 10..20],
+                },
+                // range: 37..56
+                LineItem {
+                    len: Rope::from("This is third line.\n").len(),
+                    wrapped_lines: smallvec::smallvec![0..9, 9..15, 15..20],
+                },
+                // range: 57..79
+                LineItem {
+                    len: Rope::from("这里是第 4 行。").len(),
+                    wrapped_lines: smallvec::smallvec![0..22],
+                },
+            ],
+            &(),
+        );
 
         assert_eq!(
             wrapper.offset_to_display_point(12),

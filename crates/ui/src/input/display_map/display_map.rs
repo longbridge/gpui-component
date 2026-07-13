@@ -14,9 +14,9 @@ use super::folding::FoldRange;
 use super::text_wrapper::{LineItem, WrapDisplayPoint};
 use super::wrap_map::WrapMap;
 use super::{BufferPoint, DisplayPoint};
+use crate::input::Point as TreeSitterPoint;
 use crate::input::display_map::WrapPoint;
 use crate::input::rope_ext::RopeExt as _;
-use crate::input::Point as TreeSitterPoint;
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
 ///
@@ -113,6 +113,18 @@ impl DisplayMap {
     #[inline]
     pub fn is_buffer_line_hidden(&self, line: usize) -> bool {
         self.buffer_line_to_display_row_range(line).is_none()
+    }
+
+    /// First display row of a buffer line. If the line is fully folded, returns the
+    /// nearest visible display row.
+    pub fn buffer_line_to_display_row(&self, line: usize) -> usize {
+        match self.buffer_line_to_display_row_range(line) {
+            Some(range) => range.start,
+            None => {
+                let wrap_row = self.wrap_map.buffer_line_to_first_wrap_row(line);
+                self.fold_map.nearest_visible_display_row(wrap_row)
+            }
+        }
     }
 
     /// Set fold candidates (from tree-sitter/LSP)
@@ -269,10 +281,7 @@ impl DisplayMap {
 
     /// Convert wrap display point to TreeSitterPoint (buffer line/col).
     #[inline]
-    pub(crate) fn wrap_display_point_to_point(
-        &self,
-        point: WrapDisplayPoint,
-    ) -> TreeSitterPoint {
+    pub(crate) fn wrap_display_point_to_point(&self, point: WrapDisplayPoint) -> TreeSitterPoint {
         self.wrap_map.wrapper().display_point_to_point(point)
     }
 
@@ -298,15 +307,15 @@ impl DisplayMap {
     /// Get the longest row index (by byte length).
     #[inline]
     pub(crate) fn longest_row(&self) -> usize {
-        self.wrap_map.wrapper().longest_row.row
+        self.wrap_map.wrapper().longest_row()
     }
 
     // ==================== Access Methods ====================
 
-    /// Get access to line items (for rendering)
+    /// Get the line item by buffer row index.
     #[inline]
-    pub(crate) fn lines(&self) -> &[LineItem] {
-        self.wrap_map.lines()
+    pub(crate) fn line(&self, row: usize) -> Option<&LineItem> {
+        self.wrap_map.line(row)
     }
 
     /// Get the rope text
