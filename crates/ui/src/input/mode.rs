@@ -7,6 +7,7 @@ use ropey::Rope;
 
 use super::display_map::DisplayMap;
 use crate::highlighter::DiagnosticSet;
+use crate::highlighter::LanguageRegistry;
 use crate::highlighter::SyntaxHighlighter;
 use crate::input::{InputEdit, RopeExt as _, TabSize};
 
@@ -245,6 +246,14 @@ impl InputMode {
 
                 let mut highlighter_ref = highlighter.borrow_mut();
                 if highlighter_ref.is_none() {
+                    // Do not create a highlighter if the language has no grammar.
+                    let has_grammar = LanguageRegistry::singleton()
+                        .language(language)
+                        .is_some_and(|config| config.has_grammar());
+                    if !has_grammar {
+                        return None;
+                    }
+
                     let new_highlighter = SyntaxHighlighter::new(language);
                     highlighter_ref.replace(new_highlighter);
                 }

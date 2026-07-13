@@ -88,6 +88,12 @@ pub struct LanguageConfig {
     pub name: SharedString,
 }
 
+impl LanguageConfig {
+    pub fn has_grammar(&self) -> bool {
+        false
+    }
+}
+
 // Re-export theme types from registry module (which will be conditionally compiled)
 // For WASM, we create minimal stubs here
 use schemars::JsonSchema;
