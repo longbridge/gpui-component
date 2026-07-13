@@ -1470,39 +1470,31 @@ where
                                 cx.new(|_| drag.clone())
                             },
                         )
-                        .map(|this| {
-                            // Draw the insertion indicator on the left edge of the gap
-                            // column, or on the right edge of the last column for the
-                            // trailing gap. Use an absolutely positioned overlay instead
-                            // of a border, to avoid shifting the cell content.
-                            let last_gap = col_ix + 1 == self.col_groups.len();
-                            match self.col_drag_gap {
-                                Some(gap)
-                                    if cx.has_active_drag()
-                                        && (gap == col_ix || (last_gap && gap == col_ix + 1)) =>
-                                {
-                                    let right_side = gap == col_ix + 1;
-                                    this.relative().child(
-                                        div()
-                                            .absolute()
-                                            .top_0()
-                                            .bottom_0()
-                                            .w(px(2.))
-                                            .map(
-                                                |d| {
-                                                    if right_side {
-                                                        d.right_0()
-                                                    } else {
-                                                        d.left_0()
-                                                    }
-                                                },
-                                            )
-                                            .bg(cx.theme().drag_border),
-                                    )
-                                }
-                                _ => this,
+                    })
+                    .map(|this| {
+                        // Draw the insertion indicator on the left edge of the gap
+                        // column, or on the right edge of the last column for the
+                        // trailing gap. Use an absolutely positioned overlay instead
+                        // of a border, to avoid shifting the cell content.
+                        let last_gap = col_ix + 1 == self.col_groups.len();
+                        match self.col_drag_gap {
+                            Some(gap)
+                                if cx.has_active_drag()
+                                    && (gap == col_ix || (last_gap && gap == col_ix + 1)) =>
+                            {
+                                let right_side = gap == col_ix + 1;
+                                this.relative().child(
+                                    div()
+                                        .absolute()
+                                        .top_0()
+                                        .bottom_0()
+                                        .w(px(2.))
+                                        .map(|d| if right_side { d.right_0() } else { d.left_0() })
+                                        .bg(cx.theme().drag_border),
+                                )
                             }
-                        })
+                            _ => this,
+                        }
                     }),
             )
             // resize handle
