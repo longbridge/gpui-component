@@ -87,7 +87,7 @@ impl CompanyListItem {
 
         self.base = self.base.on_drag(
             company.clone(),
-            move |drag_company: Rc<Company>, _pos, window, cx| {
+            move |drag_company: Rc<Company>, _pos, window, cx: &mut App| {
                 // Create a simple drag preview
                 cx.new(|_| DragPreview {
                     company: drag_company.clone(),
@@ -95,7 +95,7 @@ impl CompanyListItem {
             },
         );
 
-        self.base = self.base.on_drag_hover(move |hovering, _window, _cx| {
+        self.base = self.base.on_drag_hover(move |hovering, _window, _cx: &mut App| {
             if *hovering {
                 println!("→ Dragging over: {}", company_for_hover.name);
             } else {
@@ -104,7 +104,7 @@ impl CompanyListItem {
         });
 
         self.base = self.base.on_drop(
-            move |dragged_company: &Rc<Company>, _window, _cx| {
+            move |dragged_company: &Rc<Company>, _window, _cx: &mut App| {
                 println!(
                     "✓ Dropped '{}' onto '{}'",
                     dragged_company.name, company_for_drop.name
