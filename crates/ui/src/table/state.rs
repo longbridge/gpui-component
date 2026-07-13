@@ -236,6 +236,11 @@ pub struct TableState<D: TableDelegate> {
     /// The column index that is being resized.
     resizing_col: Option<usize>,
 
+    /// The insertion gap index (`0..=cols_count`) while dragging a column
+    /// header: the dragged column will be inserted between the columns
+    /// `gap - 1` and `gap` on drop.
+    col_drag_gap: Option<usize>,
+
     /// The visible range of the rows and columns.
     visible_range: TableVisibleRange,
 
@@ -264,6 +269,7 @@ where
             selected_col: None,
             selected_cell: None,
             resizing_col: None,
+            col_drag_gap: None,
             bounds: Bounds::default(),
             fixed_head_cols_bounds: Bounds::default(),
             visible_range: TableVisibleRange::default(),
@@ -1108,6 +1114,39 @@ where
         cx.notify();
     }
 
+    /// Resolve the insertion gap for a column-header drag at the window
+    /// coordinate `x`, or `None` when dropping there would not move the
+    /// dragged column at `drag_col_ix`.
+    fn drag_gap_at(&self, x: Pixels, drag_col_ix: usize) -> Option<usize> {
+        let fixed_count = self.fixed_left_cols_count();
+
+        // Columns scrolled beneath the fixed region keep stale bounds, so
+        // resolve `x` against the fixed columns alone when it falls in that
+        // region, and against the visible scrollable columns otherwise.
+        let candidates = if fixed_count > 0 && x < self.fixed_head_cols_bounds.right() {
+            0..fixed_count
+        } else {
+            self.calculate_visible_leaf_col_range(fixed_count).0
+        };
+
+        // The gap sits after the last candidate column whose center is left of `x`.
+        let mut gap = candidates.start;
+        for ix in candidates {
+            if x < self.col_groups[ix].bounds.center().x {
+                break;
+            }
+            gap = ix + 1;
+        }
+
+        // No gap if dropping there would put the dragged column back to
+        // where it already is.
+        if gap == drag_col_ix || gap == drag_col_ix + 1 {
+            None
+        } else {
+            Some(gap)
+        }
+    }
+
     /// Dispatch delegate's `load_more` method when the visible range is near the end.
     fn load_more_if_need(
         &mut self,
@@ -1431,22 +1470,31 @@ where
                                 cx.new(|_| drag.clone())
                             },
                         )
-                        .drag_over::<DragColumn>(|this, _, _, cx| {
-                            this.rounded_l_none()
-                                .border_l_2()
-                                .border_r_0()
-                                .border_color(cx.theme().drag_border)
-                        })
-                        .on_drop(cx.listener(
-                            move |table, drag: &DragColumn, window, cx| {
-                                // If the drag col is not the same as the drop col, then swap the cols.
-                                if drag.entity_id != cx.entity_id() {
-                                    return;
-                                }
-
-                                table.move_column(drag.col_ix, col_ix, window, cx);
-                            },
-                        ))
+                    })
+                    .map(|this| {
+                        // Draw the insertion indicator on the left edge of the gap
+                        // column, or on the right edge of the last column for the
+                        // trailing gap. Use an absolutely positioned overlay instead
+                        // of a border, to avoid shifting the cell content.
+                        let last_gap = col_ix + 1 == self.col_groups.len();
+                        match self.col_drag_gap {
+                            Some(gap)
+                                if cx.has_active_drag()
+                                    && (gap == col_ix || (last_gap && gap == col_ix + 1)) =>
+                            {
+                                let right_side = gap == col_ix + 1;
+                                this.relative().child(
+                                    div()
+                                        .absolute()
+                                        .top_0()
+                                        .bottom_0()
+                                        .w(px(2.))
+                                        .map(|d| if right_side { d.right_0() } else { d.left_0() })
+                                        .bg(cx.theme().drag_border),
+                                )
+                            }
+                            _ => this,
+                        }
                     }),
             )
             // resize handle
@@ -1560,6 +1608,34 @@ where
             .bg(cx.theme().tokens.table_head)
             .text_color(cx.theme().table_head_foreground)
             .refine_style(&style)
+            .on_drag_move(cx.listener(|table, e: &DragMoveEvent<DragColumn>, _, cx| {
+                let drag = e.drag(cx);
+                let (drag_entity_id, drag_col_ix) = (drag.entity_id, drag.col_ix);
+
+                let gap =
+                    if drag_entity_id == cx.entity_id() && e.bounds.contains(&e.event.position) {
+                        table.drag_gap_at(e.event.position.x, drag_col_ix)
+                    } else {
+                        None
+                    };
+
+                if table.col_drag_gap != gap {
+                    table.col_drag_gap = gap;
+                    cx.notify();
+                }
+            }))
+            .on_drop(cx.listener(|table, drag: &DragColumn, window, cx| {
+                if drag.entity_id != cx.entity_id() {
+                    return;
+                }
+
+                // Insert the dragged column into the indicated gap.
+                let Some(gap) = table.col_drag_gap.take() else {
+                    return;
+                };
+                let to_ix = if drag.col_ix < gap { gap - 1 } else { gap };
+                table.move_column(drag.col_ix, to_ix, window, cx);
+            }))
             .when(self.cell_selectable && self.row_header, |this| {
                 this.child(self.render_row_header_cell(0, true, cx))
             })
