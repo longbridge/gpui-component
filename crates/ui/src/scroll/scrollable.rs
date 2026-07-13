@@ -325,20 +325,24 @@ mod tests {
             // Mimics Dialog: the panel height is auto (content-driven), the
             // body is flex_1 + overflow_hidden, and the scrollable content
             // should give the panel its intrinsic height.
-            crate::v_flex()
-                .w(px(200.))
-                .child(
-                    crate::v_flex().flex_1().overflow_hidden().child(
-                        div().flex_1().overflow_hidden().child(
-                            crate::v_flex()
-                                .size_full()
-                                .overflow_y_scrollbar()
-                                .child(plain_row(50.))
-                                .child(plain_row(50.)),
+            // GPUI window roots with auto dimensions stretch to the viewport,
+            // so keep the auto-height panel below an explicit viewport root.
+            div().size_full().child(
+                crate::v_flex()
+                    .w(px(200.))
+                    .child(
+                        crate::v_flex().flex_1().overflow_hidden().child(
+                            div().flex_1().overflow_hidden().child(
+                                crate::v_flex()
+                                    .size_full()
+                                    .overflow_y_scrollbar()
+                                    .child(plain_row(50.))
+                                    .child(plain_row(50.)),
+                            ),
                         ),
-                    ),
-                )
-                .child(row("auto-height-footer", 10.))
+                    )
+                    .child(row("auto-height-footer", 10.)),
+            )
         }
     }
 

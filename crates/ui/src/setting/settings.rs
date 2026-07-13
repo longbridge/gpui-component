@@ -10,9 +10,12 @@ use crate::{
 };
 use gpui::{
     App, AppContext as _, Axis, ElementId, Entity, IntoElement, ParentElement as _, Pixels,
-    RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative,
+    RenderOnce, StyleRefinement, Styled, Window, container_query, div, prelude::FluentBuilder as _,
+    px, relative,
 };
 use rust_i18n::t;
+
+const STACKED_LAYOUT_MAX_WIDTH: Pixels = px(480.);
 
 /// The settings structure containing multiple pages for app settings.
 ///
@@ -145,7 +148,7 @@ impl Settings {
         options: &RenderOptions,
         window: &mut Window,
         cx: &mut App,
-    ) -> impl IntoElement {
+    ) -> gpui::AnyElement {
         let selected_index = state.read(cx).selected_index;
 
         for (ix, page) in pages.into_iter().enumerate() {
@@ -294,20 +297,29 @@ impl RenderOnce for Settings {
             disabled: false,
         };
         let sidebar_size_range = self.sidebar_size_range.clone();
+        let sidebar = self
+            .render_sidebar(&state, &filtered_pages, window, cx)
+            .into_any_element();
 
         h_resizable(self.id.clone())
             .child(
                 resizable_panel()
                     .size(self.sidebar_width)
                     .size_range(sidebar_size_range)
-                    .child(self.render_sidebar(&state, &filtered_pages, window, cx)),
+                    .child(sidebar),
             )
-            .child(resizable_panel().child(self.render_active_page(
-                &state,
-                &filtered_pages,
-                &options,
-                window,
-                cx,
-            )))
+            .child(
+                resizable_panel().child(container_query(move |size, window, cx| {
+                    let options = RenderOptions {
+                        layout: if size.width <= STACKED_LAYOUT_MAX_WIDTH {
+                            Axis::Vertical
+                        } else {
+                            Axis::Horizontal
+                        },
+                        ..options
+                    };
+                    self.render_active_page(&state, &filtered_pages, &options, window, cx)
+                })),
+            )
     }
 }
