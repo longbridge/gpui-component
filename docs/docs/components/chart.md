@@ -1,16 +1,18 @@
 ---
 title: Chart
-description: Beautiful charts and graphs for data visualization including line, bar, area, pie, and candlestick charts.
+description: Beautiful charts and graphs for data visualization including line, bar, area, pie, candlestick, and sankey charts.
 ---
 
 # Chart
 
-A comprehensive charting library providing Line, Bar, Area, Pie, and Candlestick charts for data visualization. The charts feature smooth animations, customizable styling, tooltips, legends, and automatic theming that adapts to your application's theme.
+A comprehensive charting library providing Line, Bar, Area, Pie, Candlestick, and Sankey charts for data visualization. The charts feature smooth animations, customizable styling, tooltips, legends, and automatic theming that adapts to your application's theme.
 
 ## Import
 
 ```rust
-use gpui_component::chart::{LineChart, BarChart, AreaChart, PieChart, CandlestickChart};
+use gpui_component::chart::{
+    LineChart, BarChart, AreaChart, PieChart, CandlestickChart, SankeyChart,
+};
 ```
 
 ## Chart Types
@@ -374,6 +376,100 @@ The candlestick chart automatically uses theme colors:
 - **Bullish** (close > open): `bullish` color (green)
 - **Bearish** (close < open): `bearish` color (red)
 
+### SankeyChart
+
+A sankey diagram visualizes flows between nodes, ideal for financial statements, energy flows, and traffic analysis. The layout algorithm mirrors [d3-sankey](https://github.com/d3/d3-sankey).
+
+#### Basic Sankey Chart
+
+```rust
+use gpui_component::plot::shape::SankeyLink;
+
+#[derive(Clone)]
+struct FlowNode {
+    pub name: SharedString,
+}
+
+let nodes = vec![
+    FlowNode { name: "Revenue".into() },
+    FlowNode { name: "Gross Profit".into() },
+    FlowNode { name: "Cost".into() },
+];
+
+// Links reference nodes by their index in `nodes`.
+let links = vec![
+    SankeyLink::new(0, 1, 45.0),
+    SankeyLink::new(0, 2, 55.0),
+];
+
+SankeyChart::new(nodes, links)
+    .node_label(|d| d.name.clone())
+    .value_label(|_, value| format!("{:.1}", value).into())
+```
+
+The value label is drawn above the name label. Its closure receives the node's computed throughput (the larger of incoming and outgoing flow).
+
+#### Node Alignment
+
+```rust
+use gpui_component::plot::shape::SankeyAlign;
+
+// Justify (default): nodes without outgoing links move to the last column
+SankeyChart::new(nodes, links).node_align(SankeyAlign::Justify)
+
+// Left: nodes stay at their topological depth
+SankeyChart::new(nodes, links).node_align(SankeyAlign::Left)
+
+// Also available: SankeyAlign::Right, SankeyAlign::Center
+```
+
+#### Sankey Chart Styling
+
+```rust
+SankeyChart::new(nodes, links)
+    .node_width(8.)             // Node bar width (default: 10)
+    .node_padding(20.)          // Vertical gap between nodes in a column (default: 16)
+    .node_corner_radius(px(2.)) // Corner radius of node bars (default: 0)
+    .node_color(|d| d.color)    // Per-node color; defaults to the theme chart palette
+    .link_opacity(0.4)          // Ribbon opacity (default: 0.3)
+    .min_link_width(2.)         // Minimum ribbon thickness (default: 1)
+    .iterations(10)             // Layout relaxation passes (default: 6)
+```
+
+Link ribbons are filled with a horizontal gradient from the source node color to the target node color.
+
+#### Custom Labels
+
+For full control over the label lines, use `labels` — one `SankeyLabel` per line, top to bottom, each with its own color and font size. It takes precedence over `node_label`/`value_label` when set. For example, a financial-statement label with a year-over-year change line:
+
+```rust
+use gpui_component::chart::SankeyLabel;
+
+SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
+    let arrow = if d.growth >= 0. { "▲" } else { "▼" };
+    let growth_color = if d.growth >= 0. { green } else { red };
+    vec![
+        SankeyLabel::new(format!("{:.1}", value)),
+        SankeyLabel::new(format!("{} {:+.2}%", arrow, d.growth)).color(growth_color),
+        SankeyLabel::new(d.name.clone()).color(muted),
+    ]
+})
+```
+
+Line color defaults to the theme foreground and font size to 10; the chart keeps handling placement, alignment and margin reservation. A first/last-column label wider than its reserved margin is truncated with a trailing ellipsis rather than drawn outside the plot, so break or shorten long labels yourself if you want the full text on multiple lines.
+
+#### Compressing Large Value Ranges
+
+Node heights are linear in flow value by default, so a large value range (e.g. 200:1) leaves the small flows nearly invisible and the dominant flow oversized. Set `value_scale(SankeyValueScale::Sqrt)` to compress the range — the component sizes nodes by the square root of the value, so small flows stay visible without pre-transforming the data, and labels still receive the raw values:
+
+```rust
+use gpui_component::plot::shape::SankeyValueScale;
+
+SankeyChart::new(nodes, links).value_scale(SankeyValueScale::Sqrt)
+```
+
+Every node stays exactly filled by its ribbons under either scale, so children always match their parent's height.
+
 ## Data Structures
 
 ### Example Data Types
@@ -410,6 +506,13 @@ struct StockPrice {
     pub low: f64,
     pub close: f64,
     pub volume: u64,
+}
+
+// Sankey flow: nodes are referenced by index (from gpui_component::plot::shape)
+pub struct SankeyLink {
+    pub source: usize,
+    pub target: usize,
+    pub value: f64,
 }
 ```
 
@@ -485,6 +588,7 @@ let chart = LineChart::new(data)
 - [AreaChart]
 - [PieChart]
 - [CandlestickChart]
+- [SankeyChart]
 
 ## Examples
 
