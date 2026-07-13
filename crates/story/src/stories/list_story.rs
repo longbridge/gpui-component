@@ -87,7 +87,7 @@ impl CompanyListItem {
 
         self.base = self.base.on_drag(
             company.clone(),
-            move |drag_company: Rc<Company>, _pos, window, cx: &mut App| {
+            move |drag_company: &Rc<Company>, _pos, _window: &mut Window, cx: &mut App| {
                 // Create a simple drag preview
                 cx.new(|_| DragPreview {
                     company: drag_company.clone(),
@@ -512,7 +512,18 @@ impl ListStory {
 
     fn toggle_draggable(&mut self, draggable: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.draggable = draggable;
-        cx.notify();
+        self.company_list.update(cx, |list, cx| {
+            list.delegate_mut().draggable = draggable;
+            cx.notify();
+        });
+        println!(
+            "Drag/Drop example: {}",
+            if draggable {
+                "enabled (check console)"
+            } else {
+                "disabled"
+            }
+        );
     }
 }
 
@@ -659,20 +670,8 @@ impl Render for ListStory {
                         Checkbox::new("draggable")
                             .label("Draggable (Demo)")
                             .checked(self.draggable)
-                            .on_click(cx.listener(|this, check: &bool, _, cx| {
-                                this.draggable = *check;
-                                this.company_list.update(cx, |list, cx| {
-                                    list.delegate_mut().draggable = *check;
-                                    cx.notify();
-                                });
-                                println!(
-                                    "Drag/Drop example: {}",
-                                    if *check {
-                                        "enabled (check console)"
-                                    } else {
-                                        "disabled"
-                                    }
-                                );
+                            .on_click(cx.listener(|this, check: &bool, window, cx| {
+                                this.toggle_draggable(*check, window, cx)
                             })),
                     ),
             )
