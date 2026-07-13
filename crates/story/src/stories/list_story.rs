@@ -76,34 +76,43 @@ impl CompanyListItem {
     }
 
     /// Add drag-and-drop support to this list item
-    pub fn with_drag_drop(self, enable: bool) -> Self {
+    pub fn with_drag_drop(mut self, enable: bool) -> Self {
         if !enable {
             return self;
         }
 
         let company = self.company.clone();
+        let company_for_hover = self.company.clone();
         let company_for_drop = self.company.clone();
 
-        self.base
-            .on_drag(company.clone(), move |drag_company, _pos, window, cx| {
+        self.base = self.base.on_drag(
+            company.clone(),
+            move |drag_company: Rc<Company>, _pos, window, cx| {
                 // Create a simple drag preview
                 cx.new(|_| DragPreview {
                     company: drag_company.clone(),
                 })
-            })
-            .on_drag_hover(move |hovering, window, cx| {
-                if *hovering {
-                    println!("→ Dragging over: {}", company_for_drop.name);
-                } else {
-                    println!("← Left: {}", company_for_drop.name);
-                }
-            })
-            .on_drop(move |dragged_company, window, cx| {
+            },
+        );
+
+        self.base = self.base.on_drag_hover(move |hovering, _window, _cx| {
+            if *hovering {
+                println!("→ Dragging over: {}", company_for_hover.name);
+            } else {
+                println!("← Left: {}", company_for_hover.name);
+            }
+        });
+
+        self.base = self
+            .base
+            .on_drop(move |dragged_company: &Rc<Company>, _window, _cx| {
                 println!(
                     "✓ Dropped '{}' onto '{}'",
                     dragged_company.name, company_for_drop.name
                 );
-            })
+            });
+
+        self
     }
 }
 
@@ -337,7 +346,7 @@ impl ListDelegate for CompanyListDelegate {
         &mut self,
         ix: IndexPath,
         _: &mut Window,
-        cx: &mut Context<ListState<Self>>,
+        _cx: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
