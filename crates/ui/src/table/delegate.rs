@@ -117,7 +117,9 @@ pub trait TableDelegate: Sized + 'static {
         cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement;
 
-    /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
+    /// Move the column at the given `col_ix` so that it ends up at the index `to_ix`.
+    ///
+    /// e.g.: `let col = self.columns.remove(col_ix); self.columns.insert(to_ix, col);`
     fn move_column(
         &mut self,
         col_ix: usize,
