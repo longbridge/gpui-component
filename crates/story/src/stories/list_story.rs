@@ -19,6 +19,22 @@ use gpui_component::{
 
 actions!(list_story, [SelectedCompany]);
 
+#[derive(Clone)]
+struct DragPreview {
+    company: Rc<Company>,
+}
+
+impl Render for DragPreview {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px_3()
+            .py_2()
+            .bg(cx.theme().accent)
+            .rounded(cx.theme().radius)
+            .child(self.company.name.clone())
+    }
+}
+
 #[derive(Clone, Default)]
 struct Company {
     name: SharedString,
@@ -57,6 +73,37 @@ impl CompanyListItem {
             base: ListItem::new(id).selected(selected),
             selected,
         }
+    }
+
+    /// Add drag-and-drop support to this list item
+    pub fn with_drag_drop(self, enable: bool) -> Self {
+        if !enable {
+            return self;
+        }
+
+        let company = self.company.clone();
+        let company_for_drop = self.company.clone();
+
+        self.base
+            .on_drag(company.clone(), move |drag_company, _pos, window, cx| {
+                // Create a simple drag preview
+                cx.new(|_| DragPreview {
+                    company: drag_company.clone(),
+                })
+            })
+            .on_drag_hover(move |hovering, window, cx| {
+                if *hovering {
+                    println!("→ Dragging over: {}", company_for_drop.name);
+                } else {
+                    println!("← Left: {}", company_for_drop.name);
+                }
+            })
+            .on_drop(move |dragged_company, window, cx| {
+                println!(
+                    "✓ Dropped '{}' onto '{}'",
+                    dragged_company.name, company_for_drop.name
+                );
+            })
     }
 }
 
@@ -144,6 +191,7 @@ struct CompanyListDelegate {
     loading: bool,
     eof: bool,
     lazy_load: bool,
+    draggable: bool,
 }
 
 impl CompanyListDelegate {
@@ -289,14 +337,14 @@ impl ListDelegate for CompanyListDelegate {
         &mut self,
         ix: IndexPath,
         _: &mut Window,
-        _: &mut Context<ListState<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
-            return Some(CompanyListItem::new(ix, company.clone(), selected));
+            Some(CompanyListItem::new(ix, company.clone(), selected).with_drag_drop(self.draggable))
+        } else {
+            None
         }
-
-        None
     }
 
     fn loading(&self, _: &App) -> bool {
@@ -344,6 +392,7 @@ pub struct ListStory {
     selected_company: Option<Rc<Company>>,
     selectable: bool,
     searchable: bool,
+    draggable: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -377,6 +426,7 @@ impl ListStory {
             loading: false,
             eof: false,
             lazy_load: false,
+            draggable: false,
         };
         delegate.extend_more(100);
 
@@ -423,6 +473,7 @@ impl ListStory {
             focus_handle: cx.focus_handle(),
             searchable: true,
             selectable: true,
+            draggable: false,
             company_list,
             selected_company: None,
             _subscriptions,
@@ -448,6 +499,11 @@ impl ListStory {
         self.company_list.update(cx, |list, cx| {
             list.set_searchable(self.searchable, cx);
         })
+    }
+
+    fn toggle_draggable(&mut self, draggable: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.draggable = draggable;
+        cx.notify();
     }
 }
 
@@ -588,6 +644,26 @@ impl Render for ListStory {
                                     this.delegate_mut().lazy_load = *check;
                                     cx.notify();
                                 })
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("draggable")
+                            .label("Draggable (Demo)")
+                            .checked(self.draggable)
+                            .on_click(cx.listener(|this, check: &bool, _, cx| {
+                                this.draggable = *check;
+                                this.company_list.update(cx, |list, cx| {
+                                    list.delegate_mut().draggable = *check;
+                                    cx.notify();
+                                });
+                                println!(
+                                    "Drag/Drop example: {}",
+                                    if *check {
+                                        "enabled (check console)"
+                                    } else {
+                                        "disabled"
+                                    }
+                                );
                             })),
                     ),
             )
