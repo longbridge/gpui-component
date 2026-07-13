@@ -18,7 +18,6 @@ use tree_sitter::{
 /// When a node spans more than this many bytes beyond the requested query
 /// range, we recurse into its children instead of querying it directly.
 const LARGE_NODE_THRESHOLD: usize = 8 * 1024;
-const MAX_INJECTION_LAYERS: usize = 256;
 const MAX_INJECTION_RANGES: usize = 4096;
 const MAX_INJECTION_BYTES: usize = 512 * 1024;
 const MAX_INJECTION_LANGUAGE_BYTES: usize = 64;
@@ -677,6 +676,10 @@ impl SyntaxHighlighter {
             .iter()
             .map(|layer| (layer.language_name.clone(), layer.highlight_query.clone()))
             .collect();
+        // Cache raw names as well as canonical queries. Otherwise every fence with the
+        // same info string would lock the registry and clone its language configuration.
+        let mut resolved_languages: HashMap<SharedString, Option<(SharedString, Arc<Query>)>> =
+            HashMap::new();
         let mut new_layers = Vec::new();
         while let Some(query_match) = matches.next() {
             let mut language_name: Option<SharedString> = None;
@@ -704,10 +707,18 @@ impl SyntaxHighlighter {
                     });
             }
 
-            let Some((language_name, highlight_query)) = language_name
-                .as_deref()
-                .and_then(|name| resolve_language(name, &mut highlight_queries))
-            else {
+            let Some(raw_language_name) = language_name else {
+                continue;
+            };
+            let resolved_language =
+                if let Some(resolved) = resolved_languages.get(&raw_language_name) {
+                    resolved.clone()
+                } else {
+                    let resolved = resolve_language(&raw_language_name, &mut highlight_queries);
+                    resolved_languages.insert(raw_language_name, resolved.clone());
+                    resolved
+                };
+            let Some((language_name, highlight_query)) = resolved_language else {
                 continue;
             };
 
@@ -736,9 +747,7 @@ impl SyntaxHighlighter {
                     })
                     .push_limited(ranges);
             } else {
-                if new_layers.len() >= MAX_INJECTION_LAYERS
-                    || !injection_ranges_within_limits(&ranges)
-                {
+                if !injection_ranges_within_limits(&ranges) {
                     continue;
                 }
 
@@ -758,10 +767,6 @@ impl SyntaxHighlighter {
         }
 
         for (language_name, combined) in combined_ranges {
-            if new_layers.len() >= MAX_INJECTION_LAYERS {
-                break;
-            }
-
             let mut ranges = combined.ranges;
             if ranges.is_empty() {
                 continue;
@@ -1411,6 +1416,34 @@ console.log(answer);
                 .iter()
                 .all(|layer| { layer.language_name.as_ref() != "not-a-registered-language" })
         );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_markdown_fenced_code_highlights_blocks_beyond_previous_limit() {
+        const FENCE_COUNT: usize = 384;
+        let markdown = (0..FENCE_COUNT)
+            .map(|i| format!("```rust\nfn function_{i}() {{}}\n```\n"))
+            .collect::<String>();
+        let rope = Rope::from_str(&markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+
+        assert!(highlighter.update(None, &rope, None));
+        assert_eq!(highlighter.injection_layers.len(), FENCE_COUNT);
+        assert!(
+            highlighter
+                .injection_layers
+                .iter()
+                .all(|layer| layer.language_name.as_ref() == "rust")
+        );
+
+        let highlights = highlighter.match_styles(0..markdown.len());
+        assert!(has_highlight_covering(
+            &highlights,
+            &markdown,
+            "function_383",
+            "function"
+        ));
     }
 
     #[test]
