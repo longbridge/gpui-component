@@ -111,7 +111,7 @@ impl InputState {
     pub(crate) fn on_action_go_to_definition(
         &mut self,
         _: &GoToDefinition,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.cursor();
@@ -121,7 +121,7 @@ impl InputState {
             }
 
             if let Some(location) = locations.first().cloned() {
-                self.go_to_definition(&location, cx);
+                self.go_to_definition(&location, window, cx);
             }
         }
     }
@@ -131,7 +131,7 @@ impl InputState {
         &mut self,
         event: &MouseDownEvent,
         offset: usize,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<InputState>,
     ) -> bool {
         if !event.modifiers.secondary() {
@@ -149,7 +149,7 @@ impl InputState {
             return false;
         };
 
-        self.go_to_definition(&location, cx);
+        self.go_to_definition(&location, window, cx);
 
         true
     }
@@ -157,8 +157,17 @@ impl InputState {
     pub(crate) fn go_to_definition(
         &mut self,
         location: &lsp_types::LocationLink,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Give the host a chance to handle the location first, e.g. to open
+        // virtual/external documents (stdlib docs) in an app window.
+        if let Some(handler) = self.lsp.on_open_location.clone() {
+            if handler(location, window, cx) {
+                return;
+            }
+        }
+
         if location
             .target_uri
             .scheme()
