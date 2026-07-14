@@ -375,7 +375,10 @@ impl Language {
         }
 
         let (language, query, injection, locals) = match self {
-            Self::Plain => unreachable!(),
+            Self::Plain => {
+                debug_assert!(false, "Plain language has no grammar to configure");
+                return LanguageConfig::plain(self.name());
+            }
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
                 include_str!("languages/json/highlights.scm"),
