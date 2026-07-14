@@ -160,24 +160,31 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Give the host a chance to handle the location first, e.g. to open
-        // virtual/external documents (stdlib docs) in an app window.
-        if let Some(handler) = self.lsp.on_open_location.clone() {
-            if handler(location, window, cx) {
+        let external = location
+            .target_uri
+            .scheme()
+            .map(|s| s.as_str() == "https" || s.as_str() == "http")
+            == Some(true);
+
+        // Give the host a chance to show the document first (window/showDocument),
+        // e.g. to open virtual/external documents (stdlib docs) in an app window.
+        if let Some(handler) = self.lsp.show_document.clone() {
+            let params = lsp_types::ShowDocumentParams {
+                uri: location.target_uri.clone(),
+                external: Some(external),
+                take_focus: Some(true),
+                selection: Some(location.target_selection_range),
+            };
+            if handler(&params, window, cx) {
                 return;
             }
         }
 
-        if location
-            .target_uri
-            .scheme()
-            .map(|s| s.as_str() == "https" || s.as_str() == "http")
-            == Some(true)
-        {
+        if external {
             cx.open_url(&location.target_uri.to_string());
         } else {
             // Move to the location.
-            let target_range = location.target_range;
+            let target_range = location.target_selection_range;
             let start = self.text.position_to_offset(&target_range.start);
             let end = self.text.position_to_offset(&target_range.end);
 

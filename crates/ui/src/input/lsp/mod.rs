@@ -19,13 +19,17 @@ pub use document_colors::*;
 pub use hover::*;
 pub use semantic_tokens::*;
 
-/// Host hook to intercept opening an LSP location (Go to Definition).
+/// Host hook to show a document when following an LSP location
+/// (Go to Definition), modeled after the `window/showDocument` request.
 ///
-/// Called before the built-in behavior. Return `true` if the host handled
-/// the location (e.g. opened a docs window for a virtual/external URI);
-/// return `false` to fall through to the default handling (http(s) URIs
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
+///
+/// Called before the built-in behavior. Return `true` if the host has shown
+/// the document (e.g. opened a docs window for a virtual/external URI);
+/// return `false` to fall through to the default handling (`external` URIs
 /// open in the browser, anything else jumps within the current document).
-pub type OpenLocationHandler = Rc<dyn Fn(&lsp_types::LocationLink, &mut Window, &mut App) -> bool>;
+pub type ShowDocumentHandler =
+    Rc<dyn Fn(&lsp_types::ShowDocumentParams, &mut Window, &mut App) -> bool>;
 
 /// LSP ServerCapabilities
 ///
@@ -43,9 +47,11 @@ pub struct Lsp {
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
     /// The range semantic tokens provider.
     pub semantic_tokens_provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
-    /// Optional host hook to intercept Go to Definition locations
-    /// (see [`OpenLocationHandler`]).
-    pub on_open_location: Option<OpenLocationHandler>,
+    /// Optional host hook to show documents for Go to Definition locations,
+    /// following the `window/showDocument` request (see [`ShowDocumentHandler`]).
+    ///
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
+    pub show_document: Option<ShowDocumentHandler>,
 
     document_colors: Vec<(lsp_types::Range, Hsla)>,
     /// Cached semantic tokens as absolute position ranges + theme token-type
@@ -66,7 +72,7 @@ impl Default for Lsp {
             definition_provider: None,
             document_color_provider: None,
             semantic_tokens_provider: None,
-            on_open_location: None,
+            show_document: None,
             document_colors: vec![],
             semantic_tokens: vec![],
             _hover_task: Task::ready(Ok(())),
