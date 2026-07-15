@@ -19,6 +19,18 @@ pub use document_colors::*;
 pub use hover::*;
 pub use semantic_tokens::*;
 
+/// Host hook to show a document when following an LSP location
+/// (Go to Definition), modeled after the `window/showDocument` request.
+///
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
+///
+/// Called before the built-in behavior. Return `true` if the host has shown
+/// the document (e.g. opened a docs window for a virtual/external URI);
+/// return `false` to fall through to the default handling (`external` URIs
+/// open in the browser, anything else jumps within the current document).
+pub type ShowDocumentHandler =
+    Rc<dyn Fn(&lsp_types::ShowDocumentParams, &mut Window, &mut App) -> bool>;
+
 /// LSP ServerCapabilities
 ///
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#serverCapabilities
@@ -35,6 +47,11 @@ pub struct Lsp {
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
     /// The range semantic tokens provider.
     pub semantic_tokens_provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
+    /// Optional host hook to show documents for Go to Definition locations,
+    /// following the `window/showDocument` request (see [`ShowDocumentHandler`]).
+    ///
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
+    pub show_document: Option<ShowDocumentHandler>,
 
     document_colors: Vec<(lsp_types::Range, Hsla)>,
     /// Cached semantic tokens as absolute position ranges + theme token-type
@@ -55,6 +72,7 @@ impl Default for Lsp {
             definition_provider: None,
             document_color_provider: None,
             semantic_tokens_provider: None,
+            show_document: None,
             document_colors: vec![],
             semantic_tokens: vec![],
             _hover_task: Task::ready(Ok(())),

@@ -111,7 +111,7 @@ impl InputState {
     pub(crate) fn on_action_go_to_definition(
         &mut self,
         _: &GoToDefinition,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let offset = self.cursor();
@@ -121,7 +121,7 @@ impl InputState {
             }
 
             if let Some(location) = locations.first().cloned() {
-                self.go_to_definition(&location, cx);
+                self.go_to_definition(&location, window, cx);
             }
         }
     }
@@ -131,7 +131,7 @@ impl InputState {
         &mut self,
         event: &MouseDownEvent,
         offset: usize,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<InputState>,
     ) -> bool {
         if !event.modifiers.secondary() {
@@ -149,7 +149,7 @@ impl InputState {
             return false;
         };
 
-        self.go_to_definition(&location, cx);
+        self.go_to_definition(&location, window, cx);
 
         true
     }
@@ -157,18 +157,34 @@ impl InputState {
     pub(crate) fn go_to_definition(
         &mut self,
         location: &lsp_types::LocationLink,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if location
+        let external = location
             .target_uri
             .scheme()
             .map(|s| s.as_str() == "https" || s.as_str() == "http")
-            == Some(true)
-        {
+            == Some(true);
+
+        // Give the host a chance to show the document first (window/showDocument),
+        // e.g. to open virtual/external documents (stdlib docs) in an app window.
+        if let Some(handler) = self.lsp.show_document.clone() {
+            let params = lsp_types::ShowDocumentParams {
+                uri: location.target_uri.clone(),
+                external: Some(external),
+                take_focus: Some(true),
+                selection: Some(location.target_selection_range),
+            };
+            if handler(&params, window, cx) {
+                return;
+            }
+        }
+
+        if external {
             cx.open_url(&location.target_uri.to_string());
         } else {
             // Move to the location.
-            let target_range = location.target_range;
+            let target_range = location.target_selection_range;
             let start = self.text.position_to_offset(&target_range.start);
             let end = self.text.position_to_offset(&target_range.end);
 
