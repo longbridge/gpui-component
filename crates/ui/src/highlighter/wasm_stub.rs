@@ -21,10 +21,11 @@ impl SyntaxHighlighter {
 
     pub fn styles(
         &self,
-        _range: &Range<usize>,
+        range: &Range<usize>,
         _theme: &HighlightTheme,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
-        Vec::new()
+        // If the matched styles is empty, return a default range.
+        vec![(range.clone(), HighlightStyle::default())]
     }
 
     pub fn update(
