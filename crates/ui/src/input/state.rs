@@ -2727,9 +2727,12 @@ impl InputState {
                     let Some(config) = LanguageRegistry::singleton().language(&language) else {
                         return None;
                     };
+                    let Some(grammar) = config.language.as_ref() else {
+                        return None;
+                    };
 
                     let mut parser = tree_sitter::Parser::new();
-                    if parser.set_language(&config.language).is_err() {
+                    if parser.set_language(grammar).is_err() {
                         return None;
                     }
 

@@ -370,7 +370,7 @@ impl Language {
     /// (language, query, injection, locals)
     pub(super) fn config(&self) -> LanguageConfig {
         let (language, query, injection, locals) = match self {
-            Self::Plain => (tree_sitter_json::LANGUAGE, "", "", ""),
+            Self::Plain => return LanguageConfig::plain(self.name()),
             Self::Json => (
                 tree_sitter_json::LANGUAGE,
                 include_str!("languages/json/highlights.scm"),

@@ -341,6 +341,29 @@ impl SyntaxHighlighter {
         }
     }
 
+    /// Build an inert highlighter that never parses and creates no styles,
+    /// for languages without a grammar.
+    fn build_inert(language: SharedString) -> Self {
+        Self {
+            language,
+            query: None,
+            injections_query: None,
+            locals_pattern_index: 0,
+            highlights_pattern_index: 0,
+            non_local_variable_patterns: Vec::new(),
+            injection_content_capture_index: None,
+            injection_language_capture_index: None,
+            local_scope_capture_index: None,
+            local_def_capture_index: None,
+            local_def_value_capture_index: None,
+            local_ref_capture_index: None,
+            text: Rope::new(),
+            parser: Parser::new(),
+            tree: None,
+            injection_layers: Vec::new(),
+        }
+    }
+
     /// Build the highlighter for the given language.
     ///
     /// https://github.com/tree-sitter/tree-sitter/blob/v0.26.8/crates/highlight/src/highlight.rs#L339
@@ -352,10 +375,14 @@ impl SyntaxHighlighter {
             ));
         };
 
+        // Languages without grammar default to a highlighter that never
+        // parses and creates no styles.
+        let Some(grammar) = config.language.as_ref() else {
+            return Ok(Self::build_inert(config.name.clone()));
+        };
+
         let mut parser = Parser::new();
-        parser
-            .set_language(&config.language)
-            .context("parse set_language")?;
+        parser.set_language(grammar).context("parse set_language")?;
 
         // Concatenate the query strings, keeping track of the start offset of each section.
         let mut query_source = String::new();
@@ -367,7 +394,7 @@ impl SyntaxHighlighter {
 
         // Construct a single query by concatenating the three query strings, but record the
         // range of pattern indices that belong to each individual string.
-        let mut query = Query::new(&config.language, &query_source).context("new query")?;
+        let mut query = Query::new(grammar, &query_source).context("new query")?;
 
         let mut locals_pattern_index = 0;
         let mut highlights_pattern_index = 0;
@@ -384,9 +411,7 @@ impl SyntaxHighlighter {
         }
 
         let injections_query = if !config.injections.is_empty() {
-            Query::new(&config.language, &config.injections)
-                .ok()
-                .map(Arc::new)
+            Query::new(grammar, &config.injections).ok().map(Arc::new)
         } else {
             None
         };
@@ -502,6 +527,12 @@ impl SyntaxHighlighter {
         timeout: Option<Duration>,
     ) -> bool {
         if self.text.eq(text) {
+            return true;
+        }
+
+        // If there's no grammar for the language, just update the text.
+        if self.parser.language().is_none() {
+            self.text = text.clone();
             return true;
         }
 
@@ -638,7 +669,7 @@ impl SyntaxHighlighter {
                 return Some((config.name, query.clone()));
             }
 
-            let query = match Query::new(&config.language, &config.highlights) {
+            let query = match Query::new(config.language.as_ref()?, &config.highlights) {
                 Ok(query) => Arc::new(query),
                 Err(error) => {
                     tracing::error!(
@@ -808,7 +839,7 @@ impl SyntaxHighlighter {
         }
         let config = LanguageRegistry::singleton().language(language_name)?;
         let mut parser = Parser::new();
-        parser.set_language(&config.language).ok()?;
+        parser.set_language(config.language.as_ref()?).ok()?;
         parser.set_included_ranges(&ranges).ok()?;
         let parse_start = Instant::now();
         let mut timed_out = false;
@@ -1248,6 +1279,24 @@ mod tests {
         let mut style = HighlightStyle::default();
         style.color = Some(color);
         style
+    }
+
+    #[test]
+    fn test_plain_text_never_parses() {
+        // "text" has no grammar, the highlighter shouldn't parse.
+        let mut highlighter = SyntaxHighlighter::new("text");
+        let rope = Rope::from("hello {\"a\": 1}\nworld");
+        assert!(highlighter.update(None, &rope, None));
+        assert!(highlighter.tree().is_none());
+        assert_eq!(highlighter.text().to_string(), rope.to_string());
+
+        let styles = highlighter.styles(&(0..rope.len()), &HighlightTheme::default_dark());
+        assert_eq!(styles, vec![(0..rope.len(), HighlightStyle::default())]);
+
+        // Unregistered languages fall back to plain text.
+        let mut highlighter = SyntaxHighlighter::new("no-such-language");
+        assert!(highlighter.update(None, &rope, None));
+        assert!(highlighter.tree().is_none());
     }
 
     #[cfg(feature = "tree-sitter-languages")]

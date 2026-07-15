@@ -60,7 +60,7 @@ pub(super) const HIGHLIGHT_NAMES: [&str; 41] = [
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanguageConfig {
     pub name: SharedString,
-    pub language: tree_sitter::Language,
+    pub language: Option<tree_sitter::Language>,
     pub injection_languages: Vec<SharedString>,
     pub highlights: SharedString,
     pub injections: SharedString,
@@ -78,12 +78,29 @@ impl LanguageConfig {
     ) -> Self {
         Self {
             name: name.into(),
-            language,
+            language: Some(language),
             injection_languages,
             highlights: SharedString::from(highlights.to_string()),
             injections: SharedString::from(injections.to_string()),
             locals: SharedString::from(locals.to_string()),
         }
+    }
+
+    /// A plain text language without a grammar, it will never be parsed.
+    pub fn plain(name: impl Into<SharedString>) -> Self {
+        Self {
+            name: name.into(),
+            language: None,
+            injection_languages: vec![],
+            highlights: SharedString::default(),
+            injections: SharedString::default(),
+            locals: SharedString::default(),
+        }
+    }
+
+    /// Whether this language has a grammar to parse with.
+    pub fn has_grammar(&self) -> bool {
+        self.language.is_some()
     }
 }
 
