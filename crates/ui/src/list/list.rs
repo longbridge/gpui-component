@@ -510,6 +510,9 @@ where
         let rows_cache = self.rows_cache.clone();
         let scrollbar_visible = self.options.scrollbar_visible;
         let scroll_handle = self.scroll_handle.clone();
+        let item_to_measure_index = rows_cache
+            .position_of(&self.item_to_measure_index)
+            .unwrap_or(0);
 
         v_flex()
             .flex_grow_1()
@@ -563,6 +566,7 @@ where
                                     .collect::<Vec<_>>()
                             },
                         )
+                        .with_item_to_measure_index(item_to_measure_index)
                         .paddings(self.options.paddings.clone())
                         .when(self.options.max_height.is_some(), |this| {
                             this.with_sizing_behavior(ListSizingBehavior::Infer)
