@@ -1,6 +1,6 @@
 use gpui::{
     App, Axis, IntoElement, ParentElement, Pixels, Rems, RenderOnce, StyleRefinement, Styled,
-    Window, div, px,
+    Window, px,
 };
 
 use crate::{
@@ -98,20 +98,17 @@ impl RenderOnce for Form {
             _ => px(8.),
         };
 
-        // Add `div` wrapper to avoid sometime width not full issue.
-        div().child(
-            v_flex()
-                .w_full()
-                .gap_x(gap * 3.)
-                .gap_y(gap)
-                .grid()
-                .grid_cols(props.columns as u16)
-                .children(
-                    self.fields
-                        .into_iter()
-                        .enumerate()
-                        .map(|(ix, field)| field.props(ix, props)),
-                ),
-        )
+        v_flex()
+            .w_full()
+            .gap_x(gap * 3.)
+            .gap_y(gap)
+            .grid()
+            .grid_cols(props.columns as u16)
+            .children(
+                self.fields
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, field)| field.props(ix, props)),
+            )
     }
 }
