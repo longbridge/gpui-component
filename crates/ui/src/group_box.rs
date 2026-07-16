@@ -135,35 +135,32 @@ impl RenderOnce for GroupBox {
             GroupBoxVariant::Outline => (None, Some(cx.theme().border), true),
         };
 
-        // Add `div` wrapper to avoid sometime width not full issue.
-        div().child(
-            v_flex()
-                .id(self.id.unwrap_or("group-box".into()))
-                .w_full()
-                .when(has_paddings, |this| this.gap_3())
-                .when(!has_paddings, |this| this.gap_4())
-                .refine_style(&self.style)
-                .when_some(self.title, |this, title| {
-                    this.child(
-                        div()
-                            .text_color(cx.theme().muted_foreground)
-                            .line_height(relative(1.))
-                            .refine_style(&self.title_style)
-                            .child(title),
-                    )
-                })
-                .child(
-                    v_flex()
-                        .when_some(bg, |this, bg| this.bg(bg))
-                        .when_some(border, |this, border| this.border_color(border).border_1())
-                        .text_color(cx.theme().group_box_foreground)
-                        .when(has_paddings, |this| this.p_4())
-                        .gap_4()
-                        .rounded(cx.theme().radius)
-                        .refine_style(&self.content_style)
-                        .children(self.children),
-                ),
-        )
+        v_flex()
+            .id(self.id.unwrap_or("group-box".into()))
+            .w_full()
+            .when(has_paddings, |this| this.gap_3())
+            .when(!has_paddings, |this| this.gap_4())
+            .refine_style(&self.style)
+            .when_some(self.title, |this, title| {
+                this.child(
+                    div()
+                        .text_color(cx.theme().muted_foreground)
+                        .line_height(relative(1.))
+                        .refine_style(&self.title_style)
+                        .child(title),
+                )
+            })
+            .child(
+                v_flex()
+                    .when_some(bg, |this, bg| this.bg(bg))
+                    .when_some(border, |this, border| this.border_color(border).border_1())
+                    .text_color(cx.theme().group_box_foreground)
+                    .when(has_paddings, |this| this.p_4())
+                    .gap_4()
+                    .rounded(cx.theme().radius)
+                    .refine_style(&self.content_style)
+                    .children(self.children),
+            )
     }
 }
 
