@@ -236,8 +236,15 @@ cx.subscribe_in(&state, window, |view, _, event, window, cx| {
 
 ### 程序化操控
 
+值会通过当前 delegate 解析，无法找到的值会被忽略。
+
 ```rust
-// 替换整个选中集合
+// 按值替换整个选中集合
+state.update(cx, |s, cx| {
+    s.set_selected_values(&["React", "Angular"], window, cx);
+});
+
+// 按索引路径替换整个选中集合
 state.update(cx, |s, cx| {
     s.set_selected_indices(vec![IndexPath::new(0), IndexPath::new(2)], window, cx);
 });

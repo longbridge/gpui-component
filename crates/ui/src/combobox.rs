@@ -289,6 +289,30 @@ where
         self.state.selection()
     }
 
+    /// Replace the entire selection set by item values.
+    ///
+    /// Values are resolved through the current delegate. Values that cannot be resolved are
+    /// ignored. This updates the committed selection and snapshot without emitting a
+    /// [`ComboboxEvent`].
+    pub fn set_selected_values(
+        &mut self,
+        values: &[<D::Item as SearchableListItem>::Value],
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let selected_indices = {
+            let list = self.state.list.read(cx);
+            let delegate = &list.delegate().delegate;
+
+            values
+                .iter()
+                .filter_map(|value| delegate.position(value))
+                .collect::<Vec<_>>()
+        };
+
+        self.set_selected_indices(selected_indices, window, cx);
+    }
+
     /// Replace the entire selection set.
     pub fn set_selected_indices(
         &mut self,
@@ -1019,16 +1043,44 @@ fn render_popup_shell<D: SearchableListDelegate + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext as _, TestAppContext};
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{AppContext as _, Context, Entity, Subscription, TestAppContext};
 
     use crate::{
         IndexPath,
-        combobox::{Combobox, ComboboxState},
+        combobox::{Combobox, ComboboxEvent, ComboboxState},
         searchable_list::{
             SearchableListChange, SearchableListDelegate, SearchableListItem, SearchableListState,
             SearchableVec,
         },
     };
+
+    struct TestComboboxEventCollector {
+        event_count: Rc<Cell<usize>>,
+        _subscription: Subscription,
+    }
+
+    impl TestComboboxEventCollector {
+        fn new(
+            state: &Entity<ComboboxState<SearchableVec<&'static str>>>,
+            cx: &mut Context<Self>,
+        ) -> Self {
+            let event_count = Rc::new(Cell::new(0));
+            let event_count_for_subscription = event_count.clone();
+            let _subscription = cx.subscribe(
+                state,
+                move |_, _, _: &ComboboxEvent<SearchableVec<&'static str>>, _| {
+                    event_count_for_subscription.set(event_count_for_subscription.get() + 1);
+                },
+            );
+
+            Self {
+                event_count,
+                _subscription,
+            }
+        }
+    }
 
     #[gpui::test]
     fn test_combo_box_builder(cx: &mut TestAppContext) {
@@ -1108,6 +1160,97 @@ mod tests {
                 .disabled(false);
 
             assert_eq!(state.read(cx).selected_values(), vec!["React"]);
+        });
+    }
+
+    #[gpui::test]
+    fn test_combo_box_set_selected_values_uses_current_delegate(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx).multiple(true));
+
+            state.update(cx, |state, cx| {
+                state.set_selected_values(&["Vue", "Missing"], window, cx);
+
+                assert_eq!(state.selected_values(), vec!["Vue"]);
+                assert_eq!(
+                    state
+                        .selection()
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>(),
+                    vec![IndexPath::new(1)],
+                );
+                assert_eq!(
+                    state
+                        .state
+                        .list
+                        .read(cx)
+                        .delegate()
+                        .selection_snapshot
+                        .as_slice(),
+                    state.selection(),
+                );
+
+                state.set_items(SearchableVec::new(vec!["Vue", "Rust", "Go"]), window, cx);
+                state.set_selected_values(&["Go", "Vue"], window, cx);
+
+                assert_eq!(state.selected_values(), vec!["Go", "Vue"]);
+                assert_eq!(
+                    state
+                        .selection()
+                        .iter()
+                        .map(|(index, _)| *index)
+                        .collect::<Vec<_>>(),
+                    vec![IndexPath::new(2), IndexPath::new(0)],
+                );
+                assert_eq!(
+                    state
+                        .state
+                        .list
+                        .read(cx)
+                        .delegate()
+                        .selection_snapshot
+                        .as_slice(),
+                    state.selection(),
+                );
+
+                state.set_selected_values(&[], window, cx);
+
+                assert!(state.selection().is_empty());
+                assert!(
+                    state
+                        .state
+                        .list
+                        .read(cx)
+                        .delegate()
+                        .selection_snapshot
+                        .is_empty()
+                );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_combo_box_set_selected_values_does_not_emit_events(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            cx.new(|cx| ComboboxState::new(items, vec![], window, cx).multiple(true))
+        });
+        let collector = cx.update(|_, cx| cx.new(|cx| TestComboboxEventCollector::new(&state, cx)));
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_selected_values(&["React", "Vue"], window, cx);
+            });
+        });
+
+        cx.update(|_, cx| {
+            assert_eq!(collector.read(cx).event_count.get(), 0);
         });
     }
 
