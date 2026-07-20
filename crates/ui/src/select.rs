@@ -558,7 +558,7 @@ where
                                     v_flex()
                                         .occlude()
                                         .mt_1p5()
-                                        .bg(cx.theme().tokens.background)
+                                        .bg(cx.theme().tokens.popover)
                                         .border_1()
                                         .border_color(cx.theme().border)
                                         .rounded(popup_radius)
