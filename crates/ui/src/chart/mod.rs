@@ -3,6 +3,7 @@ mod bar_chart;
 mod candlestick_chart;
 mod line_chart;
 mod pie_chart;
+mod radar_chart;
 mod sankey_chart;
 
 pub use area_chart::AreaChart;
@@ -10,6 +11,7 @@ pub use bar_chart::BarChart;
 pub use candlestick_chart::CandlestickChart;
 pub use line_chart::LineChart;
 pub use pie_chart::PieChart;
+pub use radar_chart::RadarChart;
 pub use sankey_chart::{SankeyChart, SankeyLabel};
 
 use gpui::{Hsla, SharedString, TextAlign};

@@ -11,7 +11,7 @@ A comprehensive charting library providing Line, Bar, Area, Pie, Candlestick, an
 
 ```rust
 use gpui_component::chart::{
-    LineChart, BarChart, AreaChart, PieChart, CandlestickChart, SankeyChart,
+    LineChart, BarChart, AreaChart, PieChart, RadarChart, CandlestickChart, SankeyChart,
 };
 ```
 
@@ -317,6 +317,52 @@ PieChart::new(data)
     .pad_angle(4. / 100.) // 4% padding
 ```
 
+### RadarChart
+
+A radar chart displays multivariate data as closed polygons around a center, ideal for comparing multiple series across several dimensions.
+
+#### Basic Radar Chart
+
+```rust
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+```
+
+#### Multiple Series
+
+```rust
+// Each `.value()` call adds a series, paired with the matching
+// `.stroke()` / `.fill()` calls. Colors default to the theme
+// chart colors, cycled per series.
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .stroke(cx.theme().chart_1)
+    .value(|d| d.mobile)
+    .stroke(cx.theme().chart_2)
+```
+
+#### Radar Chart Customization
+
+```rust
+// Vertex dots and custom fill
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .stroke(cx.theme().chart_2)
+    .fill(cx.theme().chart_2.opacity(0.2))
+    .dot()
+
+// Fixed outer ring value and grid rings
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .max_value(400.)
+    .grid_levels(5)
+    .outer_radius(120.)
+```
+
 ### CandlestickChart
 
 A candlestick chart displays financial data using OHLC (Open, High, Low, Close) values, perfect for visualizing stock prices and market trends.
@@ -587,6 +633,7 @@ let chart = LineChart::new(data)
 - [BarChart]
 - [AreaChart]
 - [PieChart]
+- [RadarChart]
 - [CandlestickChart]
 - [SankeyChart]
 
@@ -921,4 +968,5 @@ impl LiveChart {
 [BarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.BarChart.html
 [AreaChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.AreaChart.html
 [PieChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.PieChart.html
+[RadarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.RadarChart.html
 [CandlestickChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.CandlestickChart.html
