@@ -191,9 +191,13 @@ impl InputState {
     }
 
     pub(crate) fn clear_hover_state(&mut self, cx: &mut Context<InputState>) {
+        let had_definition = !self.hover_definition.is_empty();
+        let had_popover = self.hover_popover.is_some();
         self.hover_definition.clear();
         self.hover_popover = None;
         self.lsp._hover_task = Task::ready(Ok(()));
-        cx.notify();
+        if had_definition || had_popover {
+            cx.notify();
+        }
     }
 }
