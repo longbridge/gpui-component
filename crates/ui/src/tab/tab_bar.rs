@@ -50,6 +50,7 @@ pub struct TabBar {
     variant: TabVariant,
     size: Size,
     menu: bool,
+    max_tab_width: Option<Pixels>,
     on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App) + 'static>>,
 }
 
@@ -71,6 +72,7 @@ impl TabBar {
             selected_index: None,
             on_click: None,
             menu: false,
+            max_tab_width: None,
         }
     }
 
@@ -107,6 +109,14 @@ impl TabBar {
     /// Set whether to show the menu button when tabs overflow, default is false.
     pub fn menu(mut self, menu: bool) -> Self {
         self.menu = menu;
+        self
+    }
+
+    /// Set the maximum width of each tab. Labels longer than this width are
+    /// truncated with an ellipsis. Does not apply to icon-only tabs. The
+    /// overflow menu still shows the full label.
+    pub fn max_tab_width(mut self, width: impl Into<Pixels>) -> Self {
+        self.max_tab_width = Some(width.into());
         self
     }
 
@@ -414,6 +424,7 @@ impl RenderOnce for TabBar {
         let mut item_metas: Vec<(Option<SharedString>, Option<Icon>, bool)> = Vec::new();
         let selected_index = self.selected_index;
         let on_click = self.on_click.clone();
+        let max_tab_width = self.max_tab_width;
 
         self.base
             .role(Role::TabList)
@@ -468,6 +479,7 @@ impl RenderOnce for TabBar {
                             let mut tab = child
                                 .ix(ix)
                                 .tab_bar_prefix(tab_bar_prefix)
+                                .max_tab_width(max_tab_width)
                                 .with_variant(self.variant)
                                 .with_size(self.size);
                             tab.indicator_active = has_indicator;
