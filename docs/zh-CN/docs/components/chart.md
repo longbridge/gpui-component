@@ -1,11 +1,11 @@
 ---
 title: Chart
-description: 支持折线图、柱状图、面积图、饼图、K 线图和桑基图的数据可视化组件。
+description: 支持折线图、柱状图、面积图、饼图、雷达图、K 线图和桑基图的数据可视化组件。
 ---
 
 # Chart
 
-Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie、Candlestick 和 Sankey 图表。它们支持动画、自定义样式、主题配色和多种展示方式，适合仪表盘、统计分析和行情场景。
+Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie、Radar、Candlestick 和 Sankey 图表。它们支持动画、自定义样式、主题配色和多种展示方式，适合仪表盘、统计分析和行情场景。
 
 ## 导入
 

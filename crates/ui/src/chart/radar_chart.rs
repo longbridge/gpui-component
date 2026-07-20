@@ -187,7 +187,8 @@ where
         let center_x = bounds.size.width.as_f32() / 2.;
         let center_y = bounds.size.height.as_f32() / 2.;
 
-        // Radius scale, from the center (zero) to the outer ring.
+        // Radius scale from the center to the outer ring. The domain includes
+        // zero so non-negative data starts at the center.
         let domain = if let Some(max_value) = self.max_value {
             vec![Y::zero(), max_value]
         } else {
@@ -303,8 +304,8 @@ mod tests {
         b: f64,
     }
 
-    #[gpui::test]
-    fn test_radar_chart_builder(_cx: &mut gpui::TestAppContext) {
+    #[test]
+    fn test_radar_chart_builder() {
         let data = vec![
             Item {
                 subject: "Sales".into(),
@@ -347,8 +348,8 @@ mod tests {
         assert_eq!(values, (80., 60.));
     }
 
-    #[gpui::test]
-    fn test_radar_chart_grid_levels_min(_cx: &mut gpui::TestAppContext) {
+    #[test]
+    fn test_radar_chart_grid_levels_min() {
         let chart: RadarChart<Item, f64> = RadarChart::new(vec![]).grid_levels(0);
         assert_eq!(chart.grid_levels, 1);
     }

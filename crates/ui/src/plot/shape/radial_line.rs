@@ -19,6 +19,10 @@ const HALF_PI: f32 = PI / 2.;
 /// Call [`RadialLine::closed`] to connect the last point back to the first
 /// (like `d3.curveLinearClosed`), and [`RadialLine::fill`] to fill the
 /// enclosed polygon, e.g. for radar charts.
+///
+/// Unlike [`Line`](super::Line), the accessors also receive the datum index,
+/// matching d3's `(d, i)` accessor form, since radial charts typically derive
+/// the angle from the index (e.g. `i * TAU / n`).
 #[allow(clippy::type_complexity)]
 pub struct RadialLine<T> {
     data: Vec<T>,

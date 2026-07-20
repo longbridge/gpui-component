@@ -1,11 +1,11 @@
 ---
 title: Chart
-description: Beautiful charts and graphs for data visualization including line, bar, area, pie, candlestick, and sankey charts.
+description: Beautiful charts and graphs for data visualization including line, bar, area, pie, radar, candlestick, and sankey charts.
 ---
 
 # Chart
 
-A comprehensive charting library providing Line, Bar, Area, Pie, Candlestick, and Sankey charts for data visualization. The charts feature smooth animations, customizable styling, tooltips, legends, and automatic theming that adapts to your application's theme.
+A comprehensive charting library providing Line, Bar, Area, Pie, Radar, Candlestick, and Sankey charts for data visualization. The charts feature smooth animations, customizable styling, tooltips, legends, and automatic theming that adapts to your application's theme.
 
 ## Import
 
