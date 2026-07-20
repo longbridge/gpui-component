@@ -236,8 +236,15 @@ cx.subscribe_in(&state, window, |view, _, event, window, cx| {
 
 ### Mutating Programmatically
 
+Values are resolved through the current delegate. Values that cannot be found are ignored.
+
 ```rust
-// Replace the entire selection
+// Replace the entire selection by value
+state.update(cx, |s, cx| {
+    s.set_selected_values(&["React", "Angular"], window, cx);
+});
+
+// Replace the entire selection by index path
 state.update(cx, |s, cx| {
     s.set_selected_indices(vec![IndexPath::new(0), IndexPath::new(2)], window, cx);
 });
