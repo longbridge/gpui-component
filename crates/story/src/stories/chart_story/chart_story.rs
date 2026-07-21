@@ -5,7 +5,10 @@ use gpui::{
 };
 use gpui_component::{
     ActiveTheme, StyledExt,
-    chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart, SankeyChart, SankeyLabel},
+    chart::{
+        AreaChart, BarChart, CandlestickChart, LineChart, PieChart, RadarChart, SankeyChart,
+        SankeyLabel,
+    },
     dock::PanelControl,
     h_flex,
     plot::shape::{BarAlignment, SankeyAlign, SankeyLink, SankeyValueScale},
@@ -37,6 +40,13 @@ pub struct DailyDevice {
     pub mobile: f64,
     pub tablet: f64,
     pub watch: f64,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct RadarDevice {
+    pub month: SharedString,
+    pub desktop: f64,
+    pub mobile: f64,
 }
 
 #[derive(Clone, Deserialize)]
@@ -92,6 +102,7 @@ pub struct ChartStory {
     focus_handle: FocusHandle,
     daily_devices: Vec<DailyDevice>,
     monthly_devices: Vec<MonthlyDevice>,
+    radar_devices: Vec<RadarDevice>,
     stock_prices: Vec<StockPrice>,
     tsla_statements: Vec<(SharedString, Vec<TslaNode>, Vec<SankeyLink>)>,
 }
@@ -104,6 +115,10 @@ impl ChartStory {
         .unwrap();
         let monthly_devices = serde_json::from_str::<Vec<MonthlyDevice>>(include_str!(
             "../../fixtures/monthly-devices.json"
+        ))
+        .unwrap();
+        let radar_devices = serde_json::from_str::<Vec<RadarDevice>>(include_str!(
+            "../../fixtures/radar-devices.json"
         ))
         .unwrap();
         let stock_prices = serde_json::from_str::<Vec<StockPrice>>(include_str!(
@@ -157,6 +172,7 @@ impl ChartStory {
         Self {
             daily_devices,
             monthly_devices,
+            radar_devices,
             stock_prices,
             tsla_statements,
             focus_handle: cx.focus_handle(),
@@ -311,6 +327,60 @@ impl Render for ChartStory {
                             .outer_radius(80.)
                             .color(move |d| d.color(color))
                             .label(|d| d.month.clone()),
+                        true,
+                        cx,
+                    )),
+            )
+            .child(Separator::horizontal())
+            .child(
+                h_flex()
+                    .flex_wrap()
+                    .gap_4()
+                    .child(chart_container(
+                        "Radar Chart",
+                        RadarChart::new(self.radar_devices.clone())
+                            .label(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .id("radar-chart"),
+                        true,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Radar Chart - Multiple",
+                        RadarChart::new(self.radar_devices.clone())
+                            .label(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .value(|d| d.mobile)
+                            .name("Mobile")
+                            .id("radar-chart-multiple"),
+                        true,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Radar Chart - Dots",
+                        RadarChart::new(self.radar_devices.clone())
+                            .label(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .stroke(cx.theme().chart_2)
+                            .dot()
+                            .id("radar-chart-dots"),
+                        true,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Radar Chart - Lines Only",
+                        RadarChart::new(self.radar_devices.clone())
+                            .label(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .stroke(cx.theme().chart_3)
+                            .fill(gpui::transparent_black())
+                            .max_value(400.)
+                            .grid_levels(5)
+                            .id("radar-chart-lines-only"),
                         true,
                         cx,
                     )),

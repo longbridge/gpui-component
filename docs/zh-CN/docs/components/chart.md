@@ -1,17 +1,17 @@
 ---
 title: Chart
-description: 支持折线图、柱状图、面积图、饼图、K 线图和桑基图的数据可视化组件。
+description: 支持折线图、柱状图、面积图、饼图、雷达图、K 线图和桑基图的数据可视化组件。
 ---
 
 # Chart
 
-Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie、Candlestick 和 Sankey 图表。它们支持动画、自定义样式、主题配色和多种展示方式，适合仪表盘、统计分析和行情场景。
+Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie、Radar、Candlestick 和 Sankey 图表。它们支持动画、自定义样式、主题配色和多种展示方式，适合仪表盘、统计分析和行情场景。
 
 ## 导入
 
 ```rust
 use gpui_component::chart::{
-    LineChart, BarChart, AreaChart, PieChart, CandlestickChart, SankeyChart,
+    LineChart, BarChart, AreaChart, PieChart, RadarChart, CandlestickChart, SankeyChart,
 };
 ```
 
@@ -304,6 +304,51 @@ PieChart::new(data)
     .pad_angle(4. / 100.)
 ```
 
+### RadarChart
+
+雷达图以围绕中心的闭合多边形展示多维数据，适合对比多个系列在各维度上的表现。
+
+#### 基础雷达图
+
+```rust
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+```
+
+#### 多系列
+
+```rust
+// 每次调用 `.value()` 新增一个系列，与随后的 `.stroke()` / `.fill()`
+// 一一配对。颜色默认按主题图表色循环取用。
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .stroke(cx.theme().chart_1)
+    .value(|d| d.mobile)
+    .stroke(cx.theme().chart_2)
+```
+
+#### 自定义
+
+```rust
+// 顶点圆点与自定义填充
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .stroke(cx.theme().chart_2)
+    .fill(cx.theme().chart_2.opacity(0.2))
+    .dot()
+
+// 固定外圈最大值与网格环数
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .max_value(400.)
+    .grid_levels(5)
+    .outer_radius(120.)
+```
+
 ### CandlestickChart
 
 K 线图适合展示金融行情中的 OHLC 数据。
@@ -557,6 +602,7 @@ let chart = LineChart::new(data)
 - [BarChart]
 - [AreaChart]
 - [PieChart]
+- [RadarChart]
 - [CandlestickChart]
 - [SankeyChart]
 
@@ -886,4 +932,5 @@ impl LiveChart {
 [BarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.BarChart.html
 [AreaChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.AreaChart.html
 [PieChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.PieChart.html
+[RadarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.RadarChart.html
 [CandlestickChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.CandlestickChart.html
