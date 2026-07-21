@@ -340,7 +340,9 @@ impl Render for ChartStory {
                         "Radar Chart",
                         RadarChart::new(self.radar_devices.clone())
                             .label(|d| d.month.clone())
-                            .value(|d| d.desktop),
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .id("radar-chart"),
                         true,
                         cx,
                     ))
@@ -352,7 +354,7 @@ impl Render for ChartStory {
                             .name("Desktop")
                             .value(|d| d.mobile)
                             .name("Mobile")
-                            .id("radar-chart-tooltip"),
+                            .id("radar-chart-multiple"),
                         true,
                         cx,
                     ))
@@ -361,8 +363,10 @@ impl Render for ChartStory {
                         RadarChart::new(self.radar_devices.clone())
                             .label(|d| d.month.clone())
                             .value(|d| d.desktop)
+                            .name("Desktop")
                             .stroke(cx.theme().chart_2)
-                            .dot(),
+                            .dot()
+                            .id("radar-chart-dots"),
                         true,
                         cx,
                     ))
@@ -371,10 +375,12 @@ impl Render for ChartStory {
                         RadarChart::new(self.radar_devices.clone())
                             .label(|d| d.month.clone())
                             .value(|d| d.desktop)
+                            .name("Desktop")
                             .stroke(cx.theme().chart_3)
                             .fill(gpui::transparent_black())
                             .max_value(400.)
-                            .grid_levels(5),
+                            .grid_levels(5)
+                            .id("radar-chart-lines-only"),
                         true,
                         cx,
                     )),
