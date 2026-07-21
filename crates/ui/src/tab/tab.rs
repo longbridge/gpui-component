@@ -779,7 +779,7 @@ impl RenderOnce for Tab {
                                 .h(inner_height)
                                 .bg(inline_inner_bg)
                                 .rounded(inner_radius)
-                                .when(tab_style.shadow, |this| this.shadow_xs()),
+                                .when(tab_style.shadow, |this| this.shadow_sm()),
                         ),
                 )
             })

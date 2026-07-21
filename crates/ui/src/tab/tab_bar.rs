@@ -224,7 +224,7 @@ impl TabBar {
                         .h(inner_height)
                         .bg(cx.theme().tokens.background)
                         .rounded(inner_radius)
-                        .shadow_xs(),
+                        .shadow_sm(),
                 ),
                 TabVariant::Pill => el.flex().items_center().child(
                     div()
