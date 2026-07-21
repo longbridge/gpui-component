@@ -349,7 +349,10 @@ impl Render for ChartStory {
                         RadarChart::new(self.radar_devices.clone())
                             .label(|d| d.month.clone())
                             .value(|d| d.desktop)
-                            .value(|d| d.mobile),
+                            .name("Desktop")
+                            .value(|d| d.mobile)
+                            .name("Mobile")
+                            .id("radar-chart-tooltip"),
                         true,
                         cx,
                     ))

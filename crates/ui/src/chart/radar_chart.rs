@@ -3,7 +3,10 @@ use std::{
     rc::Rc,
 };
 
-use gpui::{App, Background, Bounds, Hsla, Pixels, SharedString, TextAlign, Window, point, px};
+use gpui::{
+    AnyElement, App, Background, Bounds, ElementId, Hsla, IntoElement, Pixels, Point, SharedString,
+    TextAlign, Window, point, px,
+};
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive, Zero};
 
@@ -15,6 +18,7 @@ use crate::{
         polygon,
         scale::{Scale, ScaleLinear, Sealed},
         shape::RadialLine,
+        tooltip::{Dot, Tooltip, TooltipState},
     },
 };
 
@@ -41,6 +45,7 @@ where
     values: Vec<Rc<dyn Fn(&T) -> Y>>,
     strokes: Vec<Hsla>,
     fills: Vec<Background>,
+    names: Vec<SharedString>,
     label: Option<Rc<dyn Fn(&T) -> SharedString + 'static>>,
     label_color: Option<Hsla>,
     label_gap: f32,
@@ -49,6 +54,7 @@ where
     grid: bool,
     grid_levels: usize,
     dot: bool,
+    id: Option<ElementId>,
 }
 
 impl<T, Y> RadarChart<T, Y>
@@ -64,6 +70,7 @@ where
             values: vec![],
             strokes: vec![],
             fills: vec![],
+            names: vec![],
             label: None,
             label_color: None,
             label_gap: DEFAULT_LABEL_GAP,
@@ -72,7 +79,27 @@ where
             grid: true,
             grid_levels: DEFAULT_GRID_LEVELS,
             dot: false,
+            id: None,
         }
+    }
+
+    /// Enable an interactive hover tooltip (a dot and row per series at the
+    /// hovered dimension).
+    ///
+    /// The `id` must be unique among sibling elements. Without it, the chart
+    /// stays a non-interactive plot.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Set the name of the most recently added series, shown in its tooltip row.
+    ///
+    /// Call after the matching [`RadarChart::value`]
+    /// (e.g. `.value(..).stroke(..).name("Desktop")`).
+    pub fn name(mut self, name: impl Into<SharedString>) -> Self {
+        self.names.push(name.into());
+        self
     }
 
     /// Add a series to the radar chart.
@@ -155,8 +182,10 @@ where
         self
     }
 
-    /// The default stroke color of the series at the given index.
-    fn default_stroke(&self, ix: usize, cx: &App) -> Hsla {
+    /// The stroke color of the series at the given index, set or default.
+    ///
+    /// Defaults to the theme chart colors, cycled per series.
+    fn series_stroke(&self, ix: usize, cx: &App) -> Hsla {
         let colors = [
             cx.theme().chart_1,
             cx.theme().chart_2,
@@ -164,7 +193,58 @@ where
             cx.theme().chart_4,
             cx.theme().chart_5,
         ];
-        colors[ix % colors.len()]
+
+        self.strokes
+            .get(ix)
+            .copied()
+            .unwrap_or(colors[ix % colors.len()])
+    }
+
+    /// The resolved outer radius for the given bounds.
+    fn resolve_outer_radius(&self, bounds: &Bounds<Pixels>) -> f32 {
+        if self.outer_radius.is_zero() {
+            bounds.size.height.as_f32() * 0.4
+        } else {
+            self.outer_radius
+        }
+    }
+
+    /// Build the radius scale from the center to the outer ring.
+    ///
+    /// The domain includes zero so non-negative data starts at the center.
+    /// Shared by `paint` and `tooltip_state` so the two stay in sync.
+    fn scale(&self, outer_radius: f32) -> ScaleLinear<Y> {
+        let domain = if let Some(max_value) = self.max_value {
+            vec![Y::zero(), max_value]
+        } else {
+            self.data
+                .iter()
+                .flat_map(|d| self.values.iter().map(|value_fn| value_fn(d)))
+                .chain(Some(Y::zero()))
+                .collect()
+        };
+
+        ScaleLinear::new(domain, vec![0., outer_radius])
+    }
+
+    /// Map a cursor position to the nearest spoke index, or `None` when the
+    /// cursor is outside the radar.
+    fn hovered_index(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) -> Option<usize> {
+        let n = self.data.len();
+        if n == 0 {
+            return None;
+        }
+
+        let outer_radius = self.resolve_outer_radius(&bounds);
+        let dx = position.x.as_f32() - bounds.size.width.as_f32() / 2.;
+        let dy = position.y.as_f32() - bounds.size.height.as_f32() / 2.;
+        if dx.hypot(dy) > outer_radius + self.label_gap {
+            return None;
+        }
+
+        // Screen angle -> chart angle (0 at 12 o'clock, clockwise).
+        let angle = (dy.atan2(dx) + HALF_PI).rem_euclid(TAU);
+        Some((angle * n as f32 / TAU).round() as usize % n)
     }
 }
 
@@ -178,27 +258,11 @@ where
             return;
         }
 
-        let outer_radius = if self.outer_radius.is_zero() {
-            bounds.size.height.as_f32() * 0.4
-        } else {
-            self.outer_radius
-        };
+        let outer_radius = self.resolve_outer_radius(&bounds);
         let angle_step = TAU / n as f32;
         let center_x = bounds.size.width.as_f32() / 2.;
         let center_y = bounds.size.height.as_f32() / 2.;
-
-        // Radius scale from the center to the outer ring. The domain includes
-        // zero so non-negative data starts at the center.
-        let domain = if let Some(max_value) = self.max_value {
-            vec![Y::zero(), max_value]
-        } else {
-            self.data
-                .iter()
-                .flat_map(|d| self.values.iter().map(|value_fn| value_fn(d)))
-                .chain(Some(Y::zero()))
-                .collect()
-        };
-        let scale = ScaleLinear::new(domain, vec![0., outer_radius]);
+        let scale = self.scale(outer_radius);
 
         // Draw grid rings and spokes
         if self.grid {
@@ -232,11 +296,7 @@ where
 
         // Draw series
         for (i, value_fn) in self.values.iter().enumerate() {
-            let stroke = self
-                .strokes
-                .get(i)
-                .copied()
-                .unwrap_or_else(|| self.default_stroke(i, cx));
+            let stroke = self.series_stroke(i, cx);
             let fill = self
                 .fills
                 .get(i)
@@ -291,6 +351,81 @@ where
 
         PlotLabel::new(labels.collect()).paint(&bounds, window, cx);
     }
+
+    fn id(&self) -> Option<ElementId> {
+        self.id.clone()
+    }
+
+    fn tooltip_state(
+        &self,
+        position: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        _cx: &App,
+    ) -> Option<TooltipState> {
+        if self.values.is_empty() {
+            return None;
+        }
+        let index = self.hovered_index(position, bounds)?;
+        let d = self.data.get(index)?;
+
+        let outer_radius = self.resolve_outer_radius(&bounds);
+        let scale = self.scale(outer_radius);
+        let center_x = bounds.size.width.as_f32() / 2.;
+        let center_y = bounds.size.height.as_f32() / 2.;
+        let angle = index as f32 * TAU / self.data.len() as f32 - HALF_PI;
+
+        // One dot per series at the hovered dimension's vertex.
+        let dots = self
+            .values
+            .iter()
+            .filter_map(|value_fn| {
+                let radius = scale.tick(&value_fn(d))?;
+                Some(point(
+                    px(center_x + radius * angle.cos()),
+                    px(center_y + radius * angle.sin()),
+                ))
+            })
+            .collect();
+
+        Some(TooltipState::new(index, position, dots))
+    }
+
+    fn tooltip(
+        &self,
+        state: &TooltipState,
+        cursor: Point<Pixels>,
+        bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        cx: &mut App,
+    ) -> Option<AnyElement> {
+        let d = self.data.get(state.index)?;
+
+        let dot_stroke = cx.theme().background;
+
+        // No crosshair: a radar has no cartesian axis to snap to; the dots mark
+        // the hovered dimension's vertices instead.
+        let mut tooltip =
+            Tooltip::new(cursor, bounds.size)
+                .gap(px(8.))
+                .dots(state.dots.iter().enumerate().map(|(i, p)| {
+                    Dot::new(*p)
+                        .stroke(dot_stroke)
+                        .fill(self.series_stroke(i, cx))
+                }));
+
+        if let Some(label_fn) = self.label.as_ref() {
+            tooltip = tooltip.title(label_fn(d));
+        }
+
+        // One row per series: swatch + label + value.
+        for (i, value_fn) in self.values.iter().enumerate() {
+            let name = self.names.get(i).cloned().unwrap_or_default();
+            let value = value_fn(d).to_f64()?;
+            tooltip = tooltip.row(self.series_stroke(i, cx), name, format!("{}", value));
+        }
+
+        Some(tooltip.into_any_element())
+    }
 }
 
 #[cfg(test)]
@@ -324,18 +459,21 @@ mod tests {
             .value(|d| d.a)
             .stroke(gpui::red())
             .fill(gpui::red())
+            .name("A")
             .value(|d| d.b)
             .max_value(100.)
             .outer_radius(120.)
             .label_gap(8.)
             .grid(false)
             .grid_levels(5)
-            .dot();
+            .dot()
+            .id("radar");
 
         assert_eq!(chart.data.len(), 2);
         assert_eq!(chart.values.len(), 2);
         assert_eq!(chart.strokes.len(), 1);
         assert_eq!(chart.fills.len(), 1);
+        assert_eq!(chart.names.len(), 1);
         assert!(chart.label.is_some());
         assert_eq!(chart.max_value, Some(100.));
         assert_eq!(chart.outer_radius, 120.);
@@ -343,6 +481,7 @@ mod tests {
         assert!(!chart.grid);
         assert_eq!(chart.grid_levels, 5);
         assert!(chart.dot);
+        assert!(chart.id.is_some());
 
         let values = (chart.values[0](&data[0]), chart.values[1](&data[0]));
         assert_eq!(values, (80., 60.));
@@ -352,5 +491,53 @@ mod tests {
     fn test_radar_chart_grid_levels_min() {
         let chart: RadarChart<Item, f64> = RadarChart::new(vec![]).grid_levels(0);
         assert_eq!(chart.grid_levels, 1);
+    }
+
+    #[test]
+    fn test_radar_chart_hovered_index() {
+        let data = (0..4)
+            .map(|i| Item {
+                subject: format!("S{}", i).into(),
+                a: 50.,
+                b: 50.,
+            })
+            .collect::<Vec<_>>();
+
+        // Bounds 200x200 => center (100, 100), default outer radius 80,
+        // hover region 80 + 10 (label gap) = 90.
+        let chart: RadarChart<Item, f64> = RadarChart::new(data).value(|d| d.a);
+        let bounds = gpui::Bounds::new(point(px(0.), px(0.)), gpui::size(px(200.), px(200.)));
+
+        // The four spokes point at 12, 3, 6 and 9 o'clock.
+        assert_eq!(
+            chart.hovered_index(point(px(100.), px(30.)), bounds),
+            Some(0)
+        );
+        assert_eq!(
+            chart.hovered_index(point(px(170.), px(100.)), bounds),
+            Some(1)
+        );
+        assert_eq!(
+            chart.hovered_index(point(px(100.), px(170.)), bounds),
+            Some(2)
+        );
+        assert_eq!(
+            chart.hovered_index(point(px(30.), px(100.)), bounds),
+            Some(3)
+        );
+
+        // Nearest spoke wins between two spokes.
+        assert_eq!(
+            chart.hovered_index(point(px(110.), px(40.)), bounds),
+            Some(0)
+        );
+        assert_eq!(
+            chart.hovered_index(point(px(160.), px(90.)), bounds),
+            Some(1)
+        );
+
+        // Outside the radar.
+        assert_eq!(chart.hovered_index(point(px(100.), px(5.)), bounds), None);
+        assert_eq!(chart.hovered_index(point(px(5.), px(5.)), bounds), None);
     }
 }
