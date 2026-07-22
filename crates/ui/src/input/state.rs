@@ -415,6 +415,7 @@ pub struct InputState {
     /// If set, this overrides the built-in context menu (and ignores [`Self::enable_context_menu`]).
     pub(super) context_menu_builder:
         Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
+    pending_context_menu: Option<(Point<Pixels>, usize)>,
 
     /// Whether the context menu that shows on right-click is enabled.
     ///
@@ -535,6 +536,7 @@ impl InputState {
             diagnostic_popover: None,
             context_menu_content: None,
             context_menu_builder: None,
+            pending_context_menu: None,
             enable_context_menu: true,
             completion_inserting: false,
             hover_popover: None,
@@ -1683,7 +1685,7 @@ impl InputState {
     /// Show the right-click context menu as a native OS menu.
     pub(crate) fn handle_right_click_menu(
         &mut self,
-        event: &MouseDownEvent,
+        position: Point<Pixels>,
         offset: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -1749,7 +1751,7 @@ impl InputState {
             )
         };
 
-        menu.show(event.position, window, cx);
+        menu.show(position, window, cx);
     }
 
     pub(super) fn on_mouse_down(
@@ -1795,7 +1797,10 @@ impl InputState {
         // Show Mouse context menu
         if event.button == MouseButton::Right {
             if self.enable_context_menu || self.context_menu_builder.is_some() {
-                self.handle_right_click_menu(event, offset, window, cx);
+                if !self.selected_range.contains(offset) {
+                    self.move_to(offset, None, cx);
+                }
+                self.pending_context_menu = Some((event.position, offset));
             }
             return;
         }
@@ -1809,10 +1814,15 @@ impl InputState {
 
     pub(super) fn on_mouse_up(
         &mut self,
-        _: &MouseUpEvent,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
+        event: &MouseUpEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
+        if event.button == MouseButton::Right {
+            if let Some((position, offset)) = self.pending_context_menu.take() {
+                self.handle_right_click_menu(position, offset, window, cx);
+            }
+        }
         if self.selected_range.is_empty() {
             self.selection_reversed = false;
         }

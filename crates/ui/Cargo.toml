@@ -210,6 +210,7 @@ windows = { workspace = true, features = [
     "Win32_Graphics_GdiPlus",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
+    "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",

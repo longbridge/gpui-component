@@ -1,10 +1,13 @@
 //! Windows native menu implementation (Win32 popup menus).
 
-use std::{ffi::c_void, sync::Arc};
+use std::{
+    ffi::c_void,
+    sync::{Arc, OnceLock},
+};
 
 use gpui::{Action, App, AssetSource, ImageFormat, Pixels, Point, SharedString, Window};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::{BOOL, GlobalFree, HANDLE, HWND, LPARAM, POINT, WPARAM};
+use windows::Win32::Foundation::{BOOL, GlobalFree, HANDLE, HWND, POINT};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, ClientToScreen, CreateDIBSection, DIB_RGB_COLORS,
     DeleteObject, HBITMAP, HDC, HGDIOBJ,
@@ -14,15 +17,14 @@ use windows::Win32::Graphics::GdiPlus::{
     GdipGetImageThumbnail, GdiplusShutdown, GdiplusStartup, GdiplusStartupInput, GpBitmap, GpImage,
 };
 use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
+use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
-use windows::Win32::UI::Input::KeyboardAndMouse::SetCapture;
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyMenu, HMENU, MENUITEMINFOW, MF_CHECKED, MF_GRAYED,
-    MF_POPUP, MF_SEPARATOR, MF_STRING, MIIM_BITMAP, PostMessageW, SetForegroundWindow,
-    SetMenuItemInfoW, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD, TPM_TOPALIGN, TrackPopupMenuEx,
-    WM_NULL,
+    MF_POPUP, MF_SEPARATOR, MF_STRING, MIIM_BITMAP, SetForegroundWindow, SetMenuItemInfoW,
+    TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD, TPM_TOPALIGN, TrackPopupMenuEx,
 };
-use windows::core::PCWSTR;
+use windows::core::{PCSTR, PCWSTR};
 
 use super::{NativeMenuItem, resolve_icon_image};
 
@@ -39,6 +41,7 @@ pub(super) fn show(
     items: Vec<NativeMenuItem>,
     asset_source: Arc<dyn AssetSource>,
     position: Point<Pixels>,
+    dark_mode: bool,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -64,6 +67,7 @@ pub(super) fn show(
             client_x,
             client_y,
             image_px,
+            dark_mode,
         ) else {
             return;
         };
@@ -85,6 +89,7 @@ fn run_menu(
     client_x: i32,
     client_y: i32,
     image_px: u32,
+    dark_mode: bool,
 ) -> Option<Box<dyn Action>> {
     let hwnd = HWND(hwnd as *mut c_void);
 
@@ -107,6 +112,7 @@ fn run_menu(
         let _ = ClientToScreen(hwnd, &mut point);
         // Required so the menu dismisses correctly when clicking elsewhere.
         let _ = SetForegroundWindow(hwnd);
+        apply_menu_theme(hwnd, dark_mode);
 
         let flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD | TPM_NONOTIFY;
         let selected = TrackPopupMenuEx(menu, flags.0, point.x, point.y, hwnd, None);
@@ -119,12 +125,6 @@ fn run_menu(
         }
         drop(gdiplus);
 
-        // The menu's modal loop cleared the capture GPUI set on mouse-down;
-        // restore it so GPUI's mouse-up `ReleaseCapture` succeeds and doesn't
-        // log a spurious "operation completed successfully" (GetLastError == 0).
-        let _ = SetCapture(hwnd);
-        let _ = PostMessageW(hwnd, WM_NULL, WPARAM(0), LPARAM(0));
-
         // Ids are 1-based (0 means "no selection"); map back to `actions`.
         match selected.0 {
             id if id > 0 => actions
@@ -132,6 +132,47 @@ fn run_menu(
                 .map(|action| action.boxed_clone()),
             _ => None,
         }
+    }
+}
+
+/// Make Win32 popup menus follow the application's theme.
+///
+/// Windows does not expose a documented dark-mode API for `HMENU`. These
+/// dynamically resolved uxtheme entry points are used by Windows itself and
+/// degrade to the normal system menu when unavailable.
+unsafe fn apply_menu_theme(hwnd: HWND, dark_mode: bool) {
+    type AllowDarkModeForWindow = unsafe extern "system" fn(HWND, BOOL) -> BOOL;
+    type SetPreferredAppMode = unsafe extern "system" fn(i32) -> i32;
+    type FlushMenuThemes = unsafe extern "system" fn();
+
+    static UXTHEME_MODULE: OnceLock<isize> = OnceLock::new();
+    let module = *UXTHEME_MODULE.get_or_init(|| {
+        unsafe { LoadLibraryW(windows::core::w!("uxtheme.dll")) }
+            .map(|module| module.0 as isize)
+            .unwrap_or_default()
+    });
+    if module == 0 {
+        return;
+    }
+    let module = windows::Win32::Foundation::HMODULE(module as *mut c_void);
+
+    let allow_dark_mode = unsafe { GetProcAddress(module, PCSTR(133usize as *const u8)) };
+    let set_preferred_mode = unsafe { GetProcAddress(module, PCSTR(135usize as *const u8)) };
+    let flush_menu_themes = unsafe { GetProcAddress(module, PCSTR(136usize as *const u8)) };
+
+    if let Some(function) = allow_dark_mode {
+        let function: AllowDarkModeForWindow = unsafe { std::mem::transmute(function) };
+        let _ = unsafe { function(hwnd, BOOL::from(dark_mode)) };
+    }
+    if let Some(function) = set_preferred_mode {
+        let function: SetPreferredAppMode = unsafe { std::mem::transmute(function) };
+        const FORCE_DARK: i32 = 2;
+        const FORCE_LIGHT: i32 = 3;
+        let _ = unsafe { function(if dark_mode { FORCE_DARK } else { FORCE_LIGHT }) };
+    }
+    if let Some(function) = flush_menu_themes {
+        let function: FlushMenuThemes = unsafe { std::mem::transmute(function) };
+        unsafe { function() };
     }
 }
 
