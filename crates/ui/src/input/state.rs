@@ -43,7 +43,7 @@ use crate::input::{
     display_map::LineLayout,
     element::RIGHT_MARGIN,
     popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
-    search::SearchPanel,
+    search::{SearchMatcher, SearchPanel},
 };
 use crate::native_menu::NativeMenu;
 use crate::scroll::AutoScroll;
@@ -350,6 +350,7 @@ pub struct InputState {
     /// - "Hello 世界💝" = 16
     /// - "💝" = 4
     pub(super) selected_range: Selection,
+    pub(super) search_matcher: SearchMatcher,
     pub(super) search_panel: Option<Entity<SearchPanel>>,
     pub(super) searchable: bool,
     pub(super) replaceable: bool,
@@ -490,6 +491,7 @@ impl InputState {
             blink_cursor,
             history,
             selected_range: Selection::default(),
+            search_matcher: SearchMatcher::new(),
             search_panel: None,
             searchable: false,
             replaceable: true,
@@ -605,6 +607,8 @@ impl InputState {
     }
 
     /// Set this input is searchable, default is false (Default true for Code Editor).
+    ///
+    /// When false, the built-in search panel is not opened by this input.
     pub fn searchable(mut self, searchable: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.searchable = searchable;
@@ -2958,7 +2962,7 @@ impl EntityInputHandler for InputState {
         self.selected_range = (new_offset..new_offset).into();
         self.ime_marked_range.take();
         self.update_preferred_column();
-        self.update_search(cx);
+        self.search_matcher.update(&self.text);
         self.mode.update_auto_grow(&self.display_map);
         if !self.silent_replace_text {
             self.handle_completion_trigger(&range, &new_text, window, cx);
