@@ -125,6 +125,22 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     let cell = Self::__plot_tooltip_cursor(global_id, window);
                     let hitbox = hitbox.clone();
 
+                    // Scrolling (or any relayout) moves the plot under a stationary cursor
+                    // without emitting MouseMoveEvent, so the cached position would go stale
+                    // and the tooltip would ride along with the plot. Re-derive it every
+                    // frame: `mouse_hit_test` is recomputed against this frame's hitboxes
+                    // right before paint, so `is_hovered` is fresh here. `refresh()` is a
+                    // no-op while drawing; schedule the corrective frame instead.
+                    let next = if hitbox.is_hovered(window) {
+                        Some(window.mouse_position() - bounds.origin)
+                    } else {
+                        None
+                    };
+                    if cell.get() != next {
+                        cell.set(next);
+                        window.request_animation_frame();
+                    }
+
                     window.on_mouse_event(
                         move |e: &gpui::MouseMoveEvent, _, window: &mut gpui::Window, _| {
                             // `is_hovered` is false when an occluding hitbox (popup menu,
