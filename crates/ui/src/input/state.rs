@@ -2056,11 +2056,8 @@ impl InputState {
 
     pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
-            let mut new_text = clipboard.text().unwrap_or_default();
-            if !self.mode.is_multi_line() {
-                new_text = new_text.replace('\n', "");
-            }
-
+            // Newlines are stripped for single-line inputs by `normalize_input`.
+            let new_text = clipboard.text().unwrap_or_default();
             self.replace_text_in_range_silent(None, &new_text, window, cx);
             self.scroll_to(self.cursor(), None, cx);
         }
@@ -2497,10 +2494,20 @@ impl InputState {
     /// full-width number characters into their ASCII equivalents,
     /// e.g. `12。5` -> `12.5`.
     fn normalize_input<'a>(&self, new_text: &'a str) -> Cow<'a, str> {
-        if matches!(self.mask_pattern, MaskPattern::Number { .. }) {
+        let normalized = if matches!(self.mask_pattern, MaskPattern::Number { .. }) {
             normalize_number_input(new_text)
         } else {
             Cow::Borrowed(new_text)
+        };
+
+        // Single-line inputs must never hold newlines: the single-line text
+        // shaper panics with "text argument should not contain newlines".
+        // Strip them from every edit path (set_value, insert, paste, IME, …)
+        // so programmatic or pasted multiline text can't crash the input.
+        if self.mode.is_single_line() && normalized.contains(['\n', '\r']) {
+            Cow::Owned(normalized.replace(['\n', '\r'], ""))
+        } else {
+            normalized
         }
     }
 
