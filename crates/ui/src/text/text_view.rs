@@ -358,9 +358,9 @@ mod tests {
     use super::{TextView, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
-        AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, MouseDownEvent,
-        MouseUpEvent, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
-        Window, div, point, px,
+        AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, Modifiers,
+        MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render, Styled as _,
+        TestAppContext, VisualTestContext, Window, div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -460,7 +460,50 @@ mod tests {
             "unloaded inline image fallback should stay generic and compact"
         );
     }
-  
+
+    #[gpui::test]
+    fn list_item_renders_fenced_code_block(cx: &mut TestAppContext) {
+        struct ListItemBlockRoot;
+
+        impl Render for ListItemBlockRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                div()
+                    .w(px(420.))
+                    .child(
+                        div()
+                            .debug_selector(|| "plain-list-item".into())
+                            .child(TextView::markdown("plain-list", "1. List item")),
+                    )
+                    .child(div().debug_selector(|| "list-item-with-code".into()).child(
+                        TextView::markdown(
+                            "list-with-code",
+                            "1. List item\n   ```rust\n   fn main() {}\n   ```",
+                        ),
+                    ))
+            }
+        }
+
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| ListItemBlockRoot);
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let plain = cx.debug_bounds("plain-list-item").unwrap();
+        let with_code = cx.debug_bounds("list-item-with-code").unwrap();
+        assert!(
+            with_code.size.height > plain.size.height + px(20.),
+            "nested code block should increase the list item's rendered height"
+        );
+    }
+
     #[test]
     fn plugin_accepts_text_view_plugins_beyond_markdown() {
         let view = TextView::markdown("plugin-test", "").plugin(DummyTextViewPlugin);
