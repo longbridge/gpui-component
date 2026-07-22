@@ -68,6 +68,7 @@ pub mod sheet;
 pub mod sidebar;
 pub mod skeleton;
 pub mod slider;
+pub mod sortable;
 pub mod spinner;
 pub mod status_bar;
 pub mod stepper;
@@ -119,6 +120,7 @@ pub fn init(cx: &mut App) {
     sheet::init(cx);
     combobox::init(cx);
     select::init(cx);
+    sortable::init(cx);
     input::init(cx);
     list::init(cx);
     dialog::init(cx);
