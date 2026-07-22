@@ -462,7 +462,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn list_item_renders_fenced_code_block(cx: &mut TestAppContext) {
+    fn list_item_renders_fenced_code_block_at_document_width(cx: &mut TestAppContext) {
         struct ListItemBlockRoot;
 
         impl Render for ListItemBlockRoot {
@@ -471,19 +471,29 @@ mod tests {
                 _window: &mut Window,
                 _cx: &mut Context<Self>,
             ) -> impl IntoElement {
-                div()
-                    .w(px(420.))
-                    .child(
-                        div()
-                            .debug_selector(|| "plain-list-item".into())
-                            .child(TextView::markdown("plain-list", "1. List item")),
-                    )
-                    .child(div().debug_selector(|| "list-item-with-code".into()).child(
-                        TextView::markdown(
-                            "list-with-code",
-                            "1. List item\n   ```rust\n   fn main() {}\n   ```",
-                        ),
-                    ))
+                div().w(px(840.)).h(px(400.)).child(
+                    crate::resizable::h_resizable("markdown-width-test")
+                        .child(crate::resizable::resizable_panel().child(div()))
+                        .child(crate::resizable::resizable_panel().child(
+                            TextView::markdown(
+                                "list-with-code",
+                                "1. List item\n   ```rust\n   nested code\n   ```\n\n```rust\ntop-level code\n```",
+                            )
+                            .code_block_actions(|code_block, _, _| {
+                                let selector = if code_block.code().contains("nested") {
+                                    "nested-code-action"
+                                } else {
+                                    "top-level-code-action"
+                                };
+                                div()
+                                    .debug_selector(move || selector.into())
+                                    .child("Copy")
+                            })
+                            .scrollable(true)
+                            .p_5()
+                            .flex_none(),
+                        )),
+                )
             }
         }
 
@@ -496,11 +506,11 @@ mod tests {
             let _ = window.draw(cx);
         });
 
-        let plain = cx.debug_bounds("plain-list-item").unwrap();
-        let with_code = cx.debug_bounds("list-item-with-code").unwrap();
+        let nested_action = cx.debug_bounds("nested-code-action").unwrap();
+        let top_level_action = cx.debug_bounds("top-level-code-action").unwrap();
         assert!(
-            with_code.size.height > plain.size.height + px(20.),
-            "nested code block should increase the list item's rendered height"
+            top_level_action.right() - nested_action.right() < px(32.),
+            "nested code block should fill the list item's available width"
         );
     }
 

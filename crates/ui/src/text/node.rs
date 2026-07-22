@@ -733,10 +733,14 @@ impl CodeBlock {
         let style = &node_cx.style;
 
         div()
+            .w_full()
+            .min_w_0()
             .when(!options.is_last, |this| this.pb(style.paragraph_gap))
             .child(
                 div()
                     .id(("codeblock", options.ix))
+                    .w_full()
+                    .min_w_0()
                     .p_3()
                     .rounded(cx.theme().radius)
                     .bg(cx.theme().tokens.muted)
@@ -1373,6 +1377,7 @@ impl BlockNode {
                                     items.push(
                                         div()
                                             .w_full()
+                                            .min_w_0()
                                             .pl(rems(0.75))
                                             .overflow_hidden()
                                             .child(block),
@@ -1718,6 +1723,8 @@ impl BlockNode {
                 children, ordered, ..
             } => v_flex()
                 .id((if *ordered { "ol" } else { "ul" }, ix))
+                .w_full()
+                .min_w_0()
                 .pb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
