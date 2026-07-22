@@ -84,8 +84,17 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                 let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
 
                 let overlay = (|| {
-                    // Read the cursor position recorded by the previous frame's mouse handler.
-                    let position = Self::__plot_tooltip_cursor(global_id, window).get()?;
+                    // The cell only gates visibility: it holds the cursor recorded by the
+                    // mouse handler / per-frame sync in `paint`, which is one frame stale
+                    // during scrolling. Rendering that cached point while the bounds move
+                    // makes the tooltip jitter, so derive the position from the live mouse
+                    // position and this frame's bounds instead.
+                    Self::__plot_tooltip_cursor(global_id, window).get()?;
+                    let mouse = window.mouse_position();
+                    if !bounds.contains(&mouse) {
+                        return None;
+                    }
+                    let position = mouse - bounds.origin;
                     let state = <Self as Plot>::tooltip_state(self, position, bounds, cx)?;
 
                     // Pass the live cursor so the tooltip box can follow it; the crosshair and
@@ -126,19 +135,23 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     let hitbox = hitbox.clone();
 
                     // Scrolling (or any relayout) moves the plot under a stationary cursor
-                    // without emitting MouseMoveEvent, so the cached position would go stale
-                    // and the tooltip would ride along with the plot. Re-derive it every
+                    // without emitting MouseMoveEvent, so re-derive the cursor state every
                     // frame: `mouse_hit_test` is recomputed against this frame's hitboxes
-                    // right before paint, so `is_hovered` is fresh here. `refresh()` is a
-                    // no-op while drawing; schedule the corrective frame instead.
+                    // right before paint, so `is_hovered` is fresh here. Only a visibility
+                    // flip needs a corrective frame — `prepaint` derives the tooltip position
+                    // from the live mouse, not from the cell. `refresh()` is a no-op while
+                    // drawing; schedule via `request_animation_frame`.
                     let next = if hitbox.is_hovered(window) {
                         Some(window.mouse_position() - bounds.origin)
                     } else {
                         None
                     };
                     if cell.get() != next {
+                        let visibility_changed = cell.get().is_some() != next.is_some();
                         cell.set(next);
-                        window.request_animation_frame();
+                        if visibility_changed {
+                            window.request_animation_frame();
+                        }
                     }
 
                     window.on_mouse_event(
