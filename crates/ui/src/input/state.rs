@@ -2056,7 +2056,8 @@ impl InputState {
 
     pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
-            // Newlines are stripped for single-line inputs by `normalize_input`.
+            // Newlines are collapsed to spaces for single-line inputs by
+            // `normalize_input`, so multiline clipboard text stays usable.
             let new_text = clipboard.text().unwrap_or_default();
             self.replace_text_in_range_silent(None, &new_text, window, cx);
             self.scroll_to(self.cursor(), None, cx);
@@ -2500,12 +2501,14 @@ impl InputState {
             Cow::Borrowed(new_text)
         };
 
-        // Single-line inputs must never hold newlines: the single-line text
+        // Single-line inputs can't render newlines: the single-line text
         // shaper panics with "text argument should not contain newlines".
-        // Strip them from every edit path (set_value, insert, paste, IME, …)
-        // so programmatic or pasted multiline text can't crash the input.
+        // Collapse newlines to spaces (matching browser inputs) on every edit
+        // path (set_value, insert, paste, IME, …) so pasted or programmatic
+        // multiline text stays usable instead of crashing the input.
         if self.mode.is_single_line() && normalized.contains(['\n', '\r']) {
-            Cow::Owned(normalized.replace(['\n', '\r'], ""))
+            let collapsed = normalized.replace("\r\n", " ").replace(['\n', '\r'], " ");
+            Cow::Owned(collapsed)
         } else {
             normalized
         }
@@ -3741,6 +3744,33 @@ ORDER BY id
                 );
             });
         });
+    }
+
+    /// Single-line inputs must never store newlines (the single-line shaper
+    /// panics on them). Newlines from programmatic or pasted multiline text are
+    /// collapsed to spaces — including `\r\n` as a single space — matching
+    /// browser single-line inputs. Regression test for #2552.
+    #[gpui::test]
+    fn test_single_line_collapses_newlines_to_spaces(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // set_value with mixed newline styles.
+                state.set_value("first line\nsecond\r\nthird\rfourth", window, cx);
+                assert_eq!(state.value(), "first line second third fourth");
+
+                // insert() must collapse too.
+                state.set_value("", window, cx);
+                state.insert("a\nb", window, cx);
+                assert_eq!(state.value(), "a b");
+            });
+        });
+
+        // The collapsed single-line text paints without panicking.
+        cx.run_until_parked();
     }
 
     /// `replace_all` on a multi-line (non-code-editor) input clears the
