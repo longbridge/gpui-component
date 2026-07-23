@@ -124,8 +124,9 @@ impl VirtualListScrollHandle {
 ///
 /// This is like `uniform_list` in GPUI, but support two axis.
 ///
-/// The `item_sizes` is the size of each column,
-/// only the `height` is used, `width` is ignored and VirtualList will measure the first item width.
+/// The `item_sizes` is the size of each row. Only the `height` is used; `width` is inferred
+/// by measuring the item selected with [`VirtualList::with_item_to_measure_index`], defaulting
+/// to the first item.
 ///
 /// See also [`h_virtual_list`]
 #[inline]
@@ -197,6 +198,7 @@ where
         item_sizes,
         render_items: Box::new(render_range),
         sizing_behavior: ListSizingBehavior::default(),
+        item_to_measure_index: 0,
     }
 }
 
@@ -212,6 +214,7 @@ pub struct VirtualList {
         dyn for<'a> Fn(Range<usize>, &'a mut Window, &'a mut App) -> SmallVec<[AnyElement; 64]>,
     >,
     sizing_behavior: ListSizingBehavior,
+    item_to_measure_index: usize,
 }
 
 impl Styled for VirtualList {
@@ -230,6 +233,12 @@ impl VirtualList {
     /// Set the sizing behavior for the list.
     pub fn with_sizing_behavior(mut self, behavior: ListSizingBehavior) -> Self {
         self.sizing_behavior = behavior;
+        self
+    }
+
+    /// Set the item index used to infer the list's cross-axis size.
+    pub fn with_item_to_measure_index(mut self, index: usize) -> Self {
+        self.item_to_measure_index = index;
         self
     }
 
@@ -301,7 +310,7 @@ impl VirtualList {
             return Size::default();
         }
 
-        let item_ix = 0;
+        let item_ix = self.item_to_measure_index.min(self.items_count - 1);
         let mut items = (self.render_items)(item_ix..item_ix + 1, window, cx);
         let Some(mut item_to_measure) = items.pop() else {
             return Size::default();
