@@ -305,6 +305,12 @@ pub struct PopupMenu {
     /// top of shallower ones. This fixes background content (e.g. the
     /// underlying list) bleeding through multi-level submenus, which happens
     /// when nested `anchored` popovers share the same paint order.
+    ///
+    /// The top-level menu relies on its container (e.g. `Popover`,
+    /// `ContextMenu`) to `deferred`-draw it, and each submenu is deferred once
+    /// in `render_item` with `priority + 1`. Keeping a single deferred layer
+    /// per level matters because GPUI caps nested deferred depth (see
+    /// `prepaint_deferred_draws`).
     priority: usize,
 
     _subscriptions: Vec<Subscription>,
@@ -1327,7 +1333,7 @@ impl Render for PopupMenu {
             radius: cx.theme().radius.min(px(8.)),
         };
 
-        let menu = v_flex()
+        v_flex()
             .id("popup-menu")
             .role(Role::Menu)
             .key_context(CONTEXT)
@@ -1369,9 +1375,7 @@ impl Render for PopupMenu {
             .when(self.scrollable, |this| {
                 // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will cannot be displayed.
                 this.vertical_scrollbar(&self.scroll_handle)
-            });
-
-        deferred(menu).with_priority(self.priority)
+            })
     }
 }
 
