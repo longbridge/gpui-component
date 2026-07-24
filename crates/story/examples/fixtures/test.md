@@ -153,6 +153,31 @@ See the way the text is aligned, depending on the position of `':'`
 - [ ] Task 2, going to do something if there is a long text that needs to be wrapped to the next line.
 - [ ] Task 3
 
+### Block content in list items
+
+1. A fenced code block:
+
+   ```rust
+   fn main() {
+       println!("Nested code block");
+   }
+   ```
+
+2. A blockquote:
+
+   > Blockquotes inside list items should remain visible.
+
+3. A table:
+
+   | Name  | Value |
+   | ----- | ----- |
+   | Alpha | 1     |
+   | Beta  | 2     |
+
+4. A heading:
+
+   #### Heading inside a list item
+
 ## Heading
 
 Add `##` at the beginning of a line to set as Heading.

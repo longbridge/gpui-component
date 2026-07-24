@@ -358,9 +358,9 @@ mod tests {
     use super::{TextView, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
-        AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, MouseDownEvent,
-        MouseUpEvent, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
-        Window, div, point, px,
+        AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, Modifiers,
+        MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render, Styled as _,
+        TestAppContext, VisualTestContext, Window, div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -460,7 +460,60 @@ mod tests {
             "unloaded inline image fallback should stay generic and compact"
         );
     }
-  
+
+    #[gpui::test]
+    fn list_item_renders_fenced_code_block_at_document_width(cx: &mut TestAppContext) {
+        struct ListItemBlockRoot;
+
+        impl Render for ListItemBlockRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                div().w(px(840.)).h(px(400.)).child(
+                    crate::resizable::h_resizable("markdown-width-test")
+                        .child(crate::resizable::resizable_panel().child(div()))
+                        .child(crate::resizable::resizable_panel().child(
+                            TextView::markdown(
+                                "list-with-code",
+                                "1. List item\n   ```rust\n   nested code\n   ```\n\n```rust\ntop-level code\n```",
+                            )
+                            .code_block_actions(|code_block, _, _| {
+                                let selector = if code_block.code().contains("nested") {
+                                    "nested-code-action"
+                                } else {
+                                    "top-level-code-action"
+                                };
+                                div()
+                                    .debug_selector(move || selector.into())
+                                    .child("Copy")
+                            })
+                            .scrollable(true)
+                            .p_5()
+                            .flex_none(),
+                        )),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| ListItemBlockRoot);
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let nested_action = cx.debug_bounds("nested-code-action").unwrap();
+        let top_level_action = cx.debug_bounds("top-level-code-action").unwrap();
+        assert!(
+            top_level_action.right() - nested_action.right() < px(32.),
+            "nested code block should fill the list item's available width"
+        );
+    }
+
     #[test]
     fn plugin_accepts_text_view_plugins_beyond_markdown() {
         let view = TextView::markdown("plugin-test", "").plugin(DummyTextViewPlugin);
