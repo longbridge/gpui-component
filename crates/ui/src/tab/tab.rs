@@ -407,6 +407,7 @@ pub struct Tab {
     pub(super) selected: bool,
     pub(super) indicator_active: bool,
     pub(super) indicator_ready: bool,
+    pub(super) indicator_moving: bool,
     /// Animation epoch of the [`super::TabBar`] indicator; increments on every
     /// tab switch. Used to key the selected tab's text color fade so it
     /// restarts in sync with the indicator slide.
@@ -458,6 +459,7 @@ impl Default for Tab {
             selected: false,
             indicator_active: false,
             indicator_ready: true,
+            indicator_moving: false,
             indicator_epoch: 0,
             prefix: None,
             suffix: None,
@@ -677,6 +679,7 @@ impl RenderOnce for Tab {
             && self.variant == TabVariant::Pill
             && self.indicator_active
             && self.indicator_ready
+            && self.indicator_moving
             && self.indicator_epoch > 0;
         let fg_from = self.variant.normal(cx).fg;
         let fg_to = tab_style.fg;
