@@ -290,6 +290,8 @@ impl SearchPanel {
 
         self.search_input.update(cx, |this, cx| {
             if selected_text.len() > 0 {
+                // The search input is single-line; multiline selections have
+                // their newlines collapsed to spaces by the input itself.
                 // Set value will emit to update_search_query
                 this.set_value(selected_text.to_string(), window, cx);
             }
@@ -753,5 +755,66 @@ mod tests {
         assert_eq!(matcher.current_match_ix, 1);
         assert_eq!(matcher.label(), "2/2");
         assert!(!matcher.replacing);
+    }
+
+    /// Regression test for #2552: selecting text that spans multiple lines and
+    /// activating find must not put a multiline query into the single-line
+    /// search input, otherwise painting it panics in `shape_line` with
+    /// "text argument should not contain newlines".
+    ///
+    /// The `InputState` is rendered directly (rather than through the `Input`
+    /// element) so the test window never touches macOS-only native code that
+    /// requires a real platform window handle. Asserting the search input's
+    /// value stays newline-free is enough to guard the invariant.
+    #[gpui::test]
+    fn test_search_with_multiline_selection(cx: &mut gpui::TestAppContext) {
+        use crate::{Root, theme::Theme};
+        use gpui::VisualTestContext;
+
+        let mut editor: Option<Entity<InputState>> = None;
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                cx.set_global(Theme::default());
+                super::super::init(cx);
+
+                let state = cx.new(|cx| {
+                    InputState::new(window, cx)
+                        .multi_line(true)
+                        .searchable(true)
+                });
+                editor = Some(state.clone());
+                cx.new(|cx| Root::new(state, window, cx))
+            })
+            .unwrap()
+        });
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        let editor = editor.unwrap();
+
+        cx.update(|window, cx| {
+            editor.update(cx, |state, cx| {
+                state.set_value("first line\nsecond line", window, cx);
+                // Select across the line break, then activate find (like cmd-f).
+                state.set_selected_range(0..17, cx);
+                assert!(state.selected_text().to_string().contains('\n'));
+                state.on_action_search(&Search, window, cx);
+            });
+        });
+
+        let query = cx.update(|_, cx| {
+            let panel = editor
+                .read(cx)
+                .search_panel
+                .clone()
+                .expect("search panel should be open after Search action");
+            panel.read(cx).search_input.read(cx).value().to_string()
+        });
+        assert!(
+            !query.contains('\n'),
+            "single-line search input must not contain newlines, got {:?}",
+            query
+        );
+        // The multiline selection is collapsed into a single-line query, with
+        // the newline replaced by a space (matching browser search inputs).
+        assert_eq!(query, "first line second");
     }
 }
