@@ -1,7 +1,7 @@
 use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, h_flex};
 use gpui::{
-    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
+    AnyElement, App, ClickEvent, Div, ElementId, Entity, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement, Render, RenderOnce, Stateful,
     StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
 };
@@ -123,6 +123,52 @@ impl ListItem {
         handler: impl Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_mouse_enter = Some(Box::new(handler));
+        self
+    }
+
+    /// Make this row a drag source.
+    ///
+    /// Delegates to the underlying base div's [`InteractiveElement::on_drag`]
+    /// so the drag listener survives the `RenderOnce` boundary.
+    ///
+    /// This enables drag-and-drop reordering when used inside a [`crate::tree::Tree`]
+    /// or any list built from `ListItem`.
+    pub fn on_drag<T, W>(
+        mut self,
+        value: T,
+        constructor: impl Fn(&T, gpui::Point<gpui::Pixels>, &mut Window, &mut App) -> Entity<W>
+        + 'static,
+    ) -> Self
+    where
+        T: 'static,
+        W: 'static + Render,
+    {
+        self.base = self.base.on_drag(value, constructor);
+        self
+    }
+
+    /// Make this row a drop target for drag values of type `T`.
+    ///
+    /// Delegates to the underlying base div's
+    /// [`StatefulInteractiveElement::on_drop`].
+    pub fn on_drop<T: 'static>(
+        mut self,
+        listener: impl Fn(&T, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.base = self.base.on_drop(listener);
+        self
+    }
+
+    /// Set a hover start/end callback for this row.
+    ///
+    /// Delegates to the underlying base div's [`InteractiveElement::on_hover`].
+    /// Useful for highlighting a row as a potential drop target while a drag
+    /// is in progress.
+    pub fn on_drag_hover(
+        mut self,
+        listener: impl Fn(&bool, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.base = self.base.on_hover(listener);
         self
     }
 }
