@@ -187,6 +187,39 @@ TabBar::new("tabs-with-menu")
     .child(Tab::new().label("Settings"))
 ```
 
+### 最大标签宽度
+
+使用 `max_tab_width` 限制每个标签的最大宽度。通过 `.label()` 创建的标签会自动截断超长文本并显示省略号。仅图标的标签（`.icon()`）不受此限制。前缀和后缀元素（例如关闭按钮）不会被截断——标签文本会优先让出空间。如果启用了溢出菜单，下拉项仍会显示完整标签文本。
+
+通过 `.child()` 传入自定义内容的标签只会应用最大宽度约束。下方示例展示了如何截断自定义内容。
+
+```rust
+use gpui::{div, px};
+
+TabBar::new("tabs-with-max-width")
+    .max_tab_width(px(100.))
+    .menu(true)
+    .selected_index(0)
+    .child(Tab::new().label("Account Settings & Preferences"))
+    .child(Tab::new().label("Documents & Files"))
+    .child(Tab::new().label("Appearance & Themes"))
+    .child(
+        Tab::new().child(
+            h_flex()
+                .gap_1()
+                .min_w_0()
+                .child(Icon::new(IconName::Bot))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .child("Custom Child Tab"),
+                ),
+        ),
+    )
+```
+
 ## API 参考
 
 ### TabBar
@@ -203,6 +236,7 @@ TabBar::new("tabs-with-menu")
 | `last_empty_space(element)` | 自定义尾部空白区域 |
 | `track_scroll(handle)` | 配合滚动句柄启用可滚动标签栏 |
 | `with_menu(bool)` | 启用下拉菜单选择 |
+| `max_tab_width(width)` | 设置每个标签的最大宽度；超长文本自动截断 |
 
 ### TabBar 变体
 

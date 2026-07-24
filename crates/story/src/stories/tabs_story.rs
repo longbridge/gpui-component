@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window,
+    Styled, Subscription, Window, prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
@@ -8,11 +8,14 @@ use gpui_component::{
     button::{Button, ButtonGroup, ButtonVariants},
     checkbox::Checkbox,
     h_flex,
+    slider::{Slider, SliderEvent, SliderState},
     tab::{Tab, TabBar},
     v_flex,
 };
 
 use crate::section;
+
+const MAX_WIDTH_START: f32 = 110.;
 
 pub struct TabsStory {
     focus_handle: FocusHandle,
@@ -22,6 +25,10 @@ pub struct TabsStory {
     dynamic_next_tab_id: usize,
     size: Size,
     menu: bool,
+    max_tab_width_enabled: bool,
+    max_tab_width: f32,
+    max_tab_width_slider: Entity<SliderState>,
+    _max_tab_width_subscription: Subscription,
 }
 
 impl super::Story for TabsStory {
@@ -44,6 +51,21 @@ impl TabsStory {
     }
 
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+        let max_tab_width_slider = cx.new(|_| {
+            SliderState::new()
+                .min(40.)
+                .max(150.)
+                .default_value(MAX_WIDTH_START)
+                .step(2.)
+        });
+        let max_tab_width_subscription =
+            cx.subscribe(&max_tab_width_slider, |this, _, event: &SliderEvent, cx| {
+                if let SliderEvent::Change(value) = event {
+                    this.max_tab_width = value.start();
+                    cx.notify();
+                }
+            });
+
         Self {
             focus_handle: cx.focus_handle(),
             active_tab_ix: 0,
@@ -52,6 +74,10 @@ impl TabsStory {
             dynamic_next_tab_id: 3,
             size: Size::default(),
             menu: false,
+            max_tab_width_enabled: false,
+            max_tab_width: MAX_WIDTH_START,
+            max_tab_width_slider,
+            _max_tab_width_subscription: max_tab_width_subscription,
         }
     }
 
@@ -99,56 +125,87 @@ impl Focusable for TabsStory {
 
 impl Render for TabsStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let max_tab_width_enabled = self.max_tab_width_enabled;
+        let max_tab_width = px(self.max_tab_width);
+
         v_flex()
             .w_full()
             .gap_3()
             .child(
-                h_flex()
-                    .gap_3()
+                v_flex()
+                    .w_full()
+                    .gap_2()
                     .child(
-                        ButtonGroup::new("toggle-size")
-                            .outline()
-                            .compact()
+                        h_flex()
+                            .gap_3()
+                            .items_center()
                             .child(
-                                Button::new("xsmall")
-                                    .label("XSmall")
-                                    .selected(self.size == Size::XSmall),
+                                ButtonGroup::new("toggle-size")
+                                    .outline()
+                                    .compact()
+                                    .child(
+                                        Button::new("xsmall")
+                                            .label("XSmall")
+                                            .selected(self.size == Size::XSmall),
+                                    )
+                                    .child(
+                                        Button::new("small")
+                                            .label("Small")
+                                            .selected(self.size == Size::Small),
+                                    )
+                                    .child(
+                                        Button::new("medium")
+                                            .label("Medium")
+                                            .selected(self.size == Size::Medium),
+                                    )
+                                    .child(
+                                        Button::new("large")
+                                            .label("Large")
+                                            .selected(self.size == Size::Large),
+                                    )
+                                    .on_click(cx.listener(
+                                        |this, selecteds: &Vec<usize>, window, cx| {
+                                            let size = match selecteds[0] {
+                                                0 => Size::XSmall,
+                                                1 => Size::Small,
+                                                2 => Size::Medium,
+                                                3 => Size::Large,
+                                                _ => unreachable!(),
+                                            };
+                                            this.set_size(size, window, cx);
+                                        },
+                                    )),
                             )
                             .child(
-                                Button::new("small")
-                                    .label("Small")
-                                    .selected(self.size == Size::Small),
+                                Checkbox::new("show-menu")
+                                    .label("More menu")
+                                    .checked(self.menu)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.menu = !this.menu;
+                                        cx.notify();
+                                    })),
                             )
                             .child(
-                                Button::new("medium")
-                                    .label("Medium")
-                                    .selected(self.size == Size::Medium),
-                            )
-                            .child(
-                                Button::new("large")
-                                    .label("Large")
-                                    .selected(self.size == Size::Large),
-                            )
-                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
-                                let size = match selecteds[0] {
-                                    0 => Size::XSmall,
-                                    1 => Size::Small,
-                                    2 => Size::Medium,
-                                    3 => Size::Large,
-                                    _ => unreachable!(),
-                                };
-                                this.set_size(size, window, cx);
-                            })),
+                                Checkbox::new("max-tab-width")
+                                    .label("Max tab width")
+                                    .checked(self.max_tab_width_enabled)
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.max_tab_width_enabled = !this.max_tab_width_enabled;
+                                        cx.notify();
+                                    })),
+                            ),
                     )
-                    .child(
-                        Checkbox::new("show-menu")
-                            .label("More menu")
-                            .checked(self.menu)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.menu = !this.menu;
-                                cx.notify();
-                            })),
-                    ),
+                    .when(max_tab_width_enabled, |this| {
+                        this.child(
+                            h_flex()
+                                .w_full()
+                                .px_4()
+                                .gap_3()
+                                .items_center()
+                                .child(Slider::new(&self.max_tab_width_slider).w_full())
+                                .child(format!("{:.0}px", self.max_tab_width)),
+                        )
+                    }),
             )
             .child(
                 section("Tabs").max_w_md().child(
@@ -156,6 +213,9 @@ impl Render for TabsStory {
                         .w_full()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when(max_tab_width_enabled, |this| {
+                            this.max_tab_width(max_tab_width)
+                        })
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -206,6 +266,9 @@ impl Render for TabsStory {
                         .underline()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when(max_tab_width_enabled, |this| {
+                            this.max_tab_width(max_tab_width)
+                        })
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -227,6 +290,9 @@ impl Render for TabsStory {
                         .pill()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when(max_tab_width_enabled, |this| {
+                            this.max_tab_width(max_tab_width)
+                        })
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -248,6 +314,9 @@ impl Render for TabsStory {
                         .outline()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when(max_tab_width_enabled, |this| {
+                            this.max_tab_width(max_tab_width)
+                        })
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -269,6 +338,9 @@ impl Render for TabsStory {
                         .segmented()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when(max_tab_width_enabled, |this| {
+                            this.max_tab_width(max_tab_width)
+                        })
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -309,6 +381,9 @@ impl Render for TabsStory {
                             .w_full()
                             .segmented()
                             .with_size(self.size)
+                            .when(max_tab_width_enabled, |this| {
+                                this.max_tab_width(max_tab_width)
+                            })
                             .selected_index(self.dynamic_active_tab_ix)
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
                                 this.set_dynamic_active_tab(*ix, window, cx);
@@ -337,6 +412,9 @@ impl Render for TabsStory {
                             .w_full()
                             .segmented()
                             .with_size(self.size)
+                            .when(max_tab_width_enabled, |this| {
+                                this.max_tab_width(max_tab_width)
+                            })
                             .selected_index(self.active_tab_ix)
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
                                 this.set_active_tab(*ix, window, cx);

@@ -194,6 +194,39 @@ TabBar::new("tabs-with-menu")
     .child(Tab::new().label("Settings"))
 ```
 
+### Maximum Tab Width
+
+Use `max_tab_width` to cap the width of each tab. For tabs created with `.label()`, text longer than the limit is truncated with an ellipsis automatically. Icon-only tabs (`.icon()`) are not affected. Prefix and suffix elements (e.g. a close button) are never truncated — the label yields space first. The *more* menu (when enabled) still shows the full label text.
+
+Tabs with custom children (via `.child()`) only receive a maximum width constraint. See below for details on how you can truncate custom children.
+
+```rust
+use gpui::{div, px};
+
+TabBar::new("tabs-with-max-width")
+    .max_tab_width(px(100.))
+    .menu(true)
+    .selected_index(0)
+    .child(Tab::new().label("Account Settings & Preferences"))
+    .child(Tab::new().label("Documents & Files"))
+    .child(Tab::new().label("Appearance & Themes"))
+    .child(
+        Tab::new().child(
+            h_flex()
+                .gap_1()
+                .min_w_0()
+                .child(Icon::new(IconName::Bot))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .child("Custom Child Tab"),
+                ),
+        ),
+    )
+```
+
 ### Scrollable Tabs
 
 ```rust
@@ -247,6 +280,7 @@ TabBar::new("custom-tabs")
 | `last_empty_space(element)` | Custom element for empty space at the end          |
 | `track_scroll(handle)`      | Enable scrolling with a scroll handle              |
 | `with_menu(bool)`           | Enable dropdown menu for tab selection             |
+| `max_tab_width(width)`      | Set maximum width of each tab; truncates           |
 
 ### TabBar Variants
 
