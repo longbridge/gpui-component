@@ -147,6 +147,43 @@ ComboBox:
     zh-HK: "暫無數據"
     zh-TW: "沒有結果"
     it: "Nessun risultato"
+KeystrokeRecorder:
+  placeholder:
+    en: "Press shortcut..."
+    zh-CN: "按下快捷键..."
+    zh-HK: "按下快速鍵..."
+    zh-TW: "按下快速鍵..."
+    it: "Premi la scorciatoia..."
+  recording:
+    en: "Recording..."
+    zh-CN: "录制中..."
+    zh-HK: "錄製中..."
+    zh-TW: "錄製中..."
+    it: "Registrazione..."
+  rec:
+    en: REC
+    zh-CN: 录制
+    zh-HK: 錄製
+    zh-TW: 錄製
+    it: REC
+  record:
+    en: Record
+    zh-CN: 录制
+    zh-HK: 錄製
+    zh-TW: 錄製
+    it: Registra
+  stop:
+    en: Stop
+    zh-CN: 停止
+    zh-HK: 停止
+    zh-TW: 停止
+    it: Ferma
+  clear:
+    en: Clear
+    zh-CN: 清除
+    zh-HK: 清除
+    zh-TW: 清除
+    it: Cancella
 Dock:
   Unnamed:
     en: Unnamed

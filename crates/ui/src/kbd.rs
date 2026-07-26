@@ -5,6 +5,9 @@ use gpui::{
 
 use crate::{ActiveTheme, StyledExt};
 
+mod recorder;
+pub use recorder::{KeystrokeRecorder, KeystrokeRecorderEvent};
+
 /// A tag for displaying keyboard keybindings.
 #[derive(IntoElement, Clone, Debug)]
 pub struct Kbd {

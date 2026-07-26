@@ -3,12 +3,17 @@ use gpui::{
     Styled, Window,
 };
 
-use gpui_component::{h_flex, kbd::Kbd, v_flex};
+use gpui_component::{
+    h_flex,
+    kbd::{Kbd, KeystrokeRecorder},
+    v_flex,
+};
 
 use crate::section;
 
 pub struct KbdStory {
     focus_handle: gpui::FocusHandle,
+    recorder: Entity<KeystrokeRecorder>,
 }
 
 impl super::Story for KbdStory {
@@ -29,6 +34,7 @@ impl KbdStory {
     pub(crate) fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            recorder: cx.new(KeystrokeRecorder::new),
         }
     }
 
@@ -68,5 +74,6 @@ impl Render for KbdStory {
                         .child(Kbd::new(Keystroke::parse("enter").unwrap()).outline()),
                 ),
             )
+            .child(section("Keystroke Recorder").child(self.recorder.clone()))
     }
 }
