@@ -1637,33 +1637,40 @@ impl Element for TextElement {
             strikethrough: None,
         };
 
-        let runs = if !is_empty {
-            if let Some(highlight_styles) = highlight_styles {
-                let mut runs = Vec::with_capacity(highlight_styles.len());
+        let runs = if let Some(highlight_styles) = highlight_styles.filter(|_| !is_empty) {
+            let mut runs = Vec::with_capacity(highlight_styles.len() + 2);
 
-                runs.extend(highlight_styles.iter().map(|(range, style)| {
-                    let mut run = text_style.clone().highlight(*style).to_run(range.len());
-                    if let Some(ime_marked_range) = &state.ime_marked_range {
-                        if range.start >= ime_marked_range.start
-                            && range.end <= ime_marked_range.end
-                        {
-                            run.color = marked_run.color;
-                            run.strikethrough = marked_run.strikethrough;
-                            run.underline = marked_run.underline;
-                        }
+            for (range, style) in highlight_styles {
+                let mut push_run = |range: Range<usize>, marked: bool| {
+                    if range.is_empty() {
+                        return;
                     }
-
+                    let mut run = text_style.clone().highlight(style).to_run(range.len());
+                    if marked {
+                        // Preserve syntax highlighting and add the IME composition underline independently.
+                        run.underline = marked_run.underline;
+                    }
                     if disabled {
-                        run.color = run.color.opacity(0.5)
+                        run.color = run.color.opacity(0.5);
                     }
+                    runs.push(run);
+                };
 
-                    run
-                }));
-
-                runs.into_iter().filter(|run| run.len > 0).collect()
-            } else {
-                vec![run]
+                if let Some(marked) = &state.ime_marked_range {
+                    let intersection_start = range.start.max(marked.start);
+                    let intersection_end = range.end.min(marked.end);
+                    if intersection_start < intersection_end {
+                        push_run(range.start..intersection_start, false);
+                        push_run(intersection_start..intersection_end, true);
+                        push_run(intersection_end..range.end, false);
+                    } else {
+                        push_run(range.clone(), false);
+                    }
+                } else {
+                    push_run(range.clone(), false);
+                }
             }
+            runs
         } else if let Some(ime_marked_range) = &state.ime_marked_range {
             // IME marked text
             vec![
