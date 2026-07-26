@@ -86,7 +86,13 @@ impl ResizableState {
         self.done_resizing(cx);
     }
 
-    pub(crate) fn insert_panel(
+    /// Insert a panel into the state used by a dynamic [`ResizablePanelGroup`].
+    ///
+    /// Call this when the rendered panel collection changes outside of the
+    /// group's normal render-time synchronization and existing panel sizes
+    /// should stay associated with their current indices. An index past the
+    /// end of the collection appends the panel.
+    pub fn insert_panel(
         &mut self,
         size: Option<Pixels>,
         ix: Option<usize>,
@@ -110,7 +116,7 @@ impl ResizableState {
             panel.size = Some(self.sizes[i]);
         }
 
-        if let Some(ix) = ix {
+        if let Some(ix) = ix.map(|ix| ix.min(self.panels.len())) {
             self.panels.insert(ix, panel_state);
             self.sizes.insert(ix, size);
         } else {
@@ -170,7 +176,15 @@ impl ResizableState {
         cx.notify();
     }
 
-    pub(crate) fn remove_panel(&mut self, panel_ix: usize, cx: &mut Context<Self>) {
+    /// Remove a panel from the state used by a dynamic
+    /// [`ResizablePanelGroup`].
+    ///
+    /// Out-of-range indices are ignored.
+    pub fn remove_panel(&mut self, panel_ix: usize, cx: &mut Context<Self>) {
+        if panel_ix >= self.panels.len() {
+            return;
+        }
+
         self.panels.remove(panel_ix);
         self.sizes.remove(panel_ix);
         if let Some(resizing_panel_ix) = self.resizing_panel_ix {
@@ -179,6 +193,33 @@ impl ResizableState {
             }
         }
         self.adjust_to_container_size(cx);
+    }
+
+    /// Reset every panel to an equal share of the current container.
+    ///
+    /// This is useful for dynamic split layouts that expose a "reset sizes"
+    /// command. A [`ResizablePanelEvent::Resized`] event is emitted, matching a
+    /// completed pointer or programmatic resize.
+    pub fn reset_panel_sizes(&mut self, cx: &mut Context<Self>) {
+        if self.panels.is_empty() {
+            return;
+        }
+
+        let container_size = self.container_size();
+        if container_size.is_zero() {
+            for (panel, panel_size) in self.panels.iter_mut().zip(self.sizes.iter_mut()) {
+                panel.size = None;
+                *panel_size = PANEL_MIN_SIZE;
+            }
+        } else {
+            let size = container_size / self.panels.len() as f32;
+            for (panel, panel_size) in self.panels.iter_mut().zip(self.sizes.iter_mut()) {
+                panel.size = Some(size);
+                *panel_size = size;
+            }
+        }
+        self.done_resizing(cx);
+        cx.notify();
     }
 
     pub(crate) fn replace_panel(
@@ -335,4 +376,52 @@ pub(crate) struct ResizablePanelState {
     pub size: Option<Pixels>,
     pub size_range: Range<Pixels>,
     bounds: Bounds<Pixels>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{AppContext as _, TestAppContext, size};
+
+    #[gpui::test]
+    fn reset_panel_sizes_distributes_the_container_equally(cx: &mut TestAppContext) {
+        let state = cx.new(|_| ResizableState {
+            axis: Axis::Horizontal,
+            panels: vec![ResizablePanelState::default(); 3],
+            sizes: vec![px(100.), px(200.), px(300.)],
+            resizing_panel_ix: Some(1),
+            bounds: Bounds {
+                size: size(px(600.), px(400.)),
+                ..Default::default()
+            },
+        });
+
+        state.update(cx, |state, cx| state.reset_panel_sizes(cx));
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.sizes(), &vec![px(200.); 3]);
+            assert_eq!(state.resizing_panel_ix, None);
+            assert!(
+                state
+                    .panels
+                    .iter()
+                    .all(|panel| panel.size == Some(px(200.)))
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn removing_an_unknown_panel_is_a_noop(cx: &mut TestAppContext) {
+        let state = cx.new(|_| ResizableState {
+            panels: vec![ResizablePanelState::default()],
+            sizes: vec![px(100.)],
+            ..Default::default()
+        });
+
+        state.update(cx, |state, cx| state.remove_panel(9, cx));
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.sizes(), &vec![px(100.)]);
+        });
+    }
 }
