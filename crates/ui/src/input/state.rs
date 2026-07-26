@@ -5,11 +5,11 @@
 use anyhow::Result;
 use gpui::{
     Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
-    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
-    Subscription, Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _,
-    px,
+    EventEmitter, FocusHandle, Focusable, HighlightStyle, InteractiveElement as _, IntoElement,
+    KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement as _, Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine,
+    SharedString, Styled as _, Subscription, Task, UTF16Selection, Window, actions, div, point,
+    prelude::FluentBuilder as _, px,
 };
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
@@ -396,6 +396,8 @@ pub struct InputState {
     pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) text_align: TextAlign,
+    /// Application-provided presentation highlights in UTF-8 byte ranges.
+    pub(super) text_highlights: Vec<(Range<usize>, HighlightStyle)>,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -532,6 +534,7 @@ impl InputState {
             mask_pattern: MaskPattern::default(),
             mask_pattern_set: false,
             text_align: TextAlign::Left,
+            text_highlights: Vec::new(),
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu_content: None,
@@ -1268,6 +1271,33 @@ impl InputState {
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self._pending_update = true;
         cx.notify();
+    }
+
+    /// Set application-provided presentation highlights.
+    ///
+    /// Ranges use UTF-8 byte offsets into [`Self::value`]. Empty ranges are
+    /// discarded and ranges beyond the current value are clamped. These
+    /// highlights work in plain, auto-growing, and code-editor inputs and are
+    /// composed with syntax, semantic-token, and diagnostic highlighting.
+    pub fn set_text_highlights(
+        &mut self,
+        highlights: Vec<(Range<usize>, HighlightStyle)>,
+        cx: &mut Context<Self>,
+    ) {
+        let text_len = self.text.len();
+        self.text_highlights = highlights
+            .into_iter()
+            .filter_map(|(range, style)| {
+                let range = range.start.min(text_len)..range.end.min(text_len);
+                (!range.is_empty()).then_some((range, style))
+            })
+            .collect();
+        cx.notify();
+    }
+
+    /// Return the application-provided presentation highlights.
+    pub fn text_highlights(&self) -> &[(Range<usize>, HighlightStyle)] {
+        &self.text_highlights
     }
 
     pub(super) fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -3846,6 +3876,22 @@ ORDER BY id
                 // clamped + collapsed
                 s.set_selected_range(100..100, cx);
                 assert_eq!(s.selected_range(), 11..11);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_set_text_highlights_clamps_ranges(cx: &mut TestAppContext) {
+        let input = InputView::build(cx, |state| state.default_value("hello")).input;
+        let style = HighlightStyle {
+            font_weight: Some(gpui::FontWeight::BOLD),
+            ..Default::default()
+        };
+
+        cx.update(|cx| {
+            input.update(cx, |state, cx| {
+                state.set_text_highlights(vec![(1..4, style), (4..100, style), (8..9, style)], cx);
+                assert_eq!(state.text_highlights(), &[(1..4, style), (4..5, style)]);
             });
         });
     }
