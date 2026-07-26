@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
-    InspectorElementId, InteractiveElement, IntoElement, LayoutId, ParentElement, Pixels,
+    InspectorElementId, InteractiveElement, IntoElement, LayoutId, ParentElement, Pixels, Point,
     SharedString, StyleRefinement, Styled, Window, div,
 };
 
@@ -18,6 +18,19 @@ use crate::{global_state::GlobalState, text::TextViewStyle};
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+
+/// Information about a context-menu request inside a [`TextView`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextViewContextMenuRequest {
+    /// Window-space position of the right-click.
+    pub position: Point<Pixels>,
+    /// Text selected in this text view, if any.
+    pub selected_text: Option<SharedString>,
+    /// URL of the link under the pointer, if any.
+    pub link_url: Option<SharedString>,
+}
+
+pub(crate) type ContextMenuFn = dyn Fn(TextViewContextMenuRequest, &mut Window, &mut App) + 'static;
 
 /// A text view that can render Markdown or HTML.
 ///
@@ -46,6 +59,7 @@ pub struct TextView {
     selectable: bool,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    on_context_menu: Option<Rc<ContextMenuFn>>,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -85,6 +99,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            on_context_menu: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -101,6 +116,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            on_context_menu: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -117,6 +133,7 @@ impl TextView {
             selectable: false,
             scrollable: false,
             code_block_actions: None,
+            on_context_menu: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -162,6 +179,18 @@ impl TextView {
         self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
             f(&code_block, window, cx).into_any_element()
         }));
+        self
+    }
+
+    /// Handle a right-click inside this text view.
+    ///
+    /// The request includes the current selection and the link under the
+    /// pointer, allowing applications to build their own context menu.
+    pub fn on_context_menu(
+        mut self,
+        callback: impl Fn(TextViewContextMenuRequest, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_context_menu = Some(Rc::new(callback));
         self
     }
 
@@ -278,6 +307,7 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
+            state.on_context_menu = self.on_context_menu.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
             state.scrollable = self.scrollable;
@@ -355,13 +385,14 @@ impl Element for TextView {
 
 #[cfg(test)]
 mod tests {
-    use super::{TextView, TextViewPlugin};
+    use super::{TextView, TextViewContextMenuRequest, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
         AppContext as _, Context, Entity, IntoElement, Modifiers, MouseButton, MouseDownEvent,
         MouseUpEvent, ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext,
         Window, div, point, px,
     };
+    use std::{cell::RefCell, rc::Rc};
 
     struct TextViewTestRoot {
         text_view: Entity<TextViewState>,
@@ -395,6 +426,38 @@ mod tests {
                         .child(TextView::new(&self.text_view).selectable(true)),
                 )
                 .child(div().h(px(40.)).child("footer"))
+        }
+    }
+
+    struct ContextMenuTestRoot {
+        text_view: Entity<TextViewState>,
+        requests: Rc<RefCell<Vec<TextViewContextMenuRequest>>>,
+    }
+
+    impl ContextMenuTestRoot {
+        fn new(
+            requests: Rc<RefCell<Vec<TextViewContextMenuRequest>>>,
+            cx: &mut Context<Self>,
+        ) -> Self {
+            let text_view =
+                cx.new(|cx| TextViewState::markdown("[quick](https://example.com) value", cx));
+            Self {
+                text_view,
+                requests,
+            }
+        }
+    }
+
+    impl Render for ContextMenuTestRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let requests = self.requests.clone();
+            div().w(px(200.)).child(
+                TextView::new(&self.text_view)
+                    .selectable(true)
+                    .on_context_menu(move |request, _, _| {
+                        requests.borrow_mut().push(request);
+                    }),
+            )
         }
     }
 
@@ -460,7 +523,7 @@ mod tests {
             "unloaded inline image fallback should stay generic and compact"
         );
     }
-  
+
     #[test]
     fn plugin_accepts_text_view_plugins_beyond_markdown() {
         let view = TextView::markdown("plugin-test", "").plugin(DummyTextViewPlugin);
@@ -576,6 +639,47 @@ mod tests {
 
         let selected_text = view.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
         assert_eq!(selected_text.trim(), "quick select value");
+    }
+
+    #[gpui::test]
+    fn context_menu_reports_selection_and_link_under_pointer(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let requests = Rc::new(RefCell::new(Vec::new()));
+        let captured = requests.clone();
+        let (_, cx) = cx.add_window_view(|_, cx| ContextMenuTestRoot::new(captured, cx));
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let position = point(px(10.), px(10.));
+        cx.simulate_event(MouseDownEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+            first_mouse: false,
+        });
+        cx.simulate_event(MouseUpEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_down(position, MouseButton::Right, Modifiers::default());
+
+        let requests = requests.borrow();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].selected_text.as_deref().map(str::trim),
+            Some("quick")
+        );
+        assert_eq!(requests[0].link_url.as_deref(), Some("https://example.com"));
+        assert_eq!(requests[0].position, position);
     }
 
     // Regression: markdown `TextView` items inside an outer `gpui::list` with

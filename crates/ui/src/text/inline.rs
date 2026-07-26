@@ -14,7 +14,8 @@ use gpui::{
 
 use crate::{
     ActiveTheme, WindowExt as _, global_state::GlobalState, input::Selection,
-    text::TextViewMultiClickKind, text::node::LinkMark, text::selection::word_range_at,
+    text::TextViewContextMenuRequest, text::TextViewMultiClickKind, text::node::LinkMark,
+    text::selection::word_range_at,
 };
 
 /// A inline element used to render a inline text and support selectable.
@@ -478,6 +479,41 @@ impl Element for Inline {
             });
         }
 
+        if let Some(text_view_state) = GlobalState::global(cx).text_view_state().cloned()
+            && let Some(on_context_menu) = text_view_state.read(cx).on_context_menu.clone()
+        {
+            window.on_mouse_event({
+                let hitbox = hitbox.clone();
+                let links = self.links.clone();
+                let text_layout = text_layout.clone();
+                move |event: &MouseDownEvent, phase, window, cx| {
+                    if !phase.bubble()
+                        || event.button != MouseButton::Right
+                        || !hitbox.is_hovered(window)
+                    {
+                        return;
+                    }
+
+                    let selected_text = {
+                        let selected = text_view_state.read(cx).selected_text();
+                        (!selected.is_empty()).then(|| selected.into())
+                    };
+                    let link_url = Self::link_for_position(&text_layout, &links, event.position)
+                        .map(|link| link.url);
+                    on_context_menu(
+                        TextViewContextMenuRequest {
+                            position: event.position,
+                            selected_text,
+                            link_url,
+                        },
+                        window,
+                        cx,
+                    );
+                    cx.stop_propagation();
+                }
+            });
+        }
+
         // mouse move, update hovered link
         window.on_mouse_event({
             let hitbox = hitbox.clone();
@@ -507,7 +543,10 @@ impl Element for Inline {
                 let text_view_state = GlobalState::global(cx).text_view_state().cloned();
 
                 move |event: &MouseUpEvent, phase, window, cx| {
-                    if !phase.bubble() || !hitbox.is_hovered(window) {
+                    if !phase.bubble()
+                        || event.button != MouseButton::Left
+                        || !hitbox.is_hovered(window)
+                    {
                         return;
                     }
                     if text_view_state
