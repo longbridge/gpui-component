@@ -332,17 +332,23 @@ impl RenderOnce for ResizablePanel {
             .children(self.children)
             .when(self.panel_ix > 0, |this| {
                 let ix = self.panel_ix - 1;
-                this.child(resize_handle(("resizable-handle", ix), self.axis).on_drag(
-                    DragPanel,
-                    move |drag_panel, _, _, cx| {
-                        cx.stop_propagation();
-                        // Set current resizing panel ix
-                        state.update(cx, |state, _| {
-                            state.resizing_panel_ix = Some(ix);
-                        });
-                        cx.new(|_| drag_panel.deref().clone())
-                    },
-                ))
+                let reset_state = state.clone();
+                this.child(
+                    resize_handle(("resizable-handle", ix), self.axis)
+                        .on_drag(DragPanel, move |drag_panel, _, _, cx| {
+                            cx.stop_propagation();
+                            // Set current resizing panel ix
+                            state.update(cx, |state, _| {
+                                state.resizing_panel_ix = Some(ix);
+                            });
+                            cx.new(|_| drag_panel.deref().clone())
+                        })
+                        .on_double_click(move |_, cx| {
+                            reset_state.update(cx, |state, cx| {
+                                state.reset_panel_sizes(cx);
+                            });
+                        }),
+                )
             })
     }
 }
