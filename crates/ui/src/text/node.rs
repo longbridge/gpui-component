@@ -887,10 +887,6 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        // PR #2146: merge configurable inline_code HighlightStyle.
-                        // Fallback ensures inline code is always visually distinct —
-                        // to suppress the background, set it to transparent rather
-                        // than leaving it as None.
                         let mut code_span_style = node_cx.style.inline_code;
                         if code_span_style.background_color.is_none() {
                             code_span_style.background_color = Some(cx.theme().accent);
@@ -1009,7 +1005,11 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent);
+                        let mut code_span_style = node_cx.style.inline_code;
+                        if code_span_style.background_color.is_none() {
+                            code_span_style.background_color = Some(cx.theme().accent);
+                        }
+                        highlight = highlight.highlight(code_span_style);
                     }
                     if let Some(color) = style.highlight {
                         highlight.background_color = Some(color);
