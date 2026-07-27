@@ -2931,7 +2931,11 @@ impl EntityInputHandler for InputState {
             }
         }
 
-        self.decorations.clear();
+        if mask_changed {
+            self.decorations.clear();
+        } else {
+            self.decorations.adjust_for_edit(&range, new_text.len());
+        }
         if mask_changed {
             // A segment-based history entry no longer matches the masked
             // document, record a whole-document change instead, so that
@@ -3015,7 +3019,7 @@ impl EntityInputHandler for InputState {
             }
         }
 
-        self.decorations.clear();
+        self.decorations.adjust_for_edit(&range, new_text.len());
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }

@@ -141,14 +141,21 @@ impl InputStory {
                         TextDecoration::new(
                             0..1,
                             HighlightStyle {
-                                color: Some(gpui::red()),
+                                color: Some(cx.theme().red),
+                                ..Default::default()
+                            },
+                        ),
+                        TextDecoration::new(
+                            1..7,
+                            HighlightStyle {
+                                color: Some(cx.theme().blue),
                                 ..Default::default()
                             },
                         ),
                         TextDecoration::new(
                             25..26,
                             HighlightStyle {
-                                color: Some(gpui::green()),
+                                color: Some(cx.theme().green),
                                 ..Default::default()
                             },
                         ),
@@ -156,30 +163,17 @@ impl InputStory {
                     cx,
                 );
                 let underline = state.create_decorations_collection(
-                    vec![
-                        TextDecoration::new(
-                            0..7,
-                            HighlightStyle {
-                                underline: Some(gpui::UnderlineStyle {
-                                    color: Some(gpui::blue()),
-                                    thickness: gpui::px(1.),
-                                    wavy: false,
-                                }),
-                                ..Default::default()
-                            },
-                        ),
-                        TextDecoration::new(
-                            25..37,
-                            HighlightStyle {
-                                underline: Some(gpui::UnderlineStyle {
-                                    color: Some(gpui::blue()),
-                                    thickness: gpui::px(1.),
-                                    wavy: false,
-                                }),
-                                ..Default::default()
-                            },
-                        ),
-                    ],
+                    vec![TextDecoration::new(
+                        26..37,
+                        HighlightStyle {
+                            underline: Some(gpui::UnderlineStyle {
+                                color: Some(cx.theme().green),
+                                thickness: gpui::px(1.),
+                                wavy: false,
+                            }),
+                            ..Default::default()
+                        },
+                    )],
                     cx,
                 );
                 (color, underline)
@@ -452,14 +446,21 @@ impl InputStory {
                 TextDecoration::new(
                     0..1,
                     HighlightStyle {
-                        color: Some(gpui::red()),
+                        color: Some(cx.theme().red),
+                        ..Default::default()
+                    },
+                ),
+                TextDecoration::new(
+                    1..7,
+                    HighlightStyle {
+                        color: Some(cx.theme().blue),
                         ..Default::default()
                     },
                 ),
                 TextDecoration::new(
                     25..26,
                     HighlightStyle {
-                        color: Some(gpui::green()),
+                        color: Some(cx.theme().green),
                         ..Default::default()
                     },
                 ),
@@ -469,30 +470,17 @@ impl InputStory {
             .set(color_decorations.unwrap_or_default(), cx);
 
         let underline_decorations = self.decorations_visible.then(|| {
-            vec![
-                TextDecoration::new(
-                    0..7,
-                    HighlightStyle {
-                        underline: Some(gpui::UnderlineStyle {
-                            color: Some(gpui::blue()),
-                            thickness: gpui::px(1.),
-                            wavy: false,
-                        }),
-                        ..Default::default()
-                    },
-                ),
-                TextDecoration::new(
-                    25..37,
-                    HighlightStyle {
-                        underline: Some(gpui::UnderlineStyle {
-                            color: Some(gpui::blue()),
-                            thickness: gpui::px(1.),
-                            wavy: false,
-                        }),
-                        ..Default::default()
-                    },
-                ),
-            ]
+            vec![TextDecoration::new(
+                26..37,
+                HighlightStyle {
+                    underline: Some(gpui::UnderlineStyle {
+                        color: Some(cx.theme().green),
+                        thickness: gpui::px(1.),
+                        wavy: false,
+                    }),
+                    ..Default::default()
+                },
+            )]
         });
         self.underline_decorations
             .set(underline_decorations.unwrap_or_default(), cx);
