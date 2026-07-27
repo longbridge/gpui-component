@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use gpui::{AppContext, Context, HighlightStyle, WeakEntity};
+use gpui::{App, Context, HighlightStyle, WeakEntity};
 use ropey::Rope;
 use sum_tree::Bias;
 
@@ -41,11 +41,7 @@ impl TextDecorationCollection {
     ///
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.set`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#set).
-    pub fn set<AppContextType: AppContext>(
-        &self,
-        decorations: Vec<TextDecoration>,
-        cx: &mut AppContext,
-    ) {
+    pub fn set(&self, decorations: Vec<TextDecoration>, cx: &mut App) {
         let _ = self.input.update(cx, |state, cx| {
             let decorations = normalize(&state.text, decorations);
             if state.decorations.set(self.id, decorations) {
@@ -58,11 +54,7 @@ impl TextDecorationCollection {
     ///
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.append`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#append).
-    pub fn append<AppContextType: AppContext>(
-        &self,
-        decorations: Vec<TextDecoration>,
-        cx: &mut AppContextType,
-    ) {
+    pub fn append(&self, decorations: Vec<TextDecoration>, cx: &mut App) {
         let _ = self.input.update(cx, |state, cx| {
             let decorations = normalize(&state.text, decorations);
             if state.decorations.append(self.id, decorations) {
@@ -75,7 +67,7 @@ impl TextDecorationCollection {
     ///
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.clear`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#clear).
-    pub fn clear<AppContextType: AppContext>(&self, cx: &mut AppContextType) {
+    pub fn clear(&self, cx: &mut App) {
         self.set(Vec::new(), cx);
     }
 
@@ -83,7 +75,7 @@ impl TextDecorationCollection {
     ///
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.getRanges`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#getRanges).
-    pub fn get_ranges<AppContextType: AppContext>(&self, cx: &AppContextType) -> Vec<Range<usize>> {
+    pub fn get_ranges(&self, cx: &App) -> Vec<Range<usize>> {
         self.input
             .read_with(cx, |state, _| {
                 state
