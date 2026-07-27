@@ -7,6 +7,7 @@ use crate::section;
 use gpui_component::{button::*, input::*, label::Label, *};
 
 const CODE_EXAMPLE: &str = r#"{"single_line":"code editor"}"#;
+const DECORATIONS_EXAMPLE: &str = "/commit improve decorations with $skill-creator and add tests";
 
 pub fn init(_: &mut App) {}
 
@@ -131,25 +132,23 @@ impl InputStory {
                 .default_value("Custom text color input")
         });
 
-        let decorations_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .default_value("Decorations can style multiple ranges independently")
-        });
+        let decorations_input =
+            cx.new(|cx| InputState::new(window, cx).default_value(DECORATIONS_EXAMPLE));
         let (color_decorations, underline_decorations) =
             decorations_input.update(cx, |state, cx| {
                 let color = state.create_decorations_collection(
                     vec![
                         TextDecoration::new(
-                            0..21,
+                            0..1,
                             HighlightStyle {
                                 color: Some(gpui::red()),
                                 ..Default::default()
                             },
                         ),
                         TextDecoration::new(
-                            31..51,
+                            33..34,
                             HighlightStyle {
-                                color: Some(gpui::red()),
+                                color: Some(gpui::green()),
                                 ..Default::default()
                             },
                         ),
@@ -159,7 +158,7 @@ impl InputStory {
                 let underline = state.create_decorations_collection(
                     vec![
                         TextDecoration::new(
-                            8..16,
+                            0..7,
                             HighlightStyle {
                                 underline: Some(gpui::UnderlineStyle {
                                     color: Some(gpui::blue()),
@@ -170,7 +169,7 @@ impl InputStory {
                             },
                         ),
                         TextDecoration::new(
-                            26..42,
+                            33..47,
                             HighlightStyle {
                                 underline: Some(gpui::UnderlineStyle {
                                     color: Some(gpui::blue()),
@@ -451,16 +450,16 @@ impl InputStory {
         let color_decorations = self.decorations_visible.then(|| {
             vec![
                 TextDecoration::new(
-                    0..21,
+                    0..1,
                     HighlightStyle {
                         color: Some(gpui::red()),
                         ..Default::default()
                     },
                 ),
                 TextDecoration::new(
-                    31..51,
+                    33..34,
                     HighlightStyle {
-                        color: Some(gpui::red()),
+                        color: Some(gpui::green()),
                         ..Default::default()
                     },
                 ),
@@ -472,7 +471,7 @@ impl InputStory {
         let underline_decorations = self.decorations_visible.then(|| {
             vec![
                 TextDecoration::new(
-                    8..16,
+                    0..7,
                     HighlightStyle {
                         underline: Some(gpui::UnderlineStyle {
                             color: Some(gpui::blue()),
@@ -483,7 +482,7 @@ impl InputStory {
                     },
                 ),
                 TextDecoration::new(
-                    26..42,
+                    33..47,
                     HighlightStyle {
                         underline: Some(gpui::UnderlineStyle {
                             color: Some(gpui::blue()),
