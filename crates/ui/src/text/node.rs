@@ -1324,7 +1324,7 @@ impl BlockNode {
                                             v_flex().child(preceding_row).child(
                                                 div()
                                                     .w_full()
-                                                    .pl(rems(0.75))
+                                                    .pl(rems(1.))
                                                     .overflow_hidden()
                                                     .child(text),
                                             ),
@@ -1374,11 +1374,14 @@ impl BlockNode {
                                         block, ix, options, *checked, cx,
                                     ));
                                 } else {
+                                    // Indent continuation blocks to align with a
+                                    // nested sub-list (`ml(rems(1.))`) and with
+                                    // continuation paragraphs.
                                     items.push(
                                         div()
                                             .w_full()
                                             .min_w_0()
-                                            .pl(rems(0.75))
+                                            .pl(rems(1.))
                                             .overflow_hidden()
                                             .child(block),
                                     );
