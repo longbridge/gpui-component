@@ -35,20 +35,24 @@ fn compose_text_highlights(
     text_highlights: &[(Range<usize>, HighlightStyle)],
     visible_byte_range: Range<usize>,
 ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
-    let text_highlights = text_highlights.iter().filter_map(|(range, style)| {
+    let has_visible_highlight = text_highlights.iter().any(|(range, _)| {
+        range.start < visible_byte_range.end && range.end > visible_byte_range.start
+    });
+    if !has_visible_highlight {
+        return (!styles.is_empty()).then_some(styles);
+    }
+
+    if styles.is_empty() {
+        styles.push((visible_byte_range.clone(), HighlightStyle::default()));
+    }
+    let visible_highlights = text_highlights.iter().filter_map(|(range, style)| {
         let range =
             range.start.max(visible_byte_range.start)..range.end.min(visible_byte_range.end);
         (!range.is_empty()).then_some((range, *style))
     });
-    let text_highlights = text_highlights.collect::<Vec<_>>();
-    if !text_highlights.is_empty() {
-        if styles.is_empty() {
-            styles.push((visible_byte_range, HighlightStyle::default()));
-        }
-        styles = gpui::combine_highlights(text_highlights, styles).collect();
-    }
+    styles = gpui::combine_highlights(visible_highlights, styles).collect();
 
-    (!styles.is_empty()).then_some(styles)
+    Some(styles)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1303,81 +1307,105 @@ impl TextElement {
         let state = self.state.read(cx);
         let text = &state.text;
         let is_multi_line = state.mode.is_multi_line();
+        let text_highlights = if state.masked {
+            &[][..]
+        } else {
+            &state.text_highlights
+        };
+
+        let (mut highlighter, diagnostics) = match &state.mode {
+            InputMode::CodeEditor {
+                highlighter,
+                diagnostics,
+                ..
+            } => (highlighter.borrow_mut(), diagnostics),
+            _ => {
+                return compose_text_highlights(Vec::new(), text_highlights, visible_byte_range);
+            }
+        };
+        let Some(highlighter) = highlighter.as_mut() else {
+            return compose_text_highlights(Vec::new(), text_highlights, visible_byte_range);
+        };
+
         let mut styles = Vec::with_capacity(visible_buffer_lines.len());
 
-        if let InputMode::CodeEditor {
-            highlighter,
-            diagnostics,
-            ..
-        } = &state.mode
-            && let Some(highlighter) = highlighter.borrow_mut().as_mut()
-        {
-            // Helper to flush a contiguous range of lines. These ranges are
-            // disjoint, so appending avoids repeatedly cloning and recombining
-            // prior styles.
-            let flush_range =
-                |start_line: usize, end_line: usize, skip: bool, styles: &mut Vec<_>| {
-                    let byte_start = text.line_start_offset(start_line);
-                    let byte_end = if is_multi_line {
-                        // +1 for `\n`
-                        text.line_start_offset(end_line + 1)
-                    } else {
-                        text.line_end_offset(end_line)
-                    };
-                    let range_styles = if skip {
-                        vec![(byte_start..byte_end, HighlightStyle::default())]
-                    } else {
-                        highlighter.styles(&(byte_start..byte_end), &cx.theme().highlight_theme)
-                    };
+        // Helper to flush a contiguous range of lines. These ranges are disjoint,
+        // so appending avoids repeatedly cloning and recombining prior styles.
+        let flush_range = |start_line: usize, end_line: usize, skip: bool, styles: &mut Vec<_>| {
+            let byte_start = text.line_start_offset(start_line);
+            let byte_end = if is_multi_line {
+                // +1 for `\n`
+                text.line_start_offset(end_line + 1)
+            } else {
+                text.line_end_offset(end_line)
+            };
+            let range_styles = if skip {
+                vec![(byte_start..byte_end, HighlightStyle::default())]
+            } else {
+                highlighter.styles(&(byte_start..byte_end), &cx.theme().highlight_theme)
+            };
 
-                    styles.extend(range_styles);
-                };
+            styles.extend(range_styles);
+        };
 
-            // Group contiguous visible lines into ranges and call styles() once
-            // per range.
-            let mut visible_iter = visible_buffer_lines.iter().peekable();
-            let mut range_start: Option<usize> = None;
+        // Group contiguous visible lines into ranges and call styles() once per range
+        let mut visible_iter = visible_buffer_lines.iter().peekable();
+        let mut range_start: Option<usize> = None;
 
-            while let Some(&line) = visible_iter.next() {
-                let line_len = text.slice_line(line).len();
-                if line_len > MAX_HIGHLIGHT_LINE_LENGTH {
-                    if let Some(start) = range_start.take() {
-                        flush_range(start, line - 1, false, &mut styles);
-                    }
-
-                    flush_range(line, line, true, &mut styles);
-                    continue;
+        while let Some(&line) = visible_iter.next() {
+            // Check if this line is too long for highlighting
+            let line_len = text.slice_line(line).len();
+            if line_len > MAX_HIGHLIGHT_LINE_LENGTH {
+                // Flush any accumulated range first
+                if let Some(start) = range_start.take() {
+                    flush_range(start, line - 1, false, &mut styles);
                 }
 
-                range_start.get_or_insert(line);
-                if visible_iter
-                    .peek()
-                    .map(|&&next| next == line + 1)
-                    .unwrap_or(false)
-                {
-                    continue;
-                }
-
-                let start_line = range_start.take().unwrap();
-                flush_range(start_line, line, false, &mut styles);
+                flush_range(line, line, true, &mut styles);
+                continue;
             }
 
-            let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
-            let semantic_styles = state.lsp.semantic_tokens_for_range(
-                text,
-                &visible_byte_range,
-                &cx.theme().highlight_theme,
-            );
+            range_start.get_or_insert(line);
 
-            if let Some(hover_style) = self.layout_hover_definition(cx) {
-                styles.push(hover_style);
+            // Check if next line is contiguous, if so keep accumulating
+            if visible_iter
+                .peek()
+                .map(|&&next| next == line + 1)
+                .unwrap_or(false)
+            {
+                continue;
             }
 
-            styles = gpui::combine_highlights(semantic_styles, styles).collect();
-            styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
+            // Flush the contiguous range
+            let start_line = range_start.take().unwrap();
+            flush_range(start_line, line, false, &mut styles);
         }
 
-        compose_text_highlights(styles, &state.text_highlights, visible_byte_range)
+        let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
+
+        // Range semantic tokens, resolved from the LSP provider's cached
+        // result through the active highlight theme so it shares the same
+        // colour vocabulary as the tree-sitter path. Empty Vec when no
+        // provider is set, so `combine_highlights` short-circuits.
+        let custom_styles = state.lsp.semantic_tokens_for_range(
+            text,
+            &visible_byte_range,
+            &cx.theme().highlight_theme,
+        );
+
+        // hover definition style
+        if let Some(hover_style) = self.layout_hover_definition(cx) {
+            styles.push(hover_style);
+        }
+
+        // Compose order: tree-sitter (base) -> custom (overlay) -> application
+        // highlights -> diagnostics (top).
+        styles = gpui::combine_highlights(custom_styles, styles).collect();
+        styles = compose_text_highlights(styles, text_highlights, visible_byte_range.clone())
+            .unwrap_or_default();
+        styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
+
+        Some(styles)
     }
 }
 

@@ -1284,11 +1284,11 @@ impl InputState {
         highlights: Vec<(Range<usize>, HighlightStyle)>,
         cx: &mut Context<Self>,
     ) {
-        let text_len = self.text.len();
         self.text_highlights = highlights
             .into_iter()
             .filter_map(|(range, style)| {
-                let range = range.start.min(text_len)..range.end.min(text_len);
+                let range = self.text.clip_offset(range.start, Bias::Left)
+                    ..self.text.clip_offset(range.end, Bias::Right);
                 (!range.is_empty()).then_some((range, style))
             })
             .collect();
@@ -2958,6 +2958,7 @@ impl EntityInputHandler for InputState {
             }
         }
 
+        self.text_highlights.clear();
         if mask_changed {
             // A segment-based history entry no longer matches the masked
             // document, record a whole-document change instead, so that
@@ -3041,6 +3042,7 @@ impl EntityInputHandler for InputState {
             }
         }
 
+        self.text_highlights.clear();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -3882,16 +3884,21 @@ ORDER BY id
 
     #[gpui::test]
     fn test_set_text_highlights_clamps_ranges(cx: &mut TestAppContext) {
-        let input = InputView::build(cx, |state| state.default_value("hello")).input;
+        let input_view = InputView::build(cx, |state| state.default_value("héllo"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
         let style = HighlightStyle {
             font_weight: Some(gpui::FontWeight::BOLD),
             ..Default::default()
         };
 
-        cx.update(|cx| {
+        cx.update(|window, cx| {
             input.update(cx, |state, cx| {
-                state.set_text_highlights(vec![(1..4, style), (4..100, style), (8..9, style)], cx);
-                assert_eq!(state.text_highlights(), &[(1..4, style), (4..5, style)]);
+                state.set_text_highlights(vec![(2..4, style), (5..100, style), (8..9, style)], cx);
+                assert_eq!(state.text_highlights(), &[(1..4, style), (5..6, style)]);
+
+                state.set_value("world", window, cx);
+                assert!(state.text_highlights().is_empty());
             });
         });
     }
