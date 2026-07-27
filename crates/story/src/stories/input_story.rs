@@ -148,6 +148,13 @@ impl InputStory {
                         TextDecoration::new(
                             25..26,
                             HighlightStyle {
+                                color: Some(cx.theme().cyan_light),
+                                ..Default::default()
+                            },
+                        ),
+                        TextDecoration::new(
+                            26..37,
+                            HighlightStyle {
                                 color: Some(cx.theme().cyan),
                                 ..Default::default()
                             },
@@ -445,6 +452,13 @@ impl InputStory {
                 ),
                 TextDecoration::new(
                     25..26,
+                    HighlightStyle {
+                        color: Some(cx.theme().cyan_light),
+                        ..Default::default()
+                    },
+                ),
+                TextDecoration::new(
+                    26..37,
                     HighlightStyle {
                         color: Some(cx.theme().cyan),
                         ..Default::default()
