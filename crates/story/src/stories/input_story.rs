@@ -139,14 +139,7 @@ impl InputStory {
                 let color = state.create_decorations_collection(
                     vec![
                         TextDecoration::new(
-                            0..1,
-                            HighlightStyle {
-                                color: Some(cx.theme().red),
-                                ..Default::default()
-                            },
-                        ),
-                        TextDecoration::new(
-                            1..7,
+                            0..7,
                             HighlightStyle {
                                 color: Some(cx.theme().blue),
                                 ..Default::default()
@@ -155,7 +148,7 @@ impl InputStory {
                         TextDecoration::new(
                             25..26,
                             HighlightStyle {
-                                color: Some(cx.theme().green),
+                                color: Some(cx.theme().cyan),
                                 ..Default::default()
                             },
                         ),
@@ -167,7 +160,7 @@ impl InputStory {
                         26..37,
                         HighlightStyle {
                             underline: Some(gpui::UnderlineStyle {
-                                color: Some(cx.theme().green),
+                                color: Some(cx.theme().cyan),
                                 thickness: gpui::px(1.),
                                 wavy: false,
                             }),
@@ -444,14 +437,7 @@ impl InputStory {
         let color_decorations = self.decorations_visible.then(|| {
             vec![
                 TextDecoration::new(
-                    0..1,
-                    HighlightStyle {
-                        color: Some(cx.theme().red),
-                        ..Default::default()
-                    },
-                ),
-                TextDecoration::new(
-                    1..7,
+                    0..7,
                     HighlightStyle {
                         color: Some(cx.theme().blue),
                         ..Default::default()
@@ -460,7 +446,7 @@ impl InputStory {
                 TextDecoration::new(
                     25..26,
                     HighlightStyle {
-                        color: Some(cx.theme().green),
+                        color: Some(cx.theme().cyan),
                         ..Default::default()
                     },
                 ),
@@ -474,7 +460,7 @@ impl InputStory {
                 26..37,
                 HighlightStyle {
                     underline: Some(gpui::UnderlineStyle {
-                        color: Some(cx.theme().green),
+                        color: Some(cx.theme().cyan),
                         thickness: gpui::px(1.),
                         wavy: false,
                     }),
