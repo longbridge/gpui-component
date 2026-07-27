@@ -14,6 +14,12 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
+        uiFont = pkgs.ibm-plex.override {
+          families = [ "sans" ];
+        };
+        fontsConf = pkgs.makeFontsConf {
+          fontDirectories = [ uiFont ];
+        };
         build-dependencies = with pkgs; [
           pkg-config # For dynamically linked libraries
           makeWrapper # To provide LD_LIBRARY_PATH to the final binary
@@ -50,7 +56,8 @@
           buildInputs = dynamic-libraries;
           postFixup = ''
             wrapProgram $out/bin/gpui-component-story \
-            --suffix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath dynamic-libraries}
+            --suffix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath dynamic-libraries} \
+            --set FONTCONFIG_FILE ${fontsConf}
           '';
         });
         devShells.default = with pkgs; mkShell {
@@ -58,6 +65,7 @@
 
           env = {
             RUST_BACKTRACE = "1";
+            FONTCONFIG_FILE = fontsConf;
             LD_LIBRARY_PATH = lib.makeLibraryPath dynamic-libraries;
           };
         };

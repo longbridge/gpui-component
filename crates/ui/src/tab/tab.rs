@@ -751,17 +751,21 @@ impl RenderOnce for Tab {
             .border_b(tab_style.borders.bottom)
             .border_color(outer_border_color)
             .rounded(radius)
-            .when(!self.selected && !self.disabled, |this| {
-                this.hover(|this| {
-                    this.text_color(hover_style.fg)
-                        .bg(hover_style.bg)
-                        .border_l(hover_style.borders.left)
-                        .border_r(hover_style.borders.right)
-                        .border_t(hover_style.borders.top)
-                        .border_b(hover_style.borders.bottom)
-                        .border_color(hover_style.border_color)
-                        .rounded(radius)
-                })
+            .hover(|this| {
+                // Always register the hover style: GPUI only refreshes the cached
+                // hover state while one is present. If the selected tab skipped it,
+                // the stale state would keep hover colors after unselecting.
+                if self.selected || self.disabled {
+                    return this;
+                }
+                this.text_color(hover_style.fg)
+                    .bg(hover_style.bg)
+                    .border_l(hover_style.borders.left)
+                    .border_r(hover_style.borders.right)
+                    .border_t(hover_style.borders.top)
+                    .border_b(hover_style.borders.bottom)
+                    .border_color(hover_style.border_color)
+                    .rounded(radius)
             })
             .when(has_inline_inner_bg, |this| {
                 this.child(
