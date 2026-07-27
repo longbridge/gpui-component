@@ -1,6 +1,6 @@
 use gpui::{
-    App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Role, Styled, Subscription, Window, div,
+    App, AppContext as _, ClickEvent, Context, Entity, HighlightStyle, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Role, Styled, Subscription, Window, div,
 };
 
 use crate::section;
@@ -32,6 +32,8 @@ pub struct InputStory {
     custom_menu_input: Entity<InputState>,
     code_input: Entity<InputState>,
     color_input: Entity<InputState>,
+    decorations_input: Entity<InputState>,
+    background_decorations: TextDecorationCollectionId,
     content_type_inputs: Vec<ContentTypeInput>,
 
     _subscriptions: Vec<Subscription>,
@@ -125,6 +127,37 @@ impl InputStory {
             InputState::new(window, cx)
                 .placeholder("Type something...")
                 .default_value("Custom text color input")
+        });
+
+        let decorations_input = cx.new(|cx| {
+            InputState::new(window, cx).default_value("Independent decoration collections")
+        });
+        let background_decorations = decorations_input.update(cx, |state, cx| {
+            let background = state.add_decoration_collection(
+                vec![TextDecoration::new(
+                    0..11,
+                    HighlightStyle {
+                        background_color: Some(gpui::yellow()),
+                        ..Default::default()
+                    },
+                )],
+                cx,
+            );
+            state.add_decoration_collection(
+                vec![TextDecoration::new(
+                    12..22,
+                    HighlightStyle {
+                        underline: Some(gpui::UnderlineStyle {
+                            color: Some(gpui::blue()),
+                            thickness: gpui::px(1.),
+                            wavy: false,
+                        }),
+                        ..Default::default()
+                    },
+                )],
+                cx,
+            );
+            background
         });
 
         let code_input = cx.new(|cx| {
@@ -289,6 +322,8 @@ impl InputStory {
             custom_menu_input,
             code_input,
             color_input,
+            decorations_input,
+            background_decorations,
             input_text_centered,
             input_text_right,
             content_type_inputs,
@@ -548,6 +583,51 @@ impl Render for InputStory {
                 section("Custom Text Color")
                     .max_w_md()
                     .child(Input::new(&self.color_input).text_color(cx.theme().info)),
+            )
+            .child(
+                section("Text Decorations")
+                    .max_w_md()
+                    .child(Input::new(&self.decorations_input))
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Button::new("clear-text-decoration")
+                                    .label("Clear background")
+                                    .on_click({
+                                        let input = self.decorations_input.clone();
+                                        let collection = self.background_decorations;
+                                        move |_, _, cx| {
+                                            input.update(cx, |state, cx| {
+                                                state.clear_decorations(collection, cx)
+                                            });
+                                        }
+                                    }),
+                            )
+                            .child(
+                                Button::new("restore-text-decoration")
+                                    .label("Restore background")
+                                    .on_click({
+                                        let input = self.decorations_input.clone();
+                                        let collection = self.background_decorations;
+                                        move |_, _, cx| {
+                                            input.update(cx, |state, cx| {
+                                                state.set_decorations(
+                                                    collection,
+                                                    vec![TextDecoration::new(
+                                                        0..11,
+                                                        HighlightStyle {
+                                                            background_color: Some(gpui::yellow()),
+                                                            ..Default::default()
+                                                        },
+                                                    )],
+                                                    cx,
+                                                )
+                                            });
+                                        }
+                                    }),
+                            ),
+                    ),
             )
             .child(
                 section("Single line code editor").max_w_md().child(
