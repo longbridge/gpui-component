@@ -21,7 +21,7 @@ use crate::{
     scroll::Scrollbar,
 };
 
-use super::{InputState, LastLayout, WhitespaceIndicators, mode::InputMode};
+use super::{InputState, LastLayout, TextDecoration, WhitespaceIndicators, mode::InputMode};
 
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
@@ -29,6 +29,49 @@ pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 const FOLD_ICON_WIDTH: Pixels = px(14.);
 const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
 const MAX_HIGHLIGHT_LINE_LENGTH: usize = 10_000;
+
+fn compose_decorations(
+    mut styles: Vec<(Range<usize>, HighlightStyle)>,
+    decorations: impl IntoIterator<Item = (Range<usize>, HighlightStyle)>,
+    visible_byte_range: Range<usize>,
+) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
+    let mut visible_decorations = decorations
+        .into_iter()
+        .filter_map(|(range, style)| {
+            let range =
+                range.start.max(visible_byte_range.start)..range.end.min(visible_byte_range.end);
+            (!range.is_empty()).then_some((range, style))
+        })
+        .peekable();
+
+    if visible_decorations.peek().is_none() {
+        return (!styles.is_empty()).then_some(styles);
+    }
+    if styles.is_empty() {
+        styles.push((visible_byte_range.clone(), HighlightStyle::default()));
+    }
+
+    Some(gpui::combine_highlights(visible_decorations, styles).collect())
+}
+
+fn compose_decoration_collections<'a>(
+    mut styles: Vec<(Range<usize>, HighlightStyle)>,
+    collections: impl IntoIterator<Item = &'a [TextDecoration]>,
+    visible_byte_range: Range<usize>,
+) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
+    for decorations in collections {
+        styles = compose_decorations(
+            styles,
+            decorations
+                .iter()
+                .map(|decoration| (decoration.range.clone(), decoration.style)),
+            visible_byte_range.clone(),
+        )
+        .unwrap_or_default();
+    }
+
+    (!styles.is_empty()).then_some(styles)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct EditorScrollbarLayout {
@@ -1289,9 +1332,29 @@ impl TextElement {
                 diagnostics,
                 ..
             } => (highlighter.borrow_mut(), diagnostics),
-            _ => return None,
+            _ => {
+                return (!state.masked)
+                    .then(|| {
+                        compose_decoration_collections(
+                            Vec::new(),
+                            state.decorations.iter(),
+                            visible_byte_range,
+                        )
+                    })
+                    .flatten();
+            }
         };
-        let highlighter = highlighter.as_mut()?;
+        let Some(highlighter) = highlighter.as_mut() else {
+            return (!state.masked)
+                .then(|| {
+                    compose_decoration_collections(
+                        Vec::new(),
+                        state.decorations.iter(),
+                        visible_byte_range,
+                    )
+                })
+                .flatten();
+        };
 
         let mut styles = Vec::with_capacity(visible_buffer_lines.len());
 
@@ -1364,10 +1427,16 @@ impl TextElement {
             styles.push(hover_style);
         }
 
-        // Compose order: tree-sitter (base) -> custom (overlay) -> diagnostics (top).
-        // Diagnostics keep highest priority so errors remain visible regardless
-        // of language coloring.
+        // Compose tree-sitter, semantic, application, then diagnostic styles.
         styles = gpui::combine_highlights(custom_styles, styles).collect();
+        if !state.masked {
+            styles = compose_decoration_collections(
+                styles,
+                state.decorations.iter(),
+                visible_byte_range.clone(),
+            )
+            .unwrap_or_default();
+        }
         styles = gpui::combine_highlights(diagnostic_styles, styles).collect();
 
         Some(styles)
@@ -2369,6 +2438,50 @@ fn split_runs_by_bg_segments(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_plain_text_decorations_include_unstyled_gaps() {
+        let decoration = HighlightStyle {
+            background_color: Some(gpui::red()),
+            ..Default::default()
+        };
+        let styles = compose_decorations(Vec::new(), [(2..5, decoration)], 0..10).unwrap();
+
+        assert_eq!(
+            styles
+                .iter()
+                .map(|(range, _)| range.clone())
+                .collect::<Vec<_>>(),
+            vec![0..2, 2..5, 5..10]
+        );
+        assert_eq!(styles[0].1, HighlightStyle::default());
+        assert_eq!(styles[1].1.background_color, Some(gpui::red()));
+        assert_eq!(styles[2].1, HighlightStyle::default());
+    }
+
+    #[test]
+    fn test_first_decoration_collection_has_precedence() {
+        let first = [TextDecoration::new(
+            0..4,
+            HighlightStyle {
+                background_color: Some(gpui::red()),
+                ..Default::default()
+            },
+        )];
+        let second = [TextDecoration::new(
+            0..4,
+            HighlightStyle {
+                background_color: Some(gpui::blue()),
+                ..Default::default()
+            },
+        )];
+
+        let styles =
+            compose_decoration_collections(Vec::new(), [&first[..], &second[..]], 0..4).unwrap();
+
+        assert_eq!(styles.len(), 1);
+        assert_eq!(styles[0].1.background_color, Some(gpui::red()));
+    }
 
     #[test]
     fn test_editor_scrollbar_layout_uses_current_scroll_size() {
