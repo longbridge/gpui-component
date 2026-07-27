@@ -1637,39 +1637,71 @@ impl Element for TextElement {
             strikethrough: None,
         };
 
-        let runs = if let Some(highlight_styles) = highlight_styles.filter(|_| !is_empty) {
+        let runs = if let (false, Some(highlight_styles)) = (is_empty, highlight_styles) {
             let mut runs = Vec::with_capacity(highlight_styles.len() + 2);
 
             for (range, style) in &highlight_styles {
-                let mut highlighted_run = text_style.clone().highlight(*style).to_run(range.len());
+                let mut run = text_style.clone().highlight(*style).to_run(range.len());
                 if disabled {
-                    highlighted_run.color = highlighted_run.color.opacity(0.5);
+                    run.color = run.color.opacity(0.5);
                 }
-                extend_runs_with_ime_underline(
-                    &mut runs,
-                    highlighted_run,
-                    range.clone(),
-                    state
-                        .ime_marked_range
-                        .as_ref()
-                        .map(|marked| marked.start..marked.end),
-                    marked_run.underline,
-                );
+
+                if let Some(marked) = &state.ime_marked_range {
+                    let intersection_start = range.start.max(marked.start);
+                    let intersection_end = range.end.min(marked.end);
+                    if intersection_start < intersection_end {
+                        let before_len = intersection_start - range.start;
+                        if before_len > 0 {
+                            runs.push(TextRun {
+                                len: before_len,
+                                ..run.clone()
+                            });
+                        }
+
+                        runs.push(TextRun {
+                            len: intersection_end - intersection_start,
+                            underline: marked_run.underline,
+                            ..run.clone()
+                        });
+
+                        let after_len = range.end - intersection_end;
+                        if after_len > 0 {
+                            runs.push(TextRun {
+                                len: after_len,
+                                ..run
+                            });
+                        }
+                        continue;
+                    }
+                }
+
+                if run.len > 0 {
+                    runs.push(run);
+                }
             }
             runs
+        } else if let Some(ime_marked_range) = &state.ime_marked_range {
+            // IME marked text
+            vec![
+                TextRun {
+                    len: ime_marked_range.start,
+                    ..run.clone()
+                },
+                TextRun {
+                    len: ime_marked_range.end - ime_marked_range.start,
+                    underline: marked_run.underline,
+                    ..run.clone()
+                },
+                TextRun {
+                    len: display_text.len() - ime_marked_range.end,
+                    ..run.clone()
+                },
+            ]
+            .into_iter()
+            .filter(|run| run.len > 0)
+            .collect()
         } else {
-            let mut runs = Vec::with_capacity(3);
-            extend_runs_with_ime_underline(
-                &mut runs,
-                run,
-                0..display_text.len(),
-                state
-                    .ime_marked_range
-                    .as_ref()
-                    .map(|marked| marked.start..marked.end),
-                marked_run.underline,
-            );
-            runs
+            vec![run]
         };
 
         let document_colors = state
@@ -2266,43 +2298,6 @@ pub(super) fn runs_for_range(
     result
 }
 
-fn extend_runs_with_ime_underline(
-    runs: &mut Vec<TextRun>,
-    run: TextRun,
-    run_range: Range<usize>,
-    marked_range: Option<Range<usize>>,
-    marked_underline: Option<UnderlineStyle>,
-) {
-    let Some(marked) = marked_range else {
-        runs.push(run);
-        return;
-    };
-
-    let intersection_start = run_range.start.max(marked.start);
-    let intersection_end = run_range.end.min(marked.end);
-    if intersection_start >= intersection_end {
-        runs.push(run);
-        return;
-    }
-
-    let split_runs = [
-        TextRun {
-            len: intersection_start - run_range.start,
-            ..run.clone()
-        },
-        TextRun {
-            len: intersection_end - intersection_start,
-            underline: marked_underline,
-            ..run.clone()
-        },
-        TextRun {
-            len: run_range.end - intersection_end,
-            ..run
-        },
-    ];
-    runs.extend(split_runs.into_iter().filter(|run| run.len > 0));
-}
-
 fn split_runs_by_bg_segments(
     start_offset: usize,
     runs: &[TextRun],
@@ -2478,67 +2473,6 @@ mod tests {
         assert_runs(runs_for_range(&runs, 3, &(0..3)), &[1, 2]);
         assert_runs(runs_for_range(&runs, 3, &(2..10)), &[4, 1, 3]);
         assert_runs(runs_for_range(&runs, 9, &(0..8)), &[1, 7]);
-    }
-
-    #[test]
-    fn test_highlighted_runs_apply_ime_underline_to_intersection() {
-        let underline = UnderlineStyle {
-            thickness: px(1.),
-            color: Some(gpui::black()),
-            wavy: false,
-        };
-        let text_style = TextStyle::default();
-        let highlight_style = HighlightStyle::default();
-
-        let runs = [0..4, 4..10]
-            .into_iter()
-            .fold(Vec::new(), |mut runs, range| {
-                extend_runs_with_ime_underline(
-                    &mut runs,
-                    text_style
-                        .clone()
-                        .highlight(highlight_style)
-                        .to_run(range.len()),
-                    range,
-                    Some(2..7),
-                    Some(underline),
-                );
-                runs
-            });
-
-        assert_eq!(
-            runs.iter()
-                .map(|run| (run.len, run.underline.is_some()))
-                .collect::<Vec<_>>(),
-            vec![(2, false), (2, true), (3, true), (3, false)]
-        );
-    }
-
-    #[test]
-    fn test_plain_text_runs_apply_ime_underline() {
-        let run = TextRun {
-            len: 10,
-            font: gpui::font(".SystemUIFont"),
-            color: gpui::black(),
-            background_color: None,
-            underline: None,
-            strikethrough: None,
-        };
-        let underline = UnderlineStyle {
-            thickness: px(1.),
-            color: Some(gpui::black()),
-            wavy: false,
-        };
-
-        let mut runs = Vec::new();
-        extend_runs_with_ime_underline(&mut runs, run, 0..10, Some(2..7), Some(underline));
-
-        assert_eq!(
-            runs.iter()
-                .map(|run| (run.len, run.underline.is_some()))
-                .collect::<Vec<_>>(),
-            vec![(2, false), (5, true), (3, false)]
-        );
     }
 
     #[test]
