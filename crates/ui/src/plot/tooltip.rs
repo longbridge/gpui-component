@@ -402,15 +402,19 @@ impl RenderOnce for Tooltip {
             // Only the box is deferred: it can overflow the plot bounds and must paint above
             // sibling content, while the crosshair and dots stay in the plot's own layer so
             // they don't cover elements drawn over the plot.
-            .child(deferred(content.map(|this| {
+            .child(deferred(content.map(|mut this| {
                 if !appearance {
                     return this.size_full().relative();
                 }
 
+                // Default min width only applies when the caller hasn't set one, so a
+                // custom `min_w` isn't clobbered here.
+                let min_w_unset = this.style().min_size.width.is_none();
+
                 // The box hugs the cursor, flipping toward the center near each edge so it
                 // never overflows the near side.
                 this.absolute()
-                    .min_w(px(150.))
+                    .when(min_w_unset, |c| c.min_w(px(150.)))
                     .popover_style(cx)
                     .p_2()
                     .map(|c| {
