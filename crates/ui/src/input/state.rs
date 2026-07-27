@@ -72,6 +72,14 @@ impl Enter {
     }
 }
 
+fn normalize_single_line_input(input: Cow<'_, str>) -> Cow<'_, str> {
+    if input.contains(['\n', '\r']) {
+        Cow::Owned(input.replace(['\n', '\r'], ""))
+    } else {
+        input
+    }
+}
+
 actions!(
     input,
     [
@@ -2499,8 +2507,8 @@ impl InputState {
             Cow::Borrowed(new_text)
         };
 
-        if self.mode.is_single_line() && normalized.contains(['\n', '\r']) {
-            Cow::Owned(normalized.replace(['\n', '\r'], ""))
+        if self.mode.is_single_line() {
+            normalize_single_line_input(normalized)
         } else {
             normalized
         }
@@ -3167,6 +3175,18 @@ impl Render for InputState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_normalize_single_line_input() {
+        assert_eq!(
+            normalize_single_line_input(Cow::Borrowed("first\nsecond\r\nthird\rfourth")),
+            "firstsecondthirdfourth"
+        );
+        assert!(matches!(
+            normalize_single_line_input(Cow::Borrowed("single line")),
+            Cow::Borrowed("single line")
+        ));
+    }
     use crate::theme::Theme;
     use gpui::{TestAppContext, VisualTestContext};
 
