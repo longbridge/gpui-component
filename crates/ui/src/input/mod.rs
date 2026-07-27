@@ -6,6 +6,7 @@ mod change;
 mod clear_button;
 mod content_type;
 mod cursor;
+mod decorations;
 mod display_map;
 mod element;
 mod indent;
@@ -27,6 +28,7 @@ mod state;
 pub(crate) use clear_button::*;
 pub use content_type::*;
 pub use cursor::*;
+pub use decorations::*;
 #[cfg(not(feature = "tree-sitter"))]
 pub use display_map::Tree;
 pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange};

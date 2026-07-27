@@ -1,12 +1,13 @@
 use gpui::{
-    App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Role, Styled, Subscription, Window, div,
+    App, AppContext as _, ClickEvent, Context, Entity, HighlightStyle, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Role, Styled, Subscription, Window, div,
 };
 
 use crate::section;
 use gpui_component::{button::*, input::*, label::Label, *};
 
 const CODE_EXAMPLE: &str = r#"{"single_line":"code editor"}"#;
+const DECORATIONS_EXAMPLE: &str = "/review decorations with $code-review before merging";
 
 pub fn init(_: &mut App) {}
 
@@ -32,6 +33,10 @@ pub struct InputStory {
     custom_menu_input: Entity<InputState>,
     code_input: Entity<InputState>,
     color_input: Entity<InputState>,
+    decorations_input: Entity<InputState>,
+    color_decorations: TextDecorationCollection,
+    underline_decorations: TextDecorationCollection,
+    decorations_visible: bool,
     content_type_inputs: Vec<ContentTypeInput>,
 
     _subscriptions: Vec<Subscription>,
@@ -126,6 +131,46 @@ impl InputStory {
                 .placeholder("Type something...")
                 .default_value("Custom text color input")
         });
+
+        let decorations_input =
+            cx.new(|cx| InputState::new(window, cx).default_value(DECORATIONS_EXAMPLE));
+        let (color_decorations, underline_decorations) =
+            decorations_input.update(cx, |state, cx| {
+                let color = state.create_decorations_collection(
+                    vec![
+                        TextDecoration::new(
+                            0..7,
+                            HighlightStyle {
+                                color: Some(cx.theme().muted_foreground),
+                                ..Default::default()
+                            },
+                        ),
+                        TextDecoration::new(
+                            25..37,
+                            HighlightStyle {
+                                color: Some(cx.theme().primary),
+                                ..Default::default()
+                            },
+                        ),
+                    ],
+                    cx,
+                );
+                let underline = state.create_decorations_collection(
+                    vec![TextDecoration::new(
+                        26..37,
+                        HighlightStyle {
+                            underline: Some(gpui::UnderlineStyle {
+                                color: Some(cx.theme().primary),
+                                thickness: gpui::px(1.),
+                                wavy: false,
+                            }),
+                            ..Default::default()
+                        },
+                    )],
+                    cx,
+                );
+                (color, underline)
+            });
 
         let code_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -289,6 +334,10 @@ impl InputStory {
             custom_menu_input,
             code_input,
             color_input,
+            decorations_input,
+            color_decorations,
+            underline_decorations,
+            decorations_visible: true,
             input_text_centered,
             input_text_right,
             content_type_inputs,
@@ -376,6 +425,52 @@ impl InputStory {
         self.code_input.update(cx, |input_state, cx| {
             input_state.set_value(CODE_EXAMPLE, window, cx);
         });
+    }
+
+    fn on_click_toggle_decorations(
+        &mut self,
+        _: &ClickEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.decorations_visible = !self.decorations_visible;
+        let color_decorations = self.decorations_visible.then(|| {
+            vec![
+                TextDecoration::new(
+                    0..7,
+                    HighlightStyle {
+                        color: Some(cx.theme().muted_foreground),
+                        ..Default::default()
+                    },
+                ),
+                TextDecoration::new(
+                    25..37,
+                    HighlightStyle {
+                        color: Some(cx.theme().primary),
+                        ..Default::default()
+                    },
+                ),
+            ]
+        });
+        self.color_decorations
+            .set(color_decorations.unwrap_or_default(), cx);
+
+        let underline_decorations = self.decorations_visible.then(|| {
+            vec![TextDecoration::new(
+                26..37,
+                HighlightStyle {
+                    underline: Some(gpui::UnderlineStyle {
+                        color: Some(cx.theme().primary),
+                        thickness: gpui::px(1.),
+                        wavy: false,
+                    }),
+                    ..Default::default()
+                },
+            )]
+        });
+        self.underline_decorations
+            .set(underline_decorations.unwrap_or_default(), cx);
+        cx.notify();
     }
 }
 
@@ -548,6 +643,21 @@ impl Render for InputStory {
                 section("Custom Text Color")
                     .max_w_md()
                     .child(Input::new(&self.color_input).text_color(cx.theme().info)),
+            )
+            .child(
+                section("Text Decorations").max_w_md().child(
+                    Input::new(&self.decorations_input).suffix(
+                        Button::new("toggle-text-decorations")
+                            .ghost()
+                            .xsmall()
+                            .label(if self.decorations_visible {
+                                "Hide decorations"
+                            } else {
+                                "Show decorations"
+                            })
+                            .on_click(cx.listener(Self::on_click_toggle_decorations)),
+                    ),
+                ),
             )
             .child(
                 section("Single line code editor").max_w_md().child(

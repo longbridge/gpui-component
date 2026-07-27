@@ -25,6 +25,7 @@ use super::{
     DisplayMap, MASK_CHAR,
     blink_cursor::BlinkCursor,
     change::Change,
+    decorations::DecorationCollections,
     element::{EditorScrollbarSnapshot, TextElement},
     mask_pattern::{MaskPattern, normalize_number_input},
     mode::InputMode,
@@ -396,6 +397,7 @@ pub struct InputState {
     pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) text_align: TextAlign,
+    pub(super) decorations: DecorationCollections,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -532,6 +534,7 @@ impl InputState {
             mask_pattern: MaskPattern::default(),
             mask_pattern_set: false,
             text_align: TextAlign::Left,
+            decorations: DecorationCollections::default(),
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu_content: None,
@@ -2931,6 +2934,11 @@ impl EntityInputHandler for InputState {
         }
 
         if mask_changed {
+            self.decorations.clear();
+        } else {
+            self.decorations.adjust_for_edit(&range, new_text.len());
+        }
+        if mask_changed {
             // A segment-based history entry no longer matches the masked
             // document, record a whole-document change instead, so that
             // undo/redo can restore the text exactly.
@@ -3013,6 +3021,7 @@ impl EntityInputHandler for InputState {
             }
         }
 
+        self.decorations.adjust_for_edit(&range, new_text.len());
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
