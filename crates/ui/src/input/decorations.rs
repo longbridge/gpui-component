@@ -32,7 +32,7 @@ struct TextDecorationCollectionId(usize);
 /// [`IEditorDecorationsCollection`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html).
 #[derive(Clone, Debug)]
 pub struct TextDecorationCollection {
-    input: WeakEntity<InputState>,
+    state: WeakEntity<InputState>,
     id: TextDecorationCollectionId,
 }
 
@@ -42,7 +42,7 @@ impl TextDecorationCollection {
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.set`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#set).
     pub fn set(&self, decorations: Vec<TextDecoration>, cx: &mut App) {
-        let _ = self.input.update(cx, |state, cx| {
+        let _ = self.state.update(cx, |state, cx| {
             let decorations = normalize(&state.text, decorations);
             if state.decorations.set(self.id, decorations) {
                 cx.notify();
@@ -55,7 +55,7 @@ impl TextDecorationCollection {
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.append`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#append).
     pub fn append(&self, decorations: Vec<TextDecoration>, cx: &mut App) {
-        let _ = self.input.update(cx, |state, cx| {
+        let _ = self.state.update(cx, |state, cx| {
             let decorations = normalize(&state.text, decorations);
             if state.decorations.append(self.id, decorations) {
                 cx.notify();
@@ -76,7 +76,7 @@ impl TextDecorationCollection {
     /// This corresponds to Monaco's
     /// [`IEditorDecorationsCollection.getRanges`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#getRanges).
     pub fn get_ranges(&self, cx: &App) -> Vec<Range<usize>> {
-        self.input
+        self.state
             .read_with(cx, |state, _| {
                 state
                     .decorations
@@ -185,7 +185,7 @@ impl InputState {
         let id = self.decorations.create(decorations);
         cx.notify();
         TextDecorationCollection {
-            input: cx.entity().downgrade(),
+            state: cx.entity().downgrade(),
             id,
         }
     }

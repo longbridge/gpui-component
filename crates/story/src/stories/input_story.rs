@@ -33,7 +33,8 @@ pub struct InputStory {
     code_input: Entity<InputState>,
     color_input: Entity<InputState>,
     decorations_input: Entity<InputState>,
-    background_decorations: TextDecorationCollection,
+    color_decorations: TextDecorationCollection,
+    underline_decorations: TextDecorationCollection,
     decorations_visible: bool,
     content_type_inputs: Vec<ContentTypeInput>,
 
@@ -134,55 +135,56 @@ impl InputStory {
             InputState::new(window, cx)
                 .default_value("Decorations can style multiple ranges independently")
         });
-        let background_decorations = decorations_input.update(cx, |state, cx| {
-            let background = state.create_decorations_collection(
-                vec![
-                    TextDecoration::new(
-                        0..11,
-                        HighlightStyle {
-                            background_color: Some(gpui::yellow()),
-                            ..Default::default()
-                        },
-                    ),
-                    TextDecoration::new(
-                        22..30,
-                        HighlightStyle {
-                            background_color: Some(gpui::yellow()),
-                            ..Default::default()
-                        },
-                    ),
-                ],
-                cx,
-            );
-            state.create_decorations_collection(
-                vec![
-                    TextDecoration::new(
-                        12..15,
-                        HighlightStyle {
-                            underline: Some(gpui::UnderlineStyle {
-                                color: Some(gpui::blue()),
-                                thickness: gpui::px(1.),
-                                wavy: false,
-                            }),
-                            ..Default::default()
-                        },
-                    ),
-                    TextDecoration::new(
-                        31..37,
-                        HighlightStyle {
-                            underline: Some(gpui::UnderlineStyle {
-                                color: Some(gpui::blue()),
-                                thickness: gpui::px(1.),
-                                wavy: false,
-                            }),
-                            ..Default::default()
-                        },
-                    ),
-                ],
-                cx,
-            );
-            background
-        });
+        let (color_decorations, underline_decorations) =
+            decorations_input.update(cx, |state, cx| {
+                let color = state.create_decorations_collection(
+                    vec![
+                        TextDecoration::new(
+                            0..21,
+                            HighlightStyle {
+                                color: Some(gpui::red()),
+                                ..Default::default()
+                            },
+                        ),
+                        TextDecoration::new(
+                            31..51,
+                            HighlightStyle {
+                                color: Some(gpui::red()),
+                                ..Default::default()
+                            },
+                        ),
+                    ],
+                    cx,
+                );
+                let underline = state.create_decorations_collection(
+                    vec![
+                        TextDecoration::new(
+                            8..16,
+                            HighlightStyle {
+                                underline: Some(gpui::UnderlineStyle {
+                                    color: Some(gpui::blue()),
+                                    thickness: gpui::px(1.),
+                                    wavy: false,
+                                }),
+                                ..Default::default()
+                            },
+                        ),
+                        TextDecoration::new(
+                            26..42,
+                            HighlightStyle {
+                                underline: Some(gpui::UnderlineStyle {
+                                    color: Some(gpui::blue()),
+                                    thickness: gpui::px(1.),
+                                    wavy: false,
+                                }),
+                                ..Default::default()
+                            },
+                        ),
+                    ],
+                    cx,
+                );
+                (color, underline)
+            });
 
         let code_input = cx.new(|cx| {
             InputState::new(window, cx)
@@ -347,7 +349,8 @@ impl InputStory {
             code_input,
             color_input,
             decorations_input,
-            background_decorations,
+            color_decorations,
+            underline_decorations,
             decorations_visible: true,
             input_text_centered,
             input_text_right,
@@ -445,26 +448,55 @@ impl InputStory {
         cx: &mut Context<Self>,
     ) {
         self.decorations_visible = !self.decorations_visible;
-        let decorations = self.decorations_visible.then(|| {
+        let color_decorations = self.decorations_visible.then(|| {
             vec![
                 TextDecoration::new(
-                    0..11,
+                    0..21,
                     HighlightStyle {
-                        background_color: Some(gpui::yellow()),
+                        color: Some(gpui::red()),
                         ..Default::default()
                     },
                 ),
                 TextDecoration::new(
-                    22..30,
+                    31..51,
                     HighlightStyle {
-                        background_color: Some(gpui::yellow()),
+                        color: Some(gpui::red()),
                         ..Default::default()
                     },
                 ),
             ]
         });
-        self.background_decorations
-            .set(decorations.unwrap_or_default(), cx);
+        self.color_decorations
+            .set(color_decorations.unwrap_or_default(), cx);
+
+        let underline_decorations = self.decorations_visible.then(|| {
+            vec![
+                TextDecoration::new(
+                    8..16,
+                    HighlightStyle {
+                        underline: Some(gpui::UnderlineStyle {
+                            color: Some(gpui::blue()),
+                            thickness: gpui::px(1.),
+                            wavy: false,
+                        }),
+                        ..Default::default()
+                    },
+                ),
+                TextDecoration::new(
+                    26..42,
+                    HighlightStyle {
+                        underline: Some(gpui::UnderlineStyle {
+                            color: Some(gpui::blue()),
+                            thickness: gpui::px(1.),
+                            wavy: false,
+                        }),
+                        ..Default::default()
+                    },
+                ),
+            ]
+        });
+        self.underline_decorations
+            .set(underline_decorations.unwrap_or_default(), cx);
         cx.notify();
     }
 }
@@ -647,9 +679,9 @@ impl Render for InputStory {
                         h_flex().gap_2().child(
                             Button::new("toggle-text-decorations")
                                 .label(if self.decorations_visible {
-                                    "Hide backgrounds"
+                                    "Hide decorations"
                                 } else {
-                                    "Show backgrounds"
+                                    "Show decorations"
                                 })
                                 .on_click(cx.listener(Self::on_click_toggle_decorations)),
                         ),
