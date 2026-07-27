@@ -3,22 +3,22 @@ mod diagnostics;
 pub use diagnostics::*;
 
 // Native implementation with full tree-sitter support
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 mod highlighter;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 mod languages;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 mod registry;
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 pub use highlighter::*;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 pub use languages::*;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 pub use registry::*;
 
-// WASM stub implementation (no tree-sitter support)
-#[cfg(target_family = "wasm")]
+// WASM stub implementation (no tree-sitter support or disabled)
+#[cfg(not(feature = "tree-sitter"))]
 mod wasm_stub;
-#[cfg(target_family = "wasm")]
+#[cfg(not(feature = "tree-sitter"))]
 pub use wasm_stub::*;

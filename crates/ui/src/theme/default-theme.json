@@ -23,6 +23,8 @@
         "chart_3": "#2563eb",
         "chart_4": "#1d4ed8",
         "chart_5": "#1e40af",
+        "chart_bullish": "green-600",
+        "chart_bearish": "red-600",
         "danger.background": "red-500",
         "danger.foreground": "neutral-50",
         "description_list_label.foreground": "#171717",
@@ -71,8 +73,6 @@
         "slider.thumb.background": "white",
         "success.background": "green-500",
         "success.foreground": "neutral-50",
-        "bullish.background": "green-600",
-        "bearish.background": "red-600",
         "switch.background": "#d4d4d4",
         "tab.background": "#00000000",
         "tab.active.background": "white",
@@ -91,6 +91,8 @@
         "tiles.background": "#fafafa",
         "title_bar.background": "#F8F8F8",
         "title_bar.border": "#e5e5e5",
+        "status_bar.background": "#F8F8F8",
+        "status_bar.border": "#e5e5e5",
         "warning.background": "yellow-500",
         "warning.foreground": "neutral-50",
         "overlay": "#0000000d",
@@ -144,6 +146,12 @@
           "embedded": {
             "color": "#333333"
           },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
+          },
           "function": {
             "color": "#0000A2"
           },
@@ -182,6 +190,9 @@
           "text.literal": {
             "color": "#6F42C1"
           },
+          "text.code.span": {
+            "color": "#6F42C1"
+          },
           "title": {
             "color": "#0433FF"
           },
@@ -218,6 +229,8 @@
         "chart_3": "#2563eb",
         "chart_4": "#1d4ed8",
         "chart_5": "#1e40af",
+        "chart_bullish": "green-600",
+        "chart_bearish": "red-600",
         "danger.background": "red-400",
         "danger.foreground": "red-600",
         "description_list_label.background": "#171717",
@@ -266,8 +279,6 @@
         "slider.thumb.background": "#0a0a0a",
         "success.background": "green-400",
         "success.foreground": "green-600",
-        "bullish.background": "#22c55e",
-        "bearish.background": "#ef4444",
         "switch.background": "#404040",
         "tab.background": "#00000000",
         "tab.active.background": "#0a0a0a",
@@ -281,9 +292,11 @@
         "tiles.background": "#171717",
         "title_bar.background": "#171717",
         "title_bar.border": "#262626",
+        "status_bar.background": "#171717",
+        "status_bar.border": "#262626",
         "warning.background": "yellow-400",
         "warning.foreground": "yellow-600",
-        "overlay": "#ffffff08",
+        "overlay": "#00000033",
         "window.border": "#262626",
         "base.red": "red-400",
         "base.red.light": "red-300",
@@ -345,6 +358,12 @@
           "embedded": {
             "color": "#CACCCA"
           },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
+          },
           "function": {
             "color": "#fdd888"
           },
@@ -381,6 +400,9 @@
             "color": "#b5af9a"
           },
           "text.literal": {
+            "color": "#E1D797"
+          },
+          "text.code.span": {
             "color": "#E1D797"
           },
           "title": {

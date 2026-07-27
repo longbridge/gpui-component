@@ -446,6 +446,7 @@ fn main() {
         cx.set_menus(vec![Menu {
             name: "GPUI App".into(),
             items: vec![MenuItem::action("Quit", Quit)],
+            disabled: false,
         }]);
         cx.activate(true);
 

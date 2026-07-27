@@ -1,21 +1,20 @@
 use std::{
     any::TypeId,
+    borrow::Cow,
     collections::{HashMap, VecDeque},
     rc::Rc,
     time::Duration,
 };
 
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context, DismissEvent,
-    ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    Subscription, Window, div, prelude::FluentBuilder, px,
+    Anchor, Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context,
+    DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement,
+    Styled, Subscription, Window, div, prelude::FluentBuilder, px,
 };
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
 use crate::{
-    ActiveTheme as _, Anchor, Edges, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
+    ActiveTheme as _, Edges, Icon, IconName, Sizable as _, StyledExt, TITLE_BAR_HEIGHT,
     animation::cubic_bezier,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
@@ -75,6 +74,7 @@ pub struct Notification {
     action_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> Button>>,
     content_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> AnyElement>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
+    on_close: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
     closing: bool,
 }
 
@@ -90,20 +90,23 @@ impl From<SharedString> for Notification {
     }
 }
 
-impl From<&'static str> for Notification {
-    fn from(s: &'static str) -> Self {
+impl From<&str> for Notification {
+    fn from(s: &str) -> Self {
         Self::new().message(s)
     }
 }
 
-impl From<(NotificationType, &'static str)> for Notification {
-    fn from((type_, content): (NotificationType, &'static str)) -> Self {
-        Self::new().message(content).with_type(type_)
+impl<'a> From<Cow<'a, str>> for Notification {
+    fn from(s: Cow<'a, str>) -> Self {
+        Self::new().message(s)
     }
 }
 
-impl From<(NotificationType, SharedString)> for Notification {
-    fn from((type_, content): (NotificationType, SharedString)) -> Self {
+impl<T> From<(NotificationType, T)> for Notification
+where
+    T: Into<SharedString>,
+{
+    fn from((type_, content): (NotificationType, T)) -> Self {
         Self::new().message(content).with_type(type_)
     }
 }
@@ -129,6 +132,7 @@ impl Notification {
             action_builder: None,
             content_builder: None,
             on_click: None,
+            on_close: None,
             closing: false,
         }
     }
@@ -171,7 +175,7 @@ impl Notification {
     ///
     /// ```rs
     /// struct MyNotificationKind;
-    /// let notification = Notification::new("Hello").id::<MyNotificationKind>();
+    /// let notification = Notification::new().message("Hello").id::<MyNotificationKind>();
     /// ```
     pub fn id<T: Sized + 'static>(mut self) -> Self {
         self.id = TypeId::of::<T>().into();
@@ -221,6 +225,15 @@ impl Notification {
         self
     }
 
+    /// Set the close callback of the notification.
+    ///
+    /// Triggered when the notification is closed by any means
+    /// (close button, middle-click, autohide, click handler, or programmatic close).
+    pub fn on_close(mut self, on_close: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_close = Some(Rc::new(on_close));
+        self
+    }
+
     /// Set the action button of the notification.
     ///
     /// When an action is set, the notification will not autohide.
@@ -234,24 +247,27 @@ impl Notification {
     }
 
     /// Dismiss the notification.
-    pub fn dismiss(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.closing {
             return;
         }
         self.closing = true;
         cx.notify();
 
+        let on_close = self.on_close.clone();
         // Dismiss the notification after 0.15s to show the animation.
-        cx.spawn(async move |view, cx| {
-            cx.background_executor().timer(Duration::from_secs_f32(0.15)).await;
-            cx.update(|cx| {
-                if let Some(view) = view.upgrade() {
-                    view.update(cx, |view, cx| {
-                        view.closing = false;
-                        cx.emit(DismissEvent);
-                    });
-                }
-            })
+        cx.spawn_in(window, async move |view, cx| {
+            cx.background_executor()
+                .timer(Duration::from_secs_f32(0.15))
+                .await;
+            _ = view.update_in(cx, |view, _, cx| {
+                view.closing = false;
+                cx.emit(DismissEvent);
+                cx.notify();
+            });
+            if let Some(on_close) = on_close {
+                _ = cx.update(|window, cx| on_close(window, cx));
+            }
         })
         .detach();
     }
@@ -265,6 +281,7 @@ impl Notification {
         self
     }
 }
+
 impl EventEmitter<DismissEvent> for Notification {}
 impl FluentBuilder for Notification {}
 impl Styled for Notification {
@@ -272,6 +289,7 @@ impl Styled for Notification {
         &mut self.style
     }
 }
+
 impl Render for Notification {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content = self
@@ -299,7 +317,7 @@ impl Render for Notification {
             .w_112()
             .border_1()
             .border_color(cx.theme().border)
-            .bg(cx.theme().popover)
+            .bg(cx.theme().tokens.popover)
             .rounded(cx.theme().radius_lg)
             .shadow_md()
             .py_3p5()
@@ -307,7 +325,7 @@ impl Render for Notification {
             .gap_3()
             .refine_style(&self.style)
             .when_some(icon, |this, icon| {
-                this.child(div().absolute().py_3p5().left_4().child(icon))
+                this.child(div().absolute().top(px(18.)).left_4().child(icon))
             })
             .child(
                 v_flex()
@@ -335,7 +353,10 @@ impl Render for Notification {
                             .icon(IconName::Close)
                             .ghost()
                             .xsmall()
-                            .on_click(cx.listener(|this, _, window, cx| this.dismiss(window, cx))),
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.dismiss(window, cx);
+                            })),
                     ),
             )
             .when_some(self.on_click.clone(), |this, on_click| {
@@ -377,11 +398,16 @@ impl Render for Notification {
                                 let y_offset = px(0.) + delta * px(45.);
                                 that.top(px(0.) + y_offset)
                             }
+                            _ => that,
                         }
                     } else {
                         let y_offset = match placement {
-                            placement if placement.is_top() => px(-45.) + delta * px(45.),
-                            placement if placement.is_bottom() => px(45.) - delta * px(45.),
+                            Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
+                                px(-45.) + delta * px(45.)
+                            }
+                            Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter => {
+                                px(45.) - delta * px(45.)
+                            }
                             _ => px(0.),
                         };
                         let opacity = delta;
@@ -395,7 +421,7 @@ impl Render for Notification {
 }
 
 /// The settings for notifications.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct NotificationSettings {
     /// The placement of the notification, default: [`Anchor::TopRight`]
     pub placement: Anchor,
@@ -491,6 +517,28 @@ impl NotificationList {
         cx.notify();
     }
 
+    /// Close all notifications whose id matches the given [`TypeId`], regardless of
+    /// whether they were registered via [`Notification::id`] or [`Notification::id1`].
+    pub(crate) fn close_by_type(
+        &mut self,
+        type_id: TypeId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let matched: Vec<_> = self
+            .notifications
+            .iter()
+            .filter(|n| match &n.read(cx).id {
+                NotificationId::Id(t) | NotificationId::IdAndElementId(t, _) => *t == type_id,
+            })
+            .cloned()
+            .collect();
+        for n in matched {
+            n.update(cx, |note, cx| note.dismiss(window, cx));
+        }
+        cx.notify();
+    }
+
     pub fn clear(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.notifications.clear();
         cx.notify();
@@ -508,7 +556,14 @@ impl Render for NotificationList {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let size = window.viewport_size();
-        let items = self.notifications.iter().rev().take(10).rev().cloned();
+        let max_items = cx.theme().notification.max_items;
+        let items = self
+            .notifications
+            .iter()
+            .rev()
+            .take(max_items)
+            .rev()
+            .cloned();
 
         let placement = cx.theme().notification.placement;
         let margins = &cx.theme().notification.margins;
@@ -543,5 +598,183 @@ impl Render for NotificationList {
                 cx.notify()
             }))
             .children(items)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::Theme;
+    use gpui::{TestAppContext, VisualTestContext};
+
+    struct FooKind;
+    struct BarKind;
+
+    struct TestRoot {
+        list: Entity<NotificationList>,
+    }
+
+    impl Render for TestRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.list.clone()
+        }
+    }
+
+    fn ids(list: &Entity<NotificationList>, cx: &mut VisualTestContext) -> Vec<NotificationId> {
+        list.read_with(cx, |l, cx| {
+            l.notifications
+                .iter()
+                .map(|n| n.read(cx).id.clone())
+                .collect()
+        })
+    }
+
+    /// Drive the dismiss animation timer + propagate the resulting `DismissEvent`
+    /// so that closed notifications are removed from the list.
+    fn flush_dismiss(cx: &mut VisualTestContext) {
+        cx.background_executor
+            .advance_clock(Duration::from_millis(200));
+        cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn close_by_type_removes_id_and_all_id1_of_same_type(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("plain").id::<FooKind>().autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("a").id1::<FooKind>(1).autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("b").id1::<FooKind>(2).autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("bar").id::<BarKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        assert_eq!(ids(&list, cx).len(), 4);
+
+        list.update_in(cx, |list, window, cx| {
+            list.close_by_type(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        let remaining = ids(&list, cx);
+        assert_eq!(
+            remaining,
+            vec![NotificationId::Id(TypeId::of::<BarKind>())],
+            "only the BarKind notification should survive"
+        );
+    }
+
+    #[gpui::test]
+    fn close_with_id_and_element_id_removes_only_matching_key(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("a").id1::<FooKind>(1).autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("b").id1::<FooKind>(2).autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("plain").id::<FooKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        list.update_in(cx, |list, window, cx| {
+            list.close(
+                (TypeId::of::<FooKind>(), ElementId::from(1usize)),
+                window,
+                cx,
+            );
+        });
+        flush_dismiss(cx);
+
+        let remaining = ids(&list, cx);
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.contains(&NotificationId::IdAndElementId(
+            TypeId::of::<FooKind>(),
+            ElementId::from(2usize),
+        )));
+        assert!(remaining.contains(&NotificationId::Id(TypeId::of::<FooKind>())));
+    }
+
+    #[gpui::test]
+    fn close_with_only_type_id_does_not_match_id1_entries(cx: &mut TestAppContext) {
+        // The plain `close(TypeId)` form (used by the legacy code path) must keep
+        // its narrow semantics: it only matches `NotificationId::Id`, not
+        // `NotificationId::IdAndElementId`. The new `close_by_type` is the broad form.
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("a").id1::<FooKind>(1).autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        assert_eq!(ids(&list, cx).len(), 1, "id1 entry should remain untouched");
+    }
+
+    #[gpui::test]
+    fn close_by_type_with_no_match_is_noop(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |r, _| r.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("bar").id::<BarKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        list.update_in(cx, |list, window, cx| {
+            list.close_by_type(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        assert_eq!(ids(&list, cx).len(), 1);
     }
 }

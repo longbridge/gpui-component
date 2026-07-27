@@ -50,6 +50,22 @@ pub struct Column {
     pub max_width: Pixels,
 }
 
+/// A column group can be used to group multiple columns under a single header.
+#[derive(Debug, Clone)]
+pub struct ColumnGroup {
+    pub label: SharedString,
+    pub span: usize,
+}
+
+impl ColumnGroup {
+    pub fn new(label: impl Into<SharedString>, span: usize) -> Self {
+        Self {
+            label: label.into(),
+            span,
+        }
+    }
+}
+
 impl Default for Column {
     fn default() -> Self {
         Self {
@@ -261,7 +277,7 @@ impl Render for DragColumn {
         div()
             .px_4()
             .py_1()
-            .bg(cx.theme().table_head)
+            .bg(cx.theme().tokens.table_head)
             .text_color(cx.theme().muted_foreground)
             .opacity(0.9)
             .border_1()

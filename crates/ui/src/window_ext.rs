@@ -5,7 +5,7 @@ use crate::{
     notification::Notification,
     sheet::Sheet,
 };
-use gpui::{App, Entity, Window};
+use gpui::{App, ElementId, Entity, Window};
 use std::rc::Rc;
 
 /// Extension trait for [`Window`] to add dialog, sheet .. functionality.
@@ -64,8 +64,12 @@ pub trait WindowExt: Sized {
     /// Pushes a notification to the notification list.
     fn push_notification(&mut self, note: impl Into<Notification>, cx: &mut App);
 
-    /// Removes the notification with the given id.
+    /// Removes all notifications whose id matches `T`, including ones registered with
+    /// either `Notification::id` or `Notification::id1` (any key).
     fn remove_notification<T: Sized + 'static>(&mut self, cx: &mut App);
+
+    /// Removes a single notification matching the given type `T` and `key` (paired with `Notification::id1`).
+    fn remove_notification1<T: Sized + 'static>(&mut self, key: impl Into<ElementId>, cx: &mut App);
 
     /// Clears all notifications.
     fn clear_notifications(&mut self, cx: &mut App);
@@ -77,6 +81,23 @@ pub trait WindowExt: Sized {
     fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>>;
     /// Returns true if there is a focused Input entity.
     fn has_focused_input(&mut self, cx: &mut App) -> bool;
+
+    /// Returns the merged selected text across all selectable TextViews in
+    /// this window, ordered top to bottom and joined with `\n`.
+    ///
+    /// Returns an empty string if the window root is not a [`Root`].
+    fn selected_text(&mut self, cx: &mut App) -> String;
+
+    /// Returns true if there is an active text selection in this window
+    /// (either a window-level drag selection or a view-local selection such
+    /// as select-all or a double-click word selection).
+    fn has_text_selection(&mut self, cx: &mut App) -> bool;
+
+    /// Clears the window-level text selection and all view-local selections.
+    fn clear_text_selection(&mut self, cx: &mut App);
+
+    /// Ends the in-progress window-level text selection drag (if any).
+    fn end_text_selection(&mut self, cx: &mut App);
 }
 
 impl WindowExt for Window {
@@ -165,6 +186,18 @@ impl WindowExt for Window {
     }
 
     #[inline]
+    fn remove_notification1<T: Sized + 'static>(
+        &mut self,
+        key: impl Into<ElementId>,
+        cx: &mut App,
+    ) {
+        let key = key.into();
+        Root::update(self, cx, |root, window, cx| {
+            root.remove_notification1::<T>(key, window, cx);
+        })
+    }
+
+    #[inline]
     fn clear_notifications(&mut self, cx: &mut App) {
         Root::update(self, cx, |root, window, cx| {
             root.clear_notifications(window, cx);
@@ -184,5 +217,37 @@ impl WindowExt for Window {
     #[inline]
     fn focused_input(&mut self, cx: &mut App) -> Option<Entity<InputState>> {
         Root::read(self, cx).focused_input.clone()
+    }
+
+    #[inline]
+    fn selected_text(&mut self, cx: &mut App) -> String {
+        let Some(root) = self.root::<Root>().flatten() else {
+            return String::new();
+        };
+        root.read(cx).window_selected_text(cx)
+    }
+
+    #[inline]
+    fn has_text_selection(&mut self, cx: &mut App) -> bool {
+        let Some(root) = self.root::<Root>().flatten() else {
+            return false;
+        };
+        root.read(cx).has_text_selection(cx)
+    }
+
+    #[inline]
+    fn clear_text_selection(&mut self, cx: &mut App) {
+        let Some(root) = self.root::<Root>().flatten() else {
+            return;
+        };
+        root.update(cx, |root, cx| root.clear_text_selection(cx));
+    }
+
+    #[inline]
+    fn end_text_selection(&mut self, cx: &mut App) {
+        let Some(root) = self.root::<Root>().flatten() else {
+            return;
+        };
+        root.update(cx, |root, cx| root.end_text_selection(cx));
     }
 }

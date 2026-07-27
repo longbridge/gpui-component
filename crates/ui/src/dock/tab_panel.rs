@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
+    Anchor, App, AppContext, Context, DismissEvent, Div, DragMoveEvent, Empty, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
     Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
     Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
@@ -58,7 +58,7 @@ impl Render for DragPanel {
             .border_color(cx.theme().border)
             .rounded(cx.theme().radius)
             .text_color(cx.theme().tab_foreground)
-            .bg(cx.theme().tab_active)
+            .bg(cx.theme().tokens.tab_active)
             .opacity(0.75)
             .child(self.panel.title(window, cx))
     }
@@ -78,6 +78,7 @@ pub struct TabPanel {
     pub(crate) closable: bool,
 
     tab_bar_scroll_handle: ScrollHandle,
+    pending_scroll_to_ix: Option<usize>,
     zoomed: bool,
     collapsed: bool,
     /// When drag move, will get the placement of the panel to be split
@@ -172,6 +173,7 @@ impl TabPanel {
             panels: Vec::new(),
             active_ix: 0,
             tab_bar_scroll_handle: ScrollHandle::new(),
+            pending_scroll_to_ix: None,
             will_split_placement: None,
             zoomed: false,
             collapsed: false,
@@ -217,7 +219,7 @@ impl TabPanel {
         let last_active_ix = self.active_ix;
 
         self.active_ix = ix;
-        self.tab_bar_scroll_handle.scroll_to_item(ix);
+        self.pending_scroll_to_ix = Some(ix);
         self.focus_active_panel(window, cx);
 
         // Sync the active state to all panels
@@ -397,6 +399,10 @@ impl TabPanel {
     }
 
     /// Return true if self or parent only have last panel.
+    ///
+    /// Only visible panels are counted, so a hidden panel does not keep the
+    /// last visible panel draggable/closable (which could otherwise leave the
+    /// dock visually empty and undroppable).
     fn is_last_panel(&self, cx: &App) -> bool {
         if let Some(parent) = &self.stack_panel {
             if let Some(stack_panel) = parent.upgrade() {
@@ -406,7 +412,7 @@ impl TabPanel {
             }
         }
 
-        self.panels.len() <= 1
+        self.visible_panels(cx).count() <= 1
     }
 
     /// Return all visible panels
@@ -514,7 +520,7 @@ impl TabPanel {
                             })
                         }
                     })
-                    .anchor(Corner::TopRight),
+                    .anchor(Anchor::TopRight),
             )
     }
 
@@ -691,6 +697,18 @@ impl TabPanel {
                 .into_any_element();
         }
 
+        if let Some(panel_ix) = self.pending_scroll_to_ix.take() {
+            if let Some(visible_ix) = self
+                .panels
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.visible(cx))
+                .position(|(ix, _)| ix == panel_ix)
+            {
+                self.tab_bar_scroll_handle.scroll_to_item(visible_ix);
+            }
+        }
+
         let tabs_count = self.panels.len();
 
         TabBar::new("tab-bar")
@@ -706,7 +724,7 @@ impl TabPanel {
                         .border_b_1()
                         .h_full()
                         .border_color(cx.theme().border)
-                        .bg(cx.theme().tab_bar)
+                        .bg(cx.theme().tokens.tab_bar)
                         .px_2()
                         .children(left_dock_button)
                         .children(bottom_dock_button),
@@ -783,11 +801,11 @@ impl TabPanel {
                 div()
                     .id("tab-bar-empty-space")
                     .h_full()
-                    .flex_grow()
+                    .flex_grow_1()
                     .min_w_16()
                     .when(state.droppable, |this| {
                         this.drag_over::<DragPanel>(|this, _, _, cx| {
-                            this.bg(cx.theme().drop_target)
+                            this.bg(cx.theme().tokens.drop_target)
                         })
                         .on_drop(cx.listener(
                             move |this, drag: &DragPanel, window, cx| {
@@ -814,7 +832,7 @@ impl TabPanel {
                         .border_b_1()
                         .h_full()
                         .border_color(cx.theme().border)
-                        .bg(cx.theme().tab_bar)
+                        .bg(cx.theme().tokens.tab_bar)
                         .px_2()
                         .gap_1()
                         .children(
@@ -867,7 +885,7 @@ impl TabPanel {
                         div()
                             .invisible()
                             .absolute()
-                            .bg(cx.theme().drop_target)
+                            .bg(cx.theme().tokens.drop_target)
                             .map(|this| match self.will_split_placement {
                                 Some(placement) => {
                                     let size = relative(0.5);
@@ -1193,7 +1211,7 @@ impl Render for TabPanel {
             .tab_group()
             .size_full()
             .overflow_hidden()
-            .bg(cx.theme().background)
+            .bg(cx.theme().tokens.background)
             .child(self.render_title_bar(&state, window, cx))
             .child(self.render_active_panel(&state, window, cx))
     }

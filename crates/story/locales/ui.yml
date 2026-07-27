@@ -1,0 +1,44 @@
+_version: 2
+gpui_component:
+  Calendar:
+    week.0:
+      fr: Di
+    week.1:
+      fr: Lu
+    week.2:
+      fr: Ma
+    week.3:
+      fr: Me
+    week.4:
+      fr: Je
+    week.5:
+      fr: Ve
+    week.6:
+      fr: Sa
+    month.January:
+      fr: Janvier
+    month.February:
+      fr: Février
+    month.March:
+      fr: Mars
+    month.April:
+      fr: Avril
+    month.May:
+      fr: Mai
+    month.June:
+      fr: Juin
+    month.July:
+      fr: Juillet
+    month.August:
+      fr: Août
+    month.September:
+      fr: Septembre
+    month.October:
+      fr: Octobre
+    month.November:
+      fr: Novembre
+    month.December:
+      fr: Décembre
+  DatePicker:
+    placeholder:
+      fr: Sélectionner une date

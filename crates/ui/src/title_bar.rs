@@ -269,7 +269,7 @@ impl RenderOnce for TitleBar {
                 .pl(TITLE_BAR_LEFT_PADDING)
                 .border_b_1()
                 .border_color(cx.theme().title_bar_border)
-                .bg(cx.theme().title_bar)
+                .bg(cx.theme().tokens.title_bar)
                 .refine_style(&self.style)
                 .when(is_linux, |this| {
                     this.on_double_click(|_, window, _| window.zoom_window())

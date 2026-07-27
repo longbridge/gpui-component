@@ -1,14 +1,22 @@
 use std::{rc::Rc, sync::Arc};
 
-use gpui::{SharedString, px};
+use gpui::{Background, Hsla, SharedString, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    Colorize, Theme, ThemeColor, ThemeMode,
-    highlighter::{HighlightTheme, HighlightThemeStyle},
-    try_parse_color,
+use crate::highlighter::{HighlightTheme, HighlightThemeStyle};
+
+use super::color::{
+    try_parse_background, try_parse_background_clamped, try_parse_color, try_parse_theme_color,
 };
+use super::{Colorize, Theme, ThemeColor, ThemeMode, ThemeToken, ThemeTokens};
+
+fn try_parse_theme_token(value: &str) -> anyhow::Result<ThemeToken> {
+    Ok(ThemeToken::new(
+        try_parse_theme_color(value)?,
+        try_parse_background(value)?,
+    ))
+}
 
 /// Represents a theme configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -89,6 +97,90 @@ pub struct ThemeConfigColors {
     /// Default border color
     #[serde(rename = "border")]
     pub border: Option<SharedString>,
+    /// Default Button background color.
+    #[serde(rename = "button.background")]
+    pub button: Option<SharedString>,
+    /// Default Button active background color.
+    #[serde(rename = "button.active.background")]
+    pub button_active: Option<SharedString>,
+    /// Default Button text color.
+    #[serde(rename = "button.foreground")]
+    pub button_foreground: Option<SharedString>,
+    /// Default Button hover background color.
+    #[serde(rename = "button.hover.background")]
+    pub button_hover: Option<SharedString>,
+    /// Button danger background color, fallback to `danger`.
+    #[serde(rename = "button.danger.background")]
+    pub button_danger: Option<SharedString>,
+    /// Button danger active background color, fallback to `danger_active`.
+    #[serde(rename = "button.danger.active.background")]
+    pub button_danger_active: Option<SharedString>,
+    /// Button danger text color, fallback to `danger_foreground`.
+    #[serde(rename = "button.danger.foreground")]
+    pub button_danger_foreground: Option<SharedString>,
+    /// Button danger hover background color, fallback to `danger_hover`.
+    #[serde(rename = "button.danger.hover.background")]
+    pub button_danger_hover: Option<SharedString>,
+    /// Button info background color, fallback to `info`.
+    #[serde(rename = "button.info.background")]
+    pub button_info: Option<SharedString>,
+    /// Button info active background color, fallback to `info_active`.
+    #[serde(rename = "button.info.active.background")]
+    pub button_info_active: Option<SharedString>,
+    /// Button info text color, fallback to `info_foreground`.
+    #[serde(rename = "button.info.foreground")]
+    pub button_info_foreground: Option<SharedString>,
+    /// Button info hover background color, fallback to `info_hover`.
+    #[serde(rename = "button.info.hover.background")]
+    pub button_info_hover: Option<SharedString>,
+    /// Button primary background color, fallback to `primary`.
+    #[serde(rename = "button.primary.background")]
+    pub button_primary: Option<SharedString>,
+    /// Button primary active background color, fallback to `primary_active`.
+    #[serde(rename = "button.primary.active.background")]
+    pub button_primary_active: Option<SharedString>,
+    /// Button primary text color, fallback to `primary_foreground`.
+    #[serde(rename = "button.primary.foreground")]
+    pub button_primary_foreground: Option<SharedString>,
+    /// Button primary hover background color, fallback to `primary_hover`.
+    #[serde(rename = "button.primary.hover.background")]
+    pub button_primary_hover: Option<SharedString>,
+    /// Button secondary background color, fallback to `secondary`.
+    #[serde(rename = "button.secondary.background")]
+    pub button_secondary: Option<SharedString>,
+    /// Button secondary active background color, fallback to `secondary_active`.
+    #[serde(rename = "button.secondary.active.background")]
+    pub button_secondary_active: Option<SharedString>,
+    /// Button secondary text color, fallback to `secondary_foreground`.
+    #[serde(rename = "button.secondary.foreground")]
+    pub button_secondary_foreground: Option<SharedString>,
+    /// Button secondary hover background color, fallback to `secondary_hover`.
+    #[serde(rename = "button.secondary.hover.background")]
+    pub button_secondary_hover: Option<SharedString>,
+    /// Button success background color, fallback to `success`.
+    #[serde(rename = "button.success.background")]
+    pub button_success: Option<SharedString>,
+    /// Button success active background color, fallback to `success_active`.
+    #[serde(rename = "button.success.active.background")]
+    pub button_success_active: Option<SharedString>,
+    /// Button success text color, fallback to `success_foreground`.
+    #[serde(rename = "button.success.foreground")]
+    pub button_success_foreground: Option<SharedString>,
+    /// Button success hover background color, fallback to `success_hover`.
+    #[serde(rename = "button.success.hover.background")]
+    pub button_success_hover: Option<SharedString>,
+    /// Button warning background color, fallback to `warning`.
+    #[serde(rename = "button.warning.background")]
+    pub button_warning: Option<SharedString>,
+    /// Button warning active background color, fallback to `warning_active`.
+    #[serde(rename = "button.warning.active.background")]
+    pub button_warning_active: Option<SharedString>,
+    /// Button warning text color, fallback to `warning_foreground`.
+    #[serde(rename = "button.warning.foreground")]
+    pub button_warning_foreground: Option<SharedString>,
+    /// Button warning hover background color, fallback to `warning_hover`.
+    #[serde(rename = "button.warning.hover.background")]
+    pub button_warning_hover: Option<SharedString>,
     /// Background color for GroupBox.
     #[serde(rename = "group_box.background")]
     pub group_box: Option<SharedString>,
@@ -116,6 +208,12 @@ pub struct ThemeConfigColors {
     /// Chart 5 color.
     #[serde(rename = "chart.5")]
     pub chart_5: Option<SharedString>,
+    /// Bullish color for candlestick charts (upward price movement).
+    #[serde(rename = "chart_bullish")]
+    pub chart_bullish: Option<SharedString>,
+    /// Bearish color for candlestick charts (downward price movement).
+    #[serde(rename = "chart_bearish")]
+    pub chart_bearish: Option<SharedString>,
     /// Danger background color.
     #[serde(rename = "danger.background")]
     pub danger: Option<SharedString>,
@@ -281,12 +379,6 @@ pub struct ThemeConfigColors {
     /// Success active background color.
     #[serde(rename = "success.active.background")]
     pub success_active: Option<SharedString>,
-    /// Bullish color for candlestick charts (upward price movement).
-    #[serde(rename = "bullish.background")]
-    pub bullish: Option<SharedString>,
-    /// Bearish color for candlestick charts (downward price movement).
-    #[serde(rename = "bearish.background")]
-    pub bearish: Option<SharedString>,
     /// Switch background color.
     #[serde(rename = "switch.background")]
     pub switch: Option<SharedString>,
@@ -347,6 +439,12 @@ pub struct ThemeConfigColors {
     /// TitleBar border color.
     #[serde(rename = "title_bar.border")]
     pub title_bar_border: Option<SharedString>,
+    /// StatusBar background color, use for the bottom status bar.
+    #[serde(rename = "status_bar.background")]
+    pub status_bar: Option<SharedString>,
+    /// StatusBar border color.
+    #[serde(rename = "status_bar.border")]
+    pub status_bar_border: Option<SharedString>,
     /// Background color for Tiles.
     #[serde(rename = "tiles.background")]
     pub tiles: Option<SharedString>,
@@ -412,107 +510,243 @@ pub struct ThemeConfigColors {
 
 impl ThemeColor {
     /// Create a new `ThemeColor` from a `ThemeConfig`.
-    pub(crate) fn apply_config(&mut self, config: &ThemeConfig, default_theme: &ThemeColor) {
+    pub(crate) fn apply_config(
+        &mut self,
+        config: &ThemeConfig,
+        default_theme: &ThemeColor,
+    ) -> ThemeTokens {
         let colors = config.colors.clone();
+        let default_tokens = ThemeTokens::from(default_theme);
+        let mut tokens = default_tokens;
 
         macro_rules! apply_color {
             ($config_field:ident) => {
-                if let Some(value) = colors.$config_field {
-                    if let Ok(color) = try_parse_color(&value) {
-                        self.$config_field = color;
-                    } else {
-                        self.$config_field = default_theme.$config_field;
-                    }
+                if let Some(value) = &colors.$config_field {
+                    self.$config_field =
+                        try_parse_color(value).unwrap_or(default_theme.$config_field);
                 } else {
                     self.$config_field = default_theme.$config_field;
                 }
+                tokens.$config_field = self.$config_field.into();
             };
             // With fallback
             ($config_field:ident, fallback = $fallback:expr) => {
-                if let Some(value) = colors.$config_field {
-                    if let Ok(color) = try_parse_color(&value) {
-                        self.$config_field = color;
-                    }
+                let fallback: gpui::Hsla = ($fallback).into();
+                if let Some(value) = &colors.$config_field {
+                    self.$config_field = try_parse_color(value).unwrap_or(fallback);
                 } else {
-                    self.$config_field = $fallback;
+                    self.$config_field = fallback;
                 }
+                tokens.$config_field = self.$config_field.into();
             };
         }
 
-        apply_color!(background);
+        macro_rules! apply_background_color {
+            ($config_field:ident) => {
+                let token = if let Some(value) = &colors.$config_field {
+                    if let Ok(token) = try_parse_theme_token(&value) {
+                        token
+                    } else {
+                        default_tokens.$config_field
+                    }
+                } else {
+                    default_tokens.$config_field
+                };
+                self.$config_field = token.color;
+                tokens.$config_field = token;
+            };
+            ($config_field:ident, fallback = $fallback:expr) => {
+                let fallback: ThemeToken = ($fallback).into();
+                let token = if let Some(value) = &colors.$config_field {
+                    if let Ok(token) = try_parse_theme_token(&value) {
+                        token
+                    } else {
+                        fallback
+                    }
+                } else {
+                    fallback
+                };
+                self.$config_field = token.color;
+                tokens.$config_field = token;
+            };
+        }
+
+        apply_background_color!(background);
 
         // Base colors for fallback
         apply_color!(red);
-        apply_color!(red_light, fallback = self.background.blend(self.red.opacity(0.8)));
+        apply_color!(
+            red_light,
+            fallback = self.background.blend(self.red.opacity(0.8))
+        );
         apply_color!(green);
-        apply_color!(green_light, fallback = self.background.blend(self.green.opacity(0.8)));
+        apply_color!(
+            green_light,
+            fallback = self.background.blend(self.green.opacity(0.8))
+        );
         apply_color!(blue);
-        apply_color!(blue_light, fallback = self.background.blend(self.blue.opacity(0.8)));
+        apply_color!(
+            blue_light,
+            fallback = self.background.blend(self.blue.opacity(0.8))
+        );
         apply_color!(magenta);
-        apply_color!(magenta_light, fallback = self.background.blend(self.magenta.opacity(0.8)));
+        apply_color!(
+            magenta_light,
+            fallback = self.background.blend(self.magenta.opacity(0.8))
+        );
         apply_color!(yellow);
-        apply_color!(yellow_light, fallback = self.background.blend(self.yellow.opacity(0.8)));
+        apply_color!(
+            yellow_light,
+            fallback = self.background.blend(self.yellow.opacity(0.8))
+        );
         apply_color!(cyan);
-        apply_color!(cyan_light, fallback = self.background.blend(self.cyan.opacity(0.8)));
+        apply_color!(
+            cyan_light,
+            fallback = self.background.blend(self.cyan.opacity(0.8))
+        );
 
         apply_color!(border);
         apply_color!(foreground);
-        apply_color!(muted);
-        apply_color!(muted_foreground, fallback = self.muted.blend(self.foreground.opacity(0.7)));
+        apply_color!(input, fallback = self.border);
+        apply_background_color!(muted);
+        apply_color!(
+            muted_foreground,
+            fallback = self.muted.blend(self.foreground.opacity(0.7))
+        );
 
         // Button colors
         let active_darken = if config.mode.is_dark() { 0.2 } else { 0.1 };
         let hover_opacity = 0.9;
-        apply_color!(primary);
+        let transparent = gpui::transparent_black();
+        let button_background = if config.mode.is_dark() {
+            self.input.mix_oklab(transparent, 0.3)
+        } else {
+            self.background
+        };
+        apply_background_color!(button, fallback = button_background);
+        apply_color!(button_foreground, fallback = self.foreground);
+        apply_background_color!(
+            button_hover,
+            fallback = self.input.mix_oklab(transparent, 0.5)
+        );
+        apply_background_color!(
+            button_active,
+            fallback = self.input.mix_oklab(transparent, 0.7)
+        );
+        apply_background_color!(primary);
         apply_color!(primary_foreground, fallback = self.foreground);
-        apply_color!(
+        apply_background_color!(
             primary_hover,
             fallback = self.background.blend(self.primary.opacity(hover_opacity))
         );
-        apply_color!(primary_active, fallback = self.primary.darken(active_darken));
-        apply_color!(secondary);
-        apply_color!(secondary_foreground, fallback = self.foreground);
+        apply_background_color!(
+            primary_active,
+            fallback = self.primary.darken(active_darken)
+        );
+        apply_background_color!(button_primary, fallback = tokens.primary);
         apply_color!(
+            button_primary_foreground,
+            fallback = self.primary_foreground
+        );
+        apply_background_color!(button_primary_hover, fallback = tokens.primary_hover);
+        apply_background_color!(button_primary_active, fallback = tokens.primary_active);
+        apply_background_color!(secondary);
+        apply_color!(secondary_foreground, fallback = self.foreground);
+        apply_background_color!(
             secondary_hover,
             fallback = self.background.blend(self.secondary.opacity(hover_opacity))
         );
-        apply_color!(secondary_active, fallback = self.secondary.darken(active_darken));
-        apply_color!(success, fallback = self.green);
-        apply_color!(success_foreground, fallback = self.primary_foreground);
+        apply_background_color!(
+            secondary_active,
+            fallback = self.secondary.darken(active_darken)
+        );
+        apply_background_color!(button_secondary, fallback = tokens.secondary);
         apply_color!(
+            button_secondary_foreground,
+            fallback = self.secondary_foreground
+        );
+        apply_background_color!(button_secondary_hover, fallback = tokens.secondary_hover);
+        apply_background_color!(button_secondary_active, fallback = tokens.secondary_active);
+        apply_background_color!(success, fallback = self.green);
+        apply_color!(success_foreground, fallback = self.primary_foreground);
+        apply_background_color!(
             success_hover,
             fallback = self.background.blend(self.success.opacity(hover_opacity))
         );
-        apply_color!(success_active, fallback = self.success.darken(active_darken));
-        apply_color!(bullish, fallback = self.green);
-        apply_color!(bearish, fallback = self.red);
-        apply_color!(info, fallback = self.cyan);
+        apply_background_color!(
+            success_active,
+            fallback = self.success.darken(active_darken)
+        );
+        apply_background_color!(
+            button_success,
+            fallback = self.success.mix_oklab(transparent, 0.2)
+        );
+        apply_color!(button_success_foreground, fallback = self.success);
+        apply_background_color!(
+            button_success_hover,
+            fallback = self.success.mix_oklab(transparent, 0.3)
+        );
+        apply_background_color!(
+            button_success_active,
+            fallback = self.success.mix_oklab(transparent, 0.4)
+        );
+        apply_background_color!(info, fallback = self.cyan);
         apply_color!(info_foreground, fallback = self.primary_foreground);
-        apply_color!(
+        apply_background_color!(
             info_hover,
             fallback = self.background.blend(self.info.opacity(hover_opacity))
         );
-        apply_color!(info_active, fallback = self.info.darken(active_darken));
-        apply_color!(warning, fallback = self.yellow);
+        apply_background_color!(info_active, fallback = self.info.darken(active_darken));
+        apply_background_color!(
+            button_info,
+            fallback = self.info.mix_oklab(transparent, 0.2)
+        );
+        apply_color!(button_info_foreground, fallback = self.info);
+        apply_background_color!(
+            button_info_hover,
+            fallback = self.info.mix_oklab(transparent, 0.3)
+        );
+        apply_background_color!(
+            button_info_active,
+            fallback = self.info.mix_oklab(transparent, 0.4)
+        );
+        apply_background_color!(warning, fallback = self.yellow);
         apply_color!(warning_foreground, fallback = self.primary_foreground);
-        apply_color!(warning_hover, fallback = self.background.blend(self.warning.opacity(0.9)));
-        apply_color!(
+        apply_background_color!(
+            warning_hover,
+            fallback = self.background.blend(self.warning.opacity(0.9))
+        );
+        apply_background_color!(
             warning_active,
             fallback = self.background.blend(self.warning.darken(active_darken))
         );
+        apply_background_color!(
+            button_warning,
+            fallback = self.warning.mix_oklab(transparent, 0.2)
+        );
+        apply_color!(button_warning_foreground, fallback = self.warning);
+        apply_background_color!(
+            button_warning_hover,
+            fallback = self.warning.mix_oklab(transparent, 0.3)
+        );
+        apply_background_color!(
+            button_warning_active,
+            fallback = self.warning.mix_oklab(transparent, 0.4)
+        );
 
         // Other colors
-        apply_color!(accent, fallback = self.secondary);
+        apply_background_color!(accent, fallback = tokens.secondary);
         apply_color!(accent_foreground, fallback = self.foreground);
-        apply_color!(accordion, fallback = self.background);
-        apply_color!(accordion_hover, fallback = self.accent.opacity(0.8));
-        apply_color!(
+        apply_background_color!(accordion, fallback = tokens.background);
+        apply_background_color!(accordion_hover, fallback = self.accent.opacity(0.8));
+        apply_background_color!(
             group_box,
-            fallback = self.background.blend(self.secondary.opacity(if config.mode.is_dark() {
-                0.3
-            } else {
-                0.4
-            }))
+            fallback = self
+                .background
+                .blend(
+                    self.secondary
+                        .opacity(if config.mode.is_dark() { 0.3 } else { 0.4 })
+                )
         );
         apply_color!(group_box_foreground, fallback = self.foreground);
         apply_color!(caret, fallback = self.primary);
@@ -521,78 +755,139 @@ impl ThemeColor {
         apply_color!(chart_3, fallback = self.blue);
         apply_color!(chart_4, fallback = self.blue.darken(0.2));
         apply_color!(chart_5, fallback = self.blue.darken(0.4));
-        apply_color!(danger, fallback = self.red);
-        apply_color!(danger_active, fallback = self.danger.darken(active_darken));
+        apply_color!(chart_bullish, fallback = self.green);
+        apply_color!(chart_bearish, fallback = self.red);
+        apply_background_color!(danger, fallback = self.red);
+        apply_background_color!(danger_active, fallback = self.danger.darken(active_darken));
         apply_color!(danger_foreground, fallback = self.primary_foreground);
-        apply_color!(danger_hover, fallback = self.background.blend(self.danger.opacity(0.9)));
-        apply_color!(
+        apply_background_color!(
+            danger_hover,
+            fallback = self.background.blend(self.danger.opacity(0.9))
+        );
+        apply_background_color!(
+            button_danger,
+            fallback = self.danger.mix_oklab(transparent, 0.2)
+        );
+        apply_color!(button_danger_foreground, fallback = self.danger);
+        apply_background_color!(
+            button_danger_hover,
+            fallback = self.danger.mix_oklab(transparent, 0.3)
+        );
+        apply_background_color!(
+            button_danger_active,
+            fallback = self.danger.mix_oklab(transparent, 0.4)
+        );
+        apply_background_color!(
             description_list_label,
             fallback = self.background.blend(self.border.opacity(0.2))
         );
-        apply_color!(description_list_label_foreground, fallback = self.muted_foreground);
+        apply_color!(
+            description_list_label_foreground,
+            fallback = self.muted_foreground
+        );
         apply_color!(drag_border, fallback = self.primary.opacity(0.65));
-        apply_color!(drop_target, fallback = self.primary.opacity(0.2));
-        apply_color!(input, fallback = self.border);
+        apply_background_color!(drop_target, fallback = self.primary.opacity(0.2));
         apply_color!(link, fallback = self.primary);
         apply_color!(link_active, fallback = self.link);
         apply_color!(link_hover, fallback = self.link);
-        apply_color!(list, fallback = self.background);
-        apply_color!(list_active, fallback = self.background.blend(self.primary.opacity(0.1)));
+        apply_background_color!(list, fallback = tokens.background);
+        apply_background_color!(
+            list_active,
+            fallback = self.background.blend(self.primary.opacity(0.1))
+        );
         apply_color!(
             list_active_border,
             fallback = self.background.blend(self.primary.opacity(0.6))
         );
-        apply_color!(list_even, fallback = self.list);
-        apply_color!(list_head, fallback = self.list);
-        apply_color!(list_hover, fallback = self.accent.opacity(0.6));
-        apply_color!(popover, fallback = self.background);
+        apply_background_color!(list_even, fallback = tokens.list);
+        apply_background_color!(list_head, fallback = tokens.list);
+        apply_background_color!(list_hover, fallback = self.accent.opacity(0.6));
+        apply_background_color!(popover, fallback = tokens.background);
         apply_color!(popover_foreground, fallback = self.foreground);
-        apply_color!(progress_bar, fallback = self.primary);
+        apply_background_color!(progress_bar, fallback = tokens.primary);
         apply_color!(ring, fallback = self.blue);
-        apply_color!(scrollbar, fallback = self.background);
-        apply_color!(scrollbar_thumb, fallback = self.accent);
-        apply_color!(scrollbar_thumb_hover, fallback = self.scrollbar_thumb);
-        apply_color!(selection, fallback = self.primary);
-        apply_color!(sidebar, fallback = self.background.blend(self.border.opacity(0.15)));
-        apply_color!(sidebar_accent, fallback = self.accent);
+        apply_background_color!(scrollbar, fallback = tokens.background);
+        apply_background_color!(scrollbar_thumb, fallback = tokens.accent);
+        apply_background_color!(scrollbar_thumb_hover, fallback = tokens.scrollbar_thumb);
+        apply_background_color!(selection, fallback = tokens.primary);
+        apply_background_color!(
+            sidebar,
+            fallback = self.background.blend(self.border.opacity(0.15))
+        );
+        apply_background_color!(sidebar_accent, fallback = tokens.accent);
         apply_color!(sidebar_accent_foreground, fallback = self.accent_foreground);
         apply_color!(sidebar_border, fallback = self.border);
         apply_color!(sidebar_foreground, fallback = self.foreground);
-        apply_color!(sidebar_primary, fallback = self.primary);
-        apply_color!(sidebar_primary_foreground, fallback = self.primary_foreground);
-        apply_color!(skeleton, fallback = self.secondary);
-        apply_color!(slider_bar, fallback = self.primary);
-        apply_color!(slider_thumb, fallback = self.primary_foreground);
-        apply_color!(switch, fallback = self.secondary_active);
-        apply_color!(switch_thumb, fallback = self.background);
-        apply_color!(tab, fallback = self.background);
-        apply_color!(tab_active, fallback = self.background);
+        apply_background_color!(sidebar_primary, fallback = tokens.primary);
+        apply_color!(
+            sidebar_primary_foreground,
+            fallback = self.primary_foreground
+        );
+        apply_background_color!(skeleton, fallback = tokens.secondary);
+        apply_background_color!(slider_bar, fallback = tokens.primary);
+        apply_background_color!(slider_thumb, fallback = self.primary_foreground);
+        apply_background_color!(switch, fallback = tokens.secondary_active);
+        apply_background_color!(switch_thumb, fallback = tokens.background);
+        apply_background_color!(tab, fallback = tokens.background);
+        apply_background_color!(tab_active, fallback = tokens.background);
         apply_color!(tab_active_foreground, fallback = self.foreground);
-        apply_color!(tab_bar, fallback = self.background);
-        apply_color!(tab_bar_segmented, fallback = self.secondary);
+        apply_background_color!(tab_bar, fallback = tokens.background);
+        apply_background_color!(tab_bar_segmented, fallback = tokens.secondary);
         apply_color!(tab_foreground, fallback = self.foreground);
-        apply_color!(table, fallback = self.list);
-        apply_color!(table_active, fallback = self.list_active);
+        apply_background_color!(table, fallback = tokens.list);
+        apply_background_color!(table_active, fallback = tokens.list_active);
         apply_color!(table_active_border, fallback = self.list_active_border);
-        apply_color!(table_even, fallback = self.list_even);
-        apply_color!(table_head, fallback = self.list_head);
+        apply_background_color!(table_even, fallback = tokens.list_even);
+        apply_background_color!(table_head, fallback = tokens.list_head);
         apply_color!(table_head_foreground, fallback = self.muted_foreground);
-        apply_color!(table_foot, fallback = self.list_head);
+        apply_background_color!(table_foot, fallback = tokens.list_head);
         apply_color!(table_foot_foreground, fallback = self.muted_foreground);
-        apply_color!(table_hover, fallback = self.list_hover);
+        apply_background_color!(table_hover, fallback = tokens.list_hover);
         apply_color!(table_row_border, fallback = self.border);
-        apply_color!(title_bar, fallback = self.background);
+        apply_background_color!(title_bar, fallback = tokens.background);
         apply_color!(title_bar_border, fallback = self.border);
-        apply_color!(tiles, fallback = self.background);
-        apply_color!(overlay);
+        apply_background_color!(status_bar, fallback = tokens.title_bar);
+        apply_color!(status_bar_border, fallback = self.title_bar_border);
+        apply_background_color!(tiles, fallback = tokens.background);
+        apply_background_color!(overlay);
         apply_color!(window_border, fallback = self.border);
 
         // TODO: Apply default fallback colors to highlight.
 
-        // Ensure opacity for list_active, table_active
-        self.list_active = self.list_active.alpha(self.list_active.a.min(0.2));
-        self.table_active = self.table_active.alpha(self.table_active.a.min(0.2));
-        self.selection = self.selection.alpha(self.selection.a.min(0.3));
+        // Ensure opacity for list_active, table_active, selection.
+        let clamp_alpha = |raw: Option<&str>, color: Hsla, background: Background, max: f32| {
+            let base = color.a;
+            let target = base.min(max);
+            let color = color.alpha(target);
+            let background = raw
+                .and_then(|value| try_parse_background_clamped(value, max).ok())
+                .unwrap_or_else(|| {
+                    let factor = if base > 0. { target / base } else { 1. };
+                    background.opacity(factor)
+                });
+            (color, ThemeToken::new(color, background))
+        };
+
+        (self.list_active, tokens.list_active) = clamp_alpha(
+            colors.list_active.as_deref(),
+            self.list_active,
+            tokens.list_active.background,
+            0.2,
+        );
+        (self.table_active, tokens.table_active) = clamp_alpha(
+            colors.table_active.as_deref(),
+            self.table_active,
+            tokens.table_active.background,
+            0.2,
+        );
+        (self.selection, tokens.selection) = clamp_alpha(
+            colors.selection.as_deref(),
+            self.selection,
+            tokens.selection.background,
+            0.3,
+        );
+
+        tokens
     }
 }
 
@@ -613,49 +908,175 @@ impl Theme {
             self.highlight_theme = highlight_theme.clone();
         }
 
-        let default_theme = if config.mode.is_dark() {
-            Self::from(ThemeColor::dark().as_ref())
+        let default_colors = if config.mode.is_dark() {
+            ThemeColor::dark()
         } else {
-            Self::from(ThemeColor::light().as_ref())
+            ThemeColor::light()
         };
 
         if let Some(font_size) = config.font_size {
             self.font_size = px(font_size);
-        } else {
-            self.font_size = default_theme.font_size;
         }
         if let Some(font_family) = &config.font_family {
             self.font_family = font_family.clone();
-        } else {
-            self.font_family = default_theme.font_family.clone();
         }
         if let Some(mono_font_family) = &config.mono_font_family {
             self.mono_font_family = mono_font_family.clone();
-        } else {
-            self.mono_font_family = default_theme.mono_font_family.clone();
         }
         if let Some(mono_font_size) = config.mono_font_size {
             self.mono_font_size = px(mono_font_size);
-        } else {
-            self.mono_font_size = default_theme.mono_font_size;
         }
         if let Some(radius) = config.radius {
             self.radius = px(radius as f32);
-        } else {
-            self.radius = default_theme.radius;
         }
         if let Some(radius_lg) = config.radius_lg {
             self.radius_lg = px(radius_lg as f32);
-        } else {
-            self.radius_lg = default_theme.radius_lg;
         }
         if let Some(shadow) = config.shadow {
             self.shadow = shadow;
-        } else {
-            self.shadow = default_theme.shadow;
         }
 
-        self.colors.apply_config(&config, &default_theme.colors);
+        self.tokens = self.colors.apply_config(&config, &default_colors);
         self.mode = config.mode;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{linear_color_stop, linear_gradient};
+
+    use crate::{Theme, ThemeConfig, ThemeMode, ThemeSet, try_parse_color};
+
+    #[test]
+    fn test_apply_config_preserves_gradient_background_and_solid_color_fallback() {
+        let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+            "name": "Gradient",
+            "mode": "light",
+            "colors": {
+                "primary.background": "linear-gradient(135deg, #4F46E5, #06B6D4)",
+                "button.primary.hover.background": "linear-gradient(to right, red-500 25%, blue-600 75%)"
+            }
+        }))
+        .unwrap();
+
+        let mut theme = Theme::default();
+        theme.apply_config(&std::rc::Rc::new(config));
+
+        let primary_from = try_parse_color("#4F46E5").unwrap();
+        let primary_to = try_parse_color("#06B6D4").unwrap();
+        assert_eq!(theme.primary, primary_from);
+        assert_eq!(theme.tokens.primary.color, primary_from);
+        assert_eq!(
+            theme.tokens.primary.background,
+            linear_gradient(
+                135.,
+                linear_color_stop(primary_from, 0.),
+                linear_color_stop(primary_to, 1.)
+            )
+        );
+        assert_eq!(
+            theme.tokens.button_primary.background,
+            theme.tokens.primary.background
+        );
+        assert_eq!(
+            theme.tokens.button_primary_hover.background,
+            linear_gradient(
+                90.,
+                linear_color_stop(crate::red_500(), 0.25),
+                linear_color_stop(crate::blue_600(), 0.75)
+            )
+        );
+        assert_eq!(theme.mode, ThemeMode::Light);
+    }
+
+    #[test]
+    fn test_aurora_theme_parses_gradient_backgrounds() {
+        let theme_set =
+            serde_json::from_str::<ThemeSet>(include_str!("../../../../themes/aurora.json"))
+                .unwrap();
+        assert_eq!(theme_set.themes.len(), 1);
+        assert!(theme_set.themes.iter().all(|theme| !theme.mode.is_dark()));
+
+        let light = theme_set
+            .themes
+            .iter()
+            .find(|theme| theme.name.as_ref() == "Aurora Light")
+            .unwrap();
+        let mut theme = Theme::default();
+        theme.apply_config(&std::rc::Rc::new(light.clone()));
+
+        assert_ne!(
+            theme.tokens.button_primary.background,
+            theme.button_primary.into()
+        );
+        assert_eq!(theme.tokens.background.background, theme.background.into());
+        assert_eq!(theme.button_primary, try_parse_color("#1E293B").unwrap());
+        assert_eq!(theme.background, try_parse_color("#FFFFFF").unwrap());
+        assert_ne!(
+            theme.tokens.progress_bar.background,
+            theme.progress_bar.into()
+        );
+        assert_ne!(
+            theme.tokens.scrollbar_thumb.background,
+            theme.scrollbar_thumb.into()
+        );
+        assert_ne!(theme.tokens.switch.background, theme.switch.into());
+        assert_ne!(
+            theme.tokens.switch_thumb.background,
+            theme.switch_thumb.into()
+        );
+        assert_ne!(theme.tokens.title_bar.background, theme.title_bar.into());
+        assert_ne!(theme.tokens.status_bar.background, theme.status_bar.into());
+    }
+
+    #[test]
+    fn test_apply_config_clamps_highlight_alpha_per_gradient_stop() {
+        let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+            "name": "Highlight",
+            "mode": "light",
+            "colors": {
+                // Solid above the cap: must be capped to 0.2, not attenuated twice.
+                "list.active.background": "#3b82f6",
+                // Gradient with a faint `from` stop and an opaque `to` stop: the
+                // `to` stop must be clamped independently, not left at full alpha.
+                "table.active.background": "linear-gradient(#bfdbfe33, #3b82f6)",
+                // Gradient with a transparent `from` stop: the opaque `to` stop
+                // must still be clamped (the `base == 0` factor fallback used to
+                // leave it untouched).
+                "selection.background": "linear-gradient(#3b82f600, #3b82f6)",
+            }
+        }))
+        .unwrap();
+
+        let mut theme = Theme::default();
+        theme.apply_config(&std::rc::Rc::new(config));
+
+        // Solid: representative color and rendered background both capped at 0.2.
+        let blue = try_parse_color("#3b82f6").unwrap();
+        assert_eq!(theme.list_active, blue.alpha(0.2));
+        assert_eq!(theme.tokens.list_active.background, blue.alpha(0.2).into());
+
+        // Gradient: the opaque `to` stop is clamped to 0.2, not left fully opaque.
+        let faint = try_parse_color("#bfdbfe33").unwrap();
+        assert_eq!(
+            theme.tokens.table_active.background,
+            linear_gradient(
+                180.,
+                linear_color_stop(faint.alpha(faint.a.min(0.2)), 0.),
+                linear_color_stop(blue.alpha(0.2), 1.),
+            )
+        );
+
+        // Gradient: a transparent `from` stop stays transparent while the opaque
+        // `to` stop is still clamped to 0.3 (selection cap).
+        let clear = try_parse_color("#3b82f600").unwrap();
+        assert_eq!(
+            theme.tokens.selection.background,
+            linear_gradient(
+                180.,
+                linear_color_stop(clear.alpha(clear.a.min(0.3)), 0.),
+                linear_color_stop(blue.alpha(0.3), 1.),
+            )
+        );
     }
 }

@@ -7,9 +7,9 @@ use gpui::{
 use gpui_component::{
     ActiveTheme as _, Selectable, Sizable, VirtualListScrollHandle,
     button::{Button, ButtonGroup},
-    divider::Divider,
     h_flex,
     scroll::{ScrollableElement, ScrollbarAxis},
+    separator::Separator,
     v_flex, v_virtual_list,
 };
 
@@ -120,7 +120,7 @@ impl VirtualListStory {
                                         }
                                     })),
                             )
-                            .child(Divider::vertical().px_2())
+                            .child(Separator::vertical().px_2())
                             .child(
                                 ButtonGroup::new("scrollbars")
                                     .outline()

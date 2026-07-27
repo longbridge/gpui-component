@@ -27,6 +27,7 @@ Context menus appear when right-clicking on an element:
 use gpui_component::menu::ContextMenuExt;
 
 div()
+    .id("my-element")
     .child("Right click me")
     .context_menu(|menu, window, cx| {
         menu.menu("Copy", Box::new(Copy))
@@ -78,11 +79,11 @@ There have a `on_click` callback to handle the click event directly.
 Control where the dropdown menu appears relative to the trigger:
 
 ```rust
-use gpui::Corner;
+use gpui::Anchor;
 
 Button::new("menu-btn")
     .label("Options")
-    .dropdown_menu_with_anchor(Corner::TopRight, |menu, window, cx| {
+    .dropdown_menu_with_anchor(Anchor::TopRight, |menu, window, cx| {
         menu.menu("Option 1", Box::new(Action1))
             .menu("Option 2", Box::new(Action2))
     })
@@ -332,6 +333,7 @@ menu.action_context(focus_handle)
 
 ```rust
 div()
+    .id("file-manager")
     .child("Right-click for options")
     .context_menu(|menu, window, cx| {
         menu.menu_with_icon("Open", IconName::FolderOpen, Box::new(Open))

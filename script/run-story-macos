@@ -1,0 +1,45 @@
+#!/bin/bash
+# Build and launch the Story gallery for AccessKit / VoiceOver testing.
+# Run from the repo root:
+#
+#   ./script/run-story-macos
+#
+# We set up a proper .app bundle (so macOS and VoiceOver see the correct
+# bundle ID) but execute the binary directly instead of going through
+# LaunchServices (`open`).  Using `open` causes the macOS bundle lifecycle
+# to conflict with GPUI's async window-open (cx.spawn), leading to a
+# 100% CPU busy-loop.  Direct execution behaves identically to `cargo run`.
+
+set -euxo pipefail
+
+APP=/tmp/GPUIComponentStory.app
+BIN=gpui-component-story
+
+cargo build -p gpui-component-story
+
+mkdir -p "$APP/Contents/MacOS"
+cp "target/debug/$BIN" "$APP/Contents/MacOS/"
+
+cat > "$APP/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>gpui-component-story</string>
+  <key>CFBundleIdentifier</key><string>com.longbridge.gpui-component-story</string>
+  <key>CFBundleName</key><string>GPUI Component Story</string>
+  <key>CFBundleVersion</key><string>1.0</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+PLIST
+
+codesign --sign - --force "$APP"
+
+# Execute the binary directly — same as `cargo run`.
+# Do NOT use `open "$APP"`: LaunchServices triggers a macOS bundle lifecycle
+# that conflicts with GPUI's deferred window creation (cx.spawn), causing
+# the run loop to spin at 100% CPU.
+exec "$APP/Contents/MacOS/$BIN" "$@"

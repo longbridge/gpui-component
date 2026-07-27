@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-    AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
+    Anchor, AnyElement, App, Context, DismissEvent, Element, ElementId, Entity, Focusable,
     GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
     MouseButton, MouseDownEvent, ParentElement, Pixels, Point, StyleRefinement, Styled,
     Subscription, Window, anchored, deferred, div, prelude::FluentBuilder, px,
@@ -10,13 +10,13 @@ use gpui::{
 use crate::menu::PopupMenu;
 
 /// A extension trait for adding a context menu to an element.
-pub trait ContextMenuExt: ParentElement + Styled {
+pub trait ContextMenuExt: InteractiveElement + ParentElement + Styled {
     /// Add a context menu to the element.
     ///
     /// This will changed the element to be `relative` positioned, and add a child `ContextMenu` element.
     /// Because the `ContextMenu` element is positioned `absolute`, it will not affect the layout of the parent element.
     fn context_menu(
-        self,
+        mut self,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> ContextMenu<Self>
     where
@@ -24,12 +24,17 @@ pub trait ContextMenuExt: ParentElement + Styled {
     {
         // Generate a unique ID based on the element's memory address to ensure
         // each context menu has its own state and doesn't share with others
-        let id = format!("context-menu-{:p}", &self as *const _);
+        let id = self
+            .interactivity()
+            .element_id
+            .clone()
+            .map(|id| format!("context-menu-{:?}", id))
+            .unwrap_or_else(|| format!("context-menu-{:p}", &self as *const _));
         ContextMenu::new(id, self).menu(f)
     }
 }
 
-impl<E: ParentElement + Styled> ContextMenuExt for E {}
+impl<E: InteractiveElement + ParentElement + Styled> ContextMenuExt for E {}
 
 /// A context menu that can be shown on right-click.
 pub struct ContextMenu<E: ParentElement + Styled + Sized> {
@@ -38,7 +43,7 @@ pub struct ContextMenu<E: ParentElement + Styled + Sized> {
     menu: Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
     // This is not in use, just for style refinement forwarding.
     _ignore_style: StyleRefinement,
-    anchor: Corner,
+    anchor: Anchor,
 }
 
 impl<E: ParentElement + Styled> ContextMenu<E> {
@@ -48,7 +53,7 @@ impl<E: ParentElement + Styled> ContextMenu<E> {
             id: id.into(),
             element: Some(element),
             menu: None,
-            anchor: Corner::TopLeft,
+            anchor: Anchor::TopLeft,
             _ignore_style: StyleRefinement::default(),
         }
     }

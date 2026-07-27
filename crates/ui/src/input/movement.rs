@@ -25,7 +25,7 @@ impl InputState {
             return;
         };
 
-        let Some(pos) = line.position_for_index(point.column, last_layout) else {
+        let Some(pos) = line.position_for_index(point.column, last_layout, false) else {
             self.preferred_column = None;
             return;
         };
@@ -45,6 +45,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let offset = offset.clamp(0, self.text.len());
+        self.cursor_line_end_affinity = false;
         self.selected_range = (offset..offset).into();
         self.scroll_to(offset, direction, cx);
         self.pause_blink_cursor(cx);
@@ -235,6 +236,7 @@ impl InputState {
         self.pause_blink_cursor(cx);
         let offset = self.end_of_line();
         self.move_to(offset, Some(MoveDirection::Down), cx);
+        self.cursor_line_end_affinity = true;
     }
 
     pub(super) fn move_to_start(

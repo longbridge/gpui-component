@@ -3,8 +3,9 @@ use std::{rc::Rc, sync::LazyLock, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Edges,
     FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, Point, RenderOnce, SharedString, StyleRefinement, Styled, Window, WindowControlArea,
-    actions, anchored, div, hsla, point, prelude::FluentBuilder, px,
+    Pixels, Point, RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window, WindowControlArea, actions, anchored, div, hsla, point, prelude::FluentBuilder,
+    px,
 };
 use rust_i18n::t;
 
@@ -15,6 +16,7 @@ use crate::{
     button::{Button, ButtonVariant, ButtonVariants as _},
     dialog::{DialogContent, DialogTitle},
     scroll::ScrollableElement as _,
+    text::{SelectionScope, SelectionScopeElement as _},
     v_flex,
 };
 
@@ -115,7 +117,10 @@ impl DialogButtonProps {
         let on_ok = self.on_ok.clone();
         let on_close = self.on_close.clone();
 
-        let ok_text = self.ok_text.clone().unwrap_or_else(|| t!("Dialog.ok").into());
+        let ok_text = self
+            .ok_text
+            .clone()
+            .unwrap_or_else(|| t!("Dialog.ok").into());
         let ok_variant = self.ok_variant;
 
         Button::new("ok")
@@ -138,7 +143,10 @@ impl DialogButtonProps {
     pub(crate) fn render_cancel(&self, _: &mut Window, _: &mut App) -> AnyElement {
         let on_cancel = self.on_cancel.clone();
         let on_close = self.on_close.clone();
-        let cancel_text = self.cancel_text.clone().unwrap_or_else(|| t!("Dialog.cancel").into());
+        let cancel_text = self
+            .cancel_text
+            .clone()
+            .unwrap_or_else(|| t!("Dialog.cancel").into());
         let cancel_variant = self.cancel_variant;
 
         Button::new("cancel")
@@ -201,6 +209,7 @@ pub struct Dialog {
     pub(crate) footer: Option<AnyElement>,
     pub(crate) content_builder: Option<ContentBuilderFn>,
     pub(crate) props: DialogProps,
+    pub(crate) a11y_role: Role,
 
     button_props: DialogButtonProps,
 
@@ -232,6 +241,7 @@ impl Dialog {
             children: Vec::new(),
             layer_ix: 0,
             button_props: DialogButtonProps::default(),
+            a11y_role: Role::Dialog,
         }
     }
 
@@ -277,6 +287,11 @@ impl Dialog {
     /// Set the button props of the dialog.
     pub fn button_props(mut self, button_props: DialogButtonProps) -> Self {
         self.button_props = button_props;
+        self
+    }
+
+    pub(crate) fn alert_dialog_role(mut self) -> Self {
+        self.a11y_role = Role::AlertDialog;
         self
     }
 
@@ -446,7 +461,10 @@ impl RenderOnce for Dialog {
                 window_paddings.left + window_paddings.right,
                 window_paddings.top + window_paddings.bottom,
             );
-        let bounds = Bounds { origin: Point::default(), size: view_size };
+        let bounds = Bounds {
+            origin: Point::default(),
+            size: view_size,
+        };
         let offset_top = px(layer_ix as f32 * 16.);
         let y = self.props.margin_top.unwrap_or(view_size.height / 10.) + offset_top;
         let x = bounds.center().x - self.props.width / 2.;
@@ -489,31 +507,34 @@ impl RenderOnce for Dialog {
                             return this;
                         }
 
-                        this.window_control_area(WindowControlArea::Drag).on_any_mouse_down({
-                            let on_cancel = on_cancel.clone();
-                            let on_close = on_close.clone();
-                            move |event, window, cx| {
-                                if event.position.y < TITLE_BAR_HEIGHT {
-                                    return;
-                                }
+                        this.window_control_area(WindowControlArea::Drag)
+                            .on_any_mouse_down({
+                                let on_cancel = on_cancel.clone();
+                                let on_close = on_close.clone();
+                                move |event, window, cx| {
+                                    if event.position.y < TITLE_BAR_HEIGHT {
+                                        return;
+                                    }
 
-                                cx.stop_propagation();
-                                if self.props.overlay_closable && event.button == MouseButton::Left
-                                {
-                                    if on_cancel(&ClickEvent::default(), window, cx) {
-                                        on_close(&ClickEvent::default(), window, cx);
-                                        window.close_dialog(cx);
+                                    cx.stop_propagation();
+                                    if self.props.overlay_closable
+                                        && event.button == MouseButton::Left
+                                    {
+                                        if on_cancel(&ClickEvent::default(), window, cx) {
+                                            on_close(&ClickEvent::default(), window, cx);
+                                            window.close_dialog(cx);
+                                        }
                                     }
                                 }
-                            }
-                        })
+                            })
                     })
                     .child(
                         v_flex()
                             .id(layer_ix)
+                            .role(self.a11y_role)
                             .track_focus(&self.focus_handle)
                             .focus_trap(format!("dialog-{}", layer_ix), &self.focus_handle)
-                            .bg(cx.theme().background)
+                            .bg(cx.theme().tokens.background)
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded(cx.theme().radius_lg)
@@ -559,40 +580,51 @@ impl RenderOnce for Dialog {
                             .top(y)
                             .w(self.props.width)
                             .when_some(self.props.max_width, |this, w| this.max_w(w))
-                            .when_some(self.header, |this, header| {
-                                this.child(div().pl(paddings.left).pr(paddings.right).child(header))
-                            })
-                            .when_some(self.title, |this, title| {
-                                this.child(
-                                    DialogTitle::new()
-                                        .pl(paddings.left)
-                                        .pr(paddings.right)
-                                        .child(title),
-                                )
-                            })
-                            .when_some(self.content_builder, |this, builder| {
-                                this.child(builder(
-                                    DialogContent::new()
-                                        .gap(paddings.bottom)
-                                        .pl(paddings.left)
-                                        .pr(paddings.right),
-                                    window,
-                                    cx,
-                                ))
-                            })
-                            .when(!self.children.is_empty(), |this| {
-                                this.child(
-                                    div().flex_1().overflow_hidden().child(
-                                        // Body
-                                        v_flex()
-                                            .size_full()
-                                            .overflow_y_scrollbar()
-                                            .pl(paddings.left)
-                                            .pr(paddings.right)
-                                            .children(self.children),
-                                    ),
-                                )
-                            })
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .overflow_hidden()
+                                    .gap_y_2()
+                                    .when_some(self.header, |this, header| {
+                                        this.child(
+                                            div()
+                                                .pl(paddings.left)
+                                                .pr(paddings.right)
+                                                .child(header),
+                                        )
+                                    })
+                                    .when_some(self.title, |this, title| {
+                                        this.child(
+                                            DialogTitle::new()
+                                                .pl(paddings.left)
+                                                .pr(paddings.right)
+                                                .child(title),
+                                        )
+                                    })
+                                    .when_some(self.content_builder, |this, builder| {
+                                        this.child(builder(
+                                            DialogContent::new()
+                                                .gap(paddings.bottom)
+                                                .pl(paddings.left)
+                                                .pr(paddings.right),
+                                            window,
+                                            cx,
+                                        ))
+                                    })
+                                    .when(!self.children.is_empty(), |this| {
+                                        this.child(
+                                            div().flex_1().overflow_hidden().child(
+                                                // Body
+                                                v_flex()
+                                                    .size_full()
+                                                    .overflow_y_scrollbar()
+                                                    .pl(paddings.left)
+                                                    .pr(paddings.right)
+                                                    .children(self.children),
+                                            ),
+                                        )
+                                    }),
+                            )
                             .when_some(self.footer, |this, footer| {
                                 this.child(div().pl(paddings.left).pr(paddings.right).child(footer))
                             })
@@ -617,11 +649,6 @@ impl RenderOnce for Dialog {
                                         }
                                     })
                             }))
-                            .on_any_mouse_down({
-                                |_, _, cx| {
-                                    cx.stop_propagation();
-                                }
-                            })
                             .with_animation("slide-down", animation.clone(), move |this, delta| {
                                 // This is equivalent to `shadow_xl` with an extra opacity.
                                 let shadow = vec![
@@ -630,16 +657,19 @@ impl RenderOnce for Dialog {
                                         offset: point(px(0.), px(20.)),
                                         blur_radius: px(25.),
                                         spread_radius: px(-5.),
+                                        inset: false,
                                     },
                                     BoxShadow {
                                         color: hsla(0., 0., 0., 0.1 * delta),
                                         offset: point(px(0.), px(8.)),
                                         blur_radius: px(10.),
                                         spread_radius: px(-6.),
+                                        inset: false,
                                     },
                                 ];
                                 this.top(y * delta).shadow(shadow)
-                            }),
+                            })
+                            .selection_scope(SelectionScope::Dialog(layer_ix)),
                     )
                     .with_animation("fade-in", animation, move |this, delta| this.opacity(delta)),
             )

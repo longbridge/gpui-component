@@ -371,6 +371,17 @@ impl CalendarState {
     ///
     /// Each year page contains 20 years, so the range will be divided into chunks of 20 years is better.
     pub fn year_range(mut self, range: (i32, i32)) -> Self {
+        self.apply_year_range(range);
+        self
+    }
+
+    /// Set the year range of the calendar.
+    pub fn set_year_range(&mut self, range: (i32, i32), cx: &mut Context<Self>) {
+        self.apply_year_range(range);
+        cx.notify();
+    }
+
+    fn apply_year_range(&mut self, range: (i32, i32)) {
         self.years = (range.0..range.1)
             .collect::<Vec<_>>()
             .chunks(20)
@@ -381,7 +392,6 @@ impl CalendarState {
             .iter()
             .position(|years| years.contains(&self.current_year))
             .unwrap_or(0) as i32;
-        self
     }
 
     /// Get year and month by offset month.
@@ -753,7 +763,7 @@ impl Calendar {
             })
             .when(secondary_active, |this| {
                 this.bg(if muted {
-                    cx.theme().accent.opacity(0.5)
+                    cx.theme().accent.opacity(0.5).into()
                 } else {
                     cx.theme().accent
                 })
@@ -761,12 +771,12 @@ impl Calendar {
             })
             .when(!active && !disabled, |this| {
                 this.hover(|this| {
-                    this.bg(cx.theme().accent)
+                    this.bg(cx.theme().tokens.accent)
                         .text_color(cx.theme().accent_foreground)
                 })
             })
             .when(active, |this| {
-                this.bg(cx.theme().primary)
+                this.bg(cx.theme().tokens.primary)
                     .text_color(cx.theme().primary_foreground)
             })
             .child(label.into())

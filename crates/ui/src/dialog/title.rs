@@ -14,7 +14,10 @@ pub struct DialogTitle {
 
 impl DialogTitle {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: vec![] }
+        Self {
+            style: StyleRefinement::default(),
+            children: vec![],
+        }
     }
 }
 
@@ -34,6 +37,7 @@ impl RenderOnce for DialogTitle {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div()
             .id("dialog-title")
+            .text_base()
             .font_semibold()
             .line_height(relative(1.))
             .refine_style(&self.style)

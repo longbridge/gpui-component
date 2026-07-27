@@ -183,7 +183,7 @@ impl Render for DescriptionListStory {
                     .children(self.items.clone().into_iter().enumerate().map(
                         |(ix, (label, value, span))| {
                             if label == "--" {
-                                return DescriptionItem::Divider;
+                                return DescriptionItem::Separator;
                             }
 
                             DescriptionItem::new(label)

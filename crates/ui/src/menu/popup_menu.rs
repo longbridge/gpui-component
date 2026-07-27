@@ -5,12 +5,13 @@ use crate::scroll::ScrollableElement;
 use crate::{ActiveTheme, ElementExt, Icon, IconName, Sizable as _, h_flex, v_flex};
 use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
-    Action, AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity,
+    Action, Anchor, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Edges, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
-    WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
+    ParentElement, Pixels, Render, Role, ScrollHandle, SharedString, StatefulInteractiveElement,
+    Styled, WeakEntity, Window, anchored, deferred, div, prelude::FluentBuilder, px, rems,
 };
 use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Point, Subscription};
+
 use std::rc::Rc;
 
 const CONTEXT: &str = "PopupMenu";
@@ -267,6 +268,15 @@ impl PopupMenuItem {
             _ => false,
         }
     }
+
+    fn a11y_label(&self) -> Option<SharedString> {
+        match self {
+            PopupMenuItem::Item { label, .. }
+            | PopupMenuItem::Label(label)
+            | PopupMenuItem::Submenu { label, .. } => Some(label.clone()),
+            PopupMenuItem::Separator | PopupMenuItem::ElementItem { .. } => None,
+        }
+    }
 }
 
 pub struct PopupMenu {
@@ -288,7 +298,20 @@ pub struct PopupMenu {
     external_link_icon: bool,
     scroll_handle: ScrollHandle,
     // This will update on render
-    submenu_anchor: (Corner, Pixels),
+    submenu_anchor: (Anchor, Pixels),
+
+    /// Paint priority for this menu layer. The top-level menu starts at 1 and
+    /// each nested submenu increments it, so deeper levels are always drawn on
+    /// top of shallower ones. This fixes background content (e.g. the
+    /// underlying list) bleeding through multi-level submenus, which happens
+    /// when nested `anchored` popovers share the same paint order.
+    ///
+    /// The top-level menu relies on its container (e.g. `Popover`,
+    /// `ContextMenu`) to `deferred`-draw it, and each submenu is deferred once
+    /// in `render_item` with `priority + 1`. Keeping a single deferred layer
+    /// per level matters because GPUI caps nested deferred depth (see
+    /// `prepaint_deferred_draws`).
+    priority: usize,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -310,7 +333,8 @@ impl PopupMenu {
             scroll_handle: ScrollHandle::default(),
             external_link_icon: true,
             size: Size::default(),
-            submenu_anchor: (Corner::TopLeft, Pixels::ZERO),
+            submenu_anchor: (Anchor::TopLeft, Pixels::ZERO),
+            priority: 1,
             _subscriptions: vec![],
         }
     }
@@ -331,6 +355,22 @@ impl PopupMenu {
     pub fn action_context(mut self, handle: FocusHandle) -> Self {
         self.action_context = Some(handle);
         self
+    }
+
+    pub(crate) fn set_action_context(
+        &mut self,
+        action_context: Option<FocusHandle>,
+        cx: &mut Context<Self>,
+    ) {
+        self.action_context = action_context.clone();
+
+        for item in &self.menu_items {
+            if let PopupMenuItem::Submenu { menu, .. } = item {
+                menu.update(cx, |menu, cx| {
+                    menu.set_action_context(action_context.clone(), cx);
+                });
+            }
+        }
     }
 
     /// Set min width of the popup menu, default is 120px
@@ -622,8 +662,10 @@ impl PopupMenu {
     ) -> Self {
         let submenu = PopupMenu::build(window, cx, f);
         let parent_menu = cx.entity().downgrade();
+        let parent_priority = self.priority;
         submenu.update(cx, |view, _| {
             view.parent_menu = Some(parent_menu);
+            view.priority = parent_priority + 1;
         });
 
         self.menu_items.push(
@@ -636,12 +678,6 @@ impl PopupMenu {
     pub fn item(mut self, item: impl Into<PopupMenuItem>) -> Self {
         let item: PopupMenuItem = item.into();
         self.menu_items.push(item);
-        self
-    }
-
-    /// Use small size, the menu item will have smaller height.
-    pub(crate) fn small(mut self) -> Self {
-        self.size = Size::Small;
         self
     }
 
@@ -678,8 +714,16 @@ impl PopupMenu {
                     name,
                     action,
                     checked,
+                    disabled,
                     ..
-                } => self = self.menu_with_check(name, checked, action.boxed_clone()),
+                } => {
+                    self = self.menu_with_check_and_disabled(
+                        name,
+                        checked,
+                        action.boxed_clone(),
+                        disabled,
+                    )
+                }
                 OwnedMenuItem::Separator => {
                     self = self.separator();
                 }
@@ -824,7 +868,7 @@ impl PopupMenu {
     }
 
     fn select_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
-        let handled = if matches!(self.submenu_anchor.0, Corner::TopLeft | Corner::BottomLeft) {
+        let handled = if matches!(self.submenu_anchor.0, Anchor::TopLeft | Anchor::BottomLeft) {
             self._unselect_submenu(window, cx)
         } else {
             self._select_submenu(window, cx)
@@ -845,7 +889,7 @@ impl PopupMenu {
     }
 
     fn select_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
-        let handled = if matches!(self.submenu_anchor.0, Corner::TopLeft | Corner::BottomLeft) {
+        let handled = if matches!(self.submenu_anchor.0, Anchor::TopLeft | Anchor::BottomLeft) {
             self._select_submenu(window, cx)
         } else {
             self._unselect_submenu(window, cx)
@@ -916,8 +960,10 @@ impl PopupMenu {
         };
 
         match parent.read(cx).submenu_anchor.0 {
-            Corner::TopLeft | Corner::BottomLeft => Side::Left,
-            Corner::TopRight | Corner::BottomRight => Side::Right,
+            Anchor::TopLeft | Anchor::BottomLeft => Side::Left,
+            Anchor::TopRight | Anchor::BottomRight => Side::Right,
+            // Center anchors are not used for submenu positioning, but we must cover them.
+            _ => Side::Left,
         }
     }
 
@@ -1028,14 +1074,14 @@ impl PopupMenu {
         let bounds = self.bounds;
         let max_width = self.max_width();
         let (anchor, left) = if max_width + bounds.origin.x > window.bounds().size.width {
-            (Corner::TopRight, -px(16.))
+            (Anchor::TopRight, -px(16.))
         } else {
-            (Corner::TopLeft, bounds.size.width - px(8.))
+            (Anchor::TopLeft, bounds.size.width - px(8.))
         };
 
         let is_bottom_pos = bounds.origin.y + bounds.size.height > window.bounds().size.height;
         self.submenu_anchor = if is_bottom_pos {
-            (anchor.other_side_corner_along(gpui::Axis::Vertical), left)
+            (anchor.other_side_along(gpui::Axis::Vertical), left)
         } else {
             (anchor, left)
         };
@@ -1086,7 +1132,8 @@ impl PopupMenu {
                 }
 
                 cx.notify();
-            }));
+            }))
+            .when_some(item.a11y_label(), |this, label| this.aria_label(label));
 
         match item {
             PopupMenuItem::Separator => this
@@ -1225,19 +1272,22 @@ impl PopupMenu {
                     this.child({
                         let (anchor, left) = self.submenu_anchor;
                         let is_bottom_pos =
-                            matches!(anchor, Corner::BottomLeft | Corner::BottomRight);
-                        anchored()
-                            .anchor(anchor)
-                            .child(
-                                div()
-                                    .id("submenu")
-                                    .occlude()
-                                    .when(is_bottom_pos, |this| this.bottom_0())
-                                    .when(!is_bottom_pos, |this| this.top_neg_1())
-                                    .left(left)
-                                    .child(menu.clone()),
-                            )
-                            .snap_to_window_with_margin(Edges::all(EDGE_PADDING))
+                            matches!(anchor, Anchor::BottomLeft | Anchor::BottomRight);
+                        deferred(
+                            anchored()
+                                .anchor(anchor)
+                                .child(
+                                    div()
+                                        .id("submenu")
+                                        .occlude()
+                                        .when(is_bottom_pos, |this| this.bottom_0())
+                                        .when(!is_bottom_pos, |this| this.top_neg_1())
+                                        .left(left)
+                                        .child(menu.clone()),
+                                )
+                                .snap_to_window_with_margin(Edges::all(EDGE_PADDING)),
+                        )
+                        .with_priority(self.priority + 1)
                     })
                 }),
         }
@@ -1285,6 +1335,7 @@ impl Render for PopupMenu {
 
         v_flex()
             .id("popup-menu")
+            .role(Role::Menu)
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::select_up))
@@ -1325,5 +1376,31 @@ impl Render for PopupMenu {
                 // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will cannot be displayed.
                 this.vertical_scrollbar(&self.scroll_handle)
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn popup_menu_item_a11y_label_uses_visible_label(cx: &mut gpui::TestAppContext) {
+        let submenu = cx.update(|cx| cx.new(|cx| PopupMenu::new(cx)));
+
+        assert_eq!(PopupMenuItem::new("Open").a11y_label(), Some("Open".into()));
+        assert_eq!(
+            PopupMenuItem::link("Docs", "https://example.com").a11y_label(),
+            Some("Docs".into())
+        );
+        assert_eq!(
+            PopupMenuItem::label("Recent files").a11y_label(),
+            Some("Recent files".into())
+        );
+        assert_eq!(
+            PopupMenuItem::submenu("More", submenu).a11y_label(),
+            Some("More".into())
+        );
+        assert_eq!(PopupMenuItem::separator().a11y_label(), None);
+        assert_eq!(PopupMenuItem::element(|_, _| div()).a11y_label(), None);
     }
 }

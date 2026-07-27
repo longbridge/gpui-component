@@ -2,9 +2,9 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     AnyElement, App, AppContext as _, AvailableSpace, Bounds, Element, ElementId, Entity,
-    InteractiveElement, IntoElement, MouseDownEvent, ParentElement as _, Pixels, Render,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, deferred, div, point,
-    prelude::FluentBuilder as _, px,
+    InteractiveElement, IntoElement, MouseDownEvent, MouseMoveEvent, ParentElement as _, Pixels,
+    Render, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, deferred, div, point,
+    px,
 };
 
 use crate::{
@@ -141,7 +141,6 @@ impl IntoElement for Popover {
 }
 
 pub(crate) struct PopoverLayoutState {
-    state: Entity<bool>,
     bounds: Bounds<Pixels>,
     element: Option<AnyElement>,
 }
@@ -165,7 +164,6 @@ impl Element for Popover {
         window: &mut Window,
         cx: &mut App,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
-        let open_state = window.use_keyed_state("popover-open", cx, |_, _| true);
         let trigger_bounds = match self.trigger_bounds(cx) {
             Some(bounds) => bounds,
             None => {
@@ -174,7 +172,6 @@ impl Element for Popover {
                     PopoverLayoutState {
                         bounds: Bounds::default(),
                         element: None,
-                        state: open_state,
                     },
                 );
             }
@@ -187,12 +184,9 @@ impl Element for Popover {
             .max(px(200.));
         let max_height = (window.bounds().size.height - SNAP_TO_EDGE * 2).min(px(320.));
 
-        let is_open = *open_state.read(cx);
-
         let mut popover = deferred(
             div()
                 .id("hover-popover-content")
-                .when(!is_open, |s| s.invisible())
                 .flex_none()
                 .occlude()
                 .p_1()
@@ -233,7 +227,6 @@ impl Element for Popover {
                     size: popover_size,
                 },
                 element: Some(popover),
-                state: open_state,
             },
         )
     }
@@ -274,14 +267,25 @@ impl Element for Popover {
 
         popover.paint(window, cx);
 
-        let open_state = request_layout.state.clone();
+        let editor = self.editor.clone();
         // Mouse down out to hide.
         window.on_mouse_event(move |event: &MouseDownEvent, _, _, cx| {
             if !bounds.contains(&event.position) {
-                open_state.update(cx, |open, cx| {
-                    *open = false;
-                    cx.notify();
-                })
+                let _ = editor.update(cx, |editor, cx| {
+                    editor.clear_hover_state(cx);
+                });
+            }
+        });
+
+        // Mouse out of trigger + popover bounds
+        let editor = self.editor.clone();
+        let trigger_bounds = self.trigger_bounds(cx).unwrap_or(bounds);
+        let keep_open_region = trigger_bounds.union(&bounds);
+        window.on_mouse_event(move |event: &MouseMoveEvent, _, _, cx| {
+            if !keep_open_region.contains(&event.position) {
+                let _ = editor.update(cx, |editor, cx| {
+                    editor.clear_hover_state(cx);
+                });
             }
         })
     }

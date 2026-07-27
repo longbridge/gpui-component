@@ -5,14 +5,15 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     dock::{ClosePanel, DockArea, DockAreaState, DockEvent, DockItem, DockPlacement, ToggleZoom},
     menu::DropdownMenu,
+    status_bar::StatusBar,
 };
 
 use gpui_component_assets::Assets;
 use gpui_component_story::{
-    AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DialogStory, FormStory,
-    IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
+    AccordionStory, AppState, AppTitleBar, ButtonStory, CalendarStory, DataTableStory, DialogStory,
+    FormStory, IconStory, ImageStory, InputStory, LabelStory, ListStory, NotificationStory, Open,
     PopoverStory, ProgressStory, ResizableStory, ScrollbarStory, SelectStory, SidebarStory,
-    StoryContainer, SwitchStory, DataTableStory, TooltipStory,
+    StoryContainer, SwitchStory, TooltipStory,
 };
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
@@ -161,7 +162,7 @@ impl StoryWorkspace {
                                 )
                             }
                         })
-                        .anchor(Corner::TopRight)
+                        .anchor(Anchor::TopRight)
                 }
             })
         });
@@ -513,7 +514,40 @@ impl Render for StoryWorkspace {
             .flex()
             .flex_col()
             .child(self.title_bar.clone())
-            .child(self.dock_area.clone())
+            .child(div().flex_1().min_h_0().child(self.dock_area.clone()))
+            .child(
+                StatusBar::new()
+                    .left(
+                        Button::new("toggle-left-dock").ghost().xsmall()
+                            .icon(IconName::PanelLeft)
+                            .tooltip("Toggle Left Dock")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.dock_area.update(cx, |area, cx| {
+                                    area.toggle_dock(DockPlacement::Left, window, cx);
+                                });
+                            })),
+                    )
+                    .left(
+                        Button::new("toggle-bottom-dock").ghost().xsmall()
+                            .icon(IconName::PanelBottom)
+                            .tooltip("Toggle Bottom Dock")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.dock_area.update(cx, |area, cx| {
+                                    area.toggle_dock(DockPlacement::Bottom, window, cx);
+                                });
+                            })),
+                    )
+                    .child(
+                        Button::new("toggle-right-dock").ghost().xsmall()
+                            .icon(IconName::PanelRight)
+                            .tooltip("Toggle Right Dock")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.dock_area.update(cx, |area, cx| {
+                                    area.toggle_dock(DockPlacement::Right, window, cx);
+                                });
+                            })),
+                    ),
+            )
             .children(sheet_layer)
             .children(dialog_layer)
             .children(notification_layer)

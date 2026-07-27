@@ -1,5 +1,5 @@
 use gpui::{
-    Action, App, AppContext, Context, Corner, Entity, InteractiveElement, IntoElement, KeyBinding,
+    Action, Anchor, App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyBinding,
     ParentElement as _, Render, SharedString, Styled as _, Window, actions, div, px,
 };
 use gpui_component::{
@@ -135,7 +135,8 @@ impl Render for MenuStory {
                             .outline()
                             .label("Edit")
                             .dropdown_menu(move |this, window, cx| {
-                                this.link("About", "https://github.com/longbridge/gpui-component")
+                                this.min_w(250.)
+                                    .link("About", "https://github.com/longbridge/gpui-component")
                                     .check_side(check_side.unwrap_or(Side::Left))
                                     .separator()
                                     .item(PopupMenuItem::new("Handle Click").on_click(
@@ -213,9 +214,30 @@ impl Render for MenuStory {
                                         .link("Zed", "https://zed.dev")
                                     })
                                     .separator()
-                                    .submenu("Other Links", window, cx, |menu, _, _| {
+                                    .submenu("Other Links", window, cx, |menu, window, cx| {
                                         menu.link("Crates", "https://crates.io")
                                             .link("Rust Docs", "https://docs.rs")
+                                            .separator()
+                                            .submenu(
+                                                "Nested",
+                                                window,
+                                                cx,
+                                                |menu, window, cx| {
+                                                    menu.link("Docs.rs", "https://docs.rs")
+                                                        .separator()
+                                                        .submenu(
+                                                            "Deeper",
+                                                            window,
+                                                            cx,
+                                                            |menu, _, _| {
+                                                                menu.link(
+                                                                    "GPUI",
+                                                                    "https://gpui.rs",
+                                                                )
+                                                            },
+                                                        )
+                                                },
+                                            )
                                     })
                             }),
                     )
@@ -257,11 +279,56 @@ impl Render for MenuStory {
                                             Box::new(ToggleCheck),
                                         )
                                         .separator()
-                                        .submenu("Settings", window, cx, move |menu, _, _| {
+                                        // Deeply nested submenus to verify each
+                                        // level paints above the shallower ones and
+                                        // the background content behind them.
+                                        .submenu("Settings", window, cx, move |menu, window, cx| {
                                             menu.menu("Info 0", Box::new(Info(0)))
                                                 .separator()
                                                 .menu("Item 1", Box::new(Info(1)))
                                                 .menu("Item 2", Box::new(Info(2)))
+                                                .separator()
+                                                .submenu(
+                                                    "More",
+                                                    window,
+                                                    cx,
+                                                    move |menu, window, cx| {
+                                                        menu.menu("More Item 1", Box::new(Info(1)))
+                                                            .menu("More Item 2", Box::new(Info(2)))
+                                                            .separator()
+                                                            .submenu(
+                                                                "Even More",
+                                                                window,
+                                                                cx,
+                                                                move |menu, window, cx| {
+                                                                    menu.menu(
+                                                                        "Deep Item 1",
+                                                                        Box::new(Info(1)),
+                                                                    )
+                                                                    .menu(
+                                                                        "Deep Item 2",
+                                                                        Box::new(Info(2)),
+                                                                    )
+                                                                    .separator()
+                                                                    .submenu(
+                                                                        "Deepest",
+                                                                        window,
+                                                                        cx,
+                                                                        move |menu, _, _| {
+                                                                            menu.menu(
+                                                                                "Leaf 1",
+                                                                                Box::new(Info(1)),
+                                                                            )
+                                                                            .menu(
+                                                                                "Leaf 2",
+                                                                                Box::new(Info(2)),
+                                                                            )
+                                                                        },
+                                                                    )
+                                                                },
+                                                            )
+                                                    },
+                                                )
                                         })
                                         .separator()
                                         .menu("Search All", Box::new(SearchAll))
@@ -335,7 +402,7 @@ impl Render for MenuStory {
                         Button::new("dropdown-menu-scrollable-1")
                             .outline()
                             .label("Scrollable Menu (100 items)")
-                            .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Anchor::TopRight, move |this, _, _| {
                                 let mut this = this
                                     .scrollable(true)
                                     .max_h(px(300.))
@@ -357,7 +424,7 @@ impl Render for MenuStory {
                         Button::new("dropdown-menu-scrollable-2")
                             .outline()
                             .label("Scrollable Menu (5 items)")
-                            .dropdown_menu_with_anchor(Corner::TopRight, move |this, _, _| {
+                            .dropdown_menu_with_anchor(Anchor::TopRight, move |this, _, _| {
                                 let mut this = this
                                     .scrollable(true)
                                     .max_h(px(300.))

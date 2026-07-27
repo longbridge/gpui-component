@@ -1,19 +1,44 @@
+use std::{cell::RefCell, rc::Rc, time::Duration};
+
 use gpui::{
-    AnyElement, App, Corner, Div, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Anchor, Animation, AnimationExt as _, AnyElement, App, Background, Bounds, Div, Edges,
+    ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, Role,
+    ScrollHandle, SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled,
     Window, div, prelude::FluentBuilder as _, px,
 };
+use rust_i18n::t;
 use smallvec::SmallVec;
-use std::rc::Rc;
 
 use super::{Tab, TabVariant};
+use crate::animation::{Lerp, ease_in_out_cubic};
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
-use crate::{ActiveTheme, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
+use crate::{
+    ActiveTheme, ElementExt, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex,
+};
+
+struct TabIndicatorBounds {
+    container: Bounds<Pixels>,
+    tabs: Vec<Bounds<Pixels>>,
+}
+
+impl TabIndicatorBounds {
+    fn new(num_tabs: usize) -> Self {
+        Self {
+            container: Bounds::default(),
+            tabs: vec![Bounds::default(); num_tabs],
+        }
+    }
+
+    fn resize(&mut self, num_tabs: usize) {
+        self.tabs.resize(num_tabs, Bounds::default());
+    }
+}
 
 /// A TabBar element that contains multiple [`Tab`] items.
 #[derive(IntoElement)]
 pub struct TabBar {
+    id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
     scroll_handle: Option<ScrollHandle>,
@@ -31,7 +56,9 @@ pub struct TabBar {
 impl TabBar {
     /// Create a new TabBar.
     pub fn new(id: impl Into<ElementId>) -> Self {
+        let id = id.into();
         Self {
+            id: id.clone(),
             base: div().id(id).px(px(-1.)),
             style: StyleRefinement::default(),
             children: SmallVec::new(),
@@ -135,6 +162,166 @@ impl TabBar {
         self.on_click = Some(Rc::new(on_click));
         self
     }
+
+    /// Render the sliding indicator element for animated tab switching.
+    ///
+    /// Returns the indicator element together with the current animation
+    /// `epoch`, which increments on every tab switch. Tabs key their own
+    /// transitions (e.g. text color fade) on this epoch so they restart in sync
+    /// with the indicator slide.
+    fn render_indicator(
+        &self,
+        bounds_rc: &Option<Rc<RefCell<TabIndicatorBounds>>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<(AnyElement, u64)> {
+        let has_indicator = matches!(
+            self.variant,
+            TabVariant::Segmented | TabVariant::Pill | TabVariant::Underline
+        );
+        let num_tabs = self.children.len();
+        let selected_ix = self.selected_index.unwrap_or(usize::MAX);
+
+        if !(has_indicator && num_tabs > 0 && selected_ix < num_tabs) {
+            return None;
+        }
+
+        let prev_key = format!("{}-tab-prev", self.id);
+        let anim_key = format!("{}-tab-anim", self.id);
+        let init_key = format!("{}-tab-init", self.id);
+
+        let prev_selected = window.use_keyed_state(prev_key, cx, |_, _| selected_ix);
+        // (from_left, from_width, to_left, to_width, epoch)
+        let anim_params =
+            window.use_keyed_state(anim_key, cx, |_, _| (px(0.), px(0.), px(0.), px(0.), 0u64));
+        let initialized = window.use_keyed_state(init_key, cx, |_, _| false);
+
+        // First frame: trigger re-render to capture bounds via on_prepaint
+        if !*initialized.read(cx) {
+            initialized.update(cx, |v, _| *v = true);
+        }
+
+        self.update_anim_params(selected_ix, bounds_rc, &prev_selected, &anim_params, cx);
+
+        let (from_left, from_width, to_left, to_width, epoch) = *anim_params.read(cx);
+        if to_width <= px(0.) {
+            return None;
+        }
+
+        let variant = self.variant;
+        let size = self.size;
+        let inner_height = variant.inner_height(size);
+        let inner_radius = variant.inner_radius(size, cx);
+
+        let indicator = div()
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .map(|el| match variant {
+                TabVariant::Segmented => el.flex().items_center().child(
+                    div()
+                        .w_full()
+                        .h(inner_height)
+                        .bg(cx.theme().tokens.background)
+                        .rounded(inner_radius)
+                        .shadow_sm(),
+                ),
+                TabVariant::Pill => el.flex().items_center().child(
+                    div()
+                        .size_full()
+                        .bg(cx.theme().tokens.primary)
+                        .rounded(px(99.)),
+                ),
+                TabVariant::Underline => el.child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(px(2.))
+                        .bg(cx.theme().tokens.primary),
+                ),
+                _ => el,
+            })
+            .with_animation(
+                ElementId::NamedInteger("tab-ind".into(), epoch),
+                Animation::new(Duration::from_millis(200)).with_easing(ease_in_out_cubic),
+                move |el, delta| {
+                    let left = Lerp::lerp(&from_left, &to_left, delta);
+                    let width = Lerp::lerp(&from_width, &to_width, delta);
+                    el.left(left).w(width)
+                },
+            );
+
+        Some((indicator.into_any_element(), epoch))
+    }
+
+    /// Update animation parameters based on current and previous selection.
+    fn update_anim_params(
+        &self,
+        selected_ix: usize,
+        bounds_rc: &Option<Rc<RefCell<TabIndicatorBounds>>>,
+        prev_selected: &gpui::Entity<usize>,
+        anim_params: &gpui::Entity<(Pixels, Pixels, Pixels, Pixels, u64)>,
+        cx: &mut App,
+    ) {
+        let rc = match bounds_rc {
+            Some(rc) => rc,
+            None => return,
+        };
+
+        let prev_ix = *prev_selected.read(cx);
+        let bounds = rc.borrow();
+        let container = bounds.container;
+
+        if container.size.width == px(0.) {
+            if prev_ix != selected_ix {
+                prev_selected.update(cx, |v, _| *v = selected_ix);
+            }
+            return;
+        }
+
+        if prev_ix != selected_ix {
+            let from_b = bounds.tabs.get(prev_ix);
+            let to_b = bounds.tabs.get(selected_ix);
+            match (from_b, to_b) {
+                (Some(from_b), Some(to_b)) => {
+                    let from_left = from_b.origin.x - container.origin.x;
+                    let from_width = from_b.size.width;
+                    let to_left = to_b.origin.x - container.origin.x;
+                    let to_width = to_b.size.width;
+                    let epoch = anim_params.read(cx).4 + 1;
+                    anim_params.update(cx, |v, _| {
+                        *v = (from_left, from_width, to_left, to_width, epoch)
+                    });
+                }
+                (None, Some(to_b)) => {
+                    let left = to_b.origin.x - container.origin.x;
+                    let width = to_b.size.width;
+                    anim_params.update(cx, |v, _| *v = (left, width, left, width, v.4));
+                }
+                _ => {}
+            }
+            drop(bounds);
+            prev_selected.update(cx, |v, _| *v = selected_ix);
+            return;
+        }
+
+        if let Some(to_b) = bounds.tabs.get(selected_ix) {
+            let left = to_b.origin.x - container.origin.x;
+            let width = to_b.size.width;
+            let (_, _, to_left, to_width, epoch) = *anim_params.read(cx);
+
+            if to_width == px(0.) {
+                anim_params.update(cx, |v, _| *v = (left, width, left, width, epoch));
+                return;
+            }
+
+            if left != to_left || width != to_width {
+                anim_params.update(cx, |v, _| *v = (left, width, left, width, epoch));
+            }
+        }
+    }
 }
 
 impl Styled for TabBar {
@@ -151,24 +338,24 @@ impl Sizable for TabBar {
 }
 
 impl RenderOnce for TabBar {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let default_gap = match self.size {
             Size::Small | Size::XSmall => px(8.),
             Size::Large => px(16.),
             _ => px(12.),
         };
-        let (bg, paddings, gap) = match self.variant {
+        let (bg, paddings, gap): (Background, _, _) = match self.variant {
             TabVariant::Tab => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().tab_bar, padding, px(0.))
+                (cx.theme().tokens.tab_bar.into(), padding, px(0.))
             }
             TabVariant::Outline => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().transparent, padding, default_gap)
+                (cx.theme().transparent.into(), padding, default_gap)
             }
             TabVariant::Pill => {
                 let padding = Edges::all(px(0.));
-                (cx.theme().transparent, padding, px(4.))
+                (cx.theme().transparent.into(), padding, px(4.))
             }
             TabVariant::Segmented => {
                 let padding_x = match self.size {
@@ -182,7 +369,7 @@ impl RenderOnce for TabBar {
                     ..Default::default()
                 };
 
-                (cx.theme().tab_bar_segmented, padding, px(2.))
+                (cx.theme().tokens.tab_bar_segmented.into(), padding, px(2.))
             }
             TabVariant::Underline => {
                 // This gap is same as the tab inner_paddings
@@ -193,15 +380,43 @@ impl RenderOnce for TabBar {
                     _ => px(16.),
                 };
 
-                (cx.theme().transparent, Edges::all(px(0.)), gap)
+                (cx.theme().transparent.into(), Edges::all(px(0.)), gap)
             }
         };
 
-        let mut item_labels = Vec::new();
+        let has_indicator = matches!(
+            self.variant,
+            TabVariant::Segmented | TabVariant::Pill | TabVariant::Underline
+        );
+        let num_tabs = self.children.len();
+
+        // Bounds tracking for tab indicator animation.
+        // Uses Rc<RefCell> to avoid triggering re-renders from prepaint writes.
+        let bounds_rc = if has_indicator && num_tabs > 0 {
+            let rc: Rc<RefCell<TabIndicatorBounds>> = window
+                .use_keyed_state(format!("{}-tab-bounds", self.id), cx, |_, _| {
+                    Rc::new(RefCell::new(TabIndicatorBounds::new(num_tabs)))
+                })
+                .read(cx)
+                .clone();
+            rc.borrow_mut().resize(num_tabs);
+            Some(rc)
+        } else {
+            None
+        };
+
+        let indicator = self.render_indicator(&bounds_rc, window, cx);
+        let indicator_epoch = indicator.as_ref().map(|(_, epoch)| *epoch).unwrap_or(0);
+        let indicator_element = indicator.map(|(el, _)| el);
+        let indicator_ready = indicator_element.is_some();
+
+        let has_suffix_or_menu = self.suffix.is_some() || self.menu;
+        let mut item_metas: Vec<(Option<SharedString>, Option<Icon>, bool)> = Vec::new();
         let selected_index = self.selected_index;
         let on_click = self.on_click.clone();
 
         self.base
+            .role(Role::TabList)
             .group("tab-bar")
             .relative()
             .flex()
@@ -228,32 +443,61 @@ impl RenderOnce for TabBar {
             .refine_style(&self.style)
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(
-                h_flex()
-                    .id("tabs")
-                    .flex_1()
-                    .overflow_x_scroll()
-                    .when_some(self.scroll_handle, |this, scroll_handle| {
-                        this.track_scroll(&scroll_handle)
-                    })
-                    .gap(gap)
-                    .children(self.children.into_iter().enumerate().map(|(ix, child)| {
-                        item_labels.push((child.label.clone(), child.disabled));
-                        let tab_bar_prefix = child.tab_bar_prefix.unwrap_or(true);
-                        child
-                            .ix(ix)
-                            .tab_bar_prefix(tab_bar_prefix)
-                            .with_variant(self.variant)
-                            .with_size(self.size)
-                            .when_some(self.selected_index, |this, selected_ix| {
-                                this.selected(selected_ix == ix)
+                h_flex().id("tabs").flex_1().overflow_x_hidden().child(
+                    h_flex()
+                        .id("tabs-inner")
+                        .relative()
+                        .gap(gap)
+                        .overflow_x_scroll()
+                        .when_some(self.scroll_handle, |this, scroll_handle| {
+                            this.track_scroll(&scroll_handle)
+                        })
+                        .when_some(bounds_rc.clone(), |this, rc| {
+                            this.on_prepaint(move |bounds, _, _| {
+                                rc.borrow_mut().container = bounds;
                             })
-                            .when_some(self.on_click.clone(), move |this, on_click| {
-                                this.on_click(move |_, window, cx| on_click(&ix, window, cx))
-                            })
-                    }))
-                    .when(self.suffix.is_some() || self.menu, |this| {
-                        this.child(self.last_empty_space)
-                    }),
+                        })
+                        .when_some(indicator_element, |this, ind| this.child(ind))
+                        .children(self.children.into_iter().enumerate().map(|(ix, child)| {
+                            item_metas.push((
+                                child.label.clone(),
+                                child.icon.clone(),
+                                child.disabled,
+                            ));
+                            let tab_bar_prefix = child.tab_bar_prefix.unwrap_or(true);
+                            let mut tab = child
+                                .ix(ix)
+                                .tab_bar_prefix(tab_bar_prefix)
+                                .with_variant(self.variant)
+                                .with_size(self.size);
+                            tab.indicator_active = has_indicator;
+                            tab.indicator_ready = indicator_ready;
+                            tab.indicator_epoch = indicator_epoch;
+                            let tab = tab
+                                .when_some(self.selected_index, |this, selected_ix| {
+                                    this.selected(selected_ix == ix)
+                                })
+                                .when_some(self.on_click.clone(), move |this, on_click| {
+                                    this.on_click(move |_, window, cx| on_click(&ix, window, cx))
+                                });
+
+                            if let Some(ref rc) = bounds_rc {
+                                let rc = rc.clone();
+                                div()
+                                    .flex_shrink_0()
+                                    .on_prepaint(move |bounds, _, _| {
+                                        if let Some(slot) = rc.borrow_mut().tabs.get_mut(ix) {
+                                            *slot = bounds;
+                                        }
+                                    })
+                                    .child(tab)
+                                    .into_any_element()
+                            } else {
+                                tab.into_any_element()
+                            }
+                        }))
+                        .when(has_suffix_or_menu, |this| this.child(self.last_empty_space)),
+                ),
             )
             .when(self.menu, |this| {
                 this.child(
@@ -263,22 +507,28 @@ impl RenderOnce for TabBar {
                         .icon(IconName::ChevronDown)
                         .dropdown_menu(move |mut this, _, _| {
                             this = this.scrollable(true);
-                            for (ix, (label, disabled)) in item_labels.iter().enumerate() {
+                            for (ix, (label, icon, disabled)) in item_metas.iter().enumerate() {
+                                let base = if let Some(label) = label.clone() {
+                                    PopupMenuItem::new(label)
+                                } else if let Some(icon) = icon.clone() {
+                                    PopupMenuItem::element(move |_, _| icon.clone())
+                                } else {
+                                    PopupMenuItem::new(t!("Dock.Unnamed"))
+                                };
                                 this = this.item(
-                                    PopupMenuItem::new(label.clone().unwrap_or_default())
-                                        .checked(selected_index == Some(ix))
+                                    base.checked(selected_index == Some(ix))
                                         .disabled(*disabled)
                                         .when_some(on_click.clone(), |this, on_click| {
                                             this.on_click(move |_, window, cx| {
                                                 on_click(&ix, window, cx)
                                             })
                                         }),
-                                )
+                                );
                             }
 
                             this
                         })
-                        .anchor(Corner::TopRight),
+                        .anchor(Anchor::TopRight),
                 )
             })
             .when_some(self.suffix, |this, suffix| this.child(suffix))

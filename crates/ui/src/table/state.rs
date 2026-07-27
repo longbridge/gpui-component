@@ -134,7 +134,7 @@ impl TableVisibleRange {
 /// - Double-click on cells to trigger actions
 /// - Navigate between cells using keyboard (arrow keys, Home, End, PageUp, PageDown, Tab)
 ///
-/// When in cell selection mode, a row selector column appears on the left side,
+/// When in cell selection mode, a row header column appears on the left side,
 /// allowing users to select entire rows by clicking on it.
 ///
 /// # Events
@@ -166,6 +166,16 @@ impl TableVisibleRange {
 ///     }
 /// });
 /// ```
+#[derive(Clone)]
+pub(crate) struct HeaderCell {
+    pub label: SharedString,
+    pub width: Pixels,
+    col_span: usize,
+    is_leaf: bool,
+    leaf_col_ix: Option<usize>,
+    start_leaf_col_ix: usize,
+}
+
 pub struct TableState<D: TableDelegate> {
     focus_handle: FocusHandle,
     delegate: D,
@@ -176,6 +186,7 @@ pub struct TableState<D: TableDelegate> {
     fixed_head_cols_bounds: Bounds<Pixels>,
 
     col_groups: Vec<ColGroup>,
+    header_layout: Vec<Vec<HeaderCell>>,
 
     /// Whether the table can loop selection, default is true.
     ///
@@ -185,14 +196,24 @@ pub struct TableState<D: TableDelegate> {
     pub col_selectable: bool,
     /// Whether the table can select row.
     pub row_selectable: bool,
-    /// Whether the table can select cell, default is true.
+    /// Whether the table can select cell, default is false.
     ///
     /// When enabled:
     /// - Users can click on individual cells to select them
-    /// - A row selector column appears on the left for selecting entire rows
+    /// - A row header column appears on the left for selecting entire rows
+    ///   (can be hidden via [`Self::row_header`])
     /// - Keyboard navigation works at the cell level (arrow keys move between cells)
     /// - Right-click and double-click events are supported for cells
     pub cell_selectable: bool,
+    /// Whether the row header column is visible when `cell_selectable` is enabled,
+    /// default is `true`.
+    ///
+    /// Set to `false` to hide the narrow leftmost header column while keeping cell
+    /// selection — useful when you want to put your own content (e.g. a row index
+    /// column) on the left. When hidden, clicking the already-selected cell again
+    /// escalates the selection to the whole row so users can still pick rows; row
+    /// escalation requires `row_selectable` to be enabled.
+    pub row_header: bool,
     /// Whether the table can sort.
     pub sortable: bool,
     /// Whether the table can resize columns.
@@ -215,6 +236,11 @@ pub struct TableState<D: TableDelegate> {
     /// The column index that is being resized.
     resizing_col: Option<usize>,
 
+    /// The insertion gap index (`0..=cols_count`) while dragging a column
+    /// header: the dragged column will be inserted between the columns
+    /// `gap - 1` and `gap` on drop.
+    col_drag_gap: Option<usize>,
+
     /// The visible range of the rows and columns.
     visible_range: TableVisibleRange,
 
@@ -233,6 +259,7 @@ where
             options: TableOptions::default(),
             delegate,
             col_groups: Vec::new(),
+            header_layout: Vec::new(),
             horizontal_scroll_handle: VirtualListScrollHandle::new(),
             vertical_scroll_handle: UniformListScrollHandle::new(),
             selection_mode: SelectionMode::Row,
@@ -242,6 +269,7 @@ where
             selected_col: None,
             selected_cell: None,
             resizing_col: None,
+            col_drag_gap: None,
             bounds: Bounds::default(),
             fixed_head_cols_bounds: Bounds::default(),
             visible_range: TableVisibleRange::default(),
@@ -249,6 +277,7 @@ where
             col_selectable: true,
             row_selectable: true,
             cell_selectable: false,
+            row_header: true,
             sortable: true,
             col_movable: true,
             col_resizable: true,
@@ -307,11 +336,11 @@ where
         self
     }
 
-    /// Set to enable/disable cell selection, default is true.
+    /// Set to enable/disable cell selection, default is false.
     ///
     /// When enabled:
     /// - Individual cells become selectable by clicking
-    /// - A row selector column appears on the left side
+    /// - A row header column appears on the left side (can be hidden via [`Self::row_header`])
     /// - Keyboard navigation operates at the cell level
     /// - Cell-specific events (SelectCell, DoubleClickedCell, RightClickedCell) are emitted
     ///
@@ -321,11 +350,26 @@ where
     /// let table_state = cx.new(|cx| {
     ///     TableState::new(delegate, cx)
     ///         .cell_selectable(true)  // Enable cell selection
-    ///         .row_selectable(true)   // Also allow row selection via row selector
+    ///         .row_selectable(true)   // Also allow row selection via row header
     /// });
     /// ```
     pub fn cell_selectable(mut self, cell_selectable: bool) -> Self {
         self.cell_selectable = cell_selectable;
+        self
+    }
+
+    /// Set whether the row header column is shown, default is `true`.
+    ///
+    /// Only effective when `cell_selectable` is `true` — otherwise the row header
+    /// column is never rendered. Hide it when you want to use the leftmost column
+    /// for your own content (e.g. a row index column).
+    ///
+    /// When hidden, the first click on a cell selects the cell; clicking the
+    /// already-selected cell again escalates to selecting the whole row, so users
+    /// can still pick rows without the dedicated header column. The row escalation
+    /// requires `row_selectable` to be enabled.
+    pub fn row_header(mut self, row_header: bool) -> Self {
+        self.row_header = row_header;
         self
     }
 
@@ -336,7 +380,8 @@ where
 
     /// Scroll to the row at the given index.
     pub fn scroll_to_row(&mut self, row_ix: usize, cx: &mut Context<Self>) {
-        self.vertical_scroll_handle.scroll_to_item(row_ix, ScrollStrategy::Top);
+        self.vertical_scroll_handle
+            .scroll_to_item(row_ix, ScrollStrategy::Top);
         cx.notify();
     }
 
@@ -344,7 +389,8 @@ where
     pub fn scroll_to_col(&mut self, col_ix: usize, cx: &mut Context<Self>) {
         let col_ix = col_ix.saturating_sub(self.fixed_left_cols_count());
 
-        self.horizontal_scroll_handle.scroll_to_item(col_ix, ScrollStrategy::Top);
+        self.horizontal_scroll_handle
+            .scroll_to_item(col_ix, ScrollStrategy::Top);
         cx.notify();
     }
 
@@ -367,7 +413,11 @@ where
         if let Some(row_ix) = self.selected_row {
             self.vertical_scroll_handle.scroll_to_item(
                 row_ix,
-                if is_down { ScrollStrategy::Bottom } else { ScrollStrategy::Top },
+                if is_down {
+                    ScrollStrategy::Bottom
+                } else {
+                    ScrollStrategy::Top
+                },
             );
         }
         cx.emit(TableEvent::SelectRow(row_ix));
@@ -378,6 +428,15 @@ where
     /// Returns the row that has been right clicked.
     pub fn right_clicked_row(&self) -> Option<usize> {
         self.right_clicked_row
+    }
+
+    /// Set or clear the right-clicked row state.
+    ///
+    /// Pass `None` to clear — useful when opening a header context menu
+    /// to prevent the row context menu from appearing simultaneously.
+    pub fn set_right_clicked_row(&mut self, row: Option<usize>, cx: &mut Context<Self>) {
+        self.right_clicked_row = row;
+        cx.notify();
     }
 
     /// Returns the selected column index.
@@ -431,7 +490,8 @@ where
         self.selected_cell = Some((row_ix, col_ix));
 
         // Scroll to the cell
-        self.vertical_scroll_handle.scroll_to_item(row_ix, ScrollStrategy::Center);
+        self.vertical_scroll_handle
+            .scroll_to_item(row_ix, ScrollStrategy::Center);
         self.scroll_to_col(col_ix, cx);
 
         cx.emit(TableEvent::SelectCell(row_ix, col_ix));
@@ -481,14 +541,77 @@ where
         (headers, rows)
     }
 
+    /// Re-compute the header layout from the current delegate.
+    ///
+    /// Call this after changing delegate state that affects `group_headers`.
+    pub fn refresh_header_layout(&mut self, cx: &mut Context<Self>) {
+        self.update_header_layout(cx);
+        cx.notify();
+    }
+
     fn prepare_col_groups(&mut self, cx: &mut Context<Self>) {
         self.col_groups = (0..self.delegate.columns_count(cx))
             .map(|col_ix| {
                 let column = self.delegate().column(col_ix, cx);
-                ColGroup { width: column.width, bounds: Bounds::default(), column }
+                ColGroup {
+                    width: column.width,
+                    bounds: Bounds::default(),
+                    column,
+                }
             })
             .collect();
-        cx.notify();
+
+        self.update_header_layout(cx);
+    }
+
+    fn update_header_layout(&mut self, cx: &mut Context<Self>) {
+        let group_rows = self.delegate.group_headers(cx);
+
+        let mut layout = match group_rows.as_ref() {
+            Some(rows) => Vec::with_capacity(rows.len() + 1),
+            None => Vec::with_capacity(1),
+        };
+
+        if let Some(group_rows) = group_rows {
+            for row in group_rows {
+                let mut cell_row = Vec::with_capacity(row.len());
+                let mut current_leaf_ix = 0;
+                for group in row {
+                    let mut width = px(0.);
+                    let start_leaf_col_ix = current_leaf_ix;
+                    for i in 0..group.span {
+                        if current_leaf_ix + i < self.col_groups.len() {
+                            width += self.col_groups[current_leaf_ix + i].width;
+                        }
+                    }
+                    current_leaf_ix += group.span;
+                    cell_row.push(HeaderCell {
+                        label: group.label.clone(),
+                        width,
+                        col_span: group.span,
+                        is_leaf: false,
+                        leaf_col_ix: None,
+                        start_leaf_col_ix,
+                    });
+                }
+                layout.push(cell_row);
+            }
+        }
+
+        let mut leaf_row = Vec::with_capacity(self.col_groups.len());
+        for (ix, group) in self.col_groups.iter().enumerate() {
+            leaf_row.push(HeaderCell {
+                label: group.column.name.clone(),
+                width: group.width,
+                col_span: 1,
+                is_leaf: true,
+                leaf_col_ix: Some(ix),
+                start_leaf_col_ix: ix,
+            });
+        }
+        layout.push(leaf_row);
+
+        self.header_layout = layout;
     }
 
     fn fixed_left_cols_count(&self) -> usize {
@@ -496,7 +619,10 @@ where
             return 0;
         }
 
-        self.col_groups.iter().filter(|col| col.column.fixed == Some(ColumnFixed::Left)).count()
+        self.col_groups
+            .iter()
+            .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
+            .count()
     }
 
     fn page_item_count(&self) -> usize {
@@ -583,9 +709,26 @@ where
         }
 
         cx.stop_propagation();
+
+        let is_double_click = e.click_count() == 2;
+
+        // When the row header column is hidden, a single click on the
+        // already-selected cell escalates the selection to the entire row —
+        // giving users a way to pick rows without the dedicated header column.
+        // Double-clicks are passed through to `DoubleClickedCell` and never
+        // trigger the escalation.
+        let is_reselect =
+            self.selection_mode.is_cell() && self.selected_cell == Some((row_ix, col_ix));
+        let should_escalate_to_row =
+            !self.row_header && self.row_selectable && is_reselect && !is_double_click;
+        if should_escalate_to_row {
+            self.set_selected_row(row_ix, cx);
+            return;
+        }
+
         self.set_selected_cell(row_ix, col_ix, cx);
 
-        if e.click_count() == 2 {
+        if is_double_click {
             cx.emit(TableEvent::DoubleClickedCell(row_ix, col_ix));
         }
     }
@@ -903,19 +1046,19 @@ where
             return;
         }
 
-        let Some(col_group) = self.col_groups.get_mut(ix) else {
-            return;
-        };
-
-        if !col_group.is_resizable() {
-            return;
+        let mut changed = false;
+        if let Some(col_group) = self.col_groups.get_mut(ix) {
+            if col_group.is_resizable() {
+                let new_width = size.clamp(col_group.column.min_width, col_group.column.max_width);
+                if col_group.width != new_width {
+                    col_group.width = new_width;
+                    changed = true;
+                }
+            }
         }
 
-        let new_width = size.clamp(col_group.column.min_width, col_group.column.max_width);
-
-        // Only update if it actually changed
-        if col_group.width != new_width {
-            col_group.width = new_width;
+        if changed {
+            self.update_header_layout(cx);
             cx.notify();
         }
     }
@@ -971,6 +1114,39 @@ where
         cx.notify();
     }
 
+    /// Resolve the insertion gap for a column-header drag at the window
+    /// coordinate `x`, or `None` when dropping there would not move the
+    /// dragged column at `drag_col_ix`.
+    fn drag_gap_at(&self, x: Pixels, drag_col_ix: usize) -> Option<usize> {
+        let fixed_count = self.fixed_left_cols_count();
+
+        // Columns scrolled beneath the fixed region keep stale bounds, so
+        // resolve `x` against the fixed columns alone when it falls in that
+        // region, and against the visible scrollable columns otherwise.
+        let candidates = if fixed_count > 0 && x < self.fixed_head_cols_bounds.right() {
+            0..fixed_count
+        } else {
+            self.calculate_visible_leaf_col_range(fixed_count).0
+        };
+
+        // The gap sits after the last candidate column whose center is left of `x`.
+        let mut gap = candidates.start;
+        for ix in candidates {
+            if x < self.col_groups[ix].bounds.center().x {
+                break;
+            }
+            gap = ix + 1;
+        }
+
+        // No gap if dropping there would put the dragged column back to
+        // where it already is.
+        if gap == drag_col_ix || gap == drag_col_ix + 1 {
+            None
+        } else {
+            Some(gap)
+        }
+    }
+
     /// Dispatch delegate's `load_more` method when the visible range is near the end.
     fn load_more_if_need(
         &mut self,
@@ -1011,13 +1187,15 @@ where
             if self.visible_range.rows == visible_range {
                 return;
             }
-            self.delegate_mut().visible_rows_changed(visible_range.clone(), window, cx);
+            self.delegate_mut()
+                .visible_rows_changed(visible_range.clone(), window, cx);
             self.visible_range.rows = visible_range;
         } else {
             if self.visible_range.cols == visible_range {
                 return;
             }
-            self.delegate_mut().visible_columns_changed(visible_range.clone(), window, cx);
+            self.delegate_mut()
+                .visible_columns_changed(visible_range.clone(), window, cx);
             self.visible_range.cols = visible_range;
         }
     }
@@ -1044,9 +1222,11 @@ where
             .whitespace_nowrap()
             .table_cell_size(self.options.size)
             .map(|this| match col_padding {
-                Some(padding) => {
-                    this.pl(padding.left).pr(padding.right).pt(padding.top).pb(padding.bottom)
-                }
+                Some(padding) => this
+                    .pl(padding.left)
+                    .pr(padding.right)
+                    .pt(padding.top)
+                    .pb(padding.bottom),
                 None => this,
             })
     }
@@ -1074,7 +1254,7 @@ where
         }
 
         if selectable && self.selected_col == Some(col_ix) && self.selection_mode.is_column() {
-            el.bg(cx.theme().table_active)
+            el.bg(cx.theme().tokens.table_active)
         } else {
             el
         }
@@ -1089,7 +1269,11 @@ where
         const HANDLE_SIZE: Pixels = px(2.);
 
         let resizable = self.col_resizable
-            && self.col_groups.get(ix).map(|col| col.is_resizable()).unwrap_or(false);
+            && self
+                .col_groups
+                .get(ix)
+                .map(|col| col.is_resizable())
+                .unwrap_or(false);
         if !resizable {
             return div().into_any_element();
         }
@@ -1114,37 +1298,42 @@ where
                     .group_hover(&group_id, |this| this.bg(cx.theme().border).h_full())
                     .w(px(1.)),
             )
-            .on_drag_move(cx.listener(move |view, e: &DragMoveEvent<ResizeColumn>, window, cx| {
-                match e.drag(cx) {
-                    ResizeColumn((entity_id, ix)) => {
-                        if cx.entity_id() != *entity_id {
-                            return;
+            .on_drag_move(
+                cx.listener(move |view, e: &DragMoveEvent<ResizeColumn>, window, cx| {
+                    match e.drag(cx) {
+                        ResizeColumn((entity_id, ix)) => {
+                            if cx.entity_id() != *entity_id {
+                                return;
+                            }
+
+                            // sync col widths into real widths
+                            // TODO: Consider to remove this, this may not need now.
+                            // for (_, col_group) in view.col_groups.iter_mut().enumerate() {
+                            //     col_group.width = col_group.bounds.size.width;
+                            // }
+
+                            let ix = *ix;
+                            view.resizing_col = Some(ix);
+
+                            let col_group = view
+                                .col_groups
+                                .get(ix)
+                                .expect("BUG: invalid col index")
+                                .clone();
+
+                            view.resize_cols(
+                                ix,
+                                e.event.position.x - HANDLE_SIZE - col_group.bounds.left(),
+                                window,
+                                cx,
+                            );
+
+                            // scroll the table if the drag is near the edge
+                            view.scroll_table_by_col_resizing(e.event.position, &col_group);
                         }
-
-                        // sync col widths into real widths
-                        // TODO: Consider to remove this, this may not need now.
-                        // for (_, col_group) in view.col_groups.iter_mut().enumerate() {
-                        //     col_group.width = col_group.bounds.size.width;
-                        // }
-
-                        let ix = *ix;
-                        view.resizing_col = Some(ix);
-
-                        let col_group =
-                            view.col_groups.get(ix).expect("BUG: invalid col index").clone();
-
-                        view.resize_cols(
-                            ix,
-                            e.event.position.x - HANDLE_SIZE - col_group.bounds.left(),
-                            window,
-                            cx,
-                        );
-
-                        // scroll the table if the drag is near the edge
-                        view.scroll_table_by_col_resizing(e.event.position, &col_group);
-                    }
-                };
-            }))
+                    };
+                }),
+            )
             .on_drag(ResizeColumn((cx.entity_id(), ix)), |drag, _, _, cx| {
                 cx.stop_propagation();
                 cx.new(|_| drag.clone())
@@ -1166,20 +1355,20 @@ where
             .into_any_element()
     }
 
-    /// Render the row selector cell (when cell_selectable is enabled)
-    fn render_row_selector_cell(
+    /// Render the row header cell (when cell_selectable is enabled)
+    fn render_row_header_cell(
         &self,
         row_ix: usize,
         is_head: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
-            .id(("row-selector", row_ix))
+            .id(("row-header", row_ix))
             .w_3()
             .h_full()
             .border_r_1()
             .border_color(cx.theme().table_row_border)
-            .bg(cx.theme().table_head)
+            .bg(cx.theme().tokens.table_head)
             .flex_shrink_0()
             .table_cell_size(self.options.size)
             .when(!is_head, |this| {
@@ -1221,12 +1410,16 @@ where
                     true => this,
                     false => this.opacity(0.5),
                 })
-                .hover(|this| this.bg(cx.theme().secondary).opacity(7.))
-                .active(|this| this.bg(cx.theme().secondary_active).opacity(1.))
+                .hover(|this| this.bg(cx.theme().tokens.secondary).opacity(7.))
+                .active(|this| this.bg(cx.theme().tokens.secondary_active).opacity(1.))
                 .on_click(
                     cx.listener(move |table, _, window, cx| table.perform_sort(col_ix, window, cx)),
                 )
-                .child(Icon::new(icon).size_3().text_color(cx.theme().secondary_foreground)),
+                .child(
+                    Icon::new(icon)
+                        .size_3()
+                        .text_color(cx.theme().secondary_foreground),
+                ),
         )
     }
 
@@ -1266,28 +1459,42 @@ where
                     )
                     .when(movable, |this| {
                         this.on_drag(
-                            DragColumn { entity_id, col_ix, name, width: col_group.width },
+                            DragColumn {
+                                entity_id,
+                                col_ix,
+                                name,
+                                width: col_group.width,
+                            },
                             |drag, _, _, cx| {
                                 cx.stop_propagation();
                                 cx.new(|_| drag.clone())
                             },
                         )
-                        .drag_over::<DragColumn>(|this, _, _, cx| {
-                            this.rounded_l_none()
-                                .border_l_2()
-                                .border_r_0()
-                                .border_color(cx.theme().drag_border)
-                        })
-                        .on_drop(cx.listener(
-                            move |table, drag: &DragColumn, window, cx| {
-                                // If the drag col is not the same as the drop col, then swap the cols.
-                                if drag.entity_id != cx.entity_id() {
-                                    return;
-                                }
-
-                                table.move_column(drag.col_ix, col_ix, window, cx);
-                            },
-                        ))
+                    })
+                    .map(|this| {
+                        // Draw the insertion indicator on the left edge of the gap
+                        // column, or on the right edge of the last column for the
+                        // trailing gap. Use an absolutely positioned overlay instead
+                        // of a border, to avoid shifting the cell content.
+                        let last_gap = col_ix + 1 == self.col_groups.len();
+                        match self.col_drag_gap {
+                            Some(gap)
+                                if cx.has_active_drag()
+                                    && (gap == col_ix || (last_gap && gap == col_ix + 1)) =>
+                            {
+                                let right_side = gap == col_ix + 1;
+                                this.relative().child(
+                                    div()
+                                        .absolute()
+                                        .top_0()
+                                        .bottom_0()
+                                        .w(px(2.))
+                                        .map(|d| if right_side { d.right_0() } else { d.left_0() })
+                                        .bg(cx.theme().drag_border),
+                                )
+                            }
+                            _ => this,
+                        }
                     }),
             )
             // resize handle
@@ -1299,6 +1506,64 @@ where
             })
     }
 
+    /// Compute the visible non-fixed leaf-column range for header rendering.
+    ///
+    /// Returns `(visible_range, left_spacer_width)` where:
+    /// - `visible_range` is the column-index range that should be rendered.
+    /// - `left_spacer_width` is the total width of the off-screen left columns,
+    ///   used as a spacer div to keep visible columns at the correct position.
+    ///
+    /// On the first frame `self.bounds` is zero, so a fallback that covers all
+    /// columns is returned to avoid a blank header on initial paint.
+    fn calculate_visible_leaf_col_range(
+        &self,
+        left_columns_count: usize,
+    ) -> (Range<usize>, Pixels) {
+        let total_cols = self.col_groups.len();
+
+        if self.bounds.size.width == px(0.) {
+            return (left_columns_count..total_cols, px(0.));
+        }
+
+        let fixed_width = self.fixed_head_cols_bounds.size.width;
+        let available_width = (self.bounds.size.width - fixed_width).max(px(0.));
+        // The scroll handle offset is negative when scrolled right; negate it
+        // to obtain a positive distance from the left edge of the scroll area.
+        let scroll_x = (-self.horizontal_scroll_handle.offset().x).max(px(0.));
+
+        // Walk left-to-right through non-fixed columns to find the first one
+        // whose right edge enters the viewport. The accumulated width of the
+        // skipped columns becomes the left spacer width.
+        let mut range_start = left_columns_count;
+        let mut left_spacer = px(0.);
+        let mut cumulative = px(0.);
+        for i in left_columns_count..total_cols {
+            let right_edge = cumulative + self.col_groups[i].width;
+            if right_edge > scroll_x {
+                range_start = i;
+                left_spacer = cumulative;
+                break;
+            }
+            cumulative = right_edge;
+        }
+
+        // Continue from `range_start` (skipping already-scanned columns) to
+        // find the last column still within the viewport. The 200 px overdraw
+        // buffer prevents a visible flash when the user scrolls quickly.
+        let right_bound = scroll_x + available_width + px(200.);
+        let mut range_end = total_cols;
+        let mut cumulative = left_spacer; // already summed widths before `range_start`
+        for i in range_start..total_cols {
+            cumulative += self.col_groups[i].width;
+            if cumulative > right_bound {
+                range_end = (i + 1).min(total_cols);
+                break;
+            }
+        }
+
+        (range_start..range_end, left_spacer)
+    }
+
     fn render_table_header(
         &mut self,
         left_columns_count: usize,
@@ -1308,6 +1573,25 @@ where
         let view = cx.entity().clone();
         let horizontal_scroll_handle = self.horizontal_scroll_handle.clone();
 
+        // Header leaf-column virtualization.
+        //
+        // `render_th` creates interactive elements with resize-handle listeners.
+        // Calling it for every column every frame is O(n) in column count; with
+        // 1000+ columns this alone drops FPS below 60 even in release mode.
+        //
+        // We restrict rendering to the columns currently visible inside the
+        // overflow-scroll viewport, surrounding them with inert spacer divs:
+        //
+        //   [left_spacer] [visible columns…] [right_spacer] [last_empty_col]
+        //
+        // The spacers preserve the flex container's total content width so that
+        // the scrollbar range stays correct.
+        let total_cols = self.col_groups.len();
+        let (visible_col_range, left_spacer) =
+            self.calculate_visible_leaf_col_range(left_columns_count);
+
+        let layout_len = self.header_layout.len();
+
         // Reset fixed head columns bounds, if no fixed columns are present
         if left_columns_count == 0 {
             self.fixed_head_cols_bounds = Bounds::default();
@@ -1315,18 +1599,45 @@ where
 
         let mut header = self.delegate_mut().render_header(window, cx);
         let style = header.style().clone();
+        let layout = self.header_layout.clone();
 
         header
             .h_flex()
             .w_full()
-            .h(self.options.size.table_row_height())
             .flex_shrink_0()
-            .border_b_1()
-            .border_color(cx.theme().border)
+            .bg(cx.theme().tokens.table_head)
             .text_color(cx.theme().table_head_foreground)
             .refine_style(&style)
-            .when(self.cell_selectable, |this| {
-                this.child(self.render_row_selector_cell(0, true, cx))
+            .on_drag_move(cx.listener(|table, e: &DragMoveEvent<DragColumn>, _, cx| {
+                let drag = e.drag(cx);
+                let (drag_entity_id, drag_col_ix) = (drag.entity_id, drag.col_ix);
+
+                let gap =
+                    if drag_entity_id == cx.entity_id() && e.bounds.contains(&e.event.position) {
+                        table.drag_gap_at(e.event.position.x, drag_col_ix)
+                    } else {
+                        None
+                    };
+
+                if table.col_drag_gap != gap {
+                    table.col_drag_gap = gap;
+                    cx.notify();
+                }
+            }))
+            .on_drop(cx.listener(|table, drag: &DragColumn, window, cx| {
+                if drag.entity_id != cx.entity_id() {
+                    return;
+                }
+
+                // Insert the dragged column into the indicated gap.
+                let Some(gap) = table.col_drag_gap.take() else {
+                    return;
+                };
+                let to_ix = if drag.col_ix < gap { gap - 1 } else { gap };
+                table.move_column(drag.col_ix, to_ix, window, cx);
+            }))
+            .when(self.cell_selectable && self.row_header, |this| {
+                this.child(self.render_row_header_cell(0, true, cx))
             })
             .when(left_columns_count > 0, |this| {
                 let view = view.clone();
@@ -1335,15 +1646,41 @@ where
                     h_flex()
                         .relative()
                         .h_full()
-                        .bg(cx.theme().table_head)
-                        .children(
-                            self.col_groups
-                                .clone()
-                                .into_iter()
-                                .filter(|col| col.column.fixed == Some(ColumnFixed::Left))
-                                .enumerate()
-                                .map(|(col_ix, _)| self.render_th(col_ix, window, cx)),
-                        )
+                        .bg(cx.theme().tokens.table_head)
+                        .child(v_flex().min_w_full().flex_shrink_0().children(
+                            layout.iter().enumerate().map(|(_row_ix, row_cells)| {
+                                h_flex()
+                                    .min_w_full()
+                                    .h(self.options.size.table_row_height())
+                                    .border_b_1()
+                                    .border_color(cx.theme().border)
+                                    .children(row_cells.iter().filter_map(|cell| {
+                                        if cell.start_leaf_col_ix < left_columns_count {
+                                            if cell.is_leaf {
+                                                if let Some(ix) = cell.leaf_col_ix {
+                                                    return Some(
+                                                        self.render_th(ix, window, cx)
+                                                            .into_any_element(),
+                                                    );
+                                                }
+                                            } else {
+                                                return Some(
+                                                    self.delegate_mut()
+                                                        .render_group_th(
+                                                            &cell.label,
+                                                            cell.col_span,
+                                                            cell.width,
+                                                            window,
+                                                            cx,
+                                                        )
+                                                        .into_any_element(),
+                                                );
+                                            }
+                                        }
+                                        None
+                                    }))
+                            }),
+                        ))
                         .child(
                             // Fixed columns border
                             div()
@@ -1369,22 +1706,80 @@ where
                     .overflow_scroll()
                     .relative()
                     .track_scroll(&horizontal_scroll_handle)
-                    .bg(cx.theme().table_head)
-                    .child(
-                        h_flex()
-                            .relative()
-                            .children(
-                                self.col_groups
-                                    .clone()
-                                    .into_iter()
-                                    .skip(left_columns_count)
-                                    .enumerate()
-                                    .map(|(col_ix, _)| {
-                                        self.render_th(left_columns_count + col_ix, window, cx)
-                                    }),
-                            )
-                            .child(self.delegate.render_last_empty_col(window, cx)),
-                    ),
+                    .bg(cx.theme().tokens.table_head)
+                    .child(v_flex().min_w_full().flex_shrink_0().children(
+                        layout.iter().enumerate().map(|(row_ix, row_cells)| {
+                            let is_leaf_row = row_ix + 1 == layout_len;
+                            h_flex()
+                                .min_w_full()
+                                .h(self.options.size.table_row_height())
+                                .border_b_1()
+                                .border_color(cx.theme().border)
+                                .map(|this| {
+                                    if is_leaf_row {
+                                        // Leaf row: apply the spacer virtualization pattern.
+                                        // Only columns in `visible_range` are rendered; the two
+                                        // spacer divs preserve the container's total content width
+                                        // so the scrollbar range stays correct.
+                                        this.when(left_spacer > px(0.), |r| {
+                                            r.child(div().w(left_spacer).h_full().flex_shrink_0())
+                                        })
+                                        .children(row_cells.iter().filter_map(|cell| {
+                                            if cell.is_leaf {
+                                                let ix = cell.leaf_col_ix?;
+                                                if !visible_col_range.contains(&ix) {
+                                                    return None;
+                                                }
+                                                Some(
+                                                    self.render_th(ix, window, cx)
+                                                        .into_any_element(),
+                                                )
+                                            } else {
+                                                None
+                                            }
+                                        }))
+                                        .when(visible_col_range.end < total_cols, |r| {
+                                            let right_spacer: Pixels = self.col_groups
+                                                [visible_col_range.end..total_cols]
+                                                .iter()
+                                                .map(|g| g.width)
+                                                .sum();
+                                            r.child(div().w(right_spacer).h_full().flex_shrink_0())
+                                        })
+                                        .child(self.delegate.render_last_empty_col(window, cx))
+                                    } else {
+                                        // Group header rows have far fewer cells (one per group),
+                                        // so the cost of rendering all of them is negligible.
+                                        this.children(row_cells.iter().filter_map(|cell| {
+                                            if cell.start_leaf_col_ix >= left_columns_count {
+                                                if cell.is_leaf {
+                                                    if let Some(ix) = cell.leaf_col_ix {
+                                                        return Some(
+                                                            self.render_th(ix, window, cx)
+                                                                .into_any_element(),
+                                                        );
+                                                    }
+                                                } else {
+                                                    return Some(
+                                                        self.delegate_mut()
+                                                            .render_group_th(
+                                                                &cell.label,
+                                                                cell.col_span,
+                                                                cell.width,
+                                                                window,
+                                                                cx,
+                                                            )
+                                                            .into_any_element(),
+                                                    );
+                                                }
+                                            }
+                                            None
+                                        }))
+                                        .child(self.delegate.render_last_empty_col(window, cx))
+                                    }
+                                })
+                        }),
+                    )),
             )
     }
 
@@ -1419,17 +1814,17 @@ where
                 .when(need_render_border, |this| {
                     this.border_b_1().border_color(cx.theme().table_row_border)
                 })
-                .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
+                .when(is_stripe_row, |this| this.bg(cx.theme().tokens.table_even))
                 .refine_style(&style)
                 .hover(|this| {
                     if is_selected || self.right_clicked_row == Some(row_ix) {
                         this
                     } else {
-                        this.bg(cx.theme().table_hover)
+                        this.bg(cx.theme().tokens.table_hover)
                     }
                 })
-                .when(self.cell_selectable, |this| {
-                    this.child(self.render_row_selector_cell(row_ix, false, cx))
+                .when(self.cell_selectable && self.row_header, |this| {
+                    this.child(self.render_row_header_cell(row_ix, false, cx))
                 })
                 .when(left_columns_count > 0, |this| {
                     // Left fixed columns
@@ -1461,7 +1856,7 @@ where
                                                             div()
                                                                 .absolute()
                                                                 .inset_0()
-                                                                .bg(cx.theme().table_active)
+                                                                .bg(cx.theme().tokens.table_active)
                                                                 .border_1()
                                                                 .border_color(
                                                                     cx.theme().table_active_border,
@@ -1580,7 +1975,10 @@ where
                                                                 div()
                                                                     .absolute()
                                                                     .inset_0()
-                                                                    .bg(cx.theme().table_active)
+                                                                    .bg(cx
+                                                                        .theme()
+                                                                        .tokens
+                                                                        .table_active)
                                                                     .border_1()
                                                                     .border_color(
                                                                         cx.theme()
@@ -1653,12 +2051,12 @@ where
                                         .right(px(0.))
                                         .bottom(px(-1.))
                                         .absolute()
-                                        .bg(cx.theme().table_active)
+                                        .bg(cx.theme().tokens.table_active)
                                         .border_1()
                                         .border_color(cx.theme().table_active_border),
                                 )
                             } else {
-                                this.bg(cx.theme().accent)
+                                this.bg(cx.theme().tokens.accent)
                             }
                         })
                     })
@@ -1694,9 +2092,9 @@ where
                 .h(row_height)
                 .border_b_1()
                 .border_color(cx.theme().table_row_border)
-                .when(is_stripe_row, |this| this.bg(cx.theme().table_even))
-                .when(self.cell_selectable, |this| {
-                    // Render empty row selector cell for fake rows
+                .when(is_stripe_row, |this| this.bg(cx.theme().tokens.table_even))
+                .when(self.cell_selectable && self.row_header, |this| {
+                    // Render empty row header cell for fake rows
                     this.child(
                         div()
                             .w(px(40.))
@@ -1740,7 +2138,10 @@ where
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         if !crate::measure_enable() {
-            return self.delegate.render_td(row_ix, col_ix, window, cx).into_any_element();
+            return self
+                .delegate
+                .render_td(row_ix, col_ix, window, cx)
+                .into_any_element();
         }
 
         let start = std::time::Instant::now();
@@ -1756,7 +2157,10 @@ where
 
         // Print avg measure time of each td
         if self._measure.len() > 0 {
-            let total = self._measure.iter().fold(Duration::default(), |acc, d| acc + *d);
+            let total = self
+                ._measure
+                .iter()
+                .fold(Duration::default(), |acc, d| acc + *d);
             let avg = total / self._measure.len() as u32;
             eprintln!(
                 "last render {} cells total: {:?}, avg: {:?}",
@@ -1774,11 +2178,11 @@ where
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
+        let header_rows = self.header_layout.len().max(1);
         Some(
             div()
-                .occlude()
                 .absolute()
-                .top(self.options.size.table_row_height())
+                .top(self.options.size.table_row_height() * header_rows as f32)
                 .right_0()
                 .bottom_0()
                 .w(Scrollbar::width())
@@ -1792,7 +2196,6 @@ where
         _: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
-            .occlude()
             .absolute()
             .left(self.fixed_head_cols_bounds.size.width)
             .right_0()
@@ -1829,23 +2232,42 @@ where
         let loading = self.delegate.loading(cx);
 
         let row_height = self.options.size.table_row_height();
-        let total_height = self.vertical_scroll_handle.0.borrow().base_handle.bounds().size.height;
+        let total_height = self
+            .vertical_scroll_handle
+            .0
+            .borrow()
+            .base_handle
+            .bounds()
+            .size
+            .height;
         let actual_height = row_height * rows_count as f32;
         let extra_rows_count =
             self.calculate_extra_rows_needed(total_height, actual_height, row_height);
-        let render_rows_count =
-            if self.options.stripe { rows_count + extra_rows_count } else { rows_count };
+        let render_rows_count = if self.options.stripe {
+            rows_count + extra_rows_count
+        } else {
+            rows_count
+        };
         let right_clicked_row = self.right_clicked_row;
         let is_filled = total_height > Pixels::ZERO && total_height <= actual_height;
 
         let loading_view = if loading {
-            Some(self.delegate.render_loading(self.options.size, window, cx).into_any_element())
+            Some(
+                self.delegate
+                    .render_loading(self.options.size, window, cx)
+                    .into_any_element(),
+            )
         } else {
             None
         };
 
         let empty_view = if rows_count == 0 {
-            Some(div().size_full().child(self.delegate.render_empty(window, cx)).into_any_element())
+            Some(
+                div()
+                    .size_full()
+                    .child(self.delegate.render_empty(window, cx))
+                    .into_any_element(),
+            )
         } else {
             None
         };
@@ -1872,20 +2294,24 @@ where
                     this.children(empty_view)
                 } else {
                     this.child(
-                        h_flex().id("table-body").flex_grow().size_full().child(
+                        h_flex().id("table-body").flex_grow_1().size_full().child(
                             uniform_list(
                                 "table-uniform-list",
                                 render_rows_count,
                                 cx.processor(
                                     move |table, visible_range: Range<usize>, window, cx| {
-                                        // We must calculate the col sizes here, because the col sizes
-                                        // need render_th first, then that method will set the bounds of each col.
+                                        // Use `col.width` (always up-to-date) rather than
+                                        // `col.bounds.size.width`, which is only set after
+                                        // prepaint and is therefore zero on the first frame.
                                         let col_sizes: Rc<Vec<gpui::Size<Pixels>>> = Rc::new(
                                             table
                                                 .col_groups
                                                 .iter()
                                                 .skip(left_columns_count)
-                                                .map(|col| col.bounds.size)
+                                                .map(|col| gpui::Size {
+                                                    width: col.width,
+                                                    height: px(0.),
+                                                })
                                                 .collect(),
                                         );
 
@@ -1935,7 +2361,7 @@ where
                                     },
                                 ),
                             )
-                            .flex_grow()
+                            .flex_grow_1()
                             .size_full()
                             .with_sizing_behavior(ListSizingBehavior::Auto)
                             .track_scroll(&self.vertical_scroll_handle)
@@ -1950,7 +2376,10 @@ where
             .children(loading_view)
             .when(!loading, |this| {
                 this.child(inner_table)
-                    .child(ScrollableMask::new(Axis::Horizontal, &self.horizontal_scroll_handle))
+                    .child(ScrollableMask::new(
+                        Axis::Horizontal,
+                        &self.horizontal_scroll_handle,
+                    ))
                     .when(right_clicked_row.is_some(), |this| {
                         this.on_mouse_down_out(cx.listener(|this, e, window, cx| {
                             this.on_row_right_click(e, None, window, cx);
@@ -1971,9 +2400,10 @@ where
                         .when(self.options.scrollbar_visible.bottom, |this| {
                             this.child(self.render_horizontal_scrollbar(window, cx))
                         })
-                        .when(self.options.scrollbar_visible.right && rows_count > 0, |this| {
-                            this.children(self.render_vertical_scrollbar(window, cx))
-                        }),
+                        .when(
+                            self.options.scrollbar_visible.right && rows_count > 0,
+                            |this| this.children(self.render_vertical_scrollbar(window, cx)),
+                        ),
                 )
             })
     }

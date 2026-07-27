@@ -78,8 +78,8 @@ impl TableDelegate for MyTableDelegate {
         self.data.len()
     }
 
-    fn column(&self, col_ix: usize, _: &App) -> &Column {
-        &self.columns[col_ix]
+    fn column(&self, col_ix: usize, _: &App) -> Column {
+        self.columns[col_ix].clone()
     }
 
     fn render_td(&mut self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<TableState<Self>>) -> impl IntoElement {
@@ -400,18 +400,22 @@ impl TableDelegate for MyTableDelegate {
 
 ### Table Styling
 
-Customize table appearance:
+Customize table appearance. `DataTable` implements `Sizable`: use preset sizes such as `.small()` and `.large()` for standard density, or pass a custom pixel size to set a uniform header and body row height.
 
 ```rust
+use gpui::px;
+use gpui_component::Sizable as _;
+
 let state = cx.new(|cx| {
     TableState::new(delegate, window, cx)
 });
 
 // In render
 DataTable::new(&state)
-    .stripe(true)           // Alternating row colors
-    .bordered(true)           // Border around table
-    .scrollbar_visible(true, true) // Vertical, horizontal scrollbars
+    .with_size(px(48.))             // Custom uniform row height
+    .stripe(true)                   // Alternating row colors
+    .bordered(true)                 // Border around table
+    .scrollbar_visible(true, true)  // Vertical, horizontal scrollbars
 ```
 
 ## Examples

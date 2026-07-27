@@ -1,10 +1,11 @@
 use crate::{
-    h_flex, text::Text, tooltip::Tooltip, ActiveTheme, Disableable, Side, Sizable, Size, StyledExt,
+    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, h_flex, text::Text,
+    tooltip::ComponentTooltip,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, Animation, AnimationExt as _, App, ElementId,
-    InteractiveElement, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    Animation, AnimationExt as _, App, Background, ElementId, Hsla, InteractiveElement,
+    IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _, px,
 };
 use std::{rc::Rc, time::Duration};
 
@@ -19,7 +20,8 @@ pub struct Switch {
     label_side: Side,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     size: Size,
-    tooltip: Option<SharedString>,
+    color: Option<Hsla>,
+    tooltip: ComponentTooltip,
 }
 
 impl Switch {
@@ -35,7 +37,8 @@ impl Switch {
             on_click: None,
             label_side: Side::Right,
             size: Size::Medium,
-            tooltip: None,
+            color: None,
+            tooltip: ComponentTooltip::default(),
         }
     }
 
@@ -60,9 +63,16 @@ impl Switch {
         self
     }
 
-    /// Set tooltip for the switch.
+    /// Set the background color of the switch when checked.
+    /// Defaults to `cx.theme().primary`.
+    pub fn color(mut self, color: impl Into<Hsla>) -> Self {
+        self.color = Some(color.into());
+        self
+    }
+
+    /// Set tooltip text for the switch.
     pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
-        self.tooltip = Some(tooltip.into());
+        self.tooltip.text = Some((tooltip.into(), None));
         self
     }
 }
@@ -93,15 +103,22 @@ impl RenderOnce for Switch {
         let on_click = self.on_click.clone();
         let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
 
-        let (bg, toggle_bg) = match checked {
-            true => (cx.theme().primary, cx.theme().switch_thumb),
-            false => (cx.theme().switch, cx.theme().switch_thumb),
+        let checked_bg = self
+            .color
+            .map(Background::from)
+            .unwrap_or(cx.theme().tokens.primary.into());
+        let (bg, toggle_bg): (Background, Background) = match checked {
+            true => (checked_bg, cx.theme().tokens.switch_thumb.into()),
+            false => (
+                cx.theme().tokens.switch.into(),
+                cx.theme().tokens.switch_thumb.into(),
+            ),
         };
 
         let (bg, toggle_bg) = if self.disabled {
             (
-                if checked { bg.alpha(0.5) } else { bg },
-                toggle_bg.alpha(0.35),
+                if checked { bg.opacity(0.5) } else { bg },
+                toggle_bg.opacity(0.35),
             )
         } else {
             (bg, toggle_bg)
@@ -140,11 +157,7 @@ impl RenderOnce for Switch {
                         .border(inset)
                         .border_color(cx.theme().transparent)
                         .bg(bg)
-                        .when_some(self.tooltip.clone(), |this, tooltip| {
-                            this.tooltip(move |window, cx| {
-                                Tooltip::new(tooltip.clone()).build(window, cx)
-                            })
-                        })
+                        .map(|this| self.tooltip.apply(this))
                         .child(
                             // Switch Toggle
                             div()

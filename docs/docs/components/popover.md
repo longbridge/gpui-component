@@ -35,57 +35,53 @@ Popover::new("basic-popover")
 
 ### Popover with Custom Positioning
 
-The `anchor` method allows you to specify where the popover appears relative to the trigger element. It accepts both `Corner` and `Anchor` types.
+The `anchor` method controls how the popover attaches to the trigger, using the [`Anchor`] type.
 
-**Using `Corner` type** (4 corner positions):
+Imagine the popover has a pointer tip (like a speech bubble's tail). The anchor is where that tip sits relative to the trigger — `Anchor::TopLeft` places it at the trigger's top-left corner, `Anchor::BottomRight` at the bottom-right, and so on. The popover then hangs off that point.
 
-```rust
-use gpui::Corner;
+For example, `Anchor::TopLeft` places the popover just below the trigger, left-aligned to it:
 
-Popover::new("positioned-popover")
-    .anchor(Corner::TopRight)
-    .trigger(Button::new("top-right").label("Top Right").outline())
-    .child("This popover appears at the top right")
+```text
+[ Trigger ]
+┌──────────────┐
+│   Popover    │
+└──────────────┘
 ```
-
-**Using `Anchor` type** (6 positions including center):
-
-The `Anchor` type provides more positioning options, including center positions:
 
 ```rust
 use gpui_component::Anchor;
 
-// Top positions
+// Anchored to the trigger's top corners
 Popover::new("top-left")
     .anchor(Anchor::TopLeft)
     .trigger(Button::new("btn").label("Top Left").outline())
-    .child("Anchored to top left")
+    .child("Anchored to the trigger's top-left")
 
 Popover::new("top-center")
     .anchor(Anchor::TopCenter)
     .trigger(Button::new("btn").label("Top Center").outline())
-    .child("Anchored to top center")
+    .child("Anchored to the trigger's top-center")
 
 Popover::new("top-right")
     .anchor(Anchor::TopRight)
     .trigger(Button::new("btn").label("Top Right").outline())
-    .child("Anchored to top right")
+    .child("Anchored to the trigger's top-right")
 
-// Bottom positions
+// Anchored to the trigger's bottom corners
 Popover::new("bottom-left")
     .anchor(Anchor::BottomLeft)
     .trigger(Button::new("btn").label("Bottom Left").outline())
-    .child("Anchored to bottom left")
+    .child("Anchored to the trigger's bottom-left")
 
 Popover::new("bottom-center")
     .anchor(Anchor::BottomCenter)
     .trigger(Button::new("btn").label("Bottom Center").outline())
-    .child("Anchored to bottom center")
+    .child("Anchored to the trigger's bottom-center")
 
 Popover::new("bottom-right")
     .anchor(Anchor::BottomRight)
     .trigger(Button::new("btn").label("Bottom Right").outline())
-    .child("Anchored to bottom right")
+    .child("Anchored to the trigger's bottom-right")
 ```
 
 ### View in Popover
@@ -96,7 +92,7 @@ You can add any `Entity<T>` that implemented [Render] as the popover content.
 let view = cx.new(|_| MyView::new());
 
 Popover::new("form-popover")
-    .anchor(Corner::BottomLeft)
+    .anchor(Anchor::BottomLeft)
     .trigger(Button::new("show-form").label("Open Form").outline())
     .child(view.clone())
 ```
@@ -122,7 +118,7 @@ use gpui::ParentElement as _;
 use gpui_component::popover::Popover;
 
 Popover::new("complex-popover")
-    .anchor(Corner::BottomLeft)
+    .anchor(Anchor::BottomLeft)
     .trigger(Button::new("complex").label("Complex Content").outline())
     .content(|_, _, _| {
         div()
@@ -143,11 +139,11 @@ Sometimes you may want to show a popover on right-click, for example, to create 
 use gpui::MouseButton;
 
 Popover::new("context-menu")
-    .anchor(Corner::BottomRight)
+    .anchor(Anchor::BottomRight)
     .mouse_button(MouseButton::Right)
     .trigger(Button::new("right-click").label("Right Click Me").outline())
     .child("Context Menu")
-    .child(Divider::horizontal())
+    .child(Separator::horizontal())
     .child("This is a custom context menu.")
 ```
 
@@ -241,3 +237,4 @@ Popover::new("default-open-popover")
 [Render]: https://docs.rs/gpui/latest/gpui/trait.Render.html
 [RenderOnce]: https://docs.rs/gpui/latest/gpui/trait.RenderOnce.html
 [Styled]: https://docs.rs/gpui/latest/gpui/trait.Styled.html
+[`Anchor`]: https://docs.rs/gpui-component/latest/gpui_component/enum.Anchor.html

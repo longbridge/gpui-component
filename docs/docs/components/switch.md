@@ -89,6 +89,31 @@ Switch::new("disabled-on")
     .checked(true)
 ```
 
+### Custom Color
+
+Use `.color()` to override the checked-state background color. The disabled alpha is applied automatically on top of the custom color.
+
+```rust
+// Success color when checked
+Switch::new("switch")
+    .label("Success")
+    .checked(true)
+    .color(cx.theme().success)
+
+// Danger color when checked
+Switch::new("switch")
+    .label("Danger")
+    .checked(true)
+    .color(cx.theme().danger)
+
+// Custom color + disabled: color is shown at 50% opacity
+Switch::new("switch")
+    .label("Disabled")
+    .checked(true)
+    .color(cx.theme().success)
+    .disabled(true)
+```
+
 ### With Tooltip
 
 ```rust
@@ -110,6 +135,7 @@ Switch::new("switch")
 | `label_side(side)` | Position label (Side::Left or Side::Right)                  |
 | `disabled(bool)`   | Set disabled state                                          |
 | `tooltip(text)`    | Add tooltip text                                            |
+| `color(color)`     | Set background color when checked (default: `theme.primary`) |
 | `on_click(fn)`     | Callback when clicked, receives `&bool` (new checked state) |
 
 ### Styling

@@ -205,6 +205,48 @@ ToggleGroup::new("mini-toolbar")
     .child(Toggle::new(2).icon(IconName::Underline))
 ```
 
+### Segmented Toggle Group
+
+Use `segmented()` when a group should render as a connected segmented control. The
+group still uses the same multi-toggle behavior: `on_click` receives a `Vec<bool>`
+with the new checked state for each item.
+
+```rust
+ToggleGroup::new("formatting")
+    .segmented()
+    .outline()
+    .child(Toggle::new(0).label("Bold").checked(self.bold))
+    .child(Toggle::new(1).label("Italic").checked(self.italic))
+    .child(Toggle::new(2).label("Code").checked(self.code))
+    .on_click(cx.listener(|view, states, _, cx| {
+        view.bold = states[0];
+        view.italic = states[1];
+        view.code = states[2];
+        cx.notify();
+    }))
+```
+
+By default, segmented groups use a zero gap so adjacent items share one outline.
+Pass a non-zero gap when you want the segmented sizing and variants but separated
+items:
+
+```rust
+use gpui::px;
+
+ToggleGroup::new("quick-actions")
+    .segmented()
+    .outline()
+    .gap(px(8.))
+    .small()
+    .child(Toggle::new(0).label("Star"))
+    .child(Toggle::new(1).label("Watch"))
+    .child(Toggle::new(2).label("Pin"))
+```
+
+If you need mutually exclusive behavior, keep that state in your view model and
+set only one child to `checked(true)` until a dedicated single-selection API is
+available.
+
 ## Event Handling
 
 ### Individual Toggle Events

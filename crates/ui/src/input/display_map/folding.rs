@@ -1,15 +1,15 @@
 use std::ops::Range;
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 use tree_sitter::Node;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 pub use tree_sitter::Tree;
 
-#[cfg(target_family = "wasm")]
+#[cfg(not(feature = "tree-sitter"))]
 /// Stub type for tree-sitter Tree on WASM (tree-sitter not available).
 pub struct Tree;
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Minimum line span for a node to be considered foldable.
 const MIN_FOLD_LINES: usize = 2;
 
@@ -39,7 +39,7 @@ impl FoldRange {
 
 // ==================== Native Implementation (with tree-sitter) ====================
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Check if a named node qualifies as a fold candidate.
 ///
 /// Uses a structural heuristic: any **named** node spanning ≥ MIN_FOLD_LINES
@@ -47,42 +47,47 @@ impl FoldRange {
 /// classes, blocks, etc.), so named nodes naturally correspond to meaningful
 /// foldable regions across all languages without a per-language node-type list.
 fn is_foldable_node(node: &Node) -> bool {
-    // Skip root node (e.g. `source_file`) and unnamed tokens
-    if !node.is_named() || node.parent().is_none() {
-        return false;
-    }
-
     let start = node.start_position().row;
     let end = node.end_position().row;
     end.saturating_sub(start) >= MIN_FOLD_LINES
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Extract fold ranges from a tree-sitter syntax tree (full traversal).
 pub fn extract_fold_ranges(tree: &Tree) -> Vec<FoldRange> {
     let mut ranges = Vec::new();
-    collect_foldable_nodes(tree.root_node(), &mut ranges);
+    let root = tree.root_node();
+    let mut cursor = root.walk();
+    // Skip the root, it's not foldable. Use named_children to skip literal tokens.
+    for child in root.named_children(&mut cursor) {
+        collect_foldable_nodes(child, &mut ranges);
+    }
 
     ranges.sort_by_key(|r| r.start_line);
     ranges.dedup_by_key(|r| r.start_line);
     ranges
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Extract fold ranges only within a byte range (for incremental updates after edits).
 ///
 /// Skips subtrees entirely outside the range, making it O(nodes in range)
 /// instead of O(all nodes in tree).
 pub fn extract_fold_ranges_in_range(tree: &Tree, byte_range: Range<usize>) -> Vec<FoldRange> {
     let mut ranges = Vec::new();
-    collect_foldable_nodes_in_range(tree.root_node(), &byte_range, &mut ranges);
+    let root = tree.root_node();
+    let mut cursor = root.walk();
+    // Skip the root, it's not foldable. Use named_children to skip literal tokens.
+    for child in root.named_children(&mut cursor) {
+        collect_foldable_nodes_in_range(child, &byte_range, &mut ranges);
+    }
 
     ranges.sort_by_key(|r| r.start_line);
     ranges.dedup_by_key(|r| r.start_line);
     ranges
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Recursively collect foldable nodes, skipping subtrees outside byte_range.
 fn collect_foldable_nodes_in_range(
     node: Node,
@@ -93,44 +98,48 @@ fn collect_foldable_nodes_in_range(
         return;
     }
 
-    if is_foldable_node(&node) {
-        ranges.push(FoldRange {
-            start_line: node.start_position().row,
-            end_line: node.end_position().row,
-        });
+    if !is_foldable_node(&node) {
+        return;
     }
 
+    ranges.push(FoldRange {
+        start_line: node.start_position().row,
+        end_line: node.end_position().row,
+    });
+
     let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
+    for child in node.named_children(&mut cursor) {
         collect_foldable_nodes_in_range(child, byte_range, ranges);
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Recursively collect foldable nodes from the syntax tree (full traversal).
 fn collect_foldable_nodes(node: Node, ranges: &mut Vec<FoldRange>) {
-    if is_foldable_node(&node) {
-        ranges.push(FoldRange {
-            start_line: node.start_position().row,
-            end_line: node.end_position().row,
-        });
+    if !is_foldable_node(&node) {
+        return;
     }
 
+    ranges.push(FoldRange {
+        start_line: node.start_position().row,
+        end_line: node.end_position().row,
+    });
+
     let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
+    for child in node.named_children(&mut cursor) {
         collect_foldable_nodes(child, ranges);
     }
 }
 
 // ==================== WASM Stub Implementation ====================
 
-#[cfg(target_family = "wasm")]
+#[cfg(not(feature = "tree-sitter"))]
 /// Extract fold ranges - WASM stub (returns empty, no tree-sitter).
 pub fn extract_fold_ranges(_tree: &Tree) -> Vec<FoldRange> {
     Vec::new()
 }
 
-#[cfg(target_family = "wasm")]
+#[cfg(not(feature = "tree-sitter"))]
 /// Extract fold ranges in range - WASM stub (returns empty, no tree-sitter).
 pub fn extract_fold_ranges_in_range(_tree: &Tree, _byte_range: Range<usize>) -> Vec<FoldRange> {
     Vec::new()

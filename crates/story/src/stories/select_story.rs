@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{button::*, checkbox::*, divider::*, input::*, select::*, *};
+use gpui_component::{button::*, checkbox::*, input::*, select::*, separator::*, *};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +42,7 @@ pub struct SelectStory {
     simple_select1: Entity<SelectState<Vec<&'static str>>>,
     simple_select2: Entity<SelectState<SearchableVec<&'static str>>>,
     simple_select3: Entity<SelectState<Vec<SharedString>>>,
+    menu_max_h_select: Entity<SelectState<Vec<&'static str>>>,
     disabled_select: Entity<SelectState<Vec<SharedString>>>,
     appearance_select: Entity<SelectState<Vec<SharedString>>>,
     input_state: Entity<InputState>,
@@ -147,6 +148,17 @@ impl SelectStory {
                 }),
                 simple_select3: cx
                     .new(|cx| SelectState::new(Vec::<SharedString>::new(), None, window, cx)),
+                menu_max_h_select: cx.new(|cx| {
+                    SelectState::new(
+                        vec![
+                            "GPUI", "Iced", "egui", "Makepad", "Slint", "QT", "ImGui", "Cocoa",
+                            "WinUI",
+                        ],
+                        Some(IndexPath::default()),
+                        window,
+                        cx,
+                    )
+                }),
                 disabled_select: cx
                     .new(|cx| SelectState::new(Vec::<SharedString>::new(), None, window, cx)),
                 appearance_select,
@@ -222,6 +234,16 @@ impl Render for SelectStory {
                 ),
             )
             .child(
+                section("Custom Menu Max Height").max_w_128().child(
+                    Select::new(&self.menu_max_h_select)
+                        .disabled(self.disabled)
+                        .small()
+                        .placeholder("UI")
+                        .title_prefix("UI: ")
+                        .menu_max_h(rems(6.)),
+                ),
+            )
+            .child(
                 section("Searchable Select").max_w_128().child(
                     Select::new(&self.simple_select2)
                         .disabled(self.disabled)
@@ -235,13 +257,13 @@ impl Render for SelectStory {
                     Select::new(&self.simple_select3)
                         .disabled(self.disabled)
                         .small()
-                        .empty(
+                        .empty(|_, cx| {
                             h_flex()
                                 .h_24()
                                 .justify_center()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("No Data"),
-                        ),
+                                .child("No Data")
+                        }),
                 ),
             )
             .child(
@@ -261,7 +283,7 @@ impl Render for SelectStory {
                                     .pl_3(),
                             ),
                         )
-                        .child(Divider::vertical())
+                        .child(Separator::vertical())
                         .child(
                             div().flex_1().child(
                                 Input::new(&self.input_state)

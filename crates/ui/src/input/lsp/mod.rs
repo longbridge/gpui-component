@@ -1,5 +1,5 @@
 use anyhow::Result;
-use gpui::{App, Context, Hsla, MouseMoveEvent, Task, Window};
+use gpui::{App, Context, Hsla, MouseMoveEvent, SharedString, Task, Window};
 use ropey::Rope;
 use std::rc::Rc;
 
@@ -10,12 +10,26 @@ mod completions;
 mod definitions;
 mod document_colors;
 mod hover;
+mod semantic_tokens;
 
 pub use code_actions::*;
 pub use completions::*;
 pub use definitions::*;
 pub use document_colors::*;
 pub use hover::*;
+pub use semantic_tokens::*;
+
+/// Host hook to show a document when following an LSP location
+/// (Go to Definition), modeled after the `window/showDocument` request.
+///
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
+///
+/// Called before the built-in behavior. Return `true` if the host has shown
+/// the document (e.g. opened a docs window for a virtual/external URI);
+/// return `false` to fall through to the default handling (`external` URIs
+/// open in the browser, anything else jumps within the current document).
+pub type ShowDocumentHandler =
+    Rc<dyn Fn(&lsp_types::ShowDocumentParams, &mut Window, &mut App) -> bool>;
 
 /// LSP ServerCapabilities
 ///
@@ -31,10 +45,22 @@ pub struct Lsp {
     pub definition_provider: Option<Rc<dyn DefinitionProvider>>,
     /// The document color provider.
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
+    /// The range semantic tokens provider.
+    pub semantic_tokens_provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
+    /// Optional host hook to show documents for Go to Definition locations,
+    /// following the `window/showDocument` request (see [`ShowDocumentHandler`]).
+    ///
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
+    pub show_document: Option<ShowDocumentHandler>,
 
     document_colors: Vec<(lsp_types::Range, Hsla)>,
+    /// Cached semantic tokens as absolute position ranges + theme token-type
+    /// names. Color is resolved from the name at paint time so theme switches
+    /// take effect without a refetch.
+    semantic_tokens: Vec<(lsp_types::Range, SharedString)>,
     _hover_task: Task<Result<()>>,
     _document_color_task: Task<()>,
+    _semantic_tokens_task: Task<()>,
 }
 
 impl Default for Lsp {
@@ -45,9 +71,13 @@ impl Default for Lsp {
             hover_provider: None,
             definition_provider: None,
             document_color_provider: None,
+            semantic_tokens_provider: None,
+            show_document: None,
             document_colors: vec![],
+            semantic_tokens: vec![],
             _hover_task: Task::ready(Ok(())),
             _document_color_task: Task::ready(()),
+            _semantic_tokens_task: Task::ready(()),
         }
     }
 }
@@ -61,25 +91,28 @@ impl Lsp {
         cx: &mut Context<InputState>,
     ) {
         self.update_document_colors(text, window, cx);
+        self.update_semantic_tokens(text, window, cx);
     }
 
     /// Reset all LSP states.
     pub(crate) fn reset(&mut self) {
         self.document_colors.clear();
+        self.semantic_tokens.clear();
         self._hover_task = Task::ready(Ok(()));
         self._document_color_task = Task::ready(());
+        self._semantic_tokens_task = Task::ready(());
     }
 }
 
 impl InputState {
     pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
-        self.context_menu = None;
+        self.context_menu_content = None;
         self._context_menu_task = Task::ready(Ok(()));
         cx.notify();
     }
 
     pub(crate) fn is_context_menu_open(&self, cx: &App) -> bool {
-        let Some(menu) = self.context_menu.as_ref() else {
+        let Some(menu) = self.context_menu_content.as_ref() else {
             return false;
         };
 
@@ -95,7 +128,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let Some(menu) = self.context_menu.as_ref() else {
+        let Some(menu) = self.context_menu_content.as_ref() else {
             return false;
         };
 
@@ -112,7 +145,6 @@ impl InputState {
                     handled = menu.handle_action(action, window, cx)
                 });
             }
-            ContextMenu::MouseContext(..) => {}
         };
 
         handled
@@ -141,12 +173,31 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<InputState>,
     ) {
+        let had_definition = !self.hover_definition.is_empty();
+        let had_popover = self.hover_popover.is_some();
+
         if event.modifiers.secondary() {
             self.handle_hover_definition(offset, window, cx);
         } else {
             self.hover_definition.clear();
             self.handle_hover_popover(offset, window, cx);
         }
-        cx.notify();
+
+        let changed = had_definition == self.hover_definition.is_empty()
+            || had_popover != self.hover_popover.is_some();
+        if changed {
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn clear_hover_state(&mut self, cx: &mut Context<InputState>) {
+        let had_definition = !self.hover_definition.is_empty();
+        let had_popover = self.hover_popover.is_some();
+        self.hover_definition.clear();
+        self.hover_popover = None;
+        self.lsp._hover_task = Task::ready(Ok(()));
+        if had_definition || had_popover {
+            cx.notify();
+        }
     }
 }

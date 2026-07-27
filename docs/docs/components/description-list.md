@@ -67,13 +67,13 @@ DescriptionList::new()
     ])
 ```
 
-### With Dividers
+### With Separators
 
 ```rust
 DescriptionList::new()
     .item("Name", "GPUI Component", 1)
     .item("Version", "0.1.0", 1)
-    .divider() // Add a visual separator
+    .separator() // Add a visual separator
     .item("Author", "Longbridge", 1)
     .item("License", "Apache-2.0", 1)
 ```
@@ -144,7 +144,7 @@ DescriptionList::new()
         DescriptionItem::new("Version").value("0.1.0").span(1),
         DescriptionItem::new("Status").value("Active").span(1),
 
-        DescriptionItem::Divider, // Full-width divider
+        DescriptionItem::Separator, // Full-width separator
 
         DescriptionItem::new("Description").value(
             "A comprehensive UI component library for building desktop applications with GPUI"
@@ -173,7 +173,7 @@ DescriptionList::new()
         DescriptionItem::new("Email").value("john@example.com"),
         DescriptionItem::new("Phone").value("+1 (555) 123-4567"),
         DescriptionItem::new("Department").value("Engineering"),
-        DescriptionItem::Divider,
+        DescriptionItem::Separator,
         DescriptionItem::new("Bio").value(
             "Senior software engineer with 10+ years of experience in Rust and system programming."
         ).span(2),
@@ -209,7 +209,7 @@ DescriptionList::new()
         DescriptionItem::new("Processor").value("Apple M2 Pro").span(2),
         DescriptionItem::new("Base Price").value("$1,999").span(1),
 
-        DescriptionItem::Divider,
+        DescriptionItem::Separator,
 
         DescriptionItem::new("Key Features").value(
             "Liquid Retina XDR display, ProMotion technology, P3 wide color gamut"
@@ -237,7 +237,7 @@ DescriptionList::horizontal()
 - Use horizontal layout for simple key-value pairs
 - Use vertical layout when values are lengthy or complex
 - Limit columns to 3-4 for optimal readability
-- Use dividers to group related information
+- Use separators to group related information
 - Keep labels concise and descriptive
 - Use consistent spacing with the size prop
 - Consider removing borders for embedded contexts

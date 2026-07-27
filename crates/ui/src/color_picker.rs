@@ -1,5 +1,5 @@
 use gpui::{
-    App, AppContext, Context, Corner, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
+    Anchor, App, AppContext, Context, Div, ElementId, Entity, EventEmitter, FocusHandle, Focusable,
     Hsla, InteractiveElement as _, IntoElement, KeyBinding, ParentElement, Render, RenderOnce,
     SharedString, Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription,
     TextAlign, Window, div, hsla, linear_color_stop, linear_gradient, prelude::FluentBuilder as _,
@@ -9,13 +9,13 @@ use rust_i18n::t;
 use crate::{
     ActiveTheme as _, Colorize as _, Icon, Selectable, Sizable, Size, StyleSized,
     actions::Confirm,
-    divider::Divider,
     h_flex,
     input::{Input, InputEvent, InputState},
     popover::Popover,
+    separator::Separator,
     slider::{Slider, SliderEvent, SliderState},
     tab::{Tab, TabBar},
-    tooltip::Tooltip,
+    tooltip::{ManagedTooltipExt as _, Tooltip},
     v_flex,
 };
 
@@ -158,6 +158,7 @@ impl ColorPickerState {
                 |this, state, ev: &InputEvent, window, cx| match ev {
                     InputEvent::Change => {
                         if this.suppress_input_change {
+                            this.suppress_input_change = false;
                             return;
                         }
                         let value = state.read(cx).value();
@@ -263,6 +264,9 @@ impl ColorPickerState {
         self.needs_slider_sync = false;
         self.value = value;
         self.hovered_color = value;
+        // Suppress the InputEvent::Change that set_value will trigger, to avoid
+        // the Hsla→hex→Hsla precision loss from feeding back into sync_sliders.
+        self.suppress_input_change = true;
         self.state.update(cx, |view, cx| {
             if let Some(value) = value {
                 view.set_value(value.to_hex(), window, cx);
@@ -270,6 +274,9 @@ impl ColorPickerState {
                 view.set_value("", window, cx);
             }
         });
+        // Sync sliders directly with the full-precision value instead of relying
+        // on the InputEvent::Change → parse_hex round-trip.
+        self.sync_sliders(value, window, cx);
         if emit {
             cx.emit(ColorPickerEvent::Change(value));
         }
@@ -280,12 +287,18 @@ impl ColorPickerState {
         &mut self,
         value: Hsla,
         emit: bool,
-        _: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.needs_slider_sync = false;
         self.value = Some(value);
         self.hovered_color = Some(value);
+        // Keep the hex input in sync with the slider, but suppress the resulting
+        // InputEvent::Change to avoid the Hsla→hex→Hsla precision loss loop.
+        self.suppress_input_change = true;
+        self.state.update(cx, |view, cx| {
+            view.set_value(value.to_hex(), window, cx);
+        });
         if emit {
             cx.emit(ColorPickerEvent::Change(Some(value)));
         }
@@ -323,7 +336,7 @@ pub struct ColorPicker {
     label: Option<SharedString>,
     icon: Option<Icon>,
     size: Size,
-    anchor: Corner,
+    anchor: Anchor,
 }
 
 impl ColorPicker {
@@ -337,7 +350,7 @@ impl ColorPicker {
             size: Size::Medium,
             label: None,
             icon: None,
-            anchor: Corner::TopLeft,
+            anchor: Anchor::TopLeft,
         }
     }
 
@@ -369,8 +382,8 @@ impl ColorPicker {
 
     /// Set the anchor corner of the color picker.
     ///
-    /// Default is `Corner::TopLeft`.
-    pub fn anchor(mut self, anchor: Corner) -> Self {
+    /// Default is `Anchor::TopLeft`.
+    pub fn anchor(mut self, anchor: Anchor) -> Self {
         self.anchor = anchor;
         self
     }
@@ -457,7 +470,7 @@ impl ColorPicker {
                     .into_any_element(),
             })
             .when_some(hovered_color, |this, hovered_color| {
-                this.child(Divider::horizontal()).child(
+                this.child(Separator::horizontal()).child(
                     h_flex()
                         .gap_2()
                         .items_center()
@@ -500,7 +513,7 @@ impl ColorPicker {
                         .map(|color| self.render_item(*color, true, window, cx)),
                 ),
             )
-            .child(Divider::horizontal())
+            .child(Separator::horizontal())
             .child(
                 v_flex()
                     .gap_1()
@@ -814,7 +827,7 @@ impl RenderOnce for ColorPickerButton {
                 this.child(
                     div()
                         .id("square")
-                        .bg(cx.theme().background)
+                        .bg(cx.theme().tokens.background)
                         .border_1()
                         .border_color(cx.theme().input)
                         .when(cx.theme().shadow, |this| this.shadow_xs())
@@ -827,8 +840,8 @@ impl RenderOnce for ColorPickerButton {
                                 .when(self.selected, |this| this.border_2())
                         })
                         .when_some(self.tooltip, |this, tooltip| {
-                            this.tooltip(move |_, cx| {
-                                cx.new(|_| Tooltip::new(tooltip.clone())).into()
+                            this.managed_tooltip(move |window, cx| {
+                                Tooltip::new(tooltip.clone()).build(window, cx)
                             })
                         }),
                 )

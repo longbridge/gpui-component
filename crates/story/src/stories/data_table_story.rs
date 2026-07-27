@@ -9,7 +9,7 @@ use gpui::{
     Action, AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, SharedString, Stateful,
     StatefulInteractiveElement, Styled, Subscription, Task, TextAlign, Window, div,
-    prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
@@ -20,7 +20,10 @@ use gpui_component::{
     label::Label,
     menu::{DropdownMenu, PopupMenu},
     spinner::Spinner,
-    table::{Column, ColumnFixed, ColumnSort, DataTable, TableDelegate, TableEvent, TableState},
+    table::{
+        Column, ColumnFixed, ColumnGroup, ColumnSort, DataTable, TableDelegate, TableEvent,
+        TableState,
+    },
     v_flex,
 };
 use serde::{Deserialize, Serialize};
@@ -185,10 +188,13 @@ fn random_stocks(size: usize) -> Vec<Stock> {
 struct StockTableDelegate {
     stocks: Vec<Stock>,
     columns: Vec<Column>,
+    /// Number of extra "Column N" columns appended after the built-in columns.
+    extra_columns_count: usize,
     size: Size,
     loading: bool,
     lazy_load: bool,
     full_loading: bool,
+    show_group_headers: bool,
     clicked_row: Option<usize>,
     eof: bool,
     visible_rows: Range<usize>,
@@ -217,16 +223,27 @@ impl StockTableDelegate {
                     .fixed(ColumnFixed::Left)
                     .resizable(true)
                     .min_width(50.),
-                Column::new("name", "Name").width(180.).fixed(ColumnFixed::Left).max_width(300.),
-                Column::new("symbol", "Symbol").width(100.).fixed(ColumnFixed::Left).sortable(),
+                Column::new("name", "Name")
+                    .width(180.)
+                    .fixed(ColumnFixed::Left)
+                    .max_width(300.),
+                Column::new("symbol", "Symbol")
+                    .width(100.)
+                    .fixed(ColumnFixed::Left)
+                    .sortable(),
                 Column::new("price", "Price").sortable().text_right().p_0(),
                 Column::new("change", "Chg").sortable().text_right().p_0(),
-                Column::new("change_percent", "Chg%").sortable().text_right().p_0(),
+                Column::new("change_percent", "Chg%")
+                    .sortable()
+                    .text_right()
+                    .p_0(),
                 Column::new("volume", "Volume").p_0(),
                 Column::new("turnover", "Turnover").p_0(),
                 Column::new("market_cap", "Market Cap").p_0(),
                 Column::new("ttm", "TTM").p_0(),
-                Column::new("five_mins_ranking", "5m Ranking").text_right().p_0(),
+                Column::new("five_mins_ranking", "5m Ranking")
+                    .text_right()
+                    .p_0(),
                 Column::new("th60_days_ranking", "60d Ranking"),
                 Column::new("year_change_percent", "Year Chg%"),
                 Column::new("bid", "Bid").text_right().p_0(),
@@ -242,8 +259,12 @@ impl StockTableDelegate {
                 Column::new("amplitude", "Amplitude"),
                 Column::new("pe_status", "P/E"),
                 Column::new("pb_status", "P/B"),
-                Column::new("volume_ratio", "Volume Ratio").text_right().p_0(),
-                Column::new("bid_ask_ratio", "Bid Ask Ratio").text_right().p_0(),
+                Column::new("volume_ratio", "Volume Ratio")
+                    .text_right()
+                    .p_0(),
+                Column::new("bid_ask_ratio", "Bid Ask Ratio")
+                    .text_right()
+                    .p_0(),
                 Column::new("latest_pre_close", "Latest Pre Close"),
                 Column::new("latest_post_close", "Latest Post Close"),
                 Column::new("pre_market_cap", "Pre Mkt Cap"),
@@ -261,8 +282,10 @@ impl StockTableDelegate {
                 Column::new("day_120_ranking", "120d Ranking"),
                 Column::new("day_250_ranking", "250d Ranking"),
             ],
+            extra_columns_count: 0,
             loading: false,
             full_loading: false,
+            show_group_headers: true,
             eof: false,
             visible_cols: Range::default(),
             visible_rows: Range::default(),
@@ -289,12 +312,16 @@ impl StockTableDelegate {
         div()
             .h_full()
             .table_cell_size(self.size)
-            .when(col.align == TextAlign::Right, |this| this.h_flex().justify_end())
+            .when(col.align == TextAlign::Right, |this| {
+                this.h_flex().justify_end()
+            })
             .map(|this| {
                 if right_num % 3 == 0 {
-                    this.text_color(cx.theme().red).bg(cx.theme().red_light.alpha(0.05))
+                    this.text_color(cx.theme().red)
+                        .bg(cx.theme().red_light.alpha(0.05))
                 } else if right_num % 3 == 1 {
-                    this.text_color(cx.theme().green).bg(cx.theme().green_light.alpha(0.05))
+                    this.text_color(cx.theme().green)
+                        .bg(cx.theme().green_light.alpha(0.05))
                 } else {
                     this
                 }
@@ -304,27 +331,34 @@ impl StockTableDelegate {
     }
 
     fn render_value_cell(&self, col: &Column, val: f64, cx: &mut App) -> AnyElement {
-        let this = div().h_full().table_cell_size(self.size).child(format!("{:.3}", val));
+        let this = div()
+            .h_full()
+            .table_cell_size(self.size)
+            .child(format!("{:.3}", val));
         // Val is a 0.0 .. n.0
         // 30% to red, 30% to green, others to default
         let right_num = ((val - val.floor()) * 1000.).floor() as i32;
 
         let this = if right_num % 3 == 0 {
-            this.text_color(cx.theme().red).bg(cx.theme().red_light.alpha(0.05))
+            this.text_color(cx.theme().red)
+                .bg(cx.theme().red_light.alpha(0.05))
         } else if right_num % 3 == 1 {
-            this.text_color(cx.theme().green).bg(cx.theme().green_light.alpha(0.05))
+            this.text_color(cx.theme().green)
+                .bg(cx.theme().green_light.alpha(0.05))
         } else {
             this
         };
 
-        this.when(col.align == TextAlign::Right, |this| this.h_flex().justify_end())
-            .into_any_element()
+        this.when(col.align == TextAlign::Right, |this| {
+            this.h_flex().justify_end()
+        })
+        .into_any_element()
     }
 }
 
 impl TableDelegate for StockTableDelegate {
     fn columns_count(&self, _: &App) -> usize {
-        self.columns.len()
+        self.columns.len() + self.extra_columns_count
     }
 
     fn rows_count(&self, _: &App) -> usize {
@@ -332,22 +366,68 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn column(&self, col_ix: usize, _cx: &App) -> Column {
-        self.columns[col_ix].clone()
+        if let Some(col) = self.columns.get(col_ix) {
+            col.clone()
+        } else {
+            let n = col_ix - self.columns.len() + 1;
+            Column::new(format!("extra_{n}"), format!("Column {n}"))
+        }
     }
 
+    fn group_headers(&self, cx: &App) -> Option<Vec<Vec<ColumnGroup>>> {
+        if !self.show_group_headers {
+            return None;
+        }
+        Some(vec![
+            vec![
+                ColumnGroup {
+                    label: "Stock Info".into(),
+                    span: 4,
+                },
+                ColumnGroup {
+                    label: "Price & Change".into(),
+                    span: 3,
+                },
+            ],
+            vec![
+                ColumnGroup {
+                    label: "Identity".into(),
+                    span: 4,
+                },
+                ColumnGroup {
+                    label: "Stock Info".into(),
+                    span: 7,
+                },
+                ColumnGroup {
+                    label: "Ranking & Stats".into(),
+                    span: 14,
+                },
+                ColumnGroup {
+                    label: "Market Data".into(),
+                    span: self.columns_count(cx) - 25,
+                },
+            ],
+        ])
+    }
     fn render_th(
         &mut self,
         col_ix: usize,
         _: &mut Window,
-        _: &mut Context<TableState<Self>>,
+        cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
-        let col = self.columns.get(col_ix).unwrap();
+        let col = self.column(col_ix, cx);
 
         div()
             .child(col.name.clone())
-            .when(col_ix >= 3 && col_ix <= 10, |this| this.table_cell_size(self.size))
-            .when(col.align == TextAlign::Center, |this| this.h_flex().w_full().justify_center())
-            .when(col.align == TextAlign::Right, |this| this.h_flex().w_full().justify_end())
+            .when(col_ix >= 3 && col_ix <= 10, |this| {
+                this.table_cell_size(self.size)
+            })
+            .when(col.align == TextAlign::Center, |this| {
+                this.h_flex().w_full().justify_center()
+            })
+            .when(col.align == TextAlign::Right, |this| {
+                this.h_flex().w_full().justify_end()
+            })
     }
 
     fn context_menu(
@@ -357,12 +437,16 @@ impl TableDelegate for StockTableDelegate {
         _window: &mut Window,
         _: &mut Context<TableState<Self>>,
     ) -> PopupMenu {
-        menu.menu(format!("Selected Row: {}", row_ix), Box::new(OpenDetail(row_ix)))
-            .separator()
-            .menu("Size Large", Box::new(ChangeSize(Size::Large)))
-            .menu("Size Medium", Box::new(ChangeSize(Size::Medium)))
-            .menu("Size Small", Box::new(ChangeSize(Size::Small)))
-            .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
+        menu.menu(
+            format!("Selected Row: {}", row_ix),
+            Box::new(OpenDetail(row_ix)),
+        )
+        .separator()
+        .menu("Size 48px", Box::new(ChangeSize(Size::Size(px(48.)))))
+        .menu("Size Large", Box::new(ChangeSize(Size::Large)))
+        .menu("Size Medium", Box::new(ChangeSize(Size::Medium)))
+        .menu("Size Small", Box::new(ChangeSize(Size::Small)))
+        .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
     }
 
     fn render_tr(
@@ -371,12 +455,17 @@ impl TableDelegate for StockTableDelegate {
         _: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> Stateful<Div> {
-        div().id(row_ix).on_click(cx.listener(move |table, ev: &ClickEvent, _window, cx| {
-            println!("You have clicked row with secondary: {}", ev.modifiers().secondary());
+        div()
+            .id(row_ix)
+            .on_click(cx.listener(move |table, ev: &ClickEvent, _window, cx| {
+                println!(
+                    "You have clicked row with secondary: {}",
+                    ev.modifiers().secondary()
+                );
 
-            table.delegate_mut().clicked_row = Some(row_ix);
-            cx.notify();
-        }))
+                table.delegate_mut().clicked_row = Some(row_ix);
+                cx.notify();
+            }))
     }
 
     /// NOTE: Performance metrics
@@ -395,7 +484,9 @@ impl TableDelegate for StockTableDelegate {
         cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
         let stock = self.stocks.get(row_ix).unwrap();
-        let col = self.columns.get(col_ix).unwrap();
+        let Some(col) = self.columns.get(col_ix) else {
+            return div().child("--").into_any_element();
+        };
 
         match col.key.as_ref() {
             "id" => div()
@@ -422,7 +513,11 @@ impl TableDelegate for StockTableDelegate {
             "market_cap" => self.render_value_cell(&col, stock.market_cap, cx),
             "ttm" => self.render_value_cell(&col, stock.ttm, cx),
             "five_mins_ranking" => self.render_value_cell(&col, stock.five_mins_ranking, cx),
-            "th60_days_ranking" => stock.th60_days_ranking.floor().to_string().into_any_element(),
+            "th60_days_ranking" => stock
+                .th60_days_ranking
+                .floor()
+                .to_string()
+                .into_any_element(),
             "year_change_percent" => self.render_percent(&col, stock.year_change_percent, cx),
             "bid" => self.render_value_cell(&col, stock.bid, cx),
             "bid_volume" => self.render_value_cell(&col, stock.bid_volume, cx),
@@ -432,21 +527,46 @@ impl TableDelegate for StockTableDelegate {
             "prev_close" => self.render_value_cell(&col, stock.prev_close, cx),
             "high" => self.render_value_cell(&col, stock.high, cx),
             "low" => self.render_value_cell(&col, stock.low, cx),
-            "turnover_rate" => (stock.turnover_rate * 100.0).floor().to_string().into_any_element(),
-            "rise_rate" => (stock.rise_rate * 100.0).floor().to_string().into_any_element(),
-            "amplitude" => (stock.amplitude * 100.0).floor().to_string().into_any_element(),
+            "turnover_rate" => (stock.turnover_rate * 100.0)
+                .floor()
+                .to_string()
+                .into_any_element(),
+            "rise_rate" => (stock.rise_rate * 100.0)
+                .floor()
+                .to_string()
+                .into_any_element(),
+            "amplitude" => (stock.amplitude * 100.0)
+                .floor()
+                .to_string()
+                .into_any_element(),
             "pe_status" => stock.pe_status.floor().to_string().into_any_element(),
             "pb_status" => stock.pb_status.floor().to_string().into_any_element(),
             "volume_ratio" => self.render_value_cell(&col, stock.volume_ratio, cx),
             "bid_ask_ratio" => self.render_value_cell(&col, stock.bid_ask_ratio, cx),
-            "latest_pre_close" => stock.latest_pre_close.floor().to_string().into_any_element(),
-            "latest_post_close" => stock.latest_post_close.floor().to_string().into_any_element(),
+            "latest_pre_close" => stock
+                .latest_pre_close
+                .floor()
+                .to_string()
+                .into_any_element(),
+            "latest_post_close" => stock
+                .latest_post_close
+                .floor()
+                .to_string()
+                .into_any_element(),
             "pre_market_cap" => stock.pre_market_cap.floor().to_string().into_any_element(),
             "pre_market_percent" => self.render_percent(&col, stock.pre_market_percent, cx),
-            "pre_market_change" => stock.pre_market_change.floor().to_string().into_any_element(),
+            "pre_market_change" => stock
+                .pre_market_change
+                .floor()
+                .to_string()
+                .into_any_element(),
             "post_market_cap" => stock.post_market_cap.floor().to_string().into_any_element(),
             "post_market_percent" => self.render_percent(&col, stock.post_market_percent, cx),
-            "post_market_change" => stock.post_market_change.floor().to_string().into_any_element(),
+            "post_market_change" => stock
+                .post_market_change
+                .floor()
+                .to_string()
+                .into_any_element(),
             "float_cap" => stock.float_cap.floor().to_string().into_any_element(),
             "shares" => stock.shares.to_string().into_any_element(),
             "shares_float" => stock.shares_float.to_string().into_any_element(),
@@ -488,9 +608,10 @@ impl TableDelegate for StockTableDelegate {
                     _ => a.id.cmp(&b.id),
                 }),
                 "change" | "change_percent" => self.stocks.sort_by(|a, b| match sort {
-                    ColumnSort::Descending => {
-                        b.change.partial_cmp(&a.change).unwrap_or(std::cmp::Ordering::Equal)
-                    }
+                    ColumnSort::Descending => b
+                        .change
+                        .partial_cmp(&a.change)
+                        .unwrap_or(std::cmp::Ordering::Equal),
                     _ => a.id.cmp(&b.id),
                 }),
                 _ => {}
@@ -618,6 +739,7 @@ impl TableDelegate for StockTableDelegate {
 pub struct DataTableStory {
     table: Entity<TableState<StockTableDelegate>>,
     num_stocks_input: Entity<InputState>,
+    num_extra_cols_input: Entity<InputState>,
     stripe: bool,
     refresh_data: bool,
     size: Size,
@@ -656,12 +778,19 @@ impl DataTableStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Create the number input field with validation for positive integers
         let num_stocks_input = cx.new(|cx| {
             let mut input = InputState::new(window, cx)
                 .placeholder("Enter number of Stocks to display")
                 .validate(|s, _| s.parse::<usize>().is_ok());
             input.set_value("5000", window, cx);
+            input
+        });
+
+        let num_extra_cols_input = cx.new(|cx| {
+            let mut input = InputState::new(window, cx)
+                .placeholder("Extra columns")
+                .validate(|s, _| s.parse::<usize>().is_ok());
+            input.set_value("0", window, cx);
             input
         });
 
@@ -671,12 +800,18 @@ impl DataTableStory {
         let _subscriptions = vec![
             cx.subscribe_in(&table, window, Self::on_table_event),
             cx.subscribe_in(&num_stocks_input, window, Self::on_num_stocks_input_change),
-            // Spawn a background to random refresh the list
+            cx.subscribe_in(
+                &num_extra_cols_input,
+                window,
+                Self::on_num_extra_cols_input_change,
+            ),
         ];
 
         let _load_task = cx.spawn(async move |this, cx| {
             loop {
-                cx.background_executor().timer(time::Duration::from_millis(33)).await;
+                cx.background_executor()
+                    .timer(time::Duration::from_millis(33))
+                    .await;
 
                 this.update(cx, |this, cx| {
                     if !this.refresh_data {
@@ -703,6 +838,7 @@ impl DataTableStory {
         Self {
             table,
             num_stocks_input,
+            num_extra_cols_input,
             stripe: false,
             refresh_data: false,
             size: Size::default(),
@@ -730,6 +866,28 @@ impl DataTableStory {
 
                     self.table.update(cx, |table, _| {
                         table.delegate_mut().update_stocks(total_count);
+                    });
+                    cx.notify();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn on_num_extra_cols_input_change(
+        &mut self,
+        _: &Entity<InputState>,
+        event: &InputEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            InputEvent::PressEnter { .. } | InputEvent::Blur => {
+                let text = self.num_extra_cols_input.read(cx).value().to_string();
+                if let Ok(count) = text.parse::<usize>() {
+                    self.table.update(cx, |table, cx| {
+                        table.delegate_mut().extra_columns_count = count;
+                        table.refresh(cx);
                     });
                     cx.notify();
                 }
@@ -794,6 +952,13 @@ impl DataTableStory {
         });
     }
 
+    fn toggle_row_header(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.row_header = *checked;
+            cx.notify();
+        });
+    }
+
     fn toggle_stripe(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.stripe = *checked;
         cx.notify();
@@ -807,6 +972,13 @@ impl DataTableStory {
     fn toggle_refresh_data(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
         self.refresh_data = *checked;
         cx.notify();
+    }
+
+    fn toggle_group_headers(&mut self, checked: &bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().show_group_headers = *checked;
+            table.refresh_header_layout(cx);
+        });
     }
 
     fn on_table_event(
@@ -955,6 +1127,12 @@ impl Render for DataTableStory {
                             .on_click(cx.listener(Self::toggle_cell_selection)),
                     )
                     .child(
+                        Checkbox::new("row-header")
+                            .label("Row Header")
+                            .selected(table.row_header)
+                            .on_click(cx.listener(Self::toggle_row_header)),
+                    )
+                    .child(
                         Checkbox::new("fixed")
                             .label("Column Fixed")
                             .selected(table.col_fixed)
@@ -982,6 +1160,12 @@ impl Render for DataTableStory {
                             .label("Refresh Data")
                             .selected(self.refresh_data)
                             .on_click(cx.listener(Self::toggle_refresh_data)),
+                    )
+                    .child(
+                        Checkbox::new("group-headers")
+                            .label("Group Headers")
+                            .checked(self.table.read(cx).delegate().show_group_headers)
+                            .on_click(cx.listener(Self::toggle_group_headers)),
                     ),
             )
             .child(
@@ -994,6 +1178,11 @@ impl Render for DataTableStory {
                             .label(format!("size: {:?}", self.size))
                             .dropdown_menu(move |menu, _, _| {
                                 menu.menu_with_check(
+                                    "48px",
+                                    size == Size::Size(px(48.)),
+                                    Box::new(ChangeSize(Size::Size(px(48.)))),
+                                )
+                                .menu_with_check(
                                     "Large",
                                     size == Size::Large,
                                     Box::new(ChangeSize(Size::Large)),
@@ -1089,11 +1278,18 @@ impl Render for DataTableStory {
                             h_flex()
                                 .gap_2()
                                 .flex_1()
-                                .child(Label::new("Number of Stocks:"))
+                                .child(Label::new("Stocks:"))
                                 .child(
                                     h_flex()
-                                        .min_w_32()
+                                        .min_w_24()
                                         .child(Input::new(&self.num_stocks_input).small())
+                                        .into_any_element(),
+                                )
+                                .child(Label::new("Extra Columns:"))
+                                .child(
+                                    h_flex()
+                                        .min_w_24()
+                                        .child(Input::new(&self.num_extra_cols_input).small())
                                         .into_any_element(),
                                 )
                                 .when(delegate.loading, |this| {
@@ -1126,6 +1322,10 @@ impl Render for DataTableStory {
                         ),
                 ),
             )
-            .child(DataTable::new(&self.table).with_size(self.size).stripe(self.stripe))
+            .child(
+                DataTable::new(&self.table)
+                    .with_size(self.size)
+                    .stripe(self.stripe),
+            )
     }
 }

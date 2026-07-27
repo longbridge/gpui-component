@@ -1,14 +1,14 @@
 use std::ops::Range;
 
 use gpui::{
-    App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Stateful,
-    Styled as _, Window, div,
+    App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    SharedString, Stateful, Styled as _, Window, div,
 };
 
 use crate::{
     ActiveTheme as _, Icon, IconName, Size, h_flex,
     menu::PopupMenu,
-    table::{Column, ColumnSort, TableState, loading::Loading},
+    table::{Column, ColumnGroup, ColumnSort, TableState, loading::Loading},
 };
 
 /// A delegate trait for providing data and rendering for a table.
@@ -42,6 +42,35 @@ pub trait TableDelegate: Sized + 'static {
         cx: &mut Context<TableState<Self>>,
     ) -> Stateful<Div> {
         div().id("header")
+    }
+
+    /// Return the group headers definitions (can be multi-level).
+    ///
+    /// By default, it returns None, meaning no group headers.
+    fn group_headers(&self, cx: &App) -> Option<Vec<Vec<ColumnGroup>>> {
+        None
+    }
+
+    /// Custom render for a group header cell.
+    /// Receives the group label, the logical col_span, and the pixel width.
+    fn render_group_th(
+        &mut self,
+        label: &SharedString,
+        _col_span: usize,
+        width: Pixels,
+        _window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        div()
+            .w(width)
+            .h_full()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .border_r_1()
+            .border_color(cx.theme().border)
+            .child(label.clone())
     }
 
     /// Render the header cell at the given column index, default to the column name.
@@ -88,7 +117,9 @@ pub trait TableDelegate: Sized + 'static {
         cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement;
 
-    /// Move the column at the given `col_ix` to insert before the column at the given `to_ix`.
+    /// Move the column at the given `col_ix` so that it ends up at the index `to_ix`.
+    ///
+    /// e.g.: `let col = self.columns.remove(col_ix); self.columns.insert(to_ix, col);`
     fn move_column(
         &mut self,
         col_ix: usize,

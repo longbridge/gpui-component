@@ -1,12 +1,14 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding, ParentElement,
-    Render, StatefulInteractiveElement, Styled, Window, actions, div,
+    Render, StatefulInteractiveElement as _, Styled, Window, actions, div,
+    prelude::FluentBuilder as _,
 };
 
 use gpui_component::{
-    ActiveTheme, IconName,
-    button::{Button, ButtonVariant, ButtonVariants},
+    IconName,
+    button::{Button, ButtonVariant, ButtonVariants, Toggle},
     checkbox::Checkbox,
+    clipboard::Clipboard,
     dock::PanelControl,
     h_flex,
     radio::Radio,
@@ -25,6 +27,7 @@ pub fn init(cx: &mut App) {
 
 pub struct TooltipStory {
     focus_handle: gpui::FocusHandle,
+    removable_button_visible: bool,
 }
 
 impl TooltipStory {
@@ -35,6 +38,7 @@ impl TooltipStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            removable_button_visible: true,
         }
     }
 }
@@ -42,6 +46,10 @@ impl TooltipStory {
 impl Story for TooltipStory {
     fn title() -> &'static str {
         "Tooltip"
+    }
+
+    fn description() -> &'static str {
+        "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -63,7 +71,7 @@ impl Render for TooltipStory {
     fn render(
         &mut self,
         _: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         v_flex()
             .w_full()
@@ -82,41 +90,17 @@ impl Render for TooltipStory {
                         Some("Tooltip"),
                     ))
                     .child(
-                        div()
-                            .child(Button::new("btn3").label("Hover me"))
-                            .id("tooltip-4")
-                            .tooltip(|window, cx| {
-                                Tooltip::element(|_, cx| {
-                                    h_flex()
-                                        .gap_x_1()
-                                        .child(IconName::Info)
-                                        .child(
-                                            div()
-                                                .child("Muted Foreground")
-                                                .text_color(cx.theme().muted_foreground),
-                                        )
-                                        .child(div().child("Danger").text_color(cx.theme().danger))
-                                        .child(IconName::ArrowUp)
-                                })
-                                .build(window, cx)
-                            }),
+                        Button::new("btn3")
+                            .label("Hover me")
+                            .tooltip("This is tooltip 3"),
                     ),
-            )
-            .child(
-                section("Label Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
-                    |window, cx| {
-                        Tooltip::new("This is a Label")
-                            .action(&Info, Some("Tooltip"))
-                            .build(window, cx)
-                    },
-                )),
             )
             .child(
                 section("Checkbox Tooltip").child(
                     Checkbox::new("check")
                         .label("Remember me")
                         .checked(true)
-                        .tooltip(|window, cx| Tooltip::new("This is a checkbox").build(window, cx)),
+                        .tooltip("This is a tooltip"),
                 ),
             )
             .child(
@@ -124,9 +108,7 @@ impl Render for TooltipStory {
                     Radio::new("radio")
                         .label("Radio with tooltip")
                         .checked(true)
-                        .tooltip(|window, cx| {
-                            Tooltip::new("This is a radio button").build(window, cx)
-                        }),
+                        .tooltip("This is a radio button"),
                 ),
             )
             .child(
@@ -134,6 +116,62 @@ impl Render for TooltipStory {
                     Switch::new("switch")
                         .checked(true)
                         .tooltip("This is a switch"),
+                ),
+            )
+            .child(
+                section("Toggle Tooltip").child(
+                    h_flex()
+                        .gap_2()
+                        .child(Toggle::new("toggle1").label("Bold").tooltip("Toggle bold"))
+                        .child(
+                            Toggle::new("toggle2")
+                                .icon(IconName::Heart)
+                                .tooltip("Toggle favorite"),
+                        ),
+                ),
+            )
+            .child(
+                section("Clipboard Tooltip").child(
+                    Clipboard::new("clip1")
+                        .value("Hello, World!")
+                        .tooltip("Copy to clipboard"),
+                ),
+            )
+            .child(
+                section("Default Tooltip").child(div().child("Hover me").id("tooltip-2").tooltip(
+                    |window, cx| {
+                        Tooltip::new("This is a default tooltip style by GPUI.")
+                            .action(&Info, Some("Tooltip"))
+                            .build(window, cx)
+                    },
+                )),
+            )
+            .child(
+                section("Tooltip trigger removed on click").child(
+                    h_flex()
+                        .gap_2()
+                        .when(self.removable_button_visible, |this| {
+                            this.child(
+                                Button::new("remove-tooltip-trigger")
+                                    .danger()
+                                    .label("Remove me")
+                                    .tooltip("Clicking this button removes the trigger.")
+                                    .on_click(cx.listener(|story, _, _, cx| {
+                                        story.removable_button_visible = false;
+                                        cx.notify();
+                                    })),
+                            )
+                        })
+                        .when(!self.removable_button_visible, |this| {
+                            this.child(
+                                Button::new("restore-tooltip-trigger")
+                                    .label("Restore button")
+                                    .on_click(cx.listener(|story, _, _, cx| {
+                                        story.removable_button_visible = true;
+                                        cx.notify();
+                                    })),
+                            )
+                        }),
                 ),
             )
     }

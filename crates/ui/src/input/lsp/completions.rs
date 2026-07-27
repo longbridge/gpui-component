@@ -130,7 +130,7 @@ impl InputState {
             return;
         }
 
-        let menu = match self.context_menu.as_ref() {
+        let menu = match self.context_menu_content.as_ref() {
             Some(ContextMenu::Completion(menu)) => Some(menu),
             _ => None,
         };
@@ -140,7 +140,7 @@ impl InputState {
             Some(menu) => menu.clone(),
             None => {
                 let menu = CompletionMenu::new(cx.entity(), window, cx);
-                self.context_menu = Some(ContextMenu::Completion(menu.clone()));
+                self.context_menu_content = Some(ContextMenu::Completion(menu.clone()));
                 menu
             }
         };

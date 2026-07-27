@@ -20,6 +20,14 @@ pub struct TextViewStyle {
     pub highlight_theme: Arc<HighlightTheme>,
     /// Style for fenced code blocks (box-model: background, border, padding).
     pub code_block: StyleRefinement,
+    /// Style refinement applied to the table container (the bordered wrapper).
+    ///
+    /// Set `overflow_x: scroll` here to keep table cells on a single line and
+    /// scroll the table horizontally instead of wrapping cell content, e.g.
+    /// `TextViewStyle::default().table({ let mut s = StyleRefinement::default(); s.overflow.x = Some(Overflow::Scroll); s })`.
+    pub table: StyleRefinement,
+    /// Style refinement applied to each table cell.
+    pub table_cell: StyleRefinement,
     /// When true, selects a dark syntax-highlight palette for code blocks.
     pub is_dark: bool,
     /// Style for inline `code` spans (text-level: color, background, weight).
@@ -43,6 +51,8 @@ impl Default for TextViewStyle {
             heading_font_size: None,
             highlight_theme: HighlightTheme::default_light().clone(),
             code_block: StyleRefinement::default(),
+            table: StyleRefinement::default(),
+            table_cell: StyleRefinement::default(),
             is_dark: false,
             inline_code: HighlightStyle::default(),
         }
@@ -73,6 +83,21 @@ impl TextViewStyle {
     /// Set style for inline code spans.
     pub fn inline_code(mut self, style: HighlightStyle) -> Self {
         self.inline_code = style;
+        self
+    }
+
+    /// Set extra style for the table container.
+    ///
+    /// Set `overflow_x: scroll` on the refinement to make wide tables scroll
+    /// horizontally (cells stop wrapping) instead of shrinking to fit.
+    pub fn table(mut self, style: StyleRefinement) -> Self {
+        self.table = style;
+        self
+    }
+
+    /// Set extra style for each table cell.
+    pub fn table_cell(mut self, style: StyleRefinement) -> Self {
+        self.table_cell = style;
         self
     }
 }

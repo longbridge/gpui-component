@@ -44,6 +44,8 @@ impl ActiveTheme for App {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Theme {
     pub colors: ThemeColor,
+    #[serde(default)]
+    pub tokens: ThemeTokens,
     pub highlight_theme: Arc<HighlightTheme>,
     pub light_theme: Rc<ThemeConfig>,
     pub dark_theme: Rc<ThemeConfig>,
@@ -72,6 +74,7 @@ pub struct Theme {
     /// Show the scrollbar mode, default: Scrolling
     pub scrollbar_show: ScrollbarShow,
     /// The notification setting.
+    #[serde(skip)]
     pub notification: NotificationSettings,
     /// Tile grid size, default is 4px.
     pub tile_grid_size: Pixels,
@@ -228,6 +231,7 @@ impl From<&ThemeColor> for Theme {
             tile_radius: px(0.),
             list: ListSettings::default(),
             colors: *colors,
+            tokens: ThemeTokens::from(colors),
             light_theme: Rc::new(ThemeConfig::default()),
             dark_theme: Rc::new(ThemeConfig::default()),
             highlight_theme: HighlightTheme::default_light(),

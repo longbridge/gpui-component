@@ -66,7 +66,8 @@ impl Default for TableOptions {
 ///
 /// When cell selection is enabled via [`TableState::cell_selectable()`]:
 /// - Click on cells to select them
-/// - A row selector column appears on the left for selecting entire rows
+/// - A row header column appears on the left for selecting entire rows
+///   (use [`TableState::row_header()`] to hide it)
 /// - Keyboard navigation (arrow keys, Tab, Home, End, PageUp, PageDown) works at cell level
 /// - Right-click and double-click events are supported
 ///
@@ -97,7 +98,10 @@ where
 {
     /// Create a new DataTable element with the given [`TableState`].
     pub fn new(state: &Entity<TableState<D>>) -> Self {
-        Self { state: state.clone(), options: TableOptions::default() }
+        Self {
+            state: state.clone(),
+            options: TableOptions::default(),
+        }
     }
 
     /// Set to use stripe style of the table, default to false.
@@ -114,8 +118,11 @@ where
 
     /// Set scrollbar visibility.
     pub fn scrollbar_visible(mut self, vertical: bool, horizontal: bool) -> Self {
-        self.options.scrollbar_visible =
-            Edges { right: vertical, bottom: horizontal, ..Default::default() };
+        self.options.scrollbar_visible = Edges {
+            right: vertical,
+            bottom: horizontal,
+            ..Default::default()
+        };
         self
     }
 }
@@ -155,9 +162,11 @@ where
             .on_action(window.listener_for(&self.state, TableState::action_select_last_column))
             .on_action(window.listener_for(&self.state, TableState::action_select_page_up))
             .on_action(window.listener_for(&self.state, TableState::action_select_page_down))
-            .bg(cx.theme().table)
+            .bg(cx.theme().tokens.table)
             .when(bordered, |this| {
-                this.rounded(cx.theme().radius).border_1().border_color(cx.theme().border)
+                this.rounded(cx.theme().radius)
+                    .border_1()
+                    .border_color(cx.theme().border)
             })
             .child(self.state)
     }

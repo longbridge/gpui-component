@@ -15,6 +15,10 @@ A select component that allows users to choose from a list of options.
 
 Supports search functionality, grouped items, custom rendering, and various states. Built with keyboard navigation and accessibility in mind.
 
+:::tip
+For richer selection UIs with custom trigger rendering or multi-select, see [Combobox](combobox).
+:::
+
 ## Import
 
 ```rust
@@ -174,6 +178,7 @@ Select::new(&state)
 Select::new(&state)
     .w(px(320.))                    // Set dropdown width
     .menu_width(px(400.))           // Set menu popup width
+    .menu_max_h(rems(10.))          // Set menu max height (default: 20rem)
     .appearance(false)              // Remove default styling
     .title_prefix("Country: ")      // Add prefix to selected title
 ```
@@ -331,7 +336,7 @@ h_flex()
                 .pl_3()
         )
     )
-    .child(Divider::vertical())
+    .child(Separator::vertical())
     .child(
         div().flex_1().child(
             Input::new(&phone_input)

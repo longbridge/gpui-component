@@ -60,6 +60,8 @@ GPUI Component's `InputState` supports a code editor mode with syntax highlighti
 It design for high performance and can handle large files efficiently. We
 used [tree-sitter](https://tree-sitter.github.io/tree-sitter/) for syntax highlighting, and [ropey](https://github.com/cessen/ropey) for text storage and manipulation.
 
+Enable `gpui-component/tree-sitter-languages` to include all built-in Tree-sitter grammars, or enable only the grammars you need, such as `gpui-component/tree-sitter-markdown` or `gpui-component/tree-sitter-rust`, to reduce downstream bundle size.
+
 ```rust
 let state = cx.new(|cx|
     InputState::new(window, cx)
@@ -150,6 +152,29 @@ let state = cx.new(|cx|
         .default_value("This is a very long line that will not wrap automatically but will show horizontal scrollbar instead.")
 );
 ```
+
+### Scroll Behavior
+
+In `code_editor` mode you can tune how the editor scrolls around the cursor and the end of the document. Both options mirror the equivalent VSCode / JetBrains settings and only take effect in `code_editor` mode.
+
+- `scroll_beyond_last_line(Option<usize>)` — empty rows reserved below the last line ("scroll beyond last line", like VSCode's `editor.scrollBeyondLastLine`). `None` (default) keeps the historical heuristic of roughly half the viewport; `Some(0)` removes the trailing space so the cursor sits flush with the last line; `Some(n)` reserves exactly `n` rows.
+- `cursor_surrounding_lines(Option<usize>)` — minimum number of lines the cursor is kept clear of the viewport's top/bottom edge before auto-scroll engages (like VSCode's `editor.cursorSurroundingLines`). `None` (default) keeps the historical heuristic; `Some(n)` keeps exactly `n` lines.
+
+```rust
+let state = cx.new(|cx|
+    InputState::new(window, cx)
+        .code_editor("rust")
+        // Reserve 3 empty rows below the last line.
+        .scroll_beyond_last_line(Some(3))
+        // Keep the cursor at least 1 line from the top/bottom edge.
+        .cursor_surrounding_lines(Some(1))
+);
+
+Input::new(&state)
+    .h_full()
+```
+
+Both can also be changed at runtime via `set_scroll_beyond_last_line` and `set_cursor_surrounding_lines`.
 
 ### Text Manipulation
 

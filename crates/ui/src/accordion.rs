@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
 
 use gpui::{
     AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    SharedString, StatefulInteractiveElement as _, Styled, Window, div,
+    Role, SharedString, StatefulInteractiveElement as _, Styled, Window, div,
     prelude::FluentBuilder as _, rems,
 };
 
@@ -229,7 +229,7 @@ impl RenderOnce for AccordionItem {
         div().flex_1().child(
             v_flex()
                 .w_full()
-                .bg(cx.theme().accordion)
+                .bg(cx.theme().tokens.accordion)
                 .overflow_hidden()
                 .when(self.bordered, |this| {
                     this.border_1()
@@ -240,6 +240,8 @@ impl RenderOnce for AccordionItem {
                 .child(
                     h_flex()
                         .id(self.index)
+                        .role(Role::Button)
+                        .aria_expanded(self.open)
                         .justify_between()
                         .gap_3()
                         .map(|this| match self.size {
@@ -275,7 +277,7 @@ impl RenderOnce for AccordionItem {
                                 .child(self.title),
                         )
                         .when(!self.disabled, |this| {
-                            this.hover(|this| this.bg(cx.theme().accordion_hover))
+                            this.hover(|this| this.bg(cx.theme().tokens.accordion_hover))
                                 .child(
                                     Icon::new(if self.open {
                                         IconName::ChevronUp

@@ -39,7 +39,9 @@ impl AlertDialogStory {
     }
 
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        Self { focus_handle: cx.focus_handle() }
+        Self {
+            focus_handle: cx.focus_handle(),
+        }
     }
 }
 
@@ -99,8 +101,9 @@ impl Render for AlertDialogStory {
                         |_, _, window, cx| {
                             use gpui_component::dialog::DialogButtonProps;
 
-                            window.open_alert_dialog(cx, |alert, _, _| {
+                            window.open_alert_dialog(cx, |alert, _, cx| {
                                 alert
+                                    .icon(Icon::new(IconName::Info).text_color(cx.theme().danger))
                                     .title("Delete File")
                                     .description(
                                         "Are you sure you want to delete this file? \
@@ -292,7 +295,7 @@ impl Render for AlertDialogStory {
                                 alert
                                     .confirm()
                                     .title("Are you sure?")
-                                    .description("This is a AlertDialog with `confirm` mode.\
+                                    .child("This is a AlertDialog with `confirm` mode.\
                                         Will have OK, CANCEL buttons.")
                             });
                         },

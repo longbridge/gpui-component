@@ -1,12 +1,12 @@
 use gpui::{
-    AnyElement, App, Bounds, Context, ElementId, InteractiveElement as _, IntoElement,
+    Anchor, AnyElement, App, Bounds, Context, ElementId, InteractiveElement as _, IntoElement,
     ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement, StyleRefinement, Styled,
     Task, Window, div, prelude::FluentBuilder as _,
 };
-use std::rc::Rc;
 use instant::Duration;
+use std::{cell::Cell, rc::Rc};
 
-use crate::{Anchor, ElementExt, StyledExt as _, popover::Popover};
+use crate::{ElementExt, StyledExt as _, popover::Popover};
 
 /// A hover card element that displays content when hovering over a trigger element.
 ///
@@ -49,6 +49,10 @@ impl HoverCard {
     }
 
     /// Set the anchor corner of the hover card, default is [`Anchor::TopCenter`].
+    ///
+    /// Imagine the card has a pointer tip (like a speech bubble's tail). The anchor
+    /// is where that tip sits relative to the trigger — e.g. `Anchor::TopCenter`
+    /// places it at the trigger's top center. The card then hangs off that point.
     pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
         self.anchor = anchor.into();
         self
@@ -276,6 +280,9 @@ impl RenderOnce for HoverCard {
             return div().id("empty");
         };
 
+        let anchor = self.anchor;
+        let position = Rc::new(Cell::new(Popover::resolved_corner(anchor, trigger_bounds)));
+
         let root = div().id(self.id).child(
             div()
                 .id("trigger")
@@ -285,7 +292,9 @@ impl RenderOnce for HoverCard {
                 }))
                 .on_prepaint({
                     let state = state.clone();
+                    let position = position.clone();
                     move |bounds, _, cx| {
+                        position.set(Popover::resolved_corner(anchor, bounds));
                         state.update(cx, |state, _| {
                             state.trigger_bounds = bounds;
                         });
@@ -311,7 +320,7 @@ impl RenderOnce for HoverCard {
 
         root.child(Popover::render_popover(
             self.anchor,
-            trigger_bounds,
+            position,
             popover_content,
             window,
             cx,

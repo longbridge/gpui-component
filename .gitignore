@@ -6,6 +6,8 @@ target/
 index.scip
 *.log
 node_modules/
+.claude/worktrees/
+docs/superpowers/
 
 # WASM build artifacts
 crates/story-web/www/src/wasm/*.js
@@ -16,3 +18,4 @@ crates/story-web/www/src/wasm/*.ts
 # Frontend build artifacts
 crates/story-web/www/dist/
 crates/story-web/www/bun.lockb
+.worktrees

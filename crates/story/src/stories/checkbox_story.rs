@@ -16,6 +16,7 @@ pub struct CheckboxStory {
     check3: bool,
     check4: bool,
     check5: bool,
+    check6: bool,
 }
 
 impl super::Story for CheckboxStory {
@@ -45,6 +46,7 @@ impl CheckboxStory {
             check3: false,
             check4: false,
             check5: false,
+            check6: false,
         }
     }
 }
@@ -144,6 +146,29 @@ impl Render for CheckboxStory {
                             .on_click(cx.listener(|this, checked: &bool, _, _| {
                                 this.check4 = *checked;
                             })),
+                    ),
+                ),
+            )
+            .child(
+                section("Label wrapping").child(
+                    v_flex().gap_4().child(
+                        div()
+                            .w(px(260.))
+                            .p_2()
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .rounded(cx.theme().radius)
+                            .child(
+                                Checkbox::new("label-wrap-checkbox")
+                                    .checked(self.check6)
+                                    .label(
+                                        "This is a very long label that should wrap \
+                                        to multiple lines without breaking the layout.",
+                                    )
+                                    .on_click(cx.listener(|this, checked: &bool, _, _| {
+                                        this.check6 = *checked;
+                                    })),
+                            ),
                     ),
                 ),
             )

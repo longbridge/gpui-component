@@ -1,0 +1,247 @@
+{
+  "$schema": "https://github.com/longbridge/gpui-component/raw/refs/heads/main/.theme-schema.json",
+  "name": "Aurora",
+  "author": "Longbridge",
+  "url": "https://github.com/longbridge/gpui-component",
+  "themes": [
+    {
+      "name": "Aurora Light",
+      "mode": "light",
+      "colors": {
+        "accent.background": "#F1F5F9",
+        "accent.foreground": "#0F172A",
+        "accordion.background": "#FFFFFF",
+        "accordion.hover.background": "#F8FAFC",
+        "background": "#FFFFFF",
+        "border": "#E2E8F0",
+        "button.background": "linear-gradient(180deg, #FFFFFF, #F8FAFC)",
+        "button.hover.background": "linear-gradient(180deg, #F8FAFC, #F1F5F9)",
+        "button.active.background": "linear-gradient(180deg, #F1F5F9, #E2E8F0)",
+        "button.foreground": "#0F172A",
+        "button.primary.background": "linear-gradient(180deg, #1E293B, #0F172A)",
+        "button.primary.hover.background": "linear-gradient(180deg, #334155, #1E293B)",
+        "button.primary.active.background": "linear-gradient(180deg, #0F172A, #020617)",
+        "button.primary.foreground": "#F8FAFC",
+        "button.secondary.background": "linear-gradient(180deg, #F1F5F9, #E2E8F0)",
+        "button.secondary.hover.background": "linear-gradient(180deg, #E2E8F0, #CBD5E1)",
+        "button.secondary.active.background": "linear-gradient(180deg, #CBD5E1, #94A3B8)",
+        "button.secondary.foreground": "#0F172A",
+        "button.danger.background": "linear-gradient(180deg, #FEF2F2, #FEE2E2)",
+        "button.danger.hover.background": "linear-gradient(180deg, #FEE2E2, #FECACA)",
+        "button.danger.active.background": "linear-gradient(180deg, #FECACA, #FCA5A5)",
+        "button.danger.foreground": "#B91C1C",
+        "button.info.background": "linear-gradient(180deg, #ECFEFF, #CFFAFE)",
+        "button.info.hover.background": "linear-gradient(180deg, #CFFAFE, #A5F3FC)",
+        "button.info.active.background": "linear-gradient(180deg, #A5F3FC, #67E8F9)",
+        "button.info.foreground": "#0E7490",
+        "button.success.background": "linear-gradient(180deg, #F0FDF4, #DCFCE7)",
+        "button.success.hover.background": "linear-gradient(180deg, #DCFCE7, #BBF7D0)",
+        "button.success.active.background": "linear-gradient(180deg, #BBF7D0, #86EFAC)",
+        "button.success.foreground": "#15803D",
+        "button.warning.background": "linear-gradient(180deg, #FEFCE8, #FEF3C7)",
+        "button.warning.hover.background": "linear-gradient(180deg, #FEF3C7, #FDE68A)",
+        "button.warning.active.background": "linear-gradient(180deg, #FDE68A, #FCD34D)",
+        "button.warning.foreground": "#A16207",
+        "caret": "#0F172A",
+        "chart.1": "#93C5FD",
+        "chart.2": "#3B82F6",
+        "chart.3": "#2563EB",
+        "chart.4": "#1D4ED8",
+        "chart.5": "#1E40AF",
+        "chart_bullish": "green-600",
+        "chart_bearish": "red-600",
+        "danger.background": "linear-gradient(180deg, #EF4444, #DC2626)",
+        "danger.active.background": "linear-gradient(180deg, #DC2626, #B91C1C)",
+        "danger.foreground": "#FFFFFF",
+        "danger.hover.background": "linear-gradient(180deg, #F87171, #EF4444)",
+        "description_list.label.background": "#F8FAFC",
+        "description_list.label.foreground": "#0F172A",
+        "drag.border": "#3B82F6",
+        "drop_target.background": "#3B82F640",
+        "foreground": "#020617",
+        "group_box.background": "#F8FAFC",
+        "group_box.foreground": "#0F172A",
+        "info.background": "linear-gradient(180deg, #06B6D4, #0891B2)",
+        "info.active.background": "linear-gradient(180deg, #0891B2, #0E7490)",
+        "info.foreground": "#FFFFFF",
+        "info.hover.background": "linear-gradient(180deg, #22D3EE, #06B6D4)",
+        "input.border": "#E2E8F0",
+        "link": "#0F172A",
+        "link.active": "#020617",
+        "link.hover": "#334155",
+        "list.background": "#FFFFFF",
+        "list.active.background": "#BFDBFE33",
+        "list.active.border": "#60A5FA",
+        "list.even.background": "#F8FAFC",
+        "list.head.background": "#F8FAFC",
+        "list.hover.background": "#F1F5F9",
+        "muted.background": "#F1F5F9",
+        "muted.foreground": "#64748B",
+        "popover.background": "#FFFFFF",
+        "popover.foreground": "#020617",
+        "primary.background": "linear-gradient(180deg, #1E293B, #0F172A)",
+        "primary.active.background": "linear-gradient(180deg, #0F172A, #020617)",
+        "primary.foreground": "#F8FAFC",
+        "primary.hover.background": "linear-gradient(180deg, #334155, #1E293B)",
+        "progress.bar.background": "linear-gradient(180deg, #1E293B, #0F172A)",
+        "ring": "#0F172A",
+        "scrollbar.background": "#F8FAFC00",
+        "scrollbar.thumb.background": "linear-gradient(to right, #CBD5E173, #94A3B873)",
+        "scrollbar.thumb.hover.background": "linear-gradient(to right, #CBD5E199, #94A3B899)",
+        "secondary.background": "#E2E8F0",
+        "secondary.active.background": "#CBD5E1",
+        "secondary.foreground": "#0F172A",
+        "secondary.hover.background": "#E2E8F0",
+        "selection.background": "#55A0FC",
+        "sidebar.background": "#F8FAFC",
+        "sidebar.accent.background": "#E2E8F0",
+        "sidebar.accent.foreground": "#0F172A",
+        "sidebar.border": "#E2E8F0",
+        "sidebar.foreground": "#0F172A",
+        "sidebar.primary.background": "#0F172A",
+        "sidebar.primary.foreground": "#F8FAFC",
+        "skeleton.background": "#F1F5F9",
+        "slider.background": "#0F172A",
+        "slider.thumb.background": "linear-gradient(180deg, #FFFFFF, #F8FAFC)",
+        "success.background": "linear-gradient(180deg, #22C55E, #16A34A)",
+        "success.active.background": "linear-gradient(180deg, #16A34A, #15803D)",
+        "success.foreground": "#FFFFFF",
+        "success.hover.background": "linear-gradient(180deg, #4ADE80, #22C55E)",
+        "switch.background": "linear-gradient(180deg, #E2E8F0, #CBD5E1)",
+        "switch.thumb.background": "linear-gradient(180deg, #FFFFFF, #F8FAFC)",
+        "tab.background": "#00000000",
+        "tab.active.background": "#FFFFFF",
+        "tab.active.foreground": "#0F172A",
+        "tab.foreground": "#334155",
+        "tab_bar.background": "#F1F5F9",
+        "tab_bar.segmented.background": "#F1F5F9",
+        "table.background": "#FFFFFF",
+        "table.active.background": "#BFDBFE33",
+        "table.active.border": "#60A5FA",
+        "table.even.background": "#F8FAFC",
+        "table.head.background": "#F8FAFC",
+        "table.head.foreground": "#64748B",
+        "table.foot.background": "#F8FAFC",
+        "table.foot.foreground": "#64748B",
+        "table.hover.background": "#F1F5F9",
+        "table.row.border": "#E2E8F0B3",
+        "tiles.background": "#F8FAFC",
+        "title_bar.background": "linear-gradient(180deg, #FFFFFF, #F8FAFC)",
+        "title_bar.border": "#E2E8F0",
+        "status_bar.background": "linear-gradient(180deg, #F8FAFC, #F1F5F9)",
+        "status_bar.border": "#E2E8F0",
+        "warning.background": "linear-gradient(180deg, #EAB308, #CA8A04)",
+        "warning.active.background": "linear-gradient(180deg, #CA8A04, #A16207)",
+        "warning.hover.background": "linear-gradient(180deg, #FACC15, #EAB308)",
+        "warning.foreground": "#422006",
+        "overlay": "#0000000D",
+        "window.border": "#E2E8F0",
+        "base.red": "red-600",
+        "base.red.light": "red-400",
+        "base.green": "green-600",
+        "base.green.light": "green-400",
+        "base.blue": "blue-600",
+        "base.blue.light": "blue-400",
+        "base.yellow": "yellow-600",
+        "base.yellow.light": "yellow-400",
+        "base.magenta": "purple-600",
+        "base.magenta.light": "purple-400",
+        "base.cyan": "cyan-600",
+        "base.cyan.light": "cyan-400"
+      },
+      "highlight": {
+        "editor.foreground": "#020617",
+        "editor.background": "#FFFFFF",
+        "editor.active_line.background": "#F8FAFC",
+        "editor.line_number": "#94A3B8",
+        "editor.active_line_number": "#0F172A",
+        "editor.invisible": "#64748B66",
+        "syntax": {
+          "attribute": {
+            "color": "#957931"
+          },
+          "boolean": {
+            "color": "#C5060B"
+          },
+          "comment": {
+            "color": "#007fff"
+          },
+          "comment.doc": {
+            "color": "#007fff"
+          },
+          "constant": {
+            "color": "#C5060B"
+          },
+          "constructor": {
+            "color": "#0433ff"
+          },
+          "embedded": {
+            "color": "#333333"
+          },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
+          },
+          "function": {
+            "color": "#0000A2"
+          },
+          "keyword": {
+            "color": "#0433ff"
+          },
+          "link_text": {
+            "color": "#0000A2",
+            "font_style": "normal"
+          },
+          "link_uri": {
+            "color": "#6A7293",
+            "font_style": "italic"
+          },
+          "number": {
+            "color": "#0433ff"
+          },
+          "string": {
+            "color": "#036A07"
+          },
+          "string.escape": {
+            "color": "#036A07"
+          },
+          "string.regex": {
+            "color": "#036A07"
+          },
+          "string.special": {
+            "color": "#d21f07"
+          },
+          "string.special.symbol": {
+            "color": "#d21f07"
+          },
+          "tag": {
+            "color": "#0433ff"
+          },
+          "text.literal": {
+            "color": "#6F42C1"
+          },
+          "text.code.span": {
+            "color": "#6F42C1"
+          },
+          "title": {
+            "color": "#0433FF"
+          },
+          "type": {
+            "color": "#6f42c1"
+          },
+          "property": {
+            "color": "#333333"
+          },
+          "variable": {
+            "color": "#333333"
+          },
+          "variable.special": {
+            "color": "#C5060B"
+          }
+        }
+      }
+    }
+  ]
+}
