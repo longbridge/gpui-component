@@ -659,20 +659,19 @@ impl Render for InputStory {
                     .child(Input::new(&self.color_input).text_color(cx.theme().info)),
             )
             .child(
-                section("Text Decorations")
-                    .max_w_md()
-                    .child(Input::new(&self.decorations_input))
-                    .child(
-                        h_flex().gap_2().child(
-                            Button::new("toggle-text-decorations")
-                                .label(if self.decorations_visible {
-                                    "Hide decorations"
-                                } else {
-                                    "Show decorations"
-                                })
-                                .on_click(cx.listener(Self::on_click_toggle_decorations)),
-                        ),
+                section("Text Decorations").max_w_md().child(
+                    Input::new(&self.decorations_input).suffix(
+                        Button::new("toggle-text-decorations")
+                            .ghost()
+                            .xsmall()
+                            .label(if self.decorations_visible {
+                                "Hide decorations"
+                            } else {
+                                "Show decorations"
+                            })
+                            .on_click(cx.listener(Self::on_click_toggle_decorations)),
                     ),
+                ),
             )
             .child(
                 section("Single line code editor").max_w_md().child(
