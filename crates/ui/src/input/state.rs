@@ -3037,22 +3037,8 @@ impl EntityInputHandler for InputState {
             self.ime_marked_range = Some((range.start..range.start + new_text.len()).into());
             self.selected_range = new_selected_range_utf16
                 .as_ref()
-                .map(|range_utf16| {
-                    let utf8_offset = |utf16_offset: usize| {
-                        let mut utf8 = 0;
-                        let mut utf16 = 0;
-                        for character in new_text.chars() {
-                            if utf16 >= utf16_offset {
-                                break;
-                            }
-                            utf16 += character.len_utf16();
-                            utf8 += character.len_utf8();
-                        }
-                        utf8
-                    };
-                    range.start + utf8_offset(range_utf16.start)
-                        ..range.start + utf8_offset(range_utf16.end)
-                })
+                .map(|range_utf16| self.range_from_utf16(range_utf16))
+                .map(|new_range| new_range.start + range.start..new_range.end + range.end)
                 .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len())
                 .into();
         }
