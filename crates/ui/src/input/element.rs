@@ -1337,7 +1337,7 @@ impl TextElement {
                     .then(|| {
                         compose_decoration_collections(
                             Vec::new(),
-                            state.decoration_collections(),
+                            state.decorations.iter(),
                             visible_byte_range,
                         )
                     })
@@ -1349,7 +1349,7 @@ impl TextElement {
                 .then(|| {
                     compose_decoration_collections(
                         Vec::new(),
-                        state.decoration_collections(),
+                        state.decorations.iter(),
                         visible_byte_range,
                     )
                 })
@@ -1432,7 +1432,7 @@ impl TextElement {
         if !state.masked {
             styles = compose_decoration_collections(
                 styles,
-                state.decoration_collections(),
+                state.decorations.iter(),
                 visible_byte_range.clone(),
             )
             .unwrap_or_default();

@@ -5,11 +5,11 @@
 use anyhow::Result;
 use gpui::{
     Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, HighlightStyle, InteractiveElement as _, IntoElement,
-    KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement as _, Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine,
-    SharedString, Styled as _, Subscription, Task, UTF16Selection, Window, actions, div, point,
-    prelude::FluentBuilder as _, px,
+    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
+    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
+    Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
+    Subscription, Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _,
+    px,
 };
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
@@ -18,7 +18,6 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use sum_tree::Bias;
 use unicode_segmentation::*;
 
@@ -26,6 +25,7 @@ use super::{
     DisplayMap, MASK_CHAR,
     blink_cursor::BlinkCursor,
     change::Change,
+    decorations::DecorationCollections,
     element::{EditorScrollbarSnapshot, TextElement},
     mask_pattern::{MaskPattern, normalize_number_input},
     mode::InputMode,
@@ -72,29 +72,6 @@ impl Enter {
         })
     }
 }
-
-/// A presentation style applied to a UTF-8 byte range in an input.
-///
-/// This is the GPUI `HighlightStyle` counterpart of Monaco's
-/// [`IModelDeltaDecoration`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IModelDeltaDecoration.html).
-#[derive(Clone, Debug, PartialEq)]
-pub struct TextDecoration {
-    pub range: Range<usize>,
-    pub style: HighlightStyle,
-}
-
-impl TextDecoration {
-    /// Create an input decoration from a UTF-8 byte range and a GPUI style.
-    pub fn new(range: Range<usize>, style: HighlightStyle) -> Self {
-        Self { range, style }
-    }
-}
-
-/// Identifies an independently managed collection of [`TextDecoration`]s.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TextDecorationCollectionId(u64);
-
-static NEXT_DECORATION_COLLECTION_ID: AtomicU64 = AtomicU64::new(1);
 
 actions!(
     input,
@@ -420,7 +397,7 @@ pub struct InputState {
     pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) text_align: TextAlign,
-    pub(super) decoration_collections: Vec<(TextDecorationCollectionId, Vec<TextDecoration>)>,
+    pub(super) decorations: DecorationCollections,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -557,7 +534,7 @@ impl InputState {
             mask_pattern: MaskPattern::default(),
             mask_pattern_set: false,
             text_align: TextAlign::Left,
-            decoration_collections: Vec::new(),
+            decorations: DecorationCollections::default(),
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu_content: None,
@@ -1294,106 +1271,6 @@ impl InputState {
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         self._pending_update = true;
         cx.notify();
-    }
-
-    /// Add an independently managed collection of text decorations.
-    ///
-    /// This follows Monaco's
-    /// [`createDecorationsCollection`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.ICodeEditor.html#createDecorationsCollection)
-    /// ownership model. Ranges use UTF-8 byte offsets into [`Self::value`].
-    ///
-    /// Decorations are presentation state, so their ranges are cleared when
-    /// the input value changes. The collection remains valid and can be
-    /// populated again with [`Self::set_decorations`]. Decorations are not
-    /// rendered while the input is masked. Collections live until their
-    /// [`InputState`] is dropped.
-    ///
-    /// Collections are layered in insertion order; the first collection wins
-    /// when overlapping decorations set the same [`HighlightStyle`] property.
-    /// Callers should avoid conflicting overlaps within one collection.
-    pub fn add_decoration_collection(
-        &mut self,
-        decorations: Vec<TextDecoration>,
-        cx: &mut Context<Self>,
-    ) -> TextDecorationCollectionId {
-        let id = TextDecorationCollectionId(
-            NEXT_DECORATION_COLLECTION_ID.fetch_add(1, Ordering::Relaxed),
-        );
-        self.decoration_collections
-            .push((id, self.normalize_decorations(decorations)));
-        cx.notify();
-        id
-    }
-
-    /// Replace all decorations in a collection.
-    ///
-    /// This corresponds to Monaco's
-    /// [`IEditorDecorationsCollection.set`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#set).
-    pub fn set_decorations(
-        &mut self,
-        collection: TextDecorationCollectionId,
-        decorations: Vec<TextDecoration>,
-        cx: &mut Context<Self>,
-    ) {
-        let decorations = self.normalize_decorations(decorations);
-        if let Some((_, current)) = self
-            .decoration_collections
-            .iter_mut()
-            .find(|(id, _)| *id == collection)
-        {
-            *current = decorations;
-            cx.notify();
-        }
-    }
-
-    /// Remove all decorations without removing the collection.
-    ///
-    /// This corresponds to Monaco's
-    /// [`IEditorDecorationsCollection.clear`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#clear).
-    pub fn clear_decorations(
-        &mut self,
-        collection: TextDecorationCollectionId,
-        cx: &mut Context<Self>,
-    ) {
-        self.set_decorations(collection, Vec::new(), cx);
-    }
-
-    /// Return the decorations in a collection.
-    ///
-    /// Unlike Monaco's range-only
-    /// [`getRanges`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html#getRanges),
-    /// this returns each range together with its GPUI [`HighlightStyle`].
-    pub fn decorations(&self, collection: TextDecorationCollectionId) -> Option<&[TextDecoration]> {
-        self.decoration_collections
-            .iter()
-            .find(|(id, _)| *id == collection)
-            .map(|(_, decorations)| decorations.as_slice())
-    }
-
-    fn normalize_decorations(&self, decorations: Vec<TextDecoration>) -> Vec<TextDecoration> {
-        decorations
-            .into_iter()
-            .filter_map(|decoration| {
-                let range = self.text.clip_offset(decoration.range.start, Bias::Left)
-                    ..self.text.clip_offset(decoration.range.end, Bias::Right);
-                (!range.is_empty()).then_some(TextDecoration {
-                    range,
-                    style: decoration.style,
-                })
-            })
-            .collect()
-    }
-
-    fn clear_decorations_after_edit(&mut self) {
-        for (_, decorations) in &mut self.decoration_collections {
-            decorations.clear();
-        }
-    }
-
-    pub(super) fn decoration_collections(&self) -> impl Iterator<Item = &[TextDecoration]> {
-        self.decoration_collections
-            .iter()
-            .map(|(_, decorations)| decorations.as_slice())
     }
 
     pub(super) fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -3054,7 +2931,7 @@ impl EntityInputHandler for InputState {
             }
         }
 
-        self.clear_decorations_after_edit();
+        self.decorations.clear();
         if mask_changed {
             // A segment-based history entry no longer matches the masked
             // document, record a whole-document change instead, so that
@@ -3138,7 +3015,7 @@ impl EntityInputHandler for InputState {
             }
         }
 
-        self.clear_decorations_after_edit();
+        self.decorations.clear();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -3974,50 +3851,6 @@ ORDER BY id
                 // clamped + collapsed
                 s.set_selected_range(100..100, cx);
                 assert_eq!(s.selected_range(), 11..11);
-            });
-        });
-    }
-
-    #[gpui::test]
-    fn test_decorations_collections_are_independent(cx: &mut TestAppContext) {
-        let input_view = InputView::build(cx, |state| state.default_value("héllo"));
-        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
-        let input = input_view.input;
-        let first_style = HighlightStyle {
-            font_weight: Some(gpui::FontWeight::BOLD),
-            ..Default::default()
-        };
-        let second_style = HighlightStyle {
-            background_color: Some(gpui::red()),
-            ..Default::default()
-        };
-
-        cx.update(|window, cx| {
-            input.update(cx, |state, cx| {
-                let first = state
-                    .add_decoration_collection(vec![TextDecoration::new(2..4, first_style)], cx);
-                let second = state
-                    .add_decoration_collection(vec![TextDecoration::new(5..100, second_style)], cx);
-                assert_ne!(first, second);
-
-                assert_eq!(
-                    state.decorations(first),
-                    Some(&[TextDecoration::new(1..4, first_style)][..])
-                );
-                assert_eq!(
-                    state.decorations(second),
-                    Some(&[TextDecoration::new(5..6, second_style)][..])
-                );
-
-                state.clear_decorations(first, cx);
-                assert_eq!(state.decorations(first), Some(&[][..]));
-                assert_eq!(
-                    state.decorations(second),
-                    Some(&[TextDecoration::new(5..6, second_style)][..])
-                );
-
-                state.set_value("world", window, cx);
-                assert_eq!(state.decorations(second), Some(&[][..]));
             });
         });
     }

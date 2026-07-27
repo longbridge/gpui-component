@@ -33,7 +33,8 @@ pub struct InputStory {
     code_input: Entity<InputState>,
     color_input: Entity<InputState>,
     decorations_input: Entity<InputState>,
-    background_decorations: TextDecorationCollectionId,
+    background_decorations: TextDecorationCollection,
+    decorations_visible: bool,
     content_type_inputs: Vec<ContentTypeInput>,
 
     _subscriptions: Vec<Subscription>,
@@ -130,31 +131,54 @@ impl InputStory {
         });
 
         let decorations_input = cx.new(|cx| {
-            InputState::new(window, cx).default_value("Independent decoration collections")
+            InputState::new(window, cx)
+                .default_value("Decorations can style multiple ranges independently")
         });
         let background_decorations = decorations_input.update(cx, |state, cx| {
-            let background = state.add_decoration_collection(
-                vec![TextDecoration::new(
-                    0..11,
-                    HighlightStyle {
-                        background_color: Some(gpui::yellow()),
-                        ..Default::default()
-                    },
-                )],
+            let background = state.create_decorations_collection(
+                vec![
+                    TextDecoration::new(
+                        0..11,
+                        HighlightStyle {
+                            background_color: Some(gpui::yellow()),
+                            ..Default::default()
+                        },
+                    ),
+                    TextDecoration::new(
+                        22..30,
+                        HighlightStyle {
+                            background_color: Some(gpui::yellow()),
+                            ..Default::default()
+                        },
+                    ),
+                ],
                 cx,
             );
-            state.add_decoration_collection(
-                vec![TextDecoration::new(
-                    12..22,
-                    HighlightStyle {
-                        underline: Some(gpui::UnderlineStyle {
-                            color: Some(gpui::blue()),
-                            thickness: gpui::px(1.),
-                            wavy: false,
-                        }),
-                        ..Default::default()
-                    },
-                )],
+            state.create_decorations_collection(
+                vec![
+                    TextDecoration::new(
+                        12..15,
+                        HighlightStyle {
+                            underline: Some(gpui::UnderlineStyle {
+                                color: Some(gpui::blue()),
+                                thickness: gpui::px(1.),
+                                wavy: false,
+                            }),
+                            ..Default::default()
+                        },
+                    ),
+                    TextDecoration::new(
+                        31..37,
+                        HighlightStyle {
+                            underline: Some(gpui::UnderlineStyle {
+                                color: Some(gpui::blue()),
+                                thickness: gpui::px(1.),
+                                wavy: false,
+                            }),
+                            ..Default::default()
+                        },
+                    ),
+                ],
                 cx,
             );
             background
@@ -324,6 +348,7 @@ impl InputStory {
             color_input,
             decorations_input,
             background_decorations,
+            decorations_visible: true,
             input_text_centered,
             input_text_right,
             content_type_inputs,
@@ -411,6 +436,36 @@ impl InputStory {
         self.code_input.update(cx, |input_state, cx| {
             input_state.set_value(CODE_EXAMPLE, window, cx);
         });
+    }
+
+    fn on_click_toggle_decorations(
+        &mut self,
+        _: &ClickEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.decorations_visible = !self.decorations_visible;
+        let decorations = self.decorations_visible.then(|| {
+            vec![
+                TextDecoration::new(
+                    0..11,
+                    HighlightStyle {
+                        background_color: Some(gpui::yellow()),
+                        ..Default::default()
+                    },
+                ),
+                TextDecoration::new(
+                    22..30,
+                    HighlightStyle {
+                        background_color: Some(gpui::yellow()),
+                        ..Default::default()
+                    },
+                ),
+            ]
+        });
+        self.background_decorations
+            .set(decorations.unwrap_or_default(), cx);
+        cx.notify();
     }
 }
 
@@ -589,44 +644,15 @@ impl Render for InputStory {
                     .max_w_md()
                     .child(Input::new(&self.decorations_input))
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                Button::new("clear-text-decoration")
-                                    .label("Clear background")
-                                    .on_click({
-                                        let input = self.decorations_input.clone();
-                                        let collection = self.background_decorations;
-                                        move |_, _, cx| {
-                                            input.update(cx, |state, cx| {
-                                                state.clear_decorations(collection, cx)
-                                            });
-                                        }
-                                    }),
-                            )
-                            .child(
-                                Button::new("restore-text-decoration")
-                                    .label("Restore background")
-                                    .on_click({
-                                        let input = self.decorations_input.clone();
-                                        let collection = self.background_decorations;
-                                        move |_, _, cx| {
-                                            input.update(cx, |state, cx| {
-                                                state.set_decorations(
-                                                    collection,
-                                                    vec![TextDecoration::new(
-                                                        0..11,
-                                                        HighlightStyle {
-                                                            background_color: Some(gpui::yellow()),
-                                                            ..Default::default()
-                                                        },
-                                                    )],
-                                                    cx,
-                                                )
-                                            });
-                                        }
-                                    }),
-                            ),
+                        h_flex().gap_2().child(
+                            Button::new("toggle-text-decorations")
+                                .label(if self.decorations_visible {
+                                    "Hide backgrounds"
+                                } else {
+                                    "Show backgrounds"
+                                })
+                                .on_click(cx.listener(Self::on_click_toggle_decorations)),
+                        ),
                     ),
             )
             .child(
