@@ -7,7 +7,7 @@ use crate::section;
 use gpui_component::{button::*, input::*, label::Label, *};
 
 const CODE_EXAMPLE: &str = r#"{"single_line":"code editor"}"#;
-const DECORATIONS_EXAMPLE: &str = "/commit improve decorations with $skill-creator and add tests";
+const DECORATIONS_EXAMPLE: &str = "/review decorations with $code-review before merging";
 
 pub fn init(_: &mut App) {}
 
@@ -146,7 +146,7 @@ impl InputStory {
                             },
                         ),
                         TextDecoration::new(
-                            33..34,
+                            25..26,
                             HighlightStyle {
                                 color: Some(gpui::green()),
                                 ..Default::default()
@@ -169,7 +169,7 @@ impl InputStory {
                             },
                         ),
                         TextDecoration::new(
-                            33..47,
+                            25..37,
                             HighlightStyle {
                                 underline: Some(gpui::UnderlineStyle {
                                     color: Some(gpui::blue()),
@@ -457,7 +457,7 @@ impl InputStory {
                     },
                 ),
                 TextDecoration::new(
-                    33..34,
+                    25..26,
                     HighlightStyle {
                         color: Some(gpui::green()),
                         ..Default::default()
@@ -482,7 +482,7 @@ impl InputStory {
                     },
                 ),
                 TextDecoration::new(
-                    33..47,
+                    25..37,
                     HighlightStyle {
                         underline: Some(gpui::UnderlineStyle {
                             color: Some(gpui::blue()),
