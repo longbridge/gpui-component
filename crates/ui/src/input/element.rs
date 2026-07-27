@@ -1398,8 +1398,7 @@ impl TextElement {
             styles.push(hover_style);
         }
 
-        // Compose order: tree-sitter (base) -> custom (overlay) -> application
-        // highlights -> diagnostics (top).
+        // Compose tree-sitter, custom, application, then diagnostic highlights.
         styles = gpui::combine_highlights(custom_styles, styles).collect();
         styles = compose_text_highlights(styles, text_highlights, visible_byte_range.clone())
             .unwrap_or_default();

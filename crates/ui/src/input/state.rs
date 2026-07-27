@@ -1278,7 +1278,8 @@ impl InputState {
     /// Ranges use UTF-8 byte offsets into [`Self::value`]. Empty ranges are
     /// discarded and ranges beyond the current value are clamped. These
     /// highlights work in plain, auto-growing, and code-editor inputs and are
-    /// composed with syntax, semantic-token, and diagnostic highlighting.
+    /// composed with syntax, semantic-token, and diagnostic highlighting. They
+    /// are cleared when the value changes and are not rendered for masked input.
     pub fn set_text_highlights(
         &mut self,
         highlights: Vec<(Range<usize>, HighlightStyle)>,
