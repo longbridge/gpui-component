@@ -1646,62 +1646,28 @@ impl Element for TextElement {
                     run.color = run.color.opacity(0.5);
                 }
 
-                if let Some(marked) = &state.ime_marked_range {
-                    let intersection_start = range.start.max(marked.start);
-                    let intersection_end = range.end.min(marked.end);
-                    if intersection_start < intersection_end {
-                        let before_len = intersection_start - range.start;
-                        if before_len > 0 {
-                            runs.push(TextRun {
-                                len: before_len,
-                                ..run.clone()
-                            });
-                        }
-
-                        runs.push(TextRun {
-                            len: intersection_end - intersection_start,
-                            underline: marked_run.underline,
-                            ..run.clone()
-                        });
-
-                        let after_len = range.end - intersection_end;
-                        if after_len > 0 {
-                            runs.push(TextRun {
-                                len: after_len,
-                                ..run
-                            });
-                        }
-                        continue;
-                    }
-                }
-
-                if run.len > 0 {
-                    runs.push(run);
-                }
+                runs.extend(split_run_for_ime_underline(
+                    run,
+                    range.clone(),
+                    state
+                        .ime_marked_range
+                        .as_ref()
+                        .map(|marked| marked.start..marked.end),
+                    marked_run.underline,
+                ));
             }
             runs
-        } else if let Some(ime_marked_range) = &state.ime_marked_range {
-            // IME marked text
-            vec![
-                TextRun {
-                    len: ime_marked_range.start,
-                    ..run.clone()
-                },
-                TextRun {
-                    len: ime_marked_range.end - ime_marked_range.start,
-                    underline: marked_run.underline,
-                    ..run.clone()
-                },
-                TextRun {
-                    len: display_text.len() - ime_marked_range.end,
-                    ..run.clone()
-                },
-            ]
-            .into_iter()
-            .filter(|run| run.len > 0)
-            .collect()
         } else {
-            vec![run]
+            split_run_for_ime_underline(
+                run,
+                0..display_text.len(),
+                state
+                    .ime_marked_range
+                    .as_ref()
+                    .map(|marked| marked.start..marked.end),
+                marked_run.underline,
+            )
+            .into_vec()
         };
 
         let document_colors = state
@@ -2298,6 +2264,46 @@ pub(super) fn runs_for_range(
     result
 }
 
+fn split_run_for_ime_underline(
+    run: TextRun,
+    run_range: Range<usize>,
+    marked_range: Option<Range<usize>>,
+    marked_underline: Option<UnderlineStyle>,
+) -> SmallVec<[TextRun; 3]> {
+    if run.len == 0 {
+        return SmallVec::new();
+    }
+
+    let Some(marked) = marked_range else {
+        return [run].into_iter().collect();
+    };
+
+    let intersection_start = run_range.start.max(marked.start);
+    let intersection_end = run_range.end.min(marked.end);
+    if intersection_start >= intersection_end {
+        return [run].into_iter().collect();
+    }
+
+    [
+        TextRun {
+            len: intersection_start - run_range.start,
+            ..run.clone()
+        },
+        TextRun {
+            len: intersection_end - intersection_start,
+            underline: marked_underline,
+            ..run.clone()
+        },
+        TextRun {
+            len: run_range.end - intersection_end,
+            ..run
+        },
+    ]
+    .into_iter()
+    .filter(|run| run.len > 0)
+    .collect()
+}
+
 fn split_runs_by_bg_segments(
     start_offset: usize,
     runs: &[TextRun],
@@ -2473,6 +2479,61 @@ mod tests {
         assert_runs(runs_for_range(&runs, 3, &(0..3)), &[1, 2]);
         assert_runs(runs_for_range(&runs, 3, &(2..10)), &[4, 1, 3]);
         assert_runs(runs_for_range(&runs, 9, &(0..8)), &[1, 7]);
+    }
+
+    #[test]
+    fn test_split_runs_preserve_ime_underline_across_highlight_boundaries() {
+        let underline = UnderlineStyle {
+            thickness: px(1.),
+            color: Some(gpui::black()),
+            wavy: false,
+        };
+
+        let runs = [0..4, 4..10]
+            .into_iter()
+            .flat_map(|range| {
+                split_run_for_ime_underline(
+                    TextStyle::default().to_run(range.len()),
+                    range,
+                    Some(2..7),
+                    Some(underline),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            runs.iter()
+                .map(|run| (run.len, run.underline.is_some()))
+                .collect::<Vec<_>>(),
+            vec![(2, false), (2, true), (3, true), (3, false)]
+        );
+    }
+
+    #[test]
+    fn test_split_run_applies_ime_underline_without_highlighting() {
+        let underline = UnderlineStyle {
+            thickness: px(1.),
+            color: Some(gpui::black()),
+            wavy: false,
+        };
+
+        let runs = split_run_for_ime_underline(
+            TextStyle::default().to_run(10),
+            0..10,
+            Some(2..7),
+            Some(underline),
+        );
+
+        assert_eq!(
+            runs.iter()
+                .map(|run| (run.len, run.underline.is_some()))
+                .collect::<Vec<_>>(),
+            vec![(2, false), (5, true), (3, false)]
+        );
+        assert!(
+            split_run_for_ime_underline(TextStyle::default().to_run(0), 0..0, None, None)
+                .is_empty()
+        );
     }
 
     #[test]
