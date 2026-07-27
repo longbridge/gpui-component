@@ -358,9 +358,15 @@ impl TextElement {
 
         let mut cursor = state.cursor();
         // Buffer rows from the raw (pre-mask) offsets, used to locate the cursor line.
-        let cursor_row = state.text.offset_to_point(cursor).row;
-        let sel_start_row = state.text.offset_to_point(selected_range.start).row;
-        let sel_end_row = state.text.offset_to_point(selected_range.end).row;
+        let (cursor_row, sel_start_row, sel_end_row) = if state.mode.is_single_line() {
+            (0, 0, 0)
+        } else {
+            (
+                state.text.offset_to_point(cursor).row,
+                state.text.offset_to_point(selected_range.start).row,
+                state.text.offset_to_point(selected_range.end).row,
+            )
+        };
         if state.masked {
             selected_range.start = masked_display_offset(&state.text, selected_range.start);
             selected_range.end = masked_display_offset(&state.text, selected_range.end);
@@ -1523,6 +1529,24 @@ impl Element for TextElement {
         let disabled = state.disabled;
         let dim = |color: Hsla| if disabled { color.opacity(0.5) } else { color };
         let fg = dim(text_style.color);
+        let single_line_display_text = (!is_empty
+            && !state.masked
+            && state.mode.is_single_line()
+            && text.chars().any(|ch| matches!(ch, '\n' | '\r')))
+        .then(|| {
+            let mut display_text = String::with_capacity(text.len());
+            let mut chars = text.chars().peekable();
+            while let Some(ch) = chars.next() {
+                match ch {
+                    // Keep CR in a CRLF pair as a zero-width control
+                    // character, then render LF as the pair's single space.
+                    '\r' if chars.peek() == Some(&'\n') => display_text.push('\r'),
+                    '\r' | '\n' => display_text.push(' '),
+                    _ => display_text.push(ch),
+                }
+            }
+            Rope::from(display_text)
+        });
         let (display_text, text_color) = if is_empty {
             (
                 &Rope::from(placeholder.as_str()),
@@ -1533,6 +1557,8 @@ impl Element for TextElement {
                 &Rope::from(MASK_CHAR.to_string().repeat(text.chars().count())),
                 fg,
             )
+        } else if let Some(display_text) = &single_line_display_text {
+            (display_text, fg)
         } else {
             (&text, fg)
         };
@@ -1566,9 +1592,13 @@ impl Element for TextElement {
         let (visible_range, visible_buffer_lines, visible_top) =
             self.calculate_visible_range(&state, line_height, bounds.size.height);
         let visible_start_offset = state.text.line_start_offset(visible_range.start);
-        let visible_end_offset = state
-            .text
-            .line_end_offset(visible_range.end.saturating_sub(1));
+        let visible_end_offset = if state.mode.is_single_line() {
+            state.text.len()
+        } else {
+            state
+                .text
+                .line_end_offset(visible_range.end.saturating_sub(1))
+        };
 
         let highlight_styles = self.highlight_lines(
             &visible_buffer_lines,
@@ -1694,7 +1724,11 @@ impl Element for TextElement {
         // 2. Multi-line with soft wrap disabled.
         if state.mode.is_single_line() || !state.soft_wrap {
             let longest_row = state.display_map.longest_row();
-            let longest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
+            let longest_line: SharedString = if state.mode.is_single_line() {
+                display_text.to_string().into()
+            } else {
+                state.text.slice_line(longest_row).to_string().into()
+            };
             longest_line_width = window
                 .text_system()
                 .shape_line(
