@@ -592,8 +592,7 @@ impl Render for ComboboxStory {
                                         }),
                                 )
                                 .child(
-                                    Icon::new(IconName::ChevronDown)
-                                        .size_4()
+                                    Caret::new(ctx.size)
                                         .text_color(cx.theme().muted_foreground),
                                 )
                                 .into_any_element()
@@ -677,8 +676,7 @@ impl Render for ComboboxStory {
                                         }),
                                 )
                                 .child(
-                                    Icon::new(IconName::ChevronDown)
-                                        .size_4()
+                                    Caret::new(ctx.size)
                                         .text_color(cx.theme().muted_foreground),
                                 )
                                 .into_any_element()
