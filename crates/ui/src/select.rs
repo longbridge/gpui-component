@@ -526,7 +526,11 @@ where
                                 let icon = match self.icon.clone() {
                                     Some(icon) => icon.xsmall(),
                                     None => Icon::new(IconName::ChevronDown)
-                                        .with_size(Size::Medium),
+                                        .with_size(match self.state.size {
+                                            Size::XSmall => Size::XSmall,
+                                            Size::Small => Size::Small,
+                                            _ => Size::Medium,
+                                        }),
                                 };
 
                                 this.child(icon.text_color(cx.theme().muted_foreground))
