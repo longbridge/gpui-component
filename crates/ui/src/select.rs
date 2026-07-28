@@ -34,17 +34,19 @@ pub use crate::searchable_list::SearchableListItemElement as SelectListItem;
 pub use crate::searchable_list::SearchableVec;
 
 #[derive(IntoElement)]
-pub(crate) struct Caret {
+pub struct Caret {
     size: Size,
     color: Option<Hsla>,
 }
 
 impl Caret {
-    pub(crate) fn new(size: Size) -> Self {
+    /// Create a select caret sized for its trigger.
+    pub fn new(size: Size) -> Self {
         Self { size, color: None }
     }
 
-    pub(crate) fn text_color(mut self, color: Hsla) -> Self {
+    /// Set the caret color.
+    pub fn text_color(mut self, color: Hsla) -> Self {
         self.color = Some(color);
         self
     }

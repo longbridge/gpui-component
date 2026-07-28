@@ -8,6 +8,8 @@ use gpui::{
 
 use rust_i18n::t;
 
+pub use crate::select::Caret;
+
 use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Sizable, Size,
     StyleSized, StyledExt,
@@ -20,7 +22,6 @@ use crate::{
         SearchableListAdapter, SearchableListChange, SearchableListDelegate, SearchableListItem,
         SearchableListState,
     },
-    select::Caret,
     v_flex,
 };
 
