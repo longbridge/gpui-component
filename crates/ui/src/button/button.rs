@@ -957,6 +957,7 @@ impl ButtonVariant {
         let border = self.border_color(outline, cx);
         let fg = match self {
             Self::Link => cx.theme().link_hover,
+            Self::Text => cx.theme().foreground.opacity(0.8),
             _ => self.text_color(outline, cx),
         };
 

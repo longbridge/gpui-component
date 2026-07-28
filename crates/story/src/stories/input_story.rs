@@ -527,12 +527,12 @@ impl Render for InputStory {
                         Input::new(&self.both_input1)
                             .cleanable(true)
                             .prefix(div().child(Icon::new(IconName::Search).small()))
-                            .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
+                            .suffix(Button::new("info").text().icon(IconName::Info).xsmall()),
                     )
                     .child(
                         Input::new(&self.suffix_input1)
                             .cleanable(true)
-                            .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
+                            .suffix(Button::new("info").text().icon(IconName::Info).xsmall()),
                     ),
             )
             .child(
@@ -544,7 +544,7 @@ impl Render for InputStory {
                             .prefix(Icon::new(IconName::Search).small())
                             .suffix(
                                 Button::new("complete-input-info")
-                                    .ghost()
+                                    .text()
                                     .icon(IconName::Info)
                                     .xsmall(),
                             ),
@@ -556,7 +556,7 @@ impl Render for InputStory {
                             .prefix(Icon::new(IconName::Search).small())
                             .suffix(
                                 Button::new("complete-disabled-input-info")
-                                    .ghost()
+                                    .text()
                                     .icon(IconName::Info)
                                     .xsmall(),
                             ),
@@ -648,7 +648,7 @@ impl Render for InputStory {
                 section("Text Decorations").max_w_md().child(
                     Input::new(&self.decorations_input).suffix(
                         Button::new("toggle-text-decorations")
-                            .ghost()
+                            .text()
                             .xsmall()
                             .label(if self.decorations_visible {
                                 "Hide decorations"
@@ -663,7 +663,7 @@ impl Render for InputStory {
                 section("Single line code editor").max_w_md().child(
                     Input::new(&self.code_input).suffix(
                         Button::new("code-reset")
-                            .ghost()
+                            .text()
                             .label("Reset")
                             .xsmall()
                             .on_click(cx.listener(Self::on_click_reset)),
