@@ -1,10 +1,11 @@
 use std::rc::Rc;
 
 use crate::{
-    ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, IconName, Selectable,
-    Sizable, Size, StyleSized, StyledExt,
+    ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, Selectable, Sizable, Size,
+    StyleSized, StyledExt,
     button::ButtonIcon,
     h_flex,
+    select::Caret,
     tooltip::{ManagedTooltipExt as _, Tooltip},
 };
 use gpui::{
@@ -622,16 +623,7 @@ impl RenderOnce for Button {
                     .children(self.children)
                     .when(self.dropdown_caret, |this| {
                         this.justify_between().child(
-                            Icon::new(IconName::ChevronDown)
-                                .with_size(match self.size {
-                                    Size::XSmall => Size::XSmall,
-                                    Size::Small => Size::Small,
-                                    _ => Size::Medium,
-                                })
-                                .text_color(match self.disabled {
-                                    true => normal_style.fg.opacity(0.3),
-                                    false => normal_style.fg.opacity(0.5),
-                                }),
+                            Caret::new(self.size).text_color(normal_style.fg.opacity(0.75)),
                         )
                     })
             })

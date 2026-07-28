@@ -13,9 +13,7 @@ use super::{Tab, TabVariant};
 use crate::animation::{Lerp, ease_in_out_cubic};
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
-use crate::{
-    ActiveTheme, ElementExt, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex,
-};
+use crate::{ActiveTheme, ElementExt, Icon, Selectable, Sizable, Size, StyledExt, h_flex};
 
 struct TabIndicatorBounds {
     container: Bounds<Pixels>,
@@ -504,7 +502,7 @@ impl RenderOnce for TabBar {
                     Button::new("more")
                         .xsmall()
                         .ghost()
-                        .icon(IconName::ChevronDown)
+                        .dropdown_caret(true)
                         .dropdown_menu(move |mut this, _, _| {
                             this = this.scrollable(true);
                             for (ix, (label, icon, disabled)) in item_metas.iter().enumerate() {
