@@ -681,6 +681,38 @@ impl PopupMenu {
         self
     }
 
+    /// Replace all menu items by re-running a builder on this menu, keeping its
+    /// identity (focus, parent menu, layer priority).
+    ///
+    /// For menus whose content arrives asynchronously after the menu is shown,
+    /// e.g. swapping a "loading…" placeholder for the loaded items:
+    ///
+    /// ```ignore
+    /// cx.spawn_in(window, async move |menu, cx| {
+    ///     let items = fetch_items().await;
+    ///     _ = menu.update_in(cx, |menu, window, cx| {
+    ///         menu.rebuild(window, cx, |menu, _, _| {
+    ///             items.into_iter().fold(menu, |menu, item| {
+    ///                 menu.menu(item.label, Box::new(item.action))
+    ///             })
+    ///         });
+    ///     });
+    /// })
+    /// .detach();
+    /// ```
+    pub fn rebuild(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        f: impl FnOnce(Self, &mut Window, &mut Context<Self>) -> Self,
+    ) {
+        let mut menu = std::mem::replace(self, Self::new(cx));
+        menu.menu_items.clear();
+        menu.selected_index = None;
+        *self = f(menu, window, cx);
+        cx.notify();
+    }
+
     fn add_menu_item(
         &mut self,
         label: impl Into<SharedString>,
@@ -1312,6 +1344,24 @@ struct RenderOptions {
 impl Render for PopupMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.update_submenu_menu_anchor(window);
+
+        // Submenus attached via the public `item()` + `PopupMenuItem::submenu()`
+        // path (from contexts that only have the menu value, e.g. a table
+        // delegate's `context_menu`) have no parent wired at construction time.
+        // Wire them here so the dismiss chain, click-outside checks and keyboard
+        // navigation treat them the same as `submenu()`-built children.
+        let parent = cx.entity().downgrade();
+        let parent_priority = self.priority;
+        for item in &self.menu_items {
+            if let PopupMenuItem::Submenu { menu, .. } = item {
+                if menu.read(cx).parent_menu.is_none() {
+                    menu.update(cx, |menu, _| {
+                        menu.parent_menu = Some(parent.clone());
+                        menu.priority = parent_priority + 1;
+                    });
+                }
+            }
+        }
 
         let view = cx.entity().clone();
         let items_count = self.menu_items.len();
