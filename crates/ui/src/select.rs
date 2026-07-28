@@ -488,14 +488,6 @@ where
                             .when(self.state.disabled, |this| this.opacity(0.5))
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
-                            .when(cx.theme().shadow, |this| this.shadow_xs())
-                    })
-                    .map(|this| {
-                        if self.state.disabled {
-                            this.shadow_none()
-                        } else {
-                            this
-                        }
                     })
                     .overflow_hidden()
                     .input_size(self.state.size)

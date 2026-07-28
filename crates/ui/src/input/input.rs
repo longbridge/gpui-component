@@ -497,7 +497,6 @@ impl RenderOnce for Input {
                     .when(self.bordered, |this| {
                         this.border_color(border_color)
                             .border_1()
-                            .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(focused && self.focus_bordered, |this| {
                                 this.focused_border(cx)
                             })

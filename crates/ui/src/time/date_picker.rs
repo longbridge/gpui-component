@@ -408,7 +408,6 @@ impl RenderOnce for DatePicker {
                             .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
-                            .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(is_focused, |this| this.focused_border(cx))
                     })
                     .overflow_hidden()

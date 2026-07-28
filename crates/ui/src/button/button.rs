@@ -867,10 +867,8 @@ impl ButtonVariant {
         }
     }
 
-    fn shadow(&self, outline: bool, _: &App) -> bool {
+    fn shadow(&self, _outline: bool, _: &App) -> bool {
         match self {
-            Self::Default => true,
-            Self::Primary | Self::Secondary | Self::Danger => outline,
             Self::Custom(c) => c.shadow,
             _ => false,
         }

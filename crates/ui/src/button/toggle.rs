@@ -191,7 +191,6 @@ impl RenderOnce for Toggle {
                     .when(self.border_edges.bottom, |this| this.border_b_1())
                     .border_color(cx.theme().border)
                     .bg(cx.theme().tokens.background)
-                    .when(cx.theme().shadow, |this| this.shadow_xs())
             })
             .when(hoverable, |this| {
                 this.hover(|this| {
