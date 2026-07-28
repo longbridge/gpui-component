@@ -808,7 +808,7 @@ impl ButtonVariant {
                 }
             }
             Self::Link => cx.theme().link,
-            Self::Text => cx.theme().foreground,
+            Self::Text => cx.theme().muted_foreground,
             Self::Custom(colors) => colors.color,
         }
     }
@@ -957,7 +957,7 @@ impl ButtonVariant {
         let border = self.border_color(outline, cx);
         let fg = match self {
             Self::Link => cx.theme().link_hover,
-            Self::Text => cx.theme().foreground.opacity(0.8),
+            Self::Text => cx.theme().foreground,
             _ => self.text_color(outline, cx),
         };
 
