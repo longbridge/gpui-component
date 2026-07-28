@@ -503,11 +503,15 @@ impl RenderOnce for Button {
                         Size::XSmall => this.h_5().px_1().when(self.compact, |this| this.min_w_5()),
                         Size::Small => this
                             .h_6()
-                            .px_3()
+                            .px_2()
                             .when(self.compact, |this| this.min_w_6().px_1p5()),
-                        _ => this
+                        Size::Medium => this
                             .h_8()
-                            .px_4()
+                            .px_2p5()
+                            .when(self.compact, |this| this.min_w_8().px_2()),
+                        Size::Large => this
+                            .h_8()
+                            .px_3()
                             .when(self.compact, |this| this.min_w_8().px_2()),
                     }
                 }

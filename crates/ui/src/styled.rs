@@ -340,8 +340,8 @@ impl Size {
     /// Returns the horizontal input padding.
     pub fn input_px(&self) -> Pixels {
         match self {
-            Self::Large => px(16.),
-            Self::Medium => px(12.),
+            Self::Large => px(12.),
+            Self::Medium => px(10.),
             Self::Small => px(8.),
             Self::XSmall => px(4.),
             _ => px(8.),
