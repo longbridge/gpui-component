@@ -20,7 +20,8 @@ pub struct TextViewStyle {
     pub highlight_theme: Arc<HighlightTheme>,
     /// The style refinement for code blocks.
     pub code_block: StyleRefinement,
-    /// Style refinement applied to the table container (the bordered wrapper).
+    /// Style refinement applied to the table container (the bordered wrapper
+    /// in wrap mode, the scroll viewport in horizontal-scroll mode).
     ///
     /// Set `overflow_x: scroll` here to keep table cells on a single line and
     /// scroll the table horizontally instead of wrapping cell content, e.g.
