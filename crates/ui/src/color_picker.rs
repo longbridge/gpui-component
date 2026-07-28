@@ -407,7 +407,6 @@ impl ColorPicker {
                 this.hover(|this| {
                     this.border_color(color.darken(0.3))
                         .bg(color.lighten(0.1))
-                        .shadow_xs()
                 })
                 .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
                 .on_mouse_move(window.listener_for(&state, move |state, _, window, cx| {
@@ -483,7 +482,7 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(Input::new(&self.state.read(cx).state).small()),
+                        .child(Input::new(&self.state.read(cx).state).small().px_2p5()),
                 )
             })
     }
@@ -830,7 +829,6 @@ impl RenderOnce for ColorPickerButton {
                         .bg(cx.theme().tokens.background)
                         .border_1()
                         .border_color(cx.theme().input)
-                        .when(cx.theme().shadow, |this| this.shadow_xs())
                         .rounded(cx.theme().radius)
                         .overflow_hidden()
                         .size_with(self.size)

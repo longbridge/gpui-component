@@ -20,6 +20,7 @@ use crate::{
         SearchableListAdapter, SearchableListChange, SearchableListDelegate, SearchableListItem,
         SearchableListState,
     },
+    select::Caret,
     v_flex,
 };
 
@@ -610,11 +611,6 @@ where
         let size = self.state.size;
         let has_custom_trigger = self.render_trigger.is_some();
 
-        let trigger_icon = self
-            .trigger_icon
-            .clone()
-            .unwrap_or_else(|| Icon::new(IconName::ChevronDown));
-
         let trigger_body = if let Some(render_trigger) = &self.render_trigger {
             let ctx = ComboboxTriggerCtx {
                 selection,
@@ -641,9 +637,12 @@ where
                     }
                 })
                 .into_any_element()
+        } else if let Some(icon) = self.trigger_icon.clone() {
+            icon.xsmall()
+                .text_color(cx.theme().muted_foreground)
+                .into_any_element()
         } else {
-            trigger_icon
-                .xsmall()
+            Caret::new(size)
                 .text_color(cx.theme().muted_foreground)
                 .into_any_element()
         };
@@ -957,9 +956,7 @@ fn render_trigger_container(
                 .when(disabled, |this| this.opacity(0.5))
                 .border_color(cx.theme().input)
                 .rounded(cx.theme().radius)
-                .when(cx.theme().shadow, |this| this.shadow_xs())
         })
-        .map(|this| if disabled { this.shadow_none() } else { this })
         .overflow_hidden()
         .input_size(size)
         .input_text_size(size)

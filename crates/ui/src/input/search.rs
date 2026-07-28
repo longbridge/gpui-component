@@ -502,7 +502,7 @@ impl Render for SearchPanel {
                                             .selected(!self.case_insensitive)
                                             .xsmall()
                                             .compact()
-                                            .ghost()
+                                            .text()
                                             .icon(IconName::CaseSensitive)
                                             .on_click(cx.listener(|this, _, _, cx| {
                                                 this.case_insensitive = !this.case_insensitive;

@@ -163,7 +163,6 @@ impl RenderOnce for Switch {
                             div()
                                 .rounded(radius)
                                 .bg(toggle_bg)
-                                .shadow_md()
                                 .size(bar_width)
                                 .map(|this| {
                                     let prev_checked = toggle_state.read(cx);

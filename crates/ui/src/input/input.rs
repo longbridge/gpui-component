@@ -201,7 +201,7 @@ impl Input {
                 IconName::EyeOff
             })
             .xsmall()
-            .ghost()
+            .text()
             .tab_stop(false)
             .on_click({
                 let state = state.clone();
@@ -497,7 +497,6 @@ impl RenderOnce for Input {
                     .when(self.bordered, |this| {
                         this.border_color(border_color)
                             .border_1()
-                            .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(focused && self.focus_bordered, |this| {
                                 this.focused_border(cx)
                             })
@@ -524,6 +523,7 @@ impl RenderOnce for Input {
                         .id("suffix")
                         .gap(gap_x)
                         .items_center()
+                        .cursor_default()
                         .when(state.disabled, |this| this.opacity(0.5))
                         .when(state.loading, |this| {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
