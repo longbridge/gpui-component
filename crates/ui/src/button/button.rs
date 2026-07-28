@@ -446,6 +446,8 @@ impl RenderOnce for Button {
             Size::Size(v) => Size::Size(v * 0.75),
             _ => self.size,
         };
+        let has_content =
+            self.icon.is_some() || self.label.is_some() || !self.children.is_empty();
 
         let focus_handle = window
             .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
@@ -622,9 +624,8 @@ impl RenderOnce for Button {
                     })
                     .children(self.children)
                     .when(self.dropdown_caret, |this| {
-                        this.justify_between().child(
-                            Caret::new(self.size).text_color(normal_style.fg.opacity(0.75)),
-                        )
+                        this.when(has_content, |this| this.justify_between())
+                            .child(Caret::new(self.size).text_color(normal_style.fg.opacity(0.75)))
                     })
             })
             .when(self.loading && !self.disabled, |this| {
