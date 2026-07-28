@@ -524,11 +524,12 @@ where
                             })
                             .when(!show_clean, |this| {
                                 let icon = match self.icon.clone() {
-                                    Some(icon) => icon,
-                                    None => Icon::new(IconName::ChevronDown),
+                                    Some(icon) => icon.xsmall(),
+                                    None => Icon::new(IconName::ChevronDown)
+                                        .with_size(Size::Medium),
                                 };
 
-                                this.child(icon.xsmall().text_color(cx.theme().muted_foreground))
+                                this.child(icon.text_color(cx.theme().muted_foreground))
                             }),
                     )
                     .on_prepaint({
