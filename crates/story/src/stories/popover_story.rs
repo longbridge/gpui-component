@@ -9,11 +9,13 @@ use gpui_component::{
     h_flex,
     input::{Input, InputState},
     list::{List, ListDelegate, ListItem, ListState},
+    menu::{DropdownMenu as _, PopupMenu, PopupMenuItem},
     popover::Popover,
     separator::Separator,
     v_flex,
 };
 use serde::Deserialize;
+use std::time::Duration;
 
 use crate::section;
 
@@ -338,6 +340,46 @@ impl Render for PopoverStory {
                         )
                         .child("This popover is open by default when first rendered."),
                 ),
+            )
+            .child(
+                section("Async Submenu")
+                    .child(
+                        Button::new("async-menu")
+                            .outline()
+                            .label("Async Menu")
+                            .dropdown_menu(|menu, window, cx| {
+                                // The submenu is attached as a plain menu value, its
+                                // content is loaded asynchronously via `rebuild`.
+                                let submenu = PopupMenu::build(window, cx, |menu, _, _| {
+                                    menu.label("Loading...")
+                                });
+
+                                cx.spawn_in(window, {
+                                    let submenu = submenu.clone();
+                                    async move |_, cx| {
+                                        cx.background_executor()
+                                            .timer(Duration::from_secs(1))
+                                            .await;
+                                        _ = submenu.update_in(cx, |menu, window, cx| {
+                                            menu.rebuild(window, cx, |menu, _, _| {
+                                                (1..=3).fold(menu, |menu, ix| {
+                                                    menu.menu(
+                                                        format!("Loaded Item {}", ix),
+                                                        Box::new(Info(ix)),
+                                                    )
+                                                })
+                                            });
+                                        });
+                                    }
+                                })
+                                .detach();
+
+                                menu.menu("Copy", Box::new(Copy))
+                                    .separator()
+                                    .item(PopupMenuItem::submenu("Async Submenu", submenu))
+                            }),
+                    )
+                    .child(self.message.clone()),
             )
             .child(
                 section("Popover Anchor")
