@@ -446,8 +446,7 @@ impl RenderOnce for Button {
             Size::Size(v) => Size::Size(v * 0.75),
             _ => self.size,
         };
-        let has_content =
-            self.icon.is_some() || self.label.is_some() || !self.children.is_empty();
+        let has_content = self.icon.is_some() || self.label.is_some() || !self.children.is_empty();
 
         let focus_handle = window
             .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
@@ -486,7 +485,10 @@ impl RenderOnce for Button {
             .items_center()
             .justify_center()
             .cursor_default()
-            .when(self.variant.is_link(), |this| this.cursor_pointer())
+            .when(
+                !self.disabled && (self.variant.is_link() || self.variant.is_text()),
+                |this| this.cursor_pointer(),
+            )
             .when(cx.theme().shadow && normal_style.shadow, |this| {
                 this.shadow_xs()
             })
@@ -808,7 +810,7 @@ impl ButtonVariant {
                 }
             }
             Self::Link => cx.theme().link,
-            Self::Text => cx.theme().muted_foreground,
+            Self::Text => cx.theme().foreground.opacity(0.9),
             Self::Custom(colors) => colors.color,
         }
     }
