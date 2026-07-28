@@ -622,12 +622,16 @@ impl RenderOnce for Button {
                     .children(self.children)
                     .when(self.dropdown_caret, |this| {
                         this.justify_between().child(
-                            Icon::new(IconName::ChevronDown).xsmall().text_color(
-                                match self.disabled {
+                            Icon::new(IconName::ChevronDown)
+                                .with_size(match self.size {
+                                    Size::XSmall => Size::XSmall,
+                                    Size::Small => Size::Small,
+                                    _ => Size::Medium,
+                                })
+                                .text_color(match self.disabled {
                                     true => normal_style.fg.opacity(0.3),
                                     false => normal_style.fg.opacity(0.5),
-                                },
-                            ),
+                                }),
                         )
                     })
             })
