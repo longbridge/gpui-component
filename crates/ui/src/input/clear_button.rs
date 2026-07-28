@@ -8,7 +8,7 @@ use crate::{
 #[inline]
 pub(crate) fn clear_button(_: &App) -> Button {
     Button::new("clean")
-        .icon(Icon::new(IconName::CircleX))
+        .icon(Icon::new(IconName::Close))
         .text()
         .xsmall()
         .tab_stop(false)
