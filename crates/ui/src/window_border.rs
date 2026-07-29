@@ -125,14 +125,14 @@ impl RenderOnce for WindowBorder {
             Hsla {
                 h: 0.,
                 s: 0.,
-                l: 0.11,
+                l: 0.2,
                 a: 1.0,
             }
         } else {
             Hsla {
                 h: 0.,
                 s: 0.,
-                l: 0.96,
+                l: 0.8,
                 a: 1.0,
             }
         };
