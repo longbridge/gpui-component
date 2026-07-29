@@ -71,14 +71,10 @@ impl ScrollableMask {
     /// Hand wheel events over to the parent scroller at the scroll edges,
     /// like CSS `overscroll-behavior: auto` (scroll chaining).
     ///
-    /// By default the mask consumes every axis-dominant wheel event, even
-    /// when the content is already at its scroll edge (or does not overflow
-    /// at all). That is the right behavior for a horizontal mask: letting a
-    /// horizontal delta bubble would get it mapped onto a vertical-only
-    /// ancestor scroller by gpui's own wheel listener (see #2468). For a
-    /// vertical mask nested in a vertical page, chaining is usually wanted
-    /// instead: consume the event only while the content can still move,
-    /// and let it bubble to the ancestor once the edge is reached.
+    /// By default the mask consumes every axis-dominant wheel event, even at
+    /// the scroll edge. Keep that default for horizontal masks: a bubbled
+    /// horizontal delta would get mapped onto a vertical-only ancestor
+    /// scroller by gpui's own wheel listener (see #2468).
     pub fn chain_at_edge(mut self) -> Self {
         self.chain_at_edge = true;
         self
@@ -213,14 +209,11 @@ impl Element for ScrollableMask {
                     }
 
                     if chain_at_edge {
-                        // Chain mode compares clamped offsets: when an event
-                        // bubbles at the edge, the scrolled element's own
-                        // bubble-phase listener still pushes the shared offset
-                        // beyond the edge unclamped (the div only clamps on
-                        // prepaint). Clamping the current offset too keeps
-                        // that transient overscroll from reading as "room to
-                        // scroll", which would swallow every other event of a
-                        // fling at the edge.
+                        // The current offset must be clamped too: after a
+                        // bubbled event, the scrolled element's own listener
+                        // pushes the shared offset beyond the edge unclamped
+                        // (the div only clamps on prepaint), and that
+                        // transient overscroll would read as "room to scroll".
                         let max_offset = scroll_handle.max_offset();
                         let (current, axis_delta, axis_max) = if is_horizontal {
                             (offset.x, delta.x, max_offset.x)
@@ -231,8 +224,7 @@ impl Element for ScrollableMask {
                         let current = current.clamp(-axis_max, px(0.));
                         let new_offset = (current + axis_delta).clamp(-axis_max, px(0.));
                         if new_offset == current {
-                            // At the edge or no overflow: let the event
-                            // bubble to the parent scroller.
+                            // At the edge or no overflow: bubble to the parent.
                             return;
                         }
 
@@ -480,11 +472,8 @@ mod tests {
         assert_eq!(scroll_handle.offset().x, px(-40.));
     }
 
-    /// Reproduces the DataTable case: a vertically scrollable element with
-    /// its own scrollbar nested inside an outer vertical scroller. Without a
-    /// vertical mask, gpui's wheel listener scrolls the inner element but
-    /// never stops propagation, so the outer scroller moves on the same
-    /// event.
+    /// Reproduces the DataTable case: a vertically scrollable element
+    /// nested inside an outer vertical scroller.
     struct NestedVerticalScrollTest {
         outer_handle: ScrollHandle,
         inner_handle: ScrollHandle,
@@ -647,11 +636,9 @@ mod tests {
             _ = window.draw(cx);
         });
 
-        // Two wheel events at the edge with no redraw in between. The first
-        // one bubbles, and the inner element's own (unclamped) bubble
-        // listener pushes the shared offset beyond the edge. The mask must
-        // compare clamped offsets, or the snap-back would read as "room to
-        // scroll" and swallow the second event.
+        // Two wheel events at the edge with no redraw in between: the first
+        // one leaves the inner offset beyond the edge unclamped, which must
+        // not read as "room to scroll" and swallow the second event.
         for _ in 0..2 {
             cx.simulate_event(ScrollWheelEvent {
                 position: point(px(10.), px(10.)),
@@ -730,8 +717,7 @@ mod tests {
             ..Default::default()
         });
 
-        // The inner scroller consumes the event; the outer list must not
-        // scroll on the same event.
+        // The inner scroller consumes the event; the list must not scroll.
         assert_eq!(scroll_handle.offset().y, px(-40.));
         let scroll_top = list_state.logical_scroll_top();
         assert_eq!((scroll_top.item_ix, scroll_top.offset_in_item), (0, px(0.)));

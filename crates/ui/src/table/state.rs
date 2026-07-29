@@ -2380,12 +2380,10 @@ where
                         Axis::Horizontal,
                         &self.horizontal_scroll_handle,
                     ))
-                    // Keep vertical wheel scrolling from also scrolling an
-                    // ancestor scroll container. `chain_at_edge` hands the
-                    // event back to the ancestor once the table hits its
-                    // top/bottom edge. Skipped when the table is empty: the
-                    // `uniform_list` is not rendered then, so the handle's
-                    // offset and `max_offset` are stale.
+                    // Keep vertical wheel scrolling from leaking into an
+                    // ancestor scroller. Skipped when the table is empty:
+                    // the `uniform_list` is not rendered then, so the
+                    // handle's offset and `max_offset` are stale.
                     .when(rows_count > 0, |this| {
                         this.child(
                             ScrollableMask::new(
