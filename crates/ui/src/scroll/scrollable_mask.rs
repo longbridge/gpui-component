@@ -50,10 +50,15 @@ pub(crate) fn horizontal_scroll_area(
 /// wins over ancestor scrollers (e.g. `gpui::list`) that register their
 /// listeners after their children; events dominated by the other axis keep
 /// propagating. The mask stays inert while occluded.
+///
+/// At the scroll edge the two axes differ, matching platform scrollers:
+/// a vertical mask hands the event over to the ancestor scroller (CSS
+/// `overscroll-behavior: auto` chaining), while a horizontal mask keeps
+/// consuming it — a bubbled horizontal delta would get mapped onto a
+/// vertical-only ancestor by gpui's own wheel listener (see #2468).
 pub struct ScrollableMask {
     axis: Axis,
     scroll_handle: ScrollHandle,
-    chain_at_edge: bool,
     debug: Option<Hsla>,
 }
 
@@ -63,21 +68,8 @@ impl ScrollableMask {
         Self {
             scroll_handle: scroll_handle.clone(),
             axis,
-            chain_at_edge: false,
             debug: None,
         }
-    }
-
-    /// Hand wheel events over to the parent scroller at the scroll edges,
-    /// like CSS `overscroll-behavior: auto` (scroll chaining).
-    ///
-    /// By default the mask consumes every axis-dominant wheel event, even at
-    /// the scroll edge. Keep that default for horizontal masks: a bubbled
-    /// horizontal delta would get mapped onto a vertical-only ancestor
-    /// scroller by gpui's own wheel listener (see #2468).
-    pub fn chain_at_edge(mut self) -> Self {
-        self.chain_at_edge = true;
-        self
     }
 
     /// Enable the debug border, to show the mask bounds.
@@ -176,7 +168,6 @@ impl Element for ScrollableMask {
             window.on_mouse_event({
                 let view_id = window.current_view();
                 let scroll_handle = self.scroll_handle.clone();
-                let chain_at_edge = self.chain_at_edge;
                 let hitbox_id = hitbox.id;
 
                 move |event: &ScrollWheelEvent, phase, window, cx| {
@@ -208,31 +199,21 @@ impl Element for ScrollableMask {
                         }
                     }
 
-                    if chain_at_edge {
+                    if !is_horizontal {
                         // The current offset must be clamped too: after a
                         // bubbled event, the scrolled element's own listener
                         // pushes the shared offset beyond the edge unclamped
                         // (the div only clamps on prepaint), and that
                         // transient overscroll would read as "room to scroll".
-                        let max_offset = scroll_handle.max_offset();
-                        let (current, axis_delta, axis_max) = if is_horizontal {
-                            (offset.x, delta.x, max_offset.x)
-                        } else {
-                            (offset.y, delta.y, max_offset.y)
-                        };
-                        let axis_max = axis_max.max(px(0.));
-                        let current = current.clamp(-axis_max, px(0.));
-                        let new_offset = (current + axis_delta).clamp(-axis_max, px(0.));
+                        let axis_max = scroll_handle.max_offset().y.max(px(0.));
+                        let current = offset.y.clamp(-axis_max, px(0.));
+                        let new_offset = (current + delta.y).clamp(-axis_max, px(0.));
                         if new_offset == current {
                             // At the edge or no overflow: bubble to the parent.
                             return;
                         }
 
-                        if is_horizontal {
-                            offset.x = new_offset;
-                        } else {
-                            offset.y = new_offset;
-                        }
+                        offset.y = new_offset;
                         scroll_handle.set_offset(offset);
                         cx.notify(view_id);
                         cx.stop_propagation();
@@ -432,6 +413,30 @@ mod tests {
     }
 
     #[gpui::test]
+    fn horizontal_scroll_area_traps_wheel_at_edge(cx: &mut TestAppContext) {
+        let scroll_handle = ScrollHandle::new();
+        let list_state = ListState::new(10, ListAlignment::Top, px(0.));
+        let cx = setup_list_test(cx, &scroll_handle, &list_state, false);
+
+        // Scroll the area to its right edge (300 - 100 = 200).
+        scroll_handle.set_offset(point(px(-200.), px(0.)));
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(-40.), px(-10.))),
+            ..Default::default()
+        });
+
+        // A horizontal mask consumes even at the edge: a bubbled horizontal
+        // delta would be axis-mapped onto the vertical list (#2468).
+        let scroll_top = list_state.logical_scroll_top();
+        assert_eq!((scroll_top.item_ix, scroll_top.offset_in_item), (0, px(0.)));
+    }
+
+    #[gpui::test]
     fn horizontal_scroll_area_ignores_wheel_when_occluded(cx: &mut TestAppContext) {
         let scroll_handle = ScrollHandle::new();
         let list_state = ListState::new(10, ListAlignment::Top, px(0.));
@@ -478,7 +483,6 @@ mod tests {
         outer_handle: ScrollHandle,
         inner_handle: ScrollHandle,
         inner_content_height: Pixels,
-        chain_at_edge: bool,
     }
 
     impl Render for NestedVerticalScrollTest {
@@ -502,14 +506,7 @@ mod tests {
                                 .track_scroll(&self.inner_handle)
                                 .child(div().w_full().h(self.inner_content_height)),
                         )
-                        .child({
-                            let mask = ScrollableMask::new(Axis::Vertical, &self.inner_handle);
-                            if self.chain_at_edge {
-                                mask.chain_at_edge()
-                            } else {
-                                mask
-                            }
-                        }),
+                        .child(ScrollableMask::new(Axis::Vertical, &self.inner_handle)),
                 )
                 .child(div().w_full().h(px(400.)))
         }
@@ -520,7 +517,6 @@ mod tests {
         outer_handle: &ScrollHandle,
         inner_handle: &ScrollHandle,
         inner_content_height: Pixels,
-        chain_at_edge: bool,
     ) -> &'a mut VisualTestContext {
         let (_, cx) = cx.add_window_view({
             let outer_handle = outer_handle.clone();
@@ -529,7 +525,6 @@ mod tests {
                 outer_handle: outer_handle.clone(),
                 inner_handle: inner_handle.clone(),
                 inner_content_height,
-                chain_at_edge,
             }
         });
         cx.run_until_parked();
@@ -540,10 +535,10 @@ mod tests {
     }
 
     #[gpui::test]
-    fn vertical_mask_chain_consumes_wheel_when_scrollable(cx: &mut TestAppContext) {
+    fn vertical_mask_consumes_wheel_when_scrollable(cx: &mut TestAppContext) {
         let outer_handle = ScrollHandle::new();
         let inner_handle = ScrollHandle::new();
-        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.), true);
+        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.));
 
         cx.simulate_event(ScrollWheelEvent {
             position: point(px(10.), px(10.)),
@@ -557,10 +552,10 @@ mod tests {
     }
 
     #[gpui::test]
-    fn vertical_mask_chain_hands_off_to_parent_at_edge(cx: &mut TestAppContext) {
+    fn vertical_mask_hands_off_to_parent_at_edge(cx: &mut TestAppContext) {
         let outer_handle = ScrollHandle::new();
         let inner_handle = ScrollHandle::new();
-        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.), true);
+        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.));
 
         // Scroll the inner element to its bottom edge (300 - 60 = 240).
         inner_handle.set_offset(point(px(0.), px(-240.)));
@@ -584,11 +579,11 @@ mod tests {
     }
 
     #[gpui::test]
-    fn vertical_mask_chain_bubbles_when_no_overflow(cx: &mut TestAppContext) {
+    fn vertical_mask_bubbles_when_no_overflow(cx: &mut TestAppContext) {
         let outer_handle = ScrollHandle::new();
         let inner_handle = ScrollHandle::new();
         // Inner content (40) fits its 60px viewport: nothing to scroll.
-        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(40.), true);
+        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(40.));
 
         cx.simulate_event(ScrollWheelEvent {
             position: point(px(10.), px(10.)),
@@ -604,32 +599,10 @@ mod tests {
     }
 
     #[gpui::test]
-    fn vertical_mask_default_traps_at_edge(cx: &mut TestAppContext) {
+    fn vertical_mask_ignores_transient_overscroll(cx: &mut TestAppContext) {
         let outer_handle = ScrollHandle::new();
         let inner_handle = ScrollHandle::new();
-        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.), false);
-
-        inner_handle.set_offset(point(px(0.), px(-240.)));
-        cx.update(|window, cx| {
-            _ = window.draw(cx);
-        });
-
-        cx.simulate_event(ScrollWheelEvent {
-            position: point(px(10.), px(10.)),
-            delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
-            ..Default::default()
-        });
-
-        // Without `chain_at_edge` the mask consumes the event even at the
-        // edge — pins the existing (horizontal mask) semantics.
-        assert_eq!(outer_handle.offset().y, px(0.));
-    }
-
-    #[gpui::test]
-    fn vertical_mask_chain_ignores_transient_overscroll(cx: &mut TestAppContext) {
-        let outer_handle = ScrollHandle::new();
-        let inner_handle = ScrollHandle::new();
-        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.), true);
+        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.));
 
         inner_handle.set_offset(point(px(0.), px(-240.)));
         cx.update(|window, cx| {
@@ -680,9 +653,7 @@ mod tests {
                                     .track_scroll(&scroll_handle)
                                     .child(div().w_full().h(px(300.))),
                             )
-                            .child(
-                                ScrollableMask::new(Axis::Vertical, &scroll_handle).chain_at_edge(),
-                            )
+                            .child(ScrollableMask::new(Axis::Vertical, &scroll_handle))
                             .into_any_element()
                     } else {
                         div().w(px(100.)).h(px(40.)).into_any_element()

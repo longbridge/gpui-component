@@ -2385,13 +2385,10 @@ where
                     // the `uniform_list` is not rendered then, so the
                     // handle's offset and `max_offset` are stale.
                     .when(rows_count > 0, |this| {
-                        this.child(
-                            ScrollableMask::new(
-                                Axis::Vertical,
-                                &self.vertical_scroll_handle.0.borrow().base_handle,
-                            )
-                            .chain_at_edge(),
-                        )
+                        this.child(ScrollableMask::new(
+                            Axis::Vertical,
+                            &self.vertical_scroll_handle.0.borrow().base_handle,
+                        ))
                     })
                     .when(right_clicked_row.is_some(), |this| {
                         this.on_mouse_down_out(cx.listener(|this, e, window, cx| {
