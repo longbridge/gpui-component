@@ -1,9 +1,9 @@
 // From:
 // https://github.com/zed-industries/zed/blob/56daba28d40301ee4c05546fadb691d070b7b2b6/crates/gpui/examples/window_shadow.rs
 use gpui::{
-    AnyElement, App, CursorStyle, Decorations, Edges, Hsla, InteractiveElement as _,
-    IntoElement, MouseButton, ParentElement, Pixels, Point, RenderOnce, ResizeEdge, Size,
-    Styled as _, Tiling, Window, div, point, prelude::FluentBuilder as _, px,
+    AnyElement, App, CursorStyle, Decorations, Edges, Hsla, InteractiveElement as _, IntoElement,
+    MouseButton, ParentElement, Pixels, Point, RenderOnce, ResizeEdge, Size, Styled as _, Tiling,
+    Window, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::ActiveTheme;
@@ -11,10 +11,14 @@ use crate::ActiveTheme;
 #[cfg(not(target_os = "linux"))]
 pub(crate) const SHADOW_SIZE: Pixels = px(0.0);
 #[cfg(target_os = "linux")]
-pub(crate) const SHADOW_SIZE: Pixels = px(12.0);
+pub(crate) const SHADOW_SIZE: Pixels = px(20.0);
 const BORDER_SIZE: Pixels = px(1.0);
 /// Half-width of the resize hit band on each side of the visible frame (inner border).
 const RESIZE_HIT_SIZE: Pixels = px(4.0);
+///
+/// GPUI currently clips overflowing children to a rectangular content mask. A non-zero
+/// radius here would round the frame itself but leave child backgrounds visible in the
+/// corners, so keep the generic window wrapper square until rounded content masks exist.
 pub(crate) const BORDER_RADIUS: Pixels = px(0.0);
 
 /// Create a new window border.
@@ -116,6 +120,22 @@ impl RenderOnce for WindowBorder {
             window.set_client_inset(platform_inset);
         }
         let window_size = window.window_bounds().get_bounds().size;
+        let is_window_active = window.is_window_active();
+        let border_color = if cx.theme().is_dark() {
+            Hsla {
+                h: 0.,
+                s: 0.,
+                l: 0.2,
+                a: 1.0,
+            }
+        } else {
+            Hsla {
+                h: 0.,
+                s: 0.,
+                l: 0.8,
+                a: 1.0,
+            }
+        };
 
         div()
             .id("window-backdrop")
@@ -171,24 +191,46 @@ impl RenderOnce for WindowBorder {
                             .when(!(tiling.top || tiling.left), |div| {
                                 div.rounded_tl(BORDER_RADIUS)
                             })
-                            .border_color(cx.theme().window_border)
+                            .border_color(border_color)
                             .when(!tiling.top, |div| div.border_t(BORDER_SIZE))
                             .when(!tiling.bottom, |div| div.border_b(BORDER_SIZE))
                             .when(!tiling.left, |div| div.border_l(BORDER_SIZE))
                             .when(!tiling.right, |div| div.border_r(BORDER_SIZE))
                             .when(!tiling.is_tiled(), |div| {
-                                div.shadow(vec![gpui::BoxShadow {
-                                    color: Hsla {
-                                        h: 0.,
-                                        s: 0.,
-                                        l: 0.,
-                                        a: 0.3,
+                                let opacity = if is_window_active { 1.0 } else { 0.7 };
+                                div.shadow(vec![
+                                    // Keep the effective outer reach below SHADOW_SIZE. GPUI
+                                    // does not grow the paint bounds for blur, so a larger blur
+                                    // or offset would be visibly cut off by the window surface.
+                                    gpui::BoxShadow {
+                                        color: Hsla {
+                                            h: 0.,
+                                            s: 0.,
+                                            l: 0.,
+                                            a: 0.18 * opacity,
+                                        },
+                                        // GNOME-style ambient shadow: horizontally centered
+                                        // with only a slight downward bias.
+                                        blur_radius: px(10.),
+                                        spread_radius: px(-1.),
+                                        offset: point(px(0.0), px(2.0)),
+                                        inset: false,
                                     },
-                                    blur_radius: visual_shadow / 2.,
-                                    spread_radius: px(0.),
-                                    offset: point(px(0.0), px(0.0)),
-                                    inset: false,
-                                }])
+                                    // The contact layer adds definition without increasing the
+                                    // space between the content and the outer window bounds.
+                                    gpui::BoxShadow {
+                                        color: Hsla {
+                                            h: 0.,
+                                            s: 0.,
+                                            l: 0.,
+                                            a: 0.18 * opacity,
+                                        },
+                                        blur_radius: px(3.),
+                                        spread_radius: px(0.),
+                                        offset: point(px(0.0), px(1.0)),
+                                        inset: false,
+                                    },
+                                ])
                             }),
                     })
                     .on_mouse_move(|_e, _, cx| {
@@ -197,25 +239,17 @@ impl RenderOnce for WindowBorder {
                     .bg(gpui::transparent_black())
                     .children(self.children),
             )
-            .when(
-                matches!(decorations, Decorations::Client { .. }),
-                |this| {
-                    let Decorations::Client { tiling, .. } = decorations else {
-                        return this;
-                    };
-                    this.child(
-                        div()
-                            .absolute()
-                            .size_full()
-                            .children(resize_hit_zones(
-                                window_size,
-                                platform_inset,
-                                resize_hit_size,
-                                &tiling,
-                            )),
-                    )
-                },
-            )
+            .when(matches!(decorations, Decorations::Client { .. }), |this| {
+                let Decorations::Client { tiling, .. } = decorations else {
+                    return this;
+                };
+                this.child(div().absolute().size_full().children(resize_hit_zones(
+                    window_size,
+                    platform_inset,
+                    resize_hit_size,
+                    &tiling,
+                )))
+            })
     }
 }
 
