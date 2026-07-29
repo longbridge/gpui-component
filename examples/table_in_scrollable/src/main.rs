@@ -36,7 +36,7 @@ impl TableDelegate for MyTable {
     }
 
     fn rows_count(&self, _: &App) -> usize {
-        200
+        30
     }
 
     fn column(&self, col_ix: usize, _: &App) -> Column {
