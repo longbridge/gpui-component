@@ -220,16 +220,13 @@ impl Element for ScrollableMask {
                         return;
                     }
 
-                    if is_horizontal {
-                        offset.x += delta.x;
-                    } else {
-                        offset.y += delta.y;
-                    }
+                    offset.x += delta.x;
 
                     // NOTE: `set_offset` does not clamp (clamping happens in
-                    // the div's prepaint), so any non-zero axis-dominant delta
-                    // passes this guard — even at the scroll edge the event is
-                    // consumed rather than turned into a parent scroll.
+                    // the div's prepaint), so any non-zero horizontal-dominant
+                    // delta passes this guard — even at the scroll edge the
+                    // event is consumed rather than turned into a parent
+                    // scroll.
                     if offset != scroll_handle.offset() {
                         scroll_handle.set_offset(offset);
                         cx.notify(view_id);
