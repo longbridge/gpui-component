@@ -121,27 +121,21 @@ impl RenderOnce for WindowBorder {
         }
         let window_size = window.window_bounds().get_bounds().size;
         let is_window_active = window.is_window_active();
-        let border_opacity = if is_window_active { 1.0 } else { 0.5 };
-        let border_tint = if cx.theme().is_dark() {
+        let border_color = if cx.theme().is_dark() {
             Hsla {
                 h: 0.,
                 s: 0.,
-                l: 0.7,
-                a: 0.03 * border_opacity,
+                l: 0.11,
+                a: 1.0,
             }
         } else {
             Hsla {
                 h: 0.,
                 s: 0.,
-                l: 0.,
-                a: 0.03 * border_opacity,
+                l: 0.96,
+                a: 1.0,
             }
         };
-        // Resolve the tint against the theme's representative background up front.
-        // The painted border is fully opaque and therefore stays consistent over
-        // title bars and content with different backgrounds.
-        let mut border_color = cx.theme().tokens.background.color.blend(border_tint);
-        border_color.a = 1.0;
 
         div()
             .id("window-backdrop")
