@@ -121,20 +121,20 @@ impl RenderOnce for WindowBorder {
         }
         let window_size = window.window_bounds().get_bounds().size;
         let is_window_active = window.is_window_active();
-        let border_opacity = if is_window_active { 1.0 } else { 0.65 };
+        let border_opacity = if is_window_active { 1.0 } else { 0.55 };
         let border_color = if cx.theme().is_dark() {
             Hsla {
                 h: 0.,
                 s: 0.,
                 l: 1.,
-                a: 0.18 * border_opacity,
+                a: 0.12 * border_opacity,
             }
         } else {
             Hsla {
                 h: 0.,
                 s: 0.,
                 l: 0.,
-                a: 0.18 * border_opacity,
+                a: 0.1 * border_opacity,
             }
         };
 
