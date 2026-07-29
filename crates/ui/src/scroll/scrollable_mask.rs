@@ -50,6 +50,12 @@ pub(crate) fn horizontal_scroll_area(
 /// wins over ancestor scrollers (e.g. `gpui::list`) that register their
 /// listeners after their children; events dominated by the other axis keep
 /// propagating. The mask stays inert while occluded.
+///
+/// At the scroll edge the two axes differ, matching platform scrollers:
+/// a vertical mask hands the event over to the ancestor scroller (CSS
+/// `overscroll-behavior: auto` chaining), while a horizontal mask keeps
+/// consuming it — a bubbled horizontal delta would get mapped onto a
+/// vertical-only ancestor by gpui's own wheel listener (see #2468).
 pub struct ScrollableMask {
     axis: Axis,
     scroll_handle: ScrollHandle,
@@ -193,16 +199,34 @@ impl Element for ScrollableMask {
                         }
                     }
 
-                    if is_horizontal {
-                        offset.x += delta.x;
-                    } else {
-                        offset.y += delta.y;
+                    if !is_horizontal {
+                        // The current offset must be clamped too: after a
+                        // bubbled event, the scrolled element's own listener
+                        // pushes the shared offset beyond the edge unclamped
+                        // (the div only clamps on prepaint), and that
+                        // transient overscroll would read as "room to scroll".
+                        let axis_max = scroll_handle.max_offset().y.max(px(0.));
+                        let current = offset.y.clamp(-axis_max, px(0.));
+                        let new_offset = (current + delta.y).clamp(-axis_max, px(0.));
+                        if new_offset == current {
+                            // At the edge or no overflow: bubble to the parent.
+                            return;
+                        }
+
+                        offset.y = new_offset;
+                        scroll_handle.set_offset(offset);
+                        cx.notify(view_id);
+                        cx.stop_propagation();
+                        return;
                     }
 
+                    offset.x += delta.x;
+
                     // NOTE: `set_offset` does not clamp (clamping happens in
-                    // the div's prepaint), so any non-zero axis-dominant delta
-                    // passes this guard — even at the scroll edge the event is
-                    // consumed rather than turned into a parent scroll.
+                    // the div's prepaint), so any non-zero horizontal-dominant
+                    // delta passes this guard — even at the scroll edge the
+                    // event is consumed rather than turned into a parent
+                    // scroll.
                     if offset != scroll_handle.offset() {
                         scroll_handle.set_offset(offset);
                         cx.notify(view_id);
@@ -386,6 +410,30 @@ mod tests {
     }
 
     #[gpui::test]
+    fn horizontal_scroll_area_traps_wheel_at_edge(cx: &mut TestAppContext) {
+        let scroll_handle = ScrollHandle::new();
+        let list_state = ListState::new(10, ListAlignment::Top, px(0.));
+        let cx = setup_list_test(cx, &scroll_handle, &list_state, false);
+
+        // Scroll the area to its right edge (300 - 100 = 200).
+        scroll_handle.set_offset(point(px(-200.), px(0.)));
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(-40.), px(-10.))),
+            ..Default::default()
+        });
+
+        // A horizontal mask consumes even at the edge: a bubbled horizontal
+        // delta would be axis-mapped onto the vertical list (#2468).
+        let scroll_top = list_state.logical_scroll_top();
+        assert_eq!((scroll_top.item_ix, scroll_top.offset_in_item), (0, px(0.)));
+    }
+
+    #[gpui::test]
     fn horizontal_scroll_area_ignores_wheel_when_occluded(cx: &mut TestAppContext) {
         let scroll_handle = ScrollHandle::new();
         let list_state = ListState::new(10, ListAlignment::Top, px(0.));
@@ -424,5 +472,222 @@ mod tests {
         });
 
         assert_eq!(scroll_handle.offset().x, px(-40.));
+    }
+
+    /// Reproduces the DataTable case: a vertically scrollable element
+    /// nested inside an outer vertical scroller.
+    struct NestedVerticalScrollTest {
+        outer_handle: ScrollHandle,
+        inner_handle: ScrollHandle,
+        inner_content_height: Pixels,
+    }
+
+    impl Render for NestedVerticalScrollTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .id("outer")
+                .w(px(100.))
+                .h(px(100.))
+                .overflow_y_scroll()
+                .track_scroll(&self.outer_handle)
+                .child(
+                    div()
+                        .relative()
+                        .w_full()
+                        .h(px(60.))
+                        .child(
+                            div()
+                                .id("inner")
+                                .size_full()
+                                .overflow_y_scroll()
+                                .track_scroll(&self.inner_handle)
+                                .child(div().w_full().h(self.inner_content_height)),
+                        )
+                        .child(ScrollableMask::new(Axis::Vertical, &self.inner_handle)),
+                )
+                .child(div().w_full().h(px(400.)))
+        }
+    }
+
+    fn setup_nested_vertical_test<'a>(
+        cx: &'a mut TestAppContext,
+        outer_handle: &ScrollHandle,
+        inner_handle: &ScrollHandle,
+        inner_content_height: Pixels,
+    ) -> &'a mut VisualTestContext {
+        let (_, cx) = cx.add_window_view({
+            let outer_handle = outer_handle.clone();
+            let inner_handle = inner_handle.clone();
+            move |_, _| NestedVerticalScrollTest {
+                outer_handle: outer_handle.clone(),
+                inner_handle: inner_handle.clone(),
+                inner_content_height,
+            }
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+        cx
+    }
+
+    #[gpui::test]
+    fn vertical_mask_consumes_wheel_when_scrollable(cx: &mut TestAppContext) {
+        let outer_handle = ScrollHandle::new();
+        let inner_handle = ScrollHandle::new();
+        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.));
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        // The inner scroller consumes the event; the outer one must not move.
+        assert_eq!(inner_handle.offset().y, px(-40.));
+        assert_eq!(outer_handle.offset().y, px(0.));
+    }
+
+    #[gpui::test]
+    fn vertical_mask_hands_off_to_parent_at_edge(cx: &mut TestAppContext) {
+        let outer_handle = ScrollHandle::new();
+        let inner_handle = ScrollHandle::new();
+        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.));
+
+        // Scroll the inner element to its bottom edge (300 - 60 = 240).
+        inner_handle.set_offset(point(px(0.), px(-240.)));
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        // At the edge the event bubbles: the outer scroller takes over.
+        assert_eq!(outer_handle.offset().y, px(-40.));
+        // The inner offset is clamped back to the edge on the next prepaint.
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+        assert_eq!(inner_handle.offset().y, px(-240.));
+    }
+
+    #[gpui::test]
+    fn vertical_mask_bubbles_when_no_overflow(cx: &mut TestAppContext) {
+        let outer_handle = ScrollHandle::new();
+        let inner_handle = ScrollHandle::new();
+        // Inner content (40) fits its 60px viewport: nothing to scroll.
+        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(40.));
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        assert_eq!(outer_handle.offset().y, px(-40.));
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+        assert_eq!(inner_handle.offset().y, px(0.));
+    }
+
+    #[gpui::test]
+    fn vertical_mask_ignores_transient_overscroll(cx: &mut TestAppContext) {
+        let outer_handle = ScrollHandle::new();
+        let inner_handle = ScrollHandle::new();
+        let cx = setup_nested_vertical_test(cx, &outer_handle, &inner_handle, px(300.));
+
+        inner_handle.set_offset(point(px(0.), px(-240.)));
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        // Two wheel events at the edge with no redraw in between: the first
+        // one leaves the inner offset beyond the edge unclamped, which must
+        // not read as "room to scroll" and swallow the second event.
+        for _ in 0..2 {
+            cx.simulate_event(ScrollWheelEvent {
+                position: point(px(10.), px(10.)),
+                delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+                ..Default::default()
+            });
+        }
+
+        assert_eq!(outer_handle.offset().y, px(-80.));
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+        assert_eq!(inner_handle.offset().y, px(-240.));
+    }
+
+    /// The vertical mask nested in a `gpui::list` ancestor: the list
+    /// registers its wheel listener after its items paint, so only a
+    /// capture-phase mask can stop it from scrolling on the same event.
+    struct ListWithVerticalAreaTest {
+        scroll_handle: ScrollHandle,
+        list_state: ListState,
+    }
+
+    impl Render for ListWithVerticalAreaTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let scroll_handle = self.scroll_handle.clone();
+            div().w(px(100.)).h(px(100.)).child(
+                list(self.list_state.clone(), move |ix, _, _| {
+                    if ix == 0 {
+                        div()
+                            .relative()
+                            .w_full()
+                            .h(px(60.))
+                            .child(
+                                div()
+                                    .id("inner")
+                                    .size_full()
+                                    .overflow_y_scroll()
+                                    .track_scroll(&scroll_handle)
+                                    .child(div().w_full().h(px(300.))),
+                            )
+                            .child(ScrollableMask::new(Axis::Vertical, &scroll_handle))
+                            .into_any_element()
+                    } else {
+                        div().w(px(100.)).h(px(40.)).into_any_element()
+                    }
+                })
+                .w_full()
+                .h_full(),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn vertical_mask_in_list_consumes_wheel_when_scrollable(cx: &mut TestAppContext) {
+        let scroll_handle = ScrollHandle::new();
+        let list_state = ListState::new(10, ListAlignment::Top, px(0.));
+        let (_, cx) = cx.add_window_view({
+            let scroll_handle = scroll_handle.clone();
+            let list_state = list_state.clone();
+            move |_, _| ListWithVerticalAreaTest {
+                scroll_handle: scroll_handle.clone(),
+                list_state: list_state.clone(),
+            }
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(10.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+            ..Default::default()
+        });
+
+        // The inner scroller consumes the event; the list must not scroll.
+        assert_eq!(scroll_handle.offset().y, px(-40.));
+        let scroll_top = list_state.logical_scroll_top();
+        assert_eq!((scroll_top.item_ix, scroll_top.offset_in_item), (0, px(0.)));
     }
 }

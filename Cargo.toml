@@ -19,6 +19,7 @@ members = [
     "examples/sidebar",
     "examples/text_selection",
     "examples/root_borderless",
+    "examples/table_in_scrollable",
 ]
 resolver = "2"
 

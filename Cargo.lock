@@ -8032,6 +8032,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "table_in_scrollable"
+version = "0.5.1"
+dependencies = [
+ "gpui",
+ "gpui-component",
+ "gpui_platform",
+]
+
+[[package]]
 name = "taffy"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
