@@ -126,8 +126,8 @@ impl RenderOnce for WindowBorder {
             Hsla {
                 h: 0.,
                 s: 0.,
-                l: 1.,
-                a: 0.04 * border_opacity,
+                l: 0.,
+                a: 0.12 * border_opacity,
             }
         } else {
             Hsla {
