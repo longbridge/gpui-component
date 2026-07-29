@@ -11,7 +11,7 @@ pub use bar_chart::BarChart;
 pub use candlestick_chart::CandlestickChart;
 pub use line_chart::LineChart;
 pub use pie_chart::PieChart;
-pub use radar_chart::RadarChart;
+pub use radar_chart::{RadarChart, RadarLabel};
 pub use sankey_chart::{SankeyChart, SankeyLabel};
 
 use gpui::{Hsla, SharedString, TextAlign};

@@ -1,7 +1,7 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement,
-    Render, Rgba, SharedString, Styled, Window, div, linear_color_stop, linear_gradient,
-    prelude::FluentBuilder, px,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, FontWeight, Hsla, IntoElement,
+    ParentElement, Render, Rgba, SharedString, Styled, Window, div, linear_color_stop,
+    linear_gradient, prelude::FluentBuilder, px,
 };
 use gpui_component::{
     ActiveTheme, StyledExt,
@@ -361,11 +361,48 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Radar Chart - Dots",
                         RadarChart::new(self.radar_devices.clone())
-                            .label(|d| d.month.clone())
+                            // An element label: the dimension name over a grade badge.
+                            .label({
+                                let muted_foreground = cx.theme().muted_foreground;
+                                let accent = cx.theme().chart_2;
+
+                                move |d: &RadarDevice| {
+                                    let grade = match d.desktop {
+                                        v if v >= 250. => "A",
+                                        v if v >= 200. => "B",
+                                        _ => "C",
+                                    };
+
+                                    v_flex()
+                                        .items_center()
+                                        .gap_1()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(muted_foreground)
+                                                .child(d.month.clone()),
+                                        )
+                                        .child(
+                                            h_flex()
+                                                .justify_center()
+                                                .size_6()
+                                                .rounded_full()
+                                                .bg(accent.opacity(0.1))
+                                                .text_sm()
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(accent)
+                                                .child(grade),
+                                        )
+                                        .into_any_element()
+                                }
+                            })
                             .value(|d| d.desktop)
                             .name("Desktop")
                             .stroke(cx.theme().chart_2)
                             .dot()
+                            // A badge label is far taller than a line of text, so
+                            // pull the ring in to leave it room.
+                            .outer_radius(64.)
                             .id("radar-chart-dots"),
                         true,
                         cx,

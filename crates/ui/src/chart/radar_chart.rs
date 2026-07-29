@@ -4,8 +4,8 @@ use std::{
 };
 
 use gpui::{
-    AnyElement, App, Background, Bounds, ElementId, Hsla, IntoElement, Pixels, Point, SharedString,
-    TextAlign, Window, point, px,
+    AnyElement, App, AvailableSpace, Background, Bounds, ElementId, Hsla, IntoElement, Pixels,
+    Point, SharedString, TextAlign, Window, point, px,
 };
 use gpui_component_macros::IntoPlot;
 use num_traits::{Num, ToPrimitive, Zero};
@@ -30,6 +30,41 @@ const DEFAULT_LABEL_GAP: f32 = 10.;
 /// The default number of concentric grid rings.
 const DEFAULT_GRID_LEVELS: usize = 4;
 
+/// The label of one radar dimension, returned by [`RadarChart::label`].
+pub enum RadarLabel {
+    /// Plain text, drawn by the plot's own text layer: honors
+    /// [`RadarChart::label_color`] and supplies the tooltip title.
+    Text(SharedString),
+    /// A custom element, measured at its natural size and anchored like a text
+    /// label. [`RadarChart::label_color`] does not apply, and it supplies no
+    /// tooltip title.
+    Element(AnyElement),
+}
+
+impl From<&'static str> for RadarLabel {
+    fn from(text: &'static str) -> Self {
+        Self::Text(text.into())
+    }
+}
+
+impl From<String> for RadarLabel {
+    fn from(text: String) -> Self {
+        Self::Text(text.into())
+    }
+}
+
+impl From<SharedString> for RadarLabel {
+    fn from(text: SharedString) -> Self {
+        Self::Text(text)
+    }
+}
+
+impl From<AnyElement> for RadarLabel {
+    fn from(element: AnyElement) -> Self {
+        Self::Element(element)
+    }
+}
+
 /// A radar (spider) chart.
 ///
 /// Each datum is one dimension (a spoke), placed clockwise around the center
@@ -46,7 +81,11 @@ where
     strokes: Vec<Hsla>,
     fills: Vec<Background>,
     names: Vec<SharedString>,
-    label: Option<Rc<dyn Fn(&T) -> SharedString + 'static>>,
+    label: Option<Rc<dyn Fn(&T) -> RadarLabel + 'static>>,
+    /// The text of each dimension's label, resolved once per frame in `prepaint`;
+    /// element labels leave `None`. Read by `paint` (to draw them) and `tooltip`
+    /// (as the title), so the label closure runs once per dimension per frame.
+    label_texts: Vec<Option<SharedString>>,
     label_color: Option<Hsla>,
     label_gap: f32,
     max_value: Option<Y>,
@@ -72,6 +111,7 @@ where
             fills: vec![],
             names: vec![],
             label: None,
+            label_texts: vec![],
             label_color: None,
             label_gap: DEFAULT_LABEL_GAP,
             max_value: None,
@@ -127,13 +167,33 @@ where
         self
     }
 
-    /// Set the label text for each dimension, shown outside the outer ring.
-    pub fn label(mut self, label: impl Fn(&T) -> SharedString + 'static) -> Self {
-        self.label = Some(Rc::new(label));
+    /// Set the label for each dimension, shown outside the outer ring.
+    ///
+    /// Return a string for a plain text label, or `element.into_any_element()`
+    /// for a custom one; see [`RadarLabel`] for how the two differ.
+    ///
+    /// ```ignore
+    /// RadarChart::new(data).label(|d| d.month.clone())
+    ///
+    /// RadarChart::new(data).label(|d| {
+    ///     v_flex()
+    ///         .items_center()
+    ///         .child(Icon::new(IconName::Star).xsmall())
+    ///         .child(d.month.clone())
+    ///         .into_any_element()
+    /// })
+    /// ```
+    pub fn label<L>(mut self, label: impl Fn(&T) -> L + 'static) -> Self
+    where
+        L: Into<RadarLabel> + 'static,
+    {
+        self.label = Some(Rc::new(move |d| label(d).into()));
         self
     }
 
-    /// Set the label text color (defaults to `cx.theme().muted_foreground`).
+    /// Set the text label color (defaults to `cx.theme().muted_foreground`).
+    ///
+    /// Element labels style themselves; this does not apply to them.
     pub fn label_color(mut self, color: impl Into<Hsla>) -> Self {
         self.label_color = Some(color.into());
         self
@@ -209,6 +269,30 @@ where
         }
     }
 
+    /// Where the label of dimension `ix` attaches, in bounds-relative coordinates,
+    /// plus the outward radial direction at that dimension (a unit vector).
+    ///
+    /// The anchor sits on the label ring at the dimension's angle; callers offset
+    /// their own box from it along `direction`. Shared by `prepaint` and `paint`
+    /// so element and text labels land in the same place.
+    fn label_anchor(
+        &self,
+        ix: usize,
+        outer_radius: f32,
+        bounds: &Bounds<Pixels>,
+    ) -> (Point<f32>, Point<f32>) {
+        let label_radius = outer_radius + self.label_gap;
+        let angle = ix as f32 * TAU / self.data.len() as f32 - HALF_PI;
+        let direction = point(angle.cos(), angle.sin());
+
+        let anchor = point(
+            bounds.size.width.as_f32() / 2. + label_radius * direction.x,
+            bounds.size.height.as_f32() / 2. + label_radius * direction.y,
+        );
+
+        (anchor, direction)
+    }
+
     /// Build the radius scale from the center to the outer ring.
     ///
     /// The domain includes zero so non-negative data starts at the center.
@@ -252,6 +336,61 @@ impl<T, Y> Plot for RadarChart<T, Y>
 where
     Y: Clone + Copy + PartialOrd + Num + ToPrimitive + Sealed + 'static,
 {
+    /// Resolve every dimension's label, keeping the text ones for `paint` and
+    /// laying out the element ones here (measuring is illegal in `paint`).
+    fn prepaint(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Vec<AnyElement> {
+        self.label_texts.clear();
+
+        // Same guard as `paint`: without a series nothing is drawn at all.
+        let n = self.data.len();
+        if n == 0 || self.values.is_empty() {
+            return vec![];
+        }
+        let Some(label_fn) = self.label.clone() else {
+            return vec![];
+        };
+
+        let outer_radius = self.resolve_outer_radius(&bounds);
+        let mut texts = Vec::with_capacity(n);
+        let mut elements = vec![];
+
+        for (ix, d) in self.data.iter().enumerate() {
+            match label_fn(d) {
+                RadarLabel::Text(text) => texts.push(Some(text)),
+                RadarLabel::Element(mut element) => {
+                    texts.push(None);
+
+                    // Only `AvailableSpace::Definite` makes text wrap, so this
+                    // measures the label at its natural, unwrapped size.
+                    let size = element.layout_as_root(AvailableSpace::min_size(), window, cx);
+                    let (anchor, direction) = self.label_anchor(ix, outer_radius, &bounds);
+
+                    // Push the box radially outward until its inner edge meets the
+                    // anchor, so a tall label clears the ring instead of straddling
+                    // it. Reduces to "centered on the anchor" across that axis when
+                    // the dimension is square-on to it.
+                    let origin = bounds.origin
+                        + point(
+                            px(anchor.x + (direction.x - 1.) * size.width.as_f32() / 2.),
+                            px(anchor.y + (direction.y - 1.) * size.height.as_f32() / 2.),
+                        );
+
+                    element.prepaint_at(origin, window, cx);
+                    elements.push(element);
+                }
+            }
+        }
+
+        self.label_texts = texts;
+
+        elements
+    }
+
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
         let n = self.data.len();
         if n == 0 || self.values.is_empty() {
@@ -319,35 +458,37 @@ where
             line.paint(&bounds, window);
         }
 
-        // Draw dimension labels outside the outer ring (only when `label` is set).
-        let Some(label_fn) = self.label.as_ref() else {
-            return;
-        };
-
-        let label_radius = outer_radius + self.label_gap;
+        // Draw the text labels outside the outer ring; `prepaint` resolved them and
+        // already placed the element ones.
         let label_color = self.label_color.unwrap_or(cx.theme().muted_foreground);
+        let labels = self
+            .label_texts
+            .iter()
+            .enumerate()
+            .filter_map(|(ix, text)| {
+                let text = text.clone()?;
+                let (anchor, direction) = self.label_anchor(ix, outer_radius, &bounds);
 
-        let labels = self.data.iter().enumerate().map(|(i, d)| {
-            let angle = i as f32 * angle_step - HALF_PI;
-            let dx = label_radius * angle.cos();
-            let dy = label_radius * angle.sin();
-            // Labels on the right are left-aligned, on the left right-aligned,
-            // and near the vertical axis centered.
-            let align = if dx > 1. {
-                TextAlign::Left
-            } else if dx < -1. {
-                TextAlign::Right
-            } else {
-                TextAlign::Center
-            };
+                // Labels on the right are left-aligned, on the left right-aligned,
+                // and near the vertical axis centered. `direction` is a unit vector,
+                // so the epsilon only absorbs float noise at 12 and 6 o'clock.
+                let align = if direction.x > 1e-3 {
+                    TextAlign::Left
+                } else if direction.x < -1e-3 {
+                    TextAlign::Right
+                } else {
+                    TextAlign::Center
+                };
 
-            Text::new(
-                label_fn(d),
-                point(px(center_x + dx), px(center_y + dy - TEXT_SIZE / 2.)),
-                label_color,
-            )
-            .align(align)
-        });
+                Some(
+                    Text::new(
+                        text,
+                        point(px(anchor.x), px(anchor.y - TEXT_SIZE / 2.)),
+                        label_color,
+                    )
+                    .align(align),
+                )
+            });
 
         PlotLabel::new(labels.collect()).paint(&bounds, window, cx);
     }
@@ -413,8 +554,9 @@ where
                         .fill(self.series_stroke(i, cx))
                 }));
 
-        if let Some(label_fn) = self.label.as_ref() {
-            tooltip = tooltip.title(label_fn(d));
+        // Filled by `prepaint`, which runs first; element labels leave no title.
+        if let Some(title) = self.label_texts.get(state.index).cloned().flatten() {
+            tooltip = tooltip.title(title);
         }
 
         // One row per series: swatch + label + value.
@@ -485,6 +627,21 @@ mod tests {
 
         let values = (chart.values[0](&data[0]), chart.values[1](&data[0]));
         assert_eq!(values, (80., 60.));
+    }
+
+    /// Every string form the `label` closure may return lands on the text path,
+    /// which is what keeps `label_color` and the tooltip title working.
+    #[test]
+    fn test_radar_label_from_text() {
+        let labels = [
+            RadarLabel::from("Sales"),
+            RadarLabel::from("Sales".to_string()),
+            RadarLabel::from(SharedString::from("Sales")),
+        ];
+
+        for label in labels {
+            assert!(matches!(label, RadarLabel::Text(text) if text == "Sales"));
+        }
     }
 
     #[test]

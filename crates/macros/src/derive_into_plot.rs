@@ -35,9 +35,14 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
 
         impl #impl_generics gpui::Element for #type_name #type_generics #where_clause {
             type RequestLayoutState = ();
-            // Carries the hitbox used for occlusion-aware hover detection and the
-            // prepainted tooltip overlay (if any) from `prepaint` to `paint`.
-            type PrepaintState = (Option<gpui::Hitbox>, Option<gpui::AnyElement>);
+            // Carries the hitbox used for occlusion-aware hover detection, the plot's
+            // prepainted child elements and the prepainted tooltip overlay (if any)
+            // from `prepaint` to `paint`.
+            type PrepaintState = (
+                Option<gpui::Hitbox>,
+                Vec<gpui::AnyElement>,
+                Option<gpui::AnyElement>,
+            );
 
             fn id(&self) -> Option<gpui::ElementId> {
                 // `Some` opts the plot in to interactive tooltips; `None` (the default)
@@ -73,9 +78,14 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                 window: &mut gpui::Window,
                 cx: &mut gpui::App,
             ) -> Self::PrepaintState {
+                // Child elements must be laid out here: `layout_as_root` / `prepaint_at`
+                // are prepaint-only. Above the early return below, so plots without an
+                // id still get their children.
+                let children = <Self as Plot>::prepaint(self, bounds, window, cx);
+
                 // No id => tooltips disabled => behave exactly like a non-interactive plot.
                 let Some(global_id) = global_id else {
-                    return (None, None);
+                    return (None, children, None);
                 };
 
                 // The hitbox lets the mouse handler hit-test with occlusion awareness:
@@ -109,7 +119,7 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
                     Some(overlay)
                 })();
 
-                (Some(hitbox), overlay)
+                (Some(hitbox), children, overlay)
             }
 
             fn paint(
@@ -124,7 +134,12 @@ pub fn derive_into_plot(input: TokenStream) -> TokenStream {
             ) {
                 <Self as Plot>::paint(self, bounds, window, cx);
 
-                let (hitbox, overlay) = prepaint;
+                let (hitbox, children, overlay) = prepaint;
+
+                // Child elements (e.g. element labels) paint above the plot graphics.
+                for child in children.iter_mut() {
+                    child.paint(window, cx);
+                }
 
                 if let (Some(global_id), Some(hitbox)) = (global_id, hitbox.as_ref()) {
                     // Record the cursor position into element-local state on every move so the
