@@ -15,6 +15,7 @@ pub trait ContextMenuExt: InteractiveElement + ParentElement + Styled {
     ///
     /// This will changed the element to be `relative` positioned, and add a child `ContextMenu` element.
     /// Because the `ContextMenu` element is positioned `absolute`, it will not affect the layout of the parent element.
+    #[track_caller]
     fn context_menu(
         mut self,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
@@ -22,14 +23,15 @@ pub trait ContextMenuExt: InteractiveElement + ParentElement + Styled {
     where
         Self: Sized,
     {
-        // Generate a unique ID based on the element's memory address to ensure
-        // each context menu has its own state and doesn't share with others
+        // The ID must be stable across renders, otherwise the element state
+        // (open menu) is lost on every re-render.
+        let caller = std::panic::Location::caller();
         let id = self
             .interactivity()
             .element_id
             .clone()
-            .map(|id| format!("context-menu-{:?}", id))
-            .unwrap_or_else(|| format!("context-menu-{:p}", &self as *const _));
+            .map(|id| ElementId::Name(format!("context-menu-{:?}", id).into()))
+            .unwrap_or_else(|| ElementId::CodeLocation(*caller));
         ContextMenu::new(id, self).menu(f)
     }
 }
@@ -277,6 +279,18 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                         && event.button == MouseButton::Right
                         && hitbox.is_hovered(window)
                     {
+                        // Capture the focused element to restore focus to on dismiss.
+                        // If focus is still on the previous menu, keep its action context.
+                        let previous_focus_handle = window.focused(cx).and_then(|focused| {
+                            let shared_state = shared_state.borrow();
+                            match shared_state.menu_view.as_ref() {
+                                Some(menu) if menu.read(cx).focus_handle == focused => {
+                                    menu.read(cx).action_context.clone()
+                                }
+                                _ => Some(focused),
+                            }
+                        });
+
                         {
                             let mut shared_state = shared_state.borrow_mut();
                             // Clear any existing menu view to allow immediate replacement
@@ -297,6 +311,9 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                                         return menu;
                                     };
                                     build(menu, window, cx)
+                                });
+                                menu.update(cx, |menu, cx| {
+                                    menu.set_action_context(previous_focus_handle, cx);
                                 });
 
                                 // Set up the subscription for dismiss handling
