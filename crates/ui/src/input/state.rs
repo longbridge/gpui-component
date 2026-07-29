@@ -686,6 +686,20 @@ impl InputState {
         self
     }
 
+    /// Toggle the clickable breakpoint gutter at runtime (dots left of the
+    /// line numbers). Requires line numbers to be shown.
+    pub fn set_breakpoints_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.breakpoints_enabled != enabled {
+            self.breakpoints_enabled = enabled;
+            cx.notify();
+        }
+    }
+
+    /// Whether the clickable breakpoint gutter is currently drawn.
+    pub fn is_breakpoints_enabled(&self) -> bool {
+        self.breakpoints_enabled
+    }
+
     /// The current gutter breakpoint lines (0-based buffer rows).
     pub fn breakpoints(&self) -> &std::collections::HashSet<usize> {
         &self.breakpoints
