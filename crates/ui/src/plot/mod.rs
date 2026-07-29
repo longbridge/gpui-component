@@ -21,6 +21,26 @@ pub use label::PlotLabel;
 use tooltip::TooltipState;
 
 pub trait Plot: IntoElement {
+    /// Lay out and place the child elements this plot hosts (e.g. element labels).
+    ///
+    /// Called during the element's prepaint phase, so implementations may use
+    /// [`AnyElement::layout_as_root`] / [`AnyElement::prepaint_at`] to measure and
+    /// position children — neither is legal from [`Plot::paint`]. The returned
+    /// elements are painted right after `paint`, below the tooltip overlay.
+    ///
+    /// Runs before [`Plot::tooltip_state`] and [`Plot::tooltip`], so anything
+    /// resolved here can be reused by them.
+    ///
+    /// The default returns no children.
+    fn prepaint(
+        &mut self,
+        _bounds: Bounds<Pixels>,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Vec<AnyElement> {
+        vec![]
+    }
+
     fn paint(&mut self, bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App);
 
     /// A stable element id that enables interactive tooltip support for this plot.

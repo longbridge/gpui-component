@@ -329,6 +329,39 @@ RadarChart::new(data)
     .stroke(cx.theme().chart_2)
 ```
 
+#### 元素标签
+
+`label` 既接受字符串，也接受自定义元素。返回 `element.into_any_element()`
+即可在外圈周围渲染任意内容——图标、多行、按维度换色都可以。
+
+```rust
+RadarChart::new(data)
+    .label({
+        let foreground = cx.theme().foreground;
+        let muted_foreground = cx.theme().muted_foreground;
+
+        move |d: &Device| {
+            v_flex()
+                .items_center()
+                .child(div().text_xs().text_color(foreground).child(d.month.clone()))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(muted_foreground)
+                        .child(format!("{:.0}", d.desktop)),
+                )
+                .into_any_element()
+        }
+    })
+    .value(|d| d.desktop)
+```
+
+每个标签按自然尺寸测量，并沿径向朝外推开，所以即使很高也不会压到外圈上。
+元素标签自带样式，因此 `.label_color()` 对它无效，也不会提供 tooltip 标题（字符串标签会）。
+
+外圈不会为标签自动让位：默认外圈半径是图表高度的 40%，所以标签比单行文字高很多时，
+需要调小 `.outer_radius()` 才能让它留在图表范围内。
+
 #### 自定义
 
 ```rust

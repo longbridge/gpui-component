@@ -343,6 +343,43 @@ RadarChart::new(data)
     .stroke(cx.theme().chart_2)
 ```
 
+#### Element Labels
+
+`label` accepts either a string or a custom element. Return
+`element.into_any_element()` to render anything you like around the outer ring —
+an icon, several lines, per-dimension colors.
+
+```rust
+RadarChart::new(data)
+    .label({
+        let foreground = cx.theme().foreground;
+        let muted_foreground = cx.theme().muted_foreground;
+
+        move |d: &Device| {
+            v_flex()
+                .items_center()
+                .child(div().text_xs().text_color(foreground).child(d.month.clone()))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(muted_foreground)
+                        .child(format!("{:.0}", d.desktop)),
+                )
+                .into_any_element()
+        }
+    })
+    .value(|d| d.desktop)
+```
+
+Each label is measured at its natural size and pushed radially outward from its
+dimension, so even a tall one clears the outer ring. Element labels style
+themselves, so `.label_color()` does not apply to them, and they supply no
+tooltip title (a string label does).
+
+The ring is not shrunk to make room: the default outer radius is 40% of the
+chart's height, so a label much taller than a line of text needs a smaller
+`.outer_radius()` to keep it inside the chart's bounds.
+
 #### Radar Chart Customization
 
 ```rust
