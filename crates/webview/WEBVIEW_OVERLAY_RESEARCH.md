@@ -4,7 +4,21 @@
 > Baseline: `gpui-wry` uses `lb-wry 0.53.3`; GPUI is based on Zed commit
 > `huacnlee/zed:gpui-webview-overlay` at `fbe67f26a3`. This document records the
 > native composition research, the implemented macOS layered-scene spike, and
-> the remaining Windows and Linux architecture.
+> the Windows architecture.
+
+## Platform Scope
+
+This implementation targets **macOS and Windows**. Linux overlay support is
+intentionally deferred and is not a completion requirement for this work.
+wry's Linux hosting differs between X11 child windows and Wayland GTK widgets;
+neither route exposes a compositable native surface that can be inserted
+between GPUI's base and overlay scenes. Supporting the same behavior would
+require substantial integration with GPUI's GTK/GDK window backend rather than
+a local WebView adapter change.
+
+The Linux analysis below is retained to explain that boundary and prevent an
+unsupported child-window or snapshot fallback from being mistaken for feature
+parity.
 
 ## Conclusion
 
@@ -23,7 +37,7 @@ The recommended end state is a GPUI **native surface slot**:
    that their GPU visual is above the WebView visual. Input is routed to the
    overlay or WebView according to GPUI hit testing.
 4. Validate the design on macOS first. Windows must use WebView2 composition
-   hosting. Linux cannot promise an implementation with the same cost.
+   hosting. Linux is outside the current implementation scope.
 
 GPUI already has a better natural split point than an arbitrary `z-index`.
 `Window::draw_roots` paints the root, calls `paint_deferred_draws`, and finally
@@ -48,7 +62,7 @@ component names as overlays.
 | --- | --- | --- | --- |
 | macOS | `WKWebView` as an `NSView` subview | **Promising; validate first** | Put WKWebView and the GPUI Metal views in an explicit sibling view/layer hierarchy; validate transparent overlays, input, and resize |
 | Windows | WebView2 controller hosted in a separate `WS_CHILD` HWND | **Unreliable; not a final design** | Fork or extend wry to use WebView2 Composition Controller and attach the WebView visual to GPUI's DirectComposition tree |
-| Linux | X11 child window or GTK `WebKitWebView` widget | X11 child window: **no**; a unified GTK tree may work | Wayland requires the window and layout to join the GTK widget tree; otherwise only a limited snapshot/offscreen fallback is possible |
+| Linux | X11 child window or GTK `WebKitWebView` widget | **Deferred; not supported by this overlay work** | Correct support requires GPUI's Linux window backend to join the GTK/GDK hierarchy; child-window and snapshot fallbacks do not provide feature parity |
 
 ## Why the Current Implementation Always Covers GPUI
 
@@ -495,7 +509,7 @@ portal handle guarantees the slot visual's lifetime.
 The first three stages prove only that WebView can display with an overlay.
 Interactive, accessible, recoverable product support requires stages 4-8 too.
 
-## Linux: GTK/WebKitGTK and Native Child-Window Constraints
+## Linux (Deferred): GTK/WebKitGTK and Native Child-Window Constraints
 
 ### Primary-source facts
 
@@ -646,9 +660,11 @@ Windows must explicitly convert unconsumed events to `SendMouseInput` or
 3. **Windows composition host:** reuse GPUI's `IDCompositionDevice` and root
    tree, create a WebView2 composition controller, and complete pointer,
    drag/drop, IME, and accessibility support.
-4. **Linux feasibility spike:** test a GTK-hosted WebKitWebView with a GPUI
-   overlay widget on X11 and Wayland separately. Promise support only after
-   live pixels and input both work; snapshots do not pass.
+
+Linux is not part of this implementation order. A future, separately scoped
+feasibility project would need to test a GTK-hosted WebKitWebView with a GPUI
+overlay widget on X11 and Wayland independently; snapshots would not qualify
+as live WebView support.
 
 Re-evaluate the unified native-embedding route if any of these occur:
 
@@ -784,5 +800,6 @@ Unit tests cover empty layers, drawable primitives, and replay.
 - macOS still needs regression testing for IME, drag/drop, accessibility,
   fullscreen, scale-factor changes, multiple windows, WebView focus, and live
   resize.
-- Windows CompositionController and Linux GTK/WebKitGTK paths are not
-  implemented. macOS success does not prove cross-platform completion.
+- Windows CompositionController runtime behavior is not yet fully validated.
+  Linux GTK/WebKitGTK support is intentionally deferred and is not used to
+  judge macOS/Windows completion.

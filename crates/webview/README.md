@@ -13,8 +13,12 @@ This is still experimental with limited features. Please file issues for bugs or
 - On macOS, applications must provide standard Edit-menu actions for Cut,
   Copy, Paste, and Select All. AppKit routes their keyboard shortcuts through
   the responder chain to either the focused WebView or GPUI.
-- Only macOS and Windows are currently supported. Windows overlay composition
-  remains future work.
+- This overlay work targets macOS and Windows. Windows support uses WebView2
+  composition hosting and is still experimental.
+- Linux overlay support is intentionally deferred. wry uses different X11 and
+  Wayland integration paths, and neither provides the compositable native
+  surface needed to place arbitrary GPUI elements above a live WebView without
+  substantially reworking GPUI's Linux GTK/GDK window backend.
 
 See [`WEBVIEW_OVERLAY_RESEARCH.md`](WEBVIEW_OVERLAY_RESEARCH.md) for the
 composition, focus, input, and platform details.
