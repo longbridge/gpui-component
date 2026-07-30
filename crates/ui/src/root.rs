@@ -535,7 +535,7 @@ impl Root {
     }
 
     fn on_action_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        let text = self.window_selected_text(cx).trim().to_string();
+        let text = self.window_selected_source(cx).trim().to_string();
         if text.is_empty() {
             cx.propagate();
             return;

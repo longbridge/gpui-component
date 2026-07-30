@@ -89,6 +89,16 @@ impl ParsedDocument {
         text
     }
 
+    /// Reconstruct the Markdown source for the current selection across all
+    /// blocks. Mirrors [`selected_text`](Self::selected_text).
+    pub(super) fn selected_source(&self) -> String {
+        let mut text = String::new();
+        for block in self.blocks.iter() {
+            text.push_str(&block.selected_source());
+        }
+        text
+    }
+
     /// Synchronously clear the selection stored in every inline state.
     ///
     /// This mirrors the [`selected_text`](Self::selected_text) traversal so the

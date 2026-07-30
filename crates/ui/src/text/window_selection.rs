@@ -364,6 +364,56 @@ impl Root {
             .join("\n")
     }
 
+    /// Like [`window_selected_text`](Self::window_selected_text), but for each
+    /// participating view that opted into `selectable_source`, collect the
+    /// Markdown *source* of its selection instead of the rendered plain text.
+    /// Views that did not opt in still contribute their rendered text, so a
+    /// window that mixes both behaves sensibly.
+    pub(crate) fn window_selected_source(&self, cx: &App) -> String {
+        let resolved = self.text_selection.resolved_points(cx);
+        let single_view = self.text_selection.single_view();
+        let anchor_scope = self.active_selection_scope();
+
+        let mut items: Vec<(Point<Pixels>, String)> = Vec::new();
+        for (id, (view, _, scope)) in self.selectable_text_views.iter() {
+            let Some(view) = view.upgrade() else { continue };
+            let state = view.read(cx);
+            let in_window_selection = resolved.is_some()
+                && state.is_selectable()
+                && *scope == anchor_scope
+                && single_view.map_or(true, |v| v == *id);
+            if !state.has_view_selection() && !in_window_selection {
+                continue;
+            }
+            let text = if state.is_selectable_source() {
+                state.selected_source()
+            } else {
+                state.selected_text()
+            };
+            if text.trim().is_empty() {
+                continue;
+            }
+            items.push((state.bounds().origin, text));
+        }
+
+        items.sort_by(|a, b| {
+            a.0.y
+                .partial_cmp(&b.0.y)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(
+                    a.0.x
+                        .partial_cmp(&b.0.x)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                )
+        });
+
+        items
+            .into_iter()
+            .map(|(_, text)| text)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Clear the window selection and all view-local selections.
     pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
         let had_window_selection = self.text_selection.anchor.is_some();

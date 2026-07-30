@@ -42,8 +42,10 @@ pub struct TextView {
     text: Option<SharedString>,
     pub(crate) state: Option<Entity<TextViewState>>,
     text_view_style: TextViewStyle,
+
     style: StyleRefinement,
     selectable: bool,
+    selectable_source: bool,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
     markdown_extensions: Arc<MarkdownExtensions>,
@@ -83,6 +85,7 @@ impl TextView {
             text_view_style: TextViewStyle::default(),
             style: StyleRefinement::default(),
             selectable: false,
+            selectable_source: false,
             scrollable: false,
             code_block_actions: None,
             markdown_extensions: Arc::default(),
@@ -99,6 +102,7 @@ impl TextView {
             style: StyleRefinement::default(),
             state: None,
             selectable: false,
+            selectable_source: false,
             scrollable: false,
             code_block_actions: None,
             markdown_extensions: Arc::default(),
@@ -115,6 +119,7 @@ impl TextView {
             style: StyleRefinement::default(),
             state: None,
             selectable: false,
+            selectable_source: false,
             scrollable: false,
             code_block_actions: None,
             markdown_extensions: Arc::default(),
@@ -130,6 +135,16 @@ impl TextView {
     /// Set the text view to be selectable, default is false.
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
+        self
+    }
+
+    /// When selectable, copy the Markdown *source* of a selection instead of
+    /// the rendered plain text. Default is false.
+    ///
+    /// With this enabled, selecting inside `**bold**` and pressing copy yields
+    /// `**bold**` (the Markdown source) rather than `bold`.
+    pub fn selectable_source(mut self, selectable_source: bool) -> Self {
+        self.selectable_source = selectable_source;
         self
     }
 
@@ -280,6 +295,7 @@ impl Element for TextView {
             state.code_block_actions = self.code_block_actions.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
+            state.selectable_source = self.selectable_source;
             state.scrollable = self.scrollable;
             state.text_view_style = self.text_view_style.clone();
 
@@ -300,7 +316,7 @@ impl Element for TextView {
             .relative()
             .on_action(move |_: &crate::input::Copy, window, cx| {
                 use crate::WindowExt as _;
-                let text = window.selected_text(cx).trim().to_string();
+                let text = window.selected_source(cx).trim().to_string();
                 if text.is_empty() {
                     cx.propagate();
                     return;
