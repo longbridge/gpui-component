@@ -95,6 +95,12 @@ impl RowsCache {
             .position(|p| p.is_entry() && p.eq_index_path(path))
     }
 
+    /// Returns the flattened position of the first item row, skipping section
+    /// headers and footers.
+    pub(crate) fn first_entry_position(&self) -> Option<usize> {
+        self.entities.iter().position(RowEntry::is_entry)
+    }
+
     /// Return prev row, if the row is the first in the first section, goes to the last row.
     ///
     /// Empty rows section are skipped.
@@ -251,6 +257,14 @@ mod tests {
                 children
             })
             .collect()
+    }
+
+    #[test]
+    fn first_entry_position_skips_section_headers() {
+        let mut row_cache = RowsCache::default();
+        row_cache.entities = Rc::new(build_entities(&[2]));
+
+        assert_eq!(row_cache.first_entry_position(), Some(1));
     }
 
     #[test]
