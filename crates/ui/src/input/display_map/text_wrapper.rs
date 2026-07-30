@@ -10,6 +10,16 @@ use sum_tree::{Bias, Dimensions, SumTree};
 
 use crate::input::{LastLayout, Point as TreeSitterPoint, RopeExt, WhitespaceIndicators};
 
+/// Controls how soft-wrapped continuation lines are indented.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WrappingIndent {
+    /// Continuation lines start flush-left at the full editor width.
+    #[default]
+    None,
+    /// Continuation lines keep the same indentation as the first line.
+    Same,
+}
+
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
 pub(crate) struct LineItem {
@@ -126,6 +136,7 @@ pub(crate) struct TextWrapper {
     font_size: Pixels,
     /// If is none, it means the text is not wrapped
     wrap_width: Option<Pixels>,
+    wrapping_indent: WrappingIndent,
     /// The lines by split \n
     pub(crate) lines: SumTree<LineItem>,
 
@@ -140,6 +151,7 @@ impl TextWrapper {
             font,
             font_size,
             wrap_width,
+            wrapping_indent: WrappingIndent::default(),
             lines: SumTree::new(&()),
             _initialized: false,
         }
@@ -221,6 +233,15 @@ impl TextWrapper {
         }
 
         self.wrap_width = wrap_width;
+        self.update_all(&self.text.clone(), cx);
+    }
+
+    pub(crate) fn set_wrapping_indent(&mut self, wrapping_indent: WrappingIndent, cx: &mut App) {
+        if wrapping_indent == self.wrapping_indent {
+            return;
+        }
+
+        self.wrapping_indent = wrapping_indent;
         self.update_all(&self.text.clone(), cx);
     }
 
