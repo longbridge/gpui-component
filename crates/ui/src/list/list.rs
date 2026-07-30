@@ -512,6 +512,7 @@ where
         let scroll_handle = self.scroll_handle.clone();
         let item_to_measure_index = rows_cache
             .position_of(&self.item_to_measure_index)
+            .or_else(|| rows_cache.first_entry_position())
             .unwrap_or(0);
 
         v_flex()

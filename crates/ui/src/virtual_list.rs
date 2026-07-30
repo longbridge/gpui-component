@@ -145,8 +145,9 @@ where
 
 /// Create a [`VirtualList`] in horizontal direction.
 ///
-/// The `item_sizes` is the size of each column,
-/// only the `width` is used, `height` is ignored and VirtualList will measure the first item height.
+/// The `item_sizes` is the size of each column. Only the `width` is used; `height` is inferred
+/// by measuring the item selected with [`VirtualList::with_item_to_measure_index`], defaulting
+/// to the first item.
 ///
 /// See also [`v_virtual_list`]
 #[inline]
@@ -425,25 +426,19 @@ impl Element for VirtualList {
                                 })
                                 .collect::<Vec<_>>();
 
-                            state.content_size = if self.axis.is_horizontal() {
-                                Size {
-                                    width: px(state
-                                        .sizes
-                                        .iter()
-                                        .map(|size| size.as_f32())
-                                        .sum::<f32>()),
-                                    height: longest_item_size.height,
-                                }
+                            if self.axis.is_horizontal() {
+                                state.content_size.width =
+                                    px(state.sizes.iter().map(|size| size.as_f32()).sum::<f32>());
                             } else {
-                                Size {
-                                    width: longest_item_size.width,
-                                    height: px(state
-                                        .sizes
-                                        .iter()
-                                        .map(|size| size.as_f32())
-                                        .sum::<f32>()),
-                                }
-                            };
+                                state.content_size.height =
+                                    px(state.sizes.iter().map(|size| size.as_f32()).sum::<f32>());
+                            }
+                        }
+
+                        if self.axis.is_horizontal() {
+                            state.content_size.height = longest_item_size.height;
+                        } else {
+                            state.content_size.width = longest_item_size.width;
                         }
 
                         (state.clone(), state)
