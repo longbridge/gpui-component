@@ -1,7 +1,11 @@
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Root, h_flex,
+    ActiveTheme as _, Root, WindowExt as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
     input::{Input, InputEvent, InputState},
+    menu::DropdownMenu as _,
+    popover::Popover,
     v_flex,
 };
 use gpui_wry::WebView;
@@ -95,6 +99,43 @@ impl Example {
             webview.back().unwrap();
         });
     }
+
+    fn show_dialog(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        window.open_dialog(cx, |dialog, _, _| {
+            dialog.title("WebView overlay dialog").child(
+                v_flex()
+                    .gap_3()
+                    .w(px(520.))
+                    .child("This modal, its translucent backdrop, text, and controls are all GPUI.")
+                    .child(
+                        div()
+                            .p_4()
+                            .rounded_lg()
+                            .border_1()
+                            .child("The native WKWebView must remain visible behind the backdrop."),
+                    )
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .child(Button::new("dialog-secondary").label("Secondary action"))
+                            .child(
+                                Button::new("dialog-primary")
+                                    .primary()
+                                    .label("Primary action"),
+                            ),
+                    ),
+            )
+        });
+        cx.notify();
+    }
+
+    fn show_notification(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        window.push_notification(
+            "This GPUI notification is rendered above the native WebView.",
+            cx,
+        );
+        cx.notify();
+    }
 }
 
 impl Focusable for Example {
@@ -104,7 +145,7 @@ impl Focusable for Example {
 }
 
 impl Render for Example {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let webview = self.webview.clone();
 
         v_flex()
@@ -115,7 +156,33 @@ impl Render for Example {
                 h_flex()
                     .gap_2()
                     .items_center()
-                    .child(Input::new(&self.address_input)),
+                    .child(Input::new(&self.address_input))
+                    .child(
+                        Popover::new("webview-overlay-proof")
+                            .trigger(Button::new("overlay-trigger").label("Overlay proof"))
+                            .w(px(320.))
+                            .child("This GPUI popover is rendered above the native WebView."),
+                    )
+                    .child(
+                        Button::new("dialog-trigger")
+                            .label("Open dialog")
+                            .on_click(cx.listener(Self::show_dialog)),
+                    )
+                    .child(
+                        Button::new("notification-trigger")
+                            .label("Notify")
+                            .on_click(cx.listener(Self::show_notification)),
+                    )
+                    .child(
+                        Button::new("popup-menu-trigger")
+                            .label("Popup menu")
+                            .dropdown_menu(|menu, _, _| {
+                                menu.label("GPUI above WebView").separator().link(
+                                    "Open GPUI Component",
+                                    "https://longbridge.github.io/gpui-component/",
+                                )
+                            }),
+                    ),
             )
             .child(
                 div()
@@ -125,6 +192,8 @@ impl Render for Example {
                     .border_color(cx.theme().border)
                     .child(webview.clone()),
             )
+            .children(Root::render_dialog_layer(window, cx))
+            .children(Root::render_notification_layer(window, cx))
     }
 }
 
@@ -138,12 +207,19 @@ fn main() {
     gpui_platform::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
         gpui_component::init(cx);
+        let window_bounds = WindowBounds::centered(size(px(800.), px(600.)), cx);
 
         cx.spawn(async move |cx| {
-            cx.open_window(WindowOptions::default(), |window, cx| {
-                let view = Example::new(window, cx);
-                cx.new(|cx| Root::new(view, window, cx))
-            })
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(window_bounds),
+                    ..Default::default()
+                },
+                |window, cx| {
+                    let view = Example::new(window, cx);
+                    cx.new(|cx| Root::new(view, window, cx))
+                },
+            )
             .expect("Failed to open window");
         })
         .detach();
