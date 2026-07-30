@@ -2,7 +2,7 @@
 
 > Research date: 2026-07-30
 > Baseline: `gpui-wry` uses `lb-wry 0.53.3`; GPUI is based on Zed commit
-> `huacnlee/zed:gpui-webview-overlay` at `fbe67f26a3`. This document records the
+> `huacnlee/zed:gpui-webview-overlay` at `ad82de04a2`. This document records the
 > native composition research, the implemented macOS layered-scene spike, and
 > the Windows architecture.
 
