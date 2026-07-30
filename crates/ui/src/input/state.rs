@@ -3048,8 +3048,11 @@ impl EntityInputHandler for InputState {
             self.ime_marked_range = Some((range.start..range.start + new_text.len()).into());
             self.selected_range = new_selected_range_utf16
                 .as_ref()
-                .map(|range_utf16| self.range_from_utf16(range_utf16))
-                .map(|new_range| new_range.start + range.start..new_range.end + range.end)
+                .map(|range_utf16| {
+                    let new_text = Rope::from(new_text);
+                    range.start + new_text.offset_utf16_to_offset(range_utf16.start)
+                        ..range.start + new_text.offset_utf16_to_offset(range_utf16.end)
+                })
                 .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len())
                 .into();
         }
@@ -3887,6 +3890,25 @@ ORDER BY id
                 // clamped + collapsed
                 s.set_selected_range(100..100, cx);
                 assert_eq!(s.selected_range(), 11..11);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_ime_selection_is_relative_to_replacement_start(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.default_value("你好 "));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_selected_range(7..7, cx);
+                state.replace_and_mark_text_in_range(None, "s", Some(1..1), window, cx);
+                state.replace_and_mark_text_in_range(None, "sh", Some(2..2), window, cx);
+
+                assert_eq!(state.value(), "你好 sh");
+                assert_eq!(state.selected_range(), 9..9);
+                assert_eq!(state.ime_marked_range, Some((7..9).into()));
             });
         });
     }
