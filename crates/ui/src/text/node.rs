@@ -164,18 +164,56 @@ impl BlockNode {
                     text.push('\n');
                 }
             }
-            BlockNode::Heading { children, .. } => {
+            BlockNode::Heading {
+                level, children, ..
+            } => {
                 let block_text = match kind {
                     BlockTextKind::All => children.text(),
                     BlockTextKind::Selected => children.selected_text(),
                     BlockTextKind::SelectedSource => children.selected_source(),
                 };
                 if !block_text.is_empty() {
+                    // In source mode, prefix the heading marker so a selected
+                    // heading round-trips as Markdown (e.g. `## Title`).
+                    if matches!(kind, BlockTextKind::SelectedSource) {
+                        text.push_str(&"#".repeat(*level as usize));
+                        text.push(' ');
+                    }
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
-            BlockNode::List { children, .. } | BlockNode::ListItem { children, .. } => {
+            BlockNode::List {
+                children, ordered, ..
+            } => {
+                if matches!(kind, BlockTextKind::SelectedSource) {
+                    // Prefix each list item with its Markdown marker so a
+                    // selected list round-trips (e.g. `- item` / `1. item`).
+                    let mut item_ix = 0usize;
+                    for child in children.iter() {
+                        let item_text = child.text_by_kind(kind);
+                        if item_text.trim().is_empty() {
+                            if child.is_list_item() {
+                                item_ix += 1;
+                            }
+                            continue;
+                        }
+                        let prefix = if *ordered {
+                            format!("{}. ", item_ix + 1)
+                        } else {
+                            "- ".to_string()
+                        };
+                        text.push_str(&prefix);
+                        text.push_str(&item_text);
+                        if child.is_list_item() {
+                            item_ix += 1;
+                        }
+                    }
+                } else {
+                    text.push_str(&Self::children_text(children, kind));
+                }
+            }
+            BlockNode::ListItem { children, .. } => {
                 text.push_str(&Self::children_text(children, kind));
             }
             BlockNode::Blockquote { children, .. } => {
@@ -2168,6 +2206,73 @@ mod tests {
         set_paragraph_selection(&paragraph, 0..11);
         assert_eq!(paragraph.selected_source(), "plain words");
         assert_eq!(paragraph.selected_text(), "plain words");
+    }
+
+    fn selected_paragraph(text: &str) -> Paragraph {
+        let len = text.len();
+        let paragraph = paragraph_with_children(vec![
+            InlineNode::new(text).marks(vec![(0..len, TextMark::default())]),
+        ]);
+        set_paragraph_selection(&paragraph, 0..len);
+        paragraph
+    }
+
+    #[test]
+    fn heading_selected_source_prefixes_hashes() {
+        let heading = BlockNode::Heading {
+            level: 2,
+            children: selected_paragraph("Title"),
+            span: None,
+        };
+        assert_eq!(heading.selected_source(), "## Title\n");
+        // Rendered text keeps no marker.
+        assert_eq!(heading.selected_text(), "Title\n");
+    }
+
+    #[test]
+    fn unordered_list_selected_source_prefixes_dash() {
+        let list = BlockNode::List {
+            ordered: false,
+            span: None,
+            children: vec![
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("one"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+            ],
+        };
+        assert_eq!(list.selected_source(), "- one\n- two\n");
+    }
+
+    #[test]
+    fn ordered_list_selected_source_prefixes_numbers() {
+        let list = BlockNode::List {
+            ordered: true,
+            span: None,
+            children: vec![
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("first"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("second"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+            ],
+        };
+        assert_eq!(list.selected_source(), "1. first\n2. second\n");
     }
 
     #[cfg(feature = "tree-sitter")]
