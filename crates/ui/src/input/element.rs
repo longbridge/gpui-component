@@ -260,6 +260,22 @@ fn masked_display_offset(text: &Rope, original_offset: usize) -> usize {
     text.offset_to_char_index(original_offset) * MASK_CHAR.len_utf8()
 }
 
+/// Move the IME marked range (tracked against the original text) into the display text
+/// coordinate space, so that a run boundary can't land inside a multi-byte `MASK_CHAR`
+/// and panic text shaping on a non-char-boundary slice.
+fn ime_marked_display_range(
+    text: &Rope,
+    marked_range: Option<Range<usize>>,
+    masked: bool,
+) -> Option<Range<usize>> {
+    let marked = marked_range?;
+    if masked {
+        Some(masked_display_offset(text, marked.start)..masked_display_offset(text, marked.end))
+    } else {
+        Some(marked)
+    }
+}
+
 /// Minimum pixel padding the cursor is kept clear of the viewport's
 /// top/bottom edges before auto-scroll engages. Backs
 /// [`InputState::cursor_surrounding_lines`].
@@ -1706,6 +1722,12 @@ impl Element for TextElement {
             strikethrough: None,
         };
 
+        let ime_marked_range = ime_marked_display_range(
+            &text,
+            state.ime_marked_range.as_ref().map(|m| m.start..m.end),
+            state.masked,
+        );
+
         let runs = if let (false, Some(highlight_styles)) = (is_empty, highlight_styles) {
             let mut runs = Vec::with_capacity(highlight_styles.len() + 2);
 
@@ -1718,10 +1740,7 @@ impl Element for TextElement {
                 runs.extend(split_run_for_ime_underline(
                     run,
                     range.clone(),
-                    state
-                        .ime_marked_range
-                        .as_ref()
-                        .map(|marked| marked.start..marked.end),
+                    ime_marked_range.clone(),
                     marked_run.underline,
                 ));
             }
@@ -1730,10 +1749,7 @@ impl Element for TextElement {
             split_run_for_ime_underline(
                 run,
                 0..display_text.len(),
-                state
-                    .ime_marked_range
-                    .as_ref()
-                    .map(|marked| marked.start..marked.end),
+                ime_marked_range,
                 marked_run.underline,
             )
             .into_vec()
@@ -2647,6 +2663,42 @@ mod tests {
             split_run_for_ime_underline(TextStyle::default().to_run(0), 0..0, None, None)
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn test_masked_ime_underline_splits_on_mask_char_boundaries() {
+        let underline = UnderlineStyle {
+            thickness: px(1.),
+            color: Some(gpui::black()),
+            wavy: false,
+        };
+        let text = Rope::from("abcdef");
+        let mask_len = MASK_CHAR.len_utf8();
+
+        assert_eq!(
+            ime_marked_display_range(&text, Some(4..6), false),
+            Some(4..6)
+        );
+        assert_eq!(ime_marked_display_range(&text, None, true), None);
+        assert_eq!(
+            ime_marked_display_range(&text, Some(4..6), true),
+            Some(4 * mask_len..6 * mask_len)
+        );
+
+        let display_text = MASK_CHAR.to_string().repeat(text.chars().count());
+        let runs = split_run_for_ime_underline(
+            TextStyle::default().to_run(display_text.len()),
+            0..display_text.len(),
+            ime_marked_display_range(&text, Some(4..6), true),
+            Some(underline),
+        );
+
+        let mut offset = 0;
+        for run in &runs {
+            assert!(display_text.is_char_boundary(offset));
+            offset += run.len;
+        }
+        assert_eq!(offset, display_text.len());
     }
 
     #[test]
