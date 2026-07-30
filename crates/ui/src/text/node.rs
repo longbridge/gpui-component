@@ -667,13 +667,18 @@ impl CodeBlock {
             return Vec::new();
         };
 
-        // Pointer identity is the common render-path fast check; value equality
-        // also preserves the cache when an equivalent theme is reallocated.
-        if let Some(cached) = styles.as_ref()
-            && (Arc::ptr_eq(&cached.highlight_theme, highlight_theme)
-                || cached.highlight_theme.as_ref() == highlight_theme.as_ref())
-        {
-            return cached.styles.clone();
+        // Pointer identity is the common render-path fast check. If an
+        // equivalent theme is reallocated, adopt its Arc while preserving the
+        // computed styles so subsequent renders also use the fast path.
+        if let Some(cached) = styles.as_mut() {
+            if Arc::ptr_eq(&cached.highlight_theme, highlight_theme) {
+                return cached.styles.clone();
+            }
+
+            if cached.highlight_theme.as_ref() == highlight_theme.as_ref() {
+                cached.highlight_theme = highlight_theme.clone();
+                return cached.styles.clone();
+            }
         }
 
         let code = self.code();
@@ -1919,9 +1924,13 @@ mod tests {
         let repeated_light_styles = block.styles(&equivalent_light_theme);
         assert_eq!(repeated_light_styles, light_styles);
         assert!(
-            Arc::ptr_eq(&cached_highlight_theme(&block).unwrap(), &light_theme),
-            "an equivalent theme should reuse the existing cache entry"
+            Arc::ptr_eq(
+                &cached_highlight_theme(&block).unwrap(),
+                &equivalent_light_theme
+            ),
+            "an equivalent replacement should become the cache identity"
         );
+        assert_eq!(block.styles(&equivalent_light_theme), light_styles);
 
         let dark_styles = block.styles(&dark_theme);
         assert_eq!(
