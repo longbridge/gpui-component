@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla, InteractiveElement as _,
+    AccessibleAction, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla, InteractiveElement as _,
     IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Rems, RenderOnce, Role,
     StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
@@ -288,6 +288,17 @@ impl Input {
         }
     }
 
+    fn exposes_accessibility_value(
+        masked: bool,
+        content_type: Option<InputContentType>,
+    ) -> bool {
+        !masked
+            && !matches!(
+                content_type,
+                Some(InputContentType::Password | InputContentType::NewPassword)
+            )
+    }
+
     /// This method must after the refine_style.
     fn render_editor(
         paddings: EdgesRefinement<DefiniteLength>,
@@ -360,6 +371,9 @@ impl RenderOnce for Input {
         let disabled = self.disabled;
         let is_multi_line = state.mode.is_multi_line();
         let accessibility_role = Self::accessibility_role(is_multi_line, content_type, self.role);
+        let accessibility_state = self.state.clone();
+        let accessibility_value = Self::exposes_accessibility_value(state.masked, content_type)
+            .then(|| state.text.to_string());
         let focused = state.focus_handle.is_focused(window) && !state.disabled;
         if focused {
             sync_native_content_type(window, content_type, state.disabled);
@@ -396,12 +410,21 @@ impl RenderOnce for Input {
         div()
             .id(("input", self.state.entity_id()))
             .role(accessibility_role)
+            .when_some(accessibility_value, |this, value| this.aria_value(value))
             .flex()
             .key_context(crate::input::CONTEXT)
             .track_focus(&state.focus_handle.clone())
             .tab_index(self.tab_index)
             .when(!state.disabled, |this| {
-                this.on_action(window.listener_for(&self.state, InputState::backspace))
+                this.on_a11y_action(AccessibleAction::SetValue, move |data, window, cx| {
+                    let Some(gpui::accesskit::ActionData::Value(value)) = data else {
+                        return;
+                    };
+                    accessibility_state.update(cx, |state, cx| {
+                        state.replace_all(value.to_string(), window, cx);
+                    });
+                })
+                .on_action(window.listener_for(&self.state, InputState::backspace))
                     .on_action(window.listener_for(&self.state, InputState::delete))
                     .on_action(
                         window.listener_for(&self.state, InputState::delete_to_beginning_of_line),
@@ -658,5 +681,19 @@ mod tests {
             ),
             Role::TextInput
         );
+    }
+
+    #[test]
+    fn accessibility_value_is_hidden_for_secret_inputs() {
+        assert!(Input::exposes_accessibility_value(false, None));
+        assert!(!Input::exposes_accessibility_value(true, None));
+        assert!(!Input::exposes_accessibility_value(
+            false,
+            Some(InputContentType::Password)
+        ));
+        assert!(!Input::exposes_accessibility_value(
+            false,
+            Some(InputContentType::NewPassword)
+        ));
     }
 }
