@@ -28,6 +28,8 @@ pub struct WebView {
     bounds: Bounds<Pixels>,
     #[cfg(target_os = "macos")]
     event_monitor: Option<Retained<AnyObject>>,
+    #[cfg(target_os = "windows")]
+    native_surface: Option<Rc<dyn gpui::PlatformNativeSurface>>,
 }
 
 impl Drop for WebView {
@@ -43,8 +45,41 @@ impl Drop for WebView {
 }
 
 impl WebView {
+    /// Builds a child WebView using the platform's native-surface integration.
+    pub fn build_as_child(
+        builder: wry::WebViewBuilder<'_>,
+        parent: &impl wry::raw_window_handle::HasWindowHandle,
+        window: &Window,
+        cx: &mut App,
+    ) -> anyhow::Result<Self> {
+        #[cfg(target_os = "windows")]
+        {
+            use wry::WebViewBuilderExtWindows as _;
+
+            let native_surface = window.create_native_surface()?;
+            let platform_handle = native_surface.platform_handle();
+            let root_visual = platform_handle
+                .downcast::<windows_core::IUnknown>()
+                .map_err(|_| anyhow::anyhow!("GPUI returned an invalid Windows portal handle"))?;
+            let webview = builder
+                .with_composition_root_visual(*root_visual)
+                .build_as_child(parent)?;
+            return Ok(Self::new_with_native_surface(
+                webview,
+                native_surface,
+                window,
+                cx,
+            ));
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Ok(Self::new(builder.build_as_child(parent)?, window, cx))
+        }
+    }
+
     /// Create a new WebView from a wry WebView.
-    pub fn new(webview: wry::WebView, _window: &mut Window, cx: &mut App) -> Self {
+    pub fn new(webview: wry::WebView, _window: &Window, cx: &mut App) -> Self {
         let _ = webview.set_bounds(Rect::default());
 
         #[cfg(target_os = "macos")]
@@ -62,12 +97,34 @@ impl WebView {
             webview: Rc::new(webview),
             #[cfg(target_os = "macos")]
             event_monitor,
+            #[cfg(target_os = "windows")]
+            native_surface: None,
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn new_with_native_surface(
+        webview: wry::WebView,
+        native_surface: Rc<dyn gpui::PlatformNativeSurface>,
+        _window: &Window,
+        cx: &mut App,
+    ) -> Self {
+        Self {
+            focus_handle: cx.focus_handle(),
+            visible: true,
+            bounds: Bounds::default(),
+            webview: Rc::new(webview),
+            native_surface: Some(native_surface),
         }
     }
 
     /// Show the webview.
     pub fn show(&mut self) {
         let _ = self.webview.set_visible(true);
+        #[cfg(target_os = "windows")]
+        if let Some(native_surface) = &self.native_surface {
+            let _ = native_surface.set_visible(true);
+        }
         self.visible = true;
     }
 
@@ -75,6 +132,10 @@ impl WebView {
     pub fn hide(&mut self) {
         _ = self.webview.focus_parent();
         _ = self.webview.set_visible(false);
+        #[cfg(target_os = "windows")]
+        if let Some(native_surface) = &self.native_surface {
+            let _ = native_surface.set_visible(false);
+        }
         self.visible = false;
     }
 
@@ -272,6 +333,11 @@ impl Element for WebViewElement {
                 bounds.origin.y.into(),
             )),
         });
+
+        #[cfg(target_os = "windows")]
+        if let Some(native_surface) = &self.parent.read(cx).native_surface {
+            let _ = native_surface.set_bounds(bounds.to_device_pixels(window.scale_factor()));
+        }
 
         // Create a hitbox to handle mouse event
         Some(window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal))

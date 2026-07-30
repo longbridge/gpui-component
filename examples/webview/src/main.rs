@@ -29,7 +29,7 @@ impl Example {
                 target_os = "ios",
                 target_os = "android"
             )))]
-            let webview = {
+            {
                 use gtk::prelude::*;
                 use wry::WebViewBuilderExtUnix;
                 // borrowed from https://github.com/tauri-apps/wry/blob/dev/examples/gtk_multiwebview.rs
@@ -37,22 +37,21 @@ impl Example {
                 // TODO: How to initialize this fixed?
                 let fixed = gtk::Fixed::builder().build();
                 fixed.show_all();
-                builder.build_gtk(&fixed).unwrap()
-            };
+                let webview = builder.build_gtk(&fixed).unwrap();
+                return WebView::new(webview, window, cx);
+            }
             #[cfg(any(
                 target_os = "windows",
                 target_os = "macos",
                 target_os = "ios",
                 target_os = "android"
             ))]
-            let webview = {
+            {
                 use raw_window_handle::HasWindowHandle;
 
                 let window_handle = window.window_handle().expect("No window handle");
-                builder.build_as_child(&window_handle).unwrap()
-            };
-
-            WebView::new(webview, window, cx)
+                WebView::build_as_child(builder, &window_handle, window, cx).unwrap()
+            }
         });
 
         let address_input = cx.new(|cx| {
@@ -198,12 +197,6 @@ impl Render for Example {
 }
 
 fn main() {
-    // Required this for Windows to render the WebView.
-    #[cfg(target_os = "windows")]
-    unsafe {
-        std::env::set_var("GPUI_DISABLE_DIRECT_COMPOSITION", "true");
-    }
-
     gpui_platform::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
         gpui_component::init(cx);
