@@ -57,6 +57,9 @@ pub struct TextViewState {
     bounds: Bounds<Pixels>,
 
     pub(super) selectable: bool,
+    /// When selectable and this is set, copy yields the Markdown *source* for
+    /// the selection instead of the rendered plain text. Default false.
+    pub(super) selectable_source: bool,
     pub(super) scrollable: bool,
     pub(super) text_view_style: TextViewStyle,
     pub(super) code_block_actions: Option<std::sync::Arc<CodeBlockActionsFn>>,
@@ -137,6 +140,7 @@ impl TextViewState {
             selected_text_override: None,
             select_all: false,
             selectable: false,
+            selectable_source: false,
             scrollable: false,
             // Measure all blocks (not just visible ones) so the scrollbar
             // thumb size stays stable. Without this, off-screen blocks count
@@ -176,6 +180,26 @@ impl TextViewState {
     pub fn set_selectable(&mut self, selectable: bool, cx: &mut Context<Self>) {
         self.selectable = selectable;
         cx.notify();
+    }
+
+    /// Set whether copying a selection yields the Markdown source instead of
+    /// the rendered plain text, default false. Only has an effect when the
+    /// view is also selectable.
+    pub fn selectable_source(mut self, selectable_source: bool) -> Self {
+        self.selectable_source = selectable_source;
+        self
+    }
+
+    /// Set whether copying a selection yields the Markdown source instead of
+    /// the rendered plain text, default false.
+    pub fn set_selectable_source(&mut self, selectable_source: bool, cx: &mut Context<Self>) {
+        self.selectable_source = selectable_source;
+        cx.notify();
+    }
+
+    /// Whether copy should yield the Markdown source for this view.
+    pub(crate) fn is_selectable_source(&self) -> bool {
+        self.selectable_source
     }
 
     /// Set whether the text is selectable, default false.
@@ -241,6 +265,25 @@ impl TextViewState {
         }
 
         self.parsed_content.document.selected_text()
+    }
+
+    /// Return the Markdown source for the current selection.
+    ///
+    /// - Select-all yields the whole document source.
+    /// - A multi-click (word/paragraph) selection yields its stored text; a
+    ///   single word rarely carries markup, so the rendered text is used as-is.
+    /// - Otherwise the selection is mapped back to Markdown source per inline
+    ///   node (see [`Paragraph::selected_source`](crate::text::node)).
+    pub fn selected_source(&self) -> String {
+        if self.select_all {
+            return self.source().to_string();
+        }
+
+        if let Some(text) = &self.selected_text_override {
+            return text.clone();
+        }
+
+        self.parsed_content.document.selected_source()
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
@@ -743,6 +786,27 @@ mod tests {
         state.read_with(cx, |state, _| {
             assert!(!state.has_view_selection());
             assert_eq!(state.selected_text(), "");
+        });
+    }
+
+    #[gpui::test]
+    fn select_all_source_returns_markdown_source(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let markdown = "**quick** value";
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown(markdown, cx)));
+        cx.run_until_parked();
+
+        state.update(cx, |state, cx| {
+            state.set_selectable_source(true, cx);
+            state.select_all(cx);
+        });
+
+        state.read_with(cx, |state, _| {
+            assert!(state.is_selectable_source());
+            // select-all yields the whole document source verbatim.
+            assert_eq!(state.selected_source().trim(), markdown);
+            // The rendered text still strips the markup.
+            assert_eq!(state.selected_text().trim(), "quick value");
         });
     }
 
