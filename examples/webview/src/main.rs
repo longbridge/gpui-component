@@ -3,7 +3,7 @@ use gpui_component::{
     ActiveTheme as _, Root, WindowExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{Input, InputEvent, InputState},
+    input::{Copy, Cut, Input, InputEvent, InputState, Paste, SelectAll},
     menu::DropdownMenu as _,
     popover::Popover,
     v_flex,
@@ -207,6 +207,12 @@ fn main() {
     gpui_platform::application().run(move |cx| {
         // This must be called before using any GPUI Component features.
         gpui_component::init(cx);
+        cx.set_menus([Menu::new("Edit").items([
+            MenuItem::os_action("Cut", Cut, OsAction::Cut),
+            MenuItem::os_action("Copy", Copy, OsAction::Copy),
+            MenuItem::os_action("Paste", Paste, OsAction::Paste),
+            MenuItem::os_action("Select All", SelectAll, OsAction::SelectAll),
+        ])]);
         let window_bounds = WindowBounds::centered(size(px(800.), px(600.)), cx);
 
         cx.spawn(async move |cx| {

@@ -2,7 +2,7 @@
 
 > Research date: 2026-07-30
 > Baseline: `gpui-wry` uses `lb-wry 0.53.3`; GPUI is based on Zed commit
-> `896e7f138b385f745b3f58aba1cb66c647fa1dda`. This document records the
+> `huacnlee/zed:gpui-webview-overlay` at `41dbc82966`. This document records the
 > native composition research, the implemented macOS layered-scene spike, and
 > the remaining Windows and Linux architecture.
 
@@ -704,14 +704,22 @@ blinking caret after the user clicks the WebView, even though subsequent
 typing belongs to the WebView. The result presents two apparent input targets
 and makes keyboard ownership ambiguous.
 
-When GPUI receives a mouse-down inside WebView bounds, the WebView element now
+When GPUI receives a mouse-down inside WebView bounds, the WebView element
 treats it as a focus boundary and clears GPUI window focus. This covers the
 top-plane path where the event dismisses a Popover over the WebView region.
-When the top plane is empty, however, AppKit sends the event directly to
-`WKWebView`; GPUI does not observe that mouse-down. The production native-slot
-API must therefore also report native focus acquisition back to the GPUI
-window and blur its focus tree. Returning from WebView to GPUI must perform the
-inverse handoff through the normal GPUI focus path.
+When the top plane is empty, AppKit sends the event directly to `WKWebView`.
+The macOS platform now native-hit-tests mouse-down events before AppKit
+dispatch and emits `PlatformInput::NativeViewFocus` when the hit view is an
+embedded native descendant rather than the GPUI or overlay surface. That event
+uses GPUI's normal input callback and synchronously blurs the logical focus
+tree. `makeFirstResponder:` provides the equivalent path for keyboard and
+programmatic native focus changes.
+
+This distinction is subtle: wry inserts `WKWebView` as a descendant of
+`GPUIView`, so membership in the GPUI native-view hierarchy is not sufficient
+to identify GPUI ownership. Only the GPUI rendering view itself and its
+separate overlay view count as GPUI surfaces; embedded descendants are native
+focus targets. Returning from WebView to GPUI uses the normal GPUI focus path.
 
 This is not example-only polish. Any native-surface-slot API must define:
 
@@ -725,10 +733,21 @@ This is not example-only polish. Any native-surface-slot API must define:
 
 Regression validation must first focus the address `Input`, confirm its caret
 is visible, and then click the WebView both with no overlay and while a Popover
-is open. The overlay-dismiss path now clears the GPUI caret; the direct native
-path remains an explicit acceptance gate. In both cases the final
-implementation must stop the GPUI caret as WebView receives focus. The reverse
-transition must restore exactly one GPUI focus target.
+is open. Both paths now stop the GPUI caret as WebView receives focus. Runtime
+diagnostics verified the active-window native path by observing GPUI focus
+change from focused to blurred after a WebView click. The reverse transition
+must restore exactly one GPUI focus target.
+
+On macOS, `Cmd+C`, `Cmd+V`, `Cmd+X`, and `Cmd+A` are AppKit key equivalents
+routed through standard Edit-menu selectors and the responder chain. A bare
+GPUI example without those menu items can display and focus WKWebView while
+copy and paste shortcuts still do nothing. The example therefore installs an
+Edit menu whose `MenuItem::os_action` entries map to Cut, Copy, Paste, and
+Select All. When WKWebView owns native focus, AppKit routes those selectors to
+WebKit; when GPUI owns focus, the same items dispatch the corresponding GPUI
+input actions. Native-surface examples and host applications must preserve
+this responder-chain integration rather than implementing clipboard shortcuts
+as WebView-specific JavaScript.
 
 The Notification layer creates a deferred element only when the list is
 non-empty. This avoids a permanent empty top-plane node and unnecessary scene
