@@ -960,11 +960,20 @@ impl CodeBlock {
 
     /// Markdown source for the current selection.
     ///
-    /// Code block content is literal Markdown (the text between the fences), so
-    /// the selected source is the selected rendered text verbatim. Mirrors
-    /// [`selected_text`](Self::selected_text).
+    /// The selected code is wrapped in a fenced code block carrying the block's
+    /// language, so a selected code block round-trips as Markdown (e.g.
+    /// ```` ```rust\n…\n``` ````) instead of pasting as bare, unfenced text.
+    /// A partial selection is still emitted as a valid fenced block.
     pub(super) fn selected_source(&self) -> String {
-        self.selected_text()
+        let code = self.selected_text();
+        if code.is_empty() {
+            return String::new();
+        }
+        let lang = self.lang.clone().unwrap_or_default();
+        // Trim trailing newlines so the closing fence sits on its own line
+        // directly after the last code line (no blank line before it).
+        let code = code.trim_end_matches('\n');
+        format!("```{}\n{}\n```", lang, code)
     }
 
     pub(super) fn text(&self) -> String {
@@ -2275,6 +2284,46 @@ mod tests {
         assert_eq!(list.selected_source(), "1. first\n2. second\n");
     }
 
+    fn selected_code_block(code: &str, lang: Option<&str>) -> BlockNode {
+        let block = CodeBlock::new(
+            code.to_string().into(),
+            lang.map(|l| l.to_string().into()),
+            None::<Span>,
+        );
+        if let Ok(mut state) = block.state.lock() {
+            let len = state.text.len();
+            state.selection = Some((0..len).into());
+        }
+        BlockNode::CodeBlock(block)
+    }
+
+    #[test]
+    fn code_block_selected_source_wraps_in_fence_with_lang() {
+        let block = selected_code_block("let x = 1;\n", Some("rust"));
+        let code = block.selected_text();
+        let code_trimmed = code.trim_end_matches('\n');
+        // The source wraps the (trailing-newline-trimmed) selected code in a
+        // fenced block carrying the language; the block arm adds one trailing
+        // newline.
+        assert_eq!(
+            block.selected_source(),
+            format!("```rust\n{}\n```\n", code_trimmed)
+        );
+        assert!(block.selected_source().starts_with("```rust\n"));
+        assert!(block.selected_source().trim_end().ends_with("\n```"));
+    }
+
+    #[test]
+    fn code_block_selected_source_without_lang() {
+        let block = selected_code_block("plain\n", None);
+        let code_trimmed = block.selected_text();
+        let code_trimmed = code_trimmed.trim_end_matches('\n');
+        assert_eq!(
+            block.selected_source(),
+            format!("```\n{}\n```\n", code_trimmed)
+        );
+    }
+
     #[test]
     fn document_selected_source_joins_blocks_with_blank_line() {
         use crate::text::document::ParsedDocument;
@@ -2291,6 +2340,7 @@ mod tests {
                     span: None,
                 },
                 BlockNode::Paragraph(selected_paragraph("A paragraph.")),
+                selected_code_block("let x = 1;\n", Some("rust")),
                 BlockNode::List {
                     ordered: true,
                     span: None,
@@ -2314,7 +2364,7 @@ mod tests {
 
         assert_eq!(
             document.selected_source(),
-            "# Title\n\nA paragraph.\n\n1. one\n2. two"
+            "# Title\n\nA paragraph.\n\n```rust\nlet x = 1;\n```\n\n1. one\n2. two"
         );
     }
 
