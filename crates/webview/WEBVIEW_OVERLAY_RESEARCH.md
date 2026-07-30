@@ -2,7 +2,7 @@
 
 > Research date: 2026-07-30
 > Baseline: `gpui-wry` uses `lb-wry 0.53.3`; GPUI is based on Zed commit
-> `huacnlee/zed:gpui-webview-overlay` at `847a8e30d7`. This document records the
+> `huacnlee/zed:gpui-webview-overlay` at `fbe67f26a3`. This document records the
 > native composition research, the implemented macOS layered-scene spike, and
 > the remaining Windows and Linux architecture.
 
@@ -708,18 +708,18 @@ When GPUI receives a mouse-down inside WebView bounds, the WebView element
 treats it as a focus boundary and clears GPUI window focus. This covers the
 top-plane path where the event dismisses a Popover over the WebView region.
 When the top plane is empty, AppKit sends the event directly to `WKWebView`.
-The macOS platform now native-hit-tests mouse-down events before AppKit
-dispatch and emits `PlatformInput::NativeViewFocus` when the hit view is an
-embedded native descendant rather than the GPUI or overlay surface. That event
-uses GPUI's normal input callback and synchronously blurs the logical focus
-tree. `makeFirstResponder:` provides the equivalent path for keyboard and
-programmatic native focus changes.
+`gpui-wry` therefore installs a lifecycle-scoped local `NSEvent` monitor for
+mouse-down events. The monitor checks the event window, native-hit-tests the
+content view, and clears this GPUI window's logical focus only when the hit
+view is the managed `WKWebView` or one of its descendants. The monitor token
+is removed when the `WebView` is dropped.
 
-This distinction is subtle: wry inserts `WKWebView` as a descendant of
-`GPUIView`, so membership in the GPUI native-view hierarchy is not sufficient
-to identify GPUI ownership. Only the GPUI rendering view itself and its
-separate overlay view count as GPUI surfaces; embedded descendants are native
-focus targets. Returning from WebView to GPUI uses the normal GPUI focus path.
+Keeping this handoff in `gpui-wry` is deliberate. It avoids adding a
+WebView-specific focus event, AppKit responder override, or native-descendant
+classification to GPUI. The GPUI platform patch stays limited to scene
+composition, while the component that owns the embedded native view also owns
+its focus boundary. Returning from WebView to GPUI uses the normal GPUI focus
+path.
 
 This is not example-only polish. Any native-surface-slot API must define:
 
@@ -733,10 +733,10 @@ This is not example-only polish. Any native-surface-slot API must define:
 
 Regression validation must first focus the address `Input`, confirm its caret
 is visible, and then click the WebView both with no overlay and while a Popover
-is open. Both paths now stop the GPUI caret as WebView receives focus. Runtime
-diagnostics verified the active-window native path by observing GPUI focus
-change from focused to blurred after a WebView click. The reverse transition
-must restore exactly one GPUI focus target.
+is open. Both paths stop the GPUI caret as WebView receives focus. Runtime
+validation confirmed that the address Input loses its focus indication after
+a direct WebView click and that clicking the WebView region dismisses an open
+Popover. The reverse transition must restore exactly one GPUI focus target.
 
 On macOS, `Cmd+C`, `Cmd+V`, `Cmd+X`, and `Cmd+A` are AppKit key equivalents
 routed through standard Edit-menu selectors and the responder chain. A bare
@@ -747,7 +747,9 @@ Select All. When WKWebView owns native focus, AppKit routes those selectors to
 WebKit; when GPUI owns focus, the same items dispatch the corresponding GPUI
 input actions. Native-surface examples and host applications must preserve
 this responder-chain integration rather than implementing clipboard shortcuts
-as WebView-specific JavaScript.
+as WebView-specific JavaScript. Runtime validation copied a sentinel from a
+GPUI Input into a WebView text field and another sentinel from the WebView back
+into the GPUI Input using only `Cmd+C` and `Cmd+V`.
 
 The Notification layer creates a deferred element only when the list is
 non-empty. This avoids a permanent empty top-plane node and unnecessary scene

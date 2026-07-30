@@ -1,13 +1,23 @@
 # Wry for GPUI
 
-A webview supports for GPUI, based on [Wry](https://github.com/tauri-apps/wry).
+A WebView implementation for GPUI, based on [Wry](https://github.com/tauri-apps/wry).
 
-This still a experimental with limited features, please file issues for any bugs or missing features.
+This is still experimental with limited features. Please file issues for bugs or missing features.
 
-- The WebView will render on top of the GPUI window, any GPUI elements behind the WebView bounds will be covered.
-- Only supports macOS and Windows currently.
+- On macOS, GPUI Popovers, Dialogs, Notifications, and Popup Menus can render
+  above the WebView when using the layered-scene GPUI branch configured by
+  this repository.
+- The WebView owns native keyboard focus after it is clicked. `gpui-wry`
+  clears GPUI's logical focus at that boundary so an Input does not continue
+  showing a stale blinking caret.
+- On macOS, applications must provide standard Edit-menu actions for Cut,
+  Copy, Paste, and Select All. AppKit routes their keyboard shortcuts through
+  the responder chain to either the focused WebView or GPUI.
+- Only macOS and Windows are currently supported. Windows overlay composition
+  remains future work.
 
-So, we recommend using the webview in a separate window or in a Popup layer.
+See [`WEBVIEW_OVERLAY_RESEARCH.md`](WEBVIEW_OVERLAY_RESEARCH.md) for the
+composition, focus, input, and platform details.
 
 ## Run Example
 

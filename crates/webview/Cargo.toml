@@ -21,3 +21,8 @@ doctest = false
 anyhow.workspace = true
 gpui.workspace = true
 wry = { version = "0.53.3", package = "lb-wry" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["block2", "NSEvent", "NSView", "NSWindow"] }

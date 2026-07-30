@@ -1,9 +1,16 @@
 use std::{ops::Deref, rc::Rc};
 
+#[cfg(target_os = "macos")]
+use block2::RcBlock;
 use wry::{
     Rect,
     dpi::{self, LogicalSize},
 };
+
+#[cfg(target_os = "macos")]
+use objc2::{rc::Retained, runtime::AnyObject};
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSEvent, NSEventMask};
 
 use gpui::{
     App, Bounds, ContentMask, DismissEvent, Element, ElementId, Entity, EventEmitter, FocusHandle,
@@ -19,10 +26,18 @@ pub struct WebView {
     webview: Rc<wry::WebView>,
     visible: bool,
     bounds: Bounds<Pixels>,
+    #[cfg(target_os = "macos")]
+    event_monitor: Option<Retained<AnyObject>>,
 }
 
 impl Drop for WebView {
     fn drop(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(event_monitor) = self.event_monitor.take() {
+            // SAFETY: The token was returned by addLocalMonitor and is removed
+            // exactly once while the application is still running.
+            unsafe { NSEvent::removeMonitor(&event_monitor) };
+        }
         self.hide();
     }
 }
@@ -37,11 +52,16 @@ impl WebView {
             .enable_scene_overlay()
             .expect("macOS WebView requires GPUI layered scene support");
 
+        #[cfg(target_os = "macos")]
+        let event_monitor = install_focus_monitor(&webview, _window, cx);
+
         Self {
             focus_handle: cx.focus_handle(),
             visible: true,
             bounds: Bounds::default(),
             webview: Rc::new(webview),
+            #[cfg(target_os = "macos")]
+            event_monitor,
         }
     }
 
@@ -81,6 +101,55 @@ impl WebView {
     /// Get the raw wry webview.
     pub fn raw(&self) -> &wry::WebView {
         &self.webview
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn install_focus_monitor(
+    webview: &wry::WebView,
+    window: &Window,
+    cx: &App,
+) -> Option<Retained<AnyObject>> {
+    use wry::WebViewExtMacOS as _;
+
+    let native_webview = webview.webview();
+    let native_window = webview.ns_window();
+    let async_window = window.to_async(cx);
+    let foreground_executor = cx.foreground_executor().clone();
+    let handler = RcBlock::new(move |event: std::ptr::NonNull<NSEvent>| {
+        let event = unsafe { event.as_ref() };
+        let clicked_webview = event
+            .window(objc2::MainThreadMarker::new().expect("NSEvent runs on the main thread"))
+            .filter(|event_window| std::ptr::eq(&**event_window, &*native_window))
+            .and_then(|event_window| event_window.contentView())
+            .and_then(|content_view| {
+                let point = content_view.convertPoint_fromView(event.locationInWindow(), None);
+                content_view.hitTest(point)
+            })
+            .is_some_and(|hit_view| {
+                std::ptr::eq(&*hit_view, &***native_webview)
+                    || hit_view.isDescendantOf(&native_webview)
+            });
+
+        if clicked_webview {
+            let mut async_window = async_window.clone();
+            foreground_executor
+                .spawn(async move {
+                    let _ = async_window.update(|window, _| window.blur());
+                })
+                .detach();
+        }
+
+        event as *const NSEvent as *mut NSEvent
+    });
+
+    // SAFETY: The block returns the same live NSEvent it receives. The retained
+    // monitor token is stored on WebView and removed in Drop.
+    unsafe {
+        NSEvent::addLocalMonitorForEventsMatchingMask_handler(
+            NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown | NSEventMask::OtherMouseDown,
+            &handler,
+        )
     }
 }
 
