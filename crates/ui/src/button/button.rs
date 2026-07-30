@@ -191,6 +191,7 @@ pub struct Button {
     children: Vec<AnyElement>,
     disabled: bool,
     pub(crate) selected: bool,
+    selection_exposed: bool,
     variant: ButtonVariant,
     rounded: ButtonRounded,
     outline: bool,
@@ -233,6 +234,7 @@ impl Button {
             label: None,
             disabled: false,
             selected: false,
+            selection_exposed: false,
             variant: ButtonVariant::default(),
             rounded: ButtonRounded::Medium,
             border_corners: Corners {
@@ -395,6 +397,7 @@ impl Disableable for Button {
 impl Selectable for Button {
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
+        self.selection_exposed = true;
         self
     }
 
@@ -471,7 +474,13 @@ impl RenderOnce for Button {
             .when_some(self.label.as_ref(), |this, label| {
                 this.aria_label(label.clone())
             })
-            .aria_selected(self.selected)
+            .when(self.selection_exposed, |this| {
+                this.aria_toggled(if self.selected {
+                    gpui::accesskit::Toggled::True
+                } else {
+                    gpui::accesskit::Toggled::False
+                })
+            })
             .when(!self.disabled, |this| {
                 this.track_focus(
                     &focus_handle
@@ -1178,6 +1187,7 @@ mod tests {
         assert!(!button.loading);
         assert!(!button.disabled);
         assert!(!button.selected);
+        assert!(button.selection_exposed);
         assert_eq!(button.tab_index, 1);
         assert!(button.tab_stop);
         assert!(!button.dropdown_caret);
@@ -1189,6 +1199,7 @@ mod tests {
         // Button with click handler should be clickable
         let clickable = Button::new("test").on_click(|_, _, _| {});
         assert!(clickable.clickable());
+        assert!(!clickable.selection_exposed);
 
         // Disabled button should not be clickable
         let disabled = Button::new("test").disabled(true).on_click(|_, _, _| {});
