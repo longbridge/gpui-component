@@ -872,6 +872,8 @@ impl Paragraph {
                         .when_some(image.link.clone(), |this, link| {
                             let title = image.title();
                             let link_click_handler = link_click_handler.clone();
+                            let aux_link = link.clone();
+                            let aux_link_click_handler = link_click_handler.clone();
                             this.cursor_pointer()
                                 .tooltip(move |window, cx| {
                                     Tooltip::new(title.clone()).build(window, cx)
@@ -879,16 +881,26 @@ impl Paragraph {
                                 .on_click(move |event, window, cx| {
                                     window.end_text_selection(cx);
                                     cx.stop_propagation();
-                                    let button = if event.is_middle_click() {
-                                        gpui::MouseButton::Middle
-                                    } else if event.is_right_click() {
-                                        gpui::MouseButton::Right
-                                    } else {
-                                        gpui::MouseButton::Left
-                                    };
                                     handle_link_click(
                                         &link_click_handler,
                                         link.url.clone(),
+                                        gpui::MouseButton::Left,
+                                        event.modifiers(),
+                                        window,
+                                        cx,
+                                    );
+                                })
+                                .on_aux_click(move |event, window, cx| {
+                                    window.end_text_selection(cx);
+                                    cx.stop_propagation();
+                                    let button = if event.is_middle_click() {
+                                        gpui::MouseButton::Middle
+                                    } else {
+                                        gpui::MouseButton::Right
+                                    };
+                                    handle_link_click(
+                                        &aux_link_click_handler,
+                                        aux_link.url.clone(),
                                         button,
                                         event.modifiers(),
                                         window,
