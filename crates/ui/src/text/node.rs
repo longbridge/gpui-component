@@ -2275,6 +2275,49 @@ mod tests {
         assert_eq!(list.selected_source(), "1. first\n2. second\n");
     }
 
+    #[test]
+    fn document_selected_source_joins_blocks_with_blank_line() {
+        use crate::text::document::ParsedDocument;
+
+        // A heading, a paragraph, and a two-item ordered list, each fully
+        // selected. Top-level blocks must be separated by a blank line so the
+        // copied Markdown re-renders with the same structure.
+        let document = ParsedDocument {
+            source: String::new().into(),
+            blocks: vec![
+                BlockNode::Heading {
+                    level: 1,
+                    children: selected_paragraph("Title"),
+                    span: None,
+                },
+                BlockNode::Paragraph(selected_paragraph("A paragraph.")),
+                BlockNode::List {
+                    ordered: true,
+                    span: None,
+                    children: vec![
+                        BlockNode::ListItem {
+                            children: vec![BlockNode::Paragraph(selected_paragraph("one"))],
+                            spread: false,
+                            checked: None,
+                            span: None,
+                        },
+                        BlockNode::ListItem {
+                            children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
+                            spread: false,
+                            checked: None,
+                            span: None,
+                        },
+                    ],
+                },
+            ],
+        };
+
+        assert_eq!(
+            document.selected_source(),
+            "# Title\n\nA paragraph.\n\n1. one\n2. two"
+        );
+    }
+
     #[cfg(feature = "tree-sitter")]
     use crate::{
         Theme, ThemeMode,
