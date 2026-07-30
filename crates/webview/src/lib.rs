@@ -221,9 +221,14 @@ impl Element for WebViewElement {
         let bounds = hitbox.clone().map(|h| h.bounds).unwrap_or(bounds);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             let webview = self.view.clone();
-            window.on_mouse_event(move |event: &MouseDownEvent, _, _, _| {
-                if !bounds.contains(&event.position) {
-                    // Click white space to blur the input focus
+            window.on_mouse_event(move |event: &MouseDownEvent, _, window, _| {
+                if bounds.contains(&event.position) {
+                    // Native WebView focus is outside GPUI's focus tree. Clear
+                    // GPUI focus so text inputs stop showing a stale caret.
+                    window.blur();
+                } else {
+                    // Return native focus to the GPUI parent when clicking
+                    // elsewhere in the GPUI window.
                     let _ = webview.focus_parent();
                 }
             });

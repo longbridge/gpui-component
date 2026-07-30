@@ -695,6 +695,41 @@ Runtime validation covered:
 7. WebView remains clickable while the overlay is empty.
 8. Resize and drawable-size updates reach both renderers.
 
+### Focus ownership is part of the portal contract
+
+A native WebView and GPUI maintain separate focus systems. Giving native
+keyboard focus to the WebView does not automatically clear GPUI's focused
+element. Without an explicit handoff, a GPUI `Input` can keep drawing its
+blinking caret after the user clicks the WebView, even though subsequent
+typing belongs to the WebView. The result presents two apparent input targets
+and makes keyboard ownership ambiguous.
+
+When GPUI receives a mouse-down inside WebView bounds, the WebView element now
+treats it as a focus boundary and clears GPUI window focus. This covers the
+top-plane path where the event dismisses a Popover over the WebView region.
+When the top plane is empty, however, AppKit sends the event directly to
+`WKWebView`; GPUI does not observe that mouse-down. The production native-slot
+API must therefore also report native focus acquisition back to the GPUI
+window and blur its focus tree. Returning from WebView to GPUI must perform the
+inverse handoff through the normal GPUI focus path.
+
+This is not example-only polish. Any native-surface-slot API must define:
+
+- which focus system owns keyboard and IME input at every point;
+- how pointer, Tab, Shift-Tab, programmatic focus, and overlay dismissal
+  transfer that ownership;
+- that the losing system immediately removes visible focus indicators,
+  including carets and focus rings;
+- that only the owner receives text, composition, and accessibility focus
+  events.
+
+Regression validation must first focus the address `Input`, confirm its caret
+is visible, and then click the WebView both with no overlay and while a Popover
+is open. The overlay-dismiss path now clears the GPUI caret; the direct native
+path remains an explicit acceptance gate. In both cases the final
+implementation must stop the GPUI caret as WebView receives focus. The reverse
+transition must restore exactly one GPUI focus target.
+
 The Notification layer creates a deferred element only when the list is
 non-empty. This avoids a permanent empty top-plane node and unnecessary scene
 operations. After opening a Dialog or Notification, the WebView example
