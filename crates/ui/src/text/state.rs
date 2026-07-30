@@ -8,9 +8,8 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme, ElementExt,
+    ElementExt,
     async_util::{Receiver, Sender, unbounded},
-    highlighter::HighlightTheme,
     input::{self, SelectAll},
     scroll::AutoScroll,
     text::{
@@ -250,7 +249,6 @@ impl TextViewState {
             revision: self.revision,
             append,
             pending_text: text.to_string(),
-            highlight_theme: cx.theme().highlight_theme.clone(),
             markdown_extensions: self.markdown_extensions.clone(),
         };
 
@@ -547,7 +545,6 @@ struct UpdateOptions {
     revision: usize,
     pending_text: String,
     append: bool,
-    highlight_theme: std::sync::Arc<HighlightTheme>,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -556,7 +553,6 @@ impl UpdateOptions {
         if next.append {
             self.pending_text.push_str(&next.pending_text);
             self.revision = next.revision;
-            self.highlight_theme = next.highlight_theme;
         } else {
             *self = next;
         }
@@ -608,9 +604,7 @@ fn parse_content(
     }
 
     let new_document = match format {
-        TextViewFormat::Markdown => {
-            format::markdown::parse(&source, &mut node_cx, &options.highlight_theme)
-        }
+        TextViewFormat::Markdown => format::markdown::parse(&source, &mut node_cx),
         TextViewFormat::Html => format::html::parse(&source, &mut node_cx),
     }?;
 
@@ -662,12 +656,10 @@ mod tests {
 
     #[test]
     fn update_options_merge_keeps_latest_full_text() {
-        let theme = HighlightTheme::default_light();
         let mut options = UpdateOptions {
             revision: 1,
             pending_text: "old".to_string(),
             append: true,
-            highlight_theme: theme.clone(),
             markdown_extensions: Arc::default(),
         };
 
@@ -675,14 +667,12 @@ mod tests {
             revision: 2,
             pending_text: "new".to_string(),
             append: false,
-            highlight_theme: theme.clone(),
             markdown_extensions: Arc::default(),
         });
         options.merge(UpdateOptions {
             revision: 3,
             pending_text: " text".to_string(),
             append: true,
-            highlight_theme: theme,
             markdown_extensions: Arc::default(),
         });
 
@@ -693,7 +683,6 @@ mod tests {
 
     #[test]
     fn update_future_yields_before_coalescing_all_queued_updates() {
-        let theme = HighlightTheme::default_light();
         let (tx, rx) = unbounded::<UpdateOptions>();
         let (tx_result, rx_result) = unbounded::<ParsedUpdate>();
         let total_updates = 128;
@@ -703,7 +692,6 @@ mod tests {
                 revision,
                 pending_text: format!("{revision}\n"),
                 append: revision != 1,
-                highlight_theme: theme.clone(),
                 markdown_extensions: Arc::default(),
             })
             .unwrap();

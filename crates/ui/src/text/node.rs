@@ -603,10 +603,16 @@ impl Paragraph {
 }
 
 #[derive(Debug, Clone)]
+struct CachedCodeBlockStyles {
+    /// The active theme used to compute `styles`.
+    highlight_theme: Arc<HighlightTheme>,
+    styles: Vec<(Range<usize>, HighlightStyle)>,
+}
+
+#[derive(Debug, Clone)]
 pub struct CodeBlock {
     lang: Option<SharedString>,
-    styles: Arc<Mutex<Option<Vec<(Range<usize>, HighlightStyle)>>>>,
-    highlight_theme: Arc<HighlightTheme>,
+    styles: Arc<Mutex<Option<CachedCodeBlockStyles>>>,
     state: Arc<Mutex<InlineState>>,
     pub span: Option<Span>,
 }
@@ -634,7 +640,6 @@ impl CodeBlock {
     pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
-        highlight_theme: &HighlightTheme,
         span: Option<impl Into<Span>>,
     ) -> Self {
         let state = Arc::new(Mutex::new(InlineState::default()));
@@ -645,13 +650,15 @@ impl CodeBlock {
         Self {
             lang,
             styles: Arc::new(Mutex::new(None)),
-            highlight_theme: Arc::new(highlight_theme.clone()),
             state,
             span: span.map(|s| s.into()),
         }
     }
 
-    pub(crate) fn styles(&self) -> Vec<(Range<usize>, HighlightStyle)> {
+    pub(crate) fn styles(
+        &self,
+        highlight_theme: &Arc<HighlightTheme>,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
         let Some(lang) = &self.lang else {
             return Vec::new();
         };
@@ -660,8 +667,18 @@ impl CodeBlock {
             return Vec::new();
         };
 
-        if let Some(styles) = styles.as_ref() {
-            return styles.clone();
+        // Pointer identity is the common render-path fast check. If an
+        // equivalent theme is reallocated, adopt its Arc while preserving the
+        // computed styles so subsequent renders also use the fast path.
+        if let Some(cached) = styles.as_mut() {
+            if Arc::ptr_eq(&cached.highlight_theme, highlight_theme) {
+                return cached.styles.clone();
+            }
+
+            if cached.highlight_theme.as_ref() == highlight_theme.as_ref() {
+                cached.highlight_theme = highlight_theme.clone();
+                return cached.styles.clone();
+            }
         }
 
         let code = self.code();
@@ -691,9 +708,12 @@ impl CodeBlock {
             };
 
             highlighter.update(Some(edit), &code_rope, None);
-            highlighter.styles(&(0..code.len()), &self.highlight_theme)
+            highlighter.styles(&(0..code.len()), highlight_theme)
         });
-        *styles = Some(computed_styles.clone());
+        *styles = Some(CachedCodeBlockStyles {
+            highlight_theme: highlight_theme.clone(),
+            styles: computed_styles.clone(),
+        });
         computed_styles
     }
 
@@ -752,7 +772,7 @@ impl CodeBlock {
                         "code",
                         self.state.clone(),
                         vec![],
-                        self.styles(),
+                        self.styles(&cx.theme().highlight_theme),
                     ))
                     .when_some(node_cx.code_block_actions.clone(), |this, actions| {
                         this.child(
@@ -1788,21 +1808,27 @@ impl BlockNode {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "tree-sitter")]
+    use crate::{
+        Theme, ThemeMode,
+        text::{TextView, TextViewState},
+    };
+    #[cfg(feature = "tree-sitter")]
+    use gpui::{AppContext as _, Context, Entity, Render, TestAppContext, VisualTestContext};
+
+    #[cfg(feature = "tree-sitter")]
+    fn cached_highlight_theme(block: &CodeBlock) -> Option<Arc<HighlightTheme>> {
+        block
+            .styles
+            .lock()
+            .ok()
+            .and_then(|styles| styles.as_ref().map(|styles| styles.highlight_theme.clone()))
+    }
+
     #[test]
     fn code_block_equality_includes_code_content() {
-        let theme = HighlightTheme::default_light();
-        let first = CodeBlock::new(
-            "let value = 1;".into(),
-            Some("rust".into()),
-            &theme,
-            None::<Span>,
-        );
-        let second = CodeBlock::new(
-            "let value = 2;".into(),
-            Some("rust".into()),
-            &theme,
-            None::<Span>,
-        );
+        let first = CodeBlock::new("let value = 1;".into(), Some("rust".into()), None::<Span>);
+        let second = CodeBlock::new("let value = 2;".into(), Some("rust".into()), None::<Span>);
 
         assert_ne!(first, second);
     }
@@ -1817,13 +1843,9 @@ mod tests {
             cache.borrow_mut().remove(&lang);
         });
 
-        let unknown_block = CodeBlock::new(
-            "{\"value\": 1}".into(),
-            Some(lang.clone()),
-            &theme,
-            None::<Span>,
-        );
-        _ = unknown_block.styles();
+        let unknown_block =
+            CodeBlock::new("{\"value\": 1}".into(), Some(lang.clone()), None::<Span>);
+        _ = unknown_block.styles(&theme);
 
         let cached_language = CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
             cache
@@ -1849,13 +1871,9 @@ mod tests {
             ),
         );
 
-        let registered_block = CodeBlock::new(
-            "{\"value\": 2}".into(),
-            Some(lang.clone()),
-            &theme,
-            None::<Span>,
-        );
-        _ = registered_block.styles();
+        let registered_block =
+            CodeBlock::new("{\"value\": 2}".into(), Some(lang.clone()), None::<Span>);
+        _ = registered_block.styles(&theme);
 
         let cached_language = CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
             cache
@@ -1864,5 +1882,160 @@ mod tests {
                 .map(|highlighter| highlighter.language().clone())
         });
         assert_eq!(cached_language.as_deref(), Some(lang.as_ref()));
+    }
+
+    #[cfg(feature = "tree-sitter")]
+    #[test]
+    fn code_block_styles_follow_the_current_highlight_theme() {
+        let lang = SharedString::from("json-theme-cache-test");
+        let light_theme = HighlightTheme::default_light();
+        let dark_theme = HighlightTheme::default_dark();
+        let code = SharedString::from(r#"{"value": 42}"#);
+        let number_range = code.find("42").unwrap()..code.find("42").unwrap() + 2;
+
+        let light_number = light_theme.style("number").and_then(|style| style.color);
+        let dark_number = dark_theme.style("number").and_then(|style| style.color);
+        assert_ne!(
+            light_number, dark_number,
+            "the test themes must use different number colors"
+        );
+
+        CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            cache.borrow_mut().remove(&lang);
+        });
+        LanguageRegistry::singleton().register(
+            lang.as_ref(),
+            &crate::highlighter::LanguageConfig::new(
+                lang.clone(),
+                tree_sitter_json::LANGUAGE.into(),
+                vec![],
+                "(number) @number",
+                "",
+                "",
+            ),
+        );
+
+        let block = CodeBlock::new(code.clone(), Some(lang), None::<Span>);
+        let light_styles = block.styles(&light_theme);
+        let cached_light_theme = cached_highlight_theme(&block).unwrap();
+        assert!(Arc::ptr_eq(&cached_light_theme, &light_theme));
+
+        let equivalent_light_theme = Arc::new(light_theme.as_ref().clone());
+        let repeated_light_styles = block.styles(&equivalent_light_theme);
+        assert_eq!(repeated_light_styles, light_styles);
+        assert!(
+            Arc::ptr_eq(
+                &cached_highlight_theme(&block).unwrap(),
+                &equivalent_light_theme
+            ),
+            "an equivalent replacement should become the cache identity"
+        );
+        assert_eq!(block.styles(&equivalent_light_theme), light_styles);
+
+        let dark_styles = block.styles(&dark_theme);
+        assert_eq!(
+            cached_highlight_theme(&block).as_deref(),
+            Some(dark_theme.as_ref())
+        );
+
+        let color_for_number = |styles: &[(Range<usize>, HighlightStyle)]| -> Option<Hsla> {
+            styles
+                .iter()
+                .find(|(range, _)| {
+                    range.start <= number_range.start && range.end >= number_range.end
+                })
+                .and_then(|(_, style)| style.color)
+        };
+
+        assert_eq!(color_for_number(&light_styles), light_number);
+        assert_eq!(
+            color_for_number(&dark_styles),
+            dark_number,
+            "a theme change must not reuse syntax styles from the previous theme"
+        );
+    }
+
+    #[cfg(feature = "tree-sitter")]
+    #[gpui::test]
+    fn rendered_markdown_code_block_follows_theme_without_reparsing(cx: &mut TestAppContext) {
+        struct CodeBlockThemeRoot {
+            text_view: Entity<TextViewState>,
+        }
+
+        impl Render for CodeBlockThemeRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                div().w(px(480.)).child(TextView::new(&self.text_view))
+            }
+        }
+
+        let lang = SharedString::from("json-theme-render-test");
+        LanguageRegistry::singleton().register(
+            lang.as_ref(),
+            &crate::highlighter::LanguageConfig::new(
+                lang.clone(),
+                tree_sitter_json::LANGUAGE.into(),
+                vec![],
+                "(number) @number",
+                "",
+                "",
+            ),
+        );
+
+        cx.update(crate::init);
+        let markdown = format!("```{lang}\n{{\"value\": 42}}\n```");
+        let (view, cx) = cx.add_window_view(|_, cx| CodeBlockThemeRoot {
+            text_view: cx.new(|cx| TextViewState::markdown(&markdown, cx)),
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let light_theme = cx.update(|_, cx| cx.theme().highlight_theme.clone());
+        let light_block = view.read_with(cx, |root, cx| {
+            let state = root.text_view.read(cx);
+            let BlockNode::CodeBlock(block) = &state.parsed_content.document.blocks[0] else {
+                panic!("expected a code block");
+            };
+
+            block.clone()
+        });
+        let cached_light_theme = cached_highlight_theme(&light_block)
+            .expect("initial render should populate the highlight cache");
+        assert_eq!(cached_light_theme.as_ref(), light_theme.as_ref());
+
+        cx.update(|window, cx| {
+            Theme::change(ThemeMode::Dark, Some(&mut *window), cx);
+            let _ = window.draw(cx);
+        });
+
+        let dark_theme = cx.update(|_, cx| cx.theme().highlight_theme.clone());
+        let dark_block = view.read_with(cx, |root, cx| {
+            let state = root.text_view.read(cx);
+            let BlockNode::CodeBlock(block) = &state.parsed_content.document.blocks[0] else {
+                panic!("expected a code block");
+            };
+
+            block.clone()
+        });
+        let cached_dark_theme = cached_highlight_theme(&dark_block)
+            .expect("theme-change render should refresh the highlight cache");
+
+        assert_ne!(
+            light_theme.as_ref(),
+            dark_theme.as_ref(),
+            "the test themes must have distinct highlight palettes"
+        );
+        assert!(
+            Arc::ptr_eq(&dark_block.styles, &light_block.styles),
+            "changing the theme must not require reparsing the Markdown document"
+        );
+        assert_eq!(cached_dark_theme.as_ref(), dark_theme.as_ref());
     }
 }
