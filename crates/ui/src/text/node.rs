@@ -20,10 +20,11 @@ use crate::{
     input::{InputEdit, Point, RopeExt as _},
     scroll::horizontal_scroll_area,
     text::{
-        CodeBlockActionsFn, MarkdownExtensions, MarkdownNode,
+        CodeBlockActionsFn, LinkClickHandlerFn, MarkdownExtensions, MarkdownNode,
         document::NodeRenderOptions,
         inline::{Inline, InlineState},
         inline_flow::{InlineFlow, InlineFlowItem},
+        text_view::handle_link_click,
     },
     tooltip::Tooltip,
     v_flex,
@@ -773,6 +774,7 @@ impl CodeBlock {
                         self.state.clone(),
                         vec![],
                         self.styles(&cx.theme().highlight_theme),
+                        node_cx.link_click_handler.clone(),
                     ))
                     .when_some(node_cx.code_block_actions.clone(), |this, actions| {
                         this.child(
@@ -800,6 +802,7 @@ pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    pub(crate) link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     pub(crate) markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -826,6 +829,7 @@ impl Paragraph {
             return InlineFlow::new(
                 span.unwrap_or_default(),
                 self.inline_flow_items(node_cx, cx),
+                node_cx.link_click_handler.clone(),
             )
             .into_any_element();
         }
@@ -853,10 +857,12 @@ impl Paragraph {
                             inline_node.state.clone(),
                             links.clone(),
                             highlights.clone(),
+                            node_cx.link_click_handler.clone(),
                         )
                         .into_any_element(),
                     );
                 }
+                let link_click_handler = node_cx.link_click_handler.clone();
                 child_nodes.push(
                     img(image.url.clone())
                         .id(ix)
@@ -865,14 +871,29 @@ impl Paragraph {
                         .when_some(image.width, |this, width| this.w(width))
                         .when_some(image.link.clone(), |this, link| {
                             let title = image.title();
+                            let link_click_handler = link_click_handler.clone();
                             this.cursor_pointer()
                                 .tooltip(move |window, cx| {
                                     Tooltip::new(title.clone()).build(window, cx)
                                 })
-                                .on_click(move |_, window, cx| {
+                                .on_click(move |event, window, cx| {
                                     window.end_text_selection(cx);
                                     cx.stop_propagation();
-                                    cx.open_url(&link.url);
+                                    let button = if event.is_middle_click() {
+                                        gpui::MouseButton::Middle
+                                    } else if event.is_right_click() {
+                                        gpui::MouseButton::Right
+                                    } else {
+                                        gpui::MouseButton::Left
+                                    };
+                                    handle_link_click(
+                                        &link_click_handler,
+                                        link.url.clone(),
+                                        button,
+                                        event.modifiers(),
+                                        window,
+                                        cx,
+                                    );
                                 })
                         })
                         .into_any_element(),
@@ -944,8 +965,16 @@ impl Paragraph {
             if let Ok(mut state) = self.state.lock() {
                 state.set_text(text.into());
             }
-            child_nodes
-                .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
+            child_nodes.push(
+                Inline::new(
+                    ix,
+                    self.state.clone(),
+                    links,
+                    highlights,
+                    node_cx.link_click_handler.clone(),
+                )
+                .into_any_element(),
+            );
         }
 
         div()
