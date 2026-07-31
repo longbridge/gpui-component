@@ -246,7 +246,6 @@ impl BlockNode {
                     text.push('\n');
                 }
             }
-
             BlockNode::CodeBlock(code_block) => {
                 let block_text = match kind {
                     BlockTextKind::All => code_block.text(),
