@@ -10,6 +10,74 @@ use gpui_component::{
 };
 use gpui_wry::WebView;
 
+const TEST_HTML: &str = r#"<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Local WebView input test</title>
+<style>
+  :root { color-scheme: dark; font: 14px/1.5 system-ui, sans-serif;
+    --background: #0a0a0a; --panel: #171717; --input: #0a0a0a;
+    --border: #262626; --foreground: #fafafa; --muted: #a3a3a3; --accent: #3b82f6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; padding: 24px; color: var(--foreground); background: var(--background); }
+  main { max-width: 760px; margin: auto; padding: 24px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--panel); }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  h2 { margin: 24px 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  p { margin: 0 0 18px; color: var(--muted); }
+  code { color: var(--foreground); }
+  label { display: block; margin: 14px 0; color: var(--muted); font-size: 13px; }
+  input, textarea { display: block; width: 100%; margin-top: 6px; padding: 9px 11px; border: 1px solid #2f2f2f;
+    border-radius: 5px; outline: none; color: var(--foreground); background: var(--input); font: inherit; }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  textarea { min-height: 90px; resize: vertical; }
+  button { padding: 8px 13px; border: 1px solid #fafafa; border-radius: 5px; color: #0a0a0a;
+    background: #fafafa; font: inherit; cursor: pointer; }
+  button:hover { background: #f5f5f5; }
+  #status { margin-top: 18px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 5px;
+    color: var(--muted); background: var(--input); }
+  #keyboard { min-height: 40px; margin: 0; padding: 10px; overflow: hidden; white-space: nowrap;
+    border: 1px solid var(--border); border-radius: 5px; color: var(--foreground); background: var(--input);
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+</style>
+<main>
+  <h1>Local WebView input test</h1>
+  <p>Click each field and type: <code>abc XYZ 123</code></p>
+  <label>English input
+    <input id="english" autofocus placeholder="Type English here">
+  </label>
+  <label>中文 / IME input
+    <input id="ime" placeholder="请输入中文">
+  </label>
+  <label>Multiline input
+    <textarea id="multiline" placeholder="Type multiple lines here"></textarea>
+  </label>
+  <button id="button" type="button">WebView button</button>
+  <div id="status">Focus: none</div>
+  <h2>Keyboard events</h2>
+  <pre id="keyboard">Click the page, then press keys...</pre>
+</main>
+<script>
+  const status = document.getElementById('status');
+  const keyboard = document.getElementById('keyboard');
+  const keyHistory = [];
+  function record(type, e) {
+    const key = e.key === ' ' ? 'Space' : (e.key || type);
+    const target = e.target && e.target.id ? e.target.id : (e.target && e.target.tagName ? e.target.tagName : '-');
+    const value = e.target && typeof e.target.value === 'string' ? '=' + JSON.stringify(e.target.value) : '';
+    keyHistory.push(type + '(' + key + '/' + e.code + ' @' + target + value + ')');
+    while (keyHistory.length > 12) keyHistory.shift();
+    keyboard.textContent = keyHistory.join('  →  ');
+  }
+  document.addEventListener('focusin', e => status.textContent = 'Focus: ' + (e.target.id || e.target.tagName));
+  document.addEventListener('focusout', e => status.textContent = 'Focus: none');
+  for (const type of ['keydown', 'keyup', 'keypress', 'input', 'compositionstart', 'compositionend']) {
+    document.addEventListener(type, e => record(type, e));
+  }
+  document.getElementById('button').onclick = () => status.textContent = 'Button clicked';
+</script>
+"#;
+
 pub struct Example {
     focus_handle: FocusHandle,
     webview: Entity<WebView>,
@@ -19,7 +87,7 @@ pub struct Example {
 impl Example {
     pub fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let webview = cx.new(|cx| {
-            let builder = wry::WebViewBuilder::new();
+            let builder = wry::WebViewBuilder::new().with_html(TEST_HTML);
             #[cfg(any(debug_assertions, feature = "inspector"))]
             let builder = builder.with_devtools(true);
 
@@ -56,11 +124,6 @@ impl Example {
 
         let address_input = cx.new(|cx| {
             InputState::new(window, cx).default_value("https://longbridge.github.io/gpui-component")
-        });
-
-        let url = address_input.read(cx).value().clone();
-        webview.update(cx, |view, _| {
-            view.load_url(&url);
         });
 
         cx.new(|cx| {
