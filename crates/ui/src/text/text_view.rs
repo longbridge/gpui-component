@@ -42,7 +42,6 @@ pub struct TextView {
     text: Option<SharedString>,
     pub(crate) state: Option<Entity<TextViewState>>,
     text_view_style: TextViewStyle,
-
     style: StyleRefinement,
     selectable: bool,
     selectable_source: bool,
