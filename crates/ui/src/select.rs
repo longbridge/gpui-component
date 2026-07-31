@@ -837,9 +837,10 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use gpui::{
-        AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
-        IntoElement, Modifiers, ParentElement as _, Render, SharedString, Styled as _, Task,
-        TestAppContext, VisualTestContext, WeakEntity, Window, div, px,
+        AnyElement, App, AppContext as _, Context, Entity, InputEvent as _,
+        InteractiveElement as _, IntoElement, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent,
+        ParentElement as _, Render, SharedString, Styled as _, Task, TestAppContext,
+        VisualTestContext, WeakEntity, Window, div, px,
     };
 
     use crate::{
@@ -1227,22 +1228,52 @@ mod tests {
         let trigger = cx
             .debug_bounds("select-trigger")
             .expect("select trigger is rendered");
-        cx.simulate_click(trigger.center(), Modifiers::default());
 
-        // GPUI TestWindow has no native platform handle. Keep the trigger focused while drawing
-        // the open menu so macOS does not try to synchronize the search input with an NSView.
-        // Once the input has rendered and registered its handlers, focus it without another draw.
+        // GPUI TestWindow has no native platform handle. Dispatch the click synchronously and
+        // restore trigger focus before the test executor can redraw the newly focused query input.
         cx.update(|window, cx| {
+            let position = trigger.center();
+            let modifiers = Modifiers::default();
+            window.dispatch_event(
+                MouseDownEvent {
+                    position,
+                    modifiers,
+                    button: MouseButton::Left,
+                    click_count: 1,
+                    first_mouse: false,
+                }
+                .to_platform_input(),
+                cx,
+            );
+            window.dispatch_event(
+                MouseUpEvent {
+                    position,
+                    modifiers,
+                    button: MouseButton::Left,
+                    click_count: 1,
+                }
+                .to_platform_input(),
+                cx,
+            );
+            assert!(
+                state.read(cx).state.open,
+                "the actual trigger click should open the Select"
+            );
+
             let focus_handle = state.read(cx).state.focus_handle.clone();
             focus_handle.focus(window, cx);
         });
+        cx.run_until_parked();
         draw(cx);
 
+        // Insert through the real query Input so its Change event drives the List search without
+        // requiring TestWindow to provide a native IME-backed view.
         cx.update(|window, cx| {
-            let focus_handle = state.read(cx).focus_handle(cx);
-            focus_handle.focus(window, cx);
+            let query_input = state.read(cx).state.list.read(cx).query_input.clone();
+            query_input.update(cx, |input, cx| {
+                input.insert("Rust", window, cx);
+            });
         });
-        cx.simulate_input("Rust");
         cx.run_until_parked();
 
         cx.update(|_, cx| {
