@@ -73,6 +73,7 @@ pub struct ListState<D: ListDelegate> {
     options: ListOptions,
     delegate: D,
     last_query: Option<String>,
+    search_pending: bool,
     scroll_handle: VirtualListScrollHandle,
     rows_cache: RowsCache,
     selected_index: Option<IndexPath>,
@@ -105,6 +106,7 @@ where
             rows_cache: RowsCache::default(),
             query_input,
             last_query: None,
+            search_pending: false,
             selected_index: None,
             selectable: true,
             searchable: false,
@@ -214,6 +216,27 @@ where
     /// Set the query text of the search input, this will trigger a search.
     pub fn set_query(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
         let query = query.to_string();
+        self.set_query_input(query.clone(), window, cx);
+        self.start_search(query, None, window, cx);
+    }
+
+    pub(crate) fn is_search_pending(&self) -> bool {
+        self.search_pending
+    }
+
+    pub(crate) fn set_query_with_completion(
+        &mut self,
+        query: &str,
+        on_complete: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let query = query.to_string();
+        self.set_query_input(query.clone(), window, cx);
+        self.start_search(query, Some(Box::new(on_complete)), window, cx);
+    }
+
+    fn set_query_input(&mut self, query: String, window: &mut Window, cx: &mut Context<Self>) {
         self.query_input.update(cx, |input, cx| {
             input.set_value(query, window, cx);
         });
@@ -277,35 +300,59 @@ where
                     return;
                 }
 
-                self.set_searching(true, window, cx);
-                let search = self.delegate.perform_search(&text, window, cx);
-
-                if self.rows_cache.len() > 0 {
-                    self._set_selected_index(Some(IndexPath::default()), window, cx);
-                } else {
-                    self._set_selected_index(None, window, cx);
-                }
-
-                self._search_task = cx.spawn_in(window, async move |this, window| {
-                    search.await;
-
-                    _ = this.update_in(window, |this, _, _| {
-                        this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
-                        this.last_query = Some(text);
-                    });
-
-                    // Always wait 100ms to avoid flicker
-                    window
-                        .background_executor()
-                        .timer(Duration::from_millis(100))
-                        .await;
-                    _ = this.update_in(window, |this, window, cx| {
-                        this.set_searching(false, window, cx);
-                    });
-                });
+                self.start_search(text, None, window, cx);
             }
             _ => {}
         }
+    }
+
+    fn start_search(
+        &mut self,
+        query: String,
+        on_complete: Option<Box<dyn FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static>>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // Dropping a GPUI Task cancels it. Cancel the previous search before the delegate starts
+        // new work so a stale result cannot race the replacement query.
+        self._search_task = Task::ready(());
+        self.search_pending = true;
+        self.set_searching(true, window, cx);
+        let search = self.delegate.perform_search(&query, window, cx);
+
+        // Preserve the existing cursor behavior for regular list searches. Completion-driven
+        // callers, such as Select resetting a filter before selecting a value, choose their
+        // final cursor after the delegate has restored its items.
+        if on_complete.is_none() {
+            if self.rows_cache.len() > 0 {
+                self._set_selected_index(Some(IndexPath::default()), window, cx);
+            } else {
+                self._set_selected_index(None, window, cx);
+            }
+        }
+
+        self._search_task = cx.spawn_in(window, async move |this, window| {
+            search.await;
+
+            _ = this.update_in(window, move |this, window, cx| {
+                this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
+                this.last_query = Some(query);
+                this.search_pending = false;
+
+                if let Some(on_complete) = on_complete {
+                    on_complete(this, window, cx);
+                }
+            });
+
+            // Always wait 100ms to avoid flicker
+            window
+                .background_executor()
+                .timer(Duration::from_millis(100))
+                .await;
+            _ = this.update_in(window, |this, window, cx| {
+                this.set_searching(false, window, cx);
+            });
+        });
     }
 
     fn set_searching(&mut self, searching: bool, window: &mut Window, cx: &mut Context<Self>) {
