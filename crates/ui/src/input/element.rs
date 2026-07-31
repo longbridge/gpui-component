@@ -1633,15 +1633,23 @@ impl Element for TextElement {
             None
         };
 
+        let wrapping_indent = state.wrapping_indent;
         let wrap_width_changed = state
             .last_layout
             .as_ref()
             .map(|l| l.wrap_width != wrap_width)
             .unwrap_or(true);
 
-        if wrap_width_changed {
+        let wrapping_indent_changed = state
+            .last_layout
+            .as_ref()
+            .map(|l| l.wrapping_indent != wrapping_indent)
+            .unwrap_or(true);
+
+        if wrap_width_changed || wrapping_indent_changed {
             self.state.update(cx, |state, cx| {
                 state.display_map.on_layout_changed(wrap_width, cx);
+                state.display_map.set_wrapping_indent(wrapping_indent, cx);
             });
         }
 
@@ -1694,6 +1702,7 @@ impl Element for TextElement {
             visible_range_offset,
             line_height,
             wrap_width,
+            wrapping_indent,
             line_number_width,
             lines: Rc::new(vec![]),
             cursor_bounds: None,

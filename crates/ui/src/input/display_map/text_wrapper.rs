@@ -1095,6 +1095,7 @@ mod tests {
             lines: Rc::new(vec![]),
             line_height: px(20.),
             wrap_width: None,
+            wrapping_indent: WrappingIndent::default(),
             line_number_width: px(0.),
             cursor_bounds: None,
             text_align: TextAlign::Left,
