@@ -331,10 +331,31 @@ impl TextWrapper {
 
             // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
             if let Some(wrap_width) = wrap_width {
-                // Here only have wrapped line, if there is no wrap meet, the `line_wraps` result will empty.
-                for boundary in wrap_line(&line_str, wrap_width) {
-                    wrapped_lines.push(prev_boundary_ix..boundary.ix);
-                    prev_boundary_ix = boundary.ix;
+                match self.wrapping_indent {
+                    WrappingIndent::Same => {
+                        // Here only have wrapped line, if there is no wrap meet, the `line_wraps`
+                        // result will empty.
+                        for boundary in wrap_line(&line_str, wrap_width) {
+                            wrapped_lines.push(prev_boundary_ix..boundary.ix);
+                            prev_boundary_ix = boundary.ix;
+                        }
+                    }
+                    WrappingIndent::None => {
+                        // The first visual line keeps the line's leading indentation, so it is
+                        // wrapped as is.
+                        let bondaries = wrap_line(&line_str, wrap_width);
+                        if let Some(first) = bondaries.first() {
+                            let first_ix = first.ix;
+                            wrapped_lines.push(prev_boundary_ix..first_ix);
+                            prev_boundary_ix = first_ix;
+
+                            for boundary in wrap_line(&line_str[first_ix..], wrap_width) {
+                                let ix = first_ix + boundary.ix;
+                                wrapped_lines.push(prev_boundary_ix..ix);
+                                prev_boundary_ix = ix;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1187,6 +1208,72 @@ mod tests {
         assert_eq!(
             wrapper.display_point_to_offset(WrapDisplayPoint::new(0, 0, 15)),
             15
+        );
+    }
+
+    #[test]
+    fn test_wrapping_indent_same_keeps_indent_reserved() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.0), Some(px(10.)));
+        wrapper.wrapping_indent = WrappingIndent::Same;
+        let text = Rope::from("  abcdefghijklmnopqrstuv");
+        let mut fake_wrap_line = |line: &str, _wrap_width: Pixels| {
+            if line.starts_with(' ') {
+                vec![Boundary {
+                    ix: 5,
+                    next_indent: 2,
+                }]
+            } else {
+                let mut boundaries = vec![];
+                let mut i = 8;
+                while i < line.len() {
+                    boundaries.push(Boundary {
+                        ix: i,
+                        next_indent: 0,
+                    });
+                    i += 8;
+                }
+                boundaries
+            }
+        };
+
+        wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
+
+        assert_eq!(
+            wrapper.line(0).unwrap().wrapped_lines.as_slice(),
+            [0..5, 5..24]
+        );
+    }
+
+    #[test]
+    fn test_wrapping_indent_none_continuation_lines_wrapped_at_full_width() {
+        let mut wrapper = TextWrapper::new(test_font(), px(14.0), Some(px(10.)));
+        wrapper.wrapping_indent = WrappingIndent::default();
+        let text = Rope::from("  abcdefghijklmnopqrstuv");
+        let mut fake_wrap_line = |line: &str, _wrap_width: Pixels| {
+            if line.starts_with(' ') {
+                vec![Boundary {
+                    ix: 5,
+                    next_indent: 2,
+                }]
+            } else {
+                let mut boundaries = vec![];
+                let mut i = 8;
+                while i < line.len() {
+                    boundaries.push(Boundary {
+                        ix: i,
+                        next_indent: 0,
+                    });
+                    i += 8;
+                }
+                boundaries
+            }
+        };
+
+        wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
+
+        assert_eq!(
+            wrapper.line(0).unwrap().wrapped_lines.as_slice(),
+            [0..5, 5..13, 13..21, 21..24]
         );
     }
 }
