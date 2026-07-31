@@ -4,7 +4,6 @@ use std::{ops::Deref, rc::Rc};
 use block2::RcBlock;
 #[cfg(target_os = "windows")]
 use std::cell::Cell;
-#[cfg(target_os = "windows")]
 use wry::{
     Rect,
     dpi::{self, LogicalSize},
@@ -22,9 +21,12 @@ use windows::Win32::Foundation::POINT;
 use gpui::{
     App, Bounds, ContentMask, DismissEvent, DispatchPhase, Element, ElementId, Entity,
     EventEmitter, FocusHandle, Focusable, GlobalElementId, Hitbox, InteractiveElement, IntoElement,
-    LayoutId, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement as _, Pixels, Render, ScrollDelta, ScrollWheelEvent, Size, Style, Styled as _,
-    Window, canvas, div,
+    LayoutId, MouseDownEvent, ParentElement as _, Pixels, Render, Size, Style, Styled as _, Window,
+    canvas, div,
+};
+#[cfg(target_os = "windows")]
+use gpui::{
+    MouseButton, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ScrollDelta, ScrollWheelEvent,
 };
 
 /// A webview based on wry WebView.
