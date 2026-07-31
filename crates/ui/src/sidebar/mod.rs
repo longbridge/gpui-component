@@ -71,6 +71,7 @@ impl SidebarLayout {
         collapsible: SidebarCollapsible,
         collapsed: bool,
         expanded_width: Option<Pixels>,
+        collapsed_width: Pixels,
         side: Side,
     ) -> Self {
         let collapsed = collapsed && collapsible != SidebarCollapsible::None;
@@ -79,7 +80,7 @@ impl SidebarLayout {
             SidebarCollapsible::Icon => match expanded_width {
                 Some(expanded_width) => SidebarWrapperLayout::Animated {
                     target_width: if collapsed {
-                        COLLAPSED_WIDTH
+                        collapsed_width
                     } else {
                         expanded_width
                     },
@@ -231,6 +232,8 @@ pub struct Sidebar<E: SidebarItem + 'static> {
     side: Side,
     collapsible: SidebarCollapsible,
     collapsed: bool,
+    /// The width of the sidebar when collapsed to icon mode
+    collapsed_width: Pixels,
 }
 
 impl<E: SidebarItem> Sidebar<E> {
@@ -245,6 +248,7 @@ impl<E: SidebarItem> Sidebar<E> {
             side: Side::Left,
             collapsible: SidebarCollapsible::Icon,
             collapsed: false,
+            collapsed_width: COLLAPSED_WIDTH,
         }
     }
 
@@ -269,6 +273,15 @@ impl<E: SidebarItem> Sidebar<E> {
     /// Set the sidebar to be collapsed
     pub fn collapsed(mut self, collapsed: bool) -> Self {
         self.collapsed = collapsed;
+        self
+    }
+
+    /// Set the width of the sidebar when collapsed to icon mode
+    /// ([`SidebarCollapsible::Icon`]).
+    ///
+    /// Default is 48px.
+    pub fn collapsed_width(mut self, width: impl Into<Pixels>) -> Self {
+        self.collapsed_width = width.into();
         self
     }
 
@@ -398,8 +411,14 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
         // Determine effective expanded width from user's custom style or default.
         // Non-pixel widths still render correctly, but cannot use pixel width transitions.
         let expanded_width = sidebar_expanded_width(&self.style);
-        let layout =
-            SidebarLayout::new(self.collapsible, self.collapsed, expanded_width, self.side);
+        let collapsed_width = self.collapsed_width;
+        let layout = SidebarLayout::new(
+            self.collapsible,
+            self.collapsed,
+            expanded_width,
+            collapsed_width,
+            self.side,
+        );
 
         // Sidebar content renders at its target width immediately. A wrapper
         // div animates clip-width for smooth transitions without re-laying out
@@ -422,7 +441,7 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
             })
             .refine_style(&self.style)
             .when(layout.icon_collapsed, |this| {
-                this.w(COLLAPSED_WIDTH).gap_2()
+                this.w(collapsed_width).gap_2()
             })
             .when_some(self.header.take(), |this, header| {
                 this.child(
@@ -555,7 +574,7 @@ mod tests {
         expanded_width: Option<Pixels>,
         side: Side,
     ) -> SidebarLayout {
-        SidebarLayout::new(collapsible, collapsed, expanded_width, side)
+        SidebarLayout::new(collapsible, collapsed, expanded_width, COLLAPSED_WIDTH, side)
     }
 
     #[test]
@@ -589,6 +608,25 @@ mod tests {
             layout.wrapper,
             SidebarWrapperLayout::Animated {
                 target_width: px(240.),
+            }
+        );
+    }
+
+    #[test]
+    fn icon_collapsed_should_use_custom_collapsed_width() {
+        let layout = SidebarLayout::new(
+            SidebarCollapsible::Icon,
+            true,
+            Some(px(240.)),
+            px(64.),
+            Side::Left,
+        );
+
+        assert!(layout.icon_collapsed);
+        assert_eq!(
+            layout.wrapper,
+            SidebarWrapperLayout::Animated {
+                target_width: px(64.),
             }
         );
     }
