@@ -129,11 +129,3 @@ ignored = ["log", "anyhow", "serde"]
 [patch.crates-io]
 # Use stacker's psm version which may have better WASM support
 psm = { git = "https://github.com/rust-lang/stacker", branch = "master" }
-
-[patch."https://github.com/huacnlee/zed"]
-gpui = { path = "../zed/crates/gpui" }
-gpui_macros = { path = "../zed/crates/gpui_macros" }
-gpui_platform = { path = "../zed/crates/gpui_platform" }
-gpui_web = { path = "../zed/crates/gpui_web" }
-gpui_windows = { path = "../zed/crates/gpui_windows" }
-reqwest_client = { path = "../zed/crates/reqwest_client" }
