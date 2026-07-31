@@ -1338,7 +1338,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let offset = self.end_of_line();
-        self.select_to(offset, cx);
+        self.select_to_with_affinity(offset, true, cx);
     }
 
     pub(super) fn select_to_previous_word(

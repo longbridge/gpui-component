@@ -252,8 +252,7 @@ impl InputState {
     pub(super) fn end(&mut self, _: &MoveEnd, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         let offset = self.end_of_line();
-        self.move_to(offset, Some(MoveDirection::Down), cx);
-        self.cursor_line_end_affinity = true;
+        self.move_to_with_affinity(offset, Some(MoveDirection::Down), true, cx);
     }
 
     pub(super) fn move_to_start(
