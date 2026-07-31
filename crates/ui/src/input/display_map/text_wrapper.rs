@@ -584,7 +584,11 @@ impl LineLayout {
     /// Get the index for the given position (x, y) in this line layout.
     ///
     /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0)
-    /// The return value is a local byte index in this line layout, start from 0.
+    /// The return value is a local byte index in this line layout, start from 0, together with the
+    /// `line_end_affinity` that should be used to render a caret at that index (see
+    /// [`Self::position_for_index`]): `true` when the index landed exactly at the boundary of a
+    /// non-final wrapped sub-line, so the caret should stick to the end of that sub-line rather
+    /// than jump to the start of the next one.
     ///
     /// Used for mouse hit-testing: resolves all the way to the end of a wrapped sub-line so the
     /// last character of a wrapped line is reachable by click/drag. For keyboard column-memory
@@ -593,15 +597,19 @@ impl LineLayout {
         &self,
         pos: Point<Pixels>,
         last_layout: &LastLayout,
-    ) -> Option<usize> {
+    ) -> Option<(usize, bool)> {
         let mut offset = 0;
         let mut line_top = px(0.);
         let x_offset = last_layout.alignment_offset(self.longest_width);
 
-        for line in self.wrapped_lines.iter() {
+        for (i, line) in self.wrapped_lines.iter().enumerate() {
+            let is_last = i + 1 == self.wrapped_lines.len();
             let line_bottom = line_top + last_layout.line_height;
             if pos.y >= line_top && pos.y < line_bottom {
-                return Some(offset + line.closest_index_for_x(pos.x - x_offset));
+                let ix = line.closest_index_for_x(pos.x - x_offset);
+                let line_end_affinity = !is_last && ix == line.text.len();
+
+                return Some((offset + ix, line_end_affinity));
             }
 
             offset += line.text.len();

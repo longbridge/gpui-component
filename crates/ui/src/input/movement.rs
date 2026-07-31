@@ -44,8 +44,25 @@ impl InputState {
         direction: Option<MoveDirection>,
         cx: &mut Context<Self>,
     ) {
+      self.move_to_with_affinity(offset, direction, false, cx);
+    }
+
+    /// Like [`Self::move_to`], but also sets the caret's line-end affinity in the same call.
+    ///
+    /// Used by mouse click placement: when a click resolves to the wrap boundary of a non-final
+    /// wrapped sub-line, passing `line_end_affinity: true` renders the caret at the end of that
+    /// visual line instead of the start of the next one. Folding this into `move_to` itself (rather
+    /// than setting the field after a separate `move_to` call) means a caller can't move the cursor
+    /// and forget to apply the affinity.
+    pub(crate) fn move_to_with_affinity(
+        &mut self,
+        offset: usize,
+        direction: Option<MoveDirection>,
+        line_end_affinity: bool,
+        cx: &mut Context<Self>,
+    ) {
         let offset = offset.clamp(0, self.text.len());
-        self.cursor_line_end_affinity = false;
+        self.cursor_line_end_affinity = line_end_affinity;
         self.selected_range = (offset..offset).into();
         self.scroll_to(offset, direction, cx);
         self.pause_blink_cursor(cx);
