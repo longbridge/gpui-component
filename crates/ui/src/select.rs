@@ -837,9 +837,9 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use gpui::{
-        AnyElement, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-        Modifiers, ParentElement as _, Render, SharedString, Styled as _, Task, TestAppContext,
-        VisualTestContext, WeakEntity, Window, div, px,
+        AnyElement, App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _,
+        IntoElement, Modifiers, ParentElement as _, Render, SharedString, Styled as _, Task,
+        TestAppContext, VisualTestContext, WeakEntity, Window, div, px,
     };
 
     use crate::{
@@ -1228,9 +1228,22 @@ mod tests {
             .debug_bounds("select-trigger")
             .expect("select trigger is rendered");
         cx.simulate_click(trigger.center(), Modifiers::default());
+
+        // GPUI TestWindow has no native platform handle. Keep the trigger focused while drawing
+        // the open menu so macOS does not try to synchronize the search input with an NSView.
+        // Once the input has rendered and registered its handlers, focus it without another draw.
+        cx.update(|window, cx| {
+            let focus_handle = state.read(cx).state.focus_handle.clone();
+            focus_handle.focus(window, cx);
+        });
         draw(cx);
+
+        cx.update(|window, cx| {
+            let focus_handle = state.read(cx).focus_handle(cx);
+            focus_handle.focus(window, cx);
+        });
         cx.simulate_input("Rust");
-        draw(cx);
+        cx.run_until_parked();
 
         cx.update(|_, cx| {
             let state = state.read(cx);
@@ -1244,7 +1257,7 @@ mod tests {
                 state.set_selected_value(&"Go", window, cx);
             });
         });
-        draw(cx);
+        cx.run_until_parked();
 
         cx.update(|_, cx| {
             let state = state.read(cx);
@@ -1254,6 +1267,15 @@ mod tests {
             assert_eq!(list.query_input.read(cx).value(), "");
             assert_eq!(list.delegate().delegate.items_count(0), 3);
         });
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_open(false, cx);
+                state.focus(window, cx);
+            });
+        });
+        draw(cx);
+
         assert!(
             cx.debug_bounds("selected-title-go").is_some(),
             "the actual Select trigger should render the programmatically selected item"
