@@ -51,7 +51,7 @@ pub(crate) fn handle_link_click(
             window,
             cx,
         );
-    } else {
+    } else if matches!(button, MouseButton::Left | MouseButton::Middle) {
         cx.open_url(&url);
     }
 }
@@ -600,6 +600,27 @@ mod tests {
     }
 
     #[gpui::test]
+    fn right_click_does_not_open_url_without_handler(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) =
+            cx.add_window_view(|_, cx| TextViewTestRoot::new("[example](https://example.com)", cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
     fn link_handler_receives_button_and_modifiers(cx: &mut TestAppContext) {
         use std::sync::{Arc, Mutex};
 
@@ -647,13 +668,24 @@ mod tests {
             MouseButton::Middle,
             Modifiers::default(),
         );
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
 
         let clicks = captured.lock().unwrap();
-        assert_eq!(clicks.len(), 2);
+        assert_eq!(clicks.len(), 3);
         assert_eq!(clicks[0].url, "https://example.com");
         assert_eq!(clicks[0].button, MouseButton::Left);
         assert!(clicks[0].modifiers.control);
         assert_eq!(clicks[1].button, MouseButton::Middle);
+        assert_eq!(clicks[2].button, MouseButton::Right);
         assert_eq!(cx.opened_url(), None);
     }
 
