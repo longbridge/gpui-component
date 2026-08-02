@@ -1211,6 +1211,78 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_button_emits_toggle_state_only_when_selected_is_configured(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use crate::ElementExt as _;
+        use gpui::{Element as _, IntoElement as _, Render};
+        use std::sync::{Arc, Mutex};
+
+        struct ButtonA11yProbe {
+            states: Arc<Mutex<Vec<Option<gpui::accesskit::Toggled>>>>,
+        }
+
+        impl Render for ButtonA11yProbe {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut gpui::Context<Self>,
+            ) -> impl IntoElement {
+                let states = self.states.clone();
+                div().on_prepaint(move |_, window, cx| {
+                    let ordinary = Button::new("ordinary")
+                        .label("Ordinary")
+                        .render(window, cx)
+                        .into_element();
+                    let mut ordinary_node = gpui::accesskit::Node::new(Role::Button);
+                    ordinary.write_a11y_info(&mut ordinary_node);
+                    let ordinary_state = ordinary_node.toggled();
+                    drop(ordinary);
+
+                    let unselected = Button::new("unselected")
+                        .label("Unselected")
+                        .selected(false)
+                        .render(window, cx)
+                        .into_element();
+                    let mut unselected_node = gpui::accesskit::Node::new(Role::Button);
+                    unselected.write_a11y_info(&mut unselected_node);
+                    let unselected_state = unselected_node.toggled();
+                    drop(unselected);
+
+                    let selected = Button::new("selected")
+                        .label("Selected")
+                        .selected(true)
+                        .render(window, cx)
+                        .into_element();
+                    let mut selected_node = gpui::accesskit::Node::new(Role::Button);
+                    selected.write_a11y_info(&mut selected_node);
+                    let selected_state = selected_node.toggled();
+
+                    *states.lock().unwrap() =
+                        vec![ordinary_state, unselected_state, selected_state];
+                })
+            }
+        }
+
+        cx.update(crate::init);
+        let states = Arc::new(Mutex::new(Vec::new()));
+        let captured = states.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| ButtonA11yProbe { states });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(
+            *captured.lock().unwrap(),
+            vec![
+                None,
+                Some(gpui::accesskit::Toggled::False),
+                Some(gpui::accesskit::Toggled::True),
+            ]
+        );
+    }
+
+    #[gpui::test]
     fn test_button_variant_methods(_cx: &mut gpui::TestAppContext) {
         // Test variant check methods
         assert!(ButtonVariant::Link.is_link());
