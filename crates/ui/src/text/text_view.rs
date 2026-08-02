@@ -690,6 +690,91 @@ mod tests {
     }
 
     #[gpui::test]
+    fn linked_image_handler_receives_left_middle_and_right_clicks(cx: &mut TestAppContext) {
+        use std::sync::{Arc, Mutex};
+
+        struct LinkedImageRoot {
+            text_view: Entity<TextViewState>,
+            clicks: Arc<Mutex<Vec<super::TextViewLinkClick>>>,
+        }
+
+        impl Render for LinkedImageRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                let clicks = self.clicks.clone();
+                div().w(px(160.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .on_link_click(move |event, _, _| {
+                            clicks.lock().unwrap().push(event.clone());
+                        }),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        let clicks = Arc::new(Mutex::new(Vec::new()));
+        let captured = clicks.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let content = cx.new(|cx| LinkedImageRoot {
+                text_view: cx.new(|cx| {
+                    TextViewState::markdown(
+                        r#"Before [<img src="https://example.com/image.svg" width="32" height="32">](https://example.com/image-link) after."#,
+                        cx,
+                    )
+                }),
+                clicks,
+            });
+            crate::Root::new(content, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let inline_bounds = cx.update(|window, cx| {
+            crate::Root::read(window, cx)
+                .selectable_text_inlines
+                .values()
+                .next()
+                .cloned()
+                .unwrap_or_default()
+        });
+        assert!(
+            inline_bounds.len() >= 2,
+            "linked image needs text bounds on both sides: {inline_bounds:?}"
+        );
+        assert!(
+            inline_bounds[1].left() - inline_bounds[0].right() >= px(24.),
+            "linked image did not reserve the expected click target: {inline_bounds:?}"
+        );
+        let position = point(
+            inline_bounds[0].right() + (inline_bounds[1].left() - inline_bounds[0].right()) * 0.5,
+            inline_bounds[0].top() + px(8.),
+        );
+        for button in [MouseButton::Left, MouseButton::Middle, MouseButton::Right] {
+            cx.simulate_mouse_down(position, button, Modifiers::default());
+            cx.simulate_mouse_up(position, button, Modifiers::default());
+        }
+
+        let clicks = captured.lock().unwrap();
+        assert_eq!(clicks.len(), 3);
+        assert!(
+            clicks
+                .iter()
+                .all(|event| event.url == "https://example.com/image-link")
+        );
+        assert_eq!(clicks[0].button, MouseButton::Left);
+        assert_eq!(clicks[1].button, MouseButton::Middle);
+        assert_eq!(clicks[2].button, MouseButton::Right);
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
     fn clipped_markdown_cannot_start_selection(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (view, cx) = cx
