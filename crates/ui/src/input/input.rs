@@ -2,9 +2,10 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AccessibleAction, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla, InteractiveElement as _,
-    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Rems, RenderOnce, Role,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
+    AccessibleAction, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
+    InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Rems,
+    RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window,
+    div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -288,10 +289,7 @@ impl Input {
         }
     }
 
-    fn exposes_accessibility_value(
-        masked: bool,
-        content_type: Option<InputContentType>,
-    ) -> bool {
+    fn exposes_accessibility_value(masked: bool, content_type: Option<InputContentType>) -> bool {
         !masked
             && !matches!(
                 content_type,
@@ -299,6 +297,19 @@ impl Input {
             )
     }
 
+    fn handle_accessibility_set_value(
+        state: &Entity<InputState>,
+        data: Option<&gpui::accesskit::ActionData>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(gpui::accesskit::ActionData::Value(value)) = data else {
+            return;
+        };
+        state.update(cx, |state, cx| {
+            state.replace_all(value.to_string(), window, cx);
+        });
+    }
     /// This method must after the refine_style.
     fn render_editor(
         paddings: EdgesRefinement<DefiniteLength>,
@@ -417,36 +428,31 @@ impl RenderOnce for Input {
             .tab_index(self.tab_index)
             .when(!state.disabled, |this| {
                 this.on_a11y_action(AccessibleAction::SetValue, move |data, window, cx| {
-                    let Some(gpui::accesskit::ActionData::Value(value)) = data else {
-                        return;
-                    };
-                    accessibility_state.update(cx, |state, cx| {
-                        state.replace_all(value.to_string(), window, cx);
-                    });
+                    Self::handle_accessibility_set_value(&accessibility_state, data, window, cx);
                 })
                 .on_action(window.listener_for(&self.state, InputState::backspace))
-                    .on_action(window.listener_for(&self.state, InputState::delete))
-                    .on_action(
-                        window.listener_for(&self.state, InputState::delete_to_beginning_of_line),
-                    )
-                    .on_action(window.listener_for(&self.state, InputState::delete_to_end_of_line))
-                    .on_action(window.listener_for(&self.state, InputState::delete_previous_word))
-                    .on_action(window.listener_for(&self.state, InputState::delete_next_word))
-                    .on_action(window.listener_for(&self.state, InputState::enter))
-                    .on_action(window.listener_for(&self.state, InputState::escape))
-                    .on_action(window.listener_for(&self.state, InputState::paste))
-                    .on_action(window.listener_for(&self.state, InputState::cut))
-                    .on_action(window.listener_for(&self.state, InputState::undo))
-                    .on_action(window.listener_for(&self.state, InputState::redo))
-                    .when(state.mode.is_multi_line(), |this| {
-                        this.on_action(window.listener_for(&self.state, InputState::indent_inline))
-                            .on_action(window.listener_for(&self.state, InputState::outdent_inline))
-                            .on_action(window.listener_for(&self.state, InputState::indent_block))
-                            .on_action(window.listener_for(&self.state, InputState::outdent_block))
-                    })
-                    .on_action(
-                        window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
-                    )
+                .on_action(window.listener_for(&self.state, InputState::delete))
+                .on_action(
+                    window.listener_for(&self.state, InputState::delete_to_beginning_of_line),
+                )
+                .on_action(window.listener_for(&self.state, InputState::delete_to_end_of_line))
+                .on_action(window.listener_for(&self.state, InputState::delete_previous_word))
+                .on_action(window.listener_for(&self.state, InputState::delete_next_word))
+                .on_action(window.listener_for(&self.state, InputState::enter))
+                .on_action(window.listener_for(&self.state, InputState::escape))
+                .on_action(window.listener_for(&self.state, InputState::paste))
+                .on_action(window.listener_for(&self.state, InputState::cut))
+                .on_action(window.listener_for(&self.state, InputState::undo))
+                .on_action(window.listener_for(&self.state, InputState::redo))
+                .when(state.mode.is_multi_line(), |this| {
+                    this.on_action(window.listener_for(&self.state, InputState::indent_inline))
+                        .on_action(window.listener_for(&self.state, InputState::outdent_inline))
+                        .on_action(window.listener_for(&self.state, InputState::indent_block))
+                        .on_action(window.listener_for(&self.state, InputState::outdent_block))
+                })
+                .on_action(
+                    window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
+                )
             })
             .on_action(window.listener_for(&self.state, InputState::left))
             .on_action(window.listener_for(&self.state, InputState::right))
@@ -683,6 +689,68 @@ mod tests {
         );
     }
 
+    #[gpui::test]
+    fn editable_input_emits_value_and_handles_accessibility_set_value(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use crate::ElementExt as _;
+        use gpui::{AppContext as _, Element as _, IntoElement as _, Render};
+        use std::sync::{Arc, Mutex};
+
+        type EmittedState = Option<(Option<String>, bool)>;
+
+        struct InputA11yProbe {
+            state: Entity<InputState>,
+            emitted: Arc<Mutex<EmittedState>>,
+        }
+
+        impl Render for InputA11yProbe {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut gpui::Context<Self>,
+            ) -> impl IntoElement {
+                let state = self.state.clone();
+                let emitted = self.emitted.clone();
+                div().on_prepaint(move |_, window, cx| {
+                    let input = Input::new(&state).render(window, cx).into_element();
+                    let mut node = gpui::accesskit::Node::new(Role::TextInput);
+                    input.write_a11y_info(&mut node);
+                    *emitted.lock().unwrap() = Some((
+                        node.value().map(ToOwned::to_owned),
+                        node.supports_action(AccessibleAction::SetValue),
+                    ));
+                })
+            }
+        }
+
+        cx.update(crate::init);
+        let emitted = Arc::new(Mutex::new(None));
+        let captured = emitted.clone();
+        let (probe, cx) = cx.add_window_view(move |window, cx| InputA11yProbe {
+            state: cx.new(|cx| InputState::new(window, cx).default_value("initial")),
+            emitted,
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(
+            *captured.lock().unwrap(),
+            Some((Some("initial".into()), true))
+        );
+
+        let state = probe.read_with(cx, |probe, _| probe.state.clone());
+        cx.update(|window, cx| {
+            Input::handle_accessibility_set_value(&state, None, window, cx);
+        });
+        assert_eq!(state.read_with(cx, |state, _| state.value()), "initial");
+
+        let action = gpui::accesskit::ActionData::Value("updated".into());
+        cx.update(|window, cx| {
+            Input::handle_accessibility_set_value(&state, Some(&action), window, cx);
+        });
+        assert_eq!(state.read_with(cx, |state, _| state.value()), "updated");
+    }
     #[test]
     fn accessibility_value_is_hidden_for_secret_inputs() {
         assert!(Input::exposes_accessibility_value(false, None));
