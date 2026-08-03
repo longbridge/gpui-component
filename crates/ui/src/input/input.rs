@@ -4,8 +4,8 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AccessibleAction, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
     InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Rems,
-    RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window,
-    div, px, relative,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    TextAlign, Window, div, px, relative,
 };
 
 use crate::button::{Button, ButtonVariants as _};
@@ -52,6 +52,7 @@ pub struct Input {
     selected: bool,
     content_type: Option<InputContentType>,
     role: Option<Role>,
+    aria_label: Option<SharedString>,
 
     /// An optional context menu builder to allow a custom context menu on the input.
     ///
@@ -97,8 +98,14 @@ impl Input {
             selected: false,
             content_type: None,
             role: None,
+            aria_label: None,
             context_menu_builder: None,
         }
+    }
+
+    pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
+        self.aria_label = Some(label.into());
+        self
     }
 
     pub fn prefix(mut self, prefix: impl IntoElement) -> Self {
@@ -425,6 +432,9 @@ impl RenderOnce for Input {
         div()
             .id(("input", self.state.entity_id()))
             .role(accessibility_role)
+            .when_some(self.aria_label.clone(), |this, label| {
+                this.aria_label(label)
+            })
             .when_some(accessibility_value, |this, value| this.aria_value(value))
             .flex()
             .key_context(crate::input::CONTEXT)
