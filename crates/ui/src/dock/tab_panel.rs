@@ -71,6 +71,9 @@ pub struct TabPanel {
     stack_panel: Option<WeakEntity<StackPanel>>,
     pub(crate) panels: Vec<Arc<dyn PanelView>>,
     pub(crate) active_ix: usize,
+    /// Bumped on every real active tab change, used to cancel the deferred
+    /// initial `set_active(true)` scheduled when the first panel is added.
+    active_gen: usize,
     /// If this is true, the Panel closable will follow the active panel's closable,
     /// otherwise this TabPanel will not able to close
     ///
@@ -172,6 +175,7 @@ impl TabPanel {
             stack_panel,
             panels: Vec::new(),
             active_ix: 0,
+            active_gen: 0,
             tab_bar_scroll_handle: ScrollHandle::new(),
             pending_scroll_to_ix: None,
             will_split_placement: None,
@@ -219,6 +223,7 @@ impl TabPanel {
         let last_active_ix = self.active_ix;
 
         self.active_ix = ix;
+        self.active_gen += 1;
         self.pending_scroll_to_ix = Some(ix);
         self.focus_active_panel(window, cx);
 
@@ -278,8 +283,32 @@ impl TabPanel {
         if active {
             self.set_active_ix(self.panels.len() - 1, window, cx);
         }
+        if self.panels.len() == 1 {
+            self.schedule_initial_set_active(window, cx);
+        }
         cx.emit(PanelEvent::LayoutChanged);
         cx.notify();
+    }
+
+    /// `set_active_ix` early-returns when the index is unchanged, so the first
+    /// added panel never receives the initial `set_active(true)`. Deliver it
+    /// deferred; any real tab switch in between bumps `active_gen` and cancels
+    /// this, letting the regular sync in `set_active_ix` take over.
+    fn schedule_initial_set_active(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let generation = self.active_gen;
+        cx.spawn_in(window, async move |view, cx| {
+            _ = cx.update(|window, cx| {
+                _ = view.update(cx, |view, cx| {
+                    if view.active_gen != generation || view.collapsed {
+                        return;
+                    }
+                    if let Some(panel) = view.panels.get(view.active_ix) {
+                        panel.set_active(true, window, cx);
+                    }
+                });
+            });
+        })
+        .detach();
     }
 
     /// Add panel to try to split
