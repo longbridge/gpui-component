@@ -3,8 +3,9 @@ use std::{rc::Rc, time::Duration};
 use fake::Fake;
 use gpui::{
     App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString, Styled,
-    Subscription, Task, Window, actions, div, px,
+    IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Task, Window, actions, div,
+    prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::{
@@ -43,6 +44,26 @@ impl Company {
     }
 }
 
+#[derive(Clone)]
+struct DragCompany {
+    ix: IndexPath,
+    name: SharedString,
+}
+
+impl Render for DragCompany {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px_2()
+            .py_1()
+            .text_sm()
+            .bg(cx.theme().accent)
+            .text_color(cx.theme().accent_foreground)
+            .rounded(cx.theme().radius)
+            .shadow_md()
+            .child(self.name.clone())
+    }
+}
+
 #[derive(IntoElement)]
 struct CompanyListItem {
     base: ListItem,
@@ -57,6 +78,26 @@ impl CompanyListItem {
             base: ListItem::new(id).selected(selected),
             selected,
         }
+    }
+
+    /// Make this item draggable for reordering, by using the
+    /// `InteractiveElement` methods on the inner [`ListItem`].
+    pub fn draggable(
+        mut self,
+        ix: IndexPath,
+        on_drop: impl Fn(&DragCompany, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        let drag = DragCompany {
+            ix,
+            name: self.company.name.clone(),
+        };
+
+        self.base = self
+            .base
+            .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
+            .drag_over::<DragCompany>(|style, _, _, cx| style.bg(cx.theme().drop_target))
+            .on_drop(on_drop);
+        self
     }
 }
 
@@ -144,6 +185,7 @@ struct CompanyListDelegate {
     loading: bool,
     eof: bool,
     lazy_load: bool,
+    draggable: bool,
 }
 
 impl CompanyListDelegate {
@@ -185,6 +227,33 @@ impl CompanyListDelegate {
             .get(ix.section)
             .and_then(|c| c.get(ix.row))
             .cloned()
+    }
+
+    /// Move the company at `from` to the position of `to`.
+    fn move_company(&mut self, from: IndexPath, to: IndexPath) {
+        if from == to {
+            return;
+        }
+
+        let Some(company) = self
+            .matched_companies
+            .get_mut(from.section)
+            .filter(|companies| from.row < companies.len())
+            .map(|companies| companies.remove(from.row))
+        else {
+            return;
+        };
+
+        let mut row = to.row;
+        if from.section == to.section && from.row < to.row {
+            row -= 1;
+        }
+
+        if let Some(companies) = self.matched_companies.get_mut(to.section) {
+            let row = row.min(companies.len());
+            companies.insert(row, company);
+            self.selected_index = Some(IndexPath::new(row).section(to.section));
+        }
     }
 }
 
@@ -289,11 +358,22 @@ impl ListDelegate for CompanyListDelegate {
         &mut self,
         ix: IndexPath,
         _: &mut Window,
-        _: &mut Context<ListState<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index || Some(ix) == self.confirmed_index;
         if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
-            return Some(CompanyListItem::new(ix, company.clone(), selected));
+            let item =
+                CompanyListItem::new(ix, company.clone(), selected).when(self.draggable, |this| {
+                    this.draggable(
+                        ix,
+                        cx.listener(move |this, drag: &DragCompany, _, cx| {
+                            this.delegate_mut().move_company(drag.ix, ix);
+                            cx.notify();
+                        }),
+                    )
+                });
+
+            return Some(item);
         }
 
         None
@@ -377,6 +457,7 @@ impl ListStory {
             loading: false,
             eof: false,
             lazy_load: false,
+            draggable: false,
         };
         delegate.extend_more(100);
 
@@ -476,6 +557,7 @@ impl Focusable for ListStory {
 impl Render for ListStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let lazy_load = self.company_list.read(cx).delegate().lazy_load;
+        let draggable = self.company_list.read(cx).delegate().draggable;
 
         v_flex()
             .track_focus(&self.focus_handle)
@@ -586,6 +668,17 @@ impl Render for ListStory {
                             .on_click(cx.listener(|this, check: &bool, _, cx| {
                                 this.company_list.update(cx, |this, cx| {
                                     this.delegate_mut().lazy_load = *check;
+                                    cx.notify();
+                                })
+                            })),
+                    )
+                    .child(
+                        Checkbox::new("draggable")
+                            .label("Draggable")
+                            .checked(draggable)
+                            .on_click(cx.listener(|this, check: &bool, _, cx| {
+                                this.company_list.update(cx, |this, cx| {
+                                    this.delegate_mut().draggable = *check;
                                     cx.notify();
                                 })
                             })),
