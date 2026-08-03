@@ -2,9 +2,9 @@ use std::{rc::Rc, time::Duration};
 
 use fake::Fake;
 use gpui::{
-    App, AppContext, Context, ElementId, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy, SharedString,
-    StatefulInteractiveElement, Styled, Subscription, Task, Window, actions, div,
+    App, AppContext, Context, DragMoveEvent, ElementId, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy,
+    SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window, actions, div,
     prelude::FluentBuilder as _, px,
 };
 
@@ -44,6 +44,13 @@ impl Company {
     }
 }
 
+/// Where the dragged item will be inserted relative to the drop target row.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DropPosition {
+    Before,
+    After,
+}
+
 #[derive(Clone)]
 struct DragCompany {
     ix: IndexPath,
@@ -69,6 +76,7 @@ struct CompanyListItem {
     base: ListItem,
     company: Rc<Company>,
     selected: bool,
+    drop_position: Option<DropPosition>,
 }
 
 impl CompanyListItem {
@@ -77,6 +85,7 @@ impl CompanyListItem {
             company,
             base: ListItem::new(id).selected(selected),
             selected,
+            drop_position: None,
         }
     }
 
@@ -85,6 +94,8 @@ impl CompanyListItem {
     pub fn draggable(
         mut self,
         ix: IndexPath,
+        drop_position: Option<DropPosition>,
+        on_drag_move: impl Fn(&DragMoveEvent<DragCompany>, &mut Window, &mut App) + 'static,
         on_drop: impl Fn(&DragCompany, &mut Window, &mut App) + 'static,
     ) -> Self {
         let drag = DragCompany {
@@ -92,10 +103,11 @@ impl CompanyListItem {
             name: self.company.name.clone(),
         };
 
+        self.drop_position = drop_position;
         self.base = self
             .base
             .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
-            .drag_over::<DragCompany>(|style, _, _, cx| style.bg(cx.theme().drop_target))
+            .on_drag_move(on_drag_move)
             .on_drop(on_drop);
         self
     }
@@ -138,6 +150,23 @@ impl RenderOnce for CompanyListItem {
                     .justify_between()
                     .gap_2()
                     .text_color(text_color)
+                    .when_some(
+                        self.drop_position.filter(|_| cx.has_active_drag()),
+                        |this, position| {
+                            let line = div()
+                                .absolute()
+                                .left_0()
+                                .right_0()
+                                .h(px(2.))
+                                .rounded_full()
+                                .bg(cx.theme().drag_border);
+
+                            this.child(match position {
+                                DropPosition::Before => line.top(px(-5.)),
+                                DropPosition::After => line.bottom(px(-5.)),
+                            })
+                        },
+                    )
                     .child(
                         h_flex().gap_2().child(
                             v_flex()
@@ -186,6 +215,7 @@ struct CompanyListDelegate {
     eof: bool,
     lazy_load: bool,
     draggable: bool,
+    drop_target: Option<(IndexPath, DropPosition)>,
 }
 
 impl CompanyListDelegate {
@@ -229,8 +259,31 @@ impl CompanyListDelegate {
             .cloned()
     }
 
-    /// Move the company at `from` to the position of `to`.
-    fn move_company(&mut self, from: IndexPath, to: IndexPath) {
+    /// Record the pending drop target row, returns true if it changed.
+    fn update_drop_target(&mut self, ix: IndexPath, position: Option<DropPosition>) -> bool {
+        match position {
+            Some(position) => {
+                if self.drop_target != Some((ix, position)) {
+                    self.drop_target = Some((ix, position));
+                    true
+                } else {
+                    false
+                }
+            }
+            None => {
+                if self.drop_target.is_some_and(|(target, _)| target == ix) {
+                    self.drop_target = None;
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    /// Move the company at `from` to before or after the company at `to`.
+    fn move_company(&mut self, from: IndexPath, to: IndexPath, position: DropPosition) {
+        self.drop_target = None;
         if from == to {
             return;
         }
@@ -244,8 +297,11 @@ impl CompanyListDelegate {
             return;
         };
 
-        let mut row = to.row;
-        if from.section == to.section && from.row < to.row {
+        let mut row = match position {
+            DropPosition::Before => to.row,
+            DropPosition::After => to.row + 1,
+        };
+        if from.section == to.section && from.row < row {
             row -= 1;
         }
 
@@ -364,10 +420,39 @@ impl ListDelegate for CompanyListDelegate {
         if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
             let item =
                 CompanyListItem::new(ix, company.clone(), selected).when(self.draggable, |this| {
+                    let drop_position = self
+                        .drop_target
+                        .filter(|(target, _)| *target == ix)
+                        .map(|(_, position)| position);
+
                     this.draggable(
                         ix,
+                        drop_position,
+                        cx.listener(move |this, e: &DragMoveEvent<DragCompany>, _, cx| {
+                            let bounds = e.bounds;
+                            let position =
+                                if e.drag(cx).ix != ix && bounds.contains(&e.event.position) {
+                                    if e.event.position.y < bounds.center().y {
+                                        Some(DropPosition::Before)
+                                    } else {
+                                        Some(DropPosition::After)
+                                    }
+                                } else {
+                                    None
+                                };
+
+                            if this.delegate_mut().update_drop_target(ix, position) {
+                                cx.notify();
+                            }
+                        }),
                         cx.listener(move |this, drag: &DragCompany, _, cx| {
-                            this.delegate_mut().move_company(drag.ix, ix);
+                            let position = this
+                                .delegate()
+                                .drop_target
+                                .filter(|(target, _)| *target == ix)
+                                .map(|(_, position)| position)
+                                .unwrap_or(DropPosition::Before);
+                            this.delegate_mut().move_company(drag.ix, ix, position);
                             cx.notify();
                         }),
                     )
@@ -458,6 +543,7 @@ impl ListStory {
             eof: false,
             lazy_load: false,
             draggable: false,
+            drop_target: None,
         };
         delegate.extend_more(100);
 
