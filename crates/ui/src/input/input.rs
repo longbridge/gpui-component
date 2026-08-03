@@ -310,6 +310,7 @@ impl Input {
             state.replace_all(value.to_string(), window, cx);
         });
     }
+
     /// This method must after the refine_style.
     fn render_editor(
         paddings: EdgesRefinement<DefiniteLength>,
@@ -383,8 +384,11 @@ impl RenderOnce for Input {
         let is_multi_line = state.mode.is_multi_line();
         let accessibility_role = Self::accessibility_role(is_multi_line, content_type, self.role);
         let accessibility_state = self.state.clone();
-        let accessibility_value = Self::exposes_accessibility_value(state.masked, content_type)
-            .then(|| state.text.to_string());
+        // Materializing the whole rope is only observable through the
+        // accessibility tree, so skip it when no client is listening.
+        let accessibility_value = (window.is_a11y_active()
+            && Self::exposes_accessibility_value(state.masked, content_type))
+        .then(|| state.text.to_string());
         let focused = state.focus_handle.is_focused(window) && !state.disabled;
         if focused {
             sync_native_content_type(window, content_type, state.disabled);
@@ -690,9 +694,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn editable_input_emits_value_and_handles_accessibility_set_value(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn editable_input_offers_accessibility_write_action(cx: &mut gpui::TestAppContext) {
         use crate::ElementExt as _;
         use gpui::{AppContext as _, Element as _, IntoElement as _, Render};
         use std::sync::{Arc, Mutex};
@@ -734,10 +736,9 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
         });
-        assert_eq!(
-            *captured.lock().unwrap(),
-            Some((Some("initial".into()), true))
-        );
+        // No assistive technology is attached in tests, so the value stays
+        // unmaterialized while `SetValue` is still advertised.
+        assert_eq!(*captured.lock().unwrap(), Some((None, true)));
 
         let state = probe.read_with(cx, |probe, _| probe.state.clone());
         cx.update(|window, cx| {
@@ -751,6 +752,7 @@ mod tests {
         });
         assert_eq!(state.read_with(cx, |state, _| state.value()), "updated");
     }
+
     #[test]
     fn accessibility_value_is_hidden_for_secret_inputs() {
         assert!(Input::exposes_accessibility_value(false, None));
