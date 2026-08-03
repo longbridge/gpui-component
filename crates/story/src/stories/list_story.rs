@@ -105,6 +105,7 @@ impl CompanyListItem {
         mut self,
         ix: IndexPath,
         drop_position: Option<DropPosition>,
+        on_drag_start: impl Fn(&mut App) + 'static,
         on_drag_move: impl Fn(&DragMoveEvent<DragCompany>, &mut Window, &mut App) + 'static,
         on_drop: impl Fn(&DragCompany, &mut Window, &mut App) + 'static,
     ) -> Self {
@@ -116,7 +117,10 @@ impl CompanyListItem {
         self.drop_position = drop_position;
         self.base = self
             .base
-            .on_drag(drag, |drag, _, _, cx| cx.new(|_| drag.clone()))
+            .on_drag(drag, move |drag, _, _, cx| {
+                on_drag_start(cx);
+                cx.new(|_| drag.clone())
+            })
             .on_drag_move(on_drag_move)
             .on_drop(on_drop);
         self
@@ -446,9 +450,19 @@ impl ListDelegate for CompanyListDelegate {
                         }
                     });
 
+                    let state = cx.entity().downgrade();
                     this.draggable(
                         ix,
                         drop_position,
+                        // A drag may end without a drop (e.g. released outside the
+                        // list), clear the stale drop target when a new one starts.
+                        move |cx| {
+                            _ = state.update(cx, |this, cx| {
+                                if this.delegate_mut().drop_target.take().is_some() {
+                                    cx.notify();
+                                }
+                            });
+                        },
                         cx.listener(move |this, e: &DragMoveEvent<DragCompany>, _, cx| {
                             let bounds = e.bounds;
                             let from = e.drag(cx).ix;

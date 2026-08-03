@@ -161,6 +161,9 @@ impl ParentElement for ListItem {
     }
 }
 
+/// Note: Listeners registered via these traits are not gated by
+/// `disabled`/`separator`. The hover style is managed internally, use
+/// `on_hover` instead of `.hover()`.
 impl InteractiveElement for ListItem {
     fn interactivity(&mut self) -> &mut Interactivity {
         self.base.interactivity()
@@ -274,7 +277,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn interactivity_delegates_to_base(_cx: &mut gpui::TestAppContext) {
+    fn test_list_item_interactivity(_cx: &mut gpui::TestAppContext) {
         let mut item = ListItem::new("item")
             .on_drag(DragPreview, |_, _, _, cx| cx.new(|_| DragPreview))
             .drag_over::<DragPreview>(|style, _, _, _| style)
