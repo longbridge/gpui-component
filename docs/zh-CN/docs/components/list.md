@@ -249,6 +249,44 @@ let _subscription = cx.subscribe(&state, |_, _, event: &ListEvent, _| {
 });
 ```
 
+### 拖拽重排
+
+`ListItem` 实现了 GPUI 的 `InteractiveElement` 和 `StatefulInteractiveElement` trait，
+因此 `on_drag`、`on_drop`、`drag_over`、`on_hover` 等原生交互 API 均可直接使用：
+
+```rust
+#[derive(Clone)]
+struct DragItem {
+    ix: IndexPath,
+    name: SharedString,
+}
+
+impl Render for DragItem {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // 拖拽时跟随光标的预览元素。
+        div()
+            .px_2()
+            .py_1()
+            .bg(cx.theme().accent)
+            .text_color(cx.theme().accent_foreground)
+            .rounded(cx.theme().radius)
+            .child(self.name.clone())
+    }
+}
+
+// 在 `ListDelegate` 的 `render_item` 中：
+ListItem::new(ix)
+    .child(Label::new(item.name.clone()))
+    .on_drag(DragItem { ix, name: item.name.clone() }, |drag, _, _, cx| {
+        cx.new(|_| drag.clone())
+    })
+    .drag_over::<DragItem>(|style, _, _, cx| style.bg(cx.theme().drop_target))
+    .on_drop(cx.listener(move |this, drag: &DragItem, _, cx| {
+        this.delegate_mut().move_item(drag.ix, ix);
+        cx.notify();
+    }))
+```
+
 ### 自定义空状态
 
 ```rust
