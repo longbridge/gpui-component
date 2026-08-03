@@ -169,7 +169,7 @@ impl RenderOnce for CompanyListItem {
                                 .right_0()
                                 .h(px(2.))
                                 .rounded_full()
-                                .bg(cx.theme().drag_border);
+                                .bg(cx.theme().blue);
 
                             this.child(match position {
                                 DropPosition::Before => line.top(px(-5.)),
