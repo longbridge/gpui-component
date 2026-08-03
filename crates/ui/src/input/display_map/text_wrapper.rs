@@ -14,9 +14,9 @@ use crate::input::{LastLayout, Point as TreeSitterPoint, RopeExt, WhitespaceIndi
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WrappingIndent {
     /// Continuation lines start flush-left at the full editor width.
-    #[default]
     None,
     /// Continuation lines keep the same indentation as the first line.
+    #[default]
     Same,
 }
 
@@ -25,6 +25,11 @@ pub enum WrappingIndent {
 pub(crate) struct LineItem {
     /// The byte length of the line, without the end `\n`.
     len: usize,
+    /// Number of leading characters of the line reserved as indentation for continuation wrapped
+    /// lines, when [`WrappingIndent::Same`] is used.
+    ///
+    /// Zero when [`WrappingIndent::None`] is used or the line is not wrapped.
+    pub(crate) indent: u32,
     /// The soft wrapped lines relative byte range (0..len) of this line (Include first line).
     ///
     /// Not contains the line end `\n`.
@@ -328,6 +333,7 @@ impl TextWrapper {
             let line_str = line.to_string();
             let mut wrapped_lines = SmallVec::<[Range<usize>; 1]>::new();
             let mut prev_boundary_ix = 0;
+            let mut indent_chars = 0;
 
             // If wrap_width is Pixels::MAX, skip wrapping to disable word wrap
             if let Some(wrap_width) = wrap_width {
@@ -338,6 +344,7 @@ impl TextWrapper {
                         for boundary in wrap_line(&line_str, wrap_width) {
                             wrapped_lines.push(prev_boundary_ix..boundary.ix);
                             prev_boundary_ix = boundary.ix;
+                            indent_chars = boundary.next_indent;
                         }
                     }
                     WrappingIndent::None => {
@@ -366,6 +373,7 @@ impl TextWrapper {
 
             new_lines.push(LineItem {
                 len: line.len(),
+                indent: indent_chars,
                 wrapped_lines,
             });
         }
@@ -493,6 +501,9 @@ pub(crate) struct LineLayout {
     len: usize,
     /// The soft wrapped lines of this line (Include the first line).
     pub(crate) wrapped_lines: SmallVec<[ShapedLine; 1]>,
+    /// Extra left offset applied to continuation wrapped lines, used to reserve the first line's
+    /// indentation when [`WrappingIndent::Same`] is used.
+    pub(crate) wrap_indent: Pixels,
     pub(crate) longest_width: Pixels,
     pub(crate) whitespace_indicators: Option<WhitespaceIndicators>,
     /// Whitespace indicators: (line_index, x_position, is_tab)
@@ -505,25 +516,47 @@ impl LineLayout {
             len: 0,
             longest_width: px(0.),
             wrapped_lines: SmallVec::new(),
+            wrap_indent: px(0.),
             whitespace_chars: Vec::new(),
             whitespace_indicators: None,
         }
     }
 
-    pub(crate) fn lines(mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) -> Self {
-        self.set_wrapped_lines(wrapped_lines);
+    /// The pixel indent applied to the given visual line, relative to the line's
+    /// leading text. Only continuation lines (index > 0) are indented.
+    #[inline]
+    fn line_indent(&self, line_index: usize) -> Pixels {
+        if line_index == 0 {
+            px(0.)
+        } else {
+            self.wrap_indent
+        }
+    }
+
+    pub(crate) fn lines(
+        mut self,
+        wrapped_lines: SmallVec<[ShapedLine; 1]>,
+        wrap_indent: Pixels,
+    ) -> Self {
+        self.set_wrapped_lines(wrapped_lines, wrap_indent);
         self
     }
 
-    pub(crate) fn set_wrapped_lines(&mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) {
+    pub(crate) fn set_wrapped_lines(
+        &mut self,
+        wrapped_lines: SmallVec<[ShapedLine; 1]>,
+        wrap_indent: Pixels,
+    ) {
         self.len = wrapped_lines.iter().map(|l| l.len).sum();
         let width = wrapped_lines
             .iter()
-            .map(|l| l.width)
+            .enumerate()
+            .map(|(i, l)| l.width + self.line_indent(i))
             .max()
             .unwrap_or_default();
         self.longest_width = width;
         self.wrapped_lines = wrapped_lines;
+        self.wrap_indent = wrap_indent;
     }
 
     pub(crate) fn with_whitespaces(mut self, indicators: Option<WhitespaceIndicators>) -> Self {
@@ -535,6 +568,7 @@ impl LineLayout {
         let space_indicator_offset = indicators.space.width.half();
 
         for (line_index, wrapped_line) in self.wrapped_lines.iter().enumerate() {
+            let line_indent = self.line_indent(line_index);
             for (relative_offset, c) in wrapped_line.text.char_indices() {
                 if matches!(c, ' ' | '\t') {
                     let is_tab = c == '\t';
@@ -547,7 +581,8 @@ impl LineLayout {
                         start_x
                     };
 
-                    self.whitespace_chars.push((line_index, x_position, is_tab));
+                    self.whitespace_chars
+                        .push((line_index, x_position + line_indent, is_tab));
                 }
             }
         }
@@ -591,7 +626,9 @@ impl LineLayout {
             };
 
             if matches {
-                let x = line.x_for_index(offset.saturating_sub(acc_len)) + x_offset;
+                let x = line.x_for_index(offset.saturating_sub(acc_len))
+                    + x_offset
+                    + self.line_indent(i);
                 return Some(point(x, offset_y));
             }
 
@@ -612,8 +649,9 @@ impl LineLayout {
 
         for (i, line) in self.wrapped_lines.iter().enumerate() {
             let is_last = i + 1 == self.wrapped_lines.len();
-            if x <= line.width {
-                let mut ix = line.closest_index_for_x(x);
+            let line_indent = self.line_indent(i);
+            if x <= line_indent + line.width {
+                let mut ix = line.closest_index_for_x(x - line_indent);
                 if !is_last && ix == line.text.len() {
                     // For soft wrap line, we can't put the cursor at the end of the line.
                     let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
@@ -644,7 +682,7 @@ impl LineLayout {
             let is_last = i + 1 == self.wrapped_lines.len();
             let line_bottom = line_top + last_layout.line_height;
             if pos.y >= line_top && pos.y < line_bottom {
-                let mut ix = line.closest_index_for_x(pos.x - x_offset);
+                let mut ix = line.closest_index_for_x(pos.x - x_offset - self.line_indent(i));
                 if !is_last && ix == line.text.len() {
                     // For soft wrap line, we can't put the cursor at the end of the line.
                     let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
@@ -668,10 +706,10 @@ impl LineLayout {
         let mut offset = 0;
         let mut line_top = px(0.);
         let x_offset = last_layout.alignment_offset(self.longest_width);
-        for line in self.wrapped_lines.iter() {
+        for (i, line) in self.wrapped_lines.iter().enumerate() {
             let line_bottom = line_top + last_layout.line_height;
             if pos.y >= line_top && pos.y < line_bottom {
-                let ix = line.index_for_x(pos.x - x_offset)?;
+                let ix = line.index_for_x(pos.x - x_offset - self.line_indent(i))?;
                 return Some(offset + ix);
             }
 
@@ -683,7 +721,14 @@ impl LineLayout {
     }
 
     pub(crate) fn size(&self, line_height: Pixels) -> Size<Pixels> {
-        size(self.longest_width, self.wrapped_lines.len() * line_height)
+        let width = self
+            .wrapped_lines
+            .iter()
+            .enumerate()
+            .map(|(ix, line)| line.width + self.line_indent(ix))
+            .max()
+            .unwrap_or(self.longest_width);
+        size(width, self.wrapped_lines.len() * line_height)
     }
 
     pub(crate) fn paint(
@@ -697,7 +742,7 @@ impl LineLayout {
     ) {
         for (ix, line) in self.wrapped_lines.iter().enumerate() {
             _ = line.paint(
-                pos + point(px(0.), ix * line_height),
+                pos + point(self.line_indent(ix), ix * line_height),
                 line_height,
                 text_align,
                 align_width,
@@ -993,14 +1038,17 @@ mod tests {
             vec![
                 LineItem {
                     len: 2,
+                    indent: 0,
                     wrapped_lines: smallvec::smallvec![0..2],
                 },
                 LineItem {
                     len: 4,
+                    indent: 0,
                     wrapped_lines: smallvec::smallvec![0..2, 2..4],
                 },
                 LineItem {
                     len: 1,
+                    indent: 0,
                     wrapped_lines: smallvec::smallvec![0..1],
                 },
             ],
@@ -1072,7 +1120,7 @@ mod tests {
         let line1 = ShapedLine::default().with_len(100);
         let line2 = ShapedLine::default().with_len(50);
         let wrapped_lines = smallvec::smallvec![line1, line2];
-        line_layout.set_wrapped_lines(wrapped_lines);
+        line_layout.set_wrapped_lines(wrapped_lines, px(0.));
         assert_eq!(line_layout.len(), 150);
         assert_eq!(line_layout.wrapped_lines.len(), 2);
     }
@@ -1080,11 +1128,14 @@ mod tests {
     #[test]
     fn test_position_for_index_prefers_first_leading_empty_visual_line() {
         let mut line_layout = LineLayout::new();
-        line_layout.set_wrapped_lines(smallvec::smallvec![
-            ShapedLine::default(),
-            ShapedLine::default(),
-            ShapedLine::default().with_len(3),
-        ]);
+        line_layout.set_wrapped_lines(
+            smallvec::smallvec![
+                ShapedLine::default(),
+                ShapedLine::default(),
+                ShapedLine::default().with_len(3),
+            ],
+            px(0.),
+        );
 
         let last_layout = LastLayout {
             visible_range: 0..1,
@@ -1127,21 +1178,25 @@ mod tests {
                 // range: 0..15
                 LineItem {
                     len: Rope::from("Hello, 世界!\r").len(),
+                    indent: 0,
                     wrapped_lines: smallvec::smallvec![0..15],
                 },
                 // range: 16..36
                 LineItem {
                     len: Rope::from("This is second line.\n").len(),
+                    indent: 0,
                     wrapped_lines: smallvec::smallvec![0..10, 10..20],
                 },
                 // range: 37..56
                 LineItem {
                     len: Rope::from("This is third line.\n").len(),
+                    indent: 0,
                     wrapped_lines: smallvec::smallvec![0..9, 9..15, 15..20],
                 },
                 // range: 57..79
                 LineItem {
                     len: Rope::from("这里是第 4 行。").len(),
+                    indent: 0,
                     wrapped_lines: smallvec::smallvec![0..22],
                 },
             ],
@@ -1239,16 +1294,15 @@ mod tests {
 
         wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
 
-        assert_eq!(
-            wrapper.line(0).unwrap().wrapped_lines.as_slice(),
-            [0..5, 5..24]
-        );
+        let line = wrapper.line(0).unwrap();
+        assert_eq!(line.indent, 2);
+        assert_eq!(line.wrapped_lines.as_slice(), [0..5, 5..24]);
     }
 
     #[test]
     fn test_wrapping_indent_none_continuation_lines_wrapped_at_full_width() {
         let mut wrapper = TextWrapper::new(test_font(), px(14.0), Some(px(10.)));
-        wrapper.wrapping_indent = WrappingIndent::default();
+        wrapper.wrapping_indent = WrappingIndent::None;
         let text = Rope::from("  abcdefghijklmnopqrstuv");
         let mut fake_wrap_line = |line: &str, _wrap_width: Pixels| {
             if line.starts_with(' ') {
@@ -1272,9 +1326,8 @@ mod tests {
 
         wrapper._update(&text, &(0..text.len()), &text, &mut fake_wrap_line);
 
-        assert_eq!(
-            wrapper.line(0).unwrap().wrapped_lines.as_slice(),
-            [0..5, 5..13, 13..21, 21..24]
-        );
+        let line = wrapper.line(0).unwrap();
+        assert_eq!(line.indent, 0);
+        assert_eq!(line.wrapped_lines.as_slice(), [0..5, 5..13, 13..21, 21..24]);
     }
 }

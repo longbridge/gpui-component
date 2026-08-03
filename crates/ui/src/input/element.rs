@@ -654,7 +654,8 @@ impl TextElement {
 
                 // wrapped lines
                 for i in 1..=wrapped_lines {
-                    let start = point(px(0.), start.y + i as f32 * line_height);
+                    let indent = line.wrap_indent;
+                    let start = point(indent, start.y + i as f32 * line_height);
                     let mut end = point(end.x, end.y + i as f32 * line_height);
                     if i < wrapped_lines {
                         end.x = line_size.width;
@@ -1254,7 +1255,7 @@ impl TextElement {
             );
 
             let line_layout = LineLayout::new()
-                .lines(smallvec::smallvec![shaped_line])
+                .lines(smallvec::smallvec![shaped_line], px(0.))
                 .with_whitespaces(whitespace_indicators);
             return vec![line_layout];
         }
@@ -1276,7 +1277,7 @@ impl TextElement {
 
             // Keep placeholder lines in a single layout to stay parallel with visible_* metadata.
             let line_layout = LineLayout::new()
-                .lines(placeholder_lines)
+                .lines(placeholder_lines, px(0.))
                 .with_whitespaces(whitespace_indicators);
             return vec![line_layout];
         }
@@ -1296,7 +1297,7 @@ impl TextElement {
 
             debug_assert_eq!(line_item.len(), line_text.len());
 
-            let mut wrapped_lines = SmallVec::with_capacity(1);
+            let mut wrapped_lines: SmallVec<[ShapedLine; 1]> = SmallVec::with_capacity(1);
 
             for range in &line_item.wrapped_lines {
                 let line_runs = runs_for_range(runs, run_offset, &range);
@@ -1318,8 +1319,20 @@ impl TextElement {
                 wrapped_lines.push(shaped_line);
             }
 
+            // Use the first visual line's indentation width for continuation lines.
+            let wrap_indent = if line_item.indent > 0 && wrapped_lines.len() > 1 {
+                let indent_byte_len = line_text
+                    .char_indices()
+                    .nth(line_item.indent as usize)
+                    .map(|(ix, _)| ix)
+                    .unwrap_or(line_text.len());
+                wrapped_lines[0].x_for_index(indent_byte_len)
+            } else {
+                px(0.)
+            };
+
             let line_layout = LineLayout::new()
-                .lines(wrapped_lines)
+                .lines(wrapped_lines, wrap_indent)
                 .with_whitespaces(whitespace_indicators.clone());
             lines.push(line_layout);
 
