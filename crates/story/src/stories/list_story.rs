@@ -51,6 +51,16 @@ enum DropPosition {
     After,
 }
 
+impl DropPosition {
+    /// The insertion gap index (0..=len) this position resolves to for `row`.
+    fn gap(self, row: usize) -> usize {
+        match self {
+            DropPosition::Before => row,
+            DropPosition::After => row + 1,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct DragCompany {
     ix: IndexPath,
@@ -297,10 +307,7 @@ impl CompanyListDelegate {
             return;
         };
 
-        let mut row = match position {
-            DropPosition::Before => to.row,
-            DropPosition::After => to.row + 1,
-        };
+        let mut row = position.gap(to.row);
         if from.section == to.section && from.row < row {
             row -= 1;
         }
@@ -420,38 +427,65 @@ impl ListDelegate for CompanyListDelegate {
         if let Some(company) = self.matched_companies[ix.section].get(ix.row) {
             let item =
                 CompanyListItem::new(ix, company.clone(), selected).when(self.draggable, |this| {
-                    let drop_position = self
-                        .drop_target
-                        .filter(|(target, _)| *target == ix)
-                        .map(|(_, position)| position);
+                    // Normalize the pending drop target to an insertion gap, so the
+                    // indicator renders at the same edge no matter which of the two
+                    // rows around the gap the cursor is over.
+                    let count = self.matched_companies[ix.section].len();
+                    let drop_position = self.drop_target.and_then(|(target, position)| {
+                        if target.section != ix.section {
+                            return None;
+                        }
+
+                        let gap = position.gap(target.row);
+                        if gap == ix.row {
+                            Some(DropPosition::Before)
+                        } else if gap == count && ix.row + 1 == count {
+                            Some(DropPosition::After)
+                        } else {
+                            None
+                        }
+                    });
 
                     this.draggable(
                         ix,
                         drop_position,
                         cx.listener(move |this, e: &DragMoveEvent<DragCompany>, _, cx| {
                             let bounds = e.bounds;
-                            let position =
-                                if e.drag(cx).ix != ix && bounds.contains(&e.event.position) {
-                                    if e.event.position.y < bounds.center().y {
-                                        Some(DropPosition::Before)
-                                    } else {
-                                        Some(DropPosition::After)
-                                    }
+                            let from = e.drag(cx).ix;
+                            let position = if bounds.contains(&e.event.position) {
+                                let position = if e.event.position.y < bounds.center().y {
+                                    DropPosition::Before
                                 } else {
-                                    None
+                                    DropPosition::After
                                 };
+
+                                // Gaps adjacent to the dragged row are no-op moves.
+                                let gap = position.gap(ix.row);
+                                if from.section == ix.section
+                                    && (gap == from.row || gap == from.row + 1)
+                                {
+                                    None
+                                } else {
+                                    Some(position)
+                                }
+                            } else {
+                                None
+                            };
 
                             if this.delegate_mut().update_drop_target(ix, position) {
                                 cx.notify();
                             }
                         }),
                         cx.listener(move |this, drag: &DragCompany, _, cx| {
-                            let position = this
+                            let Some(position) = this
                                 .delegate()
                                 .drop_target
                                 .filter(|(target, _)| *target == ix)
                                 .map(|(_, position)| position)
-                                .unwrap_or(DropPosition::Before);
+                            else {
+                                return;
+                            };
+
                             this.delegate_mut().move_company(drag.ix, ix, position);
                             cx.notify();
                         }),
