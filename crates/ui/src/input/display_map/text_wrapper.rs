@@ -522,6 +522,12 @@ impl LineLayout {
         }
     }
 
+    /// Set the left offset reserved for continuation wrapped lines.
+    pub(crate) fn wrap_indent(mut self, wrap_indent: Pixels) -> Self {
+        self.wrap_indent = wrap_indent;
+        self
+    }
+
     /// The pixel indent applied to the given visual line, relative to the line's
     /// leading text. Only continuation lines (index > 0) are indented.
     #[inline]
@@ -533,30 +539,20 @@ impl LineLayout {
         }
     }
 
-    pub(crate) fn lines(
-        mut self,
-        wrapped_lines: SmallVec<[ShapedLine; 1]>,
-        wrap_indent: Pixels,
-    ) -> Self {
-        self.set_wrapped_lines(wrapped_lines, wrap_indent);
+    pub(crate) fn lines(mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) -> Self {
+        self.set_wrapped_lines(wrapped_lines);
         self
     }
 
-    pub(crate) fn set_wrapped_lines(
-        &mut self,
-        wrapped_lines: SmallVec<[ShapedLine; 1]>,
-        wrap_indent: Pixels,
-    ) {
+    pub(crate) fn set_wrapped_lines(&mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) {
         self.len = wrapped_lines.iter().map(|l| l.len).sum();
         let width = wrapped_lines
             .iter()
-            .enumerate()
-            .map(|(i, l)| l.width + self.line_indent(i))
+            .map(|l| l.width)
             .max()
             .unwrap_or_default();
         self.longest_width = width;
         self.wrapped_lines = wrapped_lines;
-        self.wrap_indent = wrap_indent;
     }
 
     pub(crate) fn with_whitespaces(mut self, indicators: Option<WhitespaceIndicators>) -> Self {
@@ -1120,7 +1116,7 @@ mod tests {
         let line1 = ShapedLine::default().with_len(100);
         let line2 = ShapedLine::default().with_len(50);
         let wrapped_lines = smallvec::smallvec![line1, line2];
-        line_layout.set_wrapped_lines(wrapped_lines, px(0.));
+        line_layout.set_wrapped_lines(wrapped_lines);
         assert_eq!(line_layout.len(), 150);
         assert_eq!(line_layout.wrapped_lines.len(), 2);
     }
@@ -1133,8 +1129,7 @@ mod tests {
                 ShapedLine::default(),
                 ShapedLine::default(),
                 ShapedLine::default().with_len(3),
-            ],
-            px(0.),
+            ]
         );
 
         let last_layout = LastLayout {

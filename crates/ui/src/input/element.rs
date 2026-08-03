@@ -1255,7 +1255,7 @@ impl TextElement {
             );
 
             let line_layout = LineLayout::new()
-                .lines(smallvec::smallvec![shaped_line], px(0.))
+                .lines(smallvec::smallvec![shaped_line])
                 .with_whitespaces(whitespace_indicators);
             return vec![line_layout];
         }
@@ -1277,7 +1277,7 @@ impl TextElement {
 
             // Keep placeholder lines in a single layout to stay parallel with visible_* metadata.
             let line_layout = LineLayout::new()
-                .lines(placeholder_lines, px(0.))
+                .lines(placeholder_lines)
                 .with_whitespaces(whitespace_indicators);
             return vec![line_layout];
         }
@@ -1332,7 +1332,8 @@ impl TextElement {
             };
 
             let line_layout = LineLayout::new()
-                .lines(wrapped_lines, wrap_indent)
+                .lines(wrapped_lines)
+                .wrap_indent(wrap_indent)
                 .with_whitespaces(whitespace_indicators.clone());
             lines.push(line_layout);
 
