@@ -564,7 +564,6 @@ impl LineLayout {
         let space_indicator_offset = indicators.space.width.half();
 
         for (line_index, wrapped_line) in self.wrapped_lines.iter().enumerate() {
-            let line_indent = self.line_indent(line_index);
             for (relative_offset, c) in wrapped_line.text.char_indices() {
                 if matches!(c, ' ' | '\t') {
                     let is_tab = c == '\t';
@@ -577,8 +576,7 @@ impl LineLayout {
                         start_x
                     };
 
-                    self.whitespace_chars
-                        .push((line_index, x_position + line_indent, is_tab));
+                    self.whitespace_chars.push((line_index, x_position, is_tab));
                 }
             }
         }
@@ -757,7 +755,7 @@ impl LineLayout {
                 };
 
                 let origin = point(
-                    pos.x + *x_position,
+                    pos.x + *x_position + self.line_indent(*line_index),
                     pos.y + *line_index as f32 * line_height,
                 );
 
@@ -1124,13 +1122,11 @@ mod tests {
     #[test]
     fn test_position_for_index_prefers_first_leading_empty_visual_line() {
         let mut line_layout = LineLayout::new();
-        line_layout.set_wrapped_lines(
-            smallvec::smallvec![
-                ShapedLine::default(),
-                ShapedLine::default(),
-                ShapedLine::default().with_len(3),
-            ]
-        );
+        line_layout.set_wrapped_lines(smallvec::smallvec![
+            ShapedLine::default(),
+            ShapedLine::default(),
+            ShapedLine::default().with_len(3),
+        ]);
 
         let last_layout = LastLayout {
             visible_range: 0..1,
