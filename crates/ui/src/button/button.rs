@@ -191,7 +191,7 @@ pub struct Button {
     children: Vec<AnyElement>,
     disabled: bool,
     pub(crate) selected: bool,
-    selection_exposed: bool,
+    toggled: Option<bool>,
     variant: ButtonVariant,
     rounded: ButtonRounded,
     outline: bool,
@@ -234,7 +234,7 @@ impl Button {
             label: None,
             disabled: false,
             selected: false,
-            selection_exposed: false,
+            toggled: None,
             variant: ButtonVariant::default(),
             rounded: ButtonRounded::Medium,
             border_corners: Corners {
@@ -376,6 +376,17 @@ impl Button {
         self
     }
 
+    /// Expose this button as a toggle button to assistive technology, with
+    /// `toggled` as its pressed state.
+    ///
+    /// Only affects accessibility metadata. Use [`Selectable::selected`] for
+    /// the selected styling, and call this in addition when the button really
+    /// is a toggle, otherwise the button stays an ordinary push button.
+    pub fn toggled(mut self, toggled: bool) -> Self {
+        self.toggled = Some(toggled);
+        self
+    }
+
     #[inline]
     fn clickable(&self) -> bool {
         !(self.disabled || self.loading) && self.on_click.is_some()
@@ -397,7 +408,6 @@ impl Disableable for Button {
 impl Selectable for Button {
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
-        self.selection_exposed = true;
         self
     }
 
@@ -474,8 +484,8 @@ impl RenderOnce for Button {
             .when_some(self.label.as_ref(), |this, label| {
                 this.aria_label(label.clone())
             })
-            .when(self.selection_exposed, |this| {
-                this.aria_toggled(if self.selected {
+            .when_some(self.toggled, |this, toggled| {
+                this.aria_toggled(if toggled {
                     gpui::accesskit::Toggled::True
                 } else {
                     gpui::accesskit::Toggled::False
@@ -1187,7 +1197,7 @@ mod tests {
         assert!(!button.loading);
         assert!(!button.disabled);
         assert!(!button.selected);
-        assert!(button.selection_exposed);
+        assert_eq!(button.toggled, None);
         assert_eq!(button.tab_index, 1);
         assert!(button.tab_stop);
         assert!(!button.dropdown_caret);
@@ -1199,7 +1209,6 @@ mod tests {
         // Button with click handler should be clickable
         let clickable = Button::new("test").on_click(|_, _, _| {});
         assert!(clickable.clickable());
-        assert!(!clickable.selection_exposed);
 
         // Disabled button should not be clickable
         let disabled = Button::new("test").disabled(true).on_click(|_, _, _| {});
@@ -1210,62 +1219,45 @@ mod tests {
         assert!(!loading.clickable());
     }
 
+    /// `selected` is styling only; the toggle state must be opted into, so that
+    /// ordinary buttons are not announced as toggle buttons.
     #[gpui::test]
-    fn test_button_emits_toggle_state_only_when_selected_is_configured(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn test_button_toggle_state_is_opt_in(cx: &mut gpui::TestAppContext) {
         use crate::ElementExt as _;
-        use gpui::{Element as _, IntoElement as _, Render};
+        use gpui::{Element as _, IntoElement as _, Render, accesskit::Toggled};
         use std::sync::{Arc, Mutex};
 
+        type States = Arc<Mutex<Vec<Option<Toggled>>>>;
+
         struct ButtonA11yProbe {
-            states: Arc<Mutex<Vec<Option<gpui::accesskit::Toggled>>>>,
+            states: States,
         }
 
         impl Render for ButtonA11yProbe {
-            fn render(
-                &mut self,
-                _window: &mut Window,
-                _cx: &mut gpui::Context<Self>,
-            ) -> impl IntoElement {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
                 let states = self.states.clone();
                 div().on_prepaint(move |_, window, cx| {
-                    let ordinary = Button::new("ordinary")
-                        .label("Ordinary")
-                        .render(window, cx)
-                        .into_element();
-                    let mut ordinary_node = gpui::accesskit::Node::new(Role::Button);
-                    ordinary.write_a11y_info(&mut ordinary_node);
-                    let ordinary_state = ordinary_node.toggled();
-                    drop(ordinary);
+                    let mut toggled_of = |button: Button| {
+                        let mut node = gpui::accesskit::Node::new(Role::Button);
+                        button
+                            .render(window, cx)
+                            .into_element()
+                            .write_a11y_info(&mut node);
+                        node.toggled()
+                    };
 
-                    let unselected = Button::new("unselected")
-                        .label("Unselected")
-                        .selected(false)
-                        .render(window, cx)
-                        .into_element();
-                    let mut unselected_node = gpui::accesskit::Node::new(Role::Button);
-                    unselected.write_a11y_info(&mut unselected_node);
-                    let unselected_state = unselected_node.toggled();
-                    drop(unselected);
-
-                    let selected = Button::new("selected")
-                        .label("Selected")
-                        .selected(true)
-                        .render(window, cx)
-                        .into_element();
-                    let mut selected_node = gpui::accesskit::Node::new(Role::Button);
-                    selected.write_a11y_info(&mut selected_node);
-                    let selected_state = selected_node.toggled();
-
-                    *states.lock().unwrap() =
-                        vec![ordinary_state, unselected_state, selected_state];
+                    *states.lock().unwrap() = vec![
+                        toggled_of(Button::new("ordinary").label("Ordinary")),
+                        toggled_of(Button::new("selected").label("Selected").selected(true)),
+                        toggled_of(Button::new("off").label("Off").toggled(false)),
+                        toggled_of(Button::new("on").label("On").toggled(true)),
+                    ];
                 })
             }
         }
 
         cx.update(crate::init);
-        let states = Arc::new(Mutex::new(Vec::new()));
+        let states: States = Arc::new(Mutex::new(Vec::new()));
         let captured = states.clone();
         let (_, cx) = cx.add_window_view(move |_, _| ButtonA11yProbe { states });
         cx.update(|window, cx| {
@@ -1274,11 +1266,7 @@ mod tests {
 
         assert_eq!(
             *captured.lock().unwrap(),
-            vec![
-                None,
-                Some(gpui::accesskit::Toggled::False),
-                Some(gpui::accesskit::Toggled::True),
-            ]
+            vec![None, None, Some(Toggled::False), Some(Toggled::True)]
         );
     }
 

@@ -500,6 +500,7 @@ impl Render for SearchPanel {
                                     .suffix(
                                         Button::new("case-insensitive")
                                             .selected(!self.case_insensitive)
+                                            .toggled(!self.case_insensitive)
                                             .xsmall()
                                             .compact()
                                             .text()
@@ -528,6 +529,7 @@ impl Render for SearchPanel {
                                 .ghost()
                                 .icon(IconName::Replace)
                                 .selected(self.replace_mode)
+                                .toggled(self.replace_mode)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.replace_mode = !this.replace_mode;
                                     if this.replace_mode {
