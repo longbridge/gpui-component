@@ -481,7 +481,7 @@ impl TabPanel {
                             .ghost()
                             .tab_stop(false)
                             .tooltip_with_action(tooltip, &ToggleZoom, None)
-                            .when(zoomed, |this| this.selected(true))
+                            .selected(zoomed)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.on_action_toggle_zoom(&ToggleZoom, window, cx)
                             })),
