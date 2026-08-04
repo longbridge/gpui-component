@@ -26,6 +26,7 @@ rand = "0.8"
 regex = "1"
 serde = "1"
 serde_json = "1"
+strum = "0.28.0"
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "registry"], default-features = false }
 unindent = "0.2.3"

@@ -166,6 +166,7 @@ pub fn icon_named(input: TokenStream) -> TokenStream {
         .iter()
         .map(|(name, _)| proc_macro2::Ident::new(name, proc_macro2::Span::call_site()))
         .collect();
+    let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
     let paths: Vec<&str> = entries.iter().map(|(_, p)| p.as_str()).collect();
 
     // Build derive list: always include IntoElement and Clone, then add custom derives
@@ -188,6 +189,12 @@ pub fn icon_named(input: TokenStream) -> TokenStream {
         }
 
         impl IconNamed for #enum_name {
+            fn name(self) -> SharedString {
+                match self {
+                    #(Self::#variants => #names,)*
+                }
+                .into()
+            }
             fn path(self) -> SharedString {
                 match self {
                     #(Self::#variants => #paths,)*

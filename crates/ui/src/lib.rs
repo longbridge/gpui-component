@@ -44,6 +44,7 @@ pub mod group_box;
 pub mod highlighter;
 pub mod history;
 pub mod hover_card;
+pub mod icon_picker;
 pub mod input;
 pub mod kbd;
 pub mod label;
@@ -119,6 +120,7 @@ pub fn init(cx: &mut App) {
     sheet::init(cx);
     combobox::init(cx);
     select::init(cx);
+    icon_picker::init(cx);
     input::init(cx);
     list::init(cx);
     dialog::init(cx);

@@ -11,6 +11,8 @@ use gpui_component_macros::icon_named;
 /// This allows you to implement a custom version of [`IconName`] that functions as a drop-in
 /// replacement for other UI components.
 pub trait IconNamed {
+    /// Returns the name of the icon.
+    fn name(self) -> SharedString;
     /// Returns the embedded path of the icon.
     fn path(self) -> SharedString;
 }
