@@ -211,16 +211,25 @@ impl RenderOnce for WindowControls {
             return div().id("window-controls");
         }
 
+        // The window manager declares which controls it can honor; a tiling
+        // compositor may support neither minimize nor maximize. Close is
+        // always ours to offer.
+        let supported = window.window_controls();
+
         h_flex()
             .id("window-controls")
             .items_center()
             .flex_shrink_0()
             .h_full()
-            .child(ControlIcon::minimize())
-            .child(if window.is_maximized() {
-                ControlIcon::restore()
-            } else {
-                ControlIcon::maximize()
+            .when(supported.minimize, |this| {
+                this.child(ControlIcon::minimize())
+            })
+            .when(supported.maximize, |this| {
+                this.child(if window.is_maximized() {
+                    ControlIcon::restore()
+                } else {
+                    ControlIcon::maximize()
+                })
             })
             .child(ControlIcon::close(self.on_close_window))
     }
