@@ -303,6 +303,45 @@ ListSeparatorItem::new()
     )
 ```
 
+### Drag and Drop Reordering
+
+`ListItem` implements GPUI's `InteractiveElement` and `StatefulInteractiveElement`
+traits, so all native interaction APIs such as `on_drag`, `on_drop`, `drag_over`
+and `on_hover` are directly available:
+
+```rust
+#[derive(Clone)]
+struct DragItem {
+    ix: IndexPath,
+    name: SharedString,
+}
+
+impl Render for DragItem {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The preview element that follows the cursor while dragging.
+        div()
+            .px_2()
+            .py_1()
+            .bg(cx.theme().accent)
+            .text_color(cx.theme().accent_foreground)
+            .rounded(cx.theme().radius)
+            .child(self.name.clone())
+    }
+}
+
+// In `render_item` of your `ListDelegate`:
+ListItem::new(ix)
+    .child(Label::new(item.name.clone()))
+    .on_drag(DragItem { ix, name: item.name.clone() }, |drag, _, _, cx| {
+        cx.new(|_| drag.clone())
+    })
+    .drag_over::<DragItem>(|style, _, _, cx| style.bg(cx.theme().drop_target))
+    .on_drop(cx.listener(move |this, drag: &DragItem, _, cx| {
+        this.delegate_mut().move_item(drag.ix, ix);
+        cx.notify();
+    }))
+```
+
 ### Custom Empty State
 
 ```rust

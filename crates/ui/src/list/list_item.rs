@@ -1,9 +1,8 @@
 use crate::{ActiveTheme, Disableable, Icon, Selectable, Sizable as _, StyledExt, h_flex};
 use gpui::{
-    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, Interactivity, IntoElement,
+    MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement, RenderOnce, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -162,6 +161,17 @@ impl ParentElement for ListItem {
     }
 }
 
+/// Note: Listeners registered via these traits are not gated by
+/// `disabled`/`separator`. The hover style is managed internally, use
+/// `on_hover` instead of `.hover()`.
+impl InteractiveElement for ListItem {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for ListItem {}
+
 impl RenderOnce for ListItem {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let is_active = self.confirmed || self.selected || self.secondary_selected;
@@ -250,5 +260,30 @@ impl RenderOnce for ListItem {
                     this
                 }
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{AppContext as _, Context, Render};
+
+    struct DragPreview;
+
+    impl Render for DragPreview {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+        }
+    }
+
+    #[gpui::test]
+    fn test_list_item_interactivity(_cx: &mut gpui::TestAppContext) {
+        let mut item = ListItem::new("item")
+            .on_drag(DragPreview, |_, _, _, cx| cx.new(|_| DragPreview))
+            .drag_over::<DragPreview>(|style, _, _, _| style)
+            .on_drop(|_: &DragPreview, _, _| {})
+            .on_hover(|_, _, _| {});
+
+        assert_eq!(item.interactivity().element_id, Some("item".into()));
     }
 }
