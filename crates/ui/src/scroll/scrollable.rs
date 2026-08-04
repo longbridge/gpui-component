@@ -151,6 +151,9 @@ where
                 ScrollbarAxis::Horizontal => this.flex_row().overflow_x_scroll(),
                 ScrollbarAxis::Both => this.overflow_scroll(),
             })
+            // On a single-axis area gpui otherwise remaps the other axis' delta
+            // onto ours, so a purely horizontal swipe scrolls this vertically.
+            .restrict_scroll_to_axis()
             .child(content);
 
         div()
@@ -195,7 +198,7 @@ where
 
 #[inline]
 #[track_caller]
-fn caller_id() -> ElementId {
+pub(super) fn caller_id() -> ElementId {
     ElementId::CodeLocation(*Location::caller())
 }
 
