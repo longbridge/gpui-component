@@ -228,4 +228,41 @@ pub trait TableDelegate: Sized + 'static {
     fn cell_text(&self, row_ix: usize, col_ix: usize, cx: &App) -> String {
         String::new()
     }
+
+    // ── Row Grouping ────────────────────────────────────────────────
+
+    /// Render the toggle icon (chevron) for a group header row.
+    ///
+    /// The default implementation draws a `ChevronRight` / `ChevronDown`
+    /// icon. Override to customise the icon or spacing.
+    fn render_row_toggle(
+        &mut self,
+        is_expanded: bool,
+        _window: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
+        let icon = if is_expanded {
+            IconName::ChevronDown
+        } else {
+            IconName::ChevronRight
+        };
+        div()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(Icon::new(icon).size_3())
+    }
+
+    /// Render a group header row.  Called for each group row
+    /// produced by [`TableState::group_by`].
+    ///
+    /// The default renders a label showing the group value and count.
+    fn render_group_tr(
+        &mut self,
+        group: &crate::table::GroupInfo,
+        _window: &mut Window,
+        _cx: &mut Context<TableState<Self>>,
+    ) -> Stateful<Div> {
+        div().id(group.key.clone()).child(group.label.clone())
+    }
 }
