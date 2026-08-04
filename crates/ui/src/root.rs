@@ -14,7 +14,7 @@ use gpui::{
     Anchor, AnyView, App, AppContext, Bounds, ClipboardItem, Context, DefiniteLength, ElementId,
     Entity, EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding,
     ParentElement as _, Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle,
-    Window, actions, div, prelude::FluentBuilder as _,
+    Window, actions, deferred, div, prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, collections::HashMap, rc::Rc};
 
@@ -159,6 +159,15 @@ impl Root {
         cx: &mut App,
     ) -> Option<impl IntoElement + use<>> {
         let root = window.root::<Root>()??;
+        if root
+            .read(cx)
+            .notification
+            .read(cx)
+            .notifications()
+            .is_empty()
+        {
+            return None;
+        }
 
         let active_sheet_placement = root.read(cx).active_sheet.clone().map(|d| d.placement);
 
@@ -173,7 +182,7 @@ impl Root {
 
         let placement = cx.theme().notification.placement;
 
-        Some(
+        Some(deferred(
             div()
                 .absolute()
                 .when(matches!(placement, Anchor::TopRight), |this| {
@@ -199,7 +208,7 @@ impl Root {
                 .when_some(mb, |this, offset| this.mb(offset))
                 .when_some(ml, |this, offset| this.ml(offset))
                 .child(root.read(cx).notification.clone()),
-        )
+        ))
     }
 
     /// Render the Sheet layer.
@@ -217,12 +226,9 @@ impl Root {
 
             let size = sheet.size;
 
-            return Some(
-                div()
-                    .relative()
-                    .child(sheet)
-                    .on_prepaint(move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size))),
-            );
+            return Some(deferred(div().relative().child(sheet).on_prepaint(
+                move |_, _, cx| root.update(cx, |r, _| r.sheet_size = Some(size)),
+            )));
         }
 
         None
@@ -273,7 +279,7 @@ impl Root {
             }
         }
 
-        Some(div().children(dialogs))
+        Some(deferred(div().children(dialogs)))
     }
 
     pub fn open_dialog<F>(&mut self, build: F, window: &mut Window, cx: &mut Context<'_, Root>)
