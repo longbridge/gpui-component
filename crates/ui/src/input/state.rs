@@ -967,8 +967,7 @@ impl InputState {
         self
     }
 
-    /// Set how soft-wrapped continuation lines are indented, default is [`WrappingIndent::None`]
-    /// (flush-left at the fiull editor width).
+    /// Set how soft-wrapped continuation lines are indented, default is [`WrappingIndent::Same`]
     pub fn wrapping_indent(mut self, wrapping_indent: WrappingIndent) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.wrapping_indent = wrapping_indent;
