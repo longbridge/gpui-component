@@ -700,7 +700,7 @@ impl TextElement {
         while let Some(corners) = rev_line_corners.next() {
             points.push(corners.top_left);
             if let Some(next) = rev_line_corners.peek() {
-                if next.top_left.x > corners.top_left.x {
+                if next.top_left.x != corners.top_left.x {
                     points.push(point(next.top_left.x, corners.top_left.y));
                 }
             }
