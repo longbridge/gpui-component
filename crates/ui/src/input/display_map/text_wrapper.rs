@@ -1321,4 +1321,41 @@ mod tests {
         assert_eq!(line.indent, 0);
         assert_eq!(line.wrapped_lines.as_slice(), [0..5, 5..13, 13..21, 21..24]);
     }
+
+    #[test]
+    fn test_wrap_indent_offsets_continuation_lines() {
+        let mut line_layout = LineLayout::new();
+        line_layout.set_wrapped_lines(smallvec::smallvec![
+            ShapedLine::default().with_len(5),
+            ShapedLine::default().with_len(10),
+        ]);
+
+        line_layout = line_layout.wrap_indent(px(20.0));
+
+        let last_layout = LastLayout{
+           visible_range: 0..1,
+           visible_buffer_lines: vec![0],
+           visible_line_byte_offsets: vec![0],
+           visible_top: px(0.),
+           visible_range_offset: 0..0,
+           lines: Rc::new(vec![]),
+           line_height: px(20.0),
+           wrap_width: Some(px(10.)),
+           wrapping_indent: WrappingIndent::Same,
+           line_number_width: px(0.),
+            cursor_bounds: None,
+            text_align: TextAlign::Left,
+            content_width: px(0.),
+        };
+
+        assert_eq!(
+            line_layout.position_for_index(0, &last_layout, false),
+            Some(point(px(0.), px(0.))),
+        );
+
+        assert_eq!(
+            line_layout.position_for_index(6, &last_layout, false),
+            Some(point(px(20.), px(20.))),
+        )
+    }
 }
