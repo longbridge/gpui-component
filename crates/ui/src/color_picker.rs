@@ -249,6 +249,23 @@ impl ColorPickerState {
         self.value
     }
 
+    /// Open or close the picker popover.
+    ///
+    /// Lets a caller drive the picker from something other than its own
+    /// trigger, e.g. selecting a color by clicking the element it paints.
+    pub fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        if self.open == open {
+            return;
+        }
+        self.open = open;
+        cx.notify();
+    }
+
+    /// Whether the picker popover is open.
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
     fn on_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
         cx.notify();
