@@ -9,7 +9,7 @@ use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle,
     Hsla, InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement,
     ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _,
-    Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
+    WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
@@ -1463,8 +1463,18 @@ impl BlockNode {
     /// Column widths come from the **measured** shaped text of each cell (the
     /// widest per column across all rows), so columns line up and fit their
     /// content exactly — char-count heuristics are inaccurate on proportional
-    /// fonts. A narrow table stretches to fill the frame (cells `flex_grow`
-    /// proportionally); a wide table keeps its content widths and scrolls.
+    /// fonts. The layout adapts to the frame like CSS auto table layout:
+    ///
+    /// - Wider than the content: cells `flex_grow` proportionally to fill.
+    /// - Narrower: columns shrink and their text wraps, but not below a
+    ///   per-column floor.
+    /// - Narrower than the floors: the table keeps the floor widths and
+    ///   scrolls horizontally, so no content ever becomes unreachable.
+    ///
+    /// `white_space: nowrap` on `style.table_cell` composes like in CSS: the
+    /// refinement keeps cell text on a single line, and the floors are raised
+    /// to the full content widths so the single-line columns never shrink —
+    /// the table scrolls as soon as the content is wider than the frame.
     fn render_scroll_table(
         table: &Table,
         col_count: usize,
@@ -1475,9 +1485,20 @@ impl BlockNode {
     ) -> AnyElement {
         const CELL_PAD_PX: f32 = 16.0; // px_2 horizontal padding
         const CELL_MIN_PX: f32 = 48.0;
-        const CELL_MAX_PX: f32 = 480.0;
+        // Shrinking columns stop (and the table starts to scroll) at a floor
+        // scaled to their content: roughly the width at which the text wraps
+        // to `CELL_WRAP_MAX_LINES` lines, clamped between the two bounds so
+        // moderate columns can still wrap meaningfully while one huge column
+        // cannot push the scroll threshold arbitrarily high.
+        const CELL_WRAP_MAX_LINES: f32 = 2.0;
+        const CELL_WRAP_MIN_PX: f32 = 160.0;
+        const CELL_WRAP_MAX_PX: f32 = 480.0;
+        const CELL_BORDER_PX: f32 = 1.0; // border_r_1 drawn by every column but the last
+        const TABLE_BORDER_PX: f32 = 2.0; // the track's border_1, left + right
 
-        // Measure the widest text per column.
+        // Measure the widest text per column (max-content width). Never
+        // capped: a cap would clip overflowing text *and* leave it outside
+        // the scrollable width, making it unreachable.
         let text_style = window.text_style();
         let font_size = text_style.font_size.to_pixels(window.rem_size());
         let mut col_w = vec![CELL_MIN_PX; col_count];
@@ -1499,12 +1520,35 @@ impl BlockNode {
                         .width;
                     w = w.max(f32::from(line_w));
                 }
-                *slot = slot.max((w + CELL_PAD_PX).min(CELL_MAX_PX));
+                // Border-box widths, so the padding and border the cell draws
+                // must leave the measured text its full width.
+                let border = if ix + 1 < col_count {
+                    CELL_BORDER_PX
+                } else {
+                    0.
+                };
+                *slot = slot.max(w + CELL_PAD_PX + border);
             }
         }
-        let total_w: f32 = col_w.iter().sum();
-
         let style = &node_cx.style;
+        // Nowrap cells (via the `table_cell` refinement, which cascades to
+        // the cell text) must never shrink below their single-line content,
+        // so their floor is the content width itself.
+        let nowrap = style.table_cell.text.white_space == Some(WhiteSpace::Nowrap);
+        let col_min_w: Vec<f32> = if nowrap {
+            col_w.clone()
+        } else {
+            col_w
+                .iter()
+                .map(|w| {
+                    (w / CELL_WRAP_MAX_LINES)
+                        .clamp(CELL_WRAP_MIN_PX, CELL_WRAP_MAX_PX)
+                        .min(*w)
+                })
+                .collect()
+        };
+        let min_total_w: f32 = col_min_w.iter().sum::<f32>() + TABLE_BORDER_PX;
+
         let table_scroll_key = if let Some(span) = table.span {
             SharedString::from(format!(
                 "{}-table-scroll-{}:{}",
@@ -1531,19 +1575,21 @@ impl BlockNode {
                 let align = table.column_align(ix);
                 let is_last_col = ix == row.children.len() - 1;
                 let width = col_w.get(ix).copied().unwrap_or(CELL_MIN_PX);
+                let min_width = col_min_w.get(ix).copied().unwrap_or(CELL_MIN_PX);
                 cells.push(
                     div()
                         .id(("cell", ix))
-                        // Measured content width is the flex-basis; `flex_grow`
-                        // (proportional to it) distributes any extra space so a
-                        // narrow table still fills the frame, while `flex_shrink_0`
-                        // keeps columns from collapsing when the table is wider
-                        // than the viewport and scrolls.
+                        // Measured max-content width is the flex-basis;
+                        // `flex_grow` (proportional to it) distributes extra
+                        // space so a narrow table still fills the frame, while
+                        // shrinking is clamped at `min_w` — the flex engine
+                        // squeezes columns (their text wraps) down to the
+                        // floors before the track starts to scroll.
                         .flex_basis(px(width))
                         .flex_grow(width)
-                        .flex_shrink_0()
+                        .flex_shrink(1.)
+                        .min_w(px(min_width))
                         .overflow_hidden()
-                        .whitespace_nowrap()
                         .when(align == ColumnumnAlign::Center, |this| this.text_center())
                         .when(align == ColumnumnAlign::Right, |this| this.text_right())
                         .px_2()
@@ -1579,14 +1625,14 @@ impl BlockNode {
                     ("table", options.ix),
                     &scroll_handle,
                     &style.table,
-                    // Bordered track sized to `max(viewport, total table
-                    // width)`: `min_w_full` fills the frame when the table is
-                    // narrow (cells then grow to fill), the definite `w(total_w)`
-                    // lets it exceed the viewport and scroll when the content is
-                    // wider.
+                    // Bordered track sized to `max(viewport, column floors)`:
+                    // `min_w_full` fills the frame while the columns can still
+                    // shrink-to-fit (their text wrapping), the definite
+                    // `w(min_total_w)` keeps the floors once they are reached,
+                    // letting the track exceed the viewport and scroll.
                     div()
                         .min_w_full()
-                        .w(px(total_w))
+                        .w(px(min_total_w))
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
