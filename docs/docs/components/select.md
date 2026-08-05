@@ -233,6 +233,10 @@ state.update(cx, |state, cx| {
 let current_value = state.read(cx).selected_value();
 ```
 
+`set_selected_value` resolves the item from the delegate's complete data source, so it can select
+an item hidden by the current search. The `selected_index` cursor is only restored when that item
+is visible in the current filtered list.
+
 Update items:
 
 ```rust

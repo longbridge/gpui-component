@@ -18,7 +18,7 @@ where
 {
     pub focus_handle: FocusHandle,
     pub(crate) list: Entity<ListState<SearchableListAdapter<D>>>,
-    pub(crate) selection: Vec<(IndexPath, D::Item)>,
+    pub(crate) selection: Vec<D::Item>,
     pub(crate) open: bool,
     pub(crate) bounds: Bounds<Pixels>,
 
@@ -78,11 +78,20 @@ where
         let selection = {
             let delegate = &list.read(cx).delegate().delegate;
 
-            selected_indices
-                .iter()
-                .copied()
-                .filter_map(|ix| delegate.item(ix).map(|i| (ix, i.clone())))
-                .collect::<Vec<_>>()
+            let mut selection = Vec::new();
+            for ix in selected_indices.iter().copied() {
+                let Some(item) = delegate.item(ix) else {
+                    continue;
+                };
+
+                if !selection
+                    .iter()
+                    .any(|selected_item: &D::Item| selected_item.value() == item.value())
+                {
+                    selection.push(item.clone());
+                }
+            }
+            selection
         };
 
         if let Some(cursor) = selected_indices.first().copied() {
@@ -125,14 +134,14 @@ where
 
     // MARK: Read-only accessors
 
-    pub fn selection(&self) -> &[(IndexPath, D::Item)] {
+    pub fn selection(&self) -> &[D::Item] {
         &self.selection
     }
 
     pub fn selected_values(&self) -> Vec<<D::Item as SearchableListItem>::Value> {
         self.selection
             .iter()
-            .map(|(_ix, i)| i.value().clone())
+            .map(|item| item.value().clone())
             .collect()
     }
 
@@ -146,18 +155,26 @@ where
 
     // MARK: Mutation (no cx — callers emit events and notify)
 
-    /// Add an index+item pair to the selection; no-op if already present.
-    pub(crate) fn add_by_item(&mut self, index: IndexPath, item: D::Item) {
-        if self.selection.iter().any(|(ix, _)| ix == &index) {
-            return;
+    /// Add an item to the selection; no-op if its value is already present.
+    pub(crate) fn add_by_item(&mut self, item: D::Item) -> bool {
+        if self
+            .selection
+            .iter()
+            .any(|selected_item| selected_item.value() == item.value())
+        {
+            return false;
         }
 
-        self.selection.push((index, item));
+        self.selection.push(item);
+        true
     }
 
-    /// Remove an index from the selection by index path.
-    pub(crate) fn remove_by_index(&mut self, index: &IndexPath) -> bool {
-        if let Some(pos) = self.selection.iter().position(|(ix, _)| ix == index) {
+    /// Remove an item from the selection by value.
+    pub(crate) fn remove_by_value(
+        &mut self,
+        value: &<D::Item as SearchableListItem>::Value,
+    ) -> bool {
+        if let Some(pos) = self.selection.iter().position(|item| item.value() == value) {
             self.selection.remove(pos);
 
             return true;
@@ -166,43 +183,71 @@ where
         false
     }
 
-    /// Add a single index to the selection by looking up the item in the list.
+    /// Add the item at a current visible index to the selection.
     ///
     /// Requires `cx` only to read the list entity; does not notify.
     pub fn add_selected_index(&mut self, index: IndexPath, cx: &App) -> bool {
-        if self.selection.iter().any(|(ix, _)| ix == &index) {
-            return false;
-        }
-
-        let Some(item) = self.list.read(cx).delegate().delegate.item(index) else {
+        let Some(item) = self.list.read(cx).delegate().delegate.item(index).cloned() else {
             return false;
         };
 
-        self.add_by_item(index, item.clone());
-
-        true
+        self.add_by_item(item)
     }
 
-    /// Remove a single index from the selection.
-    pub fn remove_selected_index(&mut self, index: IndexPath) -> bool {
-        self.remove_by_index(&index)
+    /// Remove the item at a current visible index from the selection.
+    pub fn remove_selected_index(&mut self, index: IndexPath, cx: &App) -> bool {
+        let Some(value) = self
+            .list
+            .read(cx)
+            .delegate()
+            .delegate
+            .item(index)
+            .map(|item| item.value().clone())
+        else {
+            return false;
+        };
+
+        self.remove_by_value(&value)
     }
 
-    /// Replace the entire selection, looking up items from the list.
+    /// Add a single item to the selection by value, resolving it from the delegate.
+    pub fn add_selected_value(
+        &mut self,
+        value: &<D::Item as SearchableListItem>::Value,
+        cx: &App,
+    ) -> bool {
+        let Some(item) = self.list.read(cx).delegate().delegate.item_by_value(value) else {
+            return false;
+        };
+
+        self.add_by_item(item)
+    }
+
+    /// Remove a single item from the selection by value.
+    pub fn remove_selected_value(
+        &mut self,
+        value: &<D::Item as SearchableListItem>::Value,
+    ) -> bool {
+        self.remove_by_value(value)
+    }
+
+    /// Replace the entire selection with items at current visible indices.
     pub fn set_selected_indices(&mut self, indices: impl IntoIterator<Item = IndexPath>, cx: &App) {
-        let indices: Vec<IndexPath> = indices.into_iter().collect();
-
-        self.selection = indices
+        let items = indices
             .into_iter()
-            .filter_map(|ix| {
-                self.list
-                    .read(cx)
-                    .delegate()
-                    .delegate
-                    .item(ix)
-                    .map(|i| (ix, i.clone()))
-            })
-            .collect();
+            .filter_map(|ix| self.list.read(cx).delegate().delegate.item(ix).cloned())
+            .collect::<Vec<_>>();
+
+        self.set_selected_items(items);
+    }
+
+    /// Replace the entire selection with items, preserving input order and de-duplicating values.
+    pub(crate) fn set_selected_items(&mut self, items: impl IntoIterator<Item = D::Item>) {
+        self.selection.clear();
+
+        for item in items {
+            self.add_by_item(item);
+        }
     }
 
     /// Push the current selection into the adapter's snapshot so the next render pass sees

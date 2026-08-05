@@ -71,6 +71,18 @@ pub trait SearchableListDelegate: Sized + 'static {
         Self::Item: SearchableListItem<Value = V>,
         V: PartialEq;
 
+    /// Resolve an item by value, including items that are not in the current filtered view when
+    /// the delegate has access to a complete data source.
+    ///
+    /// The default implementation only supports the current visible list.
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        Self::Item: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.position(value).and_then(|ix| self.item(ix).cloned())
+    }
+
     /// Called when the search query changes.
     ///
     /// Implementations should filter or fetch items and may return an async `Task`.
@@ -127,19 +139,19 @@ pub trait SearchableListDelegate: Sized + 'static {
 
     /// Whether the item at `ix` should show a checkmark.
     ///
-    /// `current_selection` is the slice of currently selected `(IndexPath, Item)` pairs.
+    /// `current_selection` is the slice of currently selected items.
     ///
     /// Default: checks whether the item's value is present in `current_selection`.
     fn is_item_checked(
         &self,
         _ix: IndexPath,
         item: &Self::Item,
-        current_selection: &[(IndexPath, Self::Item)],
+        current_selection: &[Self::Item],
         _cx: &App,
     ) -> bool {
         current_selection
             .iter()
-            .any(|(_, selected_item)| selected_item.value() == item.value())
+            .any(|selected_item| selected_item.value() == item.value())
     }
 
     // MARK: Lifecycle / selection hooks
@@ -149,16 +161,17 @@ pub trait SearchableListDelegate: Sized + 'static {
     /// `selection` is the live selection vec — the delegate may freely mutate it: add items,
     /// remove items, reorder, or leave it unchanged to effectively veto the operation.
     ///
-    /// `changes` is the slice of atomic changes the mode-strategy computed (e.g. Single
-    /// replacement deselects all then selects one; Multi toggles the clicked item). The delegate
-    /// is not required to apply them — they are informational. The default implementation applies
-    /// every change in order.
+    /// `changes` is the slice of atomic changes the mode-strategy computed. Multi-select changes
+    /// toggle the clicked item; single-select changes contain the new item to select, and the
+    /// parent starts the working selection empty so the default implementation replaces it. The
+    /// delegate is not required to apply them — they are informational. The default implementation
+    /// applies every change in order.
     ///
     /// No `cx` is available: this hook runs synchronously during the item-click handler while
     /// the list entity is mutably borrowed. Side effects that need cx belong in `on_confirm`.
     fn on_will_change(
         &mut self,
-        selection: &mut Vec<(IndexPath, Self::Item)>,
+        selection: &mut Vec<Self::Item>,
         changes: &[SearchableListChange],
     ) {
         for change in changes {
@@ -170,25 +183,21 @@ pub trait SearchableListDelegate: Sized + 'static {
 
                     if !selection
                         .iter()
-                        .any(|(_, selected_item)| selected_item.value() == item.value())
+                        .any(|selected_item| selected_item.value() == item.value())
                     {
-                        selection.push((*index, item.clone()));
+                        selection.push(item.clone());
                     }
                 }
                 SearchableListChange::Deselect { index } => {
                     if let Some(item) = self.item(*index) {
                         let has_value = selection
                             .iter()
-                            .any(|(_, selected_item)| selected_item.value() == item.value());
+                            .any(|selected_item| selected_item.value() == item.value());
 
                         if has_value {
-                            selection
-                                .retain(|(_, selected_item)| selected_item.value() != item.value());
-                            continue;
+                            selection.retain(|selected_item| selected_item.value() != item.value());
                         }
                     }
-
-                    selection.retain(|(selected_ix, _)| selected_ix != index);
                 }
             }
         }
@@ -196,5 +205,5 @@ pub trait SearchableListDelegate: Sized + 'static {
 
     /// Called when the dropdown/popover is committed (Escape, `close_on_select`, or explicit
     /// confirm). `final_selection` is the selection after the last committed change.
-    fn on_confirm(&mut self, _final_selection: &[(IndexPath, Self::Item)]) {}
+    fn on_confirm(&mut self, _final_selection: &[Self::Item]) {}
 }

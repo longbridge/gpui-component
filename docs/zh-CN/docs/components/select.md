@@ -223,6 +223,9 @@ state.update(cx, |state, cx| {
 let current_value = state.read(cx).selected_value();
 ```
 
+`set_selected_value` 会从 delegate 的完整数据源解析选项，因此可以选中当前搜索隐藏的选项。
+只有当该选项在当前过滤列表中可见时，才会恢复 `selected_index` 光标。
+
 更新选项列表：
 
 ```rust

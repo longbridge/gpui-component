@@ -247,8 +247,8 @@ Use a recording delegate to assert that hooks fire with the right arguments and 
 #[derive(Default)]
 struct RecordingDelegate {
     items: Vec<MyItem>,
-    will_change_calls: Vec<Vec<IndexPath>>,
-    confirm_calls: Vec<Vec<IndexPath>>,
+    will_change_calls: Vec<Vec<MyItem>>,
+    confirm_calls: Vec<Vec<MyItem>>,
 }
 
 impl SearchableListDelegate for RecordingDelegate {
@@ -256,18 +256,14 @@ impl SearchableListDelegate for RecordingDelegate {
 
     fn on_will_change(
         &mut self,
-        change: &mut SearchableListChange<Self>,
-        _current: &[(IndexPath, Self::Item)],
+        selection: &mut Vec<Self::Item>,
+        _changes: &[SearchableListChange],
     ) {
-        self.will_change_calls.push(
-            change.select_queue.iter().map(|(ix, _)| *ix).collect()
-        );
+        self.will_change_calls.push(selection.clone());
     }
 
-    fn on_confirm(&mut self, final_selection: &[(IndexPath, Self::Item)]) {
-        self.confirm_calls.push(
-            final_selection.iter().map(|(ix, _)| *ix).collect()
-        );
+    fn on_confirm(&mut self, final_selection: &[Self::Item]) {
+        self.confirm_calls.push(final_selection.to_vec());
     }
 }
 

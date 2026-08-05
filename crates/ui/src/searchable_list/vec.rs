@@ -64,6 +64,14 @@ impl<T: SearchableListItem + 'static> SearchableListDelegate for Vec<T> {
             .position(|v| v.value() == value)
             .map(|ix| IndexPath::default().row(ix))
     }
+
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        Self::Item: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.iter().find(|item| item.value() == value).cloned()
+    }
 }
 
 // MARK: SearchableVec
@@ -125,6 +133,17 @@ impl<I: SearchableListItem + 'static> SearchableListDelegate for SearchableVec<I
             .iter()
             .position(|v| v.value() == value)
             .map(|ix| IndexPath::default().row(ix))
+    }
+
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        Self::Item: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.items
+            .iter()
+            .find(|item| item.value() == value)
+            .cloned()
     }
 
     fn perform_search(&mut self, query: &str, _: &mut Window, _: &mut App) -> Task<()> {
@@ -220,6 +239,18 @@ impl<I: SearchableListItem + 'static> SearchableListDelegate for SearchableVec<S
         }
 
         None
+    }
+
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        Self::Item: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.items
+            .iter()
+            .flat_map(|group| group.items.iter())
+            .find(|item| item.value() == value)
+            .cloned()
     }
 
     fn perform_search(&mut self, query: &str, _: &mut Window, _: &mut App) -> Task<()> {

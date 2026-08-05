@@ -45,7 +45,7 @@ pub(crate) fn init(cx: &mut App) {
 
 /// Context passed to the `render_trigger` closure on [`Combobox`].
 pub struct ComboboxTriggerCtx<'a, D: SearchableListDelegate + 'static> {
-    pub selection: &'a [(IndexPath, D::Item)],
+    pub selection: &'a [D::Item],
     pub placeholder: Option<&'a SharedString>,
     pub open: bool,
     pub disabled: bool,
@@ -163,11 +163,18 @@ where
                             let s = weak.read(cx);
                             (s.multiple, s.state.selection.clone())
                         };
+                        let previous_selection = selection.clone();
 
                         let changes = Self::selection_changes(multiple, &selection, ix, &item);
 
-                        let before_indices: Vec<IndexPath> =
-                            selection.iter().map(|(ix, _)| *ix).collect();
+                        let before_values = selection
+                            .iter()
+                            .map(|selected_item| selected_item.value().clone())
+                            .collect::<Vec<_>>();
+
+                        if !multiple {
+                            selection.clear();
+                        }
 
                         // on_will_change is called directly — entity-handle access would
                         // re-enter the ListState lock that defer_in holds for this callback.
@@ -176,9 +183,17 @@ where
                             .delegate
                             .on_will_change(&mut selection, &changes);
 
-                        let after_indices: Vec<IndexPath> =
-                            selection.iter().map(|(ix, _)| *ix).collect();
-                        let changed = before_indices != after_indices;
+                        // A delegate can veto a single-select change by leaving the working
+                        // selection empty. Preserve the committed selection in that case.
+                        if !multiple && selection.is_empty() && !previous_selection.is_empty() {
+                            selection = previous_selection;
+                        }
+
+                        let after_values = selection
+                            .iter()
+                            .map(|selected_item| selected_item.value().clone())
+                            .collect::<Vec<_>>();
+                        let changed = before_values != after_values;
                         let should_close = changed && !multiple;
 
                         let new_selection = weak_confirm.update(cx, |this, cx| {
@@ -286,8 +301,8 @@ where
         self.state.selected_values().into_iter().next()
     }
 
-    /// Return the currently selected `(IndexPath, Item)` pairs.
-    pub fn selection(&self) -> &[(IndexPath, D::Item)] {
+    /// Return the currently selected items.
+    pub fn selection(&self) -> &[D::Item] {
         self.state.selection()
     }
 
@@ -299,23 +314,25 @@ where
     pub fn set_selected_values(
         &mut self,
         values: &[<D::Item as SearchableListItem>::Value],
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let selected_indices = {
+        let selected_items = {
             let list = self.state.list.read(cx);
             let delegate = &list.delegate().delegate;
 
             values
                 .iter()
-                .filter_map(|value| delegate.position(value))
+                .filter_map(|value| delegate.item_by_value(value))
                 .collect::<Vec<_>>()
         };
 
-        self.set_selected_indices(selected_indices, window, cx);
+        self.state.set_selected_items(selected_items);
+        self.state.sync_snapshot(cx);
+        cx.notify();
     }
 
-    /// Replace the entire selection set.
+    /// Replace the entire selection set with items at current visible indices.
     pub fn set_selected_indices(
         &mut self,
         indices: impl IntoIterator<Item = IndexPath>,
@@ -327,7 +344,7 @@ where
         cx.notify();
     }
 
-    /// Add a single index to the selection, if not already present, returning whether it was added.
+    /// Add the item at a current visible index, if not already present, returning whether it was added.
     pub fn add_selected_index(&mut self, index: IndexPath, cx: &mut Context<Self>) -> bool {
         let added = self.state.add_selected_index(index, cx);
 
@@ -339,12 +356,45 @@ where
         added
     }
 
-    /// Remove a single index from the selection, returning whether it was removed.
+    /// Remove the item at a current visible index, returning whether it was removed.
     pub fn remove_selected_index(&mut self, index: IndexPath, cx: &mut Context<Self>) -> bool {
-        let removed = self.state.remove_selected_index(index);
+        let removed = self.state.remove_selected_index(index, cx);
 
         if removed {
             self.state.sync_snapshot(cx);
+            cx.notify();
+        }
+
+        removed
+    }
+
+    /// Add a single item to the selection by value, if it exists and is not already selected.
+    pub fn add_selected_value(
+        &mut self,
+        value: &<D::Item as SearchableListItem>::Value,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let added = self.state.add_selected_value(value, cx);
+
+        if added {
+            self.state.sync_snapshot(cx);
+            cx.notify();
+        }
+
+        added
+    }
+
+    /// Remove a single item from the selection by value.
+    pub fn remove_selected_value(
+        &mut self,
+        value: &<D::Item as SearchableListItem>::Value,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let removed = self.state.remove_selected_value(value);
+
+        if removed {
+            self.state.sync_snapshot(cx);
+            cx.notify();
         }
 
         removed
@@ -372,13 +422,13 @@ where
 
     fn selection_changes(
         multiple: bool,
-        selection: &[(IndexPath, D::Item)],
+        selection: &[D::Item],
         ix: IndexPath,
         item: &D::Item,
     ) -> Vec<SearchableListChange> {
         let is_selected = selection
             .iter()
-            .any(|(_, selected_item)| selected_item.value() == item.value());
+            .any(|selected_item| selected_item.value() == item.value());
 
         if multiple {
             if is_selected {
@@ -387,12 +437,7 @@ where
                 vec![SearchableListChange::Select { index: ix }]
             }
         } else {
-            let mut changes: Vec<SearchableListChange> = selection
-                .iter()
-                .map(|(cur_ix, _)| SearchableListChange::Deselect { index: *cur_ix })
-                .collect();
-            changes.push(SearchableListChange::Select { index: ix });
-            changes
+            vec![SearchableListChange::Select { index: ix }]
         }
     }
 
@@ -421,7 +466,15 @@ where
         let changes = Self::selection_changes(self.multiple, &self.state.selection, ix, &item);
 
         let mut selection = self.state.selection.clone();
-        let before_indices: Vec<IndexPath> = selection.iter().map(|(ix, _)| *ix).collect();
+        let previous_selection = selection.clone();
+        let before_values = selection
+            .iter()
+            .map(|selected_item| selected_item.value().clone())
+            .collect::<Vec<_>>();
+
+        if !self.multiple {
+            selection.clear();
+        }
 
         self.state.list.update(cx, |list, _cx| {
             list.delegate_mut()
@@ -429,8 +482,15 @@ where
                 .on_will_change(&mut selection, &changes);
         });
 
-        let after_indices: Vec<IndexPath> = selection.iter().map(|(ix, _)| *ix).collect();
-        let changed = before_indices != after_indices;
+        if !self.multiple && selection.is_empty() && !previous_selection.is_empty() {
+            selection = previous_selection;
+        }
+
+        let after_values = selection
+            .iter()
+            .map(|selected_item| selected_item.value().clone())
+            .collect::<Vec<_>>();
+        let changed = before_values != after_values;
         let should_close = changed && !self.multiple;
 
         self.state.selection = selection;
@@ -555,7 +615,7 @@ where
                 .state
                 .selection
                 .iter()
-                .map(|(_, i)| i.title())
+                .map(|item| item.title())
                 .collect();
 
             div()
@@ -570,7 +630,7 @@ where
                 .state
                 .selection
                 .first()
-                .map(|(_, i)| i.title())
+                .map(|item| item.title())
                 .unwrap_or_default();
 
             div()
@@ -1173,14 +1233,7 @@ mod tests {
                 state.set_selected_values(&["Vue", "Missing"], window, cx);
 
                 assert_eq!(state.selected_values(), vec!["Vue"]);
-                assert_eq!(
-                    state
-                        .selection()
-                        .iter()
-                        .map(|(index, _)| *index)
-                        .collect::<Vec<_>>(),
-                    vec![IndexPath::new(1)],
-                );
+                assert_eq!(state.selection(), &["Vue"]);
                 assert_eq!(
                     state
                         .state
@@ -1196,14 +1249,7 @@ mod tests {
                 state.set_selected_values(&["Go", "Vue"], window, cx);
 
                 assert_eq!(state.selected_values(), vec!["Go", "Vue"]);
-                assert_eq!(
-                    state
-                        .selection()
-                        .iter()
-                        .map(|(index, _)| *index)
-                        .collect::<Vec<_>>(),
-                    vec![IndexPath::new(2), IndexPath::new(0)],
-                );
+                assert_eq!(state.selection(), &["Go", "Vue"]);
                 assert_eq!(
                     state
                         .state
@@ -1359,12 +1405,87 @@ mod tests {
     }
 
     #[gpui::test]
+    fn test_multi_combo_box_value_selection_survives_filter(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx).multiple(true));
+
+            state.update(cx, |s, cx| {
+                s.set_selected_values(&["React"], window, cx);
+                s.state.list.update(cx, |list, cx| {
+                    let _ = list
+                        .delegate_mut()
+                        .delegate
+                        .perform_search("Ang", window, cx);
+                });
+
+                assert_eq!(s.selected_values(), &["React"]);
+                s.set_selected_values(&["React", "Angular"], window, cx);
+                assert_eq!(s.selected_values(), &["React", "Angular"]);
+
+                let list = s.state.list.read(cx);
+                let delegate = &list.delegate().delegate;
+                let angular = delegate
+                    .item(IndexPath::new(0))
+                    .expect("Angular is visible");
+                assert!(delegate.is_item_checked(IndexPath::new(0), angular, s.selection(), cx));
+            });
+
+            state.update(cx, |s, cx| {
+                s.state.list.update(cx, |list, cx| {
+                    let _ = list.delegate_mut().delegate.perform_search("", window, cx);
+                });
+
+                let list = s.state.list.read(cx);
+                let delegate = &list.delegate().delegate;
+                let react = delegate.item(IndexPath::new(0)).expect("React is visible");
+                assert!(delegate.is_item_checked(IndexPath::new(0), react, s.selection(), cx));
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_multi_combo_box_index_mutations_use_current_visible_items(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx).multiple(true));
+
+            state.update(cx, |s, cx| {
+                s.set_selected_values(&["React"], window, cx);
+                s.state.list.update(cx, |list, cx| {
+                    let _ = list
+                        .delegate_mut()
+                        .delegate
+                        .perform_search("Ang", window, cx);
+                });
+
+                s.set_selected_indices(vec![IndexPath::new(0)], window, cx);
+                assert_eq!(s.selected_values(), &["Angular"]);
+                s.set_selected_values(&["React"], window, cx);
+                assert!(s.add_selected_index(IndexPath::new(0), cx));
+                assert!(!s.add_selected_index(IndexPath::new(1), cx));
+                assert_eq!(s.selected_values(), &["React", "Angular"]);
+
+                assert!(s.remove_selected_index(IndexPath::new(0), cx));
+                assert_eq!(s.selected_values(), &["React"]);
+                assert!(!s.remove_selected_index(IndexPath::new(1), cx));
+                assert!(s.remove_selected_value(&"React", cx));
+                assert!(s.selected_values().is_empty());
+            });
+        });
+    }
+
+    #[gpui::test]
     fn test_searchable_list_default_change_uses_value_identity(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let cx = cx.add_empty_window();
         cx.update(|window, cx| {
             let mut delegate = SearchableVec::new(vec!["React", "Vue", "Angular"]);
-            let mut selection = vec![(IndexPath::new(1), "Vue")];
+            let mut selection = vec!["Vue"];
 
             let _ = delegate.perform_search("Vue", window, cx);
             delegate.on_will_change(
@@ -1381,7 +1502,7 @@ mod tests {
                     index: IndexPath::new(0),
                 }],
             );
-            assert_eq!(selection, vec![(IndexPath::new(0), "Vue")]);
+            assert_eq!(selection, vec!["Vue"]);
         });
     }
 
@@ -1448,7 +1569,7 @@ mod tests {
 
         fn on_will_change(
             &mut self,
-            _selection: &mut Vec<(IndexPath, &'static str)>,
+            _selection: &mut Vec<&'static str>,
             _changes: &[SearchableListChange],
         ) {
             // Leave selection unchanged — acts as a veto.
