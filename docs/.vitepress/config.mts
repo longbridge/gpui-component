@@ -17,7 +17,7 @@ function createSidebar(scanStartPath: string, rootGroupText: string) {
       collapsed: false,
       useTitleFromFrontmatter: true,
       useTitleFromFileHeading: true,
-      sortMenusByFrontmatterOrder: true,
+      sortMenusByFrontmatterOrder: false,
       includeRootIndexFile: false,
     },
   ]) as any;

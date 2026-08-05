@@ -46,6 +46,7 @@ pub mod history;
 pub mod hover_card;
 pub mod input;
 pub mod kbd;
+pub mod kbd_group;
 pub mod label;
 pub mod link;
 pub mod list;
