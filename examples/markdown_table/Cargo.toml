@@ -1,0 +1,15 @@
+[package]
+name = "markdown_table"
+description = "A minimal markdown viewer for debugging table rendering."
+version = "0.5.1"
+publish = false
+edition.workspace = true
+
+[dependencies]
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-component = { workspace = true }
+gpui-component-assets.workspace = true
+
+[lints]
+workspace = true

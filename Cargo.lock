@@ -4629,6 +4629,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "markdown_table"
+version = "0.5.1"
+dependencies = [
+ "gpui",
+ "gpui-component",
+ "gpui-component-assets",
+ "gpui_platform",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
