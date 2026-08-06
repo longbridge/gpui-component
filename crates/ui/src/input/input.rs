@@ -429,11 +429,24 @@ impl RenderOnce for Input {
             && state.mode.is_single_line();
         let has_suffix = suffix.is_some() || state.loading || self.mask_toggle || show_clear_button;
 
+        let placeholder = Some(state.placeholder.clone()).filter(|p| !p.is_empty());
+
+        // Don't use a mask-derived placeholder ("(___)___-___") as an aria_label fallback.
+        let placeholder_is_mask =
+            state.mask_pattern.placeholder().as_deref() == placeholder.as_deref();
+
+        let aria_label = match self.aria_label {
+            Some(label) => Some(label),
+            None if placeholder_is_mask => None,
+            None => placeholder.clone(),
+        };
+
         div()
             .id(("input", self.state.entity_id()))
             .role(accessibility_role)
-            .when_some(self.aria_label.clone(), |this, label| {
-                this.aria_label(label)
+            .when_some(aria_label, |this, label| this.aria_label(label))
+            .when_some(placeholder, |this, placeholder| {
+                this.aria_placeholder(placeholder)
             })
             .when_some(accessibility_value, |this, value| this.aria_value(value))
             .flex()
