@@ -12,6 +12,7 @@ use ropey::Rope;
 use super::fold_map::FoldMap;
 use super::folding::FoldRange;
 use super::text_wrapper::{LineItem, WrapDisplayPoint};
+pub use super::text_wrapper::WrappingIndent;
 use super::wrap_map::WrapMap;
 use super::{BufferPoint, DisplayPoint};
 use crate::input::Point as TreeSitterPoint;
@@ -227,6 +228,12 @@ impl DisplayMap {
     /// Update layout parameters (wrap width or font)
     pub fn on_layout_changed(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
         self.wrap_map.on_layout_changed(wrap_width, cx);
+        self.rebuild_fold_projection();
+    }
+
+    /// Set the wrapping indent for continuation lines.
+    pub fn set_wrapping_indent(&mut self, wrapping_indent: WrappingIndent, cx: &mut App) {
+        self.wrap_map.set_wrapping_indent(wrapping_indent, cx);
         self.rebuild_fold_projection();
     }
 

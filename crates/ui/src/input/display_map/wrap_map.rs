@@ -10,7 +10,7 @@ use gpui::{App, Font, Pixels};
 use ropey::Rope;
 
 use super::fold_map::FoldMap;
-use super::text_wrapper::{LineItem, TextWrapper, WrapDisplayPoint};
+use super::text_wrapper::{LineItem, TextWrapper, WrapDisplayPoint, WrappingIndent};
 use super::{BufferPoint, WrapPoint};
 use crate::input::rope_ext::RopeExt;
 
@@ -113,6 +113,11 @@ impl WrapMap {
     /// Update layout parameters (wrap width or font)
     pub fn on_layout_changed(&mut self, wrap_width: Option<Pixels>, cx: &mut App) {
         self.wrapper.set_wrap_width(wrap_width, cx);
+    }
+
+    /// Set the wrapping indent mode for continuation lines.
+    pub fn set_wrapping_indent(&mut self, wrapping_indent: WrappingIndent, cx: &mut App) {
+        self.wrapper.set_wrapping_indent(wrapping_indent, cx);
     }
 
     /// Set font parameters
