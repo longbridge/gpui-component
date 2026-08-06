@@ -1,9 +1,10 @@
 use crate::{
-    ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _, StyledExt,
+    ActiveTheme as _, Collapsible, Icon, IconName, Placement, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     menu::{ContextMenuExt, PopupMenu},
     sidebar::SidebarItem,
+    tooltip::{ManagedTooltipExt as _, Tooltip},
     v_flex,
 };
 use gpui::{
@@ -205,6 +206,10 @@ impl SidebarMenuItem {
         self.children.len() > 0
     }
 
+    fn collapsed_tooltip(&self) -> Option<SharedString> {
+        (self.collapsed && self.icon.is_some()).then(|| self.label.clone())
+    }
+
     /// Set the context menu for the menu item.
     pub fn context_menu(
         mut self,
@@ -238,6 +243,7 @@ impl SidebarItem for SidebarMenuItem {
         let click_to_open = self.click_to_open;
         let click_to_toggle = self.click_to_toggle;
         let default_open = self.default_open;
+        let collapsed_tooltip = self.collapsed_tooltip();
         let id = id.into();
         let is_submenu = self.is_submenu();
         let open_state = if is_submenu {
@@ -355,6 +361,15 @@ impl SidebarItem for SidebarMenuItem {
                         })
                     })
                     .map(|this| {
+                        if let Some(tooltip) = collapsed_tooltip {
+                            this.managed_tooltip_at(Placement::Right, move |window, cx| {
+                                Tooltip::new(tooltip.clone()).build(window, cx)
+                            })
+                        } else {
+                            this
+                        }
+                    })
+                    .map(|this| {
                         if let Some(context_menu) = self.context_menu {
                             this.context_menu(move |menu, window, cx| {
                                 context_menu(menu, window, cx)
@@ -381,5 +396,28 @@ impl SidebarItem for SidebarMenuItem {
                         })),
                 )
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collapsed_icon_item_uses_label_as_tooltip() {
+        let item = SidebarMenuItem::new("Projects")
+            .icon(Icon::default())
+            .collapsed(true);
+
+        assert_eq!(item.collapsed_tooltip().as_deref(), Some("Projects"));
+    }
+
+    #[test]
+    fn expanded_or_iconless_item_has_no_collapsed_tooltip() {
+        let expanded = SidebarMenuItem::new("Projects").icon(Icon::default());
+        let iconless = SidebarMenuItem::new("Projects").collapsed(true);
+
+        assert!(expanded.collapsed_tooltip().is_none());
+        assert!(iconless.collapsed_tooltip().is_none());
     }
 }
