@@ -426,12 +426,14 @@ impl ColorPicker {
                         .bg(color.lighten(0.1))
                 })
                 .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
-                .on_mouse_move(window.listener_for(&state, move |state, _, window, cx| {
-                    state.hovered_color = Some(color);
-                    state.state.update(cx, |input, cx| {
-                        input.set_value(color.to_hex(), window, cx);
-                    });
-                    cx.notify();
+                .on_hover(window.listener_for(&state, move |state, enter, window, cx| {
+                    if *enter {
+                        state.hovered_color = Some(color);
+                        state.state.update(cx, |input, cx| {
+                            input.set_value(color.to_hex(), window, cx);
+                        });
+                        cx.notify();
+                    }
                 }))
                 .on_click(window.listener_for(
                     &state,
