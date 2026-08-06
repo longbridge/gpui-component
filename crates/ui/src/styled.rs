@@ -1,7 +1,7 @@
 use crate::ActiveTheme;
 use gpui::{
     App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
-    Refineable, StyleRefinement, Styled, Window, div, point, px,
+    Refineable, Role, StyleRefinement, Styled, Window, div, point, px,
 };
 use serde::{Deserialize, Serialize};
 
@@ -363,6 +363,53 @@ impl Size {
 impl From<Pixels> for Size {
     fn from(size: Pixels) -> Self {
         Size::Size(size)
+    }
+}
+
+/// The accessible role a component instance reports to assistive technology.
+///
+/// Components infer a role from their own state by default; this overrides that
+/// inference, including suppressing the node entirely so an ancestor can carry
+/// the role instead.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub enum RoleOverride {
+    /// Use the role the component infers for itself.
+    #[default]
+    Implicit,
+
+    /// Emit no accessibility node, so an ancestor can carry the role.
+    ///
+    /// The analog of the HTML `role="presentation"` or `role="none"`.
+    Presentational,
+
+    /// Use this role instead of the inferred one.
+    Role(Role),
+}
+
+impl RoleOverride {
+    /// Resolve to the role to report, given the role the component infers for
+    /// itself. Returns `None` when no accessibility node should be emitted.
+    pub fn resolve(self, default: impl FnOnce() -> Role) -> Option<Role> {
+        match self {
+            Self::Implicit => Some(default()),
+            Self::Presentational => None,
+            Self::Role(role) => Some(role),
+        }
+    }
+}
+
+impl From<Role> for RoleOverride {
+    fn from(role: Role) -> Self {
+        Self::Role(role)
+    }
+}
+
+impl From<Option<Role>> for RoleOverride {
+    fn from(role: Option<Role>) -> Self {
+        match role {
+            Some(role) => Self::Role(role),
+            None => Self::Presentational,
+        }
     }
 }
 
