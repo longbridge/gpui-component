@@ -175,6 +175,10 @@ impl RenderOnce for ButtonGroup {
                     .enumerate()
                     .map(|(child_index, child)| {
                         let state = Rc::clone(&state);
+                        // The group as a whole is a toggle control, so every
+                        // child advertises its pressed state.
+                        let selected = child.selected;
+                        let child = child.toggled(selected);
                         let child = if children_len == 1 {
                             child
                         } else if child_index == 0 {

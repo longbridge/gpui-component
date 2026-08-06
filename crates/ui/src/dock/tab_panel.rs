@@ -1,7 +1,7 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use gpui::{
-    Anchor, App, AppContext, Context, DismissEvent, Div, DragMoveEvent, Empty, Entity,
+    Anchor, App, AppContext, Context, DismissEvent, Div, DragMoveEvent, Empty, Entity, EntityId,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
     Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
     Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
@@ -71,6 +71,10 @@ pub struct TabPanel {
     stack_panel: Option<WeakEntity<StackPanel>>,
     pub(crate) panels: Vec<Arc<dyn PanelView>>,
     pub(crate) active_ix: usize,
+    /// What each panel was last told via `set_active`, keyed by EntityId; absent means `false`.
+    notified_active: HashMap<EntityId, bool>,
+    /// Whether an active-state reconcile task is already queued for this frame.
+    active_sync_scheduled: bool,
     /// If this is true, the Panel closable will follow the active panel's closable,
     /// otherwise this TabPanel will not able to close
     ///
@@ -172,6 +176,8 @@ impl TabPanel {
             stack_panel,
             panels: Vec::new(),
             active_ix: 0,
+            notified_active: HashMap::new(),
+            active_sync_scheduled: false,
             tab_bar_scroll_handle: ScrollHandle::new(),
             pending_scroll_to_ix: None,
             will_split_placement: None,
@@ -216,29 +222,66 @@ impl TabPanel {
             return;
         }
 
-        let last_active_ix = self.active_ix;
-
         self.active_ix = ix;
         self.pending_scroll_to_ix = Some(ix);
         self.focus_active_panel(window, cx);
-
-        // Sync the active state to all panels
-        cx.spawn_in(window, async move |view, cx| {
-            _ = cx.update(|window, cx| {
-                _ = view.update(cx, |view, cx| {
-                    if let Some(last_active) = view.panels.get(last_active_ix) {
-                        last_active.set_active(false, window, cx);
-                    }
-                    if let Some(active) = view.panels.get(view.active_ix) {
-                        active.set_active(true, window, cx);
-                    }
-                });
-            });
-        })
-        .detach();
+        self.schedule_active_sync(window, cx);
 
         cx.emit(PanelEvent::LayoutChanged);
         cx.notify();
+    }
+
+    /// Queue one reconcile task per frame that notifies panels of their
+    /// frame-end net active state. Using a spawned task (not `defer`) is what
+    /// guarantees the task runs after every same-frame mutation, including
+    /// deferred `set_collapsed` from [`super::Dock::set_open`].
+    fn schedule_active_sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.active_sync_scheduled {
+            return;
+        }
+        self.active_sync_scheduled = true;
+
+        cx.spawn_in(window, async move |view, cx| {
+            _ = cx.update(|window, cx| {
+                let Ok(changes) = view.update(cx, |view, _| view.reconcile_active_states()) else {
+                    return;
+                };
+                // Dispatch outside the TabPanel update so a `set_active`
+                // handler may call back into this TabPanel without panicking.
+                for (panel, active) in changes {
+                    panel.set_active(active, window, cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Diff every panel's target state (`ix == active_ix && !collapsed`)
+    /// against what it was last told, returning the deliveries to make —
+    /// all `false` first, the single `true` last. Panels no longer in the
+    /// group are pruned without a `false`: `on_removed` is their signal.
+    fn reconcile_active_states(&mut self) -> Vec<(Arc<dyn PanelView>, bool)> {
+        self.active_sync_scheduled = false;
+
+        let mut notified = HashMap::with_capacity(self.panels.len());
+        let mut changes = Vec::new();
+        let mut activated = None;
+        for (ix, panel) in self.panels.iter().enumerate() {
+            let id = panel.view().entity_id();
+            let target = ix == self.active_ix && !self.collapsed;
+            let last = self.notified_active.get(&id).copied().unwrap_or(false);
+            if target != last {
+                if target {
+                    activated = Some((panel.clone(), true));
+                } else {
+                    changes.push((panel.clone(), false));
+                }
+            }
+            notified.insert(id, target);
+        }
+        self.notified_active = notified;
+        changes.extend(activated);
+        changes
     }
 
     /// Add a panel to the end of the tabs
@@ -278,6 +321,9 @@ impl TabPanel {
         if active {
             self.set_active_ix(self.panels.len() - 1, window, cx);
         }
+        // Unconditional: set_active_ix early-returns for the first panel,
+        // which is displayed regardless of `active`.
+        self.schedule_active_sync(window, cx);
         cx.emit(PanelEvent::LayoutChanged);
         cx.notify();
     }
@@ -295,7 +341,7 @@ impl TabPanel {
             cx.update(|window, cx| {
                 view.update(cx, |view, cx| {
                     view.will_split_placement = Some(placement);
-                    view.split_panel(panel, placement, size, window, cx)
+                    view.split_panel(panel, placement, size, None, window, cx)
                 })
                 .ok()
             })
@@ -324,6 +370,9 @@ impl TabPanel {
         panel.on_added_to(cx.entity().downgrade(), window, cx);
         self.panels.insert(ix, panel);
         self.set_active_ix(ix, window, cx);
+        // set_active_ix early-returns when ix == active_ix, yet the
+        // displayed panel just changed.
+        self.schedule_active_sync(window, cx);
         cx.emit(PanelEvent::LayoutChanged);
         cx.notify();
     }
@@ -341,18 +390,27 @@ impl TabPanel {
         cx.emit(PanelEvent::LayoutChanged);
     }
 
+    /// Detach the panel, returning what it was last told via `set_active` so
+    /// drag-and-drop can carry that belief into the target `TabPanel`.
     fn detach_panel(
         &mut self,
         panel: Arc<dyn PanelView>,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) {
+    ) -> Option<bool> {
         panel.on_removed(window, cx);
         let panel_view = panel.view();
+        let removed_ix = self.panels.iter().position(|p| p.view() == panel_view);
         self.panels.retain(|p| p.view() != panel_view);
+        // Keep following the same displayed panel.
+        if removed_ix.is_some_and(|ix| ix < self.active_ix) {
+            self.active_ix -= 1;
+        }
         if self.active_ix >= self.panels.len() {
             self.set_active_ix(self.panels.len().saturating_sub(1), window, cx)
         }
+        self.schedule_active_sync(window, cx);
+        self.notified_active.remove(&panel_view.entity_id())
     }
 
     /// Check to remove self from the parent StackPanel, if there is no panel left
@@ -376,9 +434,7 @@ impl TabPanel {
         cx: &mut Context<Self>,
     ) {
         self.collapsed = collapsed;
-        if let Some(panel) = self.panels.get(self.active_ix) {
-            panel.set_active(!collapsed, window, cx);
-        }
+        self.schedule_active_sync(window, cx);
         cx.notify();
     }
 
@@ -481,7 +537,7 @@ impl TabPanel {
                             .ghost()
                             .tab_stop(false)
                             .tooltip_with_action(tooltip, &ToggleZoom, None)
-                            .when(zoomed, |this| this.selected(true))
+                            .selected(zoomed)
                             .on_click(cx.listener(|view, _, window, cx| {
                                 view.on_action_toggle_zoom(&ToggleZoom, window, cx)
                             })),
@@ -966,23 +1022,29 @@ impl TabPanel {
         //
         // We must to split it to remove_panel, unless it will be crash by error:
         // Cannot update ui::dock::tab_panel::TabPanel while it is already being updated
-        if is_same_tab {
-            self.detach_panel(panel.clone(), window, cx);
+        let last_notified = if is_same_tab {
+            self.detach_panel(panel.clone(), window, cx)
         } else {
-            let _ = drag.tab_panel.update(cx, |view, cx| {
-                view.detach_panel(panel.clone(), window, cx);
+            drag.tab_panel.update(cx, |view, cx| {
+                let last_notified = view.detach_panel(panel.clone(), window, cx);
                 view.remove_self_if_empty(window, cx);
-            });
-        }
+                last_notified
+            })
+        };
 
-        // Insert into new tabs
+        // Insert into new tabs, seeding the target map with what the panel
+        // was last told so the move only notifies on a real state change.
+        let panel_id = panel.view().entity_id();
         if let Some(placement) = self.will_split_placement {
-            self.split_panel(panel, placement, None, window, cx);
+            self.split_panel(panel, placement, None, last_notified, window, cx);
         } else {
             if let Some(ix) = ix {
                 self.insert_panel_at(panel, ix, window, cx)
             } else {
                 self.add_panel_with_active(panel, active, window, cx)
+            }
+            if let Some(last_notified) = last_notified {
+                self.notified_active.insert(panel_id, last_notified);
             }
         }
 
@@ -996,14 +1058,19 @@ impl TabPanel {
         panel: Arc<dyn PanelView>,
         placement: Placement,
         size: Option<Pixels>,
+        last_notified: Option<bool>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let dock_area = self.dock_area.clone();
+        let panel_id = panel.view().entity_id();
         // wrap the panel in a TabPanel
         let new_tab_panel = cx.new(|cx| Self::new(None, dock_area.clone(), window, cx));
         new_tab_panel.update(cx, |view, cx| {
             view.add_panel(panel, window, cx);
+            if let Some(last_notified) = last_notified {
+                view.notified_active.insert(panel_id, last_notified);
+            }
         });
 
         let stack_panel = match self.stack_panel.as_ref().and_then(|panel| panel.upgrade()) {
@@ -1214,5 +1281,345 @@ impl Render for TabPanel {
             .bg(cx.theme().tokens.background)
             .child(self.render_title_bar(&state, window, cx))
             .child(self.render_active_panel(&state, window, cx))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use gpui::{TestAppContext, VisualTestContext, WindowHandle};
+
+    use super::*;
+    use crate::{Root, Theme, dock::DockItem};
+
+    /// Shared, cross-panel ordered log of every `set_active` delivery.
+    type Log = Arc<Mutex<Vec<(&'static str, bool)>>>;
+
+    struct TestPanel {
+        name: &'static str,
+        focus_handle: FocusHandle,
+        log: Log,
+    }
+
+    impl Panel for TestPanel {
+        fn panel_name(&self) -> &'static str {
+            "TestPanel"
+        }
+
+        fn set_active(&mut self, active: bool, _: &mut Window, _: &mut Context<Self>) {
+            self.log.lock().unwrap().push((self.name, active));
+        }
+    }
+
+    impl EventEmitter<PanelEvent> for TestPanel {}
+
+    impl Focusable for TestPanel {
+        fn focus_handle(&self, _: &App) -> FocusHandle {
+            self.focus_handle.clone()
+        }
+    }
+
+    impl Render for TestPanel {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            Empty
+        }
+    }
+
+    struct DockFixture {
+        dock_area: Entity<DockArea>,
+        window: WindowHandle<Root>,
+        log: Log,
+    }
+
+    fn setup(cx: &mut TestAppContext) -> DockFixture {
+        let log = Log::default();
+        let mut dock_area = None;
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                cx.set_global(Theme::default());
+                let area = cx.new(|cx| DockArea::new("test-dock", None, window, cx));
+                dock_area = Some(area.clone());
+                cx.new(|cx| Root::new(area, window, cx))
+            })
+            .unwrap()
+        });
+        DockFixture {
+            dock_area: dock_area.unwrap(),
+            window,
+            log,
+        }
+    }
+
+    fn test_panel(name: &'static str, log: &Log, cx: &mut App) -> Entity<TestPanel> {
+        let log = log.clone();
+        cx.new(|cx| TestPanel {
+            name,
+            focus_handle: cx.focus_handle(),
+            log,
+        })
+    }
+
+    /// Build a tab group holding `names`, returning the kept-alive DockItem,
+    /// its TabPanel, and the panel entities.
+    fn build_tabs(
+        fixture: &DockFixture,
+        names: &[&'static str],
+        active_ix: Option<usize>,
+        cx: &mut VisualTestContext,
+    ) -> (DockItem, Entity<TabPanel>, Vec<Entity<TestPanel>>) {
+        let weak_dock_area = fixture.dock_area.downgrade();
+        let log = fixture.log.clone();
+        let names = names.to_vec();
+        let (item, panels) = cx.update(move |window, cx| {
+            let panels: Vec<_> = names
+                .iter()
+                .map(|name| test_panel(name, &log, cx))
+                .collect();
+            let items = panels
+                .iter()
+                .map(|panel| Arc::new(panel.clone()) as Arc<dyn PanelView>)
+                .collect();
+            let mut item = DockItem::tabs(items, &weak_dock_area, window, cx);
+            if let Some(ix) = active_ix {
+                item = item.active_index(ix, cx);
+            }
+            (item, panels)
+        });
+        let DockItem::Tabs { view, .. } = &item else {
+            unreachable!("DockItem::tabs must return DockItem::Tabs");
+        };
+        let tab_panel = view.clone();
+        (item, tab_panel, panels)
+    }
+
+    fn drain(log: &Log) -> Vec<(&'static str, bool)> {
+        std::mem::take(&mut *log.lock().unwrap())
+    }
+
+    #[gpui::test]
+    fn single_panel_group_receives_initial_active(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let _keep = build_tabs(&fixture, &["A"], None, &mut cx);
+        cx.run_until_parked();
+
+        assert_eq!(drain(&fixture.log), [("A", true)]);
+    }
+
+    #[gpui::test]
+    fn multi_tab_construction_notifies_only_displayed_panel(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let _keep = build_tabs(&fixture, &["A", "B", "C"], None, &mut cx);
+        cx.run_until_parked();
+
+        // No false→true flip on A, no duplicate true, B/C silent.
+        assert_eq!(drain(&fixture.log), [("A", true)]);
+    }
+
+    #[gpui::test]
+    fn active_index_restore_notifies_that_panel_only(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let _keep = build_tabs(&fixture, &["A", "B", "C"], Some(2), &mut cx);
+        cx.run_until_parked();
+
+        assert_eq!(drain(&fixture.log), [("C", true)]);
+    }
+
+    #[gpui::test]
+    fn switching_tabs_sends_false_then_true(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (_keep, tab_panel, _) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.run_until_parked();
+        drain(&fixture.log);
+
+        cx.update(|window, cx| {
+            tab_panel.update(cx, |tab_panel, cx| tab_panel.set_active_ix(1, window, cx));
+        });
+        cx.run_until_parked();
+
+        assert_eq!(drain(&fixture.log), [("A", false), ("B", true)]);
+    }
+
+    #[gpui::test]
+    fn reselecting_active_tab_stays_silent(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (_keep, tab_panel, _) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.run_until_parked();
+        drain(&fixture.log);
+
+        cx.update(|window, cx| {
+            tab_panel.update(cx, |tab_panel, cx| tab_panel.set_active_ix(0, window, cx));
+        });
+        cx.run_until_parked();
+
+        assert_eq!(drain(&fixture.log), []);
+    }
+
+    #[gpui::test]
+    fn inserting_at_active_ix_swaps_notifications(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (_keep, tab_panel, _) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.run_until_parked();
+        drain(&fixture.log);
+
+        let log = fixture.log.clone();
+        cx.update(|window, cx| {
+            let c = test_panel("C", &log, cx);
+            tab_panel.update(cx, |tab_panel, cx| {
+                tab_panel.insert_panel_at(Arc::new(c), 0, window, cx)
+            });
+        });
+        cx.run_until_parked();
+
+        assert_eq!(drain(&fixture.log), [("A", false), ("C", true)]);
+    }
+
+    #[gpui::test]
+    fn removing_before_active_keeps_displayed_panel(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (_keep, tab_panel, panels) = build_tabs(&fixture, &["A", "B", "C"], None, &mut cx);
+        cx.update(|window, cx| {
+            tab_panel.update(cx, |tab_panel, cx| tab_panel.set_active_ix(1, window, cx));
+        });
+        cx.run_until_parked();
+        drain(&fixture.log);
+
+        cx.update(|window, cx| {
+            tab_panel.update(cx, |tab_panel, cx| {
+                tab_panel.remove_panel(Arc::new(panels[0].clone()), window, cx)
+            });
+        });
+        cx.run_until_parked();
+
+        assert_eq!(drain(&fixture.log), []);
+        cx.update(|_, cx| {
+            tab_panel.read_with(cx, |tab_panel, _| {
+                assert_eq!(tab_panel.active_ix, 0);
+                assert_eq!(
+                    tab_panel.panels[0].view().entity_id(),
+                    panels[1].entity_id()
+                );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn collapse_and_expand_notify_active_panel(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (_keep, tab_panel, _) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.run_until_parked();
+        drain(&fixture.log);
+
+        cx.update(|window, cx| {
+            tab_panel.update(cx, |tab_panel, cx| {
+                tab_panel.set_collapsed(true, window, cx)
+            });
+        });
+        cx.run_until_parked();
+        assert_eq!(drain(&fixture.log), [("A", false)]);
+
+        cx.update(|window, cx| {
+            tab_panel.update(cx, |tab_panel, cx| {
+                tab_panel.set_collapsed(false, window, cx)
+            });
+        });
+        cx.run_until_parked();
+        assert_eq!(drain(&fixture.log), [("A", true)]);
+    }
+
+    #[gpui::test]
+    fn background_add_is_silent_but_first_panel_is_not(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (_keep, tab_panel, _) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.run_until_parked();
+        drain(&fixture.log);
+
+        let log = fixture.log.clone();
+        cx.update(|window, cx| {
+            let c = test_panel("C", &log, cx);
+            tab_panel.update(cx, |tab_panel, cx| {
+                tab_panel.add_panel_with_active(Arc::new(c), false, window, cx)
+            });
+        });
+        cx.run_until_parked();
+        assert_eq!(drain(&fixture.log), []);
+
+        // The first panel of an empty group is displayed regardless of the
+        // `active` flag, so it must be told.
+        let (_keep2, empty_tab_panel, _) = build_tabs(&fixture, &[], None, &mut cx);
+        cx.run_until_parked();
+        drain(&fixture.log);
+        let log = fixture.log.clone();
+        cx.update(|window, cx| {
+            let d = test_panel("D", &log, cx);
+            empty_tab_panel.update(cx, |tab_panel, cx| {
+                tab_panel.add_panel_with_active(Arc::new(d), false, window, cx)
+            });
+        });
+        cx.run_until_parked();
+        assert_eq!(drain(&fixture.log), [("D", true)]);
+    }
+
+    #[gpui::test]
+    fn drag_active_panel_to_other_group_stays_silent_for_it(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (_keep_src, source, source_panels) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        let (_keep_dst, target, _) = build_tabs(&fixture, &["C"], None, &mut cx);
+        cx.run_until_parked();
+        drain(&fixture.log);
+
+        // A was already told `true`; becoming the target's active tab must
+        // not repeat it.
+        cx.update(|window, cx| {
+            let drag = DragPanel::new(Arc::new(source_panels[0].clone()), source.clone());
+            target.update(cx, |tab_panel, cx| {
+                tab_panel.on_drop(&drag, None, true, window, cx)
+            });
+        });
+        cx.run_until_parked();
+
+        assert_eq!(drain(&fixture.log), [("B", true), ("C", false)]);
+    }
+
+    #[gpui::test]
+    fn drag_active_panel_to_background_slot_deactivates_it(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (_keep_src, source, source_panels) = build_tabs(&fixture, &["A"], None, &mut cx);
+        let (_keep_dst, target, _) = build_tabs(&fixture, &["C", "D"], None, &mut cx);
+        cx.run_until_parked();
+        drain(&fixture.log);
+
+        // A was told `true` and becomes a background tab, so it gets one `false`.
+        cx.update(|window, cx| {
+            let drag = DragPanel::new(Arc::new(source_panels[0].clone()), source.clone());
+            target.update(cx, |tab_panel, cx| {
+                tab_panel.on_drop(&drag, None, false, window, cx)
+            });
+        });
+        cx.run_until_parked();
+
+        assert_eq!(drain(&fixture.log), [("A", false)]);
     }
 }

@@ -500,8 +500,29 @@ where
 
         if self.state.open {
             self.state.list.focus_handle(cx).focus(window, cx);
+        } else {
+            cx.emit(ComboboxEvent::Confirm(self.selected_values()));
+            self.focus(window, cx);
         }
 
+        cx.notify();
+    }
+
+    /// Close the menu when a press lands outside the popup.
+    ///
+    /// A press on the trigger is left to propagate: swallowing it here would keep nested
+    /// controls (a tag remove button, the clear button) from ever seeing the press, and
+    /// `toggle_menu` closes the menu on release anyway.
+    fn dismiss(&mut self, event: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.state.open || self.state.bounds.contains(&event.position) {
+            return;
+        }
+
+        cx.stop_propagation();
+        cx.emit(ComboboxEvent::Confirm(self.selected_values()));
+
+        self.set_open(false, cx);
+        self.focus(window, cx);
         cx.notify();
     }
 
@@ -594,7 +615,7 @@ where
         let is_focused = self.state.focus_handle.is_focused(window);
         let show_clean = self.state.cleanable && !self.state.selection.is_empty();
         let bounds = self.state.bounds;
-        let allow_open = !(self.state.open || self.state.disabled);
+        let allow_open = !self.state.disabled;
         let outline_visible = self.state.open || (is_focused && !self.state.disabled);
         let disabled = self.state.disabled;
 
@@ -663,7 +684,7 @@ where
         let footer_el = self.footer.as_ref().map(|f| f(window, cx));
 
         let dismiss_handler: Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static> =
-            Box::new(cx.listener(|this, _, window, cx| this.escape(&Cancel, window, cx)));
+            Box::new(cx.listener(Self::dismiss));
 
         div()
             .size_full()
@@ -1043,7 +1064,10 @@ fn render_popup_shell<D: SearchableListDelegate + 'static>(
 mod tests {
     use std::{cell::Cell, rc::Rc};
 
-    use gpui::{AppContext as _, Context, Entity, Subscription, TestAppContext};
+    use gpui::{
+        AppContext as _, Bounds, Context, Entity, Modifiers, MouseButton, MouseDownEvent, Pixels,
+        Point, Subscription, TestAppContext, point, px, size,
+    };
 
     use crate::{
         IndexPath,
@@ -1474,6 +1498,62 @@ mod tests {
 
             // Selection must remain unchanged because on_will_change left it unmodified.
             assert_eq!(state.read(cx).selected_values(), &["Rust"]);
+        });
+    }
+
+    fn left_press(position: Point<Pixels>) -> MouseDownEvent {
+        MouseDownEvent {
+            button: MouseButton::Left,
+            position,
+            modifiers: Modifiers::default(),
+            click_count: 1,
+            first_mouse: false,
+        }
+    }
+
+    #[gpui::test]
+    fn test_combo_box_dismiss_ignores_press_on_trigger(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            cx.new(|cx| ComboboxState::new(items, vec![], window, cx).multiple(true))
+        });
+        let collector = cx.update(|_, cx| cx.new(|cx| TestComboboxEventCollector::new(&state, cx)));
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.state.bounds = Bounds {
+                    origin: point(px(10.), px(10.)),
+                    size: size(px(200.), px(32.)),
+                };
+                state.set_open(true, cx);
+                state.dismiss(&left_press(point(px(20.), px(20.))), window, cx);
+            });
+        });
+
+        cx.update(|_, cx| {
+            assert!(
+                state.read(cx).state.open,
+                "a press on the trigger must reach nested controls, so the menu stays open \
+                 and `toggle_menu` closes it on release instead",
+            );
+            assert_eq!(collector.read(cx).event_count.get(), 0);
+        });
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.dismiss(&left_press(point(px(20.), px(200.))), window, cx);
+            });
+        });
+
+        cx.update(|_, cx| {
+            assert!(!state.read(cx).state.open);
+            assert_eq!(
+                collector.read(cx).event_count.get(),
+                1,
+                "dismissing from outside the trigger emits Confirm",
+            );
         });
     }
 

@@ -22,7 +22,7 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DisplayMap, MASK_CHAR,
+    DisplayMap, MASK_CHAR, WrappingIndent,
     blink_cursor::BlinkCursor,
     change::Change,
     decorations::DecorationCollections,
@@ -303,10 +303,12 @@ pub(super) struct LastLayout {
     pub(super) visible_range_offset: Range<usize>,
     /// The last layout lines (Only have visible lines, no empty entries for hidden lines).
     pub(super) lines: Rc<Vec<LineLayout>>,
-    /// The line_height of text layout, this will change will InputElement painted.
+    /// The line_height of text layout, this may change when InputElement is painted.
     pub(super) line_height: Pixels,
-    /// The wrap width of text layout, this will change will InputElement painted.
+    /// The wrap width of text layout, this may change when InputElement is painted.
     pub(super) wrap_width: Option<Pixels>,
+    /// The wrapping indent mode of text layout, this may change when InputElement is painted.
+    pub(super) wrapping_indent: WrappingIndent,
     /// The line number area width of text layout, if not line number, this will be 0px.
     pub(super) line_number_width: Pixels,
     /// The cursor position (top, left) in pixels.
@@ -373,6 +375,7 @@ pub struct InputState {
     pub(super) clean_on_escape: bool,
     pub(super) submit_on_enter: bool,
     pub(super) soft_wrap: bool,
+    pub(super) wrapping_indent: WrappingIndent,
     /// See [`Self::scroll_beyond_last_line`].
     pub(super) scroll_beyond_last_line: Option<usize>,
     /// See [`Self::cursor_surrounding_lines`].
@@ -505,6 +508,7 @@ impl InputState {
             clean_on_escape: false,
             submit_on_enter: false,
             soft_wrap: true,
+            wrapping_indent: WrappingIndent::default(),
             scroll_beyond_last_line: None,
             cursor_surrounding_lines: None,
             show_whitespaces: false,
@@ -963,6 +967,13 @@ impl InputState {
         self
     }
 
+    /// Set how soft-wrapped continuation lines are indented, default is [`WrappingIndent::Same`]
+    pub fn wrapping_indent(mut self, wrapping_indent: WrappingIndent) -> Self {
+        debug_assert!(self.mode.is_multi_line());
+        self.wrapping_indent = wrapping_indent;
+        self
+    }
+
     /// Update the soft wrap mode for multi-line input, default is true.
     pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
         debug_assert!(self.mode.is_multi_line());
@@ -989,6 +1000,18 @@ impl InputState {
     /// Update whether to show whitespace characters.
     pub fn set_show_whitespaces(&mut self, show: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.show_whitespaces = show;
+        cx.notify();
+    }
+
+    /// Update how soft-wrapped continuation lines are indented.
+    pub fn set_wrapping_indent(
+        &mut self,
+        wrapping_indent: WrappingIndent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.wrapping_indent = wrapping_indent;
+        self.display_map.set_wrapping_indent(wrapping_indent, cx);
         cx.notify();
     }
 

@@ -109,9 +109,16 @@ pub trait Panel: EventEmitter<PanelEvent> + Render + Focusable {
 
     /// Set active state of the panel.
     ///
-    /// This method will be called when the panel is active or inactive.
+    /// Called with the frame-end net state when this panel becomes (or stops
+    /// being) the displayed tab of its tab group: exactly one notification
+    /// per edge, delivered on the next tick after the change — never
+    /// same-value repeats nor false→true flips within one frame.
     ///
-    /// The last_active_panel and current_active_panel will be touched when the panel is active.
+    /// A panel removed from its group is NOT told `false`; [`Panel::on_removed`]
+    /// is the deactivation signal. A hidden panel occupying `active_ix` still
+    /// receives `true` even though rendering falls back to the first visible
+    /// panel, and panels inside a bare `DockItem::Panel` (no tab group) are
+    /// outside this contract.
     fn set_active(&mut self, active: bool, window: &mut Window, cx: &mut Context<Self>) {}
 
     /// Set zoomed state of the panel.

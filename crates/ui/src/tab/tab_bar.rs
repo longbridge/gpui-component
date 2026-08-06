@@ -447,6 +447,7 @@ impl RenderOnce for TabBar {
                         .relative()
                         .gap(gap)
                         .overflow_x_scroll()
+                        .restrict_scroll_to_axis()
                         .when_some(self.scroll_handle, |this, scroll_handle| {
                             this.track_scroll(&scroll_handle)
                         })

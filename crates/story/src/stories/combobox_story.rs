@@ -723,6 +723,9 @@ impl Render for ComboboxStory {
                                             .icon(Icon::new(IconName::Close).xsmall())
                                             .tab_stop(false)
                                             .on_click(move |_ev, _window, cx| {
+                                                // Otherwise the click bubbles up to the
+                                                // trigger and opens the dropdown.
+                                                cx.stop_propagation();
                                                 state.update(cx, |s, cx| {
                                                     s.remove_selected_index(index, cx);
                                                 });
