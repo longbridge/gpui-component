@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use gpui::{
-    Anchor, App, AppContext, Context, DismissEvent, Div, DragMoveEvent, Empty, Entity, EntityId,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
+    Anchor, App, AppContext, Bounds, Context, DismissEvent, Div, DragMoveEvent, Empty, Entity,
+    EntityId, EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    ParentElement, Pixels, Point, Render, ScrollHandle, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
 };
 use rust_i18n::t;
 
@@ -19,8 +19,8 @@ use crate::{
 };
 
 use super::{
-    ClosePanel, DockArea, DockPlacement, Panel, PanelControl, PanelEvent, PanelState, PanelStyle,
-    PanelView, StackPanel, ToggleZoom,
+    AnyDrag, ClosePanel, DockArea, DockEvent, DockPlacement, Panel, PanelControl, PanelEvent,
+    PanelState, PanelStyle, PanelView, StackPanel, ToggleZoom,
 };
 
 #[derive(Clone)]
@@ -30,6 +30,20 @@ struct TabState {
     draggable: bool,
     droppable: bool,
     active_panel: Option<Arc<dyn PanelView>>,
+}
+
+/// A drag originating outside the dock (payload built by the host, wrapped in
+/// [`AnyDrag`]) dropped onto a [`TabPanel`], carrying the placement resolved
+/// from the cursor. Delivered as [`DockEvent::ForeignDrop`].
+///
+/// `placement` is `None` when the cursor was in the center, meaning merge into
+/// the tab group rather than split.
+#[derive(Clone)]
+pub struct ForeignDrop {
+    pub drag: AnyDrag,
+    pub placement: Option<Placement>,
+    /// The TabPanel the drop landed on; hosts insert relative to it.
+    pub tab_panel: Entity<TabPanel>,
 }
 
 #[derive(Clone)]
@@ -937,6 +951,9 @@ impl TabPanel {
             )
             .when(state.droppable, |this| {
                 this.on_drag_move(cx.listener(Self::on_panel_drag_move))
+                    .when(!self.in_tiles, |this| {
+                        this.on_drag_move(cx.listener(Self::on_foreign_drag_move))
+                    })
                     .child(
                         div()
                             .invisible()
@@ -961,7 +978,21 @@ impl TabPanel {
                             .group_drag_over::<DragPanel>("", |this| this.visible())
                             .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
                                 this.on_drop(drag, None, true, window, cx)
-                            })),
+                            }))
+                            .when(!self.in_tiles, |this| {
+                                this.group_drag_over::<AnyDrag>("", |this| this.visible())
+                                    .on_drop(cx.listener(|this, drag: &AnyDrag, _, cx| {
+                                        let event = ForeignDrop {
+                                            drag: drag.clone(),
+                                            placement: this.will_split_placement.take(),
+                                            tab_panel: cx.entity(),
+                                        };
+                                        _ = this.dock_area.update(cx, |_, cx| {
+                                            cx.emit(DockEvent::ForeignDrop(event));
+                                        });
+                                        cx.notify();
+                                    }))
+                            }),
                     )
             })
             .into_any_element()
@@ -974,9 +1005,25 @@ impl TabPanel {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let bounds = drag.bounds;
-        let position = drag.event.position;
+        self.update_split_placement(drag.bounds, drag.event.position, cx);
+    }
 
+    /// Same as [`Self::on_panel_drag_move`], for drags carrying a host payload.
+    fn on_foreign_drag_move(
+        &mut self,
+        drag: &DragMoveEvent<AnyDrag>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.update_split_placement(drag.bounds, drag.event.position, cx);
+    }
+
+    fn update_split_placement(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        position: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
         // Check the mouse position to determine the split direction
         if position.x < bounds.left() + bounds.size.width * 0.35 {
             self.will_split_placement = Some(Placement::Left);
