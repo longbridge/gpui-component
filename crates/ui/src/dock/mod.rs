@@ -38,6 +38,10 @@ pub enum DockEvent {
 
     /// The drag item drop event.
     DragDrop(AnyDrag),
+
+    /// A host-owned drag dropped onto a TabPanel in a split layout,
+    /// carrying the placement resolved from the cursor. See [`ForeignDrop`].
+    ForeignDrop(ForeignDrop),
 }
 
 /// The main area of the dock.

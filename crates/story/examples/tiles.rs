@@ -184,6 +184,9 @@ impl StoryTiles {
                 DockEvent::DragDrop(item) => {
                     println!("drag drop: {:?}", item);
                 }
+                DockEvent::ForeignDrop(drop) => {
+                    println!("foreign drop: {:?} at {:?}", drop.drag, drop.placement);
+                }
             },
         )
         .detach();
