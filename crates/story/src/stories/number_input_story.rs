@@ -155,6 +155,7 @@ impl NumberInputStory {
             }
             InputEvent::Focus => println!("Focus"),
             InputEvent::Blur => println!("Blur"),
+            InputEvent::BreakpointToggled(line) => println!("BreakpointToggled: {}", line),
         }
     }
 
