@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{Pixels, Rems, StyleRefinement, px, rems};
+use gpui::{HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
 
 use crate::highlighter::HighlightTheme;
 
@@ -18,7 +18,7 @@ pub struct TextViewStyle {
     pub heading_font_size: Option<Arc<dyn Fn(u8, Pixels) -> Pixels + Send + Sync + 'static>>,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Arc<HighlightTheme>,
-    /// The style refinement for code blocks.
+    /// Style for fenced code blocks (box-model: background, border, padding).
     pub code_block: StyleRefinement,
     /// Style refinement applied to the table container (the bordered wrapper
     /// in wrap mode, the scroll viewport in horizontal-scroll mode).
@@ -35,7 +35,11 @@ pub struct TextViewStyle {
     /// on a single line — columns then never shrink and the table scrolls as
     /// soon as the content is wider than the frame.
     pub table_cell: StyleRefinement,
+    /// When true, selects a dark syntax-highlight palette for code blocks.
     pub is_dark: bool,
+    /// Style for inline `code` spans (text-level: color, background, weight).
+    /// Merged into each span's HighlightStyle at render time — see node.rs.
+    pub inline_code: HighlightStyle,
 }
 
 impl PartialEq for TextViewStyle {
@@ -57,6 +61,7 @@ impl Default for TextViewStyle {
             table: StyleRefinement::default(),
             table_cell: StyleRefinement::default(),
             is_dark: false,
+            inline_code: HighlightStyle::default(),
         }
     }
 }
@@ -79,6 +84,12 @@ impl TextViewStyle {
     /// Set style for code blocks.
     pub fn code_block(mut self, style: StyleRefinement) -> Self {
         self.code_block = style;
+        self
+    }
+
+    /// Set style for inline code spans.
+    pub fn inline_code(mut self, style: HighlightStyle) -> Self {
+        self.inline_code = style;
         self
     }
 

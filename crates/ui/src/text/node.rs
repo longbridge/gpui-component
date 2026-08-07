@@ -907,7 +907,11 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent);
+                        let mut code_span_style = node_cx.style.inline_code;
+                        if code_span_style.background_color.is_none() {
+                            code_span_style.background_color = Some(cx.theme().accent);
+                        }
+                        highlight = highlight.highlight(code_span_style);
                     }
                     if let Some(color) = style.highlight {
                         highlight.background_color = Some(color);
@@ -1021,7 +1025,11 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent);
+                        let mut code_span_style = node_cx.style.inline_code;
+                        if code_span_style.background_color.is_none() {
+                            code_span_style.background_color = Some(cx.theme().accent);
+                        }
+                        highlight = highlight.highlight(code_span_style);
                     }
                     if let Some(color) = style.highlight {
                         highlight.background_color = Some(color);
