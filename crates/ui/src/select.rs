@@ -307,23 +307,63 @@ where
 
     /// Set selected value for the select.
     ///
-    /// Looks up the position from the delegate and sets the selected index accordingly.
-    /// Passes `None` when the value is not found.
+    /// Clears an active search query before looking up the value, so the lookup uses the
+    /// delegate's unfiltered items and their restored index paths. For delegates with
+    /// asynchronous search, the selection is updated after the reset search completes.
+    /// Clears the current selection when the value is not found.
     pub fn set_selected_value(
         &mut self,
         selected_value: &<D::Item as SearchableListItem>::Value,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let selected_index = self
-            .state
-            .list
-            .read(cx)
-            .delegate()
-            .delegate
-            .position(selected_value);
+        let (selected_index, can_select_immediately) = {
+            let list = self.state.list.read(cx);
+            (
+                list.delegate().delegate.position(selected_value),
+                list.query_input.read(cx).value().is_empty() && !list.is_search_pending(),
+            )
+        };
 
-        self.set_selected_index(selected_index, window, cx);
+        if can_select_immediately {
+            self.set_selected_index(selected_index, window, cx);
+            return;
+        }
+
+        let selected_value = selected_value.clone();
+        let weak = cx.entity().downgrade();
+        self.state.list.update(cx, |list, cx| {
+            list.set_query_with_completion(
+                "",
+                move |list, window, cx| {
+                    let selected_index = list.delegate().delegate.position(&selected_value);
+                    let selection = selected_index
+                        .and_then(|ix| {
+                            list.delegate()
+                                .delegate
+                                .item(ix)
+                                .cloned()
+                                .map(|item| (ix, item))
+                        })
+                        .into_iter()
+                        .collect::<Vec<_>>();
+
+                    list._set_selected_index(selected_index, window, cx);
+                    // The list entity is already mutably borrowed by the search-completion
+                    // callback, so update its adapter snapshot directly instead of calling
+                    // `SelectState::set_selected_index`, which would re-enter the list entity.
+                    list.delegate_mut()
+                        .update_selection_snapshot(selection.clone());
+
+                    _ = weak.update(cx, |select, cx| {
+                        select.state.selection = selection;
+                        cx.notify();
+                    });
+                },
+                window,
+                cx,
+            );
+        });
     }
 
     /// Replace the delegate (item data) for the select state.
@@ -794,13 +834,49 @@ where
 
 #[cfg(test)]
 mod tests {
-    use gpui::{AppContext as _, TestAppContext};
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{
+        AnyElement, App, AppContext as _, Context, Entity, InputEvent as _,
+        InteractiveElement as _, IntoElement, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent,
+        ParentElement as _, Render, SharedString, Styled as _, Task, TestAppContext,
+        VisualTestContext, WeakEntity, Window, div, px,
+    };
 
     use crate::{
         IndexPath,
-        searchable_list::SearchableVec,
-        select::{SelectGroup, SelectState},
+        list::ListState,
+        searchable_list::{
+            SearchableListAdapter, SearchableListDelegate, SearchableListItem, SearchableVec,
+        },
+        select::{Select, SelectGroup, SelectState},
     };
+
+    fn filter_select<D>(
+        state: &Entity<SelectState<D>>,
+        query: &str,
+        window: &mut Window,
+        cx: &mut App,
+    ) where
+        D: SearchableListDelegate + 'static,
+        <D::Item as SearchableListItem>::Value: PartialEq + Clone,
+    {
+        state.update(cx, |state, cx| {
+            state.state.list.update(cx, |list, cx| {
+                list.query_input.update(cx, |input, cx| {
+                    input.set_value(query, window, cx);
+                });
+                let search = list
+                    .delegate_mut()
+                    .delegate
+                    .perform_search(query, window, cx);
+                assert!(
+                    search.is_ready(),
+                    "this helper is only for synchronous test delegates"
+                );
+            });
+        });
+    }
 
     #[gpui::test]
     fn test_select_initial_selection_seeds_cursor(cx: &mut TestAppContext) {
@@ -834,5 +910,406 @@ mod tests {
             assert_eq!(state.read(cx).selected_index(cx), Some(initial));
             assert_eq!(state.read(cx).selected_value(), Some(&"Blueberry"));
         });
+    }
+
+    #[gpui::test]
+    fn test_set_selected_value_resets_search_filter(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            cx.new(|cx| {
+                SelectState::new(
+                    SearchableVec::new(vec!["Rust", "Go", "C++"]),
+                    None,
+                    window,
+                    cx,
+                )
+                .searchable(true)
+            })
+        });
+
+        cx.update(|window, cx| {
+            filter_select(&state, "Rust", window, cx);
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"Go", window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            let state = state.read(cx);
+            assert_eq!(state.selected_value(), Some(&"Go"));
+            assert_eq!(state.selected_index(cx), Some(IndexPath::new(1)));
+            assert_eq!(state.state.list.read(cx).query_input.read(cx).value(), "");
+            assert_eq!(
+                state.state.list.read(cx).delegate().delegate.items_count(0),
+                3
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn test_programmatic_list_query_runs_search_delegate(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            cx.new(|cx| {
+                SelectState::new(
+                    SearchableVec::new(vec!["Rust", "Go", "C++"]),
+                    None,
+                    window,
+                    cx,
+                )
+                .searchable(true)
+            })
+        });
+
+        cx.update(|window, cx| {
+            let list = state.read(cx).state.list.clone();
+            list.update(cx, |list, cx| {
+                list.set_query("Rust", window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            let list = state.read(cx).state.list.read(cx);
+            assert_eq!(list.query_input.read(cx).value(), "Rust");
+            assert_eq!(list.delegate().delegate.items_count(0), 1);
+        });
+    }
+
+    #[gpui::test]
+    fn test_set_selected_value_without_filter_remains_synchronous(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let state = cx.new(|cx| {
+                SelectState::new(
+                    SearchableVec::new(vec!["Rust", "Go", "C++"]),
+                    Some(IndexPath::new(0)),
+                    window,
+                    cx,
+                )
+            });
+
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"Missing", window, cx);
+                assert_eq!(state.selected_value(), None);
+                assert_eq!(state.selected_index(cx), None);
+                assert!(!state.state.list.read(cx).is_search_pending());
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_set_selected_value_restores_grouped_index_after_search(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            let mut groups: SearchableVec<SelectGroup<&'static str>> = SearchableVec::new(vec![]);
+            groups.push(SelectGroup::new("A").items(["Apple", "Avocado"]));
+            groups.push(SelectGroup::new("B").items(["Banana", "Blueberry"]));
+
+            cx.new(|cx| SelectState::new(groups, None, window, cx).searchable(true))
+        });
+
+        cx.update(|window, cx| {
+            filter_select(&state, "Blue", window, cx);
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"Banana", window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            let state = state.read(cx);
+            assert_eq!(state.selected_value(), Some(&"Banana"));
+            assert_eq!(state.selected_index(cx), Some(IndexPath::new(0).section(1)));
+        });
+    }
+
+    struct AsyncSearchDelegate {
+        items: Vec<&'static str>,
+        matched_items: Vec<&'static str>,
+        release_search: async_channel::Receiver<()>,
+        search_count: Rc<Cell<usize>>,
+        list: Option<WeakEntity<ListState<SearchableListAdapter<AsyncSearchDelegate>>>>,
+    }
+
+    impl SearchableListDelegate for AsyncSearchDelegate {
+        type Item = &'static str;
+
+        fn items_count(&self, _: usize) -> usize {
+            self.matched_items.len()
+        }
+
+        fn item(&self, ix: IndexPath) -> Option<&Self::Item> {
+            self.matched_items.get(ix.row)
+        }
+
+        fn position<V>(&self, value: &V) -> Option<IndexPath>
+        where
+            Self::Item: SearchableListItem<Value = V>,
+            V: PartialEq,
+        {
+            self.matched_items
+                .iter()
+                .position(|item| item.value() == value)
+                .map(IndexPath::new)
+        }
+
+        fn perform_search(&mut self, query: &str, _: &mut Window, cx: &mut App) -> Task<()> {
+            self.search_count.set(self.search_count.get() + 1);
+
+            let items = self.items.clone();
+            let query = query.to_string();
+            let release_search = self.release_search.clone();
+            let list = self.list.clone().expect("test list handle is initialized");
+
+            cx.spawn(async move |cx| {
+                release_search
+                    .recv()
+                    .await
+                    .expect("test search gate should stay open");
+
+                _ = list.update(cx, |list, cx| {
+                    list.delegate_mut().delegate.matched_items = items
+                        .into_iter()
+                        .filter(|item| item.matches(&query))
+                        .collect();
+                    cx.notify();
+                });
+            })
+        }
+    }
+
+    #[gpui::test]
+    fn test_latest_set_selected_value_waits_for_async_filter_reset(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let (release_search, wait_for_search) = async_channel::unbounded();
+        let search_count = Rc::new(Cell::new(0));
+        let state = cx.update(|window, cx| {
+            let delegate = AsyncSearchDelegate {
+                items: vec!["Rust", "Go", "C++"],
+                matched_items: vec!["Rust"],
+                release_search: wait_for_search,
+                search_count: search_count.clone(),
+                list: None,
+            };
+            let state = cx.new(|cx| SelectState::new(delegate, None, window, cx).searchable(true));
+            let list = state.read(cx).state.list.clone();
+
+            list.update(cx, |list_state, cx| {
+                list_state.delegate_mut().delegate.list = Some(list.downgrade());
+                list_state.query_input.update(cx, |input, cx| {
+                    input.set_value("Rust", window, cx);
+                });
+            });
+
+            state
+        });
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"Go", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        assert_eq!(search_count.get(), 1);
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"C++", window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            assert_eq!(
+                state.read(cx).selected_value(),
+                None,
+                "selection must not use the still-filtered delegate before async reset completes"
+            );
+            assert_eq!(search_count.get(), 2);
+        });
+
+        release_search
+            .try_send(())
+            .expect("release the latest reset search");
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            let state = state.read(cx);
+            assert_eq!(state.selected_value(), Some(&"C++"));
+            assert_eq!(state.selected_index(cx), Some(IndexPath::new(2)));
+        });
+    }
+
+    #[derive(Clone)]
+    struct VisualItem(&'static str);
+
+    impl SearchableListItem for VisualItem {
+        type Value = &'static str;
+
+        fn title(&self) -> SharedString {
+            self.0.into()
+        }
+
+        fn display_title(&self) -> Option<AnyElement> {
+            let selector = format!("selected-title-{}", self.0.to_lowercase());
+            Some(
+                div()
+                    .debug_selector(move || selector)
+                    .child(self.0)
+                    .into_any_element(),
+            )
+        }
+
+        fn value(&self) -> &Self::Value {
+            &self.0
+        }
+    }
+
+    struct SelectResetVisualTest {
+        select: Entity<SelectState<SearchableVec<VisualItem>>>,
+    }
+
+    impl Render for SelectResetVisualTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(320.))
+                .h(px(36.))
+                .debug_selector(|| "select-trigger".to_string())
+                .child(Select::new(&self.select))
+        }
+    }
+
+    fn draw(cx: &mut VisualTestContext) {
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+    }
+
+    #[gpui::test]
+    fn test_set_selected_value_after_real_search_interaction(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let state_slot = Rc::new(std::cell::RefCell::new(None));
+        let (_, cx) = cx.add_window_view({
+            let state_slot = state_slot.clone();
+            move |window, cx| {
+                let select = cx.new(|cx| {
+                    SelectState::new(
+                        SearchableVec::new(vec![
+                            VisualItem("Rust"),
+                            VisualItem("Go"),
+                            VisualItem("C++"),
+                        ]),
+                        None,
+                        window,
+                        cx,
+                    )
+                    .searchable(true)
+                });
+                *state_slot.borrow_mut() = Some(select.clone());
+                let content = cx.new(|_| SelectResetVisualTest { select });
+                crate::Root::new(content, window, cx)
+            }
+        });
+        let state = state_slot
+            .borrow()
+            .clone()
+            .expect("select state is created with the test window");
+        let cx: &mut VisualTestContext = cx;
+
+        draw(cx);
+        let trigger = cx
+            .debug_bounds("select-trigger")
+            .expect("select trigger is rendered");
+
+        // GPUI TestWindow has no native platform handle. Dispatch the click synchronously and
+        // restore trigger focus before the test executor can redraw the newly focused query input.
+        cx.update(|window, cx| {
+            let position = trigger.center();
+            let modifiers = Modifiers::default();
+            window.dispatch_event(
+                MouseDownEvent {
+                    position,
+                    modifiers,
+                    button: MouseButton::Left,
+                    click_count: 1,
+                    first_mouse: false,
+                }
+                .to_platform_input(),
+                cx,
+            );
+            window.dispatch_event(
+                MouseUpEvent {
+                    position,
+                    modifiers,
+                    button: MouseButton::Left,
+                    click_count: 1,
+                }
+                .to_platform_input(),
+                cx,
+            );
+            assert!(
+                state.read(cx).state.open,
+                "the actual trigger click should open the Select"
+            );
+
+            let focus_handle = state.read(cx).state.focus_handle.clone();
+            focus_handle.focus(window, cx);
+        });
+        cx.run_until_parked();
+        draw(cx);
+
+        // Insert through the real query Input so its Change event drives the List search without
+        // requiring TestWindow to provide a native IME-backed view.
+        cx.update(|window, cx| {
+            let query_input = state.read(cx).state.list.read(cx).query_input.clone();
+            query_input.update(cx, |input, cx| {
+                input.insert("Rust", window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            let state = state.read(cx);
+            let list = state.state.list.read(cx);
+            assert_eq!(list.query_input.read(cx).value(), "Rust");
+            assert_eq!(list.delegate().delegate.items_count(0), 1);
+        });
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"Go", window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        cx.update(|_, cx| {
+            let state = state.read(cx);
+            let list = state.state.list.read(cx);
+            assert_eq!(state.selected_value(), Some(&"Go"));
+            assert_eq!(state.selected_index(cx), Some(IndexPath::new(1)));
+            assert_eq!(list.query_input.read(cx).value(), "");
+            assert_eq!(list.delegate().delegate.items_count(0), 3);
+        });
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.set_open(false, cx);
+                state.focus(window, cx);
+            });
+        });
+        draw(cx);
+
+        assert!(
+            cx.debug_bounds("selected-title-go").is_some(),
+            "the actual Select trigger should render the programmatically selected item"
+        );
     }
 }
