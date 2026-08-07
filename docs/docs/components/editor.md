@@ -128,6 +128,19 @@ let state = cx.new(|cx|
 Input::new(&state)
 ```
 
+For custom search UI, leave the built-in panel disabled with `.searchable(false)` and call the editor search methods directly:
+
+```rust
+editor.update(cx, |state, cx| {
+    state.set_search_query(query, true, cx);
+    state.search_next(cx);
+});
+```
+
+Custom UIs can use `set_search_query`, `clear_search`, `search_next`, `search_previous`, `search_match_count`, `current_search_match_index`, `replace_current_search_match`, and `replace_all_search_matches` while the editor still owns match highlighting and scrolling.
+
+See `crates/story/examples/custom_search.rs` for a custom search UI example.
+
 ### SoftWrap
 
 By default multi-line inputs have soft wrapping enabled, meaning long lines will wrap to fit the width of the textarea.
