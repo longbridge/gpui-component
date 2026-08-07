@@ -21,7 +21,7 @@ pub use state::*;
 pub use tab_panel::*;
 pub use tiles::*;
 
-use crate::ElementExt;
+use crate::{ElementExt, Placement};
 
 pub(crate) fn init(cx: &mut App) {
     PanelRegistry::init(cx);
@@ -36,8 +36,27 @@ pub enum DockEvent {
     /// So it emits may be too frequently, you may want to debounce the event.
     LayoutChanged,
 
-    /// The drag item drop event.
-    DragDrop(AnyDrag),
+    /// A host-owned drag item ([`AnyDrag`]) was dropped inside the dock.
+    DragDrop { item: AnyDrag, target: DropTarget },
+}
+
+/// Where a host-owned drag landed, and how much the container can say about it.
+#[derive(Clone, Debug)]
+pub enum DropTarget {
+    /// Dropped on a [`Tiles`] canvas, where the landing position is just the
+    /// cursor position and the host can read it directly.
+    Canvas,
+
+    /// Dropped on a [`TabPanel`] in a split layout. A split layout has no free
+    /// coordinates, so the container reports the panel and the edge it resolved
+    /// from the cursor instead.
+    ///
+    /// `placement` is `None` for the centre zone, meaning merge into the tab
+    /// group rather than split.
+    Panel {
+        tab_panel: Entity<TabPanel>,
+        placement: Option<Placement>,
+    },
 }
 
 /// The main area of the dock.
@@ -599,8 +618,10 @@ impl DockArea {
     ) {
         self._subscriptions
             .push(cx.subscribe(tile_panel, move |_, _, evt: &DragDrop, cx| {
-                let item = evt.0.clone();
-                cx.emit(DockEvent::DragDrop(item));
+                cx.emit(DockEvent::DragDrop {
+                    item: evt.0.clone(),
+                    target: DropTarget::Canvas,
+                });
             }));
     }
 
