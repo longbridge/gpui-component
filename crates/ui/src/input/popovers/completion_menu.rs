@@ -177,6 +177,9 @@ pub struct CompletionMenu {
     /// The offset of the first character that triggered the completion.
     pub(crate) trigger_start_offset: Option<usize>,
     query: SharedString,
+    /// Screen position the popover is pinned to for a completion session.
+    /// Cleared on `hide` and when a new session starts.
+    anchor: Option<Point<Pixels>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -220,6 +223,7 @@ impl CompletionMenu {
                 open: false,
                 trigger_start_offset: None,
                 query: SharedString::default(),
+                anchor: None,
                 _subscriptions,
             }
         })
@@ -328,6 +332,7 @@ impl CompletionMenu {
     pub(crate) fn hide(&mut self, cx: &mut Context<Self>) {
         self.open = false;
         self.trigger_start_offset = None;
+        self.anchor = None;
         cx.notify();
     }
 
@@ -335,6 +340,8 @@ impl CompletionMenu {
     pub(crate) fn update_query(&mut self, start_offset: usize, query: impl Into<SharedString>) {
         if self.trigger_start_offset.is_none() {
             self.trigger_start_offset = Some(start_offset);
+            // New session: re-pin on the next render.
+            self.anchor = None;
         }
         self.query = query.into();
     }
@@ -368,7 +375,13 @@ impl CompletionMenu {
         cx.notify();
     }
 
-    fn origin(&self, cx: &App) -> Option<Point<Pixels>> {
+    fn origin(&mut self, cx: &App) -> Option<Point<Pixels>> {
+        // Keep the popover where the session opened so it stays put as the
+        // query is typed.
+        if let Some(anchor) = self.anchor {
+            return Some(anchor);
+        }
+
         let editor = self.editor.read(cx);
         let Some(last_layout) = editor.last_layout.as_ref() else {
             return None;
@@ -377,12 +390,12 @@ impl CompletionMenu {
             return None;
         };
 
-        let scroll_origin = self.editor.read(cx).scroll_handle.offset();
+        let scroll_origin = editor.scroll_handle.offset();
 
-        Some(
-            scroll_origin + cursor_origin - editor.input_bounds.origin
-                + Point::new(-px(4.), last_layout.line_height + px(4.)),
-        )
+        let anchor = scroll_origin + cursor_origin - editor.input_bounds.origin
+            + Point::new(-px(4.), last_layout.line_height + px(4.));
+        self.anchor = Some(anchor);
+        Some(anchor)
     }
 }
 
