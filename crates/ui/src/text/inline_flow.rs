@@ -11,7 +11,11 @@ use gpui::{
     WhiteSpace, Window, img, point, prelude::FluentBuilder as _, px, relative, size,
 };
 
-use crate::{WindowExt as _, tooltip::Tooltip};
+use crate::{
+    WindowExt as _,
+    text::text_view::{LinkClickHandlerFn, handle_link_click},
+    tooltip::Tooltip,
+};
 
 use super::{
     inline::{Inline, InlineState},
@@ -23,6 +27,7 @@ const IMAGE_LEN: usize = 1;
 pub(super) struct InlineFlow {
     id: ElementId,
     items: Vec<InlineFlowItem>,
+    link_click_handler: Option<Arc<LinkClickHandlerFn>>,
 }
 
 pub(super) enum InlineFlowItem {
@@ -100,10 +105,15 @@ enum LineFragmentKind {
 }
 
 impl InlineFlow {
-    pub(super) fn new(id: impl Into<ElementId>, items: Vec<InlineFlowItem>) -> Self {
+    pub(super) fn new(
+        id: impl Into<ElementId>,
+        items: Vec<InlineFlowItem>,
+        link_click_handler: Option<Arc<LinkClickHandlerFn>>,
+    ) -> Self {
         Self {
             id: id.into(),
             items,
+            link_click_handler,
         }
     }
 
@@ -113,6 +123,7 @@ impl InlineFlow {
         link: &Option<LinkMark>,
         title: &str,
         size: Size<Pixels>,
+        link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     ) -> AnyElement {
         img(url.clone())
             .id(ix)
@@ -122,12 +133,38 @@ impl InlineFlow {
             .h(size.height)
             .when_some(link.clone(), |this, link| {
                 let title = title.to_string();
+                let aux_link = link.clone();
+                let aux_link_click_handler = link_click_handler.clone();
                 this.cursor_pointer()
                     .tooltip(move |window, cx| Tooltip::new(title.clone()).build(window, cx))
-                    .on_click(move |_, window, cx| {
+                    .on_click(move |event, window, cx| {
                         window.end_text_selection(cx);
                         cx.stop_propagation();
-                        cx.open_url(&link.url);
+                        handle_link_click(
+                            &link_click_handler,
+                            link.url.clone(),
+                            gpui::MouseButton::Left,
+                            event.modifiers(),
+                            window,
+                            cx,
+                        );
+                    })
+                    .on_aux_click(move |event, window, cx| {
+                        window.end_text_selection(cx);
+                        cx.stop_propagation();
+                        let button = if event.is_middle_click() {
+                            gpui::MouseButton::Middle
+                        } else {
+                            gpui::MouseButton::Right
+                        };
+                        handle_link_click(
+                            &aux_link_click_handler,
+                            aux_link.url.clone(),
+                            button,
+                            event.modifiers(),
+                            window,
+                            cx,
+                        );
                     })
             })
             .into_any_element()
@@ -254,8 +291,14 @@ impl Element for InlineFlow {
                         state.set_text(text);
                     }
 
-                    let mut element =
-                        Inline::new(elements.len(), state, links, highlights).into_any_element();
+                    let mut element = Inline::new(
+                        elements.len(),
+                        state,
+                        links,
+                        highlights,
+                        self.link_click_handler.clone(),
+                    )
+                    .into_any_element();
                     element.prepaint_as_root(
                         bounds.origin + origin,
                         size(
@@ -284,6 +327,7 @@ impl Element for InlineFlow {
                         link,
                         title.as_str(),
                         fragment_size,
+                        self.link_click_handler.clone(),
                     );
                     element.prepaint_as_root(
                         bounds.origin + origin,
