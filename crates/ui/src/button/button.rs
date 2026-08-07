@@ -290,6 +290,12 @@ impl Button {
         self
     }
 
+    /// Set the developer-assigned identifier exposed to accessibility clients.
+    pub fn accessibility_id(mut self, id: impl Into<SharedString>) -> Self {
+        self.base = self.base.accessibility_id(id);
+        self
+    }
+
     /// Set the icon of the button, if the Button have no label, the button well in Icon Button mode.
     pub fn icon(mut self, icon: impl Into<ButtonIcon>) -> Self {
         self.icon = Some(icon.into());
@@ -1267,6 +1273,53 @@ mod tests {
         assert_eq!(
             *captured.lock().unwrap(),
             vec![None, None, Some(Toggled::False), Some(Toggled::True)]
+        );
+    }
+
+    #[gpui::test]
+    fn test_button_emits_accessibility_id(cx: &mut gpui::TestAppContext) {
+        use crate::ElementExt as _;
+        use gpui::{Element as _, IntoElement as _, Render};
+        use std::sync::{Arc, Mutex};
+
+        type AuthorIds = Arc<Mutex<Vec<Option<String>>>>;
+
+        struct ButtonA11yProbe {
+            author_ids: AuthorIds,
+        }
+
+        impl Render for ButtonA11yProbe {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                let author_ids = self.author_ids.clone();
+                div().on_prepaint(move |_, window, cx| {
+                    let mut author_id_of = |button: Button| {
+                        let mut node = gpui::accesskit::Node::new(Role::Button);
+                        button
+                            .render(window, cx)
+                            .into_element()
+                            .write_a11y_info(&mut node);
+                        node.author_id().map(ToOwned::to_owned)
+                    };
+
+                    *author_ids.lock().unwrap() = vec![
+                        author_id_of(Button::new("ordinary")),
+                        author_id_of(Button::new("identified").accessibility_id("toolbar.export")),
+                    ];
+                })
+            }
+        }
+
+        cx.update(crate::init);
+        let author_ids: AuthorIds = Arc::new(Mutex::new(Vec::new()));
+        let captured = author_ids.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| ButtonA11yProbe { author_ids });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(
+            *captured.lock().unwrap(),
+            vec![None, Some("toolbar.export".into())]
         );
     }
 
