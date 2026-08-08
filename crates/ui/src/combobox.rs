@@ -370,6 +370,11 @@ where
         self.state.focus_handle.focus(window, cx);
     }
 
+    /// Returns the search query.
+    pub fn search_value(&self, cx: &App) -> SharedString {
+        self.state.list.read(cx).query_input.read(cx).value()
+    }
+
     fn selection_changes(
         multiple: bool,
         selection: &[(IndexPath, D::Item)],
