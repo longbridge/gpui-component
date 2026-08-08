@@ -46,6 +46,25 @@ impl ParsedDocument {
         text
     }
 
+    /// Reconstruct the Markdown source for the current selection across all
+    /// blocks. Mirrors [`selected_text`](Self::selected_text).
+    ///
+    /// Each block reconstructs its own source (with inline markup and, for
+    /// headings/lists, block prefixes); top-level blocks are joined with a
+    /// blank line so the result is valid Markdown that re-renders with the
+    /// same block structure (paragraphs, lists and headings stay separate).
+    pub(super) fn selected_source(&self) -> String {
+        let mut blocks: Vec<String> = Vec::new();
+        for block in self.blocks.iter() {
+            let source = block.selected_source();
+            let trimmed = source.trim_end_matches('\n');
+            if !trimmed.is_empty() {
+                blocks.push(trimmed.to_string());
+            }
+        }
+        blocks.join("\n\n")
+    }
+
     /// Synchronously clear the selection stored in every inline state.
     ///
     /// This mirrors the [`selected_text`](Self::selected_text) traversal so the
