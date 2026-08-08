@@ -258,7 +258,7 @@ state.update(cx, |s, cx| {
     s.remove_selected_index(IndexPath::new(0), cx);
 });
 
-// 按值增加 / 移除，包括当前搜索隐藏的选项
+// 按值增加 / 移除
 state.update(cx, |s, cx| {
     s.add_selected_value(&"React", cx);
     s.remove_selected_value(&"Angular", cx);
@@ -276,7 +276,9 @@ let values = state.read(cx).selected_values(); // Vec<Value>
 let value = state.read(cx).selected_value(); // Option<Value>
 ```
 
-按索引操作的方法只作用于当前可见列表；当前搜索可能隐藏选项时，请使用按值操作的方法。
+按索引操作的方法只作用于当前可见列表。按值操作的方法通过
+`SearchableListDelegate::item_by_value` 解析选项。`SearchableVec` 会搜索完整数据源，因此能
+解析当前搜索隐藏的选项；自定义 delegate 必须覆盖 `item_by_value` 才能提供相同行为。
 
 ## 键盘快捷键
 

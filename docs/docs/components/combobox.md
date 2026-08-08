@@ -259,7 +259,7 @@ state.update(cx, |s, cx| {
     s.remove_selected_index(IndexPath::new(0), cx);
 });
 
-// Add / remove by value, including values hidden by the current search
+// Add / remove by value
 state.update(cx, |s, cx| {
     s.add_selected_value(&"React", cx);
     s.remove_selected_value(&"Angular", cx);
@@ -277,8 +277,10 @@ let values = state.read(cx).selected_values(); // Vec<Value>
 let value = state.read(cx).selected_value(); // Option<Value>
 ```
 
-Index-based methods operate on the current visible list. Use the value-based methods when the
-current search may hide the item.
+Index-based methods operate on the current visible list. Value-based methods resolve through
+`SearchableListDelegate::item_by_value`. `SearchableVec` searches its complete data source, so it
+can resolve items hidden by the current search. Custom delegates must override `item_by_value` to
+provide the same behavior.
 
 ## Keyboard Shortcuts
 

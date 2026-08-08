@@ -246,7 +246,7 @@ Use a recording delegate to assert that hooks fire with the right arguments and 
 ```rust
 #[derive(Default)]
 struct RecordingDelegate {
-    items: Vec<MyItem>,
+    items: SearchableVec<MyItem>,
     will_change_calls: Vec<Vec<MyItem>>,
     confirm_calls: Vec<Vec<MyItem>>,
 }
@@ -257,8 +257,9 @@ impl SearchableListDelegate for RecordingDelegate {
     fn on_will_change(
         &mut self,
         selection: &mut Vec<Self::Item>,
-        _changes: &[SearchableListChange],
+        changes: &[SearchableListChange],
     ) {
+        self.items.on_will_change(selection, changes);
         self.will_change_calls.push(selection.clone());
     }
 
@@ -278,10 +279,13 @@ fn test_hooks_fire_in_correct_order(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     state.read_with(cx, |s, cx| {
-        let delegate = s.state.list.read(cx).delegate().delegate;
+        let delegate = &s.state.list.read(cx).delegate().delegate;
         assert_eq!(delegate.will_change_calls.len(), 1);
         assert_eq!(delegate.confirm_calls.len(), 1);
-        assert_eq!(delegate.confirm_calls[0], vec![IndexPath::new(0)]);
+        assert_eq!(delegate.confirm_calls[0].len(), 1);
+
+        let expected = delegate.items.item(IndexPath::new(0)).unwrap();
+        assert_eq!(delegate.confirm_calls[0][0].value(), expected.value());
     });
 }
 ```

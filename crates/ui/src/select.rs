@@ -312,12 +312,14 @@ where
 
         self.state.selection = item.into_iter().collect();
         self.state.sync_snapshot(cx);
+        cx.notify();
     }
 
     /// Set selected value for the select.
     ///
-    /// Resolves the item by value and selects it even when it is hidden by the current search.
-    /// The cursor is set only when the value is present in the current visible list.
+    /// Resolves the item through [`SearchableListDelegate::item_by_value`]. [`SearchableVec`]
+    /// searches its complete data source; custom delegates can do the same by overriding that
+    /// method. The cursor is set only when the value is present in the current visible list.
     pub fn set_selected_value(
         &mut self,
         selected_value: &<D::Item as SearchableListItem>::Value,
@@ -338,6 +340,7 @@ where
         });
         self.state.selection = item.into_iter().collect();
         self.state.sync_snapshot(cx);
+        cx.notify();
     }
 
     /// Replace the delegate (item data) for the select state.
@@ -803,6 +806,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::Cell, rc::Rc};
+
     use gpui::{AppContext as _, TestAppContext};
 
     use crate::{
@@ -875,6 +880,43 @@ mod tests {
                 assert_eq!(s.selected_index(cx), None);
             });
         });
+    }
+
+    #[gpui::test]
+    fn test_select_hidden_value_notifies_trigger(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            cx.new(|cx| SelectState::new(items, None, window, cx).searchable(true))
+        });
+        cx.run_until_parked();
+
+        let notified = Rc::new(Cell::new(false));
+        let _subscription = cx.update({
+            let state = state.clone();
+            let notified = notified.clone();
+            move |_, cx| cx.observe(&state, move |_, _| notified.set(true))
+        });
+        notified.set(false);
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.state.list.update(cx, |list, cx| {
+                    let _ = list
+                        .delegate_mut()
+                        .delegate
+                        .perform_search("Ang", window, cx);
+                });
+                state.set_selected_value(&"React", window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        assert!(
+            notified.get(),
+            "setting a hidden value should redraw the trigger"
+        );
     }
 
     #[gpui::test]

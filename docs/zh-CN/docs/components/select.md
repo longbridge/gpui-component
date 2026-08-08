@@ -223,8 +223,10 @@ state.update(cx, |state, cx| {
 let current_value = state.read(cx).selected_value();
 ```
 
-`set_selected_value` 会从 delegate 的完整数据源解析选项，因此可以选中当前搜索隐藏的选项。
-只有当该选项在当前过滤列表中可见时，才会恢复 `selected_index` 光标。
+`set_selected_value` 通过 `SearchableListDelegate::item_by_value` 解析选项。
+`SearchableVec` 会搜索完整数据源，因此可以选中当前搜索隐藏的选项；自定义 delegate 必须覆盖
+`item_by_value` 才能提供相同行为。只有当该选项在当前过滤列表中可见时，才会恢复
+`selected_index` 光标。
 
 更新选项列表：
 
