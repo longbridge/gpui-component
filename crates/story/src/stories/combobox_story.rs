@@ -288,7 +288,7 @@ pub struct ComboboxStory {
     // 05 custom check icon (single)
     custom_check: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 06 footer button (single)
-    with_footer: Entity<ComboboxState<SearchableVec<&'static str>>>,
+    with_footer: Entity<ComboboxState<SearchableVec<String>>>,
     // 07 custom trigger (single)
     custom_trigger: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 08 multi badges
@@ -402,10 +402,13 @@ impl ComboboxStory {
         });
 
         let with_footer = cx.new(|cx| {
-            let items =
-                SearchableVec::new(vec!["Harvard University", "MIT", "Stanford", "Cambridge"]);
-            ComboboxState::new(items, vec![IndexPath::default()], window, cx)
-                                .searchable(true)
+            let items = SearchableVec::new(vec![
+                "Harvard University".to_string(),
+                "MIT".to_string(),
+                "Stanford".to_string(),
+                "Cambridge".to_string(),
+            ]);
+            ComboboxState::new(items, vec![IndexPath::default()], window, cx).searchable(true)
         });
 
         let custom_trigger = cx.new(|cx| {
@@ -610,11 +613,15 @@ impl Render for ComboboxStory {
                 ),
             )
             .child(
-                section("Footer Action Button").max_w_md().child(
+                section("Footer Action Button").max_w_md().child({
+                    let search_query = self.with_footer.read(cx).search_value(cx).clone();
+                    let view = cx.entity();
                     Combobox::new(&self.with_footer)
                         .placeholder("Select university")
                         .search_placeholder("Find university")
-                        .footer(|_, cx| {
+                        .footer(move |_, cx| {
+                            let search_query = search_query.clone();
+                            let view = view.clone();
                             Button::new("add-new")
                                 .ghost()
                                 .label("New university")
@@ -622,9 +629,28 @@ impl Render for ComboboxStory {
                                 .text_color(cx.theme().foreground)
                                 .w_full()
                                 .justify_start()
+                                .on_click(move |_, window, cx| {
+                                    let search_query = search_query.clone();
+                                    cx.update_entity(&view, move |this, cx| {
+                                        let mut items = SearchableVec::new(vec![
+                                            "Harvard University".to_string(),
+                                            "MIT".to_string(),
+                                            "Stanford".to_string(),
+                                            "Cambridge".to_string(),
+                                            search_query.clone().into()
+                                        ]);
+
+                                        drop(items.perform_search(&search_query, window, cx));
+
+                                        this.with_footer.update(cx, |this, cx| {
+                                            this.set_items(items, window, cx);
+                                        })
+                                    });
+                                })
                                 .into_any_element()
                         })
-                        .w_full(),
+                        .w_full()
+                    }
                 ),
             )
             .child(
