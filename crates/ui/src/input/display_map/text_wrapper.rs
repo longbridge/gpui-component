@@ -636,23 +636,18 @@ impl LineLayout {
     }
 
     /// Get the closest index for the given x in this line layout.
+    ///
+    /// Used for mouse hit-testing: resolves all the way to the end of a wrapped sub-line so the
+    /// last character of a wrapped line is reachable by click/drag.
     pub(crate) fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
         let mut acc_len = 0;
         let x_offset = last_layout.alignment_offset(self.longest_width);
         let x = x - x_offset;
 
         for (i, line) in self.wrapped_lines.iter().enumerate() {
-            let is_last = i + 1 == self.wrapped_lines.len();
             let line_indent = self.line_indent(i);
             if x <= line_indent + line.width {
-                let mut ix = line.closest_index_for_x(x - line_indent);
-                if !is_last && ix == line.text.len() {
-                    // For soft wrap line, we can't put the cursor at the end of the line.
-                    let c_len = line.text.chars().last().map(|c| c.len_utf8()).unwrap_or(0);
-                    ix = ix.saturating_sub(c_len);
-                }
-
-                return acc_len + ix;
+                return acc_len + line.closest_index_for_x(x - line_indent);
             }
             acc_len += line.text.len();
         }
@@ -663,8 +658,48 @@ impl LineLayout {
     /// Get the index for the given position (x, y) in this line layout.
     ///
     /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0)
-    /// The return value is a local byte index in this line layout, start from 0.
+    /// The return value is a local byte index in this line layout, start from 0, together with the
+    /// `line_end_affinity` that should be used to render a caret at that index (see
+    /// [`Self::position_for_index`]): `true` when the index landed exactly at the boundary of a
+    /// non-final wrapped sub-line, so the caret should stick to the end of that sub-line rather
+    /// than jump to the start of the next one.
+    ///
+    /// Used for mouse hit-testing: resolves all the way to the end of a wrapped sub-line so the
+    /// last character of a wrapped line is reachable by click/drag. For keyboard column-memory
+    /// across wrapped rows, use [`Self::closest_row_index_for_position`].
     pub(crate) fn closest_index_for_position(
+        &self,
+        pos: Point<Pixels>,
+        last_layout: &LastLayout,
+    ) -> Option<(usize, bool)> {
+        let mut offset = 0;
+        let mut line_top = px(0.);
+        let x_offset = last_layout.alignment_offset(self.longest_width);
+
+        for (i, line) in self.wrapped_lines.iter().enumerate() {
+            let is_last = i + 1 == self.wrapped_lines.len();
+            let line_bottom = line_top + last_layout.line_height;
+            if pos.y >= line_top && pos.y < line_bottom {
+                let ix = line.closest_index_for_x(pos.x - x_offset - self.line_indent(i));
+                let line_end_affinity = !is_last && ix == line.text.len();
+
+                return Some((offset + ix, line_end_affinity));
+            }
+
+            offset += line.text.len();
+            line_top = line_bottom;
+        }
+
+        None
+    }
+
+    /// Like [`Self::closest_index_for_position`], but for resolving the target column when moving
+    /// the cursor vertically between wrapped rows (preferred-column memory).
+    ///
+    /// An index resolved to the very end of a non-final wrapped sub-line is pulled back to before
+    /// its last character, so the boundary offset (shared with the start of the next sub-line)
+    /// doesn't get mistaken for a move into the following row.
+    pub(crate) fn closest_row_index_for_position(
         &self,
         pos: Point<Pixels>,
         last_layout: &LastLayout,

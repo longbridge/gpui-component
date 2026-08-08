@@ -1361,7 +1361,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         let offset = self.end_of_line();
-        self.select_to(offset, cx);
+        self.select_to_with_affinity(offset, true, cx);
     }
 
     pub(super) fn select_to_previous_word(
@@ -1802,7 +1802,7 @@ impl InputState {
         }
 
         self.selecting = true;
-        let offset = self.index_for_mouse_position(event.position);
+        let (offset, line_end_affinity) = self.index_for_mouse_position(event.position);
 
         if self.handle_click_hover_definition(event, offset, window, cx) {
             return;
@@ -1832,9 +1832,9 @@ impl InputState {
         }
 
         if event.modifiers.shift {
-            self.select_to(offset, cx);
+            self.select_to_with_affinity(offset, line_end_affinity, cx);
         } else {
-            self.move_to(offset, None, cx)
+            self.move_to_with_affinity(offset, None, line_end_affinity, cx)
         }
     }
 
@@ -1877,7 +1877,7 @@ impl InputState {
         }
 
         // Show diagnostic popover on mouse move
-        let offset = self.index_for_mouse_position(event.position);
+        let (offset, _) = self.index_for_mouse_position(event.position);
         self.handle_mouse_move(offset, event, window, cx);
 
         if self.mode.is_code_editor() {
@@ -2183,16 +2183,22 @@ impl InputState {
         self.select_to(end, cx);
     }
 
-    pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
+    /// Resolve a mouse position to a text byte position.
+    ///
+    /// Also returns a `line_end_affinity` hint: `true` when the position resolved exactly to the
+    /// wrap boundary of a non-final wrapped sub-line, meaning the caret should be rendered at the
+    /// end of that visual line rather than the start of the next one (see
+    /// [`Self::cursor_line_end_affinity`]).
+    pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> (usize, bool) {
         // If the text is empty, always return 0
         if self.text.len() == 0 {
-            return 0;
+            return (0, false);
         }
 
         let (Some(bounds), Some(last_layout)) =
             (self.last_bounds.as_ref(), self.last_layout.as_ref())
         else {
-            return 0;
+            return (0, false);
         };
 
         let line_height = last_layout.line_height;
@@ -2229,36 +2235,43 @@ impl InputState {
             if self.mode.is_single_line() {
                 let local_index = line_layout.closest_index_for_x(pos.x, last_layout);
                 let index = line_start_offset + local_index;
-                return if self.masked {
+                let index = if self.masked {
                     self.text.char_index_to_offset(index / MASK_CHAR.len_utf8())
                 } else {
                     index.min(self.text.len())
                 };
+
+                return (index, false);
             }
 
             // Check if mouse is in this line's bounds
-            if let Some(local_index) = line_layout.closest_index_for_position(pos, last_layout) {
+            if let Some((local_index, line_end_affinity)) =
+                line_layout.closest_index_for_position(pos, last_layout)
+            {
                 let index = line_start_offset + local_index;
-                return if self.masked {
+                let index = if self.masked {
                     self.text.char_index_to_offset(index / MASK_CHAR.len_utf8())
                 } else {
                     index.min(self.text.len())
                 };
+
+                return (index, line_end_affinity);
             } else if pos.y < px(0.) {
                 // Mouse is above this line, return start of this line
-                return if self.masked {
+                let index = if self.masked {
                     self.text
                         .char_index_to_offset(line_start_offset / MASK_CHAR.len_utf8())
                 } else {
                     line_start_offset
                 };
+                return (index, false);
             }
 
             y_offset += line_layout.size(line_height).height;
         }
 
         // Mouse is below all visible lines, return end of text
-        self.text.len()
+        (self.text.len(), false)
     }
 
     /// Returns a y offsetted point for the line origin.
@@ -2268,6 +2281,22 @@ impl InputState {
     ///
     /// Ensure the offset use self.next_boundary or self.previous_boundary to get the correct offset.
     pub(crate) fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
+        self.select_to_with_affinity(offset, false, cx);
+    }
+
+    /// Like [`Self::select_to`], but also sets the caret's line-end affinity in the same call.
+    ///
+    /// Used by mouse drag-selection: when the drag resolves to the wrap boundary of a non-final
+    /// wrapped sub-line, passing `line_end_affinity: true` renders the caret at the end of that
+    /// visual line instead of the start of the next one. Folding this into `select_to` itself
+    /// (rather than setting the field after a separate `select_to` call) means a caller can't
+    /// extend the selection and forget to apply the affinity.
+    pub(crate) fn select_to_with_affinity(
+        &mut self,
+        offset: usize,
+        line_end_affinity: bool,
+        cx: &mut Context<Self>,
+    ) {
         self.clear_inline_completion(cx);
 
         let offset = offset.clamp(0, self.text.len());
@@ -2294,6 +2323,7 @@ impl InputState {
         if self.selected_range.is_empty() {
             self.update_preferred_column();
         }
+        self.cursor_line_end_affinity = line_end_affinity;
         cx.notify()
     }
 
@@ -2481,8 +2511,8 @@ impl InputState {
         }
 
         self.auto_scroll.last_drag_position = Some(event.position);
-        let offset = self.index_for_mouse_position(event.position);
-        self.select_to(offset, cx);
+        let (offset, line_end_affinity) = self.index_for_mouse_position(event.position);
+        self.select_to_with_affinity(offset, line_end_affinity, cx);
 
         if !self.mode.is_single_line() {
             // Expand input_bounds by the CSS padding so the bounds reflect the full
@@ -2506,8 +2536,8 @@ impl InputState {
                 let current = state.scroll_handle.offset();
                 state.update_scroll_offset(Some(point(current.x, current.y + delta)), cx);
                 if let Some(pos) = state.auto_scroll.last_drag_position {
-                    let offset = state.index_for_mouse_position(pos);
-                    state.select_to(offset, cx);
+                    let (offset, line_end_affinity) = state.index_for_mouse_position(pos);
+                    state.select_to_with_affinity(offset, line_end_affinity, cx);
                 }
             });
         }
