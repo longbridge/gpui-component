@@ -31,7 +31,7 @@ pub use cursor::*;
 pub use decorations::*;
 #[cfg(not(feature = "tree-sitter"))]
 pub use display_map::Tree;
-pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange};
+pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange, WrappingIndent};
 pub use indent::TabSize;
 pub use input::*;
 pub use lsp::*;

@@ -1029,13 +1029,19 @@ impl PopupMenu {
 
         cx.emit(DismissEvent);
 
-        // Focus back to the previous focused handle.
-        if let Some(handle) = self
-            .previous_focus_handle
-            .as_ref()
-            .or(self.action_context.as_ref())
-        {
-            window.focus(handle, cx);
+        // Focus back to the previous focused handle, unless the item's click
+        // handler has already moved focus elsewhere (e.g. opened a dialog and
+        // focused its input) -- stealing focus back would break that.
+        let focus_moved_away =
+            window.focused(cx).is_some() && !self.focus_handle.contains_focused(window, cx);
+        if !focus_moved_away {
+            if let Some(handle) = self
+                .previous_focus_handle
+                .as_ref()
+                .or(self.action_context.as_ref())
+            {
+                window.focus(handle, cx);
+            }
         }
 
         let Some(parent_menu) = self.parent_menu.clone() else {

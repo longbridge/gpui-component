@@ -654,7 +654,8 @@ impl TextElement {
 
                 // wrapped lines
                 for i in 1..=wrapped_lines {
-                    let start = point(px(0.), start.y + i as f32 * line_height);
+                    let indent = line.wrap_indent;
+                    let start = point(indent, start.y + i as f32 * line_height);
                     let mut end = point(end.x, end.y + i as f32 * line_height);
                     if i < wrapped_lines {
                         end.x = line_size.width;
@@ -699,7 +700,7 @@ impl TextElement {
         while let Some(corners) = rev_line_corners.next() {
             points.push(corners.top_left);
             if let Some(next) = rev_line_corners.peek() {
-                if next.top_left.x > corners.top_left.x {
+                if next.top_left.x != corners.top_left.x {
                     points.push(point(next.top_left.x, corners.top_left.y));
                 }
             }
@@ -1296,7 +1297,7 @@ impl TextElement {
 
             debug_assert_eq!(line_item.len(), line_text.len());
 
-            let mut wrapped_lines = SmallVec::with_capacity(1);
+            let mut wrapped_lines: SmallVec<[ShapedLine; 1]> = SmallVec::with_capacity(1);
 
             for range in &line_item.wrapped_lines {
                 let line_runs = runs_for_range(runs, run_offset, &range);
@@ -1318,8 +1319,21 @@ impl TextElement {
                 wrapped_lines.push(shaped_line);
             }
 
+            // Use the first visual line's indentation width for continuation lines.
+            let wrap_indent = if line_item.indent > 0 && wrapped_lines.len() > 1 {
+                let indent_byte_len = line_text
+                    .char_indices()
+                    .nth(line_item.indent as usize)
+                    .map(|(ix, _)| ix)
+                    .unwrap_or(line_text.len());
+                wrapped_lines[0].x_for_index(indent_byte_len)
+            } else {
+                px(0.)
+            };
+
             let line_layout = LineLayout::new()
                 .lines(wrapped_lines)
+                .wrap_indent(wrap_indent)
                 .with_whitespaces(whitespace_indicators.clone());
             lines.push(line_layout);
 
@@ -1633,15 +1647,23 @@ impl Element for TextElement {
             None
         };
 
+        let wrapping_indent = state.wrapping_indent;
         let wrap_width_changed = state
             .last_layout
             .as_ref()
             .map(|l| l.wrap_width != wrap_width)
             .unwrap_or(true);
 
-        if wrap_width_changed {
+        let wrapping_indent_changed = state
+            .last_layout
+            .as_ref()
+            .map(|l| l.wrapping_indent != wrapping_indent)
+            .unwrap_or(true);
+
+        if wrap_width_changed || wrapping_indent_changed {
             self.state.update(cx, |state, cx| {
                 state.display_map.on_layout_changed(wrap_width, cx);
+                state.display_map.set_wrapping_indent(wrapping_indent, cx);
             });
         }
 
@@ -1694,6 +1716,7 @@ impl Element for TextElement {
             visible_range_offset,
             line_height,
             wrap_width,
+            wrapping_indent,
             line_number_width,
             lines: Rc::new(vec![]),
             cursor_bounds: None,
