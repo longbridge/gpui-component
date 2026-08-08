@@ -184,7 +184,7 @@ Combobox::new(&state)
                 this.text_color(cx.theme().muted_foreground)
                     .child("请选择...")
             })
-            .children(ctx.selection.iter().map(|(_, item)| {
+            .children(ctx.selection.iter().map(|item| {
                 div()
                     .bg(cx.theme().accent)
                     .rounded_sm()
@@ -196,6 +196,9 @@ Combobox::new(&state)
             .into_any_element()
     })
 ```
+
+`ctx.selection` 包含按选中顺序排列的选中项。选项的 `Value` 用于身份比较；其中不再包含
+`IndexPath`，因此列表过滤时选中状态仍然有效。
 
 ### 尺寸
 
@@ -255,6 +258,12 @@ state.update(cx, |s, cx| {
     s.remove_selected_index(IndexPath::new(0), cx);
 });
 
+// 按值增加 / 移除
+state.update(cx, |s, cx| {
+    s.add_selected_value(&"React", cx);
+    s.remove_selected_value(&"Angular", cx);
+});
+
 // 清空选中
 state.update(cx, |s, cx| {
     s.clear_selection(cx);
@@ -266,6 +275,10 @@ let values = state.read(cx).selected_values(); // Vec<Value>
 // 读取第一个选中值（单选便利方法）
 let value = state.read(cx).selected_value(); // Option<Value>
 ```
+
+按索引操作的方法只作用于当前可见列表。按值操作的方法通过
+`SearchableListDelegate::item_by_value` 解析选项。`SearchableVec` 会搜索完整数据源，因此能
+解析当前搜索隐藏的选项；自定义 delegate 必须覆盖 `item_by_value` 才能提供相同行为。
 
 ## 键盘快捷键
 

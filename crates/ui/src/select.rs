@@ -180,19 +180,14 @@ where
                             .upgrade()
                             .map(|e| e.read(cx).state.selection.clone())
                             .unwrap_or_default();
+                        let previous_selection = selection.clone();
 
-                        let changes = {
-                            let mut changes: Vec<SearchableListChange> = selection
-                                .iter()
-                                .map(|(ix, _)| SearchableListChange::Deselect { index: *ix })
-                                .collect();
+                        let changes = selected_index
+                            .into_iter()
+                            .map(|ix| SearchableListChange::Select { index: ix })
+                            .collect::<Vec<_>>();
 
-                            if let Some(ix) = selected_index {
-                                changes.push(SearchableListChange::Select { index: ix });
-                            }
-
-                            changes
-                        };
+                        selection.clear();
 
                         // on_will_change is called directly — entity-handle access would
                         // re-enter the ListState lock that defer_in holds for this callback.
@@ -201,11 +196,21 @@ where
                             .delegate
                             .on_will_change(&mut selection, &changes);
 
+                        if selected_index.is_some()
+                            && selection.is_empty()
+                            && !previous_selection.is_empty()
+                        {
+                            selection = previous_selection;
+                        }
+
                         let new_selection = weak_confirm.update(cx, |this, cx| {
                             this.state.selection = selection;
 
-                            let final_value =
-                                this.state.selection.first().map(|(_, i)| i.value().clone());
+                            let final_value = this
+                                .state
+                                .selection
+                                .first()
+                                .map(|item| item.value().clone());
 
                             cx.emit(SelectEvent::Confirm(final_value));
                             cx.notify();
@@ -233,9 +238,16 @@ where
                 cx.defer_in(window, {
                     let weak_cancel = weak_cancel.clone();
                     move |list_state, window, cx| {
-                        let committed_ix = weak_cancel
-                            .upgrade()
-                            .and_then(|e| e.read(cx).state.selection.first().map(|(ix, _)| *ix));
+                        let committed_value = weak_cancel.upgrade().and_then(|e| {
+                            e.read(cx)
+                                .state
+                                .selection
+                                .first()
+                                .map(|item| item.value().clone())
+                        });
+                        let committed_ix = committed_value
+                            .as_ref()
+                            .and_then(|value| list_state.delegate().delegate.position(value));
 
                         list_state.set_selected_index(committed_ix, window, cx);
 
@@ -298,32 +310,37 @@ where
             .and_then(|ix| self.state.list.read(cx).delegate().delegate.item(ix))
             .map(|i| i.clone());
 
-        self.state.selection = match (selected_index, item) {
-            (Some(ix), Some(item)) => vec![(ix, item)],
-            _ => vec![],
-        };
+        self.state.selection = item.into_iter().collect();
         self.state.sync_snapshot(cx);
+        cx.notify();
     }
 
     /// Set selected value for the select.
     ///
-    /// Looks up the position from the delegate and sets the selected index accordingly.
-    /// Passes `None` when the value is not found.
+    /// Resolves the item through [`SearchableListDelegate::item_by_value`]. [`SearchableVec`]
+    /// searches its complete data source; custom delegates can do the same by overriding that
+    /// method. The cursor is set only when the value is present in the current visible list.
     pub fn set_selected_value(
         &mut self,
         selected_value: &<D::Item as SearchableListItem>::Value,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let selected_index = self
-            .state
-            .list
-            .read(cx)
-            .delegate()
-            .delegate
-            .position(selected_value);
+        let (selected_index, item) = {
+            let list = self.state.list.read(cx);
+            let delegate = &list.delegate().delegate;
+            (
+                delegate.position(selected_value),
+                delegate.item_by_value(selected_value),
+            )
+        };
 
-        self.set_selected_index(selected_index, window, cx);
+        self.state.list.update(cx, |list, cx| {
+            list._set_selected_index(selected_index, window, cx);
+        });
+        self.state.selection = item.into_iter().collect();
+        self.state.sync_snapshot(cx);
+        cx.notify();
     }
 
     /// Replace the delegate (item data) for the select state.
@@ -343,7 +360,7 @@ where
 
     /// Get the current selected value.
     pub fn selected_value(&self) -> Option<&<D::Item as SearchableListItem>::Value> {
-        self.state.selection.first().map(|(_, i)| i.value())
+        self.state.selection.first().map(|item| item.value())
     }
 
     /// Focus the select trigger input.
@@ -358,7 +375,14 @@ where
             return;
         }
 
-        let committed_ix = self.state.selection.first().map(|(ix, _)| *ix);
+        let committed_value = self
+            .state
+            .selection
+            .first()
+            .map(|item| item.value().clone());
+        let committed_ix = committed_value
+            .as_ref()
+            .and_then(|value| self.state.list.read(cx).delegate().delegate.position(value));
         if self.selected_index(cx) != committed_ix {
             self.state.list.update(cx, |list, cx| {
                 list.set_selected_index(committed_ix, window, cx);
@@ -448,28 +472,16 @@ where
                 .unwrap_or_else(|| t!("Select.placeholder").into()),
         );
 
-        let Some(selected_index) = self.selected_index(cx) else {
+        let Some(item) = self.state.selection.first() else {
             return default_title;
         };
 
-        let Some(title) = self
-            .state
-            .list
-            .read(cx)
-            .delegate()
-            .delegate
-            .item(selected_index)
-            .map(|item| {
-                if let Some(el) = item.display_title() {
-                    el
-                } else if let Some(prefix) = self.title_prefix.as_ref() {
-                    format!("{}{}", prefix, item.title()).into_any_element()
-                } else {
-                    item.title().into_any_element()
-                }
-            })
-        else {
-            return default_title;
+        let title = if let Some(el) = item.display_title() {
+            el
+        } else if let Some(prefix) = self.title_prefix.as_ref() {
+            format!("{}{}", prefix, item.title()).into_any_element()
+        } else {
+            item.title().into_any_element()
         };
 
         div()
@@ -488,7 +500,7 @@ where
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let searchable = self.searchable;
         let is_focused = self.state.focus_handle.is_focused(window);
-        let show_clean = self.state.cleanable && self.selected_index(cx).is_some();
+        let show_clean = self.state.cleanable && !self.state.selection.is_empty();
         let bounds = self.state.bounds;
         let allow_open = !(self.state.open || self.state.disabled);
         let outline_visible = self.state.open || (is_focused && !self.state.disabled);
@@ -794,11 +806,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::Cell, rc::Rc};
+
     use gpui::{AppContext as _, TestAppContext};
 
     use crate::{
         IndexPath,
-        searchable_list::SearchableVec,
+        searchable_list::{SearchableListDelegate, SearchableVec},
         select::{SelectGroup, SelectState},
     };
 
@@ -833,6 +847,100 @@ mod tests {
 
             assert_eq!(state.read(cx).selected_index(cx), Some(initial));
             assert_eq!(state.read(cx).selected_value(), Some(&"Blueberry"));
+        });
+    }
+
+    #[gpui::test]
+    fn test_select_hidden_value_keeps_selection_without_cursor_path(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            let state = cx.new(|cx| SelectState::new(items, None, window, cx).searchable(true));
+
+            state.update(cx, |s, cx| {
+                s.state.list.update(cx, |list, cx| {
+                    let _ = list
+                        .delegate_mut()
+                        .delegate
+                        .perform_search("Ang", window, cx);
+                });
+                s.set_selected_value(&"React", window, cx);
+
+                assert_eq!(s.selected_value(), Some(&"React"));
+                assert_eq!(s.selected_index(cx), None);
+            });
+
+            state.update(cx, |s, cx| {
+                s.state.list.update(cx, |list, cx| {
+                    let _ = list.delegate_mut().delegate.perform_search("", window, cx);
+                });
+
+                assert_eq!(s.selected_value(), Some(&"React"));
+                assert_eq!(s.selected_index(cx), None);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_select_hidden_value_notifies_trigger(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        let state = cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["React", "Vue", "Angular"]);
+            cx.new(|cx| SelectState::new(items, None, window, cx).searchable(true))
+        });
+        cx.run_until_parked();
+
+        let notified = Rc::new(Cell::new(false));
+        let _subscription = cx.update({
+            let state = state.clone();
+            let notified = notified.clone();
+            move |_, cx| cx.observe(&state, move |_, _| notified.set(true))
+        });
+        notified.set(false);
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.state.list.update(cx, |list, cx| {
+                    let _ = list
+                        .delegate_mut()
+                        .delegate
+                        .perform_search("Ang", window, cx);
+                });
+                state.set_selected_value(&"React", window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        assert!(
+            notified.get(),
+            "setting a hidden value should redraw the trigger"
+        );
+    }
+
+    #[gpui::test]
+    fn test_select_grouped_hidden_value_resolves_from_full_items(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let mut groups: SearchableVec<SelectGroup<&'static str>> = SearchableVec::new(vec![]);
+            groups.push(SelectGroup::new("A").items(["Apple", "Avocado"]));
+            groups.push(SelectGroup::new("B").items(["Banana", "Blueberry"]));
+            let state = cx.new(|cx| SelectState::new(groups, None, window, cx));
+
+            state.update(cx, |s, cx| {
+                s.state.list.update(cx, |list, cx| {
+                    let _ = list
+                        .delegate_mut()
+                        .delegate
+                        .perform_search("Banana", window, cx);
+                });
+                s.set_selected_value(&"Apple", window, cx);
+
+                assert_eq!(s.selected_value(), Some(&"Apple"));
+                assert_eq!(s.selected_index(cx), None);
+            });
         });
     }
 }

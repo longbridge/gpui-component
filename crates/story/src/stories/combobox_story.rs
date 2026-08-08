@@ -98,18 +98,18 @@ impl SearchableListItem for Industry {
 
 // MARK: Max2Delegate — allows at most 2 items to be selected simultaneously
 
-/// Shadows the current selection indices so `is_item_enabled` can disable unselected items
+/// Shadows the current selection values so `is_item_enabled` can disable unselected items
 /// when the capacity is reached, providing visual feedback without `current_selection` access.
 struct Max2Delegate {
     items: SearchableVec<&'static str>,
-    selected_indices: Vec<IndexPath>,
+    selected_values: Vec<&'static str>,
 }
 
 impl Max2Delegate {
     fn new(items: SearchableVec<&'static str>) -> Self {
         Self {
             items,
-            selected_indices: Vec::new(),
+            selected_values: Vec::new(),
         }
     }
 }
@@ -133,28 +133,38 @@ impl SearchableListDelegate for Max2Delegate {
         self.items.position(value)
     }
 
-    fn is_item_enabled(&self, ix: IndexPath, _item: &&'static str, _cx: &App) -> bool {
-        let at_capacity = self.selected_indices.len() >= 2;
-        let is_selected = self.selected_indices.contains(&ix);
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        &'static str: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.items.item_by_value(value)
+    }
+
+    fn is_item_enabled(&self, _ix: IndexPath, item: &&'static str, _cx: &App) -> bool {
+        let at_capacity = self.selected_values.len() >= 2;
+        let is_selected = self.selected_values.contains(item);
 
         !at_capacity || is_selected
     }
 
     fn on_will_change(
         &mut self,
-        selection: &mut Vec<(IndexPath, &'static str)>,
+        selection: &mut Vec<&'static str>,
         changes: &[SearchableListChange],
     ) {
         for change in changes {
             match change {
                 SearchableListChange::Deselect { index } => {
-                    selection.retain(|(ix, _)| ix != index);
+                    if let Some(item) = self.item(*index) {
+                        selection.retain(|selected_item| *selected_item != *item);
+                    }
                 }
                 SearchableListChange::Select { index } => {
                     if selection.len() < 2 {
                         if let Some(item) = self.item(*index) {
-                            if !selection.iter().any(|(ix, _)| ix == index) {
-                                selection.push((*index, *item));
+                            if !selection.contains(item) {
+                                selection.push(*item);
                             }
                         }
                     }
@@ -163,7 +173,7 @@ impl SearchableListDelegate for Max2Delegate {
         }
 
         // Keep the shadow in sync for is_item_enabled.
-        self.selected_indices = selection.iter().map(|(ix, _)| *ix).collect();
+        self.selected_values = selection.clone();
     }
 }
 
@@ -190,6 +200,14 @@ impl SearchableListDelegate for PinnedDelegate {
         self.0.position(value)
     }
 
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        &'static str: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.0.item_by_value(value)
+    }
+
     fn is_item_enabled(&self, ix: IndexPath, _item: &&'static str, _cx: &App) -> bool {
         // Pinned items are non-interactive — their checked state is fixed.
         ix != IndexPath::new(0) && ix != IndexPath::new(1)
@@ -198,15 +216,15 @@ impl SearchableListDelegate for PinnedDelegate {
     fn is_item_checked(
         &self,
         ix: IndexPath,
-        _item: &&'static str,
-        current_selection: &[(IndexPath, &'static str)],
+        item: &&'static str,
+        current_selection: &[&'static str],
         _cx: &App,
     ) -> bool {
         // First two items are always rendered checked (externally pinned),
         // regardless of what is in the normal selection.
         ix == IndexPath::new(0)
             || ix == IndexPath::new(1)
-            || current_selection.iter().any(|(sel_ix, _)| sel_ix == &ix)
+            || current_selection.contains(item)
     }
 }
 
@@ -231,6 +249,14 @@ impl SearchableListDelegate for FeaturedDelegate {
         V: PartialEq,
     {
         self.0.position(value)
+    }
+
+    fn item_by_value<V>(&self, value: &V) -> Option<Self::Item>
+    where
+        &'static str: SearchableListItem<Value = V>,
+        V: PartialEq,
+    {
+        self.0.item_by_value(value)
     }
 
     fn render_item(
@@ -365,7 +391,7 @@ impl ComboboxStory {
     fn new(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let basic = cx.new(|cx| {
             ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                                .searchable(true)
+                .searchable(true)
         });
 
         let basic_multi = cx.new(|cx| {
@@ -376,7 +402,7 @@ impl ComboboxStory {
 
         let grouped = cx.new(|cx| {
             ComboboxState::new(food_groups(), vec![IndexPath::default()], window, cx)
-                                .searchable(true)
+                .searchable(true)
         });
 
         let disabled_items = cx.new(|cx| {
@@ -387,30 +413,26 @@ impl ComboboxStory {
                 FoodItem::new("Carrots"),
                 FoodItem::new("Broccoli").disabled(),
             ]);
-            ComboboxState::new(items, vec![], window, cx)
-                                .searchable(true)
+            ComboboxState::new(items, vec![], window, cx).searchable(true)
         });
 
-        let with_icon = cx.new(|cx| {
-            ComboboxState::new(industries(), vec![], window, cx)
-                                .searchable(true)
-        });
+        let with_icon =
+            cx.new(|cx| ComboboxState::new(industries(), vec![], window, cx).searchable(true));
 
         let custom_check = cx.new(|cx| {
             ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                                .searchable(true)
+                .searchable(true)
         });
 
         let with_footer = cx.new(|cx| {
             let items =
                 SearchableVec::new(vec!["Harvard University", "MIT", "Stanford", "Cambridge"]);
-            ComboboxState::new(items, vec![IndexPath::default()], window, cx)
-                                .searchable(true)
+            ComboboxState::new(items, vec![IndexPath::default()], window, cx).searchable(true)
         });
 
         let custom_trigger = cx.new(|cx| {
             ComboboxState::new(SearchableVec::new(FRAMEWORKS.to_vec()), vec![], window, cx)
-                                .searchable(true)
+                .searchable(true)
         });
 
         let multi_badges = cx.new(|cx| {
@@ -442,7 +464,7 @@ impl ComboboxStory {
                 window,
                 cx,
             )
-                        .searchable(true)
+            .searchable(true)
         });
 
         let featured = cx.new(|cx| {
@@ -452,7 +474,7 @@ impl ComboboxStory {
                 window,
                 cx,
             )
-                        .searchable(true)
+            .searchable(true)
         });
 
         let multi_expand = cx.new(|cx| {
@@ -560,9 +582,7 @@ impl Render for ComboboxStory {
                         .render_trigger(|ctx, _, cx| {
                             let (icon, title) = match &ctx.selection {
                                 [] => (None, None),
-                                [(_index, item)] => {
-                                    (Some(item.icon.clone()), Some(item.title().clone()))
-                                }
+                                [item] => (Some(item.icon.clone()), Some(item.title().clone())),
                                 items => (
                                     None,
                                     Some(SharedString::new(format!("{} selected", items.len()))),
@@ -591,10 +611,7 @@ impl Render for ComboboxStory {
                                                 .child("Select industry category")
                                         }),
                                 )
-                                .child(
-                                    Caret::new(ctx.size)
-                                        .text_color(cx.theme().muted_foreground),
-                                )
+                                .child(Caret::new(ctx.size).text_color(cx.theme().muted_foreground))
                                 .into_any_element()
                         })
                         .w_full(),
@@ -635,7 +652,7 @@ impl Render for ComboboxStory {
                         .render_trigger(|ctx, _, cx| {
                             let title = match &ctx.selection {
                                 [] => None,
-                                [(_index, item)] => Some(item.title().clone()),
+                                [item] => Some(item.title().clone()),
                                 items => {
                                     Some(SharedString::new(format!("{} selected", items.len())))
                                 }
@@ -675,10 +692,7 @@ impl Render for ComboboxStory {
                                             )
                                         }),
                                 )
-                                .child(
-                                    Caret::new(ctx.size)
-                                        .text_color(cx.theme().muted_foreground),
-                                )
+                                .child(Caret::new(ctx.size).text_color(cx.theme().muted_foreground))
                                 .into_any_element()
                         })
                         .w_full(),
@@ -703,7 +717,7 @@ impl Render for ComboboxStory {
                                 .w_full()
                                 .flex_wrap()
                                 .gap_1()
-                                .children(items.iter().cloned().map(|(index, item)| {
+                                .children(items.iter().cloned().map(|item| {
                                     let state = multi_badges_state.clone();
                                     h_flex()
                                         .gap_0p5()
@@ -727,7 +741,7 @@ impl Render for ComboboxStory {
                                                 // trigger and opens the dropdown.
                                                 cx.stop_propagation();
                                                 state.update(cx, |s, cx| {
-                                                    s.remove_selected_index(index, cx);
+                                                    s.remove_selected_value(&item, cx);
                                                 });
                                             }),
                                         )
@@ -780,17 +794,15 @@ impl Render for ComboboxStory {
                                 .w_full()
                                 .flex_wrap()
                                 .gap_1()
-                                .children(ctx.selection.iter().take(MAX_SHOWN).map(
-                                    |(_index, item)| {
-                                        div()
-                                            .rounded_sm()
-                                            .border_1()
-                                            .border_color(cx.theme().border)
-                                            .px_1()
-                                            .text_xs()
-                                            .child(*item)
-                                    },
-                                ))
+                                .children(ctx.selection.iter().take(MAX_SHOWN).map(|item| {
+                                    div()
+                                        .rounded_sm()
+                                        .border_1()
+                                        .border_color(cx.theme().border)
+                                        .px_1()
+                                        .text_xs()
+                                        .child(*item)
+                                }))
                                 .when(ctx.selection.len() > MAX_SHOWN, |this| {
                                     let hidden = ctx.selection.len() - MAX_SHOWN;
                                     this.child(

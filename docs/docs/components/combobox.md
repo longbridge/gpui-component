@@ -184,7 +184,7 @@ Combobox::new(&state)
                 this.text_color(cx.theme().muted_foreground)
                     .child("Select...")
             })
-            .children(ctx.selection.iter().map(|(_, item)| {
+            .children(ctx.selection.iter().map(|item| {
                 div()
                     .bg(cx.theme().accent)
                     .rounded_sm()
@@ -196,6 +196,10 @@ Combobox::new(&state)
             .into_any_element()
     })
 ```
+
+`ctx.selection` contains the selected items, in selection order. The item's `Value` is used for
+identity; it does not include an `IndexPath`, so a selection remains valid while the list is
+filtered.
 
 ### Sizes
 
@@ -255,6 +259,12 @@ state.update(cx, |s, cx| {
     s.remove_selected_index(IndexPath::new(0), cx);
 });
 
+// Add / remove by value
+state.update(cx, |s, cx| {
+    s.add_selected_value(&"React", cx);
+    s.remove_selected_value(&"Angular", cx);
+});
+
 // Clear all selections
 state.update(cx, |s, cx| {
     s.clear_selection(cx);
@@ -266,6 +276,11 @@ let values = state.read(cx).selected_values(); // Vec<Value>
 // Read the first selected value (single-select convenience)
 let value = state.read(cx).selected_value(); // Option<Value>
 ```
+
+Index-based methods operate on the current visible list. Value-based methods resolve through
+`SearchableListDelegate::item_by_value`. `SearchableVec` searches its complete data source, so it
+can resolve items hidden by the current search. Custom delegates must override `item_by_value` to
+provide the same behavior.
 
 ## Keyboard Shortcuts
 
