@@ -1,4 +1,4 @@
-use chrono::{Datelike, Duration, NaiveDate};
+use chrono::{Datelike, Duration, NaiveDate, Weekday};
 
 trait NaiveDateExt {
     fn days_in_month(&self) -> i32;
@@ -28,7 +28,7 @@ impl NaiveDateExt for chrono::NaiveDate {
     }
 }
 
-pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
+pub(crate) fn days_in_month(year: i32, month: u32, first_day: Weekday) -> Vec<Vec<NaiveDate>> {
     let mut year = year;
     let mut month = month;
     if month > 12 {
@@ -42,7 +42,8 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
     let date = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
     let num_days = date.days_in_month();
-    let start_weekday = date.weekday().num_days_from_sunday();
+    let start_weekday =
+        (date.weekday().num_days_from_sunday() + 7 - first_day.num_days_from_sunday()) % 7;
 
     // Get the days in the month, 2023-02 will returns
     // "29|30|31| 1| 2| 3| 4",
@@ -87,7 +88,7 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{Datelike, NaiveDate};
+    use chrono::{Datelike, NaiveDate, Weekday};
 
     use super::{days_in_month, NaiveDateExt};
 
@@ -115,7 +116,7 @@ mod tests {
     fn test_days() {
         #[track_caller]
         fn assert_case(date: NaiveDate, expected: Vec<&str>) {
-            let out = days_in_month(date.year(), date.month())
+            let out = days_in_month(date.year(), date.month(), Weekday::Sun)
                 .iter()
                 .map(|week| {
                     week.iter()
