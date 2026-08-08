@@ -516,6 +516,7 @@ impl RenderOnce for Input {
             .on_action(window.listener_for(&self.state, InputState::show_character_palette))
             .on_action(window.listener_for(&self.state, InputState::copy))
             .on_action(window.listener_for(&self.state, InputState::on_action_search))
+            .on_action(window.listener_for(&self.state, InputState::on_action_replace))
             .on_key_down(window.listener_for(&self.state, InputState::on_key_down))
             .on_mouse_down(
                 MouseButton::Left,
