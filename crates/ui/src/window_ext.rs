@@ -88,14 +88,6 @@ pub trait WindowExt: Sized {
     /// Returns an empty string if the window root is not a [`Root`].
     fn selected_text(&mut self, cx: &mut App) -> String;
 
-    /// Returns the Markdown source for the current window text selection.
-    ///
-    /// For selectable TextViews that opted into `selectable_source`, the
-    /// selection is mapped back to Markdown source; other views contribute
-    /// their rendered text. Returns an empty string if the window root is not
-    /// a [`Root`].
-    fn selected_source(&mut self, cx: &mut App) -> String;
-
     /// Returns true if there is an active text selection in this window
     /// (either a window-level drag selection or a view-local selection such
     /// as select-all or a double-click word selection).
@@ -233,14 +225,6 @@ impl WindowExt for Window {
             return String::new();
         };
         root.read(cx).window_selected_text(cx)
-    }
-
-    #[inline]
-    fn selected_source(&mut self, cx: &mut App) -> String {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return String::new();
-        };
-        root.read(cx).window_selected_source(cx)
     }
 
     #[inline]
