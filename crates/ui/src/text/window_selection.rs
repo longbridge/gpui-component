@@ -993,6 +993,26 @@ mod tests {
         }
     }
 
+    /// [`Paragraph::render`] stores one `InlineState` per run of children
+    /// between inline images, so selection offsets belong to a run, not to a
+    /// single child. Mapping them against every child made the text before an
+    /// image show up again as if it were the text after it.
+    struct InlineImageSourceTestView {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl Render for InlineImageSourceTestView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().pt(px(10.)).child(
+                div().h(px(80.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .selection_format(crate::text::SelectionFormat::Source),
+                ),
+            )
+        }
+    }
+
     #[gpui::test]
     fn selection_spans_blocks_scrolled_past(cx: &mut TestAppContext) {
         use gpui::{ScrollDelta, ScrollWheelEvent};
@@ -1093,6 +1113,35 @@ mod tests {
         assert!(
             !text.contains("Paragraph1"),
             "unselected block was filled in: {text:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn source_format_maps_offsets_per_rendered_run(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| InlineImageSourceTestView {
+                text_view: cx.new(|cx| {
+                    TextViewState::markdown(
+                        "Build **status** ![img](https://example.com/i.svg) after text",
+                        cx,
+                    )
+                }),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        drag(cx, point(px(0.), px(11.)), point(px(600.), px(80.)));
+
+        let text = window_selected_text(cx);
+        assert_eq!(
+            text.trim(),
+            "Build **status** ![img](https://example.com/i.svg) after text"
         );
     }
 

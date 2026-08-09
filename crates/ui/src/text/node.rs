@@ -517,6 +517,16 @@ pub(crate) fn wrap_with_mark(text: &str, mark: &TextMark) -> String {
     out
 }
 
+/// The Markdown source for an inline image, e.g. `![alt](url "title")`.
+fn image_markdown(image: &ImageNode) -> String {
+    let alt = image.alt.clone().unwrap_or_default();
+    let title = image
+        .title
+        .clone()
+        .map_or(String::new(), |title| format!(" \"{}\"", title));
+    format!("![{}]({}{})", alt, image.url, title)
+}
+
 /// Reconstruct the Markdown source for the `selection` sub-range of a text run
 /// carrying `marks`.
 ///
@@ -638,64 +648,76 @@ impl Paragraph {
 
     /// Reconstruct the Markdown source for the current selection.
     ///
-    /// Mirrors [`selected_text`](Self::selected_text)'s traversal, but instead
-    /// of emitting the rendered text it maps the selection (byte offsets into
-    /// each `InlineState.text`) back to Markdown source using each inline
-    /// node's `marks` (see [`reconstruct_markdown`]).
+    /// Mirrors [`selected_text`](Self::selected_text), but emits Markdown
+    /// instead of the rendered text, using each inline node's `marks` (see
+    /// [`reconstruct_markdown`]).
     ///
-    /// Two selection layouts exist (see [`Paragraph::render`]):
-    /// - per-child `InlineState` selections when inline images split the run;
-    /// - a single paragraph-level `self.state` selection whose offsets index
-    ///   the concatenation of the (contiguous, non-image) children's text.
+    /// Selection offsets index an `InlineState.text`, and one such state spans
+    /// *several* children: [`Paragraph::render`] concatenates children until it
+    /// hits an inline image, stores that run in the image child's state, then
+    /// starts over; whatever follows the last image is stored in `self.state`.
+    /// So walk the children in the same runs and map each selected byte back to
+    /// the child it was rendered from — mapping against a single child's text
+    /// would attribute the same offsets to children in other runs.
     ///
-    /// Both are handled by walking `self.children`, so each selected byte is
-    /// attributed to the child (and thus the marks) it was rendered from.
+    /// An image carries no selection of its own, so it is emitted only when the
+    /// runs on both of its sides contributed text, i.e. the selection spans it.
     pub(super) fn selected_source(&self) -> String {
-        let mut source = String::new();
-
-        // Per-child selections (inline-image split path).
-        for c in self.children.iter() {
-            let Ok(state) = c.state.lock() else {
-                continue;
+        /// Emit the selected part of one rendered run, preceded by any images
+        /// the selection has since spanned. `run` holds the run's children with
+        /// their offset into the run's concatenated text.
+        fn emit(
+            state: &Arc<Mutex<InlineState>>,
+            run: &[(usize, &InlineNode)],
+            pending_images: &mut Vec<String>,
+            out: &mut String,
+        ) {
+            let Ok(state) = state.lock() else {
+                return;
             };
-            if let Some(selection) = &state.selection {
-                source.push_str(&reconstruct_markdown(
-                    &c.text,
-                    &c.marks,
-                    selection.start..selection.end,
+            let Some(selection) = &state.selection else {
+                return;
+            };
+
+            for (start, child) in run {
+                let end = start + child.text.len();
+                let lo = selection.start.max(*start);
+                let hi = selection.end.min(end);
+                if lo >= hi {
+                    continue;
+                }
+
+                if !out.is_empty() {
+                    out.push_str(&pending_images.join(""));
+                }
+                pending_images.clear();
+
+                out.push_str(&reconstruct_markdown(
+                    &child.text,
+                    &child.marks,
+                    (lo - start)..(hi - start),
                 ));
             }
         }
 
-        // Paragraph-level selection: offsets index the concatenated text of the
-        // contiguous non-image children. Walk children tracking the running
-        // offset and reconstruct each intersected slice from that child's marks.
-        if let Ok(state) = self.state.lock()
-            && let Some(selection) = &state.selection
-        {
-            let (sel_start, sel_end) = (selection.start, selection.end);
-            let mut offset = 0usize;
-            for c in self.children.iter() {
-                if c.image.is_some() {
-                    // Images reset the concatenation offset during render.
-                    offset = 0;
-                    continue;
-                }
-                let child_len = c.text.len();
-                let child_start = offset;
-                let child_end = offset + child_len;
-                let lo = sel_start.max(child_start);
-                let hi = sel_end.min(child_end);
-                if lo < hi {
-                    source.push_str(&reconstruct_markdown(
-                        &c.text,
-                        &c.marks,
-                        (lo - child_start)..(hi - child_start),
-                    ));
-                }
-                offset = child_end;
+        let mut source = String::new();
+        let mut pending_images: Vec<String> = Vec::new();
+        let mut run: Vec<(usize, &InlineNode)> = Vec::new();
+        let mut offset = 0;
+
+        for child in self.children.iter() {
+            if let Some(image) = &child.image {
+                emit(&child.state, &run, &mut pending_images, &mut source);
+                run.clear();
+                offset = 0;
+                pending_images.push(image_markdown(image));
+                continue;
             }
+
+            run.push((offset, child));
+            offset += child.text.len();
         }
+        emit(&self.state, &run, &mut pending_images, &mut source);
 
         source
     }
