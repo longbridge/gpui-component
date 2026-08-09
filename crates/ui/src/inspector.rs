@@ -514,6 +514,7 @@ fn render_inspector(
                             Button::new("inspect")
                                 .icon(IconName::Inspector)
                                 .selected(inspector.is_picking())
+                                .toggled(inspector.is_picking())
                                 .small()
                                 .ghost()
                                 .on_click(cx.listener(|this, _, window, _| {

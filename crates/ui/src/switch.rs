@@ -4,8 +4,9 @@ use crate::{
 };
 use gpui::{
     Animation, AnimationExt as _, App, Background, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
-    div, prelude::FluentBuilder as _, px,
+    IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Toggled, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use std::{rc::Rc, time::Duration};
 
@@ -142,6 +143,16 @@ impl RenderOnce for Switch {
         div().refine_style(&self.style).child(
             h_flex()
                 .id(self.id.clone())
+                .role(Role::Switch)
+                .aria_toggled(if checked {
+                    Toggled::True
+                } else {
+                    Toggled::False
+                })
+                .when_some(
+                    self.label.as_ref().map(|l| l.get_text(cx)),
+                    |this, label| this.aria_label(label),
+                )
                 .gap_2()
                 .items_start()
                 .when(self.label_side.is_left(), |this| this.flex_row_reverse())

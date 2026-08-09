@@ -128,6 +128,7 @@ impl Render for AppMenuBar {
             .size_full()
             .gap_x_1()
             .overflow_x_scroll()
+            .restrict_scroll_to_axis()
             .children(self.menus.clone())
     }
 }

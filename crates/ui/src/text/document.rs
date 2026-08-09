@@ -3,6 +3,8 @@ use gpui::{
     Styled as _, Window, div,
 };
 
+use std::ops::RangeInclusive;
+
 use crate::text::node::{BlockNode, NodeContext};
 
 /// The parsed document AST.
@@ -38,10 +40,51 @@ impl ParsedDocument {
         text
     }
 
-    pub(super) fn selected_text(&self) -> String {
+    /// The selected text across all blocks.
+    ///
+    /// A block only learns its selection when it is painted, so in a scrollable
+    /// (virtualized) view every block the user scrolled past reports nothing.
+    /// A selection is one continuous range, so the blocks it spans that came up
+    /// empty are inside it and are emitted whole rather than dropped.
+    ///
+    /// `blocks` bounds that span. It comes from the selection endpoints, which
+    /// hold on to their block index even after it scrolls out of view — the
+    /// painted blocks alone cannot bound the span, because the press that
+    /// starts a drag leaves an empty selection that never reaches paint.
+    /// Without it, fall back to the painted blocks.
+    pub(super) fn selected_text(&self, blocks: Option<RangeInclusive<usize>>) -> String {
+        let painted = self
+            .blocks
+            .iter()
+            .map(|block| block.has_selection())
+            .collect::<Vec<_>>();
+        let (Some(first), Some(last)) = (
+            painted.iter().position(|painted| *painted),
+            painted.iter().rposition(|painted| *painted),
+        ) else {
+            return String::new();
+        };
+
+        let last_ix = self.blocks.len().saturating_sub(1);
+        let (first, last) = match blocks {
+            Some(blocks) => (
+                first.min(*blocks.start()),
+                last.max(*blocks.end()).min(last_ix),
+            ),
+            None => (first, last),
+        };
+
         let mut text = String::new();
-        for block in self.blocks.iter() {
-            text.push_str(&block.selected_text());
+        for (ix, block) in self.blocks.iter().enumerate().take(last + 1).skip(first) {
+            let selected = block.selected_text();
+            if !selected.is_empty() {
+                text.push_str(&selected);
+            } else if !painted[ix] {
+                // Never painted, so it cannot report a selection of its own
+                // even though the span covers it. A painted block that came up
+                // empty really has nothing selected, and stays empty.
+                text.push_str(&block.text());
+            }
         }
         text
     }

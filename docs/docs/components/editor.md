@@ -114,6 +114,8 @@ The search feature allows for all multi-line inputs to support searching through
 
 It provides a search bar with options to navigate between matches and highlight them.
 
+Press `Ctrl+H` (or `Cmd+Shift+F` on Mac) to open the search bar with the replace field expanded, use `replaceable(false)` to turn the replace off.
+
 Use `searchable` method to enable:
 
 ```rust

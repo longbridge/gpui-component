@@ -193,6 +193,7 @@ where
             .id(id)
             .size_full()
             .overflow_scroll()
+            .restrict_scroll_to_axis()
             .track_scroll(&scroll_handle),
         scroll_handle,
         items_count: item_sizes.len(),
