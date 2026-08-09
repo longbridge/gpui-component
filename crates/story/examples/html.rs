@@ -1,15 +1,20 @@
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _,
+    ActiveTheme as _, Sizable as _,
+    button::{Button, ButtonVariants as _},
     highlighter::Language,
     input::{Input, InputState, TabSize},
     resizable::h_resizable,
-    text::html,
+    status_bar::StatusBar,
+    text::{SelectionFormat, html},
+    v_flex,
 };
 use gpui_component_assets::Assets;
 
 pub struct Example {
     input_state: Entity<InputState>,
+    /// Whether copying a selection yields the rendered text or its source.
+    selection_format: SelectionFormat,
     _subscribe: Subscription,
 }
 
@@ -37,6 +42,7 @@ impl Example {
 
         Self {
             input_state,
+            selection_format: SelectionFormat::Plain,
             _subscribe,
         }
     }
@@ -48,27 +54,52 @@ impl Example {
 
 impl Render for Example {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        h_resizable("container")
+        v_flex()
+            .size_full()
             .child(
-                div()
-                    .id("source")
-                    .size_full()
-                    .font_family(cx.theme().mono_font_family.clone())
-                    .text_size(cx.theme().mono_font_size)
-                    .child(
-                        Input::new(&self.input_state)
-                            .h_full()
-                            .appearance(false)
-                            .focus_bordered(false),
-                    )
-                    .into_any(),
+                div().flex_1().overflow_hidden().child(
+                    h_resizable("container")
+                        .child(
+                            div()
+                                .id("source")
+                                .size_full()
+                                .font_family(cx.theme().mono_font_family.clone())
+                                .text_size(cx.theme().mono_font_size)
+                                .child(
+                                    Input::new(&self.input_state)
+                                        .h_full()
+                                        .appearance(false)
+                                        .focus_bordered(false),
+                                )
+                                .into_any(),
+                        )
+                        .child(
+                            html(self.input_state.read(cx).value().clone())
+                                .p_5()
+                                .scrollable(true)
+                                .selectable(true)
+                                .selection_format(self.selection_format)
+                                .into_any(),
+                        ),
+                ),
             )
             .child(
-                html(self.input_state.read(cx).value().clone())
-                    .p_5()
-                    .scrollable(true)
-                    .selectable(true)
-                    .into_any(),
+                StatusBar::new().right(
+                    Button::new("selection-format")
+                        .ghost()
+                        .xsmall()
+                        .label(match self.selection_format {
+                            SelectionFormat::Plain => "Selection: Plain",
+                            SelectionFormat::Source => "Selection: Source",
+                        })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.selection_format = match this.selection_format {
+                                SelectionFormat::Plain => SelectionFormat::Source,
+                                SelectionFormat::Source => SelectionFormat::Plain,
+                            };
+                            cx.notify();
+                        })),
+                ),
             )
     }
 }
