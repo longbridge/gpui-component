@@ -517,6 +517,64 @@ pub(crate) fn wrap_with_mark(text: &str, mark: &TextMark) -> String {
     out
 }
 
+/// How a selection covers one rendered run, so the caller can tell whether it
+/// continues into an adjacent inline image.
+#[derive(Default)]
+struct RunSelection {
+    emitted: bool,
+    at_start: bool,
+    at_end: bool,
+}
+
+/// Emit the selected part of one rendered run, preceded by the images the
+/// selection has run into. `run` holds the run's children with their offset
+/// into the run's concatenated text.
+fn emit_run(
+    state: &Arc<Mutex<InlineState>>,
+    run: &[(usize, &InlineNode)],
+    pending_images: &mut Vec<String>,
+    out: &mut String,
+) -> RunSelection {
+    let mut selected = RunSelection::default();
+    let Ok(state) = state.lock() else {
+        return selected;
+    };
+    let Some(selection) = &state.selection else {
+        return selected;
+    };
+    if selection.start >= selection.end {
+        return selected;
+    }
+
+    selected.at_start = selection.start == 0;
+    selected.at_end = selection.end >= state.text.len();
+
+    for (start, child) in run {
+        let end = start + child.text.len();
+        let lo = selection.start.max(*start);
+        let hi = selection.end.min(end);
+        if lo >= hi {
+            continue;
+        }
+
+        if !selected.emitted {
+            if selected.at_start {
+                out.push_str(&pending_images.join(""));
+            }
+            pending_images.clear();
+        }
+        selected.emitted = true;
+
+        out.push_str(&reconstruct_markdown(
+            &child.text,
+            &child.marks,
+            (lo - start)..(hi - start),
+        ));
+    }
+
+    selected
+}
+
 /// The Markdown source for an inline image, e.g. `![alt](url "title")`.
 fn image_markdown(image: &ImageNode) -> String {
     let alt = image.alt.clone().unwrap_or_default();
@@ -660,64 +718,46 @@ impl Paragraph {
     /// the child it was rendered from — mapping against a single child's text
     /// would attribute the same offsets to children in other runs.
     ///
-    /// An image carries no selection of its own, so it is emitted only when the
-    /// runs on both of its sides contributed text, i.e. the selection spans it.
+    /// An image has no selection of its own, so it is emitted when the
+    /// selection runs into it: reaching the end of the run before it, and
+    /// starting at the beginning of the run after it. A paragraph that begins
+    /// or ends with an image has no run on that side, which counts as reaching
+    /// it.
     pub(super) fn selected_source(&self) -> String {
-        /// Emit the selected part of one rendered run, preceded by any images
-        /// the selection has since spanned. `run` holds the run's children with
-        /// their offset into the run's concatenated text.
-        fn emit(
-            state: &Arc<Mutex<InlineState>>,
-            run: &[(usize, &InlineNode)],
-            pending_images: &mut Vec<String>,
-            out: &mut String,
-        ) {
-            let Ok(state) = state.lock() else {
-                return;
-            };
-            let Some(selection) = &state.selection else {
-                return;
-            };
-
-            for (start, child) in run {
-                let end = start + child.text.len();
-                let lo = selection.start.max(*start);
-                let hi = selection.end.min(end);
-                if lo >= hi {
-                    continue;
-                }
-
-                if !out.is_empty() {
-                    out.push_str(&pending_images.join(""));
-                }
-                pending_images.clear();
-
-                out.push_str(&reconstruct_markdown(
-                    &child.text,
-                    &child.marks,
-                    (lo - start)..(hi - start),
-                ));
-            }
-        }
-
         let mut source = String::new();
         let mut pending_images: Vec<String> = Vec::new();
         let mut run: Vec<(usize, &InlineNode)> = Vec::new();
         let mut offset = 0;
+        let mut enters_image = true;
 
         for child in self.children.iter() {
-            if let Some(image) = &child.image {
-                emit(&child.state, &run, &mut pending_images, &mut source);
-                run.clear();
-                offset = 0;
-                pending_images.push(image_markdown(image));
+            let Some(image) = &child.image else {
+                run.push((offset, child));
+                offset += child.text.len();
                 continue;
+            };
+
+            // The run before an image is stored in that image's own state.
+            let run_before = !run.is_empty();
+            let selected = emit_run(&child.state, &run, &mut pending_images, &mut source);
+            if run_before {
+                enters_image = selected.emitted && selected.at_end;
+            }
+            if enters_image {
+                pending_images.push(image_markdown(image));
+            } else {
+                pending_images.clear();
             }
 
-            run.push((offset, child));
-            offset += child.text.len();
+            run.clear();
+            offset = 0;
         }
-        emit(&self.state, &run, &mut pending_images, &mut source);
+
+        let trailing = emit_run(&self.state, &run, &mut pending_images, &mut source);
+        // Trailing images have no run after them to flush them.
+        if !trailing.emitted && enters_image && !source.is_empty() {
+            source.push_str(&pending_images.join(""));
+        }
 
         source
     }
