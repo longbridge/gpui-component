@@ -280,10 +280,8 @@ impl TextViewState {
     /// even after it scrolls out of view; see
     /// [`ParsedDocument::selected_text`](crate::text::document::ParsedDocument).
     pub(super) fn selected_text_in(&self, blocks: Option<RangeInclusive<usize>>) -> String {
-        let source_mode = self.selection_format == SelectionFormat::Source;
-
         if self.select_all {
-            if source_mode {
+            if self.selection_format == SelectionFormat::Source {
                 return self.source().to_string();
             }
 
@@ -294,11 +292,9 @@ impl TextViewState {
             return text.clone();
         }
 
-        if source_mode {
-            return self.parsed_content.document.selected_source();
-        }
-
-        self.parsed_content.document.selected_text(blocks)
+        self.parsed_content
+            .document
+            .selected_text(self.selection_format, blocks)
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {

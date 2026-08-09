@@ -29,7 +29,7 @@ use crate::{
     v_flex,
 };
 
-use super::{TextViewStyle, utils::list_item_prefix};
+use super::{SelectionFormat, TextViewStyle, utils::list_item_prefix};
 
 thread_local! {
     static CODE_BLOCK_HIGHLIGHTERS: RefCell<HashMap<SharedString, SyntaxHighlighter>> =
@@ -133,14 +133,15 @@ impl BlockNode {
         self.text_by_kind(BlockTextKind::All)
     }
 
-    pub(super) fn selected_text(&self) -> String {
-        self.text_by_kind(BlockTextKind::Selected)
-    }
-
-    /// Reconstruct the Markdown source for the current selection within this
-    /// block. Mirrors [`selected_text`](Self::selected_text).
-    pub(super) fn selected_source(&self) -> String {
-        self.text_by_kind(BlockTextKind::SelectedSource)
+    /// The selected text within this block, in `format`.
+    ///
+    /// [`SelectionFormat::Source`] reconstructs the Markdown source of the
+    /// selection instead of the rendered text.
+    pub(super) fn selected_text(&self, format: SelectionFormat) -> String {
+        self.text_by_kind(match format {
+            SelectionFormat::Plain => BlockTextKind::Selected,
+            SelectionFormat::Source => BlockTextKind::SelectedSource,
+        })
     }
 
     fn text_by_kind(&self, kind: BlockTextKind) -> String {
@@ -2232,9 +2233,9 @@ mod tests {
             children: selected_paragraph("Title"),
             span: None,
         };
-        assert_eq!(heading.selected_source(), "## Title\n");
+        assert_eq!(heading.selected_text(SelectionFormat::Source), "## Title\n");
         // Rendered text keeps no marker.
-        assert_eq!(heading.selected_text(), "Title\n");
+        assert_eq!(heading.selected_text(SelectionFormat::Plain), "Title\n");
     }
 
     #[test]
@@ -2257,7 +2258,10 @@ mod tests {
                 },
             ],
         };
-        assert_eq!(list.selected_source(), "- one\n- two\n");
+        assert_eq!(
+            list.selected_text(SelectionFormat::Source),
+            "- one\n- two\n"
+        );
     }
 
     #[test]
@@ -2280,7 +2284,10 @@ mod tests {
                 },
             ],
         };
-        assert_eq!(list.selected_source(), "1. first\n2. second\n");
+        assert_eq!(
+            list.selected_text(SelectionFormat::Source),
+            "1. first\n2. second\n"
+        );
     }
 
     fn selected_code_block(code: &str, lang: Option<&str>) -> BlockNode {
@@ -2299,26 +2306,35 @@ mod tests {
     #[test]
     fn code_block_selected_source_wraps_in_fence_with_lang() {
         let block = selected_code_block("let x = 1;\n", Some("rust"));
-        let code = block.selected_text();
+        let code = block.selected_text(SelectionFormat::Plain);
         let code_trimmed = code.trim_end_matches('\n');
         // The source wraps the (trailing-newline-trimmed) selected code in a
         // fenced block carrying the language; the block arm adds one trailing
         // newline.
         assert_eq!(
-            block.selected_source(),
+            block.selected_text(SelectionFormat::Source),
             format!("```rust\n{}\n```\n", code_trimmed)
         );
-        assert!(block.selected_source().starts_with("```rust\n"));
-        assert!(block.selected_source().trim_end().ends_with("\n```"));
+        assert!(
+            block
+                .selected_text(SelectionFormat::Source)
+                .starts_with("```rust\n")
+        );
+        assert!(
+            block
+                .selected_text(SelectionFormat::Source)
+                .trim_end()
+                .ends_with("\n```")
+        );
     }
 
     #[test]
     fn code_block_selected_source_without_lang() {
         let block = selected_code_block("plain\n", None);
-        let code_trimmed = block.selected_text();
+        let code_trimmed = block.selected_text(SelectionFormat::Plain);
         let code_trimmed = code_trimmed.trim_end_matches('\n');
         assert_eq!(
-            block.selected_source(),
+            block.selected_text(SelectionFormat::Source),
             format!("```\n{}\n```\n", code_trimmed)
         );
     }
@@ -2362,7 +2378,7 @@ mod tests {
         };
 
         assert_eq!(
-            document.selected_source(),
+            document.selected_text(SelectionFormat::Source),
             "# Title\n\nA paragraph.\n\n```rust\nlet x = 1;\n```\n\n1. one\n2. two"
         );
     }

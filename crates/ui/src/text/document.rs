@@ -5,7 +5,10 @@ use gpui::{
 
 use std::ops::RangeInclusive;
 
-use crate::text::node::{BlockNode, NodeContext};
+use crate::text::{
+    SelectionFormat,
+    node::{BlockNode, NodeContext},
+};
 
 /// The parsed document AST.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -40,72 +43,74 @@ impl ParsedDocument {
         text
     }
 
-    /// The selected text across all blocks.
+    /// The selected text across all blocks, in `format`.
+    ///
+    /// In [`SelectionFormat::Source`] each block reconstructs its own Markdown
+    /// source (inline markup, and block prefixes for headings and lists), and
+    /// top-level blocks are joined with a blank line so the result re-renders
+    /// with the same block structure.
     ///
     /// A block only learns its selection when it is painted, so in a scrollable
     /// (virtualized) view every block the user scrolled past reports nothing.
-    /// A selection is one continuous range, so the blocks it spans that came up
-    /// empty are inside it and are emitted whole rather than dropped.
-    ///
-    /// `blocks` bounds that span. It comes from the selection endpoints, which
-    /// hold on to their block index even after it scrolls out of view — the
-    /// painted blocks alone cannot bound the span, because the press that
-    /// starts a drag leaves an empty selection that never reaches paint.
-    /// Without it, fall back to the painted blocks.
-    pub(super) fn selected_text(&self, blocks: Option<RangeInclusive<usize>>) -> String {
-        let painted = self
-            .blocks
-            .iter()
-            .map(|block| block.has_selection())
-            .collect::<Vec<_>>();
-        let (Some(first), Some(last)) = (
-            painted.iter().position(|painted| *painted),
-            painted.iter().rposition(|painted| *painted),
-        ) else {
-            return String::new();
-        };
+    /// The selection is one continuous range, so blocks it spans that came up
+    /// empty are inside it and are emitted whole rather than dropped. `blocks`
+    /// bounds that span; it comes from the selection endpoints, which hold on to
+    /// their block index even after it scrolls out of view (the painted blocks
+    /// alone cannot bound the span, because the press that starts a drag leaves
+    /// an empty selection that never reaches paint). Without it, fall back to
+    /// the painted blocks. (Source mode is only used by non-scrollable views,
+    /// where `blocks` is `None` and every block paints.)
+    pub(super) fn selected_text(
+        &self,
+        format: SelectionFormat,
+        blocks: Option<RangeInclusive<usize>>,
+    ) -> String {
+        if format == SelectionFormat::Plain {
+            let painted = self
+                .blocks
+                .iter()
+                .map(|block| block.has_selection())
+                .collect::<Vec<_>>();
+            let (Some(first), Some(last)) = (
+                painted.iter().position(|painted| *painted),
+                painted.iter().rposition(|painted| *painted),
+            ) else {
+                return String::new();
+            };
 
-        let last_ix = self.blocks.len().saturating_sub(1);
-        let (first, last) = match blocks {
-            Some(blocks) => (
-                first.min(*blocks.start()),
-                last.max(*blocks.end()).min(last_ix),
-            ),
-            None => (first, last),
-        };
+            let last_ix = self.blocks.len().saturating_sub(1);
+            let (first, last) = match blocks {
+                Some(blocks) => (
+                    first.min(*blocks.start()),
+                    last.max(*blocks.end()).min(last_ix),
+                ),
+                None => (first, last),
+            };
 
-        let mut text = String::new();
-        for (ix, block) in self.blocks.iter().enumerate().take(last + 1).skip(first) {
-            let selected = block.selected_text();
-            if !selected.is_empty() {
-                text.push_str(&selected);
-            } else if !painted[ix] {
-                // Never painted, so it cannot report a selection of its own
-                // even though the span covers it. A painted block that came up
-                // empty really has nothing selected, and stays empty.
-                text.push_str(&block.text());
+            let mut text = String::new();
+            for (ix, block) in self.blocks.iter().enumerate().take(last + 1).skip(first) {
+                let selected = block.selected_text(format);
+                if !selected.is_empty() {
+                    text.push_str(&selected);
+                } else if !painted[ix] {
+                    // Never painted, so it cannot report a selection of its own
+                    // even though the span covers it. A painted block that came
+                    // up empty really has nothing selected, and stays empty.
+                    text.push_str(&block.text());
+                }
             }
+            return text;
         }
-        text
-    }
 
-    /// Reconstruct the Markdown source for the current selection across all
-    /// blocks. Mirrors [`selected_text`](Self::selected_text).
-    ///
-    /// Each block reconstructs its own source (with inline markup and, for
-    /// headings/lists, block prefixes); top-level blocks are joined with a
-    /// blank line so the result is valid Markdown that re-renders with the
-    /// same block structure (paragraphs, lists and headings stay separate).
-    pub(super) fn selected_source(&self) -> String {
-        let mut blocks: Vec<String> = Vec::new();
+        let mut sources: Vec<String> = Vec::new();
         for block in self.blocks.iter() {
-            let source = block.selected_source();
+            let source = block.selected_text(format);
             let trimmed = source.trim_end_matches('\n');
             if !trimmed.is_empty() {
-                blocks.push(trimmed.to_string());
+                sources.push(trimmed.to_string());
             }
         }
-        blocks.join("\n\n")
+        sources.join("\n\n")
     }
 
     /// Synchronously clear the selection stored in every inline state.
