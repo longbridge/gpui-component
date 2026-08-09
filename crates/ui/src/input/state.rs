@@ -275,9 +275,9 @@ pub(crate) fn init(cx: &mut App) {
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-f", Search, Some(CONTEXT)),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-r", Replace, Some(CONTEXT)),
+        KeyBinding::new("cmd-shift-f", Replace, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
-        KeyBinding::new("ctrl-r", Replace, Some(CONTEXT)),
+        KeyBinding::new("ctrl-h", Replace, Some(CONTEXT)),
     ]);
 
     number_input::init(cx);
