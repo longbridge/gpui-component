@@ -188,28 +188,9 @@ impl BlockNode {
                 children, ordered, ..
             } => {
                 if matches!(kind, BlockTextKind::SelectedSource) {
-                    // Prefix each list item with its Markdown marker so a
-                    // selected list round-trips (e.g. `- item` / `1. item`).
-                    let mut item_ix = 0usize;
-                    for child in children.iter() {
-                        let item_text = child.text_by_kind(kind);
-                        if item_text.trim().is_empty() {
-                            if child.is_list_item() {
-                                item_ix += 1;
-                            }
-                            continue;
-                        }
-                        let prefix = if *ordered {
-                            format!("{}. ", item_ix + 1)
-                        } else {
-                            "- ".to_string()
-                        };
-                        text.push_str(&prefix);
-                        text.push_str(&item_text);
-                        if child.is_list_item() {
-                            item_ix += 1;
-                        }
-                    }
+                    // Reconstruct the list source, indenting nested lists and
+                    // restoring list markers and task-list checkboxes.
+                    text.push_str(&list_selected_source(children, *ordered, ""));
                 } else {
                     text.push_str(&Self::children_text(children, kind));
                 }
@@ -221,30 +202,56 @@ impl BlockNode {
                 let block_text = Self::children_text(children, kind);
 
                 if !block_text.is_empty() {
-                    text.push_str(&block_text);
+                    if matches!(kind, BlockTextKind::SelectedSource) {
+                        // Prefix every line with `> ` so a selected blockquote
+                        // round-trips as Markdown.
+                        let quoted = block_text
+                            .trim_end_matches('\n')
+                            .lines()
+                            .map(|line| {
+                                if line.is_empty() {
+                                    ">".to_string()
+                                } else {
+                                    format!("> {}", line)
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        text.push_str(&quoted);
+                    } else {
+                        text.push_str(&block_text);
+                    }
                     text.push('\n');
                 }
             }
             BlockNode::Table(table) => {
-                let mut block_text = String::new();
-                for row in table.children.iter() {
-                    let mut row_texts = vec![];
-                    for cell in row.children.iter() {
-                        row_texts.push(match kind {
-                            BlockTextKind::All => cell.children.text(),
-                            BlockTextKind::Selected => cell.children.selected_text(),
-                            BlockTextKind::SelectedSource => cell.children.selected_source(),
-                        });
+                if matches!(kind, BlockTextKind::SelectedSource) {
+                    let block_text = table_selected_source(table);
+                    if !block_text.is_empty() {
+                        text.push_str(&block_text);
+                        text.push('\n');
                     }
-                    if !row_texts.is_empty() {
-                        block_text.push_str(&row_texts.join(" "));
-                        block_text.push('\n');
+                } else {
+                    let mut block_text = String::new();
+                    for row in table.children.iter() {
+                        let mut row_texts = vec![];
+                        for cell in row.children.iter() {
+                            row_texts.push(match kind {
+                                BlockTextKind::All => cell.children.text(),
+                                // Source is handled above; only Selected reaches here.
+                                _ => cell.children.selected_text(),
+                            });
+                        }
+                        if !row_texts.is_empty() {
+                            block_text.push_str(&row_texts.join(" "));
+                            block_text.push('\n');
+                        }
                     }
-                }
 
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
+                    if !block_text.is_empty() {
+                        text.push_str(&block_text);
+                        text.push('\n');
+                    }
                 }
             }
             BlockNode::CodeBlock(code_block) => {
@@ -627,6 +634,145 @@ pub(crate) fn reconstruct_markdown(
     out
 }
 
+/// Reconstruct the Markdown source of the selected cells of `table`.
+///
+/// Cells emit their own selected source; rows are piped (`| a | b |`) and the
+/// delimiter/alignment row is inserted after the first row, so a selected
+/// table round-trips as a Markdown table. Returns an empty string when no cell
+/// is selected.
+fn table_selected_source(table: &Table) -> String {
+    let cell_source = |cell: &TableCell| cell.children.selected_source().replace('\n', " ");
+
+    let any_selected = table.children.iter().any(|row| {
+        row.children
+            .iter()
+            .any(|cell| !cell_source(cell).trim().is_empty())
+    });
+    if !any_selected {
+        return String::new();
+    }
+
+    let mut lines: Vec<String> = Vec::new();
+    for (row_ix, row) in table.children.iter().enumerate() {
+        let cells: Vec<String> = row
+            .children
+            .iter()
+            .map(|cell| cell_source(cell).trim().to_string())
+            .collect();
+        lines.push(format!("| {} |", cells.join(" | ")));
+
+        // The Markdown delimiter row carries the column alignments and must
+        // follow the header row.
+        if row_ix == 0 {
+            let aligns: Vec<String> = (0..row.children.len())
+                .map(|ix| {
+                    match table.column_align(ix) {
+                        ColumnumnAlign::Left => ":--",
+                        ColumnumnAlign::Center => ":-:",
+                        ColumnumnAlign::Right => "--:",
+                    }
+                    .to_string()
+                })
+                .collect();
+            lines.push(format!("| {} |", aligns.join(" | ")));
+        }
+    }
+
+    lines.join("\n")
+}
+
+/// Reconstruct the Markdown source of the selected items of a list.
+///
+/// Restores the list marker (`- ` / `N. `) and task-list checkbox (`[x] ` /
+/// `[ ] `) of each item, and recurses into nested lists with a deeper `indent`
+/// so nesting is preserved. `indent` is the leading whitespace for this level;
+/// nested levels are indented by the width of the parent marker so continuation
+/// and sub-list lines align under the item text. Items with no selected content
+/// are skipped but still consume an ordered number, so the remaining items keep
+/// their original numbering.
+fn list_selected_source(children: &[BlockNode], ordered: bool, indent: &str) -> String {
+    let mut out = String::new();
+    let mut item_ix = 0usize;
+
+    for child in children {
+        let BlockNode::ListItem {
+            children: item_children,
+            checked,
+            ..
+        } = child
+        else {
+            continue;
+        };
+
+        let marker = if ordered {
+            format!("{}. ", item_ix + 1)
+        } else {
+            "- ".to_string()
+        };
+        let checkbox = match checked {
+            Some(true) => "[x] ",
+            Some(false) => "[ ] ",
+            None => "",
+        };
+        let child_indent = format!("{}{}", indent, " ".repeat(marker.len()));
+
+        // Split the item into its own content and any nested lists, so the
+        // nested lists can be indented under the content.
+        let mut content = String::new();
+        let mut nested = String::new();
+        for sub in item_children {
+            if let BlockNode::List {
+                children: sub_children,
+                ordered: sub_ordered,
+                ..
+            } = sub
+            {
+                nested.push_str(&list_selected_source(
+                    sub_children,
+                    *sub_ordered,
+                    &child_indent,
+                ));
+            } else {
+                content.push_str(&sub.text_by_kind(BlockTextKind::SelectedSource));
+            }
+        }
+        let content = content.trim_end_matches('\n');
+
+        if content.is_empty() && nested.is_empty() {
+            item_ix += 1;
+            continue;
+        }
+
+        if content.is_empty() {
+            // An item whose only selected content is a nested list.
+            out.push_str(indent);
+            out.push_str(&marker);
+            out.push_str(checkbox.trim_end());
+            out.push('\n');
+        } else {
+            // The first line carries the marker and checkbox; continuation
+            // lines are indented to align under the item text.
+            let mut lines = content.lines();
+            if let Some(first) = lines.next() {
+                out.push_str(indent);
+                out.push_str(&marker);
+                out.push_str(checkbox);
+                out.push_str(first);
+                out.push('\n');
+            }
+            for line in lines {
+                out.push_str(&child_indent);
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out.push_str(&nested);
+        item_ix += 1;
+    }
+
+    out
+}
+
 impl InlineNode {
     pub(crate) fn new(text: impl Into<SharedString>) -> Self {
         Self {
@@ -892,6 +1038,25 @@ impl Paragraph {
 
     pub(crate) fn merge(&mut self, other: Self) {
         self.children.extend(other.children);
+    }
+
+    /// Whether this paragraph contains only image children (no text), i.e. a
+    /// standalone image such as `![alt](url)` on its own line.
+    ///
+    /// Such a paragraph renders as a bare image with no selectable text run, so
+    /// it never holds a selection of its own; the document decides whether to
+    /// include it (see [`ParsedDocument::selected_text`](crate::text::document)).
+    pub(super) fn is_only_images(&self) -> bool {
+        !self.children.is_empty() && self.children.iter().all(|child| child.image.is_some())
+    }
+
+    /// The Markdown source for this paragraph's image children, concatenated.
+    pub(super) fn images_markdown(&self) -> String {
+        self.children
+            .iter()
+            .filter_map(|child| child.image.as_ref())
+            .map(image_markdown)
+            .collect()
     }
 }
 
@@ -2352,6 +2517,161 @@ mod tests {
         );
     }
 
+    #[test]
+    fn nested_list_selected_source_indents_sublists() {
+        // - one
+        //   - nested
+        // - two
+        let nested = BlockNode::List {
+            ordered: false,
+            span: None,
+            children: vec![BlockNode::ListItem {
+                children: vec![BlockNode::Paragraph(selected_paragraph("nested"))],
+                spread: false,
+                checked: None,
+                span: None,
+            }],
+        };
+        let list = BlockNode::List {
+            ordered: false,
+            span: None,
+            children: vec![
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("one")), nested],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+            ],
+        };
+        assert_eq!(
+            list.selected_text(SelectionFormat::Source),
+            "- one\n  - nested\n- two\n"
+        );
+    }
+
+    #[test]
+    fn task_list_selected_source_restores_checkboxes() {
+        let list = BlockNode::List {
+            ordered: false,
+            span: None,
+            children: vec![
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("done"))],
+                    spread: false,
+                    checked: Some(true),
+                    span: None,
+                },
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("todo"))],
+                    spread: false,
+                    checked: Some(false),
+                    span: None,
+                },
+            ],
+        };
+        assert_eq!(
+            list.selected_text(SelectionFormat::Source),
+            "- [x] done\n- [ ] todo\n"
+        );
+    }
+
+    #[test]
+    fn blockquote_selected_source_prefixes_gt() {
+        let quote = BlockNode::Blockquote {
+            span: None,
+            children: vec![BlockNode::Paragraph(selected_paragraph("quoted text"))],
+        };
+        assert_eq!(
+            quote.selected_text(SelectionFormat::Source),
+            "> quoted text\n"
+        );
+    }
+
+    #[test]
+    fn table_selected_source_pipes_cells_with_alignment_row() {
+        let cell = |text: &str| TableCell {
+            children: selected_paragraph(text),
+            width: None,
+        };
+        let table = Table {
+            children: vec![
+                TableRow {
+                    children: vec![cell("Name"), cell("Age")],
+                },
+                TableRow {
+                    children: vec![cell("Alice"), cell("30")],
+                },
+            ],
+            column_aligns: vec![ColumnumnAlign::Left, ColumnumnAlign::Right],
+            span: None,
+        };
+        let block = BlockNode::Table(table);
+        assert_eq!(
+            block.selected_text(SelectionFormat::Source),
+            "| Name | Age |\n| :-- | --: |\n| Alice | 30 |\n"
+        );
+    }
+
+    fn image_paragraph(alt: &str, url: &str) -> Paragraph {
+        let image = ImageNode {
+            url: url.into(),
+            alt: Some(alt.into()),
+            ..Default::default()
+        };
+        Paragraph {
+            span: None,
+            children: vec![InlineNode::image(image)],
+            link_refs: HashMap::new(),
+            state: Arc::new(Mutex::new(InlineState::default())),
+        }
+    }
+
+    #[test]
+    fn document_selected_source_includes_enclosed_image() {
+        use crate::text::document::ParsedDocument;
+
+        // A standalone image between two selected paragraphs is enclosed by the
+        // selection, so it is included even though it holds no selection.
+        let document = ParsedDocument {
+            source: String::new().into(),
+            blocks: vec![
+                BlockNode::Paragraph(selected_paragraph("before")),
+                BlockNode::Paragraph(image_paragraph("alt", "https://example.com/i.png")),
+                BlockNode::Paragraph(selected_paragraph("after")),
+            ],
+        };
+        assert_eq!(
+            document.selected_text(SelectionFormat::Source, None),
+            "before\n\n![alt](https://example.com/i.png)\n\nafter"
+        );
+    }
+
+    #[test]
+    fn document_selected_source_drops_unenclosed_image() {
+        use crate::text::document::ParsedDocument;
+
+        // An image after the only selected block, with nothing selected after
+        // it, is not enclosed and is dropped.
+        let document = ParsedDocument {
+            source: String::new().into(),
+            blocks: vec![
+                BlockNode::Paragraph(selected_paragraph("before")),
+                BlockNode::Paragraph(image_paragraph("alt", "u")),
+            ],
+        };
+        assert_eq!(
+            document.selected_text(SelectionFormat::Source, None),
+            "before"
+        );
+    }
+
     fn selected_code_block(code: &str, lang: Option<&str>) -> BlockNode {
         let block = CodeBlock::new(
             code.to_string().into(),
@@ -2440,7 +2760,7 @@ mod tests {
         };
 
         assert_eq!(
-            document.selected_text(SelectionFormat::Source),
+            document.selected_text(SelectionFormat::Source, None),
             "# Title\n\nA paragraph.\n\n```rust\nlet x = 1;\n```\n\n1. one\n2. two"
         );
     }

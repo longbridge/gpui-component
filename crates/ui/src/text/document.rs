@@ -60,6 +60,13 @@ impl ParsedDocument {
     /// an empty selection that never reaches paint). Without it, fall back to
     /// the painted blocks. (Source mode is only used by non-scrollable views,
     /// where `blocks` is `None` and every block paints.)
+    ///
+    /// A standalone image (a paragraph that is only an image) has no selectable
+    /// text run, so it never carries a selection of its own. It is therefore
+    /// included when it is *enclosed* by the selection — some block before and
+    /// some block after it are selected — mirroring how an inline image is
+    /// emitted when the selection runs into it. (Select-all returns the source
+    /// verbatim, so a leading or trailing image is still copied there.)
     pub(super) fn selected_text(
         &self,
         format: SelectionFormat,
@@ -102,15 +109,35 @@ impl ParsedDocument {
             return text;
         }
 
-        let mut sources: Vec<String> = Vec::new();
+        let mut blocks: Vec<String> = Vec::new();
+        // Standalone-image blocks seen since the last selected block, held back
+        // until a following block turns out to be selected (enclosure).
+        let mut pending_images: Vec<String> = Vec::new();
         for block in self.blocks.iter() {
+            if let BlockNode::Paragraph(paragraph) = block
+                && paragraph.is_only_images()
+                && block.selected_text(format).trim().is_empty()
+            {
+                // Only a candidate if something before it is already selected;
+                // otherwise a leading unselected image would leak in.
+                if !blocks.is_empty() {
+                    pending_images.push(paragraph.images_markdown());
+                }
+                continue;
+            }
+
             let source = block.selected_text(format);
             let trimmed = source.trim_end_matches('\n');
             if !trimmed.is_empty() {
-                sources.push(trimmed.to_string());
+                // A selected block follows the pending images, so they were
+                // enclosed by the selection: flush them before this block.
+                blocks.append(&mut pending_images);
+                blocks.push(trimmed.to_string());
             }
         }
-        sources.join("\n\n")
+        // Any images still pending had no selected block after them, so they
+        // were not enclosed; drop them.
+        blocks.join("\n\n")
     }
 
     /// Synchronously clear the selection stored in every inline state.
