@@ -116,6 +116,7 @@ actions!(
         Escape,
         ToggleCodeActions,
         Search,
+        Replace,
         GoToDefinition,
     ]
 );
@@ -273,6 +274,10 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("cmd-f", Search, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-f", Search, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-shift-f", Replace, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-h", Replace, Some(CONTEXT)),
     ]);
 
     number_input::init(cx);
