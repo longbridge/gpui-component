@@ -5,10 +5,11 @@ use std::{
 
 use gpui::{
     AbsoluteLength, AnyElement, App, AvailableSpace, Bounds, DefiniteLength, Element, ElementId,
-    GlobalElementId, HighlightStyle, InspectorElementId, InteractiveElement as _, IntoElement,
-    LayoutId, LineFragment as WrapLineFragment, ObjectFit, Pixels, ShapedLine, SharedString,
-    SharedUri, Size, StatefulInteractiveElement as _, Styled, StyledImage as _, TextRun, TextStyle,
-    WhiteSpace, Window, img, point, prelude::FluentBuilder as _, px, relative, size,
+    GlobalElementId, HighlightStyle, InspectorElementId, InteractiveElement as _,
+    IntoElement, LayoutId, LineFragment as WrapLineFragment, ObjectFit, Pixels, ShapedLine,
+    SharedString, SharedUri, Size, StatefulInteractiveElement as _, Styled, StyledImage as _,
+    TextRun, TextStyle, WhiteSpace, Window, img, point, prelude::FluentBuilder as _, px, relative,
+    size,
 };
 
 use crate::{
@@ -143,8 +144,7 @@ impl InlineFlow {
                         handle_link_click(
                             &link_click_handler,
                             link.url.clone(),
-                            gpui::MouseButton::Left,
-                            event.modifiers(),
+                            event.clone(),
                             window,
                             cx,
                         );
@@ -152,16 +152,10 @@ impl InlineFlow {
                     .on_aux_click(move |event, window, cx| {
                         window.end_text_selection(cx);
                         cx.stop_propagation();
-                        let button = if event.is_middle_click() {
-                            gpui::MouseButton::Middle
-                        } else {
-                            gpui::MouseButton::Right
-                        };
                         handle_link_click(
                             &aux_link_click_handler,
                             aux_link.url.clone(),
-                            button,
-                            event.modifiers(),
+                            event.clone(),
                             window,
                             cx,
                         );

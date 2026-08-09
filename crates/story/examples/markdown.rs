@@ -1275,6 +1275,14 @@ impl Render for Example {
                                             ))
                                             .plugin(UserCardPlugin::new())
                                             .plugin(MathPlugin::new())
+                                            .on_link_click(|url, event, _window, cx| {
+                                                println!(
+                                                    "Markdown link clicked: {url} ({event:?})"
+                                                );
+                                                if !event.is_right_click() {
+                                                    cx.open_url(url);
+                                                }
+                                            })
                                             // Tables scroll horizontally by default; the
                                             // status bar toggle switches to wrapping.
                                             .style(self.text_view_style())

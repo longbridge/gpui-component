@@ -3,7 +3,7 @@ use std::sync::Arc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
-    InspectorElementId, InteractiveElement, IntoElement, LayoutId, Modifiers, MouseButton,
+    ClickEvent, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
     ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
 };
 
@@ -19,39 +19,30 @@ use crate::{global_state::GlobalState, text::TextViewStyle};
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
 
-/// A pointer event on a link rendered by a TextView.
-#[derive(Clone, Debug, PartialEq)]
-pub struct TextViewLinkClick {
-    /// The resolved link target.
-    pub url: SharedString,
-    /// The mouse button released over the link.
-    pub button: MouseButton,
-    /// Keyboard modifiers held when the button was released.
-    pub modifiers: Modifiers,
-}
-
 pub(crate) type LinkClickHandlerFn =
-    dyn Fn(&TextViewLinkClick, &mut Window, &mut App) + Send + Sync;
+    dyn Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync;
 
 pub(crate) fn handle_link_click(
     handler: &Option<Arc<LinkClickHandlerFn>>,
     url: SharedString,
-    button: MouseButton,
-    modifiers: Modifiers,
+    event: ClickEvent,
     window: &mut Window,
     cx: &mut App,
 ) {
     if let Some(handler) = handler {
         handler(
-            &TextViewLinkClick {
-                url,
-                button,
-                modifiers,
-            },
+            &url,
+            &event,
             window,
             cx,
         );
-    } else if matches!(button, MouseButton::Left | MouseButton::Middle) {
+    } else if match &event {
+        ClickEvent::Mouse(click) => {
+            matches!(click.up.button, MouseButton::Left | MouseButton::Middle)
+        }
+        ClickEvent::Keyboard(_) => true,
+        ClickEvent::Touch(click) => !click.long_press,
+    } {
         cx.open_url(&url);
     }
 }
@@ -208,10 +199,11 @@ impl TextView {
 
     /// Handle pointer events on rendered links.
     ///
+    /// The handler receives the resolved URL and the original GPUI click event.
     /// Without a handler, links open through App::open_url.
     pub fn on_link_click<F>(mut self, handler: F) -> Self
     where
-        F: Fn(&TextViewLinkClick, &mut Window, &mut App) + Send + Sync + 'static,
+        F: Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync + 'static,
     {
         self.link_click_handler = Some(Arc::new(handler));
         self
@@ -411,9 +403,9 @@ mod tests {
     use super::{TextView, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
-        AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, Modifiers,
-        MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render, Styled as _,
-        TestAppContext, VisualTestContext, Window, div, point, px,
+        AppContext as _, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement,
+        Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render,
+        SharedString, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -626,7 +618,7 @@ mod tests {
 
         struct LinkRoot {
             text_view: Entity<TextViewState>,
-            clicks: Arc<Mutex<Vec<super::TextViewLinkClick>>>,
+            clicks: Arc<Mutex<Vec<(SharedString, ClickEvent)>>>,
         }
 
         impl Render for LinkRoot {
@@ -639,8 +631,8 @@ mod tests {
                 div()
                     .w(px(240.))
                     .child(
-                        TextView::new(&self.text_view).on_link_click(move |event, _, _| {
-                            clicks.lock().unwrap().push(event.clone());
+                        TextView::new(&self.text_view).on_link_click(move |url, event, _, _| {
+                            clicks.lock().unwrap().push((url.clone(), event.clone()));
                         }),
                     )
             }
@@ -681,11 +673,11 @@ mod tests {
 
         let clicks = captured.lock().unwrap();
         assert_eq!(clicks.len(), 3);
-        assert_eq!(clicks[0].url, "https://example.com");
-        assert_eq!(clicks[0].button, MouseButton::Left);
-        assert!(clicks[0].modifiers.control);
-        assert_eq!(clicks[1].button, MouseButton::Middle);
-        assert_eq!(clicks[2].button, MouseButton::Right);
+        assert_eq!(clicks[0].0, "https://example.com");
+        assert!(!clicks[0].1.is_right_click() && !clicks[0].1.is_middle_click());
+        assert!(clicks[0].1.modifiers().control);
+        assert!(clicks[1].1.is_middle_click());
+        assert!(clicks[2].1.is_right_click());
         assert_eq!(cx.opened_url(), None);
     }
 
@@ -695,7 +687,7 @@ mod tests {
 
         struct LinkedImageRoot {
             text_view: Entity<TextViewState>,
-            clicks: Arc<Mutex<Vec<super::TextViewLinkClick>>>,
+            clicks: Arc<Mutex<Vec<(SharedString, ClickEvent)>>>,
         }
 
         impl Render for LinkedImageRoot {
@@ -708,8 +700,8 @@ mod tests {
                 div().w(px(160.)).child(
                     TextView::new(&self.text_view)
                         .selectable(true)
-                        .on_link_click(move |event, _, _| {
-                            clicks.lock().unwrap().push(event.clone());
+                        .on_link_click(move |url, event, _, _| {
+                            clicks.lock().unwrap().push((url.clone(), event.clone()));
                         }),
                 )
             }
@@ -766,11 +758,11 @@ mod tests {
         assert!(
             clicks
                 .iter()
-                .all(|event| event.url == "https://example.com/image-link")
+                .all(|(url, _)| url == "https://example.com/image-link")
         );
-        assert_eq!(clicks[0].button, MouseButton::Left);
-        assert_eq!(clicks[1].button, MouseButton::Middle);
-        assert_eq!(clicks[2].button, MouseButton::Right);
+        assert!(!clicks[0].1.is_right_click() && !clicks[0].1.is_middle_click());
+        assert!(clicks[1].1.is_middle_click());
+        assert!(clicks[2].1.is_right_click());
         assert_eq!(cx.opened_url(), None);
     }
 

@@ -7,9 +7,9 @@ use std::{
 
 use gpui::{
     App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId, GlobalElementId, Half,
-    HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, StyledText,
-    TextLayout, Window, point, px, quad,
+    ClickEvent, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
+    MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    SharedString, StyledText, TextLayout, Window, point, px, quad,
 };
 
 use crate::{
@@ -530,11 +530,20 @@ impl Element for Inline {
                     {
                         window.end_text_selection(cx);
                         cx.stop_propagation();
+                        let click = ClickEvent::Mouse(MouseClickEvent {
+                            down: MouseDownEvent {
+                                button: event.button,
+                                position: event.position,
+                                modifiers: event.modifiers,
+                                click_count: event.click_count,
+                                first_mouse: false,
+                            },
+                            up: event.clone(),
+                        });
                         handle_link_click(
                             &link_click_handler,
                             link.url,
-                            event.button,
-                            event.modifiers,
+                            click,
                             window,
                             cx,
                         );

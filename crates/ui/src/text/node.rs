@@ -7,9 +7,9 @@ use std::{
 
 use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle,
-    Hsla, InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement,
-    ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _,
-    Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
+    Hsla, InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow,
+    ParentElement, ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement, Styled,
+    StyledImage as _, Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
@@ -884,8 +884,7 @@ impl Paragraph {
                                     handle_link_click(
                                         &link_click_handler,
                                         link.url.clone(),
-                                        gpui::MouseButton::Left,
-                                        event.modifiers(),
+                                        event.clone(),
                                         window,
                                         cx,
                                     );
@@ -893,16 +892,10 @@ impl Paragraph {
                                 .on_aux_click(move |event, window, cx| {
                                     window.end_text_selection(cx);
                                     cx.stop_propagation();
-                                    let button = if event.is_middle_click() {
-                                        gpui::MouseButton::Middle
-                                    } else {
-                                        gpui::MouseButton::Right
-                                    };
                                     handle_link_click(
                                         &aux_link_click_handler,
                                         aux_link.url.clone(),
-                                        button,
-                                        event.modifiers(),
+                                        event.clone(),
                                         window,
                                         cx,
                                     );
