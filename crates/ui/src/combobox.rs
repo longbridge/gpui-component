@@ -375,6 +375,20 @@ where
         self.state.list.read(cx).query_input.read(cx).value()
     }
 
+    /// Replaces the search query.
+    pub fn set_search_value(&self, value: impl Into<SharedString>, window: &mut Window, cx: &mut App) {
+        self.state.list.update(cx, |list, cx| {
+            list.query_input.update(cx, |input, cx| {
+                input.set_value(value, window, cx);
+            })
+        });
+    }
+
+    /// Clears the search query.
+    pub fn clear_search_value(&self, window: &mut Window, cx: &mut App) {
+        self.set_search_value("", window, cx);
+    }
+
     fn selection_changes(
         multiple: bool,
         selection: &[(IndexPath, D::Item)],
