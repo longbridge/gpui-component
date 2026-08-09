@@ -1,15 +1,26 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    cell::Cell,
+    collections::HashMap,
+    rc::Rc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 
 use gpui::{
-    Anchor, App, AppContext, Context, DismissEvent, Div, DragMoveEvent, Empty, Entity, EntityId,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
+    Anchor, Animation, AnimationExt as _, App, AppContext, Context, DismissEvent, Div,
+    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, ScrollHandle,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window, div,
+    point, prelude::FluentBuilder, px, rems,
 };
 use rust_i18n::t;
 
 use crate::{
     ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
+    animation::{Lerp, ease_out_cubic},
     button::{Button, ButtonVariants as _},
     dock::PanelInfo,
     h_flex,
@@ -36,12 +47,66 @@ struct TabState {
 pub(crate) struct DragPanel {
     pub(crate) panel: Arc<dyn PanelView>,
     pub(crate) tab_panel: Entity<TabPanel>,
+    drag_offset: Rc<Cell<Point<Pixels>>>,
+    drag_session_id: u64,
 }
+
+static NEXT_DRAG_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 
 impl DragPanel {
     pub(crate) fn new(panel: Arc<dyn PanelView>, tab_panel: Entity<TabPanel>) -> Self {
-        Self { panel, tab_panel }
+        Self {
+            panel,
+            tab_panel,
+            drag_offset: Rc::new(Cell::new(Point::default())),
+            drag_session_id: NEXT_DRAG_SESSION_ID.fetch_add(1, Ordering::Relaxed),
+        }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DropPlaceholderBounds {
+    origin: Point<Pixels>,
+    size: gpui::Size<Pixels>,
+}
+
+impl DropPlaceholderBounds {
+    fn for_placement(bounds: gpui::Bounds<Pixels>, placement: Option<Placement>) -> Self {
+        let half_width = bounds.size.width * 0.5;
+        let half_height = bounds.size.height * 0.5;
+
+        match placement {
+            Some(Placement::Left) => Self {
+                origin: Point::default(),
+                size: gpui::size(half_width, bounds.size.height),
+            },
+            Some(Placement::Right) => Self {
+                origin: point(half_width, px(0.)),
+                size: gpui::size(half_width, bounds.size.height),
+            },
+            Some(Placement::Top) => Self {
+                origin: Point::default(),
+                size: gpui::size(bounds.size.width, half_height),
+            },
+            Some(Placement::Bottom) => Self {
+                origin: point(px(0.), half_height),
+                size: gpui::size(bounds.size.width, half_height),
+            },
+            None => Self {
+                origin: Point::default(),
+                size: bounds.size,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DropPlaceholderAnimation {
+    drag_session_id: u64,
+    placement: Option<Placement>,
+    from: DropPlaceholderBounds,
+    to: DropPlaceholderBounds,
+    epoch: u64,
 }
 
 impl Render for DragPanel {
@@ -87,6 +152,8 @@ pub struct TabPanel {
     collapsed: bool,
     /// When drag move, will get the placement of the panel to be split
     will_split_placement: Option<Placement>,
+    drop_placeholder_animation: Option<DropPlaceholderAnimation>,
+    drop_placeholder_animation_name: SharedString,
     /// Is TabPanel used in Tiles.
     in_tiles: bool,
 }
@@ -170,6 +237,7 @@ impl TabPanel {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let entity_id = cx.entity_id();
         Self {
             focus_handle: cx.focus_handle(),
             dock_area,
@@ -181,6 +249,8 @@ impl TabPanel {
             tab_bar_scroll_handle: ScrollHandle::new(),
             pending_scroll_to_ix: None,
             will_split_placement: None,
+            drop_placeholder_animation: None,
+            drop_placeholder_animation_name: format!("dock-drop-placeholder-{entity_id}").into(),
             zoomed: false,
             collapsed: false,
             closable: true,
@@ -730,12 +800,10 @@ impl TabPanel {
                         .child(panel.title(window, cx))
                         .when(state.draggable, |this| {
                             this.on_drag(
-                                DragPanel {
-                                    panel: panel.clone(),
-                                    tab_panel: view,
-                                },
-                                |drag, _, _, cx| {
+                                DragPanel::new(panel.clone(), view),
+                                |drag, offset, _, cx| {
                                     cx.stop_propagation();
+                                    drag.drag_offset.set(offset);
                                     cx.new(|_| drag.clone())
                                 },
                             )
@@ -829,8 +897,9 @@ impl TabPanel {
                             this.when(state.draggable, |this| {
                                 this.on_drag(
                                     DragPanel::new(panel.clone(), view.clone()),
-                                    |drag, _, _, cx| {
+                                    |drag, offset, _, cx| {
                                         cx.stop_propagation();
+                                        drag.drag_offset.set(offset);
                                         cx.new(|_| drag.clone())
                                     },
                                 )
@@ -918,6 +987,9 @@ impl TabPanel {
 
         let is_render_in_tabs = self.panels.len() > 1 && self.inner_padding(cx);
 
+        let placeholder = self.drop_placeholder_animation;
+        let placeholder_animation_name = self.drop_placeholder_animation_name.clone();
+
         v_flex()
             .id("active-panel")
             .group("")
@@ -941,27 +1013,49 @@ impl TabPanel {
                         div()
                             .invisible()
                             .absolute()
-                            .bg(cx.theme().tokens.drop_target)
-                            .map(|this| match self.will_split_placement {
-                                Some(placement) => {
-                                    let size = relative(0.5);
-                                    match placement {
-                                        Placement::Left => this.left_0().top_0().bottom_0().w(size),
-                                        Placement::Right => {
-                                            this.right_0().top_0().bottom_0().w(size)
-                                        }
-                                        Placement::Top => this.top_0().left_0().right_0().h(size),
-                                        Placement::Bottom => {
-                                            this.bottom_0().left_0().right_0().h(size)
-                                        }
-                                    }
-                                }
+                            .map(|this| match placeholder {
+                                Some(animation) => this
+                                    .left(animation.to.origin.x)
+                                    .top(animation.to.origin.y)
+                                    .w(animation.to.size.width)
+                                    .h(animation.to.size.height),
                                 None => this.top_0().left_0().size_full(),
                             })
                             .group_drag_over::<DragPanel>("", |this| this.visible())
                             .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
                                 this.on_drop(drag, None, true, window, cx)
-                            })),
+                            }))
+                            .when_some(placeholder, |this, animation| {
+                                let from = animation.from.origin - animation.to.origin;
+                                this.child(
+                                    div()
+                                        .absolute()
+                                        .bg(cx.theme().tokens.drop_target)
+                                        .with_animation(
+                                            gpui::ElementId::NamedInteger(
+                                                placeholder_animation_name,
+                                                animation.epoch,
+                                            ),
+                                            Animation::new(Duration::from_millis(150))
+                                                .with_easing(ease_out_cubic),
+                                            move |this, delta| {
+                                                let origin = from.lerp(&Point::default(), delta);
+                                                let width = animation
+                                                    .from
+                                                    .size
+                                                    .width
+                                                    .lerp(&animation.to.size.width, delta);
+                                                let height = animation
+                                                    .from
+                                                    .size
+                                                    .height
+                                                    .lerp(&animation.to.size.height, delta);
+
+                                                this.left(origin.x).top(origin.y).w(width).h(height)
+                                            },
+                                        ),
+                                )
+                            }),
                     )
             })
             .into_any_element()
@@ -977,19 +1071,54 @@ impl TabPanel {
         let bounds = drag.bounds;
         let position = drag.event.position;
 
-        // Check the mouse position to determine the split direction
-        if position.x < bounds.left() + bounds.size.width * 0.35 {
-            self.will_split_placement = Some(Placement::Left);
+        // Check the mouse position to determine the split direction.
+        let placement = if position.x < bounds.left() + bounds.size.width * 0.35 {
+            Some(Placement::Left)
         } else if position.x > bounds.left() + bounds.size.width * 0.65 {
-            self.will_split_placement = Some(Placement::Right);
+            Some(Placement::Right)
         } else if position.y < bounds.top() + bounds.size.height * 0.35 {
-            self.will_split_placement = Some(Placement::Top);
+            Some(Placement::Top)
         } else if position.y > bounds.top() + bounds.size.height * 0.65 {
-            self.will_split_placement = Some(Placement::Bottom);
+            Some(Placement::Bottom)
         } else {
             // center to merge into the current tab
-            self.will_split_placement = None;
+            None
+        };
+
+        let dragged_panel = drag.drag(cx);
+        let drag_session_id = dragged_panel.drag_session_id;
+        let to = DropPlaceholderBounds::for_placement(bounds, placement);
+        let source_origin = position - dragged_panel.drag_offset.get() - bounds.origin;
+        let source = DropPlaceholderBounds {
+            origin: source_origin,
+            size: gpui::size(px(96.), px(30.)),
+        };
+
+        let should_restart = self.drop_placeholder_animation.is_none_or(|animation| {
+            animation.drag_session_id != drag_session_id || animation.placement != placement
+        });
+        if should_restart {
+            let (from, epoch) = self
+                .drop_placeholder_animation
+                .map(|animation| {
+                    let from = if animation.drag_session_id == drag_session_id {
+                        animation.to
+                    } else {
+                        source
+                    };
+                    (from, animation.epoch.wrapping_add(1))
+                })
+                .unwrap_or((source, 0));
+
+            self.drop_placeholder_animation = Some(DropPlaceholderAnimation {
+                drag_session_id,
+                placement,
+                from,
+                to,
+                epoch,
+            });
         }
+        self.will_split_placement = placement;
         cx.notify()
     }
 
@@ -1292,6 +1421,50 @@ mod tests {
 
     use super::*;
     use crate::{Root, Theme, dock::DockItem};
+
+    #[test]
+    fn drop_placeholder_bounds_cover_each_target_placement() {
+        let bounds = gpui::Bounds {
+            origin: point(px(120.), px(80.)),
+            size: gpui::size(px(400.), px(300.)),
+        };
+
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, Some(Placement::Left)),
+            DropPlaceholderBounds {
+                origin: point(px(0.), px(0.)),
+                size: gpui::size(px(200.), px(300.)),
+            }
+        );
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, Some(Placement::Right)),
+            DropPlaceholderBounds {
+                origin: point(px(200.), px(0.)),
+                size: gpui::size(px(200.), px(300.)),
+            }
+        );
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, Some(Placement::Top)),
+            DropPlaceholderBounds {
+                origin: point(px(0.), px(0.)),
+                size: gpui::size(px(400.), px(150.)),
+            }
+        );
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, Some(Placement::Bottom)),
+            DropPlaceholderBounds {
+                origin: point(px(0.), px(150.)),
+                size: gpui::size(px(400.), px(150.)),
+            }
+        );
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, None),
+            DropPlaceholderBounds {
+                origin: point(px(0.), px(0.)),
+                size: gpui::size(px(400.), px(300.)),
+            }
+        );
+    }
 
     /// Shared, cross-panel ordered log of every `set_active` delivery.
     type Log = Arc<Mutex<Vec<(&'static str, bool)>>>;
