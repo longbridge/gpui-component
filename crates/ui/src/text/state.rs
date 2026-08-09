@@ -1,5 +1,5 @@
 use futures::Stream as _;
-use std::{pin::Pin, sync::Arc, task::Poll};
+use std::{ops::RangeInclusive, pin::Pin, sync::Arc, task::Poll};
 
 use gpui::{
     App, AppContext as _, Bounds, Context, FocusHandle, IntoElement, KeyBinding, ListState,
@@ -232,6 +232,16 @@ impl TextViewState {
 
     /// Return the selected text.
     pub fn selected_text(&self) -> String {
+        self.selected_text_in(None)
+    }
+
+    /// Return the selected text, with `blocks` bounding which top-level blocks
+    /// the selection covers.
+    ///
+    /// The range comes from the selection endpoints, which know their block
+    /// even after it scrolls out of view; see
+    /// [`ParsedDocument::selected_text`](crate::text::document::ParsedDocument).
+    pub(super) fn selected_text_in(&self, blocks: Option<RangeInclusive<usize>>) -> String {
         if self.select_all {
             return self.parsed_content.document.text();
         }
@@ -240,7 +250,7 @@ impl TextViewState {
             return text.clone();
         }
 
-        self.parsed_content.document.selected_text()
+        self.parsed_content.document.selected_text(blocks)
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
@@ -287,6 +297,34 @@ impl TextViewState {
             self.reset_selection();
         }
         self.bounds = bounds;
+    }
+
+    /// The index of the top-level block at `content_y`, in this view's content
+    /// coordinates (the same space [`SelectionEndpoint`] stores its point in).
+    ///
+    /// Only laid-out blocks can be located, which is enough for a selection
+    /// endpoint: the user can only put one where they can see it. Returns
+    /// `None` for a view that is not virtualized, where every block paints and
+    /// the range is not needed.
+    ///
+    /// [`SelectionEndpoint`]: crate::text::window_selection::SelectionEndpoint
+    pub(super) fn block_ix_at(&self, content_y: Pixels) -> Option<usize> {
+        if !self.scrollable {
+            return None;
+        }
+
+        let origin = self.bounds.origin.y + self.scroll_offset().y;
+        let count = self.list_state.item_count();
+        let mut ix = self.list_state.logical_scroll_top().item_ix;
+        while ix < count {
+            let bounds = self.list_state.bounds_for_item(ix)?;
+            if content_y < bounds.bottom() - origin {
+                return Some(ix);
+            }
+            ix += 1;
+        }
+
+        count.checked_sub(1)
     }
 
     pub(super) fn bounds(&self) -> Bounds<Pixels> {

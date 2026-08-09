@@ -237,6 +237,36 @@ impl BlockNode {
     ///
     /// Mirrors the [`selected_text`](Self::selected_text) traversal so the
     /// selection can be cleared without relying on a repaint.
+    /// Whether this block carries a selection, even an empty one.
+    ///
+    /// A block only learns its selection when it is painted, so this doubles as
+    /// "this block was on screen while the selection was made". An empty
+    /// selection is the caret left by the press that started the drag, which is
+    /// why it counts (see [`ParsedDocument::selected_text`]).
+    pub(super) fn has_selection(&self) -> bool {
+        match self {
+            BlockNode::Root { children, .. }
+            | BlockNode::Blockquote { children, .. }
+            | BlockNode::List { children, .. }
+            | BlockNode::ListItem { children, .. } => {
+                children.iter().any(|child| child.has_selection())
+            }
+            BlockNode::Paragraph(paragraph) => paragraph.has_selection(),
+            BlockNode::Heading { children, .. } => children.has_selection(),
+            BlockNode::Table(table) => table.children.iter().any(|row| {
+                row.children
+                    .iter()
+                    .any(|cell| cell.children.has_selection())
+            }),
+            BlockNode::CodeBlock(code_block) => code_block.has_selection(),
+            BlockNode::Custom { .. }
+            | BlockNode::Definition { .. }
+            | BlockNode::Break { .. }
+            | BlockNode::HorizontalRule { .. }
+            | BlockNode::Unknown { .. } => false,
+        }
+    }
+
     pub(super) fn clear_selection(&self) {
         match self {
             BlockNode::Root { children, .. }
@@ -490,6 +520,16 @@ impl Paragraph {
     /// Synchronously clear the selection stored in every inline state.
     ///
     /// Mirrors the [`selected_text`](Self::selected_text) traversal.
+    pub(super) fn has_selection(&self) -> bool {
+        self.children
+            .iter()
+            .any(|c| c.state.lock().is_ok_and(|state| state.selection.is_some()))
+            || self
+                .state
+                .lock()
+                .is_ok_and(|state| state.selection.is_some())
+    }
+
     pub(super) fn clear_selection(&self) {
         for c in self.children.iter() {
             if let Ok(mut state) = c.state.lock() {
@@ -737,6 +777,12 @@ impl CodeBlock {
     /// Synchronously clear the selection stored in the inline state.
     ///
     /// Mirrors the [`selected_text`](Self::selected_text) traversal.
+    pub(super) fn has_selection(&self) -> bool {
+        self.state
+            .lock()
+            .is_ok_and(|state| state.selection.is_some())
+    }
+
     pub(super) fn clear_selection(&self) {
         if let Ok(mut state) = self.state.lock() {
             state.selection = None;
