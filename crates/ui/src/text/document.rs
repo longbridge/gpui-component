@@ -72,28 +72,28 @@ impl ParsedDocument {
         format: SelectionFormat,
         blocks: Option<RangeInclusive<usize>>,
     ) -> String {
+        let painted = self
+            .blocks
+            .iter()
+            .map(|block| block.has_selection())
+            .collect::<Vec<_>>();
+        let (Some(first), Some(last)) = (
+            painted.iter().position(|painted| *painted),
+            painted.iter().rposition(|painted| *painted),
+        ) else {
+            return String::new();
+        };
+
+        let last_ix = self.blocks.len().saturating_sub(1);
+        let (first, last) = match blocks {
+            Some(blocks) => (
+                first.min(*blocks.start()),
+                last.max(*blocks.end()).min(last_ix),
+            ),
+            None => (first, last),
+        };
+
         if format == SelectionFormat::Plain {
-            let painted = self
-                .blocks
-                .iter()
-                .map(|block| block.has_selection())
-                .collect::<Vec<_>>();
-            let (Some(first), Some(last)) = (
-                painted.iter().position(|painted| *painted),
-                painted.iter().rposition(|painted| *painted),
-            ) else {
-                return String::new();
-            };
-
-            let last_ix = self.blocks.len().saturating_sub(1);
-            let (first, last) = match blocks {
-                Some(blocks) => (
-                    first.min(*blocks.start()),
-                    last.max(*blocks.end()).min(last_ix),
-                ),
-                None => (first, last),
-            };
-
             let mut text = String::new();
             for (ix, block) in self.blocks.iter().enumerate().take(last + 1).skip(first) {
                 let selected = block.selected_text(format);
@@ -109,35 +109,43 @@ impl ParsedDocument {
             return text;
         }
 
-        let mut blocks: Vec<String> = Vec::new();
-        // Standalone-image blocks seen since the last selected block, held back
-        // until a following block turns out to be selected (enclosure).
-        let mut pending_images: Vec<String> = Vec::new();
-        for block in self.blocks.iter() {
-            if let BlockNode::Paragraph(paragraph) = block
-                && paragraph.is_only_images()
-                && block.selected_text(format).trim().is_empty()
-            {
-                // Only a candidate if something before it is already selected;
-                // otherwise a leading unselected image would leak in.
-                if !blocks.is_empty() {
-                    pending_images.push(paragraph.images_markdown());
-                }
-                continue;
-            }
+        let mut out: Vec<String> = Vec::new();
+        for (ix, block) in self.blocks.iter().enumerate().take(last + 1).skip(first) {
+            // The selection is one continuous range, so only the block it
+            // starts in and the block it ends in can be partly selected.
+            // Everything between them is covered whole, and so is any block
+            // that reports nothing — it either scrolled past without painting,
+            // or renders no selectable text run at all (a rule, a break, a
+            // custom node, a standalone image).
+            let source = if (ix == first || ix == last) && painted[ix] {
+                block.selected_text(format)
+            } else {
+                self.whole_source(block)
+            };
 
-            let source = block.selected_text(format);
             let trimmed = source.trim_end_matches('\n');
             if !trimmed.is_empty() {
-                // A selected block follows the pending images, so they were
-                // enclosed by the selection: flush them before this block.
-                blocks.append(&mut pending_images);
-                blocks.push(trimmed.to_string());
+                out.push(trimmed.to_string());
             }
         }
-        // Any images still pending had no selected block after them, so they
-        // were not enclosed; drop them.
-        blocks.join("\n\n")
+        out.join("\n\n")
+    }
+
+    /// The whole source of a block the selection covers.
+    ///
+    /// Copied straight out of the original text, which the Markdown parser
+    /// locates per block. That keeps whatever the author wrote — `_italic_`
+    /// stays `_italic_`, a reference link keeps its `[ref]` form, a table keeps
+    /// its column padding — and it needs no rule of its own per block type.
+    /// Blocks the parser could not locate fall back to reconstruction.
+    fn whole_source(&self, block: &BlockNode) -> String {
+        if let Some(span) = block.span()
+            && let Some(source) = self.source.get(span.start..span.end)
+        {
+            return source.to_string();
+        }
+
+        block.selected_text(SelectionFormat::Source)
     }
 
     /// Synchronously clear the selection stored in every inline state.
