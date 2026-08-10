@@ -113,7 +113,6 @@ pub fn create_new_window_with_size<F, E>(
     cx.spawn(async move |cx| {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-            titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: Some(gpui::Size {
                 width: px(480.),
                 height: px(320.),
@@ -123,7 +122,7 @@ pub fn create_new_window_with_size<F, E>(
             window_background: gpui::WindowBackgroundAppearance::Transparent,
             #[cfg(target_os = "linux")]
             window_decorations: Some(gpui::WindowDecorations::Client),
-            ..Default::default()
+            ..TitleBar::window_options()
         };
 
         let window = cx
