@@ -9,8 +9,8 @@ use std::{
 use gpui::{
     AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId,
     InspectorElementId, InteractiveElement as _, IntoElement, LayoutId, ParentElement, Pixels,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, Style, Styled, Window, div,
-    percentage, prelude::FluentBuilder as _, px, relative, rems, size,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, Style, StyleRefinement,
+    Styled, Window, div, percentage, prelude::FluentBuilder as _, px, relative, rems, size,
 };
 
 use crate::{
@@ -25,6 +25,7 @@ const ANIMATION_DURATION: Duration = Duration::from_millis(200);
 #[derive(IntoElement)]
 pub struct Accordion {
     id: ElementId,
+    style: StyleRefinement,
     multiple: bool,
     size: Size,
     bordered: bool,
@@ -38,6 +39,7 @@ impl Accordion {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
+            style: StyleRefinement::default(),
             multiple: false,
             size: Size::default(),
             bordered: true,
@@ -94,8 +96,14 @@ impl Sizable for Accordion {
     }
 }
 
+impl Styled for Accordion {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for Accordion {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let open_ixs = Rc::new(RefCell::new(HashSet::new()));
         let is_multiple = self.multiple;
         let last_ix = self.children.len().saturating_sub(1);
@@ -103,7 +111,15 @@ impl RenderOnce for Accordion {
         v_flex()
             .id(self.id)
             .size_full()
-            .when(self.bordered, |this| this.gap_y_2())
+            // The bordered accordion is a single rounded card, the items are
+            // joined by their separators.
+            .when(self.bordered, |this| {
+                this.border_1()
+                    .border_color(cx.theme().border)
+                    .rounded(cx.theme().radius_lg)
+                    .overflow_hidden()
+            })
+            .refine_style(&self.style)
             .children(
                 self.children
                     .into_iter()
@@ -117,7 +133,6 @@ impl RenderOnce for Accordion {
                             .index(ix)
                             .last(ix == last_ix)
                             .with_size(self.size)
-                            .bordered(self.bordered)
                             .disabled(self.disabled)
                             .on_toggle_click({
                                 let open_ixs = Rc::clone(&open_ixs);
@@ -326,12 +341,15 @@ impl Element for AccordionContent {
 pub struct AccordionItem {
     index: usize,
     last: bool,
+    style: StyleRefinement,
+    hover_style: Option<StyleRefinement>,
+    title_style: StyleRefinement,
+    content_style: StyleRefinement,
     icon: Option<Icon>,
     title: AnyElement,
     children: Vec<AnyElement>,
     open: bool,
     size: Size,
-    bordered: bool,
     disabled: bool,
     on_toggle_click: Option<Arc<dyn Fn(&bool, &mut Window, &mut App)>>,
 }
@@ -342,6 +360,10 @@ impl AccordionItem {
         Self {
             index: 0,
             last: false,
+            style: StyleRefinement::default(),
+            hover_style: None,
+            title_style: StyleRefinement::default(),
+            content_style: StyleRefinement::default(),
             icon: None,
             title: SharedString::default().into_any_element(),
             children: Vec::new(),
@@ -349,7 +371,6 @@ impl AccordionItem {
             disabled: false,
             on_toggle_click: None,
             size: Size::default(),
-            bordered: true,
         }
     }
 
@@ -365,11 +386,6 @@ impl AccordionItem {
         self
     }
 
-    pub fn bordered(mut self, bordered: bool) -> Self {
-        self.bordered = bordered;
-        self
-    }
-
     pub fn open(mut self, open: bool) -> Self {
         self.open = open;
         self
@@ -377,6 +393,28 @@ impl AccordionItem {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Set extra style for the title row.
+    pub fn title_style(mut self, style: StyleRefinement) -> Self {
+        self.title_style = style;
+        self
+    }
+
+    /// Set the style of the title row while the mouse is over it.
+    ///
+    /// There is no hover style by default. The title row is the part that
+    /// toggles the item, so the hover feedback belongs there, not on the
+    /// whole item.
+    pub fn hover(mut self, f: impl FnOnce(StyleRefinement) -> StyleRefinement) -> Self {
+        self.hover_style = Some(f(StyleRefinement::default()));
+        self
+    }
+
+    /// Set extra style for the content below the title.
+    pub fn content_style(mut self, style: StyleRefinement) -> Self {
+        self.content_style = style;
         self
     }
 
@@ -412,6 +450,12 @@ impl Sizable for AccordionItem {
     }
 }
 
+impl Styled for AccordionItem {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
 impl RenderOnce for AccordionItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let text_size = match self.size {
@@ -425,19 +469,12 @@ impl RenderOnce for AccordionItem {
                 .w_full()
                 .bg(cx.theme().tokens.accordion)
                 .overflow_hidden()
-                .map(|this| {
-                    if self.bordered {
-                        this.border_1()
-                            .rounded(cx.theme().radius)
-                            .border_color(cx.theme().border)
-                    } else if self.last {
-                        this
-                    } else {
-                        // Separated by a line under each item, below the content.
-                        this.border_b_1().border_color(cx.theme().border)
-                    }
+                // Separated by a line under each item, below the content.
+                .when(!self.last, |this| {
+                    this.border_b_1().border_color(cx.theme().border)
                 })
                 .text_size(text_size)
+                .refine_style(&self.style)
                 .child(
                     h_flex()
                         .id(self.index)
@@ -453,6 +490,7 @@ impl RenderOnce for AccordionItem {
                             _ => this.py_2().px_3(),
                         })
                         .when(self.open, |this| this.text_color(cx.theme().foreground))
+                        .refine_style(&self.title_style)
                         .child(
                             h_flex()
                                 .items_center()
@@ -467,20 +505,25 @@ impl RenderOnce for AccordionItem {
                                 .child(self.title),
                         )
                         .when(!self.disabled, |this| {
-                            this.hover(|this| this.bg(cx.theme().tokens.accordion_hover))
-                                .child(
-                                    Icon::new(IconName::ChevronDown)
-                                        .xsmall()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .rotate(percentage(if self.open { 0.5 } else { 0. })),
-                                )
-                                .when_some(self.on_toggle_click, |this, on_toggle_click| {
+                            this.when_some(self.hover_style, |this, hover_style| {
+                                this.hover(move |this| this.refine_style(&hover_style))
+                            })
+                            .child(
+                                Icon::new(IconName::ChevronDown)
+                                    .xsmall()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .rotate(percentage(if self.open { 0.5 } else { 0. })),
+                            )
+                            .when_some(
+                                self.on_toggle_click,
+                                |this, on_toggle_click| {
                                     this.on_click({
                                         move |_, window, cx| {
                                             on_toggle_click(&!self.open, window, cx);
                                         }
                                     })
-                                })
+                                },
+                            )
                         }),
                 )
                 .child(AccordionContent::new(
@@ -494,6 +537,7 @@ impl RenderOnce for AccordionItem {
                             Size::Large => this.pb_3().px_4(),
                             _ => this.pb_2().px_3(),
                         })
+                        .refine_style(&self.content_style)
                         .children(self.children)
                         .into_any_element(),
                 )),

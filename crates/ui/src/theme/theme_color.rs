@@ -63,8 +63,6 @@ pub struct ThemeColor {
     pub accent_foreground: Hsla,
     /// Accordion background color.
     pub accordion: Hsla,
-    /// Accordion hover background color.
-    pub accordion_hover: Hsla,
     /// Default background color.
     pub background: Hsla,
     /// Default border color
@@ -373,7 +371,6 @@ define_theme_tokens! {
     accent,
     accent_foreground,
     accordion,
-    accordion_hover,
     background,
     border,
     button,

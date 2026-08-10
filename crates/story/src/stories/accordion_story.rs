@@ -1,21 +1,70 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, div, prelude::FluentBuilder as _, px,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement,
+    ParentElement as _, Render, StyleRefinement, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    IconName, Selectable, Sizable, Size,
-    accordion::Accordion,
+    ActiveTheme as _, Icon, IconName, Selectable, Sizable, Size, StyledExt as _,
+    accordion::{Accordion, AccordionItem},
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
     h_flex,
     switch::Switch,
+    tag::Tag,
     v_flex,
 };
 
 use crate::section;
 
+/// A settings row: the icon sits in a rounded square, and the content lines up
+/// with the title rather than with the icon.
+fn settings_item(
+    item: AccordionItem,
+    icon: IconName,
+    title: &'static str,
+    tag: Option<Tag>,
+    body: &'static str,
+    icon_bg: Hsla,
+    muted: Hsla,
+) -> AccordionItem {
+    item.title(
+        h_flex()
+            .gap_2()
+            .items_center()
+            .child(
+                h_flex()
+                    .flex_none()
+                    .size(px(32.))
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(8.))
+                    .bg(icon_bg)
+                    .child(Icon::new(icon).small().text_color(muted)),
+            )
+            .child(div().font_semibold().child(title))
+            .children(tag.map(|tag| tag.small())),
+    )
+    .title_style({
+        let mut style = StyleRefinement::default();
+        style.padding.top = Some(px(8.).into());
+        style.padding.bottom = Some(px(8.).into());
+        style
+    })
+    .content_style({
+        let mut style = StyleRefinement::default();
+        style.text.color = Some(muted);
+        // Past the icon square, so the text starts under the title.
+        style.padding.left = Some(px(52.).into());
+        style.padding.top = Some(px(0.).into());
+        style.padding.bottom = Some(px(12.).into());
+        style
+    })
+    .child(body)
+}
+
 pub struct AccordionStory {
     open_ixs: Vec<usize>,
+    styled_open_ixs: Vec<usize>,
     size: Size,
     bordered: bool,
     disabled: bool,
@@ -47,6 +96,7 @@ impl AccordionStory {
         Self {
             bordered: false,
             open_ixs: vec![0],
+            styled_open_ixs: vec![0],
             size: Size::default(),
             disabled: false,
             multiple: true,
@@ -74,6 +124,9 @@ impl Focusable for AccordionStory {
 
 impl Render for AccordionStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let icon_bg = cx.theme().secondary.opacity(0.5);
+        let muted_fg = cx.theme().muted_foreground;
+
         v_flex()
             .gap_5()
             .child(
@@ -215,6 +268,67 @@ impl Render for AccordionStory {
                                 },
                             )),
                     ),
+                ),
+            )
+            .child(
+                section("Custom Style").child(
+                    // A tinted frame around the card.
+                    div()
+                        .w(px(480.))
+                        .p(px(4.))
+                        .rounded(px(16.))
+                        .bg(cx.theme().secondary.opacity(0.5))
+                        .border_1()
+                        .border_color(cx.theme().border.opacity(0.5))
+                        .child(
+                            Accordion::new("custom-style")
+                                .multiple(self.multiple)
+                                .disabled(self.disabled)
+                                .item(|this| {
+                                    settings_item(
+                                        this,
+                                        IconName::Settings,
+                                        "Account Settings",
+                                        Some(Tag::success().outline().child("New")),
+                                        "Manage your account preferences, security settings, \
+                                    and personal information. You can also configure \
+                                    two-factor authentication here.",
+                                        icon_bg,
+                                        muted_fg,
+                                    )
+                                    .open(self.styled_open_ixs.contains(&0))
+                                })
+                                .item(|this| {
+                                    settings_item(
+                                        this,
+                                        IconName::Eye,
+                                        "Privacy & Security",
+                                        None,
+                                        "Control who can see your profile and how your data \
+                                    is used.",
+                                        icon_bg,
+                                        muted_fg,
+                                    )
+                                    .open(self.styled_open_ixs.contains(&1))
+                                })
+                                .item(|this| {
+                                    settings_item(
+                                        this,
+                                        IconName::Info,
+                                        "Help & Support",
+                                        None,
+                                        "Browse the documentation, or get in touch with the \
+                                    support team.",
+                                        icon_bg,
+                                        muted_fg,
+                                    )
+                                    .open(self.styled_open_ixs.contains(&2))
+                                })
+                                .on_toggle_click(cx.listener(|this, open_ixs: &[usize], _, cx| {
+                                    this.styled_open_ixs = open_ixs.to_vec();
+                                    cx.notify();
+                                })),
+                        ),
                 ),
             )
     }
