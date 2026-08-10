@@ -393,14 +393,23 @@ impl Button {
         self
     }
 
+    /// Whether the button responds to the pointer at all.
+    ///
+    /// A loading button is as inert as a disabled one, it just keeps looking
+    /// like itself instead of taking the disabled styling.
+    #[inline]
+    fn interactive(&self) -> bool {
+        !(self.disabled || self.loading)
+    }
+
     #[inline]
     fn clickable(&self) -> bool {
-        !(self.disabled || self.loading) && self.on_click.is_some()
+        self.interactive() && self.on_click.is_some()
     }
 
     #[inline]
     fn hoverable(&self) -> bool {
-        !(self.disabled || self.loading) && self.on_hover.is_some()
+        self.interactive() && self.on_hover.is_some()
     }
 }
 
@@ -458,7 +467,7 @@ impl RenderOnce for Button {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let style: ButtonVariant = self.variant;
         let clickable = self.clickable();
-        let is_disabled = self.disabled;
+        let interactive = self.interactive();
         let hoverable = self.hoverable();
         let normal_style = style.normal(self.outline, cx);
         let icon_size = match self.size {
@@ -511,7 +520,7 @@ impl RenderOnce for Button {
             .justify_center()
             .cursor_default()
             .when(
-                !self.disabled && (self.variant.is_link() || self.variant.is_text()),
+                interactive && (self.variant.is_link() || self.variant.is_text()),
                 |this| this.cursor_pointer(),
             )
             .when(cx.theme().shadow && normal_style.shadow, |this| {
@@ -575,17 +584,21 @@ impl RenderOnce for Button {
                 this.border_color(normal_style.border)
                     .bg(normal_style.bg)
                     .when(normal_style.underline, |this| this.text_decoration_1())
-                    .hover(|this| {
-                        let hover_style = style.hovered(self.outline, cx);
-                        this.bg(hover_style.bg)
-                            .border_color(hover_style.border)
-                            .text_color(hover_style.fg)
-                    })
-                    .active(|this| {
-                        let active_style = style.active(self.outline, cx);
-                        this.bg(active_style.bg)
-                            .border_color(active_style.border)
-                            .text_color(active_style.fg)
+                    // A loading button keeps its normal colors, but must not react
+                    // to the pointer, it is not waiting for another click.
+                    .when(interactive, |this| {
+                        this.hover(|this| {
+                            let hover_style = style.hovered(self.outline, cx);
+                            this.bg(hover_style.bg)
+                                .border_color(hover_style.border)
+                                .text_color(hover_style.fg)
+                        })
+                        .active(|this| {
+                            let active_style = style.active(self.outline, cx);
+                            this.bg(active_style.bg)
+                                .border_color(active_style.border)
+                                .text_color(active_style.fg)
+                        })
                     })
             })
             .when(self.disabled, |this| {
@@ -595,11 +608,17 @@ impl RenderOnce for Button {
                     .border_color(disabled_style.border)
                     .shadow_none()
             })
+            // Fade the whole button while loading, so every variant is dimmed by
+            // the same amount. Fading `bg`, `border` and `fg` one by one instead
+            // only shows up on variants that have a background to begin with:
+            // `Ghost`, `Link` and `Text` are transparent, so an alpha on their
+            // background changes nothing.
+            .when(self.loading && !self.disabled, |this| this.opacity(0.8))
             .refine_style(&self.style)
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                // Stop handle any click event when disabled.
-                // To avoid handle dropdown menu open when button is disabled.
-                if is_disabled {
+                // Stop handle any click event when disabled or loading.
+                // To avoid handle dropdown menu open when button is not interactive.
+                if !interactive {
                     cx.stop_propagation();
                     return;
                 }
@@ -654,11 +673,6 @@ impl RenderOnce for Button {
                         this.when(has_content, |this| this.justify_between())
                             .child(Caret::new(self.size).text_color(normal_style.fg.opacity(0.75)))
                     })
-            })
-            .when(self.loading && !self.disabled, |this| {
-                this.bg(normal_style.bg.opacity(0.8))
-                    .border_color(normal_style.border.opacity(0.8))
-                    .text_color(normal_style.fg.opacity(0.8))
             })
             .map(|this| {
                 if let Some(builder) = self.tooltip_builder {
@@ -1223,6 +1237,26 @@ mod tests {
         // Loading button should not be clickable
         let loading = Button::new("test").loading(true).on_click(|_, _, _| {});
         assert!(!loading.clickable());
+    }
+
+    /// A loading button must be as inert as a disabled one. `interactive` is what
+    /// gates the hover and active styling, the `cursor_pointer` of link buttons and
+    /// the `mouse_down` handler, none of which depend on a listener being set.
+    #[gpui::test]
+    fn test_button_loading_is_not_interactive(_cx: &mut gpui::TestAppContext) {
+        assert!(Button::new("test").interactive());
+        assert!(!Button::new("test").loading(true).interactive());
+        assert!(!Button::new("test").disabled(true).interactive());
+        assert!(
+            !Button::new("test")
+                .loading(true)
+                .disabled(true)
+                .interactive()
+        );
+
+        // Loading gates hovering even when an `on_hover` listener is set.
+        let loading = Button::new("test").loading(true).on_hover(|_, _, _| {});
+        assert!(!loading.hoverable());
     }
 
     /// `selected` is styling only; the toggle state must be opted into, so that
