@@ -6,8 +6,8 @@ use std::{
 };
 
 use gpui::{
-    App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId, GlobalElementId, Half,
-    ClickEvent, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
+    App, BorderStyle, Bounds, ClickEvent, CursorStyle, Edges, Element, ElementId, GlobalElementId,
+    Half, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
     MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
     SharedString, StyledText, TextLayout, Window, point, px, quad,
 };
@@ -550,13 +550,7 @@ impl Element for Inline {
                             },
                             up: event.clone(),
                         });
-                        handle_link_click(
-                            &link_click_handler,
-                            link.url,
-                            click,
-                            window,
-                            cx,
-                        );
+                        handle_link_click(&link_click_handler, link.url, click, window, cx);
                     }
                 }
             });

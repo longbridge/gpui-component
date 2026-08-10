@@ -26,7 +26,10 @@ pub struct DialogFooter {
 
 impl DialogFooter {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: Vec::new() }
+        Self {
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+        }
     }
 }
 
@@ -71,7 +74,9 @@ pub struct DialogClose {
 
 impl DialogClose {
     pub fn new() -> Self {
-        Self { children: Vec::new() }
+        Self {
+            children: Vec::new(),
+        }
     }
 }
 
@@ -98,7 +103,9 @@ pub struct DialogAction {
 
 impl DialogAction {
     pub fn new() -> Self {
-        Self { children: Vec::new() }
+        Self {
+            children: Vec::new(),
+        }
     }
 }
 

@@ -3,9 +3,9 @@ use std::{rc::Rc, sync::LazyLock, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Edges,
     FocusHandle, Hsla, InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement,
-    Pixels, Point, RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, WindowControlArea, actions, anchored, div, hsla, point, prelude::FluentBuilder,
-    px,
+    Pixels, Point, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, WindowControlArea, actions, anchored, div, hsla, point,
+    prelude::FluentBuilder, px,
 };
 use rust_i18n::t;
 

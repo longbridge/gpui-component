@@ -5,11 +5,10 @@ use std::{
 
 use gpui::{
     AbsoluteLength, AnyElement, App, AvailableSpace, Bounds, DefiniteLength, Element, ElementId,
-    GlobalElementId, HighlightStyle, InspectorElementId, InteractiveElement as _,
-    IntoElement, LayoutId, LineFragment as WrapLineFragment, ObjectFit, Pixels, ShapedLine,
-    SharedString, SharedUri, Size, StatefulInteractiveElement as _, Styled, StyledImage as _,
-    TextRun, TextStyle, WhiteSpace, Window, img, point, prelude::FluentBuilder as _, px, relative,
-    size,
+    GlobalElementId, HighlightStyle, InspectorElementId, InteractiveElement as _, IntoElement,
+    LayoutId, LineFragment as WrapLineFragment, ObjectFit, Pixels, ShapedLine, SharedString,
+    SharedUri, Size, StatefulInteractiveElement as _, Styled, StyledImage as _, TextRun, TextStyle,
+    WhiteSpace, Window, img, point, prelude::FluentBuilder as _, px, relative, size,
 };
 
 use crate::{

@@ -11,8 +11,8 @@ use ropey::Rope;
 
 use super::fold_map::FoldMap;
 use super::folding::FoldRange;
-use super::text_wrapper::{LineItem, WrapDisplayPoint};
 pub use super::text_wrapper::WrappingIndent;
+use super::text_wrapper::{LineItem, WrapDisplayPoint};
 use super::wrap_map::WrapMap;
 use super::{BufferPoint, DisplayPoint};
 use crate::input::Point as TreeSitterPoint;
