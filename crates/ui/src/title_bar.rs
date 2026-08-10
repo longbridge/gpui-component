@@ -6,7 +6,7 @@ use crate::{
 use gpui::{
     AnyElement, App, ClickEvent, Context, Decorations, Hsla, InteractiveElement, IntoElement,
     MouseButton, ParentElement, Pixels, Render, RenderOnce, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, div,
+    StyleRefinement, Styled, TitlebarOptions, Window, WindowControlArea, WindowOptions, div,
     prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
@@ -43,6 +43,31 @@ impl TitleBar {
             title: None,
             appears_transparent: true,
             traffic_light_position: Some(gpui::point(px(9.0), px(9.0))),
+        }
+    }
+
+    /// Returns the default window options for compatible with the [`crate::TitleBar`].
+    ///
+    /// Use this as the base of the [`WindowOptions`] of any window that renders a
+    /// [`crate::TitleBar`], so the title bar owns dragging and double clicking itself:
+    ///
+    /// ```no_run
+    /// # use gpui::WindowOptions;
+    /// # use gpui_component::TitleBar;
+    /// let options = WindowOptions {
+    ///     window_min_size: None,
+    ///     ..TitleBar::window_options()
+    /// };
+    /// ```
+    pub fn window_options() -> WindowOptions {
+        WindowOptions {
+            titlebar: Some(Self::title_bar_options()),
+            // The title bar draws itself and moves the window via `start_window_move`,
+            // so AppKit must not treat it as a system window-move region. Otherwise macOS
+            // handles title bar double clicks on its own (in addition to `on_double_click`
+            // below) and delays title bar clicks while disambiguating double clicks.
+            app_owns_titlebar_drag: true,
+            ..Default::default()
         }
     }
 
