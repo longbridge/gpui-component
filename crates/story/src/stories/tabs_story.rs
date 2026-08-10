@@ -1,16 +1,16 @@
 use gpui::{
     Action, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, Styled, Subscription, Window,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window,
     prelude::FluentBuilder as _, px,
 };
 use serde::Deserialize;
 
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Selectable as _, Sizable, Size,
+    ActiveTheme as _, Icon, IconName, IndexPath, Selectable as _, Sizable, Size,
     button::{Button, ButtonGroup, ButtonVariants},
     checkbox::Checkbox,
     h_flex,
-    slider::{Slider, SliderEvent, SliderState},
+    select::{Select, SelectState},
     tab::{Tab, TabBar},
     v_flex,
 };
@@ -21,7 +21,7 @@ use crate::{ChangeStorySize, section, story_toolbar};
 #[action(namespace = tabs_story, no_json)]
 struct ToggleMoreMenu;
 
-const MAX_WIDTH_START: f32 = 110.;
+const MAX_WIDTHS: [f32; 4] = [60., 90., 120., 160.];
 
 pub struct TabsStory {
     focus_handle: FocusHandle,
@@ -32,9 +32,7 @@ pub struct TabsStory {
     size: Size,
     menu: bool,
     max_width_enabled: bool,
-    max_width: f32,
-    max_width_slider: Entity<SliderState>,
-    _max_width_subscription: Subscription,
+    max_width_select: Entity<SelectState<Vec<SharedString>>>,
 }
 
 impl super::Story for TabsStory {
@@ -56,21 +54,18 @@ impl TabsStory {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
-        let max_width_slider = cx.new(|_| {
-            SliderState::new()
-                .min(40.)
-                .max(150.)
-                .default_value(MAX_WIDTH_START)
-                .step(2.)
+    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let max_width_select = cx.new(|cx| {
+            SelectState::new(
+                MAX_WIDTHS
+                    .iter()
+                    .map(|width| SharedString::from(format!("{width:.0}px")))
+                    .collect::<Vec<_>>(),
+                Some(IndexPath::new(1)),
+                window,
+                cx,
+            )
         });
-        let max_width_subscription =
-            cx.subscribe(&max_width_slider, |this, _, event: &SliderEvent, cx| {
-                if let SliderEvent::Change(value) = event {
-                    this.max_width = value.start();
-                    cx.notify();
-                }
-            });
 
         Self {
             focus_handle: cx.focus_handle(),
@@ -81,9 +76,7 @@ impl TabsStory {
             size: Size::default(),
             menu: false,
             max_width_enabled: false,
-            max_width: MAX_WIDTH_START,
-            max_width_slider,
-            _max_width_subscription: max_width_subscription,
+            max_width_select,
         }
     }
 
@@ -127,7 +120,12 @@ impl Focusable for TabsStory {
 impl Render for TabsStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let max_width_enabled = self.max_width_enabled;
-        let max_width = px(self.max_width);
+        let max_width = px(self
+            .max_width_select
+            .read(cx)
+            .selected_index(cx)
+            .and_then(|ix| MAX_WIDTHS.get(ix.row).copied())
+            .unwrap_or(MAX_WIDTHS[0]));
 
         v_flex()
             .w_full()
@@ -163,8 +161,7 @@ impl Render for TabsStory {
                             })),
                     )
                     .when(max_width_enabled, |this| {
-                        this.child(Slider::new(&self.max_width_slider).w_32())
-                            .child(format!("{:.0}px", self.max_width))
+                        this.child(Select::new(&self.max_width_select).w_24())
                     }),
             )
             .child(
