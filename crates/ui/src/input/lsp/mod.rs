@@ -53,6 +53,9 @@ pub struct Lsp {
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
     pub show_document: Option<ShowDocumentHandler>,
 
+    /// Display options for the completion popover.
+    pub completion_menu: CompletionMenuOptions,
+
     document_colors: Vec<(lsp_types::Range, Hsla)>,
     /// Cached semantic tokens as absolute position ranges + theme token-type
     /// names. Color is resolved from the name at paint time so theme switches
@@ -71,6 +74,7 @@ impl Default for Lsp {
             hover_provider: None,
             definition_provider: None,
             document_color_provider: None,
+            completion_menu: CompletionMenuOptions::default(),
             semantic_tokens_provider: None,
             show_document: None,
             document_colors: vec![],
