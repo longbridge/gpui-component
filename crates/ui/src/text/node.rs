@@ -1404,7 +1404,7 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent);
+                        highlight = highlight.highlight(node_cx.style.inline_code_highlight(cx));
                     }
                     if let Some(color) = style.highlight {
                         highlight.background_color = Some(color);
@@ -1526,7 +1526,7 @@ impl Paragraph {
                         });
                     }
                     if style.code {
-                        highlight.background_color = Some(cx.theme().accent);
+                        highlight = highlight.highlight(node_cx.style.inline_code_highlight(cx));
                     }
                     if let Some(color) = style.highlight {
                         highlight.background_color = Some(color);
