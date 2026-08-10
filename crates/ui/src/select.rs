@@ -309,12 +309,21 @@ where
     ///
     /// Looks up the position from the delegate and sets the selected index accordingly.
     /// Passes `None` when the value is not found.
+    ///
+    /// The delegate looks the value up in its matched items, so an active search query is
+    /// cleared first to get an index into the full item list.
     pub fn set_selected_value(
         &mut self,
         selected_value: &<D::Item as SearchableListItem>::Value,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.state.list.update(cx, |list, cx| {
+            if !list.query_input.read(cx).value().is_empty() {
+                list.set_query("", window, cx);
+            }
+        });
+
         let selected_index = self
             .state
             .list
@@ -798,7 +807,7 @@ mod tests {
 
     use crate::{
         IndexPath,
-        searchable_list::SearchableVec,
+        searchable_list::{SearchableListDelegate as _, SearchableVec},
         select::{SelectGroup, SelectState},
     };
 
@@ -833,6 +842,53 @@ mod tests {
 
             assert_eq!(state.read(cx).selected_index(cx), Some(initial));
             assert_eq!(state.read(cx).selected_value(), Some(&"Blueberry"));
+        });
+    }
+
+    #[gpui::test]
+    fn test_select_set_selected_value_clears_search_query(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["Rust", "Go", "C++"]);
+            let state = cx.new(|cx| SelectState::new(items, None, window, cx).searchable(true));
+            let list = state.read(cx).state.list.clone();
+
+            list.update(cx, |list, cx| list.set_query("Rust", window, cx));
+            assert_eq!(list.read(cx).delegate().delegate.items_count(0), 1);
+
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"Go", window, cx);
+            });
+
+            assert_eq!(state.read(cx).selected_value(), Some(&"Go"));
+            assert_eq!(state.read(cx).selected_index(cx), Some(IndexPath::new(1)));
+            assert_eq!(list.read(cx).query_input.read(cx).value(), "");
+        });
+    }
+
+    #[gpui::test]
+    fn test_select_set_selected_value_clears_grouped_search_query(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let mut groups: SearchableVec<SelectGroup<&'static str>> = SearchableVec::new(vec![]);
+            groups.push(SelectGroup::new("A").items(["Apple", "Avocado"]));
+            groups.push(SelectGroup::new("B").items(["Banana", "Blueberry"]));
+
+            let state = cx.new(|cx| SelectState::new(groups, None, window, cx).searchable(true));
+            let list = state.read(cx).state.list.clone();
+
+            list.update(cx, |list, cx| list.set_query("Blue", window, cx));
+            state.update(cx, |state, cx| {
+                state.set_selected_value(&"Banana", window, cx);
+            });
+
+            assert_eq!(state.read(cx).selected_value(), Some(&"Banana"));
+            assert_eq!(
+                state.read(cx).selected_index(cx),
+                Some(IndexPath::new(0).section(1)),
+            );
         });
     }
 }
