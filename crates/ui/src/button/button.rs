@@ -850,7 +850,7 @@ impl ButtonVariant {
             }
             Self::Link => cx.theme().link,
             Self::Text => cx.theme().foreground.opacity(0.9),
-            Self::Custom(colors) => colors.color,
+            Self::Custom(colors) => colors.foreground,
         }
     }
 
@@ -979,12 +979,7 @@ impl ButtonVariant {
                     cx.theme().tokens.button_info_hover.into()
                 }
             }
-            Self::Custom(colors) => if outline {
-                colors.color.mix_oklab(cx.theme().transparent, 0.2)
-            } else {
-                colors.color.mix_oklab(cx.theme().transparent, 0.3)
-            }
-            .into(),
+            Self::Custom(colors) => colors.hover.into(),
             Self::Ghost => if cx.theme().mode.is_dark() {
                 cx.theme().secondary.lighten(0.1).opacity(0.8)
             } else {
@@ -1071,7 +1066,7 @@ impl ButtonVariant {
                     cx.theme().tokens.button_info_active.into()
                 }
             }
-            Self::Custom(colors) => colors.color.mix_oklab(cx.theme().transparent, 0.4).into(),
+            Self::Custom(colors) => colors.active.into(),
             Self::Link => cx.theme().transparent.into(),
             Self::Text => cx.theme().transparent.into(),
         };
