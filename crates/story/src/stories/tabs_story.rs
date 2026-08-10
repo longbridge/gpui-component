@@ -1,7 +1,7 @@
 use gpui::{
     Action, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, SharedString, Styled, Window,
-    prelude::FluentBuilder as _, px,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window, prelude::FluentBuilder as _,
+    px,
 };
 use serde::Deserialize;
 
@@ -148,11 +148,11 @@ impl Render for TabsStory {
                 },
             ))
             .child(
-                h_flex().gap_3().items_center().child(
-                    Select::new(&self.max_width_select)
-                        .w_48()
-                        .title_prefix("Max tab width: "),
-                ),
+                h_flex()
+                    .gap_3()
+                    .items_center()
+                    .child("Max tab width")
+                    .child(Select::new(&self.max_width_select).w_32()),
             )
             .child(
                 section("Tabs").w_full().child(
