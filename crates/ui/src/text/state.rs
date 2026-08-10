@@ -47,6 +47,22 @@ pub(super) enum TextViewFormat {
     Html,
 }
 
+/// The format of the text returned by
+/// [`TextViewState::selected_text`], which is also what copy writes to the
+/// clipboard.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SelectionFormat {
+    /// The rendered text, without any markup.
+    #[default]
+    Plain,
+    /// The source of the selection.
+    ///
+    /// Select-all returns the original source verbatim, a partial selection is
+    /// reconstructed as Markdown from the parsed nodes (e.g. selecting inside
+    /// a `**bold**` run yields `**bold**`).
+    Source,
+}
+
 /// The state of a TextView.
 pub struct TextViewState {
     pub(super) focus_handle: FocusHandle,
@@ -57,6 +73,7 @@ pub struct TextViewState {
     bounds: Bounds<Pixels>,
 
     pub(super) selectable: bool,
+    pub(super) selection_format: SelectionFormat,
     pub(super) scrollable: bool,
     pub(super) text_view_style: TextViewStyle,
     pub(super) code_block_actions: Option<std::sync::Arc<CodeBlockActionsFn>>,
@@ -138,6 +155,7 @@ impl TextViewState {
             selected_text_override: None,
             select_all: false,
             selectable: false,
+            selection_format: SelectionFormat::default(),
             scrollable: false,
             // Measure all blocks (not just visible ones) so the scrollbar
             // thumb size stays stable. Without this, off-screen blocks count
@@ -177,6 +195,22 @@ impl TextViewState {
     /// Set whether the text is selectable, default false.
     pub fn set_selectable(&mut self, selectable: bool, cx: &mut Context<Self>) {
         self.selectable = selectable;
+        cx.notify();
+    }
+
+    /// Set the [`SelectionFormat`], default is [`SelectionFormat::Plain`].
+    pub fn selection_format(mut self, selection_format: SelectionFormat) -> Self {
+        self.selection_format = selection_format;
+        self
+    }
+
+    /// Set the [`SelectionFormat`], default is [`SelectionFormat::Plain`].
+    pub fn set_selection_format(
+        &mut self,
+        selection_format: SelectionFormat,
+        cx: &mut Context<Self>,
+    ) {
+        self.selection_format = selection_format;
         cx.notify();
     }
 
@@ -232,9 +266,25 @@ impl TextViewState {
         }
     }
 
-    /// Return the selected text.
+    /// Return the selected text, in the view's [`SelectionFormat`].
     pub fn selected_text(&self) -> String {
         self.selected_text_in(None)
+    }
+
+    /// The format to copy in, which is [`SelectionFormat::Plain`] whenever the
+    /// requested one cannot be produced.
+    ///
+    /// Only a Markdown view can return source. Reconstructing HTML would mean
+    /// spelling every attribute back out — a mark's color, an image's
+    /// dimensions, a cell's alignment — with a new way to lose one at each
+    /// step, and html5ever records no source offsets to fall back on (it
+    /// reports only line numbers), so there is no original text to copy from
+    /// either.
+    fn effective_format(&self) -> SelectionFormat {
+        match self.format {
+            TextViewFormat::Markdown => self.selection_format,
+            TextViewFormat::Html => SelectionFormat::Plain,
+        }
     }
 
     /// Return the selected text, with `blocks` bounding which top-level blocks
@@ -244,15 +294,27 @@ impl TextViewState {
     /// even after it scrolls out of view; see
     /// [`ParsedDocument::selected_text`](crate::text::document::ParsedDocument).
     pub(super) fn selected_text_in(&self, blocks: Option<RangeInclusive<usize>>) -> String {
+        let format = self.effective_format();
+
         if self.select_all {
+            if format == SelectionFormat::Source {
+                return self.source().to_string();
+            }
+
             return self.parsed_content.document.text();
         }
 
-        if let Some(text) = &self.selected_text_override {
+        // A multi-click stores the plain text it selected, which is a shortcut
+        // past the block walk. Source mode cannot take it: the word it stored
+        // has lost its markup. The click also set the inline selection it came
+        // from, so the walk reconstructs the same range with the markup intact.
+        if format != SelectionFormat::Source
+            && let Some(text) = &self.selected_text_override
+        {
             return text.clone();
         }
 
-        self.parsed_content.document.selected_text(blocks)
+        self.parsed_content.document.selected_text(format, blocks)
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
@@ -784,6 +846,30 @@ mod tests {
         state.read_with(cx, |state, _| {
             assert!(!state.has_view_selection());
             assert_eq!(state.selected_text(), "");
+        });
+    }
+
+    #[gpui::test]
+    fn select_all_in_source_format_returns_source(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let markdown = "**quick** value";
+        let state = cx.update(|cx| cx.new(|cx| TextViewState::markdown(markdown, cx)));
+        cx.run_until_parked();
+
+        state.update(cx, |state, cx| state.select_all(cx));
+
+        // The default (plain) mode strips the markup.
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.selected_text().trim(), "quick value");
+        });
+
+        state.update(cx, |state, cx| {
+            state.set_selection_format(SelectionFormat::Source, cx)
+        });
+
+        // Source mode yields the whole source verbatim.
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.selected_text().trim(), markdown);
         });
     }
 

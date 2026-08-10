@@ -146,11 +146,29 @@ impl Inline {
             return (is_selectable, false, None);
         };
         let line_height = window.line_height();
-        let mask_bounds = window.content_mask().bounds;
 
         // Use for debug selection bounds
         // self.paint_selected_bounds(Bounds::from_corners(selection_start, selection_end), window, cx);
 
+        // NOTE: the selection is computed purely from the geometric band
+        // (`selection_start`..`selection_end`), NOT from what is currently
+        // visible. Every glyph of a *painted* element is laid out (its
+        // `position_for_index` is valid) even when it is scrolled out of, or
+        // clipped by, an ancestor's viewport — the content mask only clips the
+        // painted pixels. Because the copied text is derived from
+        // `InlineState.selection`, gating the selection on `content_mask` here
+        // used to drop scrolled-out-but-selected glyphs, so a selection taller
+        // than the viewport (e.g. a long chat message, or a drag with
+        // auto-scroll) copied only the portion that happened to be on screen.
+        //
+        // This does not resurrect the #2156 clipped-hit-testing behavior: a
+        // selection can only START on visible text (endpoint resolution uses
+        // hitbox hover testing and the visible `inside_text` bounds in
+        // `Root::text_selection_endpoint`), so the band's endpoints are always
+        // anchored to on-screen text. Content that is merely `overflow_hidden`
+        // (not scrolled) lies outside that band and is still excluded, while
+        // the highlight quads painted for off-screen glyphs are clipped away by
+        // GPUI's content mask as before.
         let mut selection: Option<Selection> = None;
         let mut offset = 0;
         let mut chars = self.text.chars().peekable();
@@ -168,15 +186,7 @@ impl Inline {
                 }
             }
 
-            let char_center = point(pos.x + char_width.half(), pos.y + line_height.half());
-            if mask_bounds.contains(&char_center)
-                && point_in_text_selection(
-                    pos,
-                    char_width,
-                    selection_start,
-                    selection_end,
-                    line_height,
-                )
+            if point_in_text_selection(pos, char_width, selection_start, selection_end, line_height)
             {
                 if selection.is_none() {
                     selection = Some((offset..offset).into());

@@ -12,7 +12,7 @@ use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
 use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 use crate::text::node::CodeBlock;
-use crate::text::state::TextViewState;
+use crate::text::state::{SelectionFormat, TextViewState};
 use crate::{global_state::GlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
@@ -72,6 +72,7 @@ pub struct TextView {
     text_view_style: TextViewStyle,
     style: StyleRefinement,
     selectable: bool,
+    selection_format: SelectionFormat,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
@@ -112,6 +113,7 @@ impl TextView {
             text_view_style: TextViewStyle::default(),
             style: StyleRefinement::default(),
             selectable: false,
+            selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
             link_click_handler: None,
@@ -129,6 +131,7 @@ impl TextView {
             style: StyleRefinement::default(),
             state: None,
             selectable: false,
+            selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
             link_click_handler: None,
@@ -146,6 +149,7 @@ impl TextView {
             style: StyleRefinement::default(),
             state: None,
             selectable: false,
+            selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
             link_click_handler: None,
@@ -162,6 +166,15 @@ impl TextView {
     /// Set the text view to be selectable, default is false.
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
+        self
+    }
+
+    /// Set the [`SelectionFormat`], default is [`SelectionFormat::Plain`].
+    ///
+    /// With [`SelectionFormat::Source`], selecting inside `**bold**` yields
+    /// `**bold**` (the Markdown source) rather than `bold`.
+    pub fn selection_format(mut self, selection_format: SelectionFormat) -> Self {
+        self.selection_format = selection_format;
         self
     }
 
@@ -325,6 +338,7 @@ impl Element for TextView {
             state.link_click_handler = self.link_click_handler.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
+            state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
             state.text_view_style = self.text_view_style.clone();
 
@@ -793,6 +807,108 @@ mod tests {
         assert!(
             selected_text.is_empty(),
             "unexpected selection: {selected_text:?}"
+        );
+    }
+
+    /// A tall selectable TextView clipped by a short `overflow_hidden` viewport,
+    /// with a large blank footer below so a drag can extend the selection band
+    /// past the bottom of the clip while still proxy-anchoring to the view.
+    struct ClippedTallTextViewTestRoot {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl ClippedTallTextViewTestRoot {
+        fn new(cx: &mut Context<Self>) -> Self {
+            // Four separate blocks; only the first (and maybe part of the
+            // second) fit inside the 40px clip. "charlie"/"delta" render well
+            // below it.
+            let text_view =
+                cx.new(|cx| TextViewState::markdown("alpha\n\nbravo\n\ncharlie\n\ndelta", cx));
+            Self { text_view }
+        }
+    }
+
+    impl Render for ClippedTallTextViewTestRoot {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(200.))
+                .child(
+                    div()
+                        .h(px(40.))
+                        .overflow_hidden()
+                        .child(TextView::new(&self.text_view).selectable(true)),
+                )
+                // A tall blank footer so a drag can reach a y below the clipped
+                // text; a press there proxy-anchors to the TextView above.
+                .child(div().h(px(160.)))
+        }
+    }
+
+    /// Regression for copying a selection taller than the visible viewport.
+    ///
+    /// The selection band runs from visible text at the top down to a point
+    /// far below the clip. Every glyph of the painted TextView is laid out even
+    /// though the lower ones are clipped away, so the copied text must include
+    /// the clipped-out "charlie"/"delta" — not just what is on screen. This
+    /// guards against re-adding a `content_mask` gate in
+    /// `Inline::layout_selections`.
+    #[gpui::test]
+    fn selection_band_beyond_clip_copies_offscreen_text(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(ClippedTallTextViewTestRoot::new);
+            crate::Root::new(content, window, cx)
+        });
+        let content = view.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<ClippedTallTextViewTestRoot>()
+                .unwrap()
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        // Anchor on visible text near the top, then drag to a point well below
+        // the 40px clip (into the blank footer) and to the far right so the
+        // last line is fully covered.
+        cx.simulate_mouse_down(
+            point(px(2.), px(8.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_move(
+            point(px(180.), px(150.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_up(
+            point(px(180.), px(150.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let selected_text =
+            content.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+        assert!(
+            selected_text.contains("delta"),
+            "clipped-out text was not copied: {selected_text:?}"
+        );
+        assert!(
+            selected_text.contains("charlie"),
+            "clipped-out text was not copied: {selected_text:?}"
         );
     }
 

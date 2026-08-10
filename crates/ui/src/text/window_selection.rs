@@ -981,6 +981,24 @@ mod tests {
         text_view: Entity<TextViewState>,
     }
 
+    /// Same as [`ScrollableTextViewTest`], but copying yields source.
+    struct SourceTextViewTest {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl Render for SourceTextViewTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                div().h(px(60.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .scrollable(true)
+                        .selection_format(crate::text::SelectionFormat::Source),
+                ),
+            )
+        }
+    }
+
     impl Render for ScrollableTextViewTest {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div().size_full().child(
@@ -988,6 +1006,26 @@ mod tests {
                     TextView::new(&self.text_view)
                         .selectable(true)
                         .scrollable(true),
+                ),
+            )
+        }
+    }
+
+    /// [`Paragraph::render`] stores one `InlineState` per run of children
+    /// between inline images, so selection offsets belong to a run, not to a
+    /// single child. Mapping them against every child made the text before an
+    /// image show up again as if it were the text after it.
+    struct InlineImageSourceTestView {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl Render for InlineImageSourceTestView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().pt(px(10.)).child(
+                div().h(px(80.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .selection_format(crate::text::SelectionFormat::Source),
                 ),
             )
         }
@@ -1065,6 +1103,117 @@ mod tests {
         );
     }
 
+    /// Source mode has the same gap to bridge as plain text: a block the
+    /// selection spans but that scrolled past without painting reports no
+    /// selection of its own, and must still be copied — with its markup.
+    #[gpui::test]
+    fn source_selection_spans_blocks_scrolled_past(cx: &mut TestAppContext) {
+        use gpui::{ScrollDelta, ScrollWheelEvent};
+
+        const BLOCKS: usize = 20;
+
+        cx.update(crate::init);
+        let source = (0..BLOCKS)
+            .map(|ix| format!("**Paragraph{ix}**"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| SourceTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        cx.simulate_mouse_down(
+            point(px(0.), px(1.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        // Jump the whole document in one go, so the blocks in between never
+        // paint at all and cannot leave a stale selection behind.
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(30.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.) * BLOCKS as f32)),
+            ..Default::default()
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        cx.simulate_mouse_move(
+            point(px(150.), px(58.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_up(
+            point(px(150.), px(58.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = window_selected_text(cx);
+        let missing = (0..BLOCKS)
+            .filter(|ix| !text.contains(&format!("**Paragraph{ix}**")))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "blocks scrolled past were dropped or lost their markup: {missing:?} in {text:?}"
+        );
+    }
+
+    /// A multi-click selection has to come back as source too. The click stores
+    /// the plain word it selected as a shortcut, which has lost its markup.
+    #[gpui::test]
+    fn source_multi_click_selection_keeps_its_markup(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| SourceTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown("**Hello** world", cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let position = point(px(10.), px(10.));
+        cx.simulate_event(MouseDownEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+            first_mouse: false,
+        });
+        cx.simulate_event(MouseUpEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = window_selected_text(cx);
+        assert_eq!(text.trim(), "**Hello**", "got: {text:?}");
+    }
+
     #[gpui::test]
     fn selection_inside_one_block_leaves_the_rest(cx: &mut TestAppContext) {
         cx.update(crate::init);
@@ -1093,6 +1242,35 @@ mod tests {
         assert!(
             !text.contains("Paragraph1"),
             "unselected block was filled in: {text:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn source_format_maps_offsets_per_rendered_run(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| InlineImageSourceTestView {
+                text_view: cx.new(|cx| {
+                    TextViewState::markdown(
+                        "Build **status** ![img](https://example.com/i.svg) after text",
+                        cx,
+                    )
+                }),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        drag(cx, point(px(0.), px(11.)), point(px(600.), px(80.)));
+
+        let text = window_selected_text(cx);
+        assert_eq!(
+            text.trim(),
+            "Build **status** ![img](https://example.com/i.svg) after text"
         );
     }
 
