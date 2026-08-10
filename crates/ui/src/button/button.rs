@@ -608,6 +608,12 @@ impl RenderOnce for Button {
                     .border_color(disabled_style.border)
                     .shadow_none()
             })
+            // Fade the whole button while loading, so every variant is dimmed by
+            // the same amount. Fading `bg`, `border` and `fg` one by one instead
+            // only shows up on variants that have a background to begin with:
+            // `Ghost`, `Link` and `Text` are transparent, so an alpha on their
+            // background changes nothing.
+            .when(self.loading && !self.disabled, |this| this.opacity(0.8))
             .refine_style(&self.style)
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 // Stop handle any click event when disabled or loading.
@@ -667,11 +673,6 @@ impl RenderOnce for Button {
                         this.when(has_content, |this| this.justify_between())
                             .child(Caret::new(self.size).text_color(normal_style.fg.opacity(0.75)))
                     })
-            })
-            .when(self.loading && !self.disabled, |this| {
-                this.bg(normal_style.bg.opacity(0.8))
-                    .border_color(normal_style.border.opacity(0.8))
-                    .text_color(normal_style.fg.opacity(0.8))
             })
             .map(|this| {
                 if let Some(builder) = self.tooltip_builder {
