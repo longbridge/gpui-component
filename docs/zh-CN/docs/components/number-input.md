@@ -27,7 +27,21 @@ let number_input = cx.new(|cx|
 NumberInput::new(&number_input)
 ```
 
-### 最小值 / 最大值校验
+### 输入限制与字符归一化
+
+默认情况下，NumberInput 只接受合法数字：可选的开头 `+`/`-` 符号、数字和一个小数点（例如 `-1.5`），其他字符在输入和粘贴时会被拒绝。
+
+针对中文等输入法用户，全角数字字符会自动转换为对应的半角字符：
+
+- 全角数字：`１２３` → `123`
+- 全角符号：`＋` → `+`、`－` → `-`
+- 全角小数点与中文句号：`．`、`。` → `.`
+
+以小数点开头的输入保持原样（例如 `.5`，解析为 `0.5`），与 Web 行为一致——删除 `1.2` 的整数部分会保留 `.2`，便于继续编辑。
+
+如需关闭默认限制，可显式设置 mask：`state.set_mask_pattern(MaskPattern::None, window, cx)`。
+
+如需进一步限制输入（例如仅允许正整数），可使用 `pattern`：
 
 ```rust
 let integer_input = cx.new(|cx|
@@ -37,6 +51,53 @@ let integer_input = cx.new(|cx|
 );
 
 NumberInput::new(&integer_input)
+```
+
+### 最小值 / 最大值 / 步进值
+
+默认情况下，NumberInput 以 `step(1.)` 在内部更新数值：`↑`/`↓` 键和 `+`/`-` 按钮按 1 步进并发出 `InputEvent::Change` 事件。可通过 `min`/`max` 限制范围，或设置自定义步进值。
+
+如需仅发出 `NumberInputEvent::Step` 事件（由订阅方负责更新数值），可调用 `state.set_step(None, window, cx)`。
+
+手动输入的越界值在输入过程中会被保留，失焦时自动收敛到范围内。步进遵循 Web 行为：无法朝按键方向移动数值的步进不会生效（例如数值已等于或低于 `min` 时按 `↓` 不会变化）。
+
+```rust
+let stepper_input = cx.new(|cx|
+    InputState::new(window, cx)
+        .default_value("50")
+        .step(5.)
+        .min(0.)
+        .max(100.)
+);
+
+NumberInput::new(&stepper_input)
+```
+
+### 动态步长
+
+使用 `step_by` 可以根据当前值和步进方向实时计算步长，例如步长随取值区间变化。步长可在边界处随方向不同，因此闭包会收到 `StepAction`；下例中以 `1.0` 为界，向下步进 `0.1`，向上步进 `0.5`。闭包还会收到一个 `Context`，可用于读取或更新其他 entity：
+
+```rust
+let price_input = cx.new(|cx|
+    InputState::new(window, cx)
+        .step_by(|value, action, _cx| match action {
+            StepAction::Increment => if value < 1.0 { 0.1 } else { 0.5 },
+            StepAction::Decrement => if value <= 1.0 { 0.1 } else { 0.5 },
+        })
+        .min(0.)
+);
+
+NumberInput::new(&price_input)
+```
+
+步进策略也可以在运行时通过 `set_step` 更新：
+
+```rust
+use gpui_component::input::NumberStep;
+
+state.set_step(NumberStep::Fixed(0.01), window, cx);
+state.set_step(NumberStep::by_value(|v, _, _cx| if v < 1. { 0.01 } else { 0.1 }), window, cx);
+state.set_step(None, window, cx); // 回退到 NumberInputEvent::Step 事件模式
 ```
 
 ### 数字格式化
@@ -98,6 +159,8 @@ div()
 ```
 
 ### 处理 NumberInput 事件
+
+默认情况下 NumberInput 在内部更新数值。如需回退到 `NumberInputEvent::Step` 模式（由订阅方负责更新数值），可调用 `state.set_step(None, window, cx)`：
 
 ```rust
 let number_input = cx.new(|cx| InputState::new(window, cx));
@@ -164,7 +227,7 @@ NumberInput::decrement(&number_input, window, cx);
 
 | 事件 | 说明 |
 | ------------------ | ---------------------------------- |
-| `Step(StepAction)` | 点击增减按钮时触发 |
+| `Step(StepAction)` | 点击增减按钮时触发，仅当 `step` 为 `None` 时发出（通过 `set_step(None, ...)` 选择该模式） |
 
 ### StepAction
 
@@ -177,6 +240,13 @@ NumberInput::decrement(&number_input, window, cx);
 
 | 方法 | 说明 |
 | ----------------------------------- | ------------------------------------------------------- |
+| `step(impl Into<NumberStep>)` | 设置内置递增/递减的步进值（默认为 1） |
+| `step_by(fn(f64, StepAction, &mut Context) -> f64)` | 步进时根据当前值和方向实时计算步长 |
+| `min(f64)` | 设置最小值，步进与失焦时收敛到该值 |
+| `max(f64)` | 设置最大值，步进与失焦时收敛到该值 |
+| `set_step(Option<NumberStep>, ...)` | 构造后更新步进策略 |
+| `set_min(Option<f64>, ...)` | 构造后更新最小值 |
+| `set_max(Option<f64>, ...)` | 构造后更新最大值 |
 | `pattern(regex)` | 设置校验正则，例如只允许数字 |
 | `mask_pattern(MaskPattern::Number)` | 设置数字格式化规则 |
 | `value()` | 获取当前展示值 |
@@ -291,57 +361,19 @@ h_flex()
 ```rust
 struct QuantitySelector {
     quantity_input: Entity<InputState>,
-    quantity: u32,
-    min_quantity: u32,
-    max_quantity: u32,
 }
 
 impl QuantitySelector {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let min_quantity = 1;
-        let max_quantity = 99;
-
+        // 按 1 步进并限制在 1..=99 范围内，无需处理事件。
         let quantity_input = cx.new(|cx|
             InputState::new(window, cx)
-                .default_value(min_quantity.to_string())
-                .pattern(Regex::new(&format!(r"^[{}-{}]\d*$", min_quantity, max_quantity)).unwrap())
+                .default_value("1")
+                .min(1.)
+                .max(99.)
         );
 
-        let _subscription = cx.subscribe_in(&quantity_input, window, Self::on_quantity_event);
-
-        Self {
-            quantity_input,
-            quantity: min_quantity,
-            min_quantity,
-            max_quantity,
-        }
-    }
-
-    fn on_quantity_event(
-        &mut self,
-        state: &Entity<InputState>,
-        event: &NumberInputEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            NumberInputEvent::Step(StepAction::Increment) => {
-                if self.quantity < self.max_quantity {
-                    self.quantity += 1;
-                    state.update(cx, |input, cx| {
-                        input.set_value(self.quantity.to_string(), window, cx);
-                    });
-                }
-            }
-            NumberInputEvent::Step(StepAction::Decrement) => {
-                if self.quantity > self.min_quantity {
-                    self.quantity -= 1;
-                    state.update(cx, |input, cx| {
-                        input.set_value(self.quantity.to_string(), window, cx);
-                    });
-                }
-            }
-        }
+        Self { quantity_input }
     }
 }
 
@@ -351,57 +383,22 @@ NumberInput::new(&self.quantity_input).small()
 ### 浮点数输入
 
 ```rust
-struct FloatInput {
-    float_input: Entity<InputState>,
-    float_value: f64,
-    step: f64,
-}
+// 按 0.1 步进，步进时保留当前值的小数位数，
+// 例如 0.2 -> 0.3（而不是 0.30000000000000004）。
+let float_input = cx.new(|cx|
+    InputState::new(window, cx)
+        .placeholder("0.0")
+        .step(0.1)
+);
 
-impl FloatInput {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let float_input = cx.new(|cx|
-            InputState::new(window, cx)
-                .placeholder("0.0")
-                .pattern(Regex::new(r"^-?\d*\.?\d*$").unwrap())
-        );
-
-        Self {
-            float_input,
-            float_value: 0.0,
-            step: 0.1,
-        }
-    }
-
-    fn on_float_event(
-        &mut self,
-        state: &Entity<InputState>,
-        event: &NumberInputEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            NumberInputEvent::Step(StepAction::Increment) => {
-                self.float_value += self.step;
-                state.update(cx, |input, cx| {
-                    input.set_value(format!("{:.1}", self.float_value), window, cx);
-                });
-            }
-            NumberInputEvent::Step(StepAction::Decrement) => {
-                self.float_value -= self.step;
-                state.update(cx, |input, cx| {
-                    input.set_value(format!("{:.1}", self.float_value), window, cx);
-                });
-            }
-        }
-    }
-}
+NumberInput::new(&float_input)
 ```
 
 ## 最佳实践
 
 1. 客户端和服务端都应校验数值输入。
-2. 对用户可操作范围设置明确上下限。
-3. 根据业务场景选择合适的步进值。
+2. 使用 `min`/`max` 对用户可操作范围设置明确上下限。
+3. 根据业务场景选择合适的 `step` 步进值。
 4. 对非法输入提供清晰反馈。
 5. 在整个应用中保持统一的数字格式。
 6. 高频点击增减时，必要时做节流或去抖。

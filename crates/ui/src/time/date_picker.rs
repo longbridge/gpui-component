@@ -408,7 +408,6 @@ impl RenderOnce for DatePicker {
                             .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
-                            .when(cx.theme().shadow, |this| this.shadow_xs())
                             .when(is_focused, |this| this.focused_border(cx))
                     })
                     .overflow_hidden()
@@ -462,7 +461,7 @@ impl RenderOnce for DatePicker {
                                 .border_color(cx.theme().border)
                                 .shadow_lg()
                                 .rounded((cx.theme().radius * 2.).min(px(8.)))
-                                .bg(cx.theme().popover)
+                                .bg(cx.theme().tokens.popover)
                                 .text_color(cx.theme().popover_foreground)
                                 .on_mouse_up_out(
                                     MouseButton::Left,

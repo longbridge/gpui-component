@@ -1,12 +1,13 @@
 use gpui::{
-    App, AppContext as _, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, Window, div,
+    App, AppContext as _, ClickEvent, Context, Entity, HighlightStyle, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Role, Styled, Subscription, Window, div,
 };
 
 use crate::section;
-use gpui_component::{button::*, input::*, *};
+use gpui_component::{button::*, input::*, label::Label, *};
 
 const CODE_EXAMPLE: &str = r#"{"single_line":"code editor"}"#;
+const DECORATIONS_EXAMPLE: &str = "/review decorations with $code-review before merging";
 
 pub fn init(_: &mut App) {}
 
@@ -21,6 +22,8 @@ pub struct InputStory {
     prefix_input1: Entity<InputState>,
     suffix_input1: Entity<InputState>,
     both_input1: Entity<InputState>,
+    complete_input: Entity<InputState>,
+    complete_disabled_input: Entity<InputState>,
     large_input: Entity<InputState>,
     small_input: Entity<InputState>,
     phone_input: Entity<InputState>,
@@ -30,8 +33,20 @@ pub struct InputStory {
     custom_menu_input: Entity<InputState>,
     code_input: Entity<InputState>,
     color_input: Entity<InputState>,
+    decorations_input: Entity<InputState>,
+    color_decorations: TextDecorationCollection,
+    underline_decorations: TextDecorationCollection,
+    decorations_visible: bool,
+    content_type_inputs: Vec<ContentTypeInput>,
 
     _subscriptions: Vec<Subscription>,
+}
+
+struct ContentTypeInput {
+    label: &'static str,
+    content_type: InputContentType,
+    input: Entity<InputState>,
+    mask_toggle: bool,
 }
 
 impl super::Story for InputStory {
@@ -83,6 +98,16 @@ impl InputStory {
         let both_input1 = cx.new(|cx| {
             InputState::new(window, cx).placeholder("This input have prefix and suffix.")
         });
+        let complete_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Search account...")
+                .default_value("jane.doe@example.com")
+        });
+        let complete_disabled_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Search account...")
+                .default_value("disabled.account@example.com")
+        });
 
         let phone_input = cx.new(|cx| InputState::new(window, cx).mask_pattern("(999)-999-9999"));
         let mask_input2 = cx.new(|cx| InputState::new(window, cx).mask_pattern("AAA-###-AAA"));
@@ -107,6 +132,46 @@ impl InputStory {
                 .default_value("Custom text color input")
         });
 
+        let decorations_input =
+            cx.new(|cx| InputState::new(window, cx).default_value(DECORATIONS_EXAMPLE));
+        let (color_decorations, underline_decorations) =
+            decorations_input.update(cx, |state, cx| {
+                let color = state.create_decorations_collection(
+                    vec![
+                        TextDecoration::new(
+                            0..7,
+                            HighlightStyle {
+                                color: Some(cx.theme().muted_foreground),
+                                ..Default::default()
+                            },
+                        ),
+                        TextDecoration::new(
+                            25..37,
+                            HighlightStyle {
+                                color: Some(cx.theme().primary),
+                                ..Default::default()
+                            },
+                        ),
+                    ],
+                    cx,
+                );
+                let underline = state.create_decorations_collection(
+                    vec![TextDecoration::new(
+                        26..37,
+                        HighlightStyle {
+                            underline: Some(gpui::UnderlineStyle {
+                                color: Some(cx.theme().primary),
+                                thickness: gpui::px(1.),
+                                wavy: false,
+                            }),
+                            ..Default::default()
+                        },
+                    )],
+                    cx,
+                );
+                (color, underline)
+            });
+
         let code_input = cx.new(|cx| {
             InputState::new(window, cx)
                 .code_editor("json")
@@ -126,6 +191,117 @@ impl InputStory {
                 .placeholder("Enter text to test right layout...")
                 .default_value("Right Aligned Text")
         });
+
+        let content_type_inputs = vec![
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Name",
+                InputContentType::Name,
+                "Full name",
+                "Jane Doe",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Username",
+                InputContentType::Username,
+                "Username",
+                "jane.doe",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Password",
+                InputContentType::Password,
+                "Current password",
+                "current-password",
+                true,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "New password",
+                InputContentType::NewPassword,
+                "New password",
+                "new-password",
+                true,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "One-time code",
+                InputContentType::OneTimeCode,
+                "123456",
+                "123456",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Email",
+                InputContentType::EmailAddress,
+                "Email address",
+                "jane.doe@example.com",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Telephone",
+                InputContentType::TelephoneNumber,
+                "Telephone number",
+                "+1 415 555 0198",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "URL",
+                InputContentType::Url,
+                "Website URL",
+                "https://example.com",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Credit card number",
+                InputContentType::CreditCardNumber,
+                "Card number",
+                "4242 4242 4242 4242",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Credit card expiration",
+                InputContentType::CreditCardExpiration,
+                "MM/YY",
+                "12/28",
+                false,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Credit card security code",
+                InputContentType::CreditCardSecurityCode,
+                "CVC",
+                "123",
+                true,
+            ),
+            Self::new_content_type_input(
+                window,
+                cx,
+                "Postal code",
+                InputContentType::PostalCode,
+                "Postal code",
+                "94107",
+                false,
+            ),
+        ];
 
         let _subscriptions = vec![
             cx.subscribe_in(&input1, window, Self::on_input_event),
@@ -149,6 +325,8 @@ impl InputStory {
             prefix_input1,
             suffix_input1,
             both_input1,
+            complete_input,
+            complete_disabled_input,
             phone_input,
             mask_input2,
             currency_input,
@@ -156,10 +334,64 @@ impl InputStory {
             custom_menu_input,
             code_input,
             color_input,
+            decorations_input,
+            color_decorations,
+            underline_decorations,
+            decorations_visible: true,
             input_text_centered,
             input_text_right,
+            content_type_inputs,
             _subscriptions,
         }
+    }
+
+    fn new_content_type_input(
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        label: &'static str,
+        content_type: InputContentType,
+        placeholder: &'static str,
+        default_value: &'static str,
+        masked: bool,
+    ) -> ContentTypeInput {
+        let input = cx.new(|cx| {
+            let state = InputState::new(window, cx)
+                .placeholder(placeholder)
+                .default_value(default_value);
+
+            if masked { state.masked(true) } else { state }
+        });
+
+        ContentTypeInput {
+            label,
+            content_type,
+            input,
+            mask_toggle: masked,
+        }
+    }
+
+    fn render_content_type_input(item: &ContentTypeInput) -> impl IntoElement {
+        let input = Input::new(&item.input)
+            .content_type(item.content_type)
+            .flex_1();
+        let input = if item.mask_toggle {
+            input.mask_toggle()
+        } else {
+            input
+        };
+
+        h_flex()
+            .w_full()
+            .items_center()
+            .gap_3()
+            .child(
+                Label::new(item.label)
+                    .w_48()
+                    .flex_shrink_0()
+                    .text_sm()
+                    .whitespace_nowrap(),
+            )
+            .child(input)
     }
 
     fn on_input_event(
@@ -181,7 +413,9 @@ impl InputStory {
                     println!("Change: {}", text)
                 }
             }
-            InputEvent::PressEnter { secondary } => println!("PressEnter secondary: {}", secondary),
+            InputEvent::PressEnter { secondary, shift } => {
+                println!("PressEnter secondary: {}, shift: {}", secondary, shift)
+            }
             InputEvent::Focus => println!("Focus"),
             InputEvent::Blur => println!("Blur"),
         };
@@ -191,6 +425,52 @@ impl InputStory {
         self.code_input.update(cx, |input_state, cx| {
             input_state.set_value(CODE_EXAMPLE, window, cx);
         });
+    }
+
+    fn on_click_toggle_decorations(
+        &mut self,
+        _: &ClickEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.decorations_visible = !self.decorations_visible;
+        let color_decorations = self.decorations_visible.then(|| {
+            vec![
+                TextDecoration::new(
+                    0..7,
+                    HighlightStyle {
+                        color: Some(cx.theme().muted_foreground),
+                        ..Default::default()
+                    },
+                ),
+                TextDecoration::new(
+                    25..37,
+                    HighlightStyle {
+                        color: Some(cx.theme().primary),
+                        ..Default::default()
+                    },
+                ),
+            ]
+        });
+        self.color_decorations
+            .set(color_decorations.unwrap_or_default(), cx);
+
+        let underline_decorations = self.decorations_visible.then(|| {
+            vec![TextDecoration::new(
+                26..37,
+                HighlightStyle {
+                    underline: Some(gpui::UnderlineStyle {
+                        color: Some(cx.theme().primary),
+                        thickness: gpui::px(1.),
+                        wavy: false,
+                    }),
+                    ..Default::default()
+                },
+            )]
+        });
+        self.underline_decorations
+            .set(underline_decorations.unwrap_or_default(), cx);
+        cx.notify();
     }
 }
 
@@ -205,13 +485,25 @@ impl Render for InputStory {
                 section("Normal Input")
                     .max_w_md()
                     .child(Input::new(&self.input1).cleanable(true))
-                    .child(Input::new(&self.input2)),
+                    .child(Input::new(&self.input2).role(Role::EmailInput)),
             )
             .child(
                 section("Input State")
                     .max_w_md()
                     .child(Input::new(&self.disabled_input).disabled(true))
-                    .child(Input::new(&self.mask_input).mask_toggle().cleanable(true)),
+                    .child(
+                        Input::new(&self.mask_input)
+                            .content_type(InputContentType::Password)
+                            .mask_toggle()
+                            .cleanable(true),
+                    ),
+            )
+            .child(
+                section("Content Type").max_w_lg().children(
+                    self.content_type_inputs
+                        .iter()
+                        .map(Self::render_content_type_input),
+                ),
             )
             .child(
                 section("Text Align").max_w_lg().child(
@@ -235,12 +527,39 @@ impl Render for InputStory {
                         Input::new(&self.both_input1)
                             .cleanable(true)
                             .prefix(div().child(Icon::new(IconName::Search).small()))
-                            .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
+                            .suffix(Button::new("info").text().icon(IconName::Info).xsmall()),
                     )
                     .child(
                         Input::new(&self.suffix_input1)
                             .cleanable(true)
-                            .suffix(Button::new("info").ghost().icon(IconName::Info).xsmall()),
+                            .suffix(Button::new("info").text().icon(IconName::Info).xsmall()),
+                    ),
+            )
+            .child(
+                section("Complete Input")
+                    .max_w_md()
+                    .child(
+                        Input::new(&self.complete_input)
+                            .cleanable(true)
+                            .prefix(Icon::new(IconName::Search).small())
+                            .suffix(
+                                Button::new("complete-input-info")
+                                    .text()
+                                    .icon(IconName::Info)
+                                    .xsmall(),
+                            ),
+                    )
+                    .child(
+                        Input::new(&self.complete_disabled_input)
+                            .cleanable(true)
+                            .disabled(true)
+                            .prefix(Icon::new(IconName::Search).small())
+                            .suffix(
+                                Button::new("complete-disabled-input-info")
+                                    .text()
+                                    .icon(IconName::Info)
+                                    .xsmall(),
+                            ),
                     ),
             )
             .child(
@@ -326,10 +645,25 @@ impl Render for InputStory {
                     .child(Input::new(&self.color_input).text_color(cx.theme().info)),
             )
             .child(
+                section("Text Decorations").max_w_md().child(
+                    Input::new(&self.decorations_input).suffix(
+                        Button::new("toggle-text-decorations")
+                            .text()
+                            .xsmall()
+                            .label(if self.decorations_visible {
+                                "Hide decorations"
+                            } else {
+                                "Show decorations"
+                            })
+                            .on_click(cx.listener(Self::on_click_toggle_decorations)),
+                    ),
+                ),
+            )
+            .child(
                 section("Single line code editor").max_w_md().child(
                     Input::new(&self.code_input).suffix(
                         Button::new("code-reset")
-                            .ghost()
+                            .text()
                             .label("Reset")
                             .xsmall()
                             .on_click(cx.listener(Self::on_click_reset)),

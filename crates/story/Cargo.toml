@@ -41,6 +41,9 @@ color-lsp = "0.2.0"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true
+# `rand 0.8` (via `fake`) does not enable the `js` feature of getrandom,
+# which is required to build for wasm32-unknown-unknown.
+getrandom = { version = "0.2", features = ["js"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }

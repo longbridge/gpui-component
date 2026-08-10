@@ -1,6 +1,7 @@
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
-    StyleRefinement, Styled, TextAlign, Window, div, prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, Role,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div,
+    prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{ActiveTheme as _, AnyChildElement, ChildElement, Sizable, Size, StyledExt as _};
@@ -58,7 +59,8 @@ impl Table {
         mut self,
         children: impl IntoIterator<Item = E>,
     ) -> Self {
-        self.children.extend(children.into_iter().map(AnyChildElement::new));
+        self.children
+            .extend(children.into_iter().map(AnyChildElement::new));
         self
     }
 }
@@ -87,13 +89,17 @@ impl RenderOnce for Table {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .id(("table", self.ix))
+            .role(Role::Table)
             .w_full()
             .text_sm()
             .overflow_hidden()
-            .bg(cx.theme().table)
+            .bg(cx.theme().tokens.table)
             .refine_style(&self.style)
             .children(
-                self.children.into_iter().enumerate().map(|(ix, c)| c.into_any(ix, self.size)),
+                self.children
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, c)| c.into_any(ix, self.size)),
             )
     }
 }
@@ -126,7 +132,8 @@ impl TableHeader {
         mut self,
         children: impl IntoIterator<Item = E>,
     ) -> Self {
-        self.children.extend(children.into_iter().map(AnyChildElement::new));
+        self.children
+            .extend(children.into_iter().map(AnyChildElement::new));
         self
     }
 }
@@ -155,14 +162,18 @@ impl RenderOnce for TableHeader {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .id(("table-header", self.ix))
+            .role(Role::RowGroup)
             .w_full()
-            .bg(cx.theme().table_head)
+            .bg(cx.theme().tokens.table_head)
             .text_color(cx.theme().table_head_foreground)
             .refine_style(&self.style)
             .border_b_1()
             .border_color(cx.theme().table_row_border)
             .children(
-                self.children.into_iter().enumerate().map(|(ix, c)| c.into_any(ix, self.size)),
+                self.children
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, c)| c.into_any(ix, self.size)),
             )
     }
 }
@@ -195,7 +206,8 @@ impl TableBody {
         mut self,
         children: impl IntoIterator<Item = E>,
     ) -> Self {
-        self.children.extend(children.into_iter().map(AnyChildElement::new));
+        self.children
+            .extend(children.into_iter().map(AnyChildElement::new));
         self
     }
 }
@@ -222,9 +234,17 @@ impl ChildElement for TableBody {
 
 impl RenderOnce for TableBody {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div().id(("table-body", self.ix)).w_full().refine_style(&self.style).children(
-            self.children.into_iter().enumerate().map(|(ix, c)| c.into_any(ix, self.size)),
-        )
+        div()
+            .id(("table-body", self.ix))
+            .role(Role::RowGroup)
+            .w_full()
+            .refine_style(&self.style)
+            .children(
+                self.children
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, c)| c.into_any(ix, self.size)),
+            )
     }
 }
 
@@ -256,7 +276,8 @@ impl TableFooter {
         mut self,
         children: impl IntoIterator<Item = E>,
     ) -> Self {
-        self.children.extend(children.into_iter().map(AnyChildElement::new));
+        self.children
+            .extend(children.into_iter().map(AnyChildElement::new));
         self
     }
 }
@@ -286,13 +307,16 @@ impl RenderOnce for TableFooter {
         div()
             .id(("table-footer", self.ix))
             .w_full()
-            .bg(cx.theme().table_foot)
+            .bg(cx.theme().tokens.table_foot)
             .text_color(cx.theme().table_foot_foreground)
             .border_t_1()
             .border_color(cx.theme().table_row_border)
             .refine_style(&self.style)
             .children(
-                self.children.into_iter().enumerate().map(|(ix, c)| c.into_any(ix, self.size)),
+                self.children
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, c)| c.into_any(ix, self.size)),
             )
     }
 }
@@ -325,7 +349,8 @@ impl TableRow {
         mut self,
         children: impl IntoIterator<Item = E>,
     ) -> Self {
-        self.children.extend(children.into_iter().map(AnyChildElement::new));
+        self.children
+            .extend(children.into_iter().map(AnyChildElement::new));
         self
     }
 }
@@ -354,6 +379,8 @@ impl RenderOnce for TableRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         div()
             .id(("table-row", self.ix))
+            .role(Role::Row)
+            .aria_row_index(self.ix + 1)
             .w_full()
             .flex()
             .flex_row()
@@ -361,7 +388,10 @@ impl RenderOnce for TableRow {
             .border_color(cx.theme().table_row_border)
             .when(self.ix > 0, |this| this.border_t_1())
             .children(
-                self.children.into_iter().enumerate().map(|(ix, c)| c.into_any(ix, self.size)),
+                self.children
+                    .into_iter()
+                    .enumerate()
+                    .map(|(ix, c)| c.into_any(ix, self.size)),
             )
     }
 }
@@ -440,15 +470,20 @@ impl RenderOnce for TableHead {
 
         div()
             .id(("table-head", self.ix))
+            .role(Role::ColumnHeader)
+            .aria_column_index(self.ix + 1)
             .flex()
             .items_center()
             .when(self.style.size.width.is_none(), |this| {
-                this.flex_shrink().flex_basis(relative(self.col_span as f32))
+                this.flex_shrink_1()
+                    .flex_basis(relative(self.col_span as f32))
             })
             .min_w(MIN_CELL_WIDTH * self.col_span)
             .px(paddings.left)
             .py(paddings.top)
-            .when(self.align == TextAlign::Center, |this| this.justify_center())
+            .when(self.align == TextAlign::Center, |this| {
+                this.justify_center()
+            })
             .when(self.align == TextAlign::Right, |this| this.justify_end())
             .refine_style(&self.style)
             .children(self.children)
@@ -529,15 +564,20 @@ impl RenderOnce for TableCell {
 
         div()
             .id(("table-cell", self.ix))
+            .role(Role::Cell)
+            .aria_column_index(self.ix + 1)
             .flex()
             .items_center()
             .when(self.style.size.width.is_none(), |this| {
-                this.flex_shrink().flex_basis(relative(self.col_span as f32))
+                this.flex_shrink_1()
+                    .flex_basis(relative(self.col_span as f32))
             })
             .min_w(MIN_CELL_WIDTH * self.col_span)
             .px(paddings.left)
             .py(paddings.top)
-            .when(self.align == TextAlign::Center, |this| this.justify_center())
+            .when(self.align == TextAlign::Center, |this| {
+                this.justify_center()
+            })
             .when(self.align == TextAlign::Right, |this| this.justify_end())
             .refine_style(&self.style)
             .children(self.children)

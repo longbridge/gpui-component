@@ -18,6 +18,14 @@ use std::{any::Any, rc::Rc};
 
 use crate::setting::RenderOptions;
 
+/// Custom reset behavior for a setting field or item.
+///
+/// The first closure reports whether the target is "dirty" (controls the reset
+/// button visibility), the second performs the reset. Used by `element`/`render`
+/// fields and custom element items whose state is not expressed through the
+/// typed `default_value` mechanism.
+pub(crate) type ResetHandler = (Rc<dyn Fn(&App) -> bool>, Rc<dyn Fn(&mut Window, &mut App)>);
+
 pub(crate) trait SettingFieldRender {
     #[allow(clippy::too_many_arguments)]
     fn render(
@@ -135,6 +143,12 @@ pub struct SettingField<T> {
     /// Function to set the value for this field.
     pub(crate) set_value: Rc<dyn Fn(T, &mut App)>,
     pub(crate) default_value: Option<T>,
+    /// Optional custom reset behavior, used by `element`/`render` fields whose
+    /// state is not expressed through the typed `default_value` mechanism.
+    ///
+    /// The first closure reports whether the field is "dirty" (controls the
+    /// reset button visibility), the second performs the reset.
+    pub(crate) reset_handler: Option<ResetHandler>,
 }
 
 impl SettingField<bool> {
@@ -268,6 +282,7 @@ impl<T> SettingField<T> {
             value: Rc::new(value),
             set_value: Rc::new(set_value),
             default_value: None,
+            reset_handler: None,
         }
     }
 
@@ -277,6 +292,26 @@ impl<T> SettingField<T> {
     /// If not set, the setting cannot be reset.
     pub fn default_value(mut self, default_value: impl Into<T>) -> Self {
         self.default_value = Some(default_value.into());
+        self
+    }
+
+    /// Provide custom reset behavior for this field.
+    ///
+    /// This is intended for [`SettingField::element`] / [`SettingField::render`]
+    /// fields, whose state is managed externally and therefore not covered by
+    /// the typed [`SettingField::default_value`] reset mechanism.
+    ///
+    /// - `is_dirty` reports whether the field differs from its default and thus
+    ///   whether the reset button should appear.
+    /// - `reset` performs the reset.
+    ///
+    /// When set, this takes precedence over the `default_value` based reset.
+    pub fn on_reset<D, R>(mut self, is_dirty: D, reset: R) -> Self
+    where
+        D: Fn(&App) -> bool + 'static,
+        R: Fn(&mut Window, &mut App) + 'static,
+    {
+        self.reset_handler = Some((Rc::new(is_dirty), Rc::new(reset)));
         self
     }
 }
@@ -320,6 +355,17 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> AnySettingField for SettingFi
     }
 
     fn is_resettable(&self, cx: &App) -> bool {
+        if let Some((is_dirty, _)) = self.reset_handler.as_ref() {
+            return is_dirty(cx);
+        }
+
+        // `element`/`render` fields carry no typed value (their `value` always
+        // returns the default), so the `default_value` comparison is meaningless
+        // for them. Without a custom `on_reset`, they are not resettable.
+        if self.field_type.is_element() {
+            return false;
+        }
+
         let Some(default_value) = self.default_value.as_ref() else {
             return false;
         };
@@ -327,7 +373,12 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> AnySettingField for SettingFi
         &(self.value)(cx) != default_value
     }
 
-    fn reset(&self, _: &mut Window, cx: &mut App) {
+    fn reset(&self, window: &mut Window, cx: &mut App) {
+        if let Some((_, reset)) = self.reset_handler.as_ref() {
+            reset(window, cx);
+            return;
+        }
+
         let Some(default_value) = self.default_value.as_ref() else {
             return;
         };

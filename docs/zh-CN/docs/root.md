@@ -27,6 +27,16 @@ fn main() {
 }
 ```
 
+## 窗口边框
+
+默认情况下，[Root] 会渲染 GPUI Component 的客户端窗口边框包装层。对于
+layer-shell 全屏窗口，或其他不应该渲染这层边框的场景，可以用 `bordered(false)`
+关闭：
+
+```rs
+cx.new(|cx| Root::new(view, window, cx).bordered(false))
+```
+
 ## 浮层
 
 对话框、抽屉、通知等 UI 都需要一个统一的展示层，[Root] 提供了这些浮层的渲染入口：

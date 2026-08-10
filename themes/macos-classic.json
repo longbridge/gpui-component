@@ -38,6 +38,7 @@
         "tab_bar.background": "#E9E9E9",
         "title_bar.background": "#FEFEFE",
         "title_bar.border": "#DADADA",
+        "status_bar.background": "#E9E9E9",
         "base.yellow": "#B59A00",
         "base.red": "#d21f07",
         "base.blue": "#0060de",

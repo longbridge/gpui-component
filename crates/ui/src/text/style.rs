@@ -20,6 +20,21 @@ pub struct TextViewStyle {
     pub highlight_theme: Arc<HighlightTheme>,
     /// The style refinement for code blocks.
     pub code_block: StyleRefinement,
+    /// Style refinement applied to the table container (the bordered wrapper
+    /// in wrap mode, the scroll viewport in horizontal-scroll mode).
+    ///
+    /// Set `overflow_x: scroll` here for adaptive table layout: columns fit
+    /// their content when space allows, shrink (wrapping cell text) down to a
+    /// per-column floor when the frame is narrower, and below that the table
+    /// scrolls horizontally instead of squeezing further, e.g.
+    /// `TextViewStyle::default().table({ let mut s = StyleRefinement::default(); s.overflow.x = Some(Overflow::Scroll); s })`.
+    pub table: StyleRefinement,
+    /// Style refinement applied to each table cell.
+    ///
+    /// With the scroll layout, set `white_space: nowrap` here to keep cells
+    /// on a single line — columns then never shrink and the table scrolls as
+    /// soon as the content is wider than the frame.
+    pub table_cell: StyleRefinement,
     pub is_dark: bool,
 }
 
@@ -39,6 +54,8 @@ impl Default for TextViewStyle {
             heading_font_size: None,
             highlight_theme: HighlightTheme::default_light().clone(),
             code_block: StyleRefinement::default(),
+            table: StyleRefinement::default(),
+            table_cell: StyleRefinement::default(),
             is_dark: false,
         }
     }
@@ -62,6 +79,26 @@ impl TextViewStyle {
     /// Set style for code blocks.
     pub fn code_block(mut self, style: StyleRefinement) -> Self {
         self.code_block = style;
+        self
+    }
+
+    /// Set extra style for the table container.
+    ///
+    /// Set `overflow_x: scroll` on the refinement for adaptive layout: cells
+    /// wrap as the frame narrows, and once columns reach their minimum width
+    /// the table scrolls horizontally instead of shrinking further.
+    pub fn table(mut self, style: StyleRefinement) -> Self {
+        self.table = style;
+        self
+    }
+
+    /// Set extra style for each table cell.
+    ///
+    /// With the scroll table layout, `white_space: nowrap` here keeps cells
+    /// on a single line and the table scrolls whenever the content is wider
+    /// than the frame.
+    pub fn table_cell(mut self, style: StyleRefinement) -> Self {
+        self.table_cell = style;
         self
     }
 }

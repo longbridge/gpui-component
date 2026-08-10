@@ -1,15 +1,15 @@
 use std::ops::Range;
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 use tree_sitter::Node;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 pub use tree_sitter::Tree;
 
-#[cfg(target_family = "wasm")]
+#[cfg(not(feature = "tree-sitter"))]
 /// Stub type for tree-sitter Tree on WASM (tree-sitter not available).
 pub struct Tree;
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Minimum line span for a node to be considered foldable.
 const MIN_FOLD_LINES: usize = 2;
 
@@ -39,7 +39,7 @@ impl FoldRange {
 
 // ==================== Native Implementation (with tree-sitter) ====================
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Check if a named node qualifies as a fold candidate.
 ///
 /// Uses a structural heuristic: any **named** node spanning ≥ MIN_FOLD_LINES
@@ -52,7 +52,7 @@ fn is_foldable_node(node: &Node) -> bool {
     end.saturating_sub(start) >= MIN_FOLD_LINES
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Extract fold ranges from a tree-sitter syntax tree (full traversal).
 pub fn extract_fold_ranges(tree: &Tree) -> Vec<FoldRange> {
     let mut ranges = Vec::new();
@@ -68,7 +68,7 @@ pub fn extract_fold_ranges(tree: &Tree) -> Vec<FoldRange> {
     ranges
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Extract fold ranges only within a byte range (for incremental updates after edits).
 ///
 /// Skips subtrees entirely outside the range, making it O(nodes in range)
@@ -87,7 +87,7 @@ pub fn extract_fold_ranges_in_range(tree: &Tree, byte_range: Range<usize>) -> Ve
     ranges
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Recursively collect foldable nodes, skipping subtrees outside byte_range.
 fn collect_foldable_nodes_in_range(
     node: Node,
@@ -113,7 +113,7 @@ fn collect_foldable_nodes_in_range(
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 /// Recursively collect foldable nodes from the syntax tree (full traversal).
 fn collect_foldable_nodes(node: Node, ranges: &mut Vec<FoldRange>) {
     if !is_foldable_node(&node) {
@@ -133,13 +133,13 @@ fn collect_foldable_nodes(node: Node, ranges: &mut Vec<FoldRange>) {
 
 // ==================== WASM Stub Implementation ====================
 
-#[cfg(target_family = "wasm")]
+#[cfg(not(feature = "tree-sitter"))]
 /// Extract fold ranges - WASM stub (returns empty, no tree-sitter).
 pub fn extract_fold_ranges(_tree: &Tree) -> Vec<FoldRange> {
     Vec::new()
 }
 
-#[cfg(target_family = "wasm")]
+#[cfg(not(feature = "tree-sitter"))]
 /// Extract fold ranges in range - WASM stub (returns empty, no tree-sitter).
 pub fn extract_fold_ranges_in_range(_tree: &Tree, _byte_range: Range<usize>) -> Vec<FoldRange> {
     Vec::new()

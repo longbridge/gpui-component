@@ -2,9 +2,13 @@
 
 Build Status [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml) of [GPUI Component](https://github.com/longbridge/gpui-component).
 
-This is first paragraph, there have **BOLD**, _italic_, and ~strikethrough~, `code` text [^1] [^2].
+Inline image mix: larger PNG avatars <img src="https://avatars.githubusercontent.com/u/5518" alt="Jason Lee avatar" width="32" height="32" /> and <img src="https://avatars.githubusercontent.com/u/28998859" alt="GitHub avatar" width="32" height="32" /> stay inside the same text flow, and another SVG badge ![Rust](https://rust-lang.org/static/images/rust-logo-blk.svg) should wrap with nearby text when the window is resized.
+
+This is first paragraph, there have **BOLD**, _italic_, and ~~strikethrough~~, `code` text [^1] [^2].
 
 This is an additional demonstration paragraph in English demonstrating more content for [Markdown GFM]. It includes various stylistic elements and plain text.
+
+Link click handling: [open this link](https://github.com/longbridge/gpui-component) to see the custom `TextView` callback in the application log.
 
 ![Img](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*WgEz5f3n3lD7MfC7NeQGOA.jpeg)
 
@@ -123,11 +127,11 @@ See the way the text is aligned, depending on the position of `':'`
 
 ### Bulleted List
 
-- Bullet 1, this is very long and needs to be wrapped to the next line, display should be wrapped to the next line as well.
+- Bullet 1, this is **very long** and needs to be wrapped to the next line, display should be wrapped to the next line as well.
   Continuation paragraph that should appear below.
-- Bullet 2, the second bullet item is also long and needs to be wrapped to the next line.
+- Bullet 2, the `second` bullet item is also long and needs to be wrapped to the next line.
   - Bullet 2.1
-    This is a deepth continuation paragraph.
+    This is a `deepth continuation` paragraph.
     - Bullet 2.1.1
       - Bullet 2.1.1.1
     - Bullet 2.1.2
@@ -150,6 +154,31 @@ See the way the text is aligned, depending on the position of `':'`
 - [x] Task 1, a long long text task, this line is very long and needs to be wrapped to the next line, display should be wrapped to the next line as well.
 - [ ] Task 2, going to do something if there is a long text that needs to be wrapped to the next line.
 - [ ] Task 3
+
+### Block content in list items
+
+1. A fenced code block:
+
+   ```rust
+   fn main() {
+       println!("Nested code block");
+   }
+   ```
+
+2. A blockquote:
+
+   > Blockquotes inside list items should remain visible.
+
+3. A table:
+
+   | Name  | Value |
+   | ----- | ----- |
+   | Alpha | 1     |
+   | Beta  | 2     |
+
+4. A heading:
+
+   #### Heading inside a list item
 
 ## Heading
 
@@ -240,15 +269,52 @@ This is paragraph of the heading 6.
 
 ### Math
 
-This is an inline math $x^2 + y^2 = z^2$.
-
-This is a block math:
+Inline math renders in the same text flow, for example $e^{i\pi} + 1 = 0$ and $a^2 + b^2 = c^2$.
 
 $$
-\begin{aligned}
-x^2 + y^2 &= z^2 \\
-x^3 + y^3 &= z^3
-\end{aligned}
+\frac{\alpha + \beta}{\sqrt{\gamma}} = \sum_{i=1}^{n} i^2
 $$
+
+## Markers
+
+It also catches markers inside inline `code` and fenced blocks:
+
+```rust
+fn render() {
+    // TODO: cache the parsed AST between frames
+    // FIXME: handle empty input without a panic
+}
+```
 
 This is final paragraph, it includes a code block and a list of items.
+
+### Custom components
+
+A custom Markdown parser converts project-specific syntax into typed nodes,
+then registered renderers turn those nodes into arbitrary interactive
+components.
+
+Ticker blocks render as compact one-line quote rows:
+
+$AAPL.US
+
+$TSLA.US
+
+A `<UserCard />` block renders a user card with a 24px avatar and a follow
+button:
+
+<UserCard id="huacnlee" />
+
+<UserCard id="madcodelife" />
+
+## Task markers
+
+The custom `MarkerHighlighter` (an LSP-style semantic tokens provider)
+highlights these markers in the source editor on the left, each in a
+different color:
+
+- TODO: support nested task lists
+- FIXME: links with parentheses break parsing
+- XXX: revisit the table column-width heuristic
+- HACK: temporary workaround for footnote ordering
+- NOTE: math blocks require the `$$` fence

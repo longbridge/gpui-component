@@ -221,15 +221,8 @@ impl DockItem {
         window: &mut Window,
         cx: &mut App,
     ) -> Self {
-        let mut items = items;
         let stack_panel = cx.new(|cx| {
             let mut stack_panel = StackPanel::new(axis, window, cx);
-            for (i, item) in items.iter_mut().enumerate() {
-                let view = item.view();
-                let size = sizes.get(i).copied().flatten();
-                stack_panel.add_panel(view.clone(), size, dock_area.clone(), window, cx)
-            }
-
             for (i, item) in items.iter().enumerate() {
                 let view = item.view();
                 let size = sizes.get(i).copied().flatten();
@@ -513,6 +506,44 @@ impl DockItem {
             DockItem::Tiles { .. } => None,
             DockItem::Panel { .. } => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn split_with_sizes_adds_each_child_once(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            cx.set_global(crate::Theme::default());
+            cx.open_window(Default::default(), |window, cx| {
+                let dock_area = cx.new(|cx| DockArea::new("test-dock", None, window, cx));
+                let weak_dock_area = dock_area.downgrade();
+                let children = vec![
+                    DockItem::tabs(Vec::new(), &weak_dock_area, window, cx),
+                    DockItem::tabs(Vec::new(), &weak_dock_area, window, cx),
+                ];
+
+                let split = DockItem::split_with_sizes(
+                    Axis::Horizontal,
+                    children,
+                    vec![None, None],
+                    &weak_dock_area,
+                    window,
+                    cx,
+                );
+
+                let DockItem::Split { view, .. } = split else {
+                    unreachable!("split_with_sizes must return DockItem::Split");
+                };
+                assert_eq!(view.read(cx).panels_len(), 2);
+
+                cx.new(|cx| crate::Root::new(dock_area, window, cx))
+            })
+            .unwrap();
+        });
     }
 }
 

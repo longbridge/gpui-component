@@ -9,7 +9,6 @@ use gpui_component::{
     ActiveTheme as _, IconName, Side, Sizable as _, Theme, TitleBar, WindowExt as _,
     badge::Badge,
     button::{Button, ButtonVariants as _},
-    label::Label,
     menu::{AppMenuBar, DropdownMenu as _},
     scroll::ScrollbarShow,
 };
@@ -66,11 +65,6 @@ impl Render for AppTitleBar {
                     .gap_2()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child((self.child.clone())(window, cx))
-                    .child(
-                        Label::new("theme:")
-                            .secondary(cx.theme().theme_name())
-                            .text_sm(),
-                    )
                     .child(self.font_size_selector.clone())
                     .child(
                         Button::new("github")

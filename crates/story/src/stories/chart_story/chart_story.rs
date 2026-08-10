@@ -1,14 +1,17 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window, div, linear_color_stop, linear_gradient,
-    prelude::FluentBuilder, px,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, FontWeight, Hsla, IntoElement,
+    ParentElement, Render, Rgba, SharedString, Styled, Window, div, linear_color_stop,
+    linear_gradient, prelude::FluentBuilder, px,
 };
 use gpui_component::{
     ActiveTheme, StyledExt,
-    chart::{AreaChart, BarChart, CandlestickChart, LineChart, PieChart},
+    chart::{
+        AreaChart, BarChart, CandlestickChart, LineChart, PieChart, RadarChart, SankeyChart,
+        SankeyLabel,
+    },
     dock::PanelControl,
     h_flex,
-    plot::shape::BarAlignment,
+    plot::shape::{BarAlignment, SankeyAlign, SankeyLink, SankeyValueScale},
     separator::Separator,
     v_flex,
 };
@@ -40,6 +43,13 @@ pub struct DailyDevice {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct RadarDevice {
+    pub month: SharedString,
+    pub desktop: f64,
+    pub mobile: f64,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct StockPrice {
     pub date: SharedString,
     pub open: f64,
@@ -48,11 +58,53 @@ pub struct StockPrice {
     pub close: f64,
 }
 
+/// TSLA income statement data, values and colors as strings like the real API.
+#[derive(Clone, Deserialize)]
+struct TslaStatementNode {
+    key: SharedString,
+    name: SharedString,
+    value: SharedString,
+    growth: SharedString,
+    color: SharedString,
+}
+
+#[derive(Clone, Deserialize)]
+struct TslaStatementLink {
+    source: SharedString,
+    target: SharedString,
+    value: SharedString,
+}
+
+#[derive(Clone, Deserialize)]
+struct TslaStatement {
+    period: SharedString,
+    nodes: Vec<TslaStatementNode>,
+    links: Vec<TslaStatementLink>,
+}
+
+#[derive(Clone, Deserialize)]
+struct TslaIncomeStatement {
+    list: Vec<TslaStatement>,
+}
+
+#[derive(Clone)]
+pub struct TslaNode {
+    pub name: SharedString,
+    /// The real dollar value, for the label; the layout gets sqrt-compressed
+    /// link values to keep small flows readable.
+    pub value: f64,
+    /// Year-over-year growth in percent, for the label.
+    pub growth: Option<f64>,
+    pub color: Hsla,
+}
+
 pub struct ChartStory {
     focus_handle: FocusHandle,
     daily_devices: Vec<DailyDevice>,
     monthly_devices: Vec<MonthlyDevice>,
+    radar_devices: Vec<RadarDevice>,
     stock_prices: Vec<StockPrice>,
+    tsla_statements: Vec<(SharedString, Vec<TslaNode>, Vec<SankeyLink>)>,
 }
 
 impl ChartStory {
@@ -65,15 +117,64 @@ impl ChartStory {
             "../../fixtures/monthly-devices.json"
         ))
         .unwrap();
+        let radar_devices = serde_json::from_str::<Vec<RadarDevice>>(include_str!(
+            "../../fixtures/radar-devices.json"
+        ))
+        .unwrap();
         let stock_prices = serde_json::from_str::<Vec<StockPrice>>(include_str!(
             "../../fixtures/stock-prices.json"
         ))
         .unwrap();
+        let tsla = serde_json::from_str::<TslaIncomeStatement>(include_str!(
+            "../../fixtures/tsla-income-statement.json"
+        ))
+        .unwrap();
+        let tsla_statements = tsla
+            .list
+            .iter()
+            .map(|statement| {
+                // Map the fixture's string keys to node indices for `SankeyLink`.
+                let node_indexes: std::collections::HashMap<SharedString, usize> = statement
+                    .nodes
+                    .iter()
+                    .enumerate()
+                    .map(|(index, node)| (node.key.clone(), index))
+                    .collect();
+                let nodes = statement
+                    .nodes
+                    .iter()
+                    .map(|node| TslaNode {
+                        name: node.name.clone(),
+                        value: node.value.parse().unwrap_or(0.),
+                        growth: node.growth.parse().ok(),
+                        color: Rgba::try_from(node.color.as_ref())
+                            .map(Into::into)
+                            .unwrap_or(gpui::black()),
+                    })
+                    .collect();
+                // Skip links with unknown node keys or unparsable values
+                // instead of panicking on bad fixture data.
+                let links = statement
+                    .links
+                    .iter()
+                    .filter_map(|link| {
+                        Some(SankeyLink::new(
+                            *node_indexes.get(&link.source)?,
+                            *node_indexes.get(&link.target)?,
+                            link.value.parse().ok()?,
+                        ))
+                    })
+                    .collect();
+                (statement.period.clone(), nodes, links)
+            })
+            .collect();
 
         Self {
             daily_devices,
             monthly_devices,
+            radar_devices,
             stock_prices,
+            tsla_statements,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -107,12 +208,12 @@ impl Focusable for ChartStory {
     }
 }
 
-fn chart_container(
+fn chart_container<C: IntoElement>(
     title: &str,
-    chart: impl IntoElement,
+    chart: C,
     center: bool,
     cx: &mut Context<ChartStory>,
-) -> impl IntoElement {
+) -> impl IntoElement + use<C> {
     v_flex()
         .flex_1()
         .h(px(400.))
@@ -169,6 +270,7 @@ impl Render for ChartStory {
                             linear_color_stop(cx.theme().chart_1.opacity(0.4), 1.),
                             linear_color_stop(cx.theme().background.opacity(0.3), 0.),
                         ))
+                        .name("Desktop")
                         .y(|d| d.mobile)
                         .stroke(cx.theme().chart_2)
                         .fill(linear_gradient(
@@ -176,7 +278,9 @@ impl Render for ChartStory {
                             linear_color_stop(cx.theme().chart_2.opacity(0.4), 1.),
                             linear_color_stop(cx.theme().background.opacity(0.3), 0.),
                         ))
-                        .tick_margin(8),
+                        .name("Mobile")
+                        .tick_margin(8)
+                        .id("area-chart-tooltip"),
                     false,
                     cx,
                 )),
@@ -214,6 +318,108 @@ impl Render for ChartStory {
                             .color(move |d| d.color(color)),
                         true,
                         cx,
+                    ))
+                    .child(chart_container(
+                        "Pie Chart - Label",
+                        PieChart::new(self.monthly_devices.clone())
+                            .value(|d| d.desktop as f32)
+                            .inner_radius(50.)
+                            .outer_radius(80.)
+                            .color(move |d| d.color(color))
+                            .label(|d| d.month.clone()),
+                        true,
+                        cx,
+                    )),
+            )
+            .child(Separator::horizontal())
+            .child(
+                h_flex()
+                    .flex_wrap()
+                    .gap_4()
+                    .child(chart_container(
+                        "Radar Chart",
+                        RadarChart::new(self.radar_devices.clone())
+                            .label(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .id("radar-chart"),
+                        true,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Radar Chart - Multiple",
+                        RadarChart::new(self.radar_devices.clone())
+                            .label(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .value(|d| d.mobile)
+                            .name("Mobile")
+                            .id("radar-chart-multiple"),
+                        true,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Radar Chart - Dots",
+                        RadarChart::new(self.radar_devices.clone())
+                            // An element label: the dimension name over a grade badge.
+                            .label({
+                                let muted_foreground = cx.theme().muted_foreground;
+                                let accent = cx.theme().chart_2;
+
+                                move |d: &RadarDevice| {
+                                    let grade = match d.desktop {
+                                        v if v >= 250. => "A",
+                                        v if v >= 200. => "B",
+                                        _ => "C",
+                                    };
+
+                                    v_flex()
+                                        .items_center()
+                                        .gap_1()
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(muted_foreground)
+                                                .child(d.month.clone()),
+                                        )
+                                        .child(
+                                            h_flex()
+                                                .justify_center()
+                                                .size_6()
+                                                .rounded_full()
+                                                .bg(accent.opacity(0.1))
+                                                .text_sm()
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(accent)
+                                                .child(grade),
+                                        )
+                                        .into_any_element()
+                                }
+                            })
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .stroke(cx.theme().chart_2)
+                            .dot()
+                            // A badge label is far taller than a line of text, so
+                            // pull the ring in to leave it room.
+                            .outer_radius(64.)
+                            .id("radar-chart-dots"),
+                        true,
+                        cx,
+                    ))
+                    .child(chart_container(
+                        "Radar Chart - Lines Only",
+                        RadarChart::new(self.radar_devices.clone())
+                            .label(|d| d.month.clone())
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .stroke(cx.theme().chart_3)
+                            .fill(gpui::transparent_black())
+                            .max_value(400.)
+                            .grid_levels(5)
+                            .id("radar-chart-lines-only"),
+                        true,
+                        cx,
                     )),
             )
             .child(Separator::horizontal())
@@ -225,13 +431,17 @@ impl Render for ChartStory {
                         "Bar Chart",
                         BarChart::new(self.monthly_devices.clone())
                             .band(|d| d.month.clone())
-                            .value(|d| d.desktop),
+                            .value(|d| d.desktop)
+                            .name("Desktop")
+                            .id("bar-chart-tooltip"),
                         false,
                         cx,
                     ))
                     .child(chart_container(
                         "Bar Chart - Mixed",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-mixed")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .fill(move |d, _, _, _| d.color(color)),
@@ -250,6 +460,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Rounded corners",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-rounded")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
@@ -260,6 +472,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Bottom aligned",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-bottom")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string()),
@@ -269,6 +483,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Top aligned",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-top")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
@@ -279,6 +495,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Left aligned",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-left")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
@@ -289,6 +507,8 @@ impl Render for ChartStory {
                     .child(chart_container(
                         "Bar Chart - Right aligned",
                         BarChart::new(self.monthly_devices.clone())
+                            .id("bar-chart-right")
+                            .name("Desktop")
                             .band(|d| d.month.clone())
                             .value(|d| d.desktop)
                             .label(|d| d.desktop.to_string())
@@ -301,6 +521,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Bottom)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-bottom")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -322,6 +544,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Top)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-top")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -344,6 +568,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Left)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-left")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -366,6 +592,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Right)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-right")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -388,6 +616,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Per-bar)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-per-bar")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -407,6 +637,8 @@ impl Render for ChartStory {
                         chart_container(
                             "Bar Chart - Gradient (Diagonal, across bars)",
                             BarChart::new(self.monthly_devices.clone())
+                                .id("bar-chart-gradient-diagonal")
+                                .name("Desktop")
                                 .band(|d| d.month.clone())
                                 .value(|d| d.desktop)
                                 .label(|d| d.desktop.to_string())
@@ -445,10 +677,12 @@ impl Render for ChartStory {
                     .flex_wrap()
                     .gap_4()
                     .child(chart_container(
-                        "Line Chart",
+                        "Line Chart - Tooltip",
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
-                            .y(|d| d.desktop),
+                            .y(|d| d.desktop)
+                            .name("Desktop")
+                            .id("line-chart-tooltip"),
                         false,
                         cx,
                     ))
@@ -457,7 +691,8 @@ impl Render for ChartStory {
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .linear(),
+                            .linear()
+                            .id("line-chart-linear"),
                         false,
                         cx,
                     ))
@@ -466,7 +701,8 @@ impl Render for ChartStory {
                         LineChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .step_after(),
+                            .step_after()
+                            .id("line-chart-step-after"),
                         false,
                         cx,
                     ))
@@ -476,7 +712,8 @@ impl Render for ChartStory {
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
                             .dot()
-                            .stroke(cx.theme().chart_5),
+                            .stroke(cx.theme().chart_5)
+                            .id("line-chart-dots"),
                         false,
                         cx,
                     )),
@@ -490,7 +727,8 @@ impl Render for ChartStory {
                         "Area Chart",
                         AreaChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
-                            .y(|d| d.desktop),
+                            .y(|d| d.desktop)
+                            .id("area-chart"),
                         false,
                         cx,
                     ))
@@ -499,7 +737,8 @@ impl Render for ChartStory {
                         AreaChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .linear(),
+                            .linear()
+                            .id("area-chart-linear"),
                         false,
                         cx,
                     ))
@@ -508,7 +747,8 @@ impl Render for ChartStory {
                         AreaChart::new(self.monthly_devices.clone())
                             .x(|d| d.month.clone())
                             .y(|d| d.desktop)
-                            .step_after(),
+                            .step_after()
+                            .id("area-chart-step-after"),
                         false,
                         cx,
                     ))
@@ -521,7 +761,8 @@ impl Render for ChartStory {
                                 0.,
                                 linear_color_stop(cx.theme().chart_1.opacity(0.4), 1.),
                                 linear_color_stop(cx.theme().background.opacity(0.3), 0.),
-                            )),
+                            ))
+                            .id("area-chart-gradient"),
                         false,
                         cx,
                     )),
@@ -578,6 +819,58 @@ impl Render for ChartStory {
                         false,
                         cx,
                     )),
+            )
+            .child(Separator::horizontal())
+            .child(
+                h_flex().flex_wrap().gap_4().children(
+                    self.tsla_statements
+                        .iter()
+                        .enumerate()
+                        .map(|(index, (period, nodes, links))| {
+                            // Sqrt value scale keeps the huge revenue flow from
+                            // dwarfing the small profit/expense ones.
+                            let chart = SankeyChart::new(nodes.clone(), links.clone())
+                                .node_align(SankeyAlign::Center)
+                                .node_padding(40.)
+                                .value_scale(SankeyValueScale::Sqrt)
+                                .node_color(|d: &TslaNode| d.color);
+                            // The first chart shows fully custom three-line
+                            // labels with the year-over-year change; the other
+                            // keeps the default value/name lines.
+                            let chart = if index == 0 {
+                                let up = cx.theme().success;
+                                let down = cx.theme().danger;
+                                let muted = cx.theme().muted_foreground;
+                                chart.labels(move |d: &TslaNode, _| {
+                                    let mut lines = vec![SankeyLabel::new(format!(
+                                        "${:.2}B",
+                                        d.value / 1_000_000_000.
+                                    ))];
+                                    if let Some(growth) = d.growth {
+                                        let arrow = if growth >= 0. { "▲" } else { "▼" };
+                                        lines.push(
+                                            SankeyLabel::new(format!("{} {:+.2}%", arrow, growth))
+                                                .color(if growth >= 0. { up } else { down }),
+                                        );
+                                    }
+                                    lines.push(SankeyLabel::new(d.name.clone()).color(muted));
+                                    lines
+                                })
+                            } else {
+                                chart.node_label(|d| d.name.clone()).value_label(|d, _| {
+                                    format!("${:.2}B", d.value / 1_000_000_000.).into()
+                                })
+                            };
+
+                            chart_container(
+                                &format!("Sankey Chart - TSLA {}", period),
+                                chart,
+                                false,
+                                cx,
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                ),
             )
     }
 }

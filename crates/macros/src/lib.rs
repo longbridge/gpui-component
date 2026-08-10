@@ -82,18 +82,32 @@ fn pascal_case(filename: &str) -> String {
 
 /// Generate a custom icon enum and its `IconNamed` impl by scanning a directory of SVG files.
 ///
-/// Accepts an enum name, a path relative to the calling crate's `CARGO_MANIFEST_DIR`,
-/// and optionally a list of additional derive traits.
+/// Accepts an enum name, a path, and optionally a list of additional derive traits.
 /// Each `.svg` file becomes an enum variant using PascalCase conversion.
+///
+/// The path may be either:
+///
+/// - **A literal path** (the common case), resolved relative to the calling crate's
+///   `CARGO_MANIFEST_DIR`. Use this when the icons live inside your own package.
+/// - **An env-var reference** of the form `"$NAME"`, where `NAME` names a build-time
+///   environment variable whose value is the absolute path to the icons directory.
+///   Use this when the icons live in *another* crate and the path is plumbed
+///   through cargo's `links` / `DEP_<X>_<KEY>` propagation mechanism. The default
+///   `IconName` enum in `gpui-component` uses this pattern to consume icons from
+///   `gpui-component-assets` without a sibling-crate reference, which would
+///   otherwise break `cargo vendor` and `cargo publish`.
 ///
 /// # Example
 ///
 /// ```ignore
-/// // Basic usage (derives IntoElement, Clone by default)
-/// icon_named!(IconName, "../assets/assets/icons");
+/// // Literal path (relative to the calling crate's CARGO_MANIFEST_DIR)
+/// icon_named!(IconName, "icons");
+///
+/// // Env-var reference (resolved at macro expansion time)
+/// icon_named!(IconName, "$GPUI_COMPONENT_DEFAULT_ICONS_DIR");
 ///
 /// // With custom derives
-/// icon_named!(IconName, "../assets/assets/icons", [Debug, Copy, PartialEq, Eq]);
+/// icon_named!(IconName, "icons", [Debug, Copy, PartialEq, Eq]);
 /// ```
 #[proc_macro]
 pub fn icon_named(input: TokenStream) -> TokenStream {
@@ -104,10 +118,27 @@ pub fn icon_named(input: TokenStream) -> TokenStream {
         ..
     } = syn::parse_macro_input!(input as IconNameInput);
 
-    let relative_path = path.value();
+    let raw_path = path.value();
 
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-    let icons_dir = std::path::Path::new(&manifest_dir).join(&relative_path);
+    // Resolve the path. A leading `$` switches us into env-var mode: the
+    // remainder of the string is an env var name whose value (set by the
+    // caller's `build.rs` via `cargo:rustc-env=`) is the absolute path of
+    // the icons directory. Otherwise treat the string as a path relative
+    // to the calling crate's `CARGO_MANIFEST_DIR`, the original behavior.
+    let icons_dir = if let Some(env_name) = raw_path.strip_prefix('$') {
+        let env_value = std::env::var(env_name).unwrap_or_else(|_| {
+            panic!(
+                "icon_named!: env var `{env_name}` is not set at expansion time. \
+                 Ensure the calling crate's build.rs propagates it via \
+                 `cargo:rustc-env={env_name}=<absolute path>`."
+            )
+        });
+        std::path::PathBuf::from(env_value)
+    } else {
+        let manifest_dir =
+            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+        std::path::Path::new(&manifest_dir).join(&raw_path)
+    };
 
     let mut entries: Vec<(String, String)> = Vec::new();
 

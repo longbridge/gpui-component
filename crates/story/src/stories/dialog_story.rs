@@ -16,7 +16,7 @@ use gpui_component::{
     input::{Input, InputState},
     select::{Select, SelectState},
     table::{Column, DataTable, TableDelegate, TableState},
-    text::markdown,
+    text::{TextView, markdown},
     v_flex,
 };
 
@@ -476,6 +476,59 @@ impl DialogStory {
                 })),
         )
     }
+
+    fn render_textview_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let dialog_overlay = self.dialog_overlay;
+        let overlay_closable = self.overlay_closable;
+        section("TextView Dialog").child(
+            Dialog::new(cx)
+                .trigger(
+                    Button::new("textview-dialog-btn")
+                        .outline()
+                        .label("TextView Dialog"),
+                )
+                .overlay(dialog_overlay)
+                .keyboard(self.keyboard)
+                .close_button(self.close_button)
+                .overlay_closable(overlay_closable)
+                .p_0()
+                .content({
+                    move |content, _, cx| {
+                        content
+                            .child(
+                                DialogHeader::new()
+                                    .p_4()
+                                    .child(DialogTitle::new().child("TextView Dialog")),
+                            )
+                            .child(
+                                v_flex().px_4().pb_4().gap_3().child(
+                                    TextView::markdown(
+                                        "dialog-textview",
+                                        "This is a dialog with a selectable \
+                                        TextView in it. This text should be \
+                                        selectable.",
+                                    )
+                                    .selectable(true),
+                                ),
+                            )
+                            .child(
+                                DialogFooter::new()
+                                    .p_4()
+                                    .bg(cx.theme().muted)
+                                    .child(
+                                        DialogClose::new()
+                                            .child(Button::new("cancel").label("Cancel").outline()),
+                                    )
+                                    .child(
+                                        DialogAction::new().child(
+                                            Button::new("confirm").primary().label("Confirm"),
+                                        ),
+                                    ),
+                            )
+                    }
+                }),
+        )
+    }
 }
 
 impl Focusable for DialogStory {
@@ -543,7 +596,8 @@ impl Render for DialogStory {
                     .child(self.render_dialog_without_title(cx))
                     .child(self.render_custom_paddings(cx))
                     .child(self.render_custom_style(cx))
-                    .child(self.render_dialog_with_content(cx)),
+                    .child(self.render_dialog_with_content(cx))
+                    .child(self.render_textview_dialog(cx)),
             )
     }
 }

@@ -13,7 +13,7 @@ use crate::{
     highlighter::{Language, languages},
 };
 
-pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
+pub(super) const HIGHLIGHT_NAMES: [&str; 41] = [
     "attribute",
     "boolean",
     "comment",
@@ -48,6 +48,7 @@ pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
     "string.special.symbol",
     "tag",
     "tag.doctype",
+    "text.code.span",
     "text.literal",
     "title",
     "type",
@@ -59,7 +60,7 @@ pub(super) const HIGHLIGHT_NAMES: [&str; 40] = [
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanguageConfig {
     pub name: SharedString,
-    pub language: tree_sitter::Language,
+    pub language: Option<tree_sitter::Language>,
     pub injection_languages: Vec<SharedString>,
     pub highlights: SharedString,
     pub injections: SharedString,
@@ -77,12 +78,29 @@ impl LanguageConfig {
     ) -> Self {
         Self {
             name: name.into(),
-            language,
+            language: Some(language),
             injection_languages,
             highlights: SharedString::from(highlights.to_string()),
             injections: SharedString::from(injections.to_string()),
             locals: SharedString::from(locals.to_string()),
         }
+    }
+
+    /// A plain text language without a grammar, it will never be parsed.
+    pub fn plain(name: impl Into<SharedString>) -> Self {
+        Self {
+            name: name.into(),
+            language: None,
+            injection_languages: vec![],
+            highlights: SharedString::default(),
+            injections: SharedString::default(),
+            locals: SharedString::default(),
+        }
+    }
+
+    /// Whether this language has a grammar to parse with.
+    pub fn has_grammar(&self) -> bool {
+        self.language.is_some()
     }
 }
 
@@ -138,6 +156,8 @@ pub struct SyntaxColors {
     pub tag: Option<ThemeStyle>,
     #[serde(rename = "tag.doctype")]
     pub tag_doctype: Option<ThemeStyle>,
+    #[serde(rename = "text.code.span")]
+    pub text_code_span: Option<ThemeStyle>,
     #[serde(rename = "text.literal")]
     pub text_literal: Option<ThemeStyle>,
     pub title: Option<ThemeStyle>,
@@ -256,6 +276,7 @@ impl SyntaxColors {
             "string.special.symbol" => self.string_special_symbol,
             "tag" => self.tag,
             "tag.doctype" => self.tag_doctype,
+            "text.code.span" => self.text_code_span,
             "text.literal" => self.text_literal,
             "title" => self.title,
             "type" => self.type_,
@@ -423,6 +444,10 @@ pub struct HighlightThemeStyle {
     pub editor_active_line_number: Option<Hsla>,
     #[serde(rename = "editor.invisible")]
     pub editor_invisible: Option<Hsla>,
+    /// Optional background color for the gutter (line-number column).
+    /// Falls back to [`Self::editor_background`] when unset.
+    #[serde(rename = "editor.gutter.background")]
+    pub editor_gutter_background: Option<Hsla>,
     #[serde(flatten)]
     pub status: StatusColors,
     #[serde(rename = "syntax")]

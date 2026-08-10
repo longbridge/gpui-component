@@ -46,11 +46,8 @@ fn main() {
         gpui_component::init(cx);
 
         cx.spawn(async move |cx| {
-            let window_options = WindowOptions {
-                // Setup GPUI to use custom title bar
-                titlebar: Some(TitleBar::title_bar_options()),
-                ..Default::default()
-            };
+            // Setup GPUI to use custom title bar
+            let window_options = TitleBar::window_options();
 
             cx.open_window(window_options, |window, cx| {
                 let view = cx.new(|_| Example);

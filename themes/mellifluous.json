@@ -45,6 +45,7 @@
         "tab_bar.background": "#E7E7E7",
         "title_bar.background": "#dfdfdf",
         "title_bar.border": "#CACACA",
+        "status_bar.background": "#dfdfdf",
         "base.red": "#C95954",
         "base.green": "#828040",
         "base.yellow": "#c98f54",

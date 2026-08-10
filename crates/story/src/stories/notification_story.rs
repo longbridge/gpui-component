@@ -77,29 +77,59 @@ impl Render for NotificationStory {
             .size_full()
             .gap_3()
             .child(
-                h_flex().gap_3().child(
-                    Button::new("placement")
-                        .outline()
-                        .label(format!("{:?}", cx.theme().notification.placement))
-                        .dropdown_menu(move |menu, window, cx| {
-                            let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
-                                menu.item(
-                                    PopupMenuItem::new(format!("{:?}", placement))
-                                        .checked(cx.theme().notification.placement == placement)
-                                        .on_click(window.listener_for(
-                                            &view,
-                                            move |_, _, _, cx| {
-                                                Theme::global_mut(cx).notification.placement =
-                                                    placement;
-                                                cx.notify();
-                                            },
-                                        )),
-                                )
-                            });
+                h_flex()
+                    .gap_3()
+                    .child(
+                        Button::new("placement")
+                            .outline()
+                            .label(format!("{:?}", cx.theme().notification.placement))
+                            .dropdown_menu({
+                                let view = view.clone();
+                                move |menu, window, cx| {
+                                    let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
+                                        menu.item(
+                                            PopupMenuItem::new(format!("{:?}", placement))
+                                                .checked(
+                                                    cx.theme().notification.placement == placement,
+                                                )
+                                                .on_click(window.listener_for(
+                                                    &view,
+                                                    move |_, _, _, cx| {
+                                                        Theme::global_mut(cx)
+                                                            .notification
+                                                            .placement = placement;
+                                                        cx.notify();
+                                                    },
+                                                )),
+                                        )
+                                    });
 
-                            menu
-                        }),
-                ),
+                                    menu
+                                }
+                            }),
+                    )
+                    .child(
+                        Button::new("max-items")
+                            .outline()
+                            .label(format!("Max items: {}", cx.theme().notification.max_items))
+                            .dropdown_menu(move |menu, window, cx| {
+                                const MAX_ITEMS: [usize; 5] = [1, 2, 3, 5, 10];
+                                MAX_ITEMS.into_iter().fold(menu, |menu, max_items| {
+                                    menu.item(
+                                        PopupMenuItem::new(format!("{}", max_items))
+                                            .checked(cx.theme().notification.max_items == max_items)
+                                            .on_click(window.listener_for(
+                                                &view,
+                                                move |_, _, _, cx| {
+                                                    Theme::global_mut(cx).notification.max_items =
+                                                        max_items;
+                                                    cx.notify();
+                                                },
+                                            )),
+                                    )
+                                })
+                            }),
+                    ),
             )
             .child(
                 section("Simple Notification").child(
@@ -306,6 +336,33 @@ impl Render for NotificationStory {
                                         println!("Notification clicked");
                                         cx.notify();
                                     })),
+                                cx,
+                            )
+                        })),
+                ),
+            )
+            .child(
+                section("on_click vs on_close").child(
+                    Button::new("show-notify-click-close")
+                        .outline()
+                        .label("Click vs Close")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            struct ClickCloseNotification;
+
+                            window.push_notification(
+                                Notification::info(
+                                    "Click the body to fire on_click; click the X to close. \
+                                    Watch the console.",
+                                )
+                                .id::<ClickCloseNotification>()
+                                .title("on_click vs on_close")
+                                .autohide(false)
+                                .on_click(|_, _, _| {
+                                    println!("[notification] on_click fired");
+                                })
+                                .on_close(|_, _| {
+                                    println!("[notification] on_close fired");
+                                }),
                                 cx,
                             )
                         })),

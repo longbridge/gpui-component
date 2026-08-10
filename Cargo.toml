@@ -17,6 +17,10 @@ members = [
     "examples/focus_trap",
     "examples/tooltip_top_edge",
     "examples/sidebar",
+    "examples/text_selection",
+    "examples/root_borderless",
+    "examples/table_in_scrollable",
+    "examples/markdown_table",
 ]
 resolver = "2"
 
@@ -56,7 +60,7 @@ ropey = { version = "=2.0.0-beta.1", features = [
     "metric_lines_lf",
     "metric_utf16",
 ] }
-rust-i18n = "4"
+rust-i18n = "4.2.0"
 schemars = "1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1"

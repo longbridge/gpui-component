@@ -9,7 +9,7 @@ use crate::{
 use gpui::{
     App, AppContext as _, ClickEvent, Context, DismissEvent, Entity, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, MouseButton, OwnedMenu, ParentElement,
-    Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Window, anchored,
+    Render, Role, SharedString, StatefulInteractiveElement, Styled, Subscription, Window, anchored,
     deferred, div, prelude::FluentBuilder, px,
 };
 
@@ -120,6 +120,7 @@ impl Render for AppMenuBar {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         h_flex()
             .id("app-menu-bar")
+            .role(Role::MenuBar)
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_move_left))
             .on_action(cx.listener(Self::on_move_right))
@@ -127,6 +128,7 @@ impl Render for AppMenuBar {
             .size_full()
             .gap_x_1()
             .overflow_x_scroll()
+            .restrict_scroll_to_axis()
             .children(self.menus.clone())
     }
 }
@@ -158,6 +160,10 @@ impl AppMenu {
             popup_menu: None,
             _subscription: None,
         })
+    }
+
+    fn is_selected(&self, cx: &App) -> bool {
+        self.menu_bar.read(cx).selected_index == Some(self.ix)
     }
 
     fn build_popup_menu(
@@ -213,12 +219,19 @@ impl AppMenu {
 
     fn handle_trigger_click(
         &mut self,
-        _: &ClickEvent,
+        event: &ClickEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let is_selected = self.menu_bar.read(cx).selected_index == Some(self.ix);
+        if matches!(event, ClickEvent::Mouse(_)) {
+            return;
+        }
 
+        self.toggle(window, cx);
+    }
+
+    fn toggle(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let is_selected = self.is_selected(cx);
         _ = self.menu_bar.update(cx, |state, cx| {
             let new_ix = if is_selected { None } else { Some(self.ix) };
             state.set_selected_index(new_ix, window, cx);
@@ -243,8 +256,7 @@ impl AppMenu {
 
 impl Render for AppMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let menu_bar = self.menu_bar.read(cx);
-        let is_selected = menu_bar.selected_index == Some(self.ix);
+        let is_selected = self.is_selected(cx);
 
         div()
             .id(self.ix)
@@ -257,11 +269,15 @@ impl Render for AppMenu {
                     .ghost()
                     .label(self.name.clone())
                     .selected(is_selected)
-                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
-                        // Stop propagation to avoid dragging the window.
-                        window.prevent_default();
-                        cx.stop_propagation();
-                    })
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        window.listener_for(&cx.entity(), move |this, _, window, cx| {
+                            // Stop propagation to avoid dragging the window.
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            this.toggle(window, cx);
+                        }),
+                    )
                     .on_click(cx.listener(Self::handle_trigger_click)),
             )
             .on_hover(cx.listener(Self::handle_hover))

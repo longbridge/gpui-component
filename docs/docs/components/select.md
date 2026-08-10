@@ -15,6 +15,10 @@ A select component that allows users to choose from a list of options.
 
 Supports search functionality, grouped items, custom rendering, and various states. Built with keyboard navigation and accessibility in mind.
 
+:::tip
+For richer selection UIs with custom trigger rendering or multi-select, see [Combobox](combobox).
+:::
+
 ## Import
 
 ```rust

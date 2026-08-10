@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use crate::{
-    AxisExt, Sizable, StyledExt,
+    AxisExt, Disableable, Sizable, StyledExt,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
     setting::{
@@ -62,6 +62,7 @@ where
             .label(old_label)
             .dropdown_caret(true)
             .outline()
+            .disabled(options.disabled)
             .with_size(options.size)
             .refine_style(style)
             .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, _, _| {

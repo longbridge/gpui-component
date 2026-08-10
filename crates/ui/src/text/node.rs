@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     ops::Range,
     sync::{Arc, Mutex},
@@ -6,26 +7,35 @@ use std::{
 
 use gpui::{
     AnyElement, App, DefiniteLength, Div, ElementId, FontStyle, FontWeight, Half, HighlightStyle,
-    InteractiveElement as _, IntoElement, Length, ObjectFit, ParentElement, SharedString,
-    SharedUri, StatefulInteractiveElement, Styled, StyledImage as _, Window, div, img,
-    prelude::FluentBuilder as _, px, relative, rems,
+    Hsla, InteractiveElement as _, IntoElement, Length, ObjectFit, Overflow, ParentElement,
+    ScrollHandle, SharedString, SharedUri, StatefulInteractiveElement, Styled, StyledImage as _,
+    WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
 };
 use markdown::mdast;
 use ropey::Rope;
 
 use crate::{
-    ActiveTheme as _, Icon, IconName, StyledExt, h_flex,
-    highlighter::{HighlightTheme, SyntaxHighlighter},
+    ActiveTheme as _, Icon, IconName, StyledExt, WindowExt as _, h_flex,
+    highlighter::{HighlightTheme, LanguageRegistry, SyntaxHighlighter},
+    input::{InputEdit, Point, RopeExt as _},
+    scroll::horizontal_scroll_area,
     text::{
-        CodeBlockActionsFn,
+        CodeBlockActionsFn, LinkClickHandlerFn, MarkdownExtensions, MarkdownNode,
         document::NodeRenderOptions,
         inline::{Inline, InlineState},
+        inline_flow::{InlineFlow, InlineFlowItem},
+        text_view::handle_link_click,
     },
     tooltip::Tooltip,
     v_flex,
 };
 
-use super::{TextViewStyle, utils::list_item_prefix};
+use super::{SelectionFormat, TextViewStyle, utils::list_item_prefix};
+
+thread_local! {
+    static CODE_BLOCK_HIGHLIGHTERS: RefCell<HashMap<SharedString, SyntaxHighlighter>> =
+        RefCell::new(HashMap::new());
+}
 
 /// The block-level nodes.
 #[derive(Debug, Clone, PartialEq)]
@@ -59,6 +69,8 @@ pub(crate) enum BlockNode {
         span: Option<Span>,
     },
     CodeBlock(CodeBlock),
+    /// A custom Markdown node produced by [`MarkdownExtensions`].
+    Custom(MarkdownNode),
     Table(Table),
     Break {
         html: bool,
@@ -77,13 +89,18 @@ pub(crate) enum BlockNode {
     Unknown,
 }
 
+#[derive(Clone, Copy)]
+enum BlockTextKind {
+    All,
+    Selected,
+    /// Like `Selected`, but reconstructs Markdown source for the selection
+    /// instead of the rendered plain text.
+    SelectedSource,
+}
+
 impl BlockNode {
     pub(super) fn is_list_item(&self) -> bool {
         matches!(self, Self::ListItem { .. })
-    }
-
-    pub(super) fn is_break(&self) -> bool {
-        matches!(self, Self::Break { .. })
     }
 
     /// Combine all children, omitting the empt parent nodes.
@@ -95,7 +112,7 @@ impl BlockNode {
     }
 
     /// Get the span of the node.
-    pub(super) fn span(&self) -> Option<Span> {
+    pub(crate) fn span(&self) -> Option<Span> {
         match self {
             BlockNode::Root { span, .. } => *span,
             BlockNode::Paragraph(paragraph) => paragraph.span,
@@ -104,6 +121,7 @@ impl BlockNode {
             BlockNode::List { span, .. } => *span,
             BlockNode::ListItem { span, .. } => *span,
             BlockNode::CodeBlock(code_block) => code_block.span,
+            BlockNode::Custom(el) => el.span,
             BlockNode::Table(table) => table.span,
             BlockNode::Break { span, .. } => *span,
             BlockNode::HorizontalRule { span, .. } => *span,
@@ -112,79 +130,149 @@ impl BlockNode {
         }
     }
 
-    pub(super) fn selected_text(&self) -> String {
+    pub(super) fn text(&self) -> String {
+        self.text_by_kind(BlockTextKind::All)
+    }
+
+    /// The selected text within this block, in `format`.
+    ///
+    /// [`SelectionFormat::Source`] reconstructs the Markdown source of the
+    /// selection instead of the rendered text.
+    pub(super) fn selected_text(&self, format: SelectionFormat) -> String {
+        self.text_by_kind(match format {
+            SelectionFormat::Plain => BlockTextKind::Selected,
+            SelectionFormat::Source => BlockTextKind::SelectedSource,
+        })
+    }
+
+    fn text_by_kind(&self, kind: BlockTextKind) -> String {
         let mut text = String::new();
         match self {
             BlockNode::Root { children, .. } => {
-                let mut block_text = String::new();
-                for c in children.iter() {
-                    block_text.push_str(&c.selected_text());
-                }
+                let block_text = Self::children_text(children, kind);
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
             BlockNode::Paragraph(paragraph) => {
-                let mut block_text = String::new();
-                block_text.push_str(&paragraph.selected_text());
+                let block_text = match kind {
+                    BlockTextKind::All => paragraph.text(),
+                    BlockTextKind::Selected => paragraph.selected_text(),
+                    BlockTextKind::SelectedSource => paragraph.selected_source(),
+                };
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
-            BlockNode::Heading { children, .. } => {
-                let mut block_text = String::new();
-                block_text.push_str(&children.selected_text());
+            BlockNode::Heading {
+                level, children, ..
+            } => {
+                let block_text = match kind {
+                    BlockTextKind::All => children.text(),
+                    BlockTextKind::Selected => children.selected_text(),
+                    BlockTextKind::SelectedSource => children.selected_source(),
+                };
                 if !block_text.is_empty() {
+                    // In source mode, prefix the heading marker so a selected
+                    // heading round-trips as Markdown (e.g. `## Title`).
+                    if matches!(kind, BlockTextKind::SelectedSource) {
+                        text.push_str(&"#".repeat(*level as usize));
+                        text.push(' ');
+                    }
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
-            BlockNode::List { children, .. } => {
-                for c in children.iter() {
-                    text.push_str(&c.selected_text());
+            BlockNode::List {
+                children, ordered, ..
+            } => {
+                if matches!(kind, BlockTextKind::SelectedSource) {
+                    // Reconstruct the list source, indenting nested lists and
+                    // restoring list markers and task-list checkboxes.
+                    text.push_str(&list_selected_source(children, *ordered, ""));
+                } else {
+                    text.push_str(&Self::children_text(children, kind));
                 }
             }
             BlockNode::ListItem { children, .. } => {
-                for c in children.iter() {
-                    text.push_str(&c.selected_text());
-                }
+                text.push_str(&Self::children_text(children, kind));
             }
             BlockNode::Blockquote { children, .. } => {
-                let mut block_text = String::new();
-                for c in children.iter() {
-                    block_text.push_str(&c.selected_text());
-                }
+                let block_text = Self::children_text(children, kind);
 
                 if !block_text.is_empty() {
-                    text.push_str(&block_text);
+                    if matches!(kind, BlockTextKind::SelectedSource) {
+                        // Prefix every line with `> ` so a selected blockquote
+                        // round-trips as Markdown.
+                        let quoted = block_text
+                            .trim_end_matches('\n')
+                            .lines()
+                            .map(|line| {
+                                if line.is_empty() {
+                                    ">".to_string()
+                                } else {
+                                    format!("> {}", line)
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        text.push_str(&quoted);
+                    } else {
+                        text.push_str(&block_text);
+                    }
                     text.push('\n');
                 }
             }
             BlockNode::Table(table) => {
-                let mut block_text = String::new();
-                for row in table.children.iter() {
-                    let mut row_texts = vec![];
-                    for cell in row.children.iter() {
-                        row_texts.push(cell.children.selected_text());
+                if matches!(kind, BlockTextKind::SelectedSource) {
+                    let block_text = table_selected_source(table);
+                    if !block_text.is_empty() {
+                        text.push_str(&block_text);
+                        text.push('\n');
                     }
-                    if !row_texts.is_empty() {
-                        block_text.push_str(&row_texts.join(" "));
-                        block_text.push('\n');
+                } else {
+                    let mut block_text = String::new();
+                    for row in table.children.iter() {
+                        let mut row_texts = vec![];
+                        for cell in row.children.iter() {
+                            row_texts.push(match kind {
+                                BlockTextKind::All => cell.children.text(),
+                                // Source is handled above; only Selected reaches here.
+                                _ => cell.children.selected_text(),
+                            });
+                        }
+                        if !row_texts.is_empty() {
+                            block_text.push_str(&row_texts.join(" "));
+                            block_text.push('\n');
+                        }
+                    }
+
+                    if !block_text.is_empty() {
+                        text.push_str(&block_text);
+                        text.push('\n');
                     }
                 }
-
+            }
+            BlockNode::CodeBlock(code_block) => {
+                let block_text = match kind {
+                    BlockTextKind::All => code_block.text(),
+                    BlockTextKind::Selected => code_block.selected_text(),
+                    BlockTextKind::SelectedSource => code_block.selected_source(),
+                };
                 if !block_text.is_empty() {
                     text.push_str(&block_text);
                     text.push('\n');
                 }
             }
-            BlockNode::CodeBlock(code_block) => {
-                let block_text = code_block.selected_text();
-                if !block_text.is_empty() {
-                    text.push_str(&block_text);
-                    text.push('\n');
+            BlockNode::Custom(node) => {
+                if let BlockTextKind::All = kind {
+                    let content = node.as_text();
+                    if !content.is_empty() {
+                        text.push_str(content);
+                        text.push('\n');
+                    }
                 }
             }
             BlockNode::Definition { .. }
@@ -194,6 +282,77 @@ impl BlockNode {
         }
 
         text
+    }
+
+    fn children_text(children: &[BlockNode], kind: BlockTextKind) -> String {
+        let mut text = String::new();
+        for child in children.iter() {
+            text.push_str(&child.text_by_kind(kind));
+        }
+
+        text
+    }
+
+    /// Synchronously clear the selection stored in every inline state.
+    ///
+    /// Mirrors the [`selected_text`](Self::selected_text) traversal so the
+    /// selection can be cleared without relying on a repaint.
+    /// Whether this block carries a selection, even an empty one.
+    ///
+    /// A block only learns its selection when it is painted, so this doubles as
+    /// "this block was on screen while the selection was made". An empty
+    /// selection is the caret left by the press that started the drag, which is
+    /// why it counts (see [`ParsedDocument::selected_text`]).
+    pub(super) fn has_selection(&self) -> bool {
+        match self {
+            BlockNode::Root { children, .. }
+            | BlockNode::Blockquote { children, .. }
+            | BlockNode::List { children, .. }
+            | BlockNode::ListItem { children, .. } => {
+                children.iter().any(|child| child.has_selection())
+            }
+            BlockNode::Paragraph(paragraph) => paragraph.has_selection(),
+            BlockNode::Heading { children, .. } => children.has_selection(),
+            BlockNode::Table(table) => table.children.iter().any(|row| {
+                row.children
+                    .iter()
+                    .any(|cell| cell.children.has_selection())
+            }),
+            BlockNode::CodeBlock(code_block) => code_block.has_selection(),
+            BlockNode::Custom { .. }
+            | BlockNode::Definition { .. }
+            | BlockNode::Break { .. }
+            | BlockNode::HorizontalRule { .. }
+            | BlockNode::Unknown { .. } => false,
+        }
+    }
+
+    pub(super) fn clear_selection(&self) {
+        match self {
+            BlockNode::Root { children, .. }
+            | BlockNode::Blockquote { children, .. }
+            | BlockNode::List { children, .. }
+            | BlockNode::ListItem { children, .. } => {
+                for child in children.iter() {
+                    child.clear_selection();
+                }
+            }
+            BlockNode::Paragraph(paragraph) => paragraph.clear_selection(),
+            BlockNode::Heading { children, .. } => children.clear_selection(),
+            BlockNode::Table(table) => {
+                for row in table.children.iter() {
+                    for cell in row.children.iter() {
+                        cell.children.clear_selection();
+                    }
+                }
+            }
+            BlockNode::CodeBlock(code_block) => code_block.clear_selection(),
+            BlockNode::Custom { .. }
+            | BlockNode::Definition { .. }
+            | BlockNode::Break { .. }
+            | BlockNode::HorizontalRule { .. }
+            | BlockNode::Unknown { .. } => {}
+        }
     }
 }
 
@@ -211,7 +370,12 @@ pub struct TextMark {
     pub bold: bool,
     pub italic: bool,
     pub strikethrough: bool,
+    pub underline: bool,
     pub code: bool,
+    /// Highlight (`<mark>`) the text with this background color.
+    ///
+    /// `None` means the text is not highlighted.
+    pub highlight: Option<Hsla>,
     pub link: Option<LinkMark>,
 }
 
@@ -231,8 +395,19 @@ impl TextMark {
         self
     }
 
+    pub fn underline(mut self) -> Self {
+        self.underline = true;
+        self
+    }
+
     pub fn code(mut self) -> Self {
         self.code = true;
+        self
+    }
+
+    /// Mark the text as highlighted (`<mark>`) with the given background color.
+    pub fn highlight(mut self, color: Hsla) -> Self {
+        self.highlight = Some(color);
         self
     }
 
@@ -245,7 +420,11 @@ impl TextMark {
         self.bold |= other.bold;
         self.italic |= other.italic;
         self.strikethrough |= other.strikethrough;
+        self.underline |= other.underline;
         self.code |= other.code;
+        if other.highlight.is_some() {
+            self.highlight = other.highlight;
+        }
         if let Some(link) = other.link {
             self.link = Some(link);
         }
@@ -313,6 +492,296 @@ impl PartialEq for InlineNode {
     }
 }
 
+/// Wrap `text` with the Markdown syntax implied by `mark`.
+///
+/// This mirrors the per-mark formatting in [`Paragraph::to_markdown`] but
+/// operates on an already-sliced run, so it can reconstruct the Markdown
+/// source for a *partial* text selection. Applied inside-out (innermost markup
+/// first) so nested emphasis like `**_x_**` round-trips.
+pub(crate) fn wrap_with_mark(text: &str, mark: &TextMark) -> String {
+    if text.is_empty() {
+        return String::new();
+    }
+
+    let mut out = text.to_string();
+    if mark.code {
+        out = format!("`{}`", out);
+    }
+    if mark.italic {
+        out = format!("*{}*", out);
+    }
+    if mark.bold {
+        out = format!("**{}**", out);
+    }
+    if mark.strikethrough {
+        out = format!("~~{}~~", out);
+    }
+    if mark.underline {
+        // Markdown has no underline syntax, and `__` reads as bold to most
+        // parsers, so fall back to the inline HTML `<u>` parses from.
+        out = format!("<u>{}</u>", out);
+    }
+    if mark.highlight.is_some() {
+        out = format!("=={}==", out);
+    }
+    if let Some(link) = &mark.link {
+        out = match &link.title {
+            Some(title) => format!("[{}]({} \"{}\")", out, link.url, title),
+            None => format!("[{}]({})", out, link.url),
+        };
+    }
+    out
+}
+
+/// How a selection covers one rendered run, so the caller can tell whether it
+/// continues into an adjacent inline image.
+#[derive(Default)]
+struct RunSelection {
+    emitted: bool,
+    at_start: bool,
+    at_end: bool,
+}
+
+/// Emit the selected part of one rendered run, preceded by the images the
+/// selection has run into. `run` holds the run's children with their offset
+/// into the run's concatenated text.
+fn emit_run(
+    state: &Arc<Mutex<InlineState>>,
+    run: &[(usize, &InlineNode)],
+    pending_images: &mut Vec<String>,
+    out: &mut String,
+) -> RunSelection {
+    let mut selected = RunSelection::default();
+    let Ok(state) = state.lock() else {
+        return selected;
+    };
+    let Some(selection) = &state.selection else {
+        return selected;
+    };
+    if selection.start >= selection.end {
+        return selected;
+    }
+
+    selected.at_start = selection.start == 0;
+    selected.at_end = selection.end >= state.text.len();
+
+    for (start, child) in run {
+        let end = start + child.text.len();
+        let lo = selection.start.max(*start);
+        let hi = selection.end.min(end);
+        if lo >= hi {
+            continue;
+        }
+
+        if !selected.emitted {
+            if selected.at_start {
+                out.push_str(&pending_images.join(""));
+            }
+            pending_images.clear();
+        }
+        selected.emitted = true;
+
+        out.push_str(&reconstruct_markdown(
+            &child.text,
+            &child.marks,
+            (lo - start)..(hi - start),
+        ));
+    }
+
+    selected
+}
+
+/// The Markdown source for an inline image, e.g. `![alt](url "title")`.
+fn image_markdown(image: &ImageNode) -> String {
+    let alt = image.alt.clone().unwrap_or_default();
+    let title = image
+        .title
+        .clone()
+        .map_or(String::new(), |title| format!(" \"{}\"", title));
+    format!("![{}]({}{})", alt, image.url, title)
+}
+
+/// Reconstruct the Markdown source for the `selection` sub-range of a text run
+/// carrying `marks`.
+///
+/// `selection` is a byte range into `text`. For each mark that overlaps the
+/// selection, the overlapping slice is wrapped in the mark's Markdown syntax
+/// (see [`wrap_with_mark`]); slices not covered by any mark are emitted
+/// verbatim. This lets a rendered-offset selection be copied back as Markdown
+/// source (e.g. selecting inside a `**bold**` run yields `**bold**`).
+pub(crate) fn reconstruct_markdown(
+    text: &str,
+    marks: &[(Range<usize>, TextMark)],
+    selection: Range<usize>,
+) -> String {
+    let start = selection.start.min(text.len());
+    let end = selection.end.min(text.len());
+    if start >= end {
+        return String::new();
+    }
+
+    let mut out = String::new();
+    let mut cursor = start;
+    // Marks are stored in ascending, non-overlapping order by the parser.
+    for (range, mark) in marks.iter() {
+        let seg_start = range.start.max(start);
+        let seg_end = range.end.min(end);
+        if seg_start >= seg_end {
+            continue;
+        }
+        // Emit any unmarked text before this mark verbatim.
+        if cursor < seg_start {
+            out.push_str(&text[cursor..seg_start]);
+        }
+        out.push_str(&wrap_with_mark(&text[seg_start..seg_end], mark));
+        cursor = seg_end;
+    }
+    // Trailing unmarked text.
+    if cursor < end {
+        out.push_str(&text[cursor..end]);
+    }
+    out
+}
+
+/// Reconstruct the Markdown source of the selected cells of `table`.
+///
+/// Cells emit their own selected source; rows are piped (`| a | b |`) and the
+/// delimiter/alignment row is inserted after the first row, so a selected
+/// table round-trips as a Markdown table. Returns an empty string when no cell
+/// is selected.
+fn table_selected_source(table: &Table) -> String {
+    let cell_source = |cell: &TableCell| cell.children.selected_source().replace('\n', " ");
+
+    let any_selected = table.children.iter().any(|row| {
+        row.children
+            .iter()
+            .any(|cell| !cell_source(cell).trim().is_empty())
+    });
+    if !any_selected {
+        return String::new();
+    }
+
+    let mut lines: Vec<String> = Vec::new();
+    for (row_ix, row) in table.children.iter().enumerate() {
+        let cells: Vec<String> = row
+            .children
+            .iter()
+            .map(|cell| cell_source(cell).trim().to_string())
+            .collect();
+        lines.push(format!("| {} |", cells.join(" | ")));
+
+        // The Markdown delimiter row carries the column alignments and must
+        // follow the header row.
+        if row_ix == 0 {
+            let aligns: Vec<String> = (0..row.children.len())
+                .map(|ix| {
+                    match table.column_align(ix) {
+                        ColumnumnAlign::Left => ":--",
+                        ColumnumnAlign::Center => ":-:",
+                        ColumnumnAlign::Right => "--:",
+                    }
+                    .to_string()
+                })
+                .collect();
+            lines.push(format!("| {} |", aligns.join(" | ")));
+        }
+    }
+
+    lines.join("\n")
+}
+
+/// Reconstruct the Markdown source of the selected items of a list.
+///
+/// Restores the list marker (`- ` / `N. `) and task-list checkbox (`[x] ` /
+/// `[ ] `) of each item, and recurses into nested lists with a deeper `indent`
+/// so nesting is preserved. `indent` is the leading whitespace for this level;
+/// nested levels are indented by the width of the parent marker so continuation
+/// and sub-list lines align under the item text. Items with no selected content
+/// are skipped but still consume an ordered number, so the remaining items keep
+/// their original numbering.
+fn list_selected_source(children: &[BlockNode], ordered: bool, indent: &str) -> String {
+    let mut out = String::new();
+    let mut item_ix = 0usize;
+
+    for child in children {
+        let BlockNode::ListItem {
+            children: item_children,
+            checked,
+            ..
+        } = child
+        else {
+            continue;
+        };
+
+        let marker = if ordered {
+            format!("{}. ", item_ix + 1)
+        } else {
+            "- ".to_string()
+        };
+        let checkbox = match checked {
+            Some(true) => "[x] ",
+            Some(false) => "[ ] ",
+            None => "",
+        };
+        let child_indent = format!("{}{}", indent, " ".repeat(marker.len()));
+
+        // Split the item into its own content and any nested lists, so the
+        // nested lists can be indented under the content.
+        let mut content = String::new();
+        let mut nested = String::new();
+        for sub in item_children {
+            if let BlockNode::List {
+                children: sub_children,
+                ordered: sub_ordered,
+                ..
+            } = sub
+            {
+                nested.push_str(&list_selected_source(
+                    sub_children,
+                    *sub_ordered,
+                    &child_indent,
+                ));
+            } else {
+                content.push_str(&sub.text_by_kind(BlockTextKind::SelectedSource));
+            }
+        }
+        let content = content.trim_end_matches('\n');
+
+        if content.is_empty() && nested.is_empty() {
+            item_ix += 1;
+            continue;
+        }
+
+        if content.is_empty() {
+            // An item whose only selected content is a nested list.
+            out.push_str(indent);
+            out.push_str(&marker);
+            out.push_str(checkbox.trim_end());
+            out.push('\n');
+        } else {
+            // The first line carries the marker and checkbox; continuation
+            // lines are indented to align under the item text.
+            let mut lines = content.lines();
+            if let Some(first) = lines.next() {
+                out.push_str(indent);
+                out.push_str(&marker);
+                out.push_str(checkbox);
+                out.push_str(first);
+                out.push('\n');
+            }
+            for line in lines {
+                out.push_str(&child_indent);
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out.push_str(&nested);
+        item_ix += 1;
+    }
+
+    out
+}
+
 impl InlineNode {
     pub(crate) fn new(text: impl Into<SharedString>) -> Self {
         Self {
@@ -373,20 +842,112 @@ impl Paragraph {
         let mut text = String::new();
 
         for c in self.children.iter() {
-            let state = c.state.lock().unwrap();
+            let Ok(state) = c.state.lock() else {
+                continue;
+            };
             if let Some(selection) = &state.selection {
-                let part_text = state.text.clone();
-                text.push_str(&part_text[selection.start..selection.end]);
+                text.push_str(&state.text[selection.start..selection.end]);
             }
         }
 
-        let state = self.state.lock().unwrap();
-        if let Some(selection) = &state.selection {
-            let all_text = state.text.clone();
-            text.push_str(&all_text[selection.start..selection.end]);
+        if let Ok(state) = self.state.lock()
+            && let Some(selection) = &state.selection
+        {
+            text.push_str(&state.text[selection.start..selection.end]);
         }
 
         text
+    }
+
+    /// Reconstruct the Markdown source for the current selection.
+    ///
+    /// Mirrors [`selected_text`](Self::selected_text), but emits Markdown
+    /// instead of the rendered text, using each inline node's `marks` (see
+    /// [`reconstruct_markdown`]).
+    ///
+    /// Selection offsets index an `InlineState.text`, and one such state spans
+    /// *several* children: [`Paragraph::render`] concatenates children until it
+    /// hits an inline image, stores that run in the image child's state, then
+    /// starts over; whatever follows the last image is stored in `self.state`.
+    /// So walk the children in the same runs and map each selected byte back to
+    /// the child it was rendered from — mapping against a single child's text
+    /// would attribute the same offsets to children in other runs.
+    ///
+    /// An image has no selection of its own, so it is emitted when the
+    /// selection runs into it: reaching the end of the run before it, and
+    /// starting at the beginning of the run after it. A paragraph that begins
+    /// or ends with an image has no run on that side, which counts as reaching
+    /// it.
+    pub(super) fn selected_source(&self) -> String {
+        let mut source = String::new();
+        let mut pending_images: Vec<String> = Vec::new();
+        let mut run: Vec<(usize, &InlineNode)> = Vec::new();
+        let mut offset = 0;
+        let mut enters_image = true;
+
+        for child in self.children.iter() {
+            let Some(image) = &child.image else {
+                run.push((offset, child));
+                offset += child.text.len();
+                continue;
+            };
+
+            // The run before an image is stored in that image's own state.
+            let run_before = !run.is_empty();
+            let selected = emit_run(&child.state, &run, &mut pending_images, &mut source);
+            if run_before {
+                enters_image = selected.emitted && selected.at_end;
+            }
+            if enters_image {
+                pending_images.push(image_markdown(image));
+            } else {
+                pending_images.clear();
+            }
+
+            run.clear();
+            offset = 0;
+        }
+
+        let trailing = emit_run(&self.state, &run, &mut pending_images, &mut source);
+        // Trailing images have no run after them to flush them.
+        if !trailing.emitted && enters_image && !source.is_empty() {
+            source.push_str(&pending_images.join(""));
+        }
+
+        source
+    }
+
+    pub(super) fn text(&self) -> String {
+        let mut text = String::new();
+        for node in self.children.iter() {
+            text.push_str(&node.text);
+        }
+        text
+    }
+
+    /// Synchronously clear the selection stored in every inline state.
+    ///
+    /// Mirrors the [`selected_text`](Self::selected_text) traversal.
+    pub(super) fn has_selection(&self) -> bool {
+        self.children
+            .iter()
+            .any(|c| c.state.lock().is_ok_and(|state| state.selection.is_some()))
+            || self
+                .state
+                .lock()
+                .is_ok_and(|state| state.selection.is_some())
+    }
+
+    pub(super) fn clear_selection(&self) {
+        for c in self.children.iter() {
+            if let Ok(mut state) = c.state.lock() {
+                state.selection = None;
+            }
+        }
+
+        if let Ok(mut state) = self.state.lock() {
+            state.selection = None;
+        }
     }
 }
 
@@ -490,16 +1051,23 @@ impl Paragraph {
 }
 
 #[derive(Debug, Clone)]
+struct CachedCodeBlockStyles {
+    /// The active theme used to compute `styles`.
+    highlight_theme: Arc<HighlightTheme>,
+    styles: Vec<(Range<usize>, HighlightStyle)>,
+}
+
+#[derive(Debug, Clone)]
 pub struct CodeBlock {
     lang: Option<SharedString>,
-    styles: Vec<(Range<usize>, HighlightStyle)>,
+    styles: Arc<Mutex<Option<CachedCodeBlockStyles>>>,
     state: Arc<Mutex<InlineState>>,
     pub span: Option<Span>,
 }
 
 impl PartialEq for CodeBlock {
     fn eq(&self, other: &Self) -> bool {
-        self.lang == other.lang && self.styles == other.styles
+        self.lang == other.lang && self.code() == other.code() && self.span == other.span
     }
 }
 
@@ -511,41 +1079,140 @@ impl CodeBlock {
 
     /// Get the code content of the code block.
     pub fn code(&self) -> SharedString {
-        self.state.lock().unwrap().text.clone()
+        self.state
+            .lock()
+            .map(|state| state.text.clone())
+            .unwrap_or_default()
     }
 
     pub(crate) fn new(
         code: SharedString,
         lang: Option<SharedString>,
-        highlight_theme: &HighlightTheme,
         span: Option<impl Into<Span>>,
     ) -> Self {
-        let mut styles = vec![];
-        if let Some(lang) = &lang {
-            let mut highlighter = SyntaxHighlighter::new(&lang);
-            highlighter.update(None, &Rope::from_str(code.as_str()), None);
-            styles = highlighter.styles(&(0..code.len()), highlight_theme);
-        };
-
         let state = Arc::new(Mutex::new(InlineState::default()));
-        state.lock().unwrap().set_text(code);
+        if let Ok(mut state) = state.lock() {
+            state.set_text(code);
+        }
 
         Self {
             lang,
-            styles,
+            styles: Arc::new(Mutex::new(None)),
             state,
             span: span.map(|s| s.into()),
         }
     }
 
+    pub(crate) fn styles(
+        &self,
+        highlight_theme: &Arc<HighlightTheme>,
+    ) -> Vec<(Range<usize>, HighlightStyle)> {
+        let Some(lang) = &self.lang else {
+            return Vec::new();
+        };
+
+        let Ok(mut styles) = self.styles.lock() else {
+            return Vec::new();
+        };
+
+        // Pointer identity is the common render-path fast check. If an
+        // equivalent theme is reallocated, adopt its Arc while preserving the
+        // computed styles so subsequent renders also use the fast path.
+        if let Some(cached) = styles.as_mut() {
+            if Arc::ptr_eq(&cached.highlight_theme, highlight_theme) {
+                return cached.styles.clone();
+            }
+
+            if cached.highlight_theme.as_ref() == highlight_theme.as_ref() {
+                cached.highlight_theme = highlight_theme.clone();
+                return cached.styles.clone();
+            }
+        }
+
+        let code = self.code();
+        let computed_styles = CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let highlighter = cache
+                .entry(lang.clone())
+                .or_insert_with(|| SyntaxHighlighter::new(lang));
+
+            if let Some(config) = LanguageRegistry::singleton().language(lang)
+                && highlighter.language() != &config.name
+            {
+                *highlighter = SyntaxHighlighter::new(lang);
+            }
+
+            let old_end_byte = highlighter.text().len();
+            let old_end_position = highlighter.text().offset_to_point(old_end_byte);
+            let code_rope = Rope::from_str(code.as_str());
+
+            let edit = InputEdit {
+                start_byte: 0,
+                old_end_byte,
+                new_end_byte: code.len(),
+                start_position: Point::new(0, 0),
+                old_end_position,
+                new_end_position: code_rope.offset_to_point(code.len()),
+            };
+
+            highlighter.update(Some(edit), &code_rope, None);
+            highlighter.styles(&(0..code.len()), highlight_theme)
+        });
+        *styles = Some(CachedCodeBlockStyles {
+            highlight_theme: highlight_theme.clone(),
+            styles: computed_styles.clone(),
+        });
+        computed_styles
+    }
+
     pub(super) fn selected_text(&self) -> String {
         let mut text = String::new();
-        let state = self.state.lock().unwrap();
-        if let Some(selection) = &state.selection {
-            let part_text = state.text.clone();
-            text.push_str(&part_text[selection.start..selection.end]);
+        if let Ok(state) = self.state.lock()
+            && let Some(selection) = &state.selection
+        {
+            text.push_str(&state.text[selection.start..selection.end]);
         }
         text
+    }
+
+    /// Markdown source for the current selection.
+    ///
+    /// The selected code is wrapped in a fenced code block carrying the block's
+    /// language, so a selected code block round-trips as Markdown (e.g.
+    /// ```` ```rust\n…\n``` ````) instead of pasting as bare, unfenced text.
+    /// A partial selection is still emitted as a valid fenced block.
+    pub(super) fn selected_source(&self) -> String {
+        let code = self.selected_text();
+        if code.is_empty() {
+            return String::new();
+        }
+        let lang = self.lang.clone().unwrap_or_default();
+        // Trim trailing newlines so the closing fence sits on its own line
+        // directly after the last code line (no blank line before it).
+        let code = code.trim_end_matches('\n');
+        format!("```{}\n{}\n```", lang, code)
+    }
+
+    pub(super) fn text(&self) -> String {
+        self.state
+            .lock()
+            .map(|state| state.text.to_string())
+            .unwrap_or_default()
+    }
+
+    /// Synchronously clear the selection stored in the inline state.
+    ///
+    /// Mirrors the [`selected_text`](Self::selected_text) traversal.
+    pub(super) fn has_selection(&self) -> bool {
+        self.state
+            .lock()
+            .is_ok_and(|state| state.selection.is_some())
+    }
+
+    pub(super) fn clear_selection(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.selection = None;
+        }
     }
 
     fn render(
@@ -558,13 +1225,17 @@ impl CodeBlock {
         let style = &node_cx.style;
 
         div()
+            .w_full()
+            .min_w_0()
             .when(!options.is_last, |this| this.pb(style.paragraph_gap))
             .child(
                 div()
                     .id(("codeblock", options.ix))
+                    .w_full()
+                    .min_w_0()
                     .p_3()
                     .rounded(cx.theme().radius)
-                    .bg(cx.theme().muted)
+                    .bg(cx.theme().tokens.muted)
                     .font_family(cx.theme().mono_font_family.clone())
                     .text_size(cx.theme().mono_font_size)
                     .relative()
@@ -573,7 +1244,8 @@ impl CodeBlock {
                         "code",
                         self.state.clone(),
                         vec![],
-                        self.styles.clone(),
+                        self.styles(&cx.theme().highlight_theme),
+                        node_cx.link_click_handler.clone(),
                     ))
                     .when_some(node_cx.code_block_actions.clone(), |this, actions| {
                         this.child(
@@ -582,7 +1254,7 @@ impl CodeBlock {
                                 .absolute()
                                 .top_2()
                                 .right_2()
-                                .bg(cx.theme().muted)
+                                .bg(cx.theme().tokens.muted)
                                 .rounded(cx.theme().radius)
                                 .child(actions(&self, window, cx)),
                         )
@@ -601,6 +1273,8 @@ pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    pub(crate) link_click_handler: Option<Arc<LinkClickHandlerFn>>,
+    pub(crate) markdown_extensions: Arc<MarkdownExtensions>,
 }
 
 impl NodeContext {
@@ -612,19 +1286,24 @@ impl NodeContext {
 impl PartialEq for NodeContext {
     fn eq(&self, other: &Self) -> bool {
         self.link_refs == other.link_refs && self.style == other.style
-        // Note: code_block_buttons is intentionally not compared (closures can't be compared)
+        // Note: code_block_actions and markdown_extensions are intentionally
+        // not compared (closures can't be compared)
     }
 }
 
 impl Paragraph {
-    fn render(
-        &self,
-        node_cx: &NodeContext,
-        _window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
+    fn render(&self, node_cx: &NodeContext, _window: &mut Window, cx: &mut App) -> AnyElement {
         let span = self.span;
         let children = &self.children;
+
+        if self.should_render_inline_flow() {
+            return InlineFlow::new(
+                span.unwrap_or_default(),
+                self.inline_flow_items(node_cx, cx),
+                node_cx.link_click_handler.clone(),
+            )
+            .into_any_element();
+        }
 
         let mut child_nodes: Vec<AnyElement> = vec![];
 
@@ -640,21 +1319,21 @@ impl Paragraph {
 
             if let Some(image) = &inline_node.image {
                 if text.len() > 0 {
-                    inline_node
-                        .state
-                        .lock()
-                        .unwrap()
-                        .set_text(text.clone().into());
+                    if let Ok(mut state) = inline_node.state.lock() {
+                        state.set_text(text.clone().into());
+                    }
                     child_nodes.push(
                         Inline::new(
                             ix,
                             inline_node.state.clone(),
                             links.clone(),
                             highlights.clone(),
+                            node_cx.link_click_handler.clone(),
                         )
                         .into_any_element(),
                     );
                 }
+                let link_click_handler = node_cx.link_click_handler.clone();
                 child_nodes.push(
                     img(image.url.clone())
                         .id(ix)
@@ -663,13 +1342,34 @@ impl Paragraph {
                         .when_some(image.width, |this, width| this.w(width))
                         .when_some(image.link.clone(), |this, link| {
                             let title = image.title();
+                            let link_click_handler = link_click_handler.clone();
+                            let aux_link = link.clone();
+                            let aux_link_click_handler = link_click_handler.clone();
                             this.cursor_pointer()
                                 .tooltip(move |window, cx| {
                                     Tooltip::new(title.clone()).build(window, cx)
                                 })
-                                .on_click(move |_, _, cx| {
+                                .on_click(move |event, window, cx| {
+                                    window.end_text_selection(cx);
                                     cx.stop_propagation();
-                                    cx.open_url(&link.url);
+                                    handle_link_click(
+                                        &link_click_handler,
+                                        link.url.clone(),
+                                        event.clone(),
+                                        window,
+                                        cx,
+                                    );
+                                })
+                                .on_aux_click(move |event, window, cx| {
+                                    window.end_text_selection(cx);
+                                    cx.stop_propagation();
+                                    handle_link_click(
+                                        &aux_link_click_handler,
+                                        aux_link.url.clone(),
+                                        event.clone(),
+                                        window,
+                                        cx,
+                                    );
                                 })
                         })
                         .into_any_element(),
@@ -697,8 +1397,17 @@ impl Paragraph {
                             ..Default::default()
                         });
                     }
+                    if style.underline {
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
                     if style.code {
                         highlight.background_color = Some(cx.theme().accent);
+                    }
+                    if let Some(color) = style.highlight {
+                        highlight.background_color = Some(color);
                     }
 
                     if let Some(mut link_mark) = style.link.clone() {
@@ -729,12 +1438,137 @@ impl Paragraph {
 
         // Add the last text node
         if text.len() > 0 {
-            self.state.lock().unwrap().set_text(text.into());
-            child_nodes
-                .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
+            if let Ok(mut state) = self.state.lock() {
+                state.set_text(text.into());
+            }
+            child_nodes.push(
+                Inline::new(
+                    ix,
+                    self.state.clone(),
+                    links,
+                    highlights,
+                    node_cx.link_click_handler.clone(),
+                )
+                .into_any_element(),
+            );
         }
 
-        div().id(span.unwrap_or_default()).children(child_nodes)
+        div()
+            .id(span.unwrap_or_default())
+            .children(child_nodes)
+            .into_any_element()
+    }
+
+    fn should_render_inline_flow(&self) -> bool {
+        let has_image = self.children.iter().any(|child| child.image.is_some());
+        let has_text = self.children.iter().any(|child| !child.text.is_empty());
+        has_image && has_text
+    }
+
+    fn inline_flow_items(&self, node_cx: &NodeContext, cx: &mut App) -> Vec<InlineFlowItem> {
+        let mut items = Vec::new();
+        let mut text = String::new();
+        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+        let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
+        let mut offset = 0;
+
+        for inline_node in &self.children {
+            let text_len = inline_node.text.len();
+            text.push_str(&inline_node.text);
+
+            if let Some(image) = &inline_node.image {
+                if !text.is_empty() {
+                    if let Ok(mut state) = inline_node.state.lock() {
+                        state.set_text(text.clone().into());
+                    }
+                    items.push(InlineFlowItem::Text {
+                        state: inline_node.state.clone(),
+                        text: text.clone().into(),
+                        links: links.clone(),
+                        highlights: highlights.clone(),
+                    });
+                }
+
+                items.push(InlineFlowItem::Image {
+                    url: image.url.clone(),
+                    link: image.link.clone(),
+                    title: image.title(),
+                    width: image.width,
+                    height: image.height,
+                });
+
+                text.clear();
+                links.clear();
+                highlights.clear();
+                offset = 0;
+            } else {
+                let mut node_highlights = vec![];
+                for (range, style) in &inline_node.marks {
+                    let inner_range = (offset + range.start)..(offset + range.end);
+
+                    let mut highlight = HighlightStyle::default();
+                    if style.bold {
+                        highlight.font_weight = Some(FontWeight::BOLD);
+                    }
+                    if style.italic {
+                        highlight.font_style = Some(FontStyle::Italic);
+                    }
+                    if style.strikethrough {
+                        highlight.strikethrough = Some(gpui::StrikethroughStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.underline {
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.code {
+                        highlight.background_color = Some(cx.theme().accent);
+                    }
+                    if let Some(color) = style.highlight {
+                        highlight.background_color = Some(color);
+                    }
+
+                    if let Some(mut link_mark) = style.link.clone() {
+                        highlight.color = Some(cx.theme().link);
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+
+                        if let Some(identifier) = link_mark.identifier.as_ref()
+                            && let Some(mark) = node_cx.link_refs.get(identifier)
+                        {
+                            link_mark = mark.clone();
+                        }
+
+                        links.push((inner_range.clone(), link_mark));
+                    }
+
+                    node_highlights.push((inner_range, highlight));
+                }
+
+                highlights = gpui::combine_highlights(highlights, node_highlights).collect();
+                offset += text_len;
+            }
+        }
+
+        if !text.is_empty() {
+            if let Ok(mut state) = self.state.lock() {
+                state.set_text(text.clone().into());
+            }
+            items.push(InlineFlowItem::Text {
+                state: self.state.clone(),
+                text: text.into(),
+                links,
+                highlights,
+            });
+        }
+
+        items
     }
 }
 
@@ -757,6 +1591,9 @@ impl Paragraph {
                     }
                     if style.code {
                         text = format!("`{}`", &text_node.text[range.clone()]);
+                    }
+                    if style.highlight.is_some() {
+                        text = format!("=={}==", &text_node.text[range.clone()]);
                     }
                     if let Some(link) = &style.link {
                         text = format!("[{}]({})", &text_node.text[range.clone()], link.url);
@@ -902,6 +1739,7 @@ impl BlockNode {
                 }
             }
             BlockNode::HorizontalRule { .. } => "---".to_string(),
+            BlockNode::Custom(node) => node.to_markdown(),
             BlockNode::Definition {
                 identifier,
                 url,
@@ -922,6 +1760,46 @@ impl BlockNode {
 }
 
 impl BlockNode {
+    fn render_list_item_row(
+        content: AnyElement,
+        ix: usize,
+        options: NodeRenderOptions,
+        checked: Option<bool>,
+        cx: &mut App,
+    ) -> Div {
+        h_flex()
+            .w_full()
+            .flex_1()
+            .min_w_0()
+            .relative()
+            .items_start()
+            .content_start()
+            .when(!options.todo && checked.is_none(), |this| {
+                this.child(list_item_prefix(ix, options.ordered, options.depth))
+            })
+            .when_some(checked, |this, checked| {
+                // Todo list checkbox
+                this.child(
+                    div()
+                        .flex()
+                        .mt(rems(0.4))
+                        .mr_1p5()
+                        .size(rems(0.875))
+                        .items_center()
+                        .justify_center()
+                        .rounded(cx.theme().radius.half())
+                        .border_1()
+                        .border_color(cx.theme().primary)
+                        .text_color(cx.theme().primary_foreground)
+                        .when(checked, |this| {
+                            this.bg(cx.theme().tokens.primary)
+                                .child(Icon::new(IconName::Check).size_2().text_xs())
+                        }),
+                )
+            })
+            .child(div().flex_1().min_w_0().overflow_hidden().child(content))
+    }
+
     fn render_list_item(
         item: &BlockNode,
         ix: usize,
@@ -971,7 +1849,7 @@ impl BlockNode {
                                             v_flex().child(preceding_row).child(
                                                 div()
                                                     .w_full()
-                                                    .pl(rems(0.75))
+                                                    .pl(rems(1.))
                                                     .overflow_hidden()
                                                     .child(text),
                                             ),
@@ -980,48 +1858,9 @@ impl BlockNode {
                                     }
                                 }
 
-                                items.push(
-                                    h_flex()
-                                        .w_full()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .relative()
-                                        .items_start()
-                                        .content_start()
-                                        .when(!options.todo && checked.is_none(), |this| {
-                                            this.child(list_item_prefix(
-                                                ix,
-                                                options.ordered,
-                                                options.depth,
-                                            ))
-                                        })
-                                        .when_some(*checked, |this, checked| {
-                                            // Todo list checkbox
-                                            this.child(
-                                                div()
-                                                    .flex()
-                                                    .mt(rems(0.4))
-                                                    .mr_1p5()
-                                                    .size(rems(0.875))
-                                                    .items_center()
-                                                    .justify_center()
-                                                    .rounded(cx.theme().radius.half())
-                                                    .border_1()
-                                                    .border_color(cx.theme().primary)
-                                                    .text_color(cx.theme().primary_foreground)
-                                                    .when(checked, |this| {
-                                                        this.bg(cx.theme().primary).child(
-                                                            Icon::new(IconName::Check)
-                                                                .size_2()
-                                                                .text_xs(),
-                                                        )
-                                                    }),
-                                            )
-                                        })
-                                        .child(
-                                            div().flex_1().min_w_0().overflow_hidden().child(text),
-                                        ),
-                                );
+                                items.push(Self::render_list_item_row(
+                                    text, ix, options, *checked, cx,
+                                ));
                             }
                             BlockNode::List { .. } => {
                                 items.push(div().ml(rems(1.)).child(child.render_block(
@@ -1036,7 +1875,47 @@ impl BlockNode {
                                     cx,
                                 )));
                             }
-                            _ => {}
+                            BlockNode::Root { .. }
+                            | BlockNode::Heading { .. }
+                            | BlockNode::Blockquote { .. }
+                            | BlockNode::CodeBlock(_)
+                            | BlockNode::Custom(_)
+                            | BlockNode::Table(_)
+                            | BlockNode::HorizontalRule { .. } => {
+                                let block = child.render_block(
+                                    NodeRenderOptions {
+                                        depth: options.depth + 1,
+                                        todo: checked.is_some(),
+                                        is_last: true,
+                                        ..options
+                                    },
+                                    node_cx,
+                                    window,
+                                    cx,
+                                );
+
+                                if child_ix == 0 {
+                                    items.push(Self::render_list_item_row(
+                                        block, ix, options, *checked, cx,
+                                    ));
+                                } else {
+                                    // Indent continuation blocks to align with a
+                                    // nested sub-list (`ml(rems(1.))`) and with
+                                    // continuation paragraphs.
+                                    items.push(
+                                        div()
+                                            .w_full()
+                                            .min_w_0()
+                                            .pl(rems(1.))
+                                            .overflow_hidden()
+                                            .child(block),
+                                    );
+                                }
+                            }
+                            BlockNode::ListItem { .. }
+                            | BlockNode::Break { .. }
+                            | BlockNode::Definition { .. }
+                            | BlockNode::Unknown => {}
                         }
                     }
                     items
@@ -1046,6 +1925,9 @@ impl BlockNode {
         }
     }
 
+    /// Render a Markdown table. Dispatches to a horizontally scrollable layout
+    /// when `style.table` opts in with overflow-x: scroll, otherwise to the
+    /// default layout that fits the container width and wraps cell content.
     fn render_table(
         item: &BlockNode,
         options: &NodeRenderOptions,
@@ -1054,98 +1936,288 @@ impl BlockNode {
         cx: &mut App,
     ) -> impl IntoElement {
         const DEFAULT_LENGTH: usize = 5;
-        const MAX_LENGTH: usize = 150;
-        let col_lens = match item {
-            BlockNode::Table(table) => {
-                let mut col_lens = vec![];
-                for row in table.children.iter() {
-                    for (ix, cell) in row.children.iter().enumerate() {
-                        if col_lens.len() <= ix {
-                            col_lens.push(DEFAULT_LENGTH);
-                        }
 
-                        let len = cell.children.text_len();
-                        if len > col_lens[ix] {
-                            col_lens[ix] = len;
-                        }
-                    }
-                }
-                col_lens
-            }
-            _ => vec![],
+        let table = match item {
+            BlockNode::Table(table) => table,
+            _ => return div().into_any_element(),
         };
 
-        match item {
-            BlockNode::Table(table) => div()
-                .pb(rems(1.))
-                .w_full()
-                .child(
+        // Per-column max text length (in chars), used to proportion the columns
+        // in the default (wrap) layout.
+        let mut col_lens: Vec<usize> = vec![];
+        for row in table.children.iter() {
+            for (ix, cell) in row.children.iter().enumerate() {
+                if col_lens.len() <= ix {
+                    col_lens.push(DEFAULT_LENGTH);
+                }
+                col_lens[ix] = col_lens[ix].max(cell.children.text_len());
+            }
+        }
+
+        // Scroll mode is opted in via `style.table` overflow-x: scroll.
+        if matches!(node_cx.style.table.overflow.x, Some(Overflow::Scroll)) {
+            Self::render_scroll_table(table, col_lens.len(), options, node_cx, window, cx)
+        } else {
+            Self::render_wrap_table(table, &col_lens, options, node_cx, window, cx)
+        }
+    }
+
+    /// Horizontally scrollable table layout (opt-in via `style.table`
+    /// overflow-x: scroll).
+    ///
+    /// Column widths come from the **measured** shaped text of each cell (the
+    /// widest per column across all rows), so columns line up and fit their
+    /// content exactly — char-count heuristics are inaccurate on proportional
+    /// fonts. The layout adapts to the frame like CSS auto table layout:
+    ///
+    /// - Wider than the content: cells `flex_grow` proportionally to fill.
+    /// - Narrower: columns shrink and their text wraps, but not below a
+    ///   per-column floor.
+    /// - Narrower than the floors: the table keeps the floor widths and
+    ///   scrolls horizontally, so no content ever becomes unreachable.
+    ///
+    /// `white_space: nowrap` on `style.table_cell` composes like in CSS: the
+    /// refinement keeps cell text on a single line, and the floors are raised
+    /// to the full content widths so the single-line columns never shrink —
+    /// the table scrolls as soon as the content is wider than the frame.
+    fn render_scroll_table(
+        table: &Table,
+        col_count: usize,
+        options: &NodeRenderOptions,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        const CELL_PAD_PX: f32 = 16.0; // px_2 horizontal padding
+        const CELL_MIN_PX: f32 = 48.0;
+        // Shrinking columns stop (and the table starts to scroll) at a floor
+        // scaled to their content: roughly the width at which the text wraps
+        // to `CELL_WRAP_MAX_LINES` lines, clamped between the two bounds so
+        // moderate columns can still wrap meaningfully while one huge column
+        // cannot push the scroll threshold arbitrarily high.
+        const CELL_WRAP_MAX_LINES: f32 = 2.0;
+        const CELL_WRAP_MIN_PX: f32 = 160.0;
+        const CELL_WRAP_MAX_PX: f32 = 480.0;
+        const CELL_BORDER_PX: f32 = 1.0; // border_r_1 drawn by every column but the last
+        const TABLE_BORDER_PX: f32 = 2.0; // the track's border_1, left + right
+
+        // Measure the widest text per column (max-content width). Never
+        // capped: a cap would clip overflowing text *and* leave it outside
+        // the scrollable width, making it unreachable.
+        let text_style = window.text_style();
+        let font_size = text_style.font_size.to_pixels(window.rem_size());
+        let mut col_w = vec![CELL_MIN_PX; col_count];
+        for row in table.children.iter() {
+            for (ix, cell) in row.children.iter().enumerate() {
+                let Some(slot) = col_w.get_mut(ix) else {
+                    continue;
+                };
+                let mut w = 0.0_f32;
+                for line in cell.children.text().split('\n') {
+                    let line = line.trim();
+                    if line.is_empty() {
+                        continue;
+                    }
+                    let run = text_style.to_run(line.len());
+                    let line_w = window
+                        .text_system()
+                        .layout_line(line, font_size, &[run], None)
+                        .width;
+                    w = w.max(f32::from(line_w));
+                }
+                // Border-box widths, so the padding and border the cell draws
+                // must leave the measured text its full width.
+                let border = if ix + 1 < col_count {
+                    CELL_BORDER_PX
+                } else {
+                    0.
+                };
+                *slot = slot.max(w + CELL_PAD_PX + border);
+            }
+        }
+        let style = &node_cx.style;
+        // Nowrap cells (via the `table_cell` refinement, which cascades to
+        // the cell text) must never shrink below their single-line content,
+        // so their floor is the content width itself.
+        let nowrap = style.table_cell.text.white_space == Some(WhiteSpace::Nowrap);
+        let col_min_w: Vec<f32> = if nowrap {
+            col_w.clone()
+        } else {
+            col_w
+                .iter()
+                .map(|w| {
+                    (w / CELL_WRAP_MAX_LINES)
+                        .clamp(CELL_WRAP_MIN_PX, CELL_WRAP_MAX_PX)
+                        .min(*w)
+                })
+                .collect()
+        };
+        let min_total_w: f32 = col_min_w.iter().sum::<f32>() + TABLE_BORDER_PX;
+
+        let table_scroll_key = if let Some(span) = table.span {
+            SharedString::from(format!(
+                "{}-table-scroll-{}:{}",
+                window.current_view(),
+                span.start,
+                span.end
+            ))
+        } else {
+            SharedString::from(format!(
+                "{}-table-scroll-{}",
+                window.current_view(),
+                options.ix
+            ))
+        };
+        let scroll_handle = window
+            .use_keyed_state(table_scroll_key, cx, |_, _| ScrollHandle::default())
+            .read(cx)
+            .clone();
+        let row_count = table.children.len();
+        let mut rows = Vec::with_capacity(row_count);
+        for (row_ix, row) in table.children.iter().enumerate() {
+            let mut cells = Vec::with_capacity(row.children.len());
+            for (ix, cell) in row.children.iter().enumerate() {
+                let align = table.column_align(ix);
+                let is_last_col = ix == row.children.len() - 1;
+                let width = col_w.get(ix).copied().unwrap_or(CELL_MIN_PX);
+                let min_width = col_min_w.get(ix).copied().unwrap_or(CELL_MIN_PX);
+                cells.push(
                     div()
-                        .id(("table", options.ix))
-                        .w_full()
+                        .id(("cell", ix))
+                        // Measured max-content width is the flex-basis;
+                        // `flex_grow` (proportional to it) distributes extra
+                        // space so a narrow table still fills the frame, while
+                        // shrinking is clamped at `min_w` — the flex engine
+                        // squeezes columns (their text wraps) down to the
+                        // floors before the track starts to scroll.
+                        .flex_basis(px(width))
+                        .flex_grow(width)
+                        .flex_shrink(1.)
+                        .min_w(px(min_width))
+                        .overflow_hidden()
+                        .when(align == ColumnumnAlign::Center, |this| this.text_center())
+                        .when(align == ColumnumnAlign::Right, |this| this.text_right())
+                        .px_2()
+                        .py_1()
+                        .when(!is_last_col, |this| {
+                            this.border_r_1().border_color(cx.theme().border)
+                        })
+                        .refine_style(&style.table_cell)
+                        .child(cell.children.render(node_cx, window, cx)),
+                );
+            }
+            rows.push(
+                div()
+                    .id("row")
+                    .w_full()
+                    .when(row_ix < row_count - 1, |this| this.border_b_1())
+                    .border_color(cx.theme().border)
+                    .flex()
+                    .flex_row()
+                    .children(cells),
+            );
+        }
+
+        div()
+            .pb(rems(1.))
+            .w_full()
+            .child(
+                // Scroll viewport: clips and scrolls horizontally (overflow-x
+                // is handled by `ScrollableMask`, so vertical wheel events keep
+                // bubbling to the parent TextView). No border — the frame is on
+                // the inner track so it wraps the table tightly.
+                horizontal_scroll_area(
+                    ("table", options.ix),
+                    &scroll_handle,
+                    &style.table,
+                    // Bordered track sized to `max(viewport, column floors)`:
+                    // `min_w_full` fills the frame while the columns can still
+                    // shrink-to-fit (their text wrapping), the definite
+                    // `w(min_total_w)` keeps the floors once they are reached,
+                    // letting the track exceed the viewport and scroll.
+                    div()
+                        .min_w_full()
+                        .w(px(min_total_w))
                         .border_1()
                         .border_color(cx.theme().border)
                         .rounded(cx.theme().radius)
-                        .children({
-                            let mut rows = Vec::with_capacity(table.children.len());
-                            for (row_ix, row) in table.children.iter().enumerate() {
-                                rows.push(
-                                    div()
-                                        .id("row")
-                                        .w_full()
-                                        .when(row_ix < table.children.len() - 1, |this| {
-                                            this.border_b_1()
-                                        })
-                                        .border_color(cx.theme().border)
-                                        .flex()
-                                        .flex_row()
-                                        .children({
-                                            let mut cells = Vec::with_capacity(row.children.len());
-                                            for (ix, cell) in row.children.iter().enumerate() {
-                                                let align = table.column_align(ix);
-                                                let is_last_col = ix == row.children.len() - 1;
-                                                let len = col_lens
-                                                    .get(ix)
-                                                    .copied()
-                                                    .unwrap_or(MAX_LENGTH)
-                                                    .min(MAX_LENGTH);
+                        .children(rows),
+                ),
+            )
+            .into_any_element()
+    }
 
-                                                cells.push(
-                                                    div()
-                                                        .id(("cell", ix))
-                                                        .overflow_hidden()
-                                                        .when(
-                                                            align == ColumnumnAlign::Center,
-                                                            |this| this.text_center(),
-                                                        )
-                                                        .when(
-                                                            align == ColumnumnAlign::Right,
-                                                            |this| this.text_right(),
-                                                        )
-                                                        .min_w_16()
-                                                        .w(Length::Definite(relative(len as f32)))
-                                                        .px_2()
-                                                        .py_1()
-                                                        .when(!is_last_col, |this| {
-                                                            this.border_r_1()
-                                                                .border_color(cx.theme().border)
-                                                        })
-                                                        .child(
-                                                            cell.children
-                                                                .render(node_cx, window, cx),
-                                                        ),
-                                                )
-                                            }
-                                            cells
-                                        }),
-                                )
-                            }
-                            rows
-                        }),
-                )
-                .into_any_element(),
-            _ => div().into_any_element(),
+    /// Default table layout: a flex grid whose columns are proportioned by
+    /// content length and shrink to fit the container width (cell text wraps).
+    fn render_wrap_table(
+        table: &Table,
+        col_lens: &[usize],
+        options: &NodeRenderOptions,
+        node_cx: &NodeContext,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        const MAX_LENGTH: usize = 150;
+
+        let style = &node_cx.style;
+        let row_count = table.children.len();
+        let mut rows = Vec::with_capacity(row_count);
+        for (row_ix, row) in table.children.iter().enumerate() {
+            let mut cells = Vec::with_capacity(row.children.len());
+            for (ix, cell) in row.children.iter().enumerate() {
+                let align = table.column_align(ix);
+                let is_last_col = ix == row.children.len() - 1;
+                let len = col_lens
+                    .get(ix)
+                    .copied()
+                    .unwrap_or(MAX_LENGTH)
+                    .min(MAX_LENGTH);
+
+                cells.push(
+                    div()
+                        .id(("cell", ix))
+                        .overflow_hidden()
+                        .when(align == ColumnumnAlign::Center, |this| this.text_center())
+                        .when(align == ColumnumnAlign::Right, |this| this.text_right())
+                        .min_w_16()
+                        .w(Length::Definite(relative(len as f32)))
+                        .px_2()
+                        .py_1()
+                        .when(!is_last_col, |this| {
+                            this.border_r_1().border_color(cx.theme().border)
+                        })
+                        .refine_style(&style.table_cell)
+                        .child(cell.children.render(node_cx, window, cx)),
+                );
+            }
+
+            rows.push(
+                div()
+                    .id("row")
+                    .w_full()
+                    .when(row_ix < row_count - 1, |this| this.border_b_1())
+                    .border_color(cx.theme().border)
+                    .flex()
+                    .flex_row()
+                    .children(cells),
+            );
         }
+
+        div()
+            .pb(rems(1.))
+            .w_full()
+            .child(
+                div()
+                    .id(("table", options.ix))
+                    .w_full()
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .rounded(cx.theme().radius)
+                    .overflow_hidden()
+                    .children(rows)
+                    .refine_style(&style.table),
+            )
+            .into_any_element()
     }
 
     pub(crate) fn render_block(
@@ -1192,7 +2264,7 @@ impl BlockNode {
                     text_size = (f)(*level, node_cx.style.heading_base_font_size);
                 }
 
-                h_flex()
+                div()
                     .id(SharedString::from(format!("h{}-{}", level, ix)))
                     .pb(rems(0.3))
                     .whitespace_normal()
@@ -1225,6 +2297,8 @@ impl BlockNode {
                 children, ordered, ..
             } => v_flex()
                 .id((if *ordered { "ol" } else { "ul" }, ix))
+                .w_full()
+                .min_w_0()
                 .pb(mb)
                 .children({
                     let mut items = Vec::with_capacity(children.len());
@@ -1253,6 +2327,14 @@ impl BlockNode {
                 })
                 .into_any_element(),
             BlockNode::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
+            BlockNode::Custom(node) => {
+                let inner = match node_cx.markdown_extensions.render_block(node, window, cx) {
+                    Some(rendered) => rendered,
+                    None => div().child(node.as_text().to_string()).into_any_element(),
+                };
+
+                div().pb(mb).child(inner).into_any_element()
+            }
             BlockNode::Table { .. } => {
                 Self::render_table(self, &options, node_cx, window, cx).into_any_element()
             }
@@ -1270,5 +2352,749 @@ impl BlockNode {
                 div().into_any_element()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reconstruct_markdown_wraps_marked_runs() {
+        // "bold" fully covered by a bold mark.
+        let marks = vec![(0..4, TextMark::default().bold())];
+        assert_eq!(reconstruct_markdown("bold", &marks, 0..4), "**bold**");
+        // Partial selection inside the bold run still wraps the slice.
+        assert_eq!(reconstruct_markdown("bold", &marks, 1..3), "**ol**");
+    }
+
+    #[test]
+    fn reconstruct_markdown_emits_unmarked_text_verbatim() {
+        // "a b c": plain, code, plain across three runs concatenated.
+        let text = "a b c";
+        let marks = vec![(2..3, TextMark::default().code())];
+        assert_eq!(reconstruct_markdown(text, &marks, 0..5), "a `b` c");
+        // Selecting only the plain tail.
+        assert_eq!(reconstruct_markdown(text, &marks, 3..5), " c");
+    }
+
+    #[test]
+    fn reconstruct_markdown_handles_code_italic_strike_link() {
+        assert_eq!(
+            reconstruct_markdown("x", &[(0..1, TextMark::default().code())], 0..1),
+            "`x`"
+        );
+        assert_eq!(
+            reconstruct_markdown("x", &[(0..1, TextMark::default().italic())], 0..1),
+            "*x*"
+        );
+        assert_eq!(
+            reconstruct_markdown("x", &[(0..1, TextMark::default().strikethrough())], 0..1),
+            "~~x~~"
+        );
+        let link = TextMark::default().link(LinkMark {
+            url: "https://example.com".into(),
+            ..Default::default()
+        });
+        assert_eq!(
+            reconstruct_markdown("x", &[(0..1, link)], 0..1),
+            "[x](https://example.com)"
+        );
+    }
+
+    #[test]
+    fn reconstruct_markdown_nested_bold_italic() {
+        // A single run marked both bold and italic (as produced by `**_x_**`).
+        let mark = TextMark::default().bold().italic();
+        // Inner (italic) is applied first, then bold: `***x***`.
+        assert_eq!(reconstruct_markdown("x", &[(0..1, mark)], 0..1), "***x***");
+    }
+
+    /// Build a paragraph whose combined `state.text` is the concatenation of
+    /// its children (mirroring `Paragraph::render`), then set the paragraph
+    /// selection so `selected_source` can be exercised without a real paint.
+    fn paragraph_with_children(children: Vec<InlineNode>) -> Paragraph {
+        let combined: String = children.iter().map(|c| c.text.to_string()).collect();
+        let paragraph = Paragraph {
+            span: None,
+            children,
+            link_refs: HashMap::new(),
+            state: Arc::new(Mutex::new(InlineState::default())),
+        };
+        if let Ok(mut state) = paragraph.state.lock() {
+            state.set_text(combined.into());
+        }
+        paragraph
+    }
+
+    fn set_paragraph_selection(paragraph: &Paragraph, range: Range<usize>) {
+        if let Ok(mut state) = paragraph.state.lock() {
+            state.selection = Some(range.into());
+        }
+    }
+
+    #[test]
+    fn paragraph_selected_source_maps_partial_selection_across_runs() {
+        // "This has **bold** text." rendered as ["This has ", "bold", " text."].
+        let children = vec![
+            InlineNode::new("This has ").marks(vec![(0..9, TextMark::default())]),
+            InlineNode::new("bold").marks(vec![(0..4, TextMark::default().bold())]),
+            InlineNode::new(" text.").marks(vec![(0..6, TextMark::default())]),
+        ];
+        let paragraph = paragraph_with_children(children);
+
+        // Select the whole paragraph: "This has bold text." -> source with **.
+        set_paragraph_selection(&paragraph, 0..(9 + 4 + 6));
+        assert_eq!(paragraph.selected_source(), "This has **bold** text.");
+
+        // Select only across the boundary "has **bold** te".
+        // Rendered offsets: "has " starts at 5, "bold" at 9..13, " te" 13..16.
+        set_paragraph_selection(&paragraph, 5..16);
+        assert_eq!(paragraph.selected_source(), "has **bold** te");
+
+        // Select entirely inside the bold run -> still wrapped.
+        set_paragraph_selection(&paragraph, 10..12);
+        assert_eq!(paragraph.selected_source(), "**ol**");
+    }
+
+    #[test]
+    fn paragraph_selected_source_matches_text_when_no_marks() {
+        let children =
+            vec![InlineNode::new("plain words").marks(vec![(0..11, TextMark::default())])];
+        let paragraph = paragraph_with_children(children);
+        set_paragraph_selection(&paragraph, 0..11);
+        assert_eq!(paragraph.selected_source(), "plain words");
+        assert_eq!(paragraph.selected_text(), "plain words");
+    }
+
+    fn selected_paragraph(text: &str) -> Paragraph {
+        let len = text.len();
+        let paragraph = paragraph_with_children(vec![
+            InlineNode::new(text).marks(vec![(0..len, TextMark::default())]),
+        ]);
+        set_paragraph_selection(&paragraph, 0..len);
+        paragraph
+    }
+
+    #[test]
+    fn heading_selected_source_prefixes_hashes() {
+        let heading = BlockNode::Heading {
+            level: 2,
+            children: selected_paragraph("Title"),
+            span: None,
+        };
+        assert_eq!(heading.selected_text(SelectionFormat::Source), "## Title\n");
+        // Rendered text keeps no marker.
+        assert_eq!(heading.selected_text(SelectionFormat::Plain), "Title\n");
+    }
+
+    #[test]
+    fn unordered_list_selected_source_prefixes_dash() {
+        let list = BlockNode::List {
+            ordered: false,
+            span: None,
+            children: vec![
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("one"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+            ],
+        };
+        assert_eq!(
+            list.selected_text(SelectionFormat::Source),
+            "- one\n- two\n"
+        );
+    }
+
+    #[test]
+    fn ordered_list_selected_source_prefixes_numbers() {
+        let list = BlockNode::List {
+            ordered: true,
+            span: None,
+            children: vec![
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("first"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("second"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+            ],
+        };
+        assert_eq!(
+            list.selected_text(SelectionFormat::Source),
+            "1. first\n2. second\n"
+        );
+    }
+
+    #[test]
+    fn nested_list_selected_source_indents_sublists() {
+        // - one
+        //   - nested
+        // - two
+        let nested = BlockNode::List {
+            ordered: false,
+            span: None,
+            children: vec![BlockNode::ListItem {
+                children: vec![BlockNode::Paragraph(selected_paragraph("nested"))],
+                spread: false,
+                checked: None,
+                span: None,
+            }],
+        };
+        let list = BlockNode::List {
+            ordered: false,
+            span: None,
+            children: vec![
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("one")), nested],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
+                    spread: false,
+                    checked: None,
+                    span: None,
+                },
+            ],
+        };
+        assert_eq!(
+            list.selected_text(SelectionFormat::Source),
+            "- one\n  - nested\n- two\n"
+        );
+    }
+
+    #[test]
+    fn task_list_selected_source_restores_checkboxes() {
+        let list = BlockNode::List {
+            ordered: false,
+            span: None,
+            children: vec![
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("done"))],
+                    spread: false,
+                    checked: Some(true),
+                    span: None,
+                },
+                BlockNode::ListItem {
+                    children: vec![BlockNode::Paragraph(selected_paragraph("todo"))],
+                    spread: false,
+                    checked: Some(false),
+                    span: None,
+                },
+            ],
+        };
+        assert_eq!(
+            list.selected_text(SelectionFormat::Source),
+            "- [x] done\n- [ ] todo\n"
+        );
+    }
+
+    #[test]
+    fn blockquote_selected_source_prefixes_gt() {
+        let quote = BlockNode::Blockquote {
+            span: None,
+            children: vec![BlockNode::Paragraph(selected_paragraph("quoted text"))],
+        };
+        assert_eq!(
+            quote.selected_text(SelectionFormat::Source),
+            "> quoted text\n"
+        );
+    }
+
+    #[test]
+    fn table_selected_source_pipes_cells_with_alignment_row() {
+        let cell = |text: &str| TableCell {
+            children: selected_paragraph(text),
+            width: None,
+        };
+        let table = Table {
+            children: vec![
+                TableRow {
+                    children: vec![cell("Name"), cell("Age")],
+                },
+                TableRow {
+                    children: vec![cell("Alice"), cell("30")],
+                },
+            ],
+            column_aligns: vec![ColumnumnAlign::Left, ColumnumnAlign::Right],
+            span: None,
+        };
+        let block = BlockNode::Table(table);
+        assert_eq!(
+            block.selected_text(SelectionFormat::Source),
+            "| Name | Age |\n| :-- | --: |\n| Alice | 30 |\n"
+        );
+    }
+
+    fn image_paragraph(alt: &str, url: &str) -> Paragraph {
+        let image = ImageNode {
+            url: url.into(),
+            alt: Some(alt.into()),
+            ..Default::default()
+        };
+        Paragraph {
+            span: None,
+            children: vec![InlineNode::image(image)],
+            link_refs: HashMap::new(),
+            state: Arc::new(Mutex::new(InlineState::default())),
+        }
+    }
+
+    /// Every mark round-trips, including the two Markdown has no plain syntax
+    /// for.
+    #[test]
+    fn marks_round_trip_through_reconstruction() {
+        let wrap = |mark: TextMark| reconstruct_markdown("x", &[(0..1, mark)], 0..1);
+
+        assert_eq!(wrap(TextMark::default().bold()), "**x**");
+        assert_eq!(wrap(TextMark::default().italic()), "*x*");
+        assert_eq!(wrap(TextMark::default().code()), "`x`");
+        assert_eq!(wrap(TextMark::default().strikethrough()), "~~x~~");
+        assert_eq!(
+            wrap(TextMark::default().highlight(crate::yellow(200))),
+            "==x=="
+        );
+        // No Markdown syntax for underline, so it keeps the tag it came from.
+        assert_eq!(wrap(TextMark::default().underline()), "<u>x</u>");
+
+        // A link keeps its title, which Markdown carries after the URL.
+        assert_eq!(
+            wrap(TextMark::default().link(LinkMark {
+                url: "https://example.com".into(),
+                title: Some("Tip".into()),
+                ..Default::default()
+            })),
+            "[x](https://example.com \"Tip\")"
+        );
+    }
+
+    /// A block the selection covers whole comes straight from the source, so it
+    /// keeps what the author wrote instead of a normalized reconstruction.
+    #[test]
+    fn document_selected_source_slices_covered_blocks_from_the_source() {
+        use crate::text::document::ParsedDocument;
+
+        // `_italic_`, the `3.` start and the column padding all survive only
+        // because the block is copied, not rebuilt.
+        let source = "start\n\n3. _one_\n4. two\n\n---\n\nend";
+        let list = "3. _one_\n4. two";
+        let list_start = source.find(list).unwrap();
+        let rule_start = source.find("---").unwrap();
+
+        let document = ParsedDocument {
+            source: source.into(),
+            blocks: vec![
+                BlockNode::Paragraph(selected_paragraph("start")),
+                BlockNode::List {
+                    ordered: true,
+                    children: vec![],
+                    span: Some(Span {
+                        start: list_start,
+                        end: list_start + list.len(),
+                    }),
+                },
+                BlockNode::HorizontalRule {
+                    span: Some(Span {
+                        start: rule_start,
+                        end: rule_start + 3,
+                    }),
+                },
+                BlockNode::Paragraph(selected_paragraph("end")),
+            ],
+        };
+
+        assert_eq!(
+            document.selected_text(SelectionFormat::Source, None),
+            "start\n\n3. _one_\n4. two\n\n---\n\nend"
+        );
+    }
+
+    #[test]
+    fn document_selected_source_includes_enclosed_image() {
+        use crate::text::document::ParsedDocument;
+
+        // A standalone image between two selected paragraphs is covered by the
+        // selection, so it is copied whole even though it holds no selection of
+        // its own — straight out of the source the parser located it in.
+        let source = "before\n\n![alt](https://example.com/i.png)\n\nafter";
+        let image_markdown = "![alt](https://example.com/i.png)";
+        let start = source.find(image_markdown).unwrap();
+        let mut image = image_paragraph("alt", "https://example.com/i.png");
+        image.span = Some(Span {
+            start,
+            end: start + image_markdown.len(),
+        });
+
+        let document = ParsedDocument {
+            source: source.into(),
+            blocks: vec![
+                BlockNode::Paragraph(selected_paragraph("before")),
+                BlockNode::Paragraph(image),
+                BlockNode::Paragraph(selected_paragraph("after")),
+            ],
+        };
+        assert_eq!(
+            document.selected_text(SelectionFormat::Source, None),
+            "before\n\n![alt](https://example.com/i.png)\n\nafter"
+        );
+    }
+
+    #[test]
+    fn document_selected_source_drops_unenclosed_image() {
+        use crate::text::document::ParsedDocument;
+
+        // An image after the only selected block, with nothing selected after
+        // it, is not enclosed and is dropped.
+        let document = ParsedDocument {
+            source: String::new().into(),
+            blocks: vec![
+                BlockNode::Paragraph(selected_paragraph("before")),
+                BlockNode::Paragraph(image_paragraph("alt", "u")),
+            ],
+        };
+        assert_eq!(
+            document.selected_text(SelectionFormat::Source, None),
+            "before"
+        );
+    }
+
+    fn selected_code_block(code: &str, lang: Option<&str>) -> BlockNode {
+        let block = CodeBlock::new(
+            code.to_string().into(),
+            lang.map(|l| l.to_string().into()),
+            None::<Span>,
+        );
+        if let Ok(mut state) = block.state.lock() {
+            let len = state.text.len();
+            state.selection = Some((0..len).into());
+        }
+        BlockNode::CodeBlock(block)
+    }
+
+    #[test]
+    fn code_block_selected_source_wraps_in_fence_with_lang() {
+        let block = selected_code_block("let x = 1;\n", Some("rust"));
+        let code = block.selected_text(SelectionFormat::Plain);
+        let code_trimmed = code.trim_end_matches('\n');
+        // The source wraps the (trailing-newline-trimmed) selected code in a
+        // fenced block carrying the language; the block arm adds one trailing
+        // newline.
+        assert_eq!(
+            block.selected_text(SelectionFormat::Source),
+            format!("```rust\n{}\n```\n", code_trimmed)
+        );
+        assert!(
+            block
+                .selected_text(SelectionFormat::Source)
+                .starts_with("```rust\n")
+        );
+        assert!(
+            block
+                .selected_text(SelectionFormat::Source)
+                .trim_end()
+                .ends_with("\n```")
+        );
+    }
+
+    #[test]
+    fn code_block_selected_source_without_lang() {
+        let block = selected_code_block("plain\n", None);
+        let code_trimmed = block.selected_text(SelectionFormat::Plain);
+        let code_trimmed = code_trimmed.trim_end_matches('\n');
+        assert_eq!(
+            block.selected_text(SelectionFormat::Source),
+            format!("```\n{}\n```\n", code_trimmed)
+        );
+    }
+
+    #[test]
+    fn document_selected_source_joins_blocks_with_blank_line() {
+        use crate::text::document::ParsedDocument;
+
+        // A heading, a paragraph, and a two-item ordered list, each fully
+        // selected. Top-level blocks must be separated by a blank line so the
+        // copied Markdown re-renders with the same structure.
+        let document = ParsedDocument {
+            source: String::new().into(),
+            blocks: vec![
+                BlockNode::Heading {
+                    level: 1,
+                    children: selected_paragraph("Title"),
+                    span: None,
+                },
+                BlockNode::Paragraph(selected_paragraph("A paragraph.")),
+                selected_code_block("let x = 1;\n", Some("rust")),
+                BlockNode::List {
+                    ordered: true,
+                    span: None,
+                    children: vec![
+                        BlockNode::ListItem {
+                            children: vec![BlockNode::Paragraph(selected_paragraph("one"))],
+                            spread: false,
+                            checked: None,
+                            span: None,
+                        },
+                        BlockNode::ListItem {
+                            children: vec![BlockNode::Paragraph(selected_paragraph("two"))],
+                            spread: false,
+                            checked: None,
+                            span: None,
+                        },
+                    ],
+                },
+            ],
+        };
+
+        assert_eq!(
+            document.selected_text(SelectionFormat::Source, None),
+            "# Title\n\nA paragraph.\n\n```rust\nlet x = 1;\n```\n\n1. one\n2. two"
+        );
+    }
+
+    #[cfg(feature = "tree-sitter")]
+    use crate::{
+        Theme, ThemeMode,
+        text::{TextView, TextViewState},
+    };
+    #[cfg(feature = "tree-sitter")]
+    use gpui::{AppContext as _, Context, Entity, Render, TestAppContext, VisualTestContext};
+
+    #[cfg(feature = "tree-sitter")]
+    fn cached_highlight_theme(block: &CodeBlock) -> Option<Arc<HighlightTheme>> {
+        block
+            .styles
+            .lock()
+            .ok()
+            .and_then(|styles| styles.as_ref().map(|styles| styles.highlight_theme.clone()))
+    }
+
+    #[test]
+    fn code_block_equality_includes_code_content() {
+        let first = CodeBlock::new("let value = 1;".into(), Some("rust".into()), None::<Span>);
+        let second = CodeBlock::new("let value = 2;".into(), Some("rust".into()), None::<Span>);
+
+        assert_ne!(first, second);
+    }
+
+    #[cfg(feature = "tree-sitter")]
+    #[test]
+    fn code_block_highlighter_cache_refreshes_after_language_registration() {
+        let lang = SharedString::from("json-cache-test");
+        let theme = HighlightTheme::default_light();
+
+        CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            cache.borrow_mut().remove(&lang);
+        });
+
+        let unknown_block =
+            CodeBlock::new("{\"value\": 1}".into(), Some(lang.clone()), None::<Span>);
+        _ = unknown_block.styles(&theme);
+
+        let cached_language = CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            cache
+                .borrow()
+                .get(&lang)
+                .map(|highlighter| highlighter.language().clone())
+        });
+        assert_eq!(cached_language.as_deref(), Some("text"));
+
+        LanguageRegistry::singleton().register(
+            lang.as_ref(),
+            &crate::highlighter::LanguageConfig::new(
+                lang.clone(),
+                tree_sitter_json::LANGUAGE.into(),
+                vec![],
+                r#"
+                    (string) @string
+                    (number) @number
+                    (pair key: (string) @property)
+                "#,
+                "",
+                "",
+            ),
+        );
+
+        let registered_block =
+            CodeBlock::new("{\"value\": 2}".into(), Some(lang.clone()), None::<Span>);
+        _ = registered_block.styles(&theme);
+
+        let cached_language = CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            cache
+                .borrow()
+                .get(&lang)
+                .map(|highlighter| highlighter.language().clone())
+        });
+        assert_eq!(cached_language.as_deref(), Some(lang.as_ref()));
+    }
+
+    #[cfg(feature = "tree-sitter")]
+    #[test]
+    fn code_block_styles_follow_the_current_highlight_theme() {
+        let lang = SharedString::from("json-theme-cache-test");
+        let light_theme = HighlightTheme::default_light();
+        let dark_theme = HighlightTheme::default_dark();
+        let code = SharedString::from(r#"{"value": 42}"#);
+        let number_range = code.find("42").unwrap()..code.find("42").unwrap() + 2;
+
+        let light_number = light_theme.style("number").and_then(|style| style.color);
+        let dark_number = dark_theme.style("number").and_then(|style| style.color);
+        assert_ne!(
+            light_number, dark_number,
+            "the test themes must use different number colors"
+        );
+
+        CODE_BLOCK_HIGHLIGHTERS.with(|cache| {
+            cache.borrow_mut().remove(&lang);
+        });
+        LanguageRegistry::singleton().register(
+            lang.as_ref(),
+            &crate::highlighter::LanguageConfig::new(
+                lang.clone(),
+                tree_sitter_json::LANGUAGE.into(),
+                vec![],
+                "(number) @number",
+                "",
+                "",
+            ),
+        );
+
+        let block = CodeBlock::new(code.clone(), Some(lang), None::<Span>);
+        let light_styles = block.styles(&light_theme);
+        let cached_light_theme = cached_highlight_theme(&block).unwrap();
+        assert!(Arc::ptr_eq(&cached_light_theme, &light_theme));
+
+        let equivalent_light_theme = Arc::new(light_theme.as_ref().clone());
+        let repeated_light_styles = block.styles(&equivalent_light_theme);
+        assert_eq!(repeated_light_styles, light_styles);
+        assert!(
+            Arc::ptr_eq(
+                &cached_highlight_theme(&block).unwrap(),
+                &equivalent_light_theme
+            ),
+            "an equivalent replacement should become the cache identity"
+        );
+        assert_eq!(block.styles(&equivalent_light_theme), light_styles);
+
+        let dark_styles = block.styles(&dark_theme);
+        assert_eq!(
+            cached_highlight_theme(&block).as_deref(),
+            Some(dark_theme.as_ref())
+        );
+
+        let color_for_number = |styles: &[(Range<usize>, HighlightStyle)]| -> Option<Hsla> {
+            styles
+                .iter()
+                .find(|(range, _)| {
+                    range.start <= number_range.start && range.end >= number_range.end
+                })
+                .and_then(|(_, style)| style.color)
+        };
+
+        assert_eq!(color_for_number(&light_styles), light_number);
+        assert_eq!(
+            color_for_number(&dark_styles),
+            dark_number,
+            "a theme change must not reuse syntax styles from the previous theme"
+        );
+    }
+
+    #[cfg(feature = "tree-sitter")]
+    #[gpui::test]
+    fn rendered_markdown_code_block_follows_theme_without_reparsing(cx: &mut TestAppContext) {
+        struct CodeBlockThemeRoot {
+            text_view: Entity<TextViewState>,
+        }
+
+        impl Render for CodeBlockThemeRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                div().w(px(480.)).child(TextView::new(&self.text_view))
+            }
+        }
+
+        let lang = SharedString::from("json-theme-render-test");
+        LanguageRegistry::singleton().register(
+            lang.as_ref(),
+            &crate::highlighter::LanguageConfig::new(
+                lang.clone(),
+                tree_sitter_json::LANGUAGE.into(),
+                vec![],
+                "(number) @number",
+                "",
+                "",
+            ),
+        );
+
+        cx.update(crate::init);
+        let markdown = format!("```{lang}\n{{\"value\": 42}}\n```");
+        let (view, cx) = cx.add_window_view(|_, cx| CodeBlockThemeRoot {
+            text_view: cx.new(|cx| TextViewState::markdown(&markdown, cx)),
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let light_theme = cx.update(|_, cx| cx.theme().highlight_theme.clone());
+        let light_block = view.read_with(cx, |root, cx| {
+            let state = root.text_view.read(cx);
+            let BlockNode::CodeBlock(block) = &state.parsed_content.document.blocks[0] else {
+                panic!("expected a code block");
+            };
+
+            block.clone()
+        });
+        let cached_light_theme = cached_highlight_theme(&light_block)
+            .expect("initial render should populate the highlight cache");
+        assert_eq!(cached_light_theme.as_ref(), light_theme.as_ref());
+
+        cx.update(|window, cx| {
+            Theme::change(ThemeMode::Dark, Some(&mut *window), cx);
+            let _ = window.draw(cx);
+        });
+
+        let dark_theme = cx.update(|_, cx| cx.theme().highlight_theme.clone());
+        let dark_block = view.read_with(cx, |root, cx| {
+            let state = root.text_view.read(cx);
+            let BlockNode::CodeBlock(block) = &state.parsed_content.document.blocks[0] else {
+                panic!("expected a code block");
+            };
+
+            block.clone()
+        });
+        let cached_dark_theme = cached_highlight_theme(&dark_block)
+            .expect("theme-change render should refresh the highlight cache");
+
+        assert_ne!(
+            light_theme.as_ref(),
+            dark_theme.as_ref(),
+            "the test themes must have distinct highlight palettes"
+        );
+        assert!(
+            Arc::ptr_eq(&dark_block.styles, &light_block.styles),
+            "changing the theme must not require reparsing the Markdown document"
+        );
+        assert_eq!(cached_dark_theme.as_ref(), dark_theme.as_ref());
     }
 }

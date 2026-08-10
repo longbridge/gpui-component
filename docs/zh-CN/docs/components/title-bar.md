@@ -91,11 +91,28 @@ TitleBar::new()
 
 ### 窗口配置
 
+推荐以 `TitleBar::window_options()` 作为窗口配置的基础，它会配置好标题栏所需的
+全部选项，其中包括让标题栏（而不是系统）来处理拖动和双击。
+
 ```rust
-use gpui::{WindowOptions, TitlebarOptions};
+use gpui::WindowOptions;
+
+WindowOptions {
+    window_bounds: Some(window_bounds),
+    ..TitleBar::window_options()
+}
+```
+
+如果自行构造 [`WindowOptions`]，需要同时设置这两个字段：
+
+```rust
+use gpui::WindowOptions;
 
 WindowOptions {
     titlebar: Some(TitleBar::title_bar_options()),
+    // macOS 上必须设置，否则系统也会处理标题栏双击，
+    // 并且会为了判定双击而延迟投递标题栏点击。
+    app_owns_titlebar_drag: true,
     ..Default::default()
 }
 ```
@@ -136,6 +153,16 @@ WindowOptions {
 | `child(element)` | 向标题栏中添加子元素 |
 | `on_close_window(fn)` | 自定义关闭行为，仅 Linux 有效 |
 | `title_bar_options()` | 获取窗口可用的默认标题栏配置 |
+| `window_options()` | 获取标题栏配套的默认窗口配置 |
+
+### 窗口配置项
+
+| 属性 | 说明 |
+| --- | --- |
+| `appears_transparent` | 标题栏透明（默认 true） |
+| `traffic_light_position` | macOS 红黄绿按钮位置 |
+| `title` | 窗口标题（使用自定义标题栏时可选） |
+| `app_owns_titlebar_drag` | 由标题栏自行处理拖动与双击（仅 macOS） |
 
 ### 常量
 

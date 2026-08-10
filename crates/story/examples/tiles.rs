@@ -363,11 +363,6 @@ impl StoryTiles {
         cx.spawn(async move |cx| {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: Some(TitlebarOptions {
-                    title: None,
-                    appears_transparent: true,
-                    traffic_light_position: Some(point(px(9.0), px(9.0))),
-                }),
                 window_min_size: Some(gpui::Size {
                     width: px(640.),
                     height: px(480.),
@@ -377,7 +372,7 @@ impl StoryTiles {
                 window_background: gpui::WindowBackgroundAppearance::Transparent,
                 #[cfg(target_os = "linux")]
                 window_decorations: Some(gpui::WindowDecorations::Client),
-                ..Default::default()
+                ..TitleBar::window_options()
             };
 
             let window = cx.open_window(options, |window, cx| {

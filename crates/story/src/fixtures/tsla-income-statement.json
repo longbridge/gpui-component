@@ -1,0 +1,367 @@
+{
+  "list": [
+    {
+      "fiscal_year": 2025,
+      "report": "2025 Annual",
+      "currency": "USD",
+      "period": "FY 2025",
+      "nodes": [
+        {
+          "key": "bus_119884",
+          "name": "Automotive",
+          "value": "82056000000",
+          "growth": "-6.33304415323501",
+          "level": 1,
+          "color": "#5A74FF"
+        },
+        {
+          "key": "bus_130929",
+          "name": "Energy Generation and Storage",
+          "value": "12771000000",
+          "growth": "26.62105889351576",
+          "level": 1,
+          "color": "#5A74FF"
+        },
+        {
+          "key": "total_rev",
+          "name": "Total Revenue",
+          "value": "94827000000",
+          "growth": "-2.93069915037363",
+          "level": 2,
+          "color": "#5A74FF"
+        },
+        {
+          "key": "gp",
+          "name": "Gross Profit",
+          "value": "17094000000",
+          "growth": "-2.04011461318052",
+          "level": 3,
+          "color": "#35C15C"
+        },
+        {
+          "key": "cost_rev",
+          "name": "Cost Of Revenues",
+          "value": "77733000000",
+          "growth": "-3.12437686939182",
+          "level": 3,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "other_f41",
+          "name": "Other",
+          "value": "862000000",
+          "growth": "",
+          "level": 4,
+          "color": "#35C15C"
+        },
+        {
+          "key": "oper_inc",
+          "name": "Operating Income",
+          "value": "4355000000",
+          "growth": "-43.13879096487792",
+          "level": 4,
+          "color": "#35C15C"
+        },
+        {
+          "key": "oper_fee",
+          "name": "Operating Exp.",
+          "value": "12739000000",
+          "growth": "30.10928403635992",
+          "level": 4,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "ni",
+          "name": "Net Income",
+          "value": "3794000000",
+          "growth": "-46.49555774925962",
+          "level": 5,
+          "color": "#35C15C"
+        },
+        {
+          "key": "inc_tax",
+          "name": "Income Tax Exp.",
+          "value": "1423000000",
+          "growth": "-22.53674469243332",
+          "level": 5,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "sga",
+          "name": "SG& A Exp.",
+          "value": "5834000000",
+          "growth": "13.28155339805825",
+          "level": 5,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "rd_exp",
+          "name": "R&D Exp.",
+          "value": "6411000000",
+          "growth": "41.21145374449339",
+          "level": 5,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "other_f42",
+          "name": "Other",
+          "value": "494000000",
+          "growth": "",
+          "level": 5,
+          "color": "#FFA61F"
+        }
+      ],
+      "links": [
+        {
+          "source": "bus_119884",
+          "target": "total_rev",
+          "value": "82056000000"
+        },
+        {
+          "source": "bus_130929",
+          "target": "total_rev",
+          "value": "12771000000"
+        },
+        {
+          "source": "total_rev",
+          "target": "gp",
+          "value": "17094000000"
+        },
+        {
+          "source": "total_rev",
+          "target": "cost_rev",
+          "value": "77733000000"
+        },
+        {
+          "source": "gp",
+          "target": "oper_inc",
+          "value": "4355000000"
+        },
+        {
+          "source": "gp",
+          "target": "oper_fee",
+          "value": "12739000000"
+        },
+        {
+          "source": "other_f41",
+          "target": "ni",
+          "value": "862000000"
+        },
+        {
+          "source": "oper_inc",
+          "target": "ni",
+          "value": "2932000000"
+        },
+        {
+          "source": "oper_inc",
+          "target": "inc_tax",
+          "value": "1423000000"
+        },
+        {
+          "source": "oper_fee",
+          "target": "sga",
+          "value": "5834000000"
+        },
+        {
+          "source": "oper_fee",
+          "target": "rd_exp",
+          "value": "6411000000"
+        },
+        {
+          "source": "oper_fee",
+          "target": "other_f42",
+          "value": "494000000"
+        }
+      ]
+    },
+    {
+      "fiscal_year": 2024,
+      "report": "2024 Annual",
+      "currency": "USD",
+      "period": "FY 2024",
+      "nodes": [
+        {
+          "key": "bus_119884",
+          "name": "Automotive",
+          "value": "87604000000",
+          "growth": "-3.45390024025215",
+          "level": 1,
+          "color": "#5A74FF"
+        },
+        {
+          "key": "bus_130929",
+          "name": "Energy Generation and Storage",
+          "value": "10086000000",
+          "growth": "67.12510356255178",
+          "level": 1,
+          "color": "#5A74FF"
+        },
+        {
+          "key": "total_rev",
+          "name": "Total Revenue",
+          "value": "97690000000",
+          "growth": "0.94757835346636",
+          "level": 2,
+          "color": "#5A74FF"
+        },
+        {
+          "key": "gp",
+          "name": "Gross Profit",
+          "value": "17450000000",
+          "growth": "-1.18912797281993",
+          "level": 3,
+          "color": "#35C15C"
+        },
+        {
+          "key": "cost_rev",
+          "name": "Cost Of Revenues",
+          "value": "80240000000",
+          "growth": "1.42454463868138",
+          "level": 3,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "other_f41",
+          "name": "Other",
+          "value": "1269000000",
+          "growth": "",
+          "level": 4,
+          "color": "#35C15C"
+        },
+        {
+          "key": "oper_inc",
+          "name": "Operating Income",
+          "value": "7659000000",
+          "growth": "-13.85670903160499",
+          "level": 4,
+          "color": "#35C15C"
+        },
+        {
+          "key": "oper_fee",
+          "name": "Operating Exp.",
+          "value": "9791000000",
+          "growth": "11.6546926673509",
+          "level": 4,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "ni",
+          "name": "Net Income",
+          "value": "7091000000",
+          "growth": "-52.7172101086884",
+          "level": 5,
+          "color": "#35C15C"
+        },
+        {
+          "key": "inc_tax",
+          "name": "Income Tax Exp.",
+          "value": "1837000000",
+          "growth": "136.73265346930614",
+          "level": 5,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "sga",
+          "name": "SG& A Exp.",
+          "value": "5150000000",
+          "growth": "7.29166666666667",
+          "level": 5,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "rd_exp",
+          "name": "R&D Exp.",
+          "value": "4540000000",
+          "growth": "14.38649533887629",
+          "level": 5,
+          "color": "#FFA61F"
+        },
+        {
+          "key": "other_f42",
+          "name": "Other",
+          "value": "101000000",
+          "growth": "",
+          "level": 5,
+          "color": "#FFA61F"
+        }
+      ],
+      "links": [
+        {
+          "source": "bus_119884",
+          "target": "total_rev",
+          "value": "87604000000"
+        },
+        {
+          "source": "bus_130929",
+          "target": "total_rev",
+          "value": "10086000000"
+        },
+        {
+          "source": "total_rev",
+          "target": "gp",
+          "value": "17450000000"
+        },
+        {
+          "source": "total_rev",
+          "target": "cost_rev",
+          "value": "80240000000"
+        },
+        {
+          "source": "gp",
+          "target": "oper_inc",
+          "value": "7659000000"
+        },
+        {
+          "source": "gp",
+          "target": "oper_fee",
+          "value": "9791000000"
+        },
+        {
+          "source": "other_f41",
+          "target": "ni",
+          "value": "1269000000"
+        },
+        {
+          "source": "oper_inc",
+          "target": "ni",
+          "value": "5822000000"
+        },
+        {
+          "source": "oper_inc",
+          "target": "inc_tax",
+          "value": "1837000000"
+        },
+        {
+          "source": "oper_fee",
+          "target": "sga",
+          "value": "5150000000"
+        },
+        {
+          "source": "oper_fee",
+          "target": "rd_exp",
+          "value": "4540000000"
+        },
+        {
+          "source": "oper_fee",
+          "target": "other_f42",
+          "value": "101000000"
+        }
+      ]
+    }
+  ],
+  "colors": [
+    {
+      "name": "Revenue",
+      "color": "#5A74FF"
+    },
+    {
+      "name": "Profit",
+      "color": "#35C15C"
+    },
+    {
+      "name": "Cost",
+      "color": "#FFA61F"
+    }
+  ],
+  "ccy_symbol": "$"
+}

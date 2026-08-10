@@ -88,11 +88,11 @@ impl RenderOnce for SidebarHeader {
             .rounded(cx.theme().radius)
             .refine_style(&self.style)
             .hover(|this| {
-                this.bg(cx.theme().sidebar_accent)
+                this.bg(cx.theme().tokens.sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .when(self.selected, |this| {
-                this.bg(cx.theme().sidebar_accent)
+                this.bg(cx.theme().tokens.sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .children(self.children)

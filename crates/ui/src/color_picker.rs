@@ -249,6 +249,23 @@ impl ColorPickerState {
         self.value
     }
 
+    /// Open or close the picker popover.
+    ///
+    /// Lets a caller drive the picker from something other than its own
+    /// trigger, e.g. selecting a color by clicking the element it paints.
+    pub fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        if self.open == open {
+            return;
+        }
+        self.open = open;
+        cx.notify();
+    }
+
+    /// Whether the picker popover is open.
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
     fn on_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
         self.open = !self.open;
         cx.notify();
@@ -407,15 +424,16 @@ impl ColorPicker {
                 this.hover(|this| {
                     this.border_color(color.darken(0.3))
                         .bg(color.lighten(0.1))
-                        .shadow_xs()
                 })
                 .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
-                .on_mouse_move(window.listener_for(&state, move |state, _, window, cx| {
-                    state.hovered_color = Some(color);
-                    state.state.update(cx, |input, cx| {
-                        input.set_value(color.to_hex(), window, cx);
-                    });
-                    cx.notify();
+                .on_hover(window.listener_for(&state, move |state, enter, window, cx| {
+                    if *enter {
+                        state.hovered_color = Some(color);
+                        state.state.update(cx, |input, cx| {
+                            input.set_value(color.to_hex(), window, cx);
+                        });
+                        cx.notify();
+                    }
                 }))
                 .on_click(window.listener_for(
                     &state,
@@ -483,7 +501,7 @@ impl ColorPicker {
                                 .size_5()
                                 .rounded(cx.theme().radius),
                         )
-                        .child(Input::new(&self.state.read(cx).state).small()),
+                        .child(Input::new(&self.state.read(cx).state).small().px_2p5()),
                 )
             })
     }
@@ -827,10 +845,9 @@ impl RenderOnce for ColorPickerButton {
                 this.child(
                     div()
                         .id("square")
-                        .bg(cx.theme().background)
+                        .bg(cx.theme().tokens.background)
                         .border_1()
                         .border_color(cx.theme().input)
-                        .when(cx.theme().shadow, |this| this.shadow_xs())
                         .rounded(cx.theme().radius)
                         .overflow_hidden()
                         .size_with(self.size)

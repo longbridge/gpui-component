@@ -52,6 +52,46 @@ pub fn measure_text_width(text: &SharedString, font_size: Pixels, window: &mut W
     .as_f32()
 }
 
+/// Truncate `text` with a trailing ellipsis so it fits within `max_width` at
+/// `font_size`. Returns `text` unchanged when it already fits; returns just
+/// the ellipsis when not even one character fits. `max_width <= 0` is treated
+/// as "no budget" and returns `text` unchanged (the caller has no room to
+/// reason about).
+pub fn truncate_text_to_width(
+    text: &SharedString,
+    font_size: Pixels,
+    max_width: f32,
+    window: &mut Window,
+) -> SharedString {
+    if max_width <= 0. || measure_text_width(text, font_size, window) <= max_width {
+        return text.clone();
+    }
+
+    const ELLIPSIS: &str = "…";
+    // Byte offsets of every char boundary after the first char; cutting at
+    // `cuts[k]` keeps the first `k + 1` chars.
+    let cuts: Vec<usize> = text.char_indices().skip(1).map(|(i, _)| i).collect();
+
+    // Binary search the largest prefix whose text + ellipsis still fits.
+    let mut best: Option<usize> = None;
+    let (mut lo, mut hi) = (0usize, cuts.len());
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        let candidate = SharedString::from(format!("{}{ELLIPSIS}", &text[..cuts[mid]]));
+        if measure_text_width(&candidate, font_size, window) <= max_width {
+            best = Some(mid);
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    match best {
+        Some(mid) => SharedString::from(format!("{}{ELLIPSIS}", &text[..cuts[mid]])),
+        None => SharedString::from(ELLIPSIS),
+    }
+}
+
 pub struct Text {
     pub text: SharedString,
     pub origin: Point<Pixels>,
