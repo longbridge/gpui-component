@@ -88,9 +88,6 @@ pub struct ThemeConfigColors {
     /// Accordion background color.
     #[serde(rename = "accordion.background")]
     pub accordion: Option<SharedString>,
-    /// Accordion hover background color.
-    #[serde(rename = "accordion.hover.background")]
-    pub accordion_hover: Option<SharedString>,
     /// Default background color.
     #[serde(rename = "background")]
     pub background: Option<SharedString>,
@@ -738,7 +735,6 @@ impl ThemeColor {
         apply_background_color!(accent, fallback = tokens.secondary);
         apply_color!(accent_foreground, fallback = self.foreground);
         apply_background_color!(accordion, fallback = tokens.background);
-        apply_background_color!(accordion_hover, fallback = self.accent.opacity(0.8));
         apply_background_color!(
             group_box,
             fallback = self
