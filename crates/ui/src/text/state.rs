@@ -267,12 +267,24 @@ impl TextViewState {
     }
 
     /// Return the selected text, in the view's [`SelectionFormat`].
-    ///
-    /// In [`SelectionFormat::Source`] a multi-click (word/paragraph) selection
-    /// still yields its stored text, because a single word rarely carries
-    /// markup.
     pub fn selected_text(&self) -> String {
         self.selected_text_in(None)
+    }
+
+    /// The format to copy in, which is [`SelectionFormat::Plain`] whenever the
+    /// requested one cannot be produced.
+    ///
+    /// Only a Markdown view can return source. Reconstructing HTML would mean
+    /// spelling every attribute back out — a mark's color, an image's
+    /// dimensions, a cell's alignment — with a new way to lose one at each
+    /// step, and html5ever records no source offsets to fall back on (it
+    /// reports only line numbers), so there is no original text to copy from
+    /// either.
+    fn effective_format(&self) -> SelectionFormat {
+        match self.format {
+            TextViewFormat::Markdown => self.selection_format,
+            TextViewFormat::Html => SelectionFormat::Plain,
+        }
     }
 
     /// Return the selected text, with `blocks` bounding which top-level blocks
@@ -282,21 +294,27 @@ impl TextViewState {
     /// even after it scrolls out of view; see
     /// [`ParsedDocument::selected_text`](crate::text::document::ParsedDocument).
     pub(super) fn selected_text_in(&self, blocks: Option<RangeInclusive<usize>>) -> String {
+        let format = self.effective_format();
+
         if self.select_all {
-            if self.selection_format == SelectionFormat::Source {
+            if format == SelectionFormat::Source {
                 return self.source().to_string();
             }
 
             return self.parsed_content.document.text();
         }
 
-        if let Some(text) = &self.selected_text_override {
+        // A multi-click stores the plain text it selected, which is a shortcut
+        // past the block walk. Source mode cannot take it: the word it stored
+        // has lost its markup. The click also set the inline selection it came
+        // from, so the walk reconstructs the same range with the markup intact.
+        if format != SelectionFormat::Source
+            && let Some(text) = &self.selected_text_override
+        {
             return text.clone();
         }
 
-        self.parsed_content
-            .document
-            .selected_text(self.selection_format, blocks)
+        self.parsed_content.document.selected_text(format, blocks)
     }
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {

@@ -516,11 +516,19 @@ pub(crate) fn wrap_with_mark(text: &str, mark: &TextMark) -> String {
     if mark.strikethrough {
         out = format!("~~{}~~", out);
     }
+    if mark.underline {
+        // Markdown has no underline syntax, and `__` reads as bold to most
+        // parsers, so fall back to the inline HTML `<u>` parses from.
+        out = format!("<u>{}</u>", out);
+    }
     if mark.highlight.is_some() {
         out = format!("=={}==", out);
     }
     if let Some(link) = &mark.link {
-        out = format!("[{}]({})", out, link.url);
+        out = match &link.title {
+            Some(title) => format!("[{}]({} \"{}\")", out, link.url, title),
+            None => format!("[{}]({})", out, link.url),
+        };
     }
     out
 }
@@ -1039,25 +1047,6 @@ impl Paragraph {
 
     pub(crate) fn merge(&mut self, other: Self) {
         self.children.extend(other.children);
-    }
-
-    /// Whether this paragraph contains only image children (no text), i.e. a
-    /// standalone image such as `![alt](url)` on its own line.
-    ///
-    /// Such a paragraph renders as a bare image with no selectable text run, so
-    /// it never holds a selection of its own; the document decides whether to
-    /// include it (see [`ParsedDocument::selected_text`](crate::text::document)).
-    pub(super) fn is_only_images(&self) -> bool {
-        !self.children.is_empty() && self.children.iter().all(|child| child.image.is_some())
-    }
-
-    /// The Markdown source for this paragraph's image children, concatenated.
-    pub(super) fn images_markdown(&self) -> String {
-        self.children
-            .iter()
-            .filter_map(|child| child.image.as_ref())
-            .map(image_markdown)
-            .collect()
     }
 }
 
@@ -2667,17 +2656,96 @@ mod tests {
         }
     }
 
+    /// Every mark round-trips, including the two Markdown has no plain syntax
+    /// for.
+    #[test]
+    fn marks_round_trip_through_reconstruction() {
+        let wrap = |mark: TextMark| reconstruct_markdown("x", &[(0..1, mark)], 0..1);
+
+        assert_eq!(wrap(TextMark::default().bold()), "**x**");
+        assert_eq!(wrap(TextMark::default().italic()), "*x*");
+        assert_eq!(wrap(TextMark::default().code()), "`x`");
+        assert_eq!(wrap(TextMark::default().strikethrough()), "~~x~~");
+        assert_eq!(
+            wrap(TextMark::default().highlight(crate::yellow(200))),
+            "==x=="
+        );
+        // No Markdown syntax for underline, so it keeps the tag it came from.
+        assert_eq!(wrap(TextMark::default().underline()), "<u>x</u>");
+
+        // A link keeps its title, which Markdown carries after the URL.
+        assert_eq!(
+            wrap(TextMark::default().link(LinkMark {
+                url: "https://example.com".into(),
+                title: Some("Tip".into()),
+                ..Default::default()
+            })),
+            "[x](https://example.com \"Tip\")"
+        );
+    }
+
+    /// A block the selection covers whole comes straight from the source, so it
+    /// keeps what the author wrote instead of a normalized reconstruction.
+    #[test]
+    fn document_selected_source_slices_covered_blocks_from_the_source() {
+        use crate::text::document::ParsedDocument;
+
+        // `_italic_`, the `3.` start and the column padding all survive only
+        // because the block is copied, not rebuilt.
+        let source = "start\n\n3. _one_\n4. two\n\n---\n\nend";
+        let list = "3. _one_\n4. two";
+        let list_start = source.find(list).unwrap();
+        let rule_start = source.find("---").unwrap();
+
+        let document = ParsedDocument {
+            source: source.into(),
+            blocks: vec![
+                BlockNode::Paragraph(selected_paragraph("start")),
+                BlockNode::List {
+                    ordered: true,
+                    children: vec![],
+                    span: Some(Span {
+                        start: list_start,
+                        end: list_start + list.len(),
+                    }),
+                },
+                BlockNode::HorizontalRule {
+                    span: Some(Span {
+                        start: rule_start,
+                        end: rule_start + 3,
+                    }),
+                },
+                BlockNode::Paragraph(selected_paragraph("end")),
+            ],
+        };
+
+        assert_eq!(
+            document.selected_text(SelectionFormat::Source, None),
+            "start\n\n3. _one_\n4. two\n\n---\n\nend"
+        );
+    }
+
     #[test]
     fn document_selected_source_includes_enclosed_image() {
         use crate::text::document::ParsedDocument;
 
-        // A standalone image between two selected paragraphs is enclosed by the
-        // selection, so it is included even though it holds no selection.
+        // A standalone image between two selected paragraphs is covered by the
+        // selection, so it is copied whole even though it holds no selection of
+        // its own — straight out of the source the parser located it in.
+        let source = "before\n\n![alt](https://example.com/i.png)\n\nafter";
+        let image_markdown = "![alt](https://example.com/i.png)";
+        let start = source.find(image_markdown).unwrap();
+        let mut image = image_paragraph("alt", "https://example.com/i.png");
+        image.span = Some(Span {
+            start,
+            end: start + image_markdown.len(),
+        });
+
         let document = ParsedDocument {
-            source: String::new().into(),
+            source: source.into(),
             blocks: vec![
                 BlockNode::Paragraph(selected_paragraph("before")),
-                BlockNode::Paragraph(image_paragraph("alt", "https://example.com/i.png")),
+                BlockNode::Paragraph(image),
                 BlockNode::Paragraph(selected_paragraph("after")),
             ],
         };
