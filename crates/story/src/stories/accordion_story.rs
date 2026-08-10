@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, prelude::FluentBuilder as _,
+    Render, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     IconName, Selectable, Sizable, Size,
@@ -46,7 +46,7 @@ impl AccordionStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             bordered: false,
-            open_ixs: vec![0, 1, 2],
+            open_ixs: vec![0],
             size: Size::default(),
             disabled: false,
             multiple: true,
@@ -159,58 +159,62 @@ impl Render for AccordionStory {
                     ),
             )
             .child(
-                section("Normal").max_w_lg().child(
-                    Accordion::new("test")
-                        .bordered(self.bordered)
-                        .with_size(self.size)
-                        .disabled(self.disabled)
-                        .multiple(self.multiple)
-                        .item(|this| {
-                            this.open(self.open_ixs.contains(&0))
-                                .when(self.show_icon, |this| this.icon(IconName::Info))
-                                .title("Is it accessible?")
-                                .child(
-                                    "Yes. Each item is a button with an aria-expanded state, \
+                section("Normal").child(
+                    div().w(px(480.)).child(
+                        Accordion::new("test")
+                            .bordered(self.bordered)
+                            .with_size(self.size)
+                            .disabled(self.disabled)
+                            .multiple(self.multiple)
+                            .item(|this| {
+                                this.open(self.open_ixs.contains(&0))
+                                    .when(self.show_icon, |this| this.icon(IconName::Info))
+                                    .title("Is it accessible?")
+                                    .child(
+                                        "Yes. Each item is a button with an aria-expanded state, \
                                     so screen readers announce whether the section is open, \
                                     and the whole group can be reached with the keyboard.",
-                                )
-                        })
-                        .item(|this| {
-                            this.open(self.open_ixs.contains(&1))
-                                .when(self.show_icon, |this| this.icon(IconName::Inbox))
-                                .title("Can it hold any content?")
-                                .child(
-                                    v_flex()
-                                        .gap_3()
-                                        .child(
-                                            "An item takes any element as its content, \
+                                    )
+                            })
+                            .item(|this| {
+                                this.open(self.open_ixs.contains(&1))
+                                    .when(self.show_icon, |this| this.icon(IconName::Inbox))
+                                    .title("Can it hold any content?")
+                                    .child(
+                                        v_flex()
+                                            .gap_3()
+                                            .child(
+                                                "An item takes any element as its content, \
                                             not just text. The height animation measures \
                                             whatever you put in it.",
-                                        )
-                                        .child(
-                                            h_flex()
-                                                .gap_4()
-                                                .child(Switch::new("switch1").label("Switch"))
-                                                .child(
-                                                    Checkbox::new("checkbox1")
-                                                        .label("Or a Checkbox"),
-                                                ),
-                                        ),
-                                )
-                        })
-                        .item(|this| {
-                            this.open(self.open_ixs.contains(&2))
-                                .when(self.show_icon, |this| this.icon(IconName::Moon))
-                                .title("Is it animated?")
-                                .child(
-                                    "Yes. Expanding and collapsing animates the height of \
+                                            )
+                                            .child(
+                                                h_flex()
+                                                    .gap_4()
+                                                    .child(Switch::new("switch1").label("Switch"))
+                                                    .child(
+                                                        Checkbox::new("checkbox1")
+                                                            .label("Or a Checkbox"),
+                                                    ),
+                                            ),
+                                    )
+                            })
+                            .item(|this| {
+                                this.open(self.open_ixs.contains(&2))
+                                    .when(self.show_icon, |this| this.icon(IconName::Moon))
+                                    .title("Is it animated?")
+                                    .child(
+                                        "Yes. Expanding and collapsing animates the height of \
                                     the content, and the chevron rotates to follow. \
                                     Items below move along with it.",
-                                )
-                        })
-                        .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window, cx| {
-                            this.toggle_accordion(open_ixs.to_vec(), window, cx);
-                        })),
+                                    )
+                            })
+                            .on_toggle_click(cx.listener(
+                                |this, open_ixs: &[usize], window, cx| {
+                                    this.toggle_accordion(open_ixs.to_vec(), window, cx);
+                                },
+                            )),
+                    ),
                 ),
             )
     }

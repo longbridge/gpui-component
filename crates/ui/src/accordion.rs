@@ -151,9 +151,8 @@ impl RenderOnce for Accordion {
 
 /// The content of an [`AccordionItem`], animating its height on toggle.
 ///
-/// The content stays in the element tree while closed (clipped to zero height),
-/// so that the collapse can be animated, and so that its natural height is
-/// still measured for the next expand.
+/// It stays in the tree while closed, clipped to zero height, to be able to
+/// animate the collapse and to keep its natural height measured.
 struct AccordionContent {
     id: ElementId,
     open: bool,
@@ -162,11 +161,9 @@ struct AccordionContent {
 
 #[derive(Clone, Copy)]
 struct AccordionContentState {
-    /// The `open` of the last frame, to detect a toggle.
     open: bool,
-    /// The progress at the time the current animation started.
+    /// The progress when the current animation started.
     from: f32,
-    /// `None` when the content is settled at its target height.
     started_at: Option<Instant>,
     /// The natural height measured in the last prepaint.
     height: Option<Pixels>,
@@ -182,10 +179,8 @@ impl AccordionContentState {
         }
     }
 
-    /// The progress of the animation, from 0. (closed) to 1. (open).
-    ///
-    /// This finishes the animation when the duration has passed, so it takes
-    /// `&mut self`.
+    /// Progress from 0. (closed) to 1. (open), ending the animation when the
+    /// duration has passed.
     fn progress(&mut self) -> f32 {
         let target = if self.open { 1. } else { 0. };
         let Some(started_at) = self.started_at else {
@@ -263,8 +258,7 @@ impl Element for AccordionContent {
         let mut style = Style::default();
         style.size.width = relative(1.).into();
         match height {
-            // Before the first measure there is nothing to animate to, let the
-            // content lay itself out to get its natural height measured.
+            // Not measured yet, let the content lay itself out.
             None if open => {}
             None => style.size.height = px(0.).into(),
             Some(height) => style.size.height = (height * progress).into(),
@@ -282,25 +276,30 @@ impl Element for AccordionContent {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        // Lay the content out at its natural height, the visible part is the
-        // one clipped by `bounds`.
+        // Lay out at the natural height, `bounds` clips the visible part.
         let available = size(
             AvailableSpace::Definite(bounds.size.width),
             AvailableSpace::MinContent,
         );
         let measured = self.child.layout_as_root(available, window, cx);
 
-        window.with_element_state(
+        let changed = window.with_element_state(
             global_id.expect("AccordionContent must have an id"),
             |state: Option<AccordionContentState>, _| {
                 let mut state = state.unwrap_or_else(|| AccordionContentState::new(self.open));
+                let changed = state.height != Some(measured.height);
                 state.height = Some(measured.height);
-                ((), state)
+                (changed, state)
             },
         );
 
-        // Mask here as well as in paint, to keep the hidden content from
-        // taking mouse events.
+        // The measured height is only used by the next `request_layout`, ask
+        // for that frame, or the new height never gets painted.
+        if changed {
+            window.request_animation_frame();
+        }
+
+        // Masked here too, so the hidden content takes no mouse events.
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             self.child.prepaint_at(bounds.origin, window, cx);
         });
@@ -326,7 +325,6 @@ impl Element for AccordionContent {
 #[derive(IntoElement)]
 pub struct AccordionItem {
     index: usize,
-    /// The last item does not need a separator under it.
     last: bool,
     icon: Option<Icon>,
     title: AnyElement,
@@ -417,9 +415,9 @@ impl Sizable for AccordionItem {
 impl RenderOnce for AccordionItem {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let text_size = match self.size {
-            Size::XSmall => rems(0.875),
-            Size::Small => rems(0.875),
-            _ => rems(1.0),
+            Size::XSmall => rems(0.8125),
+            Size::Large => rems(1.0),
+            _ => rems(0.875),
         };
 
         div().flex_1().child(
@@ -435,8 +433,7 @@ impl RenderOnce for AccordionItem {
                     } else if self.last {
                         this
                     } else {
-                        // Without borders the items are separated by a single
-                        // line under each of them, below the content.
+                        // Separated by a line under each item, below the content.
                         this.border_b_1().border_color(cx.theme().border)
                     }
                 })
@@ -450,10 +447,10 @@ impl RenderOnce for AccordionItem {
                         .gap_3()
                         .font_medium()
                         .map(|this| match self.size {
-                            Size::XSmall => this.py_1().px_2(),
-                            Size::Small => this.py_1p5().px_2p5(),
+                            Size::XSmall => this.py_1().px_1p5(),
+                            Size::Small => this.py_1p5().px_2(),
                             Size::Large => this.py_3().px_4(),
-                            _ => this.py_2p5().px_3(),
+                            _ => this.py_2().px_3(),
                         })
                         .when(self.open, |this| this.text_color(cx.theme().foreground))
                         .child(
@@ -465,10 +462,7 @@ impl RenderOnce for AccordionItem {
                                     _ => this.gap_2(),
                                 })
                                 .when_some(self.icon, |this, icon| {
-                                    this.child(
-                                        icon.with_size(self.size)
-                                            .text_color(cx.theme().muted_foreground),
-                                    )
+                                    this.child(icon.with_size(self.size))
                                 })
                                 .child(self.title),
                         )
@@ -493,12 +487,12 @@ impl RenderOnce for AccordionItem {
                     ("content", self.index),
                     self.open,
                     div()
-                        .text_color(cx.theme().muted_foreground)
+                        // No top padding, the title has its own bottom padding.
                         .map(|this| match self.size {
-                            Size::XSmall => this.px_2().pb_2(),
-                            Size::Small => this.px_2p5().pb_2p5(),
-                            Size::Large => this.px_4().pb_4(),
-                            _ => this.px_3().pb_3(),
+                            Size::XSmall => this.pb_1().px_1p5(),
+                            Size::Small => this.pb_1p5().px_2(),
+                            Size::Large => this.pb_3().px_4(),
+                            _ => this.pb_2().px_3(),
                         })
                         .children(self.children)
                         .into_any_element(),
