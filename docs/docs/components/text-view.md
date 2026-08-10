@@ -42,6 +42,38 @@ TextView::markdown("preview", markdown_source)
 TextView::html("html-preview", "<strong>Hello</strong>")
 ```
 
+## Link Click Handling
+
+Use `on_link_click` when links should be routed by the application instead of
+being opened directly by `App::open_url`. The callback receives the resolved
+URL and the original GPUI `ClickEvent`, so it can distinguish mouse buttons,
+keyboard activation, touch, and modifier keys:
+
+```rust
+use gpui::ClickEvent;
+use gpui_component::text::markdown;
+
+markdown("[Open the project](https://github.com/longbridge/gpui-component)")
+    .on_link_click(|url, event, _window, cx| {
+        if event.is_right_click() {
+            println!("Show a context menu for {url}");
+            return;
+        }
+
+        match event {
+            ClickEvent::Mouse(click) if click.up.modifiers.control => {
+                println!("Open {url} in an internal view");
+            }
+            _ => cx.open_url(url),
+        }
+    })
+```
+
+Installing a handler consumes the link event and disables the default URL
+opening behavior. If no handler is installed, links continue to use
+`App::open_url` as usual. The callback is used for both text links and linked
+images.
+
 ## Markdown Plugins
 
 Use `.plugin(...)` to support custom Markdown formats. A plugin owns both parsing and rendering, so callers only need to attach it to the `TextView`:
