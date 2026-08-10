@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use gpui::{HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
+use gpui::{App, HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
 
-use crate::highlighter::HighlightTheme;
+use crate::{ActiveTheme as _, highlighter::HighlightTheme};
 
 /// TextViewStyle used to customize the style for [`TextView`].
 #[derive(Clone)]
@@ -18,7 +18,7 @@ pub struct TextViewStyle {
     pub heading_font_size: Option<Arc<dyn Fn(u8, Pixels) -> Pixels + Send + Sync + 'static>>,
     /// Highlight theme for code blocks. Default: [`HighlightTheme::default_light()`]
     pub highlight_theme: Arc<HighlightTheme>,
-    /// Style for fenced code blocks (box-model: background, border, padding).
+    /// The style refinement for code blocks.
     pub code_block: StyleRefinement,
     /// Style refinement applied to the table container (the bordered wrapper).
     ///
@@ -28,11 +28,12 @@ pub struct TextViewStyle {
     pub table: StyleRefinement,
     /// Style refinement applied to each table cell.
     pub table_cell: StyleRefinement,
-    /// When true, selects a dark syntax-highlight palette for code blocks.
-    pub is_dark: bool,
-    /// Style for inline `code` spans (text-level: color, background, weight).
-    /// Merged into each span's HighlightStyle at render time — see node.rs.
+    /// The highlight style for inline code.
+    ///
+    /// Default is [`HighlightStyle::default()`], the `background_color` will
+    /// fallback to `cx.theme().accent`, if it is `None`.
     pub inline_code: HighlightStyle,
+    pub is_dark: bool,
 }
 
 impl PartialEq for TextViewStyle {
@@ -53,8 +54,8 @@ impl Default for TextViewStyle {
             code_block: StyleRefinement::default(),
             table: StyleRefinement::default(),
             table_cell: StyleRefinement::default(),
-            is_dark: false,
             inline_code: HighlightStyle::default(),
+            is_dark: false,
         }
     }
 }
@@ -99,5 +100,15 @@ impl TextViewStyle {
     pub fn table_cell(mut self, style: StyleRefinement) -> Self {
         self.table_cell = style;
         self
+    }
+
+    /// Returns the [`HighlightStyle`] to use for inline code,
+    /// fallback `background_color` to `cx.theme().accent`, if it is `None`.
+    pub(crate) fn inline_code_highlight(&self, cx: &App) -> HighlightStyle {
+        let mut style = self.inline_code;
+        if style.background_color.is_none() {
+            style.background_color = Some(cx.theme().accent);
+        }
+        style
     }
 }
