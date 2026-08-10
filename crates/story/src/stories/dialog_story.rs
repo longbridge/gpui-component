@@ -110,7 +110,11 @@ impl DialogStory {
         let date = cx.new(|cx| DatePickerState::new(window, cx));
         let select = cx.new(|cx| {
             SelectState::new(
-                vec!["Option 1".to_string(), "Option 2".to_string(), "Option 3".to_string()],
+                vec![
+                    "Option 1".to_string(),
+                    "Option 2".to_string(),
+                    "Option 3".to_string(),
+                ],
                 None,
                 window,
                 cx,
@@ -239,20 +243,23 @@ impl DialogStory {
     }
 
     fn render_focus_back_test(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        section("Focus back test").max_w_md().child(Input::new(&self.input2)).child(
-            Button::new("test-action")
-                .outline()
-                .label("Test Action")
-                .flex_shrink_0()
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(TestAction), cx);
-                })
-                .tooltip(
-                    "This button for test dispatch action, \
+        section("Focus back test")
+            .max_w_md()
+            .child(Input::new(&self.input2))
+            .child(
+                Button::new("test-action")
+                    .outline()
+                    .label("Test Action")
+                    .flex_shrink_0()
+                    .on_click(|_, window, cx| {
+                        window.dispatch_action(Box::new(TestAction), cx);
+                    })
+                    .tooltip(
+                        "This button for test dispatch action, \
                         to make sure when Dialog close,\
                         \nthis still can handle the action.",
-                ),
-        )
+                    ),
+            )
     }
 
     fn render_dialog_without_title(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -260,16 +267,20 @@ impl DialogStory {
         let overlay_closable = self.overlay_closable;
 
         section("Dialog without Title").child(
-            Button::new("dialog-no-title").outline().label("Dialog without Title").on_click(
-                cx.listener(move |_, _, window, cx| {
+            Button::new("dialog-no-title")
+                .outline()
+                .label("Dialog without Title")
+                .on_click(cx.listener(move |_, _, window, cx| {
                     window.open_dialog(cx, move |dialog, _, _| {
-                        dialog.overlay(dialog_overlay).overlay_closable(overlay_closable).child(
-                            "This is a dialog without title, \
+                        dialog
+                            .overlay(dialog_overlay)
+                            .overlay_closable(overlay_closable)
+                            .child(
+                                "This is a dialog without title, \
                                 you can use it when the title is not necessary.",
-                        )
+                            )
                     });
-                }),
-            ),
+                })),
         )
     }
 
@@ -278,8 +289,10 @@ impl DialogStory {
         let overlay_closable = self.overlay_closable;
 
         section("Custom buttons").child(
-            Button::new("confirm-dialog1").outline().label("Custom Buttons").on_click(cx.listener(
-                move |_, _, window, cx| {
+            Button::new("confirm-dialog1")
+                .outline()
+                .label("Custom Buttons")
+                .on_click(cx.listener(move |_, _, window, cx| {
                     window.open_dialog(cx, move |dialog, _, cx| {
                         dialog
                             .rounded(cx.theme().radius_lg)
@@ -326,8 +339,7 @@ impl DialogStory {
                                 true
                             })
                     });
-                },
-            )),
+                })),
         )
     }
 
@@ -336,8 +348,10 @@ impl DialogStory {
         let overlay_closable = self.overlay_closable;
 
         section("Scrollable Dialog").child(
-            Button::new("scrollable-dialog").outline().label("Scrollable Dialog").on_click(
-                cx.listener(move |_, _, window, cx| {
+            Button::new("scrollable-dialog")
+                .outline()
+                .label("Scrollable Dialog")
+                .on_click(cx.listener(move |_, _, window, cx| {
                     window.open_dialog(cx, move |dialog, _, _| {
                         dialog
                             .w(px(720.))
@@ -360,8 +374,7 @@ impl DialogStory {
                                     ),
                             )
                     });
-                }),
-            ),
+                })),
         )
     }
 
@@ -370,35 +383,40 @@ impl DialogStory {
         let overlay_closable = self.overlay_closable;
 
         section("Table in Dialog").child(
-            Button::new("table-dialog").outline().label("Table Dialog").on_click(cx.listener({
-                move |this, _, window, cx| {
-                    window.open_dialog(cx, {
-                        let table = this.table.clone();
-                        move |dialog, _, _| {
-                            dialog
-                                .w(px(800.))
-                                .h(px(600.))
-                                .overlay(dialog_overlay)
-                                .overlay_closable(overlay_closable)
-                                .title("Dialog with Table")
-                                .child(
-                                    v_flex()
-                                        .size_full()
-                                        .gap_3()
-                                        .child("This is a dialog contains a table component.")
-                                        .child(DataTable::new(&table)),
-                                )
-                        }
-                    });
-                }
-            })),
+            Button::new("table-dialog")
+                .outline()
+                .label("Table Dialog")
+                .on_click(cx.listener({
+                    move |this, _, window, cx| {
+                        window.open_dialog(cx, {
+                            let table = this.table.clone();
+                            move |dialog, _, _| {
+                                dialog
+                                    .w(px(800.))
+                                    .h(px(600.))
+                                    .overlay(dialog_overlay)
+                                    .overlay_closable(overlay_closable)
+                                    .title("Dialog with Table")
+                                    .child(
+                                        v_flex()
+                                            .size_full()
+                                            .gap_3()
+                                            .child("This is a dialog contains a table component.")
+                                            .child(DataTable::new(&table)),
+                                    )
+                            }
+                        });
+                    }
+                })),
         )
     }
 
     fn render_custom_paddings(&self, cx: &mut Context<Self>) -> impl IntoElement {
         section("Custom Paddings").child(
-            Button::new("custom-dialog-paddings").outline().label("Custom Paddings").on_click(
-                cx.listener(move |_, _, window, cx| {
+            Button::new("custom-dialog-paddings")
+                .outline()
+                .label("Custom Paddings")
+                .on_click(cx.listener(move |_, _, window, cx| {
                     window.open_dialog(cx, move |dialog, _, _| {
                         dialog.p_3().title("Custom Dialog Title").child(
                             "This is a custom dialog content, we can use \
@@ -406,15 +424,16 @@ impl DialogStory {
                             the dialog.",
                         )
                     });
-                }),
-            ),
+                })),
         )
     }
 
     fn render_custom_style(&self, cx: &mut Context<Self>) -> impl IntoElement {
         section("Custom Style").child(
-            Button::new("custom-dialog-style").outline().label("Custom Dialog Style").on_click(
-                cx.listener(move |_, _, window, cx| {
+            Button::new("custom-dialog-style")
+                .outline()
+                .label("Custom Dialog Style")
+                .on_click(cx.listener(move |_, _, window, cx| {
                     window.open_dialog(cx, move |dialog, _, cx| {
                         dialog
                             .rounded(cx.theme().radius_lg)
@@ -423,58 +442,60 @@ impl DialogStory {
                             .title("Custom Dialog Title")
                             .child("This is a custom dialog content.")
                     });
-                }),
-            ),
+                })),
         )
     }
 
     fn render_dialog_with_content(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        section("Open Dialog with DialogContent").sub_title("Declarative API").child(
-            Button::new("custom-width-dialog-btn")
-                .outline()
-                .label("Custom Width (400px)")
-                .on_click(cx.listener(move |_, _, window, cx| {
-                    window.open_dialog(cx, move |dialog, _, _| {
-                        dialog.w(px(400.)).content(|content, _, _| {
-                            content
-                                .child(
-                                    DialogHeader::new()
-                                        .child(DialogTitle::new().child("Custom Width"))
-                                        .child(
-                                            DialogDescription::new()
-                                                .child("This dialog has a custom width of 400px."),
-                                        ),
-                                )
-                                .child(
-                                    "Content area with custom width configuration, \
+        section("Open Dialog with DialogContent")
+            .sub_title("Declarative API")
+            .child(
+                Button::new("custom-width-dialog-btn")
+                    .outline()
+                    .label("Custom Width (400px)")
+                    .on_click(cx.listener(move |_, _, window, cx| {
+                        window.open_dialog(cx, move |dialog, _, _| {
+                            dialog.w(px(400.)).content(|content, _, _| {
+                                content
+                                    .child(
+                                        DialogHeader::new()
+                                            .child(DialogTitle::new().child("Custom Width"))
+                                            .child(
+                                                DialogDescription::new().child(
+                                                    "This dialog has a custom width of 400px.",
+                                                ),
+                                            ),
+                                    )
+                                    .child(
+                                        "Content area with custom width configuration, \
                                             and the footer is used flex 1 button widths.",
-                                )
-                                .child(
-                                    DialogFooter::new()
-                                        .justify_center()
-                                        .child(
-                                            Button::new("cancel")
-                                                .flex_1()
-                                                .outline()
-                                                .label("Cancel")
-                                                .on_click(|_, window, cx| {
-                                                    window.close_dialog(cx);
-                                                }),
-                                        )
-                                        .child(
-                                            Button::new("done")
-                                                .flex_1()
-                                                .primary()
-                                                .label("Done")
-                                                .on_click(|_, window, cx| {
-                                                    window.close_dialog(cx);
-                                                }),
-                                        ),
-                                )
+                                    )
+                                    .child(
+                                        DialogFooter::new()
+                                            .justify_center()
+                                            .child(
+                                                Button::new("cancel")
+                                                    .flex_1()
+                                                    .outline()
+                                                    .label("Cancel")
+                                                    .on_click(|_, window, cx| {
+                                                        window.close_dialog(cx);
+                                                    }),
+                                            )
+                                            .child(
+                                                Button::new("done")
+                                                    .flex_1()
+                                                    .primary()
+                                                    .label("Done")
+                                                    .on_click(|_, window, cx| {
+                                                        window.close_dialog(cx);
+                                                    }),
+                                            ),
+                                    )
+                            })
                         })
-                    })
-                })),
-        )
+                    })),
+            )
     }
 
     fn render_textview_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement {

@@ -21,7 +21,10 @@ pub struct DialogHeader {
 
 impl DialogHeader {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: Vec::new() }
+        Self {
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+        }
     }
 }
 
@@ -39,6 +42,9 @@ impl Styled for DialogHeader {
 
 impl RenderOnce for DialogHeader {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        v_flex().gap_2().refine_style(&self.style).children(self.children)
+        v_flex()
+            .gap_2()
+            .refine_style(&self.style)
+            .children(self.children)
     }
 }

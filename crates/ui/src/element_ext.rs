@@ -21,7 +21,10 @@ pub struct AnyChildElement(Box<dyn FnOnce(ChildElementOptions) -> AnyElement>);
 impl AnyChildElement {
     pub fn new(element: impl ChildElement + 'static) -> Self {
         Self(Box::new(|options| {
-            element.with_ix(options.ix).with_size(options.size).into_any_element()
+            element
+                .with_ix(options.ix)
+                .with_size(options.size)
+                .into_any_element()
         }))
     }
 
@@ -44,9 +47,12 @@ pub trait ElementExt: ParentElement + Sized {
         F: FnOnce(Bounds<Pixels>, &mut Window, &mut App) + 'static,
     {
         self.child(
-            canvas(move |bounds, window, cx| f(bounds, window, cx), |_, _, _, _| {})
-                .absolute()
-                .size_full(),
+            canvas(
+                move |bounds, window, cx| f(bounds, window, cx),
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
         )
     }
 }

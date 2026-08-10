@@ -157,7 +157,11 @@ impl RenderOnce for Toggle {
         div()
             .id(self.id)
             .role(Role::Button)
-            .aria_toggled(if checked { Toggled::True } else { Toggled::False })
+            .aria_toggled(if checked {
+                Toggled::True
+            } else {
+                Toggled::False
+            })
             .when_some(
                 self.tooltip.text.as_ref().map(|(text, _)| text.clone()),
                 |this, label| this.aria_label(label),

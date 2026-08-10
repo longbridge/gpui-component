@@ -1332,17 +1332,17 @@ mod tests {
 
         line_layout = line_layout.wrap_indent(px(20.0));
 
-        let last_layout = LastLayout{
-           visible_range: 0..1,
-           visible_buffer_lines: vec![0],
-           visible_line_byte_offsets: vec![0],
-           visible_top: px(0.),
-           visible_range_offset: 0..0,
-           lines: Rc::new(vec![]),
-           line_height: px(20.0),
-           wrap_width: Some(px(10.)),
-           wrapping_indent: WrappingIndent::Same,
-           line_number_width: px(0.),
+        let last_layout = LastLayout {
+            visible_range: 0..1,
+            visible_buffer_lines: vec![0],
+            visible_line_byte_offsets: vec![0],
+            visible_top: px(0.),
+            visible_range_offset: 0..0,
+            lines: Rc::new(vec![]),
+            line_height: px(20.0),
+            wrap_width: Some(px(10.)),
+            wrapping_indent: WrappingIndent::Same,
+            line_number_width: px(0.),
             cursor_bounds: None,
             text_align: TextAlign::Left,
             content_width: px(0.),

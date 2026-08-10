@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
-    ClickEvent, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
+    AnyElement, App, Bounds, ClickEvent, Element, ElementId, Entity, GlobalElementId, Hitbox,
+    HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
     ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
 };
 
@@ -30,12 +30,7 @@ pub(crate) fn handle_link_click(
     cx: &mut App,
 ) {
     if let Some(handler) = handler {
-        handler(
-            &url,
-            &event,
-            window,
-            cx,
-        );
+        handler(&url, &event, window, cx);
     } else if match &event {
         ClickEvent::Mouse(click) => {
             matches!(click.up.button, MouseButton::Left | MouseButton::Middle)
