@@ -516,6 +516,23 @@ mod tests {
     }
 
     #[gpui::test]
+    fn inline_html_image_after_newline_does_not_panic(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, cx| {
+            TextViewTestRoot::new(
+                "Hi\n[<img src=\"https://example.com/image.svg\">](https://google.com/)",
+                cx,
+            )
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+    }
+
+    #[gpui::test]
     fn list_item_renders_fenced_code_block_at_document_width(cx: &mut TestAppContext) {
         struct ListItemBlockRoot;
 
