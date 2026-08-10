@@ -127,6 +127,8 @@ pub enum InputEvent {
     PressEnter { secondary: bool, shift: bool },
     Focus,
     Blur,
+    /// A gutter breakpoint was toggled; carries the 0-based buffer line.
+    BreakpointToggled(usize),
 }
 
 pub(super) const CONTEXT: &str = "Input";
@@ -460,6 +462,11 @@ pub struct InputState {
     pub(super) inline_completion: InlineCompletion,
 
     pub(super) auto_scroll: AutoScroll,
+    /// Gutter breakpoint lines (0-based buffer rows), shown as clickable dots
+    /// when [`Self::breakpoints_enabled`] is set.
+    pub(super) breakpoints: std::collections::HashSet<usize>,
+    /// Whether the clickable breakpoint gutter is drawn (requires line numbers).
+    pub(super) breakpoints_enabled: bool,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -562,6 +569,8 @@ impl InputState {
             inline_completion: InlineCompletion::default(),
             cursor_line_end_affinity: false,
             auto_scroll: AutoScroll::default(),
+            breakpoints: std::collections::HashSet::new(),
+            breakpoints_enabled: false,
         }
     }
 
@@ -675,6 +684,53 @@ impl InputState {
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
             *l = line_number;
         }
+        cx.notify();
+    }
+
+    /// Enable the clickable breakpoint gutter (dots left of the line numbers).
+    /// Requires line numbers to be shown.
+    #[must_use]
+    pub fn breakpoints_enabled(mut self, enabled: bool) -> Self {
+        self.breakpoints_enabled = enabled;
+        self
+    }
+
+    /// Toggle the clickable breakpoint gutter at runtime (dots left of the
+    /// line numbers). Requires line numbers to be shown.
+    pub fn set_breakpoints_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        if self.breakpoints_enabled != enabled {
+            self.breakpoints_enabled = enabled;
+            cx.notify();
+        }
+    }
+
+    /// Whether the clickable breakpoint gutter is currently drawn.
+    pub fn is_breakpoints_enabled(&self) -> bool {
+        self.breakpoints_enabled
+    }
+
+    /// The current gutter breakpoint lines (0-based buffer rows).
+    pub fn breakpoints(&self) -> &std::collections::HashSet<usize> {
+        &self.breakpoints
+    }
+
+    /// Replace the gutter breakpoint lines (0-based buffer rows).
+    pub fn set_breakpoints(
+        &mut self,
+        lines: std::collections::HashSet<usize>,
+        cx: &mut Context<Self>,
+    ) {
+        self.breakpoints = lines;
+        cx.notify();
+    }
+
+    /// Toggle a gutter breakpoint on a 0-based buffer line and emit
+    /// [`InputEvent::BreakpointToggled`].
+    pub fn toggle_breakpoint(&mut self, line: usize, cx: &mut Context<Self>) {
+        if !self.breakpoints.remove(&line) {
+            self.breakpoints.insert(line);
+        }
+        cx.emit(InputEvent::BreakpointToggled(line));
         cx.notify();
     }
 
