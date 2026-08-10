@@ -750,13 +750,6 @@ impl RenderOnce for Tab {
             inner_content.into_any_element()
         };
 
-        // Under `max_width` the label is the only part that gives way, so
-        // hold the prefix and suffix (e.g. a close button) at their full size.
-        let fixed = move |element: AnyElement| match max_width {
-            Some(_) => div().flex_shrink_0().child(element).into_any_element(),
-            None => element,
-        };
-
         self.base
             .id(self.ix)
             .selected(self.selected)
@@ -849,9 +842,23 @@ impl RenderOnce for Tab {
                         ),
                 )
             })
-            .when_some(self.prefix, |this, prefix| this.child(fixed(prefix)))
+            // Under `max_width` the label is the only part that gives way, so
+            // hold the prefix and suffix (e.g. a close button) at their full size.
+            .when_some(self.prefix, |this, prefix| {
+                this.child(
+                    div()
+                        .when_some(max_width, |this, _| this.flex_shrink_0())
+                        .child(prefix),
+                )
+            })
             .child(inner_element)
-            .when_some(self.suffix, |this, suffix| this.child(fixed(suffix)))
+            .when_some(self.suffix, |this, suffix| {
+                this.child(
+                    div()
+                        .when_some(max_width, |this, _| this.flex_shrink_0())
+                        .child(suffix),
+                )
+            })
             .when_some(self.on_click.clone(), |this, on_click| {
                 this.on_click(move |event, window, cx| on_click(event, window, cx))
             })
