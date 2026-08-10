@@ -13,7 +13,7 @@ use crate::{
     input::{self, SelectAll},
     scroll::AutoScroll,
     text::{
-        CodeBlockActionsFn, MarkdownExtensions, TextViewStyle,
+        CodeBlockActionsFn, LinkClickHandlerFn, MarkdownExtensions, TextViewStyle,
         document::ParsedDocument,
         format,
         node::{self, NodeContext},
@@ -77,6 +77,7 @@ pub struct TextViewState {
     pub(super) scrollable: bool,
     pub(super) text_view_style: TextViewStyle,
     pub(super) code_block_actions: Option<std::sync::Arc<CodeBlockActionsFn>>,
+    pub(super) link_click_handler: Option<std::sync::Arc<LinkClickHandlerFn>>,
     pub(super) markdown_extensions: Arc<MarkdownExtensions>,
 
     pub(super) is_selecting: bool,
@@ -163,6 +164,7 @@ impl TextViewState {
             list_state: ListState::new(0, gpui::ListAlignment::Top, px(1000.)).measure_all(),
             text_view_style: TextViewStyle::default(),
             code_block_actions: None,
+            link_click_handler: None,
             markdown_extensions: Arc::default(),
             is_selecting: false,
             auto_scroll: AutoScroll::default(),
@@ -523,6 +525,7 @@ impl Render for TextViewState {
         let mut node_cx = self.parsed_content.node_cx.clone();
 
         node_cx.code_block_actions = self.code_block_actions.clone();
+        node_cx.link_click_handler = self.link_click_handler.clone();
         node_cx.markdown_extensions = self.markdown_extensions.clone();
         node_cx.style = self.text_view_style.clone();
 

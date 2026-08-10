@@ -52,6 +52,7 @@ pub struct Input {
     selected: bool,
     content_type: Option<InputContentType>,
     role: Option<Role>,
+    accessibility_id: Option<SharedString>,
     aria_label: Option<SharedString>,
 
     /// An optional context menu builder to allow a custom context menu on the input.
@@ -98,9 +99,16 @@ impl Input {
             selected: false,
             content_type: None,
             role: None,
+            accessibility_id: None,
             aria_label: None,
             context_menu_builder: None,
         }
+    }
+
+    /// Set the developer-assigned identifier exposed to accessibility clients.
+    pub fn accessibility_id(mut self, id: impl Into<SharedString>) -> Self {
+        self.accessibility_id = Some(id.into());
+        self
     }
 
     pub fn aria_label(mut self, label: impl Into<SharedString>) -> Self {
@@ -444,6 +452,7 @@ impl RenderOnce for Input {
         div()
             .id(("input", self.state.entity_id()))
             .role(accessibility_role)
+            .when_some(self.accessibility_id, |this, id| this.accessibility_id(id))
             .when_some(aria_label, |this, label| this.aria_label(label))
             .when_some(placeholder, |this, placeholder| {
                 this.aria_placeholder(placeholder)
@@ -775,6 +784,62 @@ mod tests {
             Input::handle_accessibility_set_value(&state, Some(&action), window, cx);
         });
         assert_eq!(state.read_with(cx, |state, _| state.value()), "updated");
+    }
+
+    #[gpui::test]
+    fn input_emits_accessibility_id(cx: &mut gpui::TestAppContext) {
+        use crate::ElementExt as _;
+        use gpui::{AppContext as _, Element as _, IntoElement as _, Render};
+        use std::sync::{Arc, Mutex};
+
+        type EmittedIds = Vec<Option<String>>;
+
+        struct InputA11yProbe {
+            state: Entity<InputState>,
+            emitted: Arc<Mutex<EmittedIds>>,
+        }
+
+        impl Render for InputA11yProbe {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut gpui::Context<Self>,
+            ) -> impl IntoElement {
+                let state = self.state.clone();
+                let emitted = self.emitted.clone();
+                div().on_prepaint(move |_, window, cx| {
+                    let mut author_id_of = |input: Input| {
+                        let mut node = gpui::accesskit::Node::new(Role::TextInput);
+                        input
+                            .render(window, cx)
+                            .into_element()
+                            .write_a11y_info(&mut node);
+                        node.author_id().map(ToOwned::to_owned)
+                    };
+
+                    *emitted.lock().unwrap() = vec![
+                        author_id_of(Input::new(&state)),
+                        author_id_of(Input::new(&state).accessibility_id("search.query")),
+                    ];
+                })
+            }
+        }
+
+        cx.update(crate::init);
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let captured = emitted.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| InputA11yProbe {
+            state: cx.new(|cx| InputState::new(window, cx)),
+            emitted,
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(
+            *captured.lock().unwrap(),
+            vec![None, Some("search.query".into())]
+        );
     }
 
     #[test]

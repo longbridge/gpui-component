@@ -3,8 +3,8 @@ use std::sync::Arc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
-    InspectorElementId, InteractiveElement, IntoElement, LayoutId, ParentElement, Pixels,
-    SharedString, StyleRefinement, Styled, Window, div,
+    ClickEvent, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
+    ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
 };
 
 use crate::StyledExt;
@@ -18,6 +18,34 @@ use crate::{global_state::GlobalState, text::TextViewStyle};
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+
+pub(crate) type LinkClickHandlerFn =
+    dyn Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync;
+
+pub(crate) fn handle_link_click(
+    handler: &Option<Arc<LinkClickHandlerFn>>,
+    url: SharedString,
+    event: ClickEvent,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    if let Some(handler) = handler {
+        handler(
+            &url,
+            &event,
+            window,
+            cx,
+        );
+    } else if match &event {
+        ClickEvent::Mouse(click) => {
+            matches!(click.up.button, MouseButton::Left | MouseButton::Middle)
+        }
+        ClickEvent::Keyboard(_) => true,
+        ClickEvent::Touch(click) => !click.long_press,
+    } {
+        cx.open_url(&url);
+    }
+}
 
 /// A text view that can render Markdown or HTML.
 ///
@@ -47,6 +75,7 @@ pub struct TextView {
     selection_format: SelectionFormat,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -87,6 +116,7 @@ impl TextView {
             selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -104,6 +134,7 @@ impl TextView {
             selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -121,6 +152,7 @@ impl TextView {
             selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -175,6 +207,18 @@ impl TextView {
         self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
             f(&code_block, window, cx).into_any_element()
         }));
+        self
+    }
+
+    /// Handle pointer events on rendered links.
+    ///
+    /// The handler receives the resolved URL and the original GPUI click event.
+    /// Without a handler, links open through App::open_url.
+    pub fn on_link_click<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync + 'static,
+    {
+        self.link_click_handler = Some(Arc::new(handler));
         self
     }
 
@@ -291,6 +335,7 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
+            state.link_click_handler = self.link_click_handler.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
@@ -372,9 +417,9 @@ mod tests {
     use super::{TextView, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
-        AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, Modifiers,
-        MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render, Styled as _,
-        TestAppContext, VisualTestContext, Window, div, point, px,
+        AppContext as _, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement,
+        Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render,
+        SharedString, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -545,6 +590,193 @@ mod tests {
 
         cx.simulate_click(point(px(10.), px(34.)), Modifiers::default());
 
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
+    fn markdown_link_opens_url_without_handler(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) =
+            cx.add_window_view(|_, cx| TextViewTestRoot::new("[example](https://example.com)", cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+
+        assert_eq!(cx.opened_url(), Some("https://example.com".to_string()));
+    }
+
+    #[gpui::test]
+    fn right_click_does_not_open_url_without_handler(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) =
+            cx.add_window_view(|_, cx| TextViewTestRoot::new("[example](https://example.com)", cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
+    fn link_handler_receives_button_and_modifiers(cx: &mut TestAppContext) {
+        use std::sync::{Arc, Mutex};
+
+        struct LinkRoot {
+            text_view: Entity<TextViewState>,
+            clicks: Arc<Mutex<Vec<(SharedString, ClickEvent)>>>,
+        }
+
+        impl Render for LinkRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                let clicks = self.clicks.clone();
+                div()
+                    .w(px(240.))
+                    .child(
+                        TextView::new(&self.text_view).on_link_click(move |url, event, _, _| {
+                            clicks.lock().unwrap().push((url.clone(), event.clone()));
+                        }),
+                    )
+            }
+        }
+
+        cx.update(crate::init);
+        let clicks = Arc::new(Mutex::new(Vec::new()));
+        let captured = clicks.clone();
+        let (_, cx) = cx.add_window_view(move |_, cx| LinkRoot {
+            text_view: cx.new(|cx| TextViewState::markdown("[example](https://example.com)", cx)),
+            clicks,
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        let mut modifiers = Modifiers::default();
+        modifiers.control = true;
+        cx.simulate_click(point(px(10.), px(10.)), modifiers);
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Middle,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Middle,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+
+        let clicks = captured.lock().unwrap();
+        assert_eq!(clicks.len(), 3);
+        assert_eq!(clicks[0].0, "https://example.com");
+        assert!(!clicks[0].1.is_right_click() && !clicks[0].1.is_middle_click());
+        assert!(clicks[0].1.modifiers().control);
+        assert!(clicks[1].1.is_middle_click());
+        assert!(clicks[2].1.is_right_click());
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
+    fn linked_image_handler_receives_left_middle_and_right_clicks(cx: &mut TestAppContext) {
+        use std::sync::{Arc, Mutex};
+
+        struct LinkedImageRoot {
+            text_view: Entity<TextViewState>,
+            clicks: Arc<Mutex<Vec<(SharedString, ClickEvent)>>>,
+        }
+
+        impl Render for LinkedImageRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                let clicks = self.clicks.clone();
+                div().w(px(160.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .on_link_click(move |url, event, _, _| {
+                            clicks.lock().unwrap().push((url.clone(), event.clone()));
+                        }),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        let clicks = Arc::new(Mutex::new(Vec::new()));
+        let captured = clicks.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let content = cx.new(|cx| LinkedImageRoot {
+                text_view: cx.new(|cx| {
+                    TextViewState::markdown(
+                        r#"Before [<img src="https://example.com/image.svg" width="32" height="32">](https://example.com/image-link) after."#,
+                        cx,
+                    )
+                }),
+                clicks,
+            });
+            crate::Root::new(content, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let inline_bounds = cx.update(|window, cx| {
+            crate::Root::read(window, cx)
+                .selectable_text_inlines
+                .values()
+                .next()
+                .cloned()
+                .unwrap_or_default()
+        });
+        assert!(
+            inline_bounds.len() >= 2,
+            "linked image needs text bounds on both sides: {inline_bounds:?}"
+        );
+        assert!(
+            inline_bounds[1].left() - inline_bounds[0].right() >= px(24.),
+            "linked image did not reserve the expected click target: {inline_bounds:?}"
+        );
+        let position = point(
+            inline_bounds[0].right() + (inline_bounds[1].left() - inline_bounds[0].right()) * 0.5,
+            inline_bounds[0].top() + px(8.),
+        );
+        for button in [MouseButton::Left, MouseButton::Middle, MouseButton::Right] {
+            cx.simulate_mouse_down(position, button, Modifiers::default());
+            cx.simulate_mouse_up(position, button, Modifiers::default());
+        }
+
+        let clicks = captured.lock().unwrap();
+        assert_eq!(clicks.len(), 3);
+        assert!(
+            clicks
+                .iter()
+                .all(|(url, _)| url == "https://example.com/image-link")
+        );
+        assert!(!clicks[0].1.is_right_click() && !clicks[0].1.is_middle_click());
+        assert!(clicks[1].1.is_middle_click());
+        assert!(clicks[2].1.is_right_click());
         assert_eq!(cx.opened_url(), None);
     }
 

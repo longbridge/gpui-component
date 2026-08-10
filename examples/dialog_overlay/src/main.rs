@@ -111,17 +111,11 @@ fn main() {
         gpui_component::init(cx);
 
         cx.spawn(async move |cx| {
-            cx.open_window(
-                WindowOptions {
-                    titlebar: Some(TitleBar::title_bar_options()),
-                    ..Default::default()
-                },
-                |window, cx| {
-                    let view = cx.new(|_| HelloWorld);
-                    // This first level on the window, should be a Root.
-                    cx.new(|cx| Root::new(view, window, cx))
-                },
-            )
+            cx.open_window(TitleBar::window_options(), |window, cx| {
+                let view = cx.new(|_| HelloWorld);
+                // This first level on the window, should be a Root.
+                cx.new(|cx| Root::new(view, window, cx))
+            })
             .expect("Failed to open window");
         })
         .detach();

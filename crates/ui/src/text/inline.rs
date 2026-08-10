@@ -7,14 +7,19 @@ use std::{
 
 use gpui::{
     App, BorderStyle, Bounds, CursorStyle, Edges, Element, ElementId, GlobalElementId, Half,
-    HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, StyledText,
-    TextLayout, Window, point, px, quad,
+    ClickEvent, HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
+    MouseButton, MouseClickEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    SharedString, StyledText, TextLayout, Window, point, px, quad,
 };
 
 use crate::{
-    ActiveTheme, WindowExt as _, global_state::GlobalState, input::Selection,
-    text::TextViewMultiClickKind, text::node::LinkMark, text::selection::word_range_at,
+    ActiveTheme, WindowExt as _,
+    global_state::GlobalState,
+    input::Selection,
+    text::TextViewMultiClickKind,
+    text::node::LinkMark,
+    text::selection::word_range_at,
+    text::text_view::{LinkClickHandlerFn, handle_link_click},
 };
 
 /// A inline element used to render a inline text and support selectable.
@@ -26,6 +31,7 @@ pub(super) struct Inline {
     links: Rc<Vec<(Range<usize>, LinkMark)>>,
     highlights: Vec<(Range<usize>, HighlightStyle)>,
     styled_text: StyledText,
+    link_click_handler: Option<Arc<LinkClickHandlerFn>>,
 
     state: Arc<Mutex<InlineState>>,
 }
@@ -52,6 +58,7 @@ impl Inline {
         state: Arc<Mutex<InlineState>>,
         links: Vec<(Range<usize>, LinkMark)>,
         highlights: Vec<(Range<usize>, HighlightStyle)>,
+        link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     ) -> Self {
         let text = state
             .lock()
@@ -64,6 +71,7 @@ impl Inline {
             highlights,
             text: text.clone(),
             styled_text: StyledText::new(text),
+            link_click_handler,
             state,
         }
     }
@@ -448,7 +456,6 @@ impl Element for Inline {
                 let inline_state = self.state.clone();
                 let text = self.text.clone();
                 let text_view_state = GlobalState::global(cx).text_view_state().cloned();
-
                 move |event: &MouseDownEvent, phase, window, cx| {
                     if !phase.bubble()
                         || !hitbox.is_hovered(window)
@@ -515,6 +522,7 @@ impl Element for Inline {
                 let text_layout = text_layout.clone();
                 let hitbox = hitbox.clone();
                 let text_view_state = GlobalState::global(cx).text_view_state().cloned();
+                let link_click_handler = self.link_click_handler.clone();
 
                 move |event: &MouseUpEvent, phase, window, cx| {
                     if !phase.bubble() || !hitbox.is_hovered(window) {
@@ -532,7 +540,23 @@ impl Element for Inline {
                     {
                         window.end_text_selection(cx);
                         cx.stop_propagation();
-                        cx.open_url(&link.url);
+                        let click = ClickEvent::Mouse(MouseClickEvent {
+                            down: MouseDownEvent {
+                                button: event.button,
+                                position: event.position,
+                                modifiers: event.modifiers,
+                                click_count: event.click_count,
+                                first_mouse: false,
+                            },
+                            up: event.clone(),
+                        });
+                        handle_link_click(
+                            &link_click_handler,
+                            link.url,
+                            click,
+                            window,
+                            cx,
+                        );
                     }
                 }
             });
