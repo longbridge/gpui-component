@@ -1,16 +1,18 @@
 ---
 title: Chart
-description: 支持折线图、柱状图、面积图、饼图和 K 线图的数据可视化组件。
+description: 支持折线图、柱状图、面积图、饼图、雷达图、K 线图和桑基图的数据可视化组件。
 ---
 
 # Chart
 
-Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie 和 Candlestick 图表。它们支持动画、自定义样式、主题配色和多种展示方式，适合仪表盘、统计分析和行情场景。
+Chart 是一组完整的数据可视化组件，提供 Line、Bar、Area、Pie、Radar、Candlestick 和 Sankey 图表。它们支持动画、自定义样式、主题配色和多种展示方式，适合仪表盘、统计分析和行情场景。
 
 ## 导入
 
 ```rust
-use gpui_component::chart::{LineChart, BarChart, AreaChart, PieChart, CandlestickChart};
+use gpui_component::chart::{
+    LineChart, BarChart, AreaChart, PieChart, RadarChart, CandlestickChart, SankeyChart,
+};
 ```
 
 ## 图表类型
@@ -83,33 +85,142 @@ LineChart::new(data)
 
 ### BarChart
 
-柱状图适合用来比较不同类别的数值。
+柱状图通过矩形条形对比不同类别的数据，并可通过 `alignment` 选项切换垂直或水平方向。
 
 #### 基础柱状图
 
 ```rust
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
 ```
 
-#### 自定义
+#### 自定义柱状图
 
 ```rust
+// 自定义填充颜色
+//
+// `fill` 闭包接收四个参数：数据项、柱子的像素边界（相对于图表原点）、
+// 图表的像素边界，以及柱子的 `BarAlignment`。返回值可以是任何能转换为
+// `Background` 的类型（纯色、渐变、图案等）。
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
-    .fill(|d| d.color)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .fill(|d, _bar_bounds, _chart_bounds, _alignment| d.color)
 
+// 显示数值标签
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .label(|d| format!("{}", d.value))
 
+// 自定义刻度间距
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
     .tick_margin(2)
+
+// 隐藏分类轴的轴线和标签
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .label_axis(false)
+```
+
+#### 柱状图渐变填充
+
+如需让渐变方向跟随柱子方向，请使用 `fill_gradient`。闭包接收三个参数：数据项、图表的完整数据范围（`chart_range`），以及一个 `chart_to_bar` 辅助函数（将图表数值坐标映射为柱子局部的渐变位置，其中 `0.0` 表示柱子的基线端，`1.0` 表示尖端）。渐变方向由柱子的 `BarAlignment` 推导，使 stop-0 始终位于基线端、stop-1 位于尖端。
+
+```rust
+use gpui::linear_color_stop;
+
+// 单柱渐变：每个柱子都从半透明基线渐变到完全不透明的尖端，
+// 与该柱子的具体数值无关。
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .fill_gradient(|d, _chart_range, _chart_to_bar| {
+        let c = d.color;
+        [
+            linear_color_stop(c.opacity(0.3), 0.0),
+            linear_color_stop(c, 1.0),
+        ]
+    })
+
+// 跨图表渐变：每根柱子展示同一条覆盖整个图表数值范围的渐变中
+// 对应自身值域的那一段。超出 `[0, 1]` 的 stop 会被裁剪到柱子内，
+// 颜色会在裁剪点处插值，使整体效果保持连续。
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .fill_gradient(|d, chart_range, chart_to_bar| {
+        let c = d.color;
+        [
+            linear_color_stop(c.opacity(0.3), chart_to_bar(*chart_range.start())),
+            linear_color_stop(c,              chart_to_bar(*chart_range.end())),
+        ]
+    })
+```
+
+`fill` 与 `fill_gradient` 互斥——设置其中一个会清空另一个。
+
+#### 柱状图对齐方式
+
+`BarAlignment` 用于控制柱子的方向以及基线所在的一侧，需从 `gpui_component::plot::shape` 导入。
+
+```rust
+use gpui_component::plot::shape::BarAlignment;
+
+// 默认：垂直方向 - 向上
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Bottom)
+
+// 垂直方向 - 向下
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Top)
+
+// 水平方向 - 向右
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Left)
+
+// 水平方向 - 向左
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .alignment(BarAlignment::Right)
+```
+
+#### 柱状图圆角
+
+为柱状条形设置圆角。可传入任意可转换为 `Corners<Pixels>` 的值——
+使用单个 `px(..)` 表示四角统一圆角，或手动构造 `Corners`
+仅对特定角进行圆角处理（例如仅对柱顶一端进行圆角）。
+
+```rust
+use gpui::{px, Corners};
+
+// 所有柱条统一 4px 圆角
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .corner_radii(px(4.))
+
+// 仅顶部圆角（适用于底部对齐柱状图的柱顶一端）
+BarChart::new(data)
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .corner_radii(Corners {
+        top_left: px(4.),
+        top_right: px(4.),
+        bottom_left: px(0.),
+        bottom_right: px(0.),
+    })
 ```
 
 ### AreaChart
@@ -193,6 +304,84 @@ PieChart::new(data)
     .pad_angle(4. / 100.)
 ```
 
+### RadarChart
+
+雷达图以围绕中心的闭合多边形展示多维数据，适合对比多个系列在各维度上的表现。
+
+#### 基础雷达图
+
+```rust
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+```
+
+#### 多系列
+
+```rust
+// 每次调用 `.value()` 新增一个系列，与随后的 `.stroke()` / `.fill()`
+// 一一配对。颜色默认按主题图表色循环取用。
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .stroke(cx.theme().chart_1)
+    .value(|d| d.mobile)
+    .stroke(cx.theme().chart_2)
+```
+
+#### 元素标签
+
+`label` 既接受字符串，也接受自定义元素。返回 `element.into_any_element()`
+即可在外圈周围渲染任意内容——图标、多行、按维度换色都可以。
+
+```rust
+RadarChart::new(data)
+    .label({
+        let foreground = cx.theme().foreground;
+        let muted_foreground = cx.theme().muted_foreground;
+
+        move |d: &Device| {
+            v_flex()
+                .items_center()
+                .child(div().text_xs().text_color(foreground).child(d.month.clone()))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(muted_foreground)
+                        .child(format!("{:.0}", d.desktop)),
+                )
+                .into_any_element()
+        }
+    })
+    .value(|d| d.desktop)
+```
+
+每个标签按自然尺寸测量，并沿径向朝外推开，所以即使很高也不会压到外圈上。
+元素标签自带样式，因此 `.label_color()` 对它无效，也不会提供 tooltip 标题（字符串标签会）。
+
+外圈不会为标签自动让位：默认外圈半径是图表高度的 40%，所以标签比单行文字高很多时，
+需要调小 `.outer_radius()` 才能让它留在图表范围内。
+
+#### 自定义
+
+```rust
+// 顶点圆点与自定义填充
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .stroke(cx.theme().chart_2)
+    .fill(cx.theme().chart_2.opacity(0.2))
+    .dot()
+
+// 固定外圈最大值与网格环数
+RadarChart::new(data)
+    .label(|d| d.month.clone())
+    .value(|d| d.desktop)
+    .max_value(400.)
+    .grid_levels(5)
+    .outer_radius(120.)
+```
+
 ### CandlestickChart
 
 K 线图适合展示金融行情中的 OHLC 数据。
@@ -245,6 +434,100 @@ CandlestickChart::new(data)
 
 涨跌颜色会自动使用主题中的 bullish 和 bearish 配色。
 
+### SankeyChart
+
+桑基图用于展示节点之间的流量关系，适合财报资金流向、能源流动和流量分析等场景。布局算法对标 [d3-sankey](https://github.com/d3/d3-sankey)。
+
+#### 基础桑基图
+
+```rust
+use gpui_component::plot::shape::SankeyLink;
+
+#[derive(Clone)]
+struct FlowNode {
+    pub name: SharedString,
+}
+
+let nodes = vec![
+    FlowNode { name: "营业收入".into() },
+    FlowNode { name: "毛利润".into() },
+    FlowNode { name: "营业成本".into() },
+];
+
+// 连接通过节点在 `nodes` 中的索引引用节点。
+let links = vec![
+    SankeyLink::new(0, 1, 45.0),
+    SankeyLink::new(0, 2, 55.0),
+];
+
+SankeyChart::new(nodes, links)
+    .node_label(|d| d.name.clone())
+    .value_label(|_, value| format!("{:.1}", value).into())
+```
+
+数值标签显示在名称标签上方，闭包会收到节点的吞吐量（进出流量的较大值）。
+
+#### 节点对齐
+
+```rust
+use gpui_component::plot::shape::SankeyAlign;
+
+// Justify（默认）：没有出边的节点移到最后一列
+SankeyChart::new(nodes, links).node_align(SankeyAlign::Justify)
+
+// Left：节点保持在自己的拓扑深度列
+SankeyChart::new(nodes, links).node_align(SankeyAlign::Left)
+
+// 还支持：SankeyAlign::Right、SankeyAlign::Center
+```
+
+#### 样式
+
+```rust
+SankeyChart::new(nodes, links)
+    .node_width(8.)             // 节点条宽度（默认 10）
+    .node_padding(20.)          // 同列节点垂直间距（默认 16）
+    .node_corner_radius(px(2.)) // 节点条圆角（默认 0）
+    .node_color(|d| d.color)    // 每个节点的颜色，默认循环主题图表配色
+    .link_opacity(0.4)          // 连接带透明度（默认 0.3）
+    .min_link_width(2.)         // 连接带最小粗细（默认 1）
+    .iterations(10)             // 布局松弛迭代次数（默认 6）
+```
+
+连接带使用从源节点颜色到目标节点颜色的水平渐变填充。
+
+#### 自定义标签
+
+需要完全控制标签行时使用 `labels`——每行一个 `SankeyLabel`，从上到下排列，每行可单独设置颜色和字号。设置后优先于 `node_label`/`value_label`。例如带同比涨跌幅行的财报标签：
+
+```rust
+use gpui_component::chart::SankeyLabel;
+
+SankeyChart::new(nodes, links).labels(move |d: &FlowNode, value| {
+    let arrow = if d.growth >= 0. { "▲" } else { "▼" };
+    let growth_color = if d.growth >= 0. { green } else { red };
+    vec![
+        SankeyLabel::new(format!("{:.1}", value)),
+        SankeyLabel::new(format!("{} {:+.2}%", arrow, d.growth)).color(growth_color),
+        SankeyLabel::new(d.name.clone()).color(muted),
+    ]
+})
+```
+
+行颜色默认为主题前景色，字号默认 10；摆位、对齐和边距预留仍由组件负责。首/末列标签若超出预留边距，会被截断并加省略号，而不会画到图表外；若想让长标签完整分多行显示，请自行折断或缩短。
+
+#### 压缩数值跨度
+
+节点高度默认与流量值成线性关系，数值跨度很大时（如 200:1）小流量几乎不可见、主流量过大。设置 `value_scale(SankeyValueScale::Sqrt)` 即可压缩跨度——组件按值的平方根来定节点高度，小流量保持可见，且无需预处理数据，标签仍显示真实值：
+
+```rust
+use gpui_component::plot::shape::SankeyValueScale;
+
+SankeyChart::new(nodes, links).value_scale(SankeyValueScale::Sqrt)
+```
+
+无论用哪种缩放，每个节点都被其连接精确填满，所以子节点高度始终与父节点匹配。
+
 ## 数据结构示例
 
 ```rust
@@ -276,6 +559,13 @@ struct StockPrice {
     pub low: f64,
     pub close: f64,
     pub volume: u64,
+}
+
+// 桑基图连接：通过索引引用节点（来自 gpui_component::plot::shape）
+pub struct SankeyLink {
+    pub source: usize,
+    pub target: usize,
+    pub value: f64,
 }
 ```
 
@@ -345,7 +635,9 @@ let chart = LineChart::new(data)
 - [BarChart]
 - [AreaChart]
 - [PieChart]
+- [RadarChart]
 - [CandlestickChart]
+- [SankeyChart]
 
 ## 示例
 
@@ -400,9 +692,9 @@ fn sales_dashboard(data: Vec<SalesData>, cx: &mut Context<Self>) -> impl IntoEle
             chart_container(
                 "Regional Performance",
                 BarChart::new(data)
-                    .x(|d| d.region.clone())
-                    .y(|d| d.revenue)
-                    .fill(|d| match d.region.as_str() {
+                    .band(|d| d.region.clone())
+                    .value(|d| d.revenue)
+                    .fill(|d, _, _, _| match d.region.as_str() {
                         "North" => cx.theme().chart_1,
                         "South" => cx.theme().chart_2,
                         "East" => cx.theme().chart_3,
@@ -514,9 +806,9 @@ fn stock_chart(ohlc_data: Vec<StockOHLC>, price_data: Vec<StockData>, cx: &mut C
             chart_container(
                 "Trading Volume",
                 BarChart::new(price_data)
-                    .x(|d| d.date.clone())
-                    .y(|d| d.volume as f64)
-                    .fill(|d| {
+                    .band(|d| d.date.clone())
+                    .value(|d| d.volume as f64)
+                    .fill(|d, _, _, _| {
                         if d.volume > 1000000 {
                             cx.theme().chart_1
                         } else {
@@ -550,9 +842,9 @@ let colors = [
 ];
 
 BarChart::new(data)
-    .x(|d| d.category.clone())
-    .y(|d| d.value)
-    .fill(|d| colors[d.category_index % colors.len()])
+    .band(|d| d.category.clone())
+    .value(|d| d.value)
+    .fill(|d, _, _, _| colors[d.category_index % colors.len()])
 ```
 
 ### 响应式容器
@@ -623,8 +915,8 @@ impl ChartComponent {
                 .y(|d| d.value)
                 .into_any_element(),
             ChartType::Bar => BarChart::new(self.filtered_data())
-                .x(|d| d.date.clone())
-                .y(|d| d.value)
+                .band(|d| d.date.clone())
+                .value(|d| d.value)
                 .into_any_element(),
             ChartType::Area => AreaChart::new(self.filtered_data())
                 .x(|d| d.date.clone())
@@ -673,4 +965,5 @@ impl LiveChart {
 [BarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.BarChart.html
 [AreaChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.AreaChart.html
 [PieChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.PieChart.html
+[RadarChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.RadarChart.html
 [CandlestickChart]: https://docs.rs/gpui-component/latest/gpui_component/chart/struct.CandlestickChart.html

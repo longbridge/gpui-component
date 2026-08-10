@@ -1,16 +1,15 @@
-use gpui::{App, Styled};
+use gpui::App;
 
 use crate::{
     button::{Button, ButtonVariants as _},
-    ActiveTheme as _, Icon, IconName, Sizable as _,
+    Icon, IconName, Sizable as _,
 };
 
 #[inline]
-pub(crate) fn clear_button(cx: &App) -> Button {
+pub(crate) fn clear_button(_: &App) -> Button {
     Button::new("clean")
-        .icon(Icon::new(IconName::CircleX))
-        .ghost()
+        .icon(Icon::new(IconName::Close))
+        .text()
         .xsmall()
         .tab_stop(false)
-        .text_color(cx.theme().muted_foreground)
 }

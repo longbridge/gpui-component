@@ -1,5 +1,7 @@
+use std::rc::Rc;
+
 use gpui::{
-    App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState,
+    AnyElement, App, Entity, InteractiveElement as _, IntoElement, ListAlignment, ListState,
     ParentElement as _, SharedString, StyleRefinement, Styled, Window, div, list,
     prelude::FluentBuilder as _, px,
 };
@@ -22,6 +24,7 @@ pub struct SettingPage {
     resettable: bool,
     pub(super) default_open: bool,
     pub(super) title: SharedString,
+    pub(super) title_suffix: Option<Rc<dyn Fn(&mut Window, &mut App) -> AnyElement>>,
     pub(super) description: Option<SharedString>,
     pub(super) groups: Vec<SettingGroup>,
     pub(super) header_style: StyleRefinement,
@@ -34,6 +37,7 @@ impl SettingPage {
             resettable: true,
             default_open: false,
             title: title.into(),
+            title_suffix: None,
             description: None,
             groups: Vec::new(),
             header_style: StyleRefinement::default(),
@@ -43,6 +47,20 @@ impl SettingPage {
     /// Set the title of the setting page.
     pub fn title(mut self, title: impl Into<SharedString>) -> Self {
         self.title = title.into();
+        self
+    }
+
+    /// Set a custom element to render after the title in the page header.
+    ///
+    /// For example, an info icon button that opens the help documentation.
+    pub fn title_suffix<F, E>(mut self, suffix: F) -> Self
+    where
+        E: IntoElement,
+        F: Fn(&mut Window, &mut App) -> E + 'static,
+    {
+        self.title_suffix = Some(Rc::new(move |window, cx| {
+            suffix(window, cx).into_any_element()
+        }));
         self
     }
 
@@ -149,24 +167,33 @@ impl SettingPage {
                     .border_b_1()
                     .border_color(cx.theme().border)
                     .refine_style(&self.header_style)
-                    .child(h_flex().justify_between().child(self.title.clone()).when(
-                        self.is_resettable(cx),
-                        |this| {
-                            this.child(
-                                Button::new("reset")
-                                    .icon(IconName::Undo2)
-                                    .ghost()
-                                    .small()
-                                    .tooltip(t!("Settings.Reset All"))
-                                    .on_click({
-                                        let page = self.clone();
-                                        move |_, window, cx| {
-                                            page.reset_all(window, cx);
-                                        }
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .child(
+                                h_flex()
+                                    .gap_1()
+                                    .child(self.title.clone())
+                                    .when_some(self.title_suffix.clone(), |this, suffix| {
+                                        this.child(suffix(window, cx))
                                     }),
                             )
-                        },
-                    ))
+                            .when(self.is_resettable(cx), |this| {
+                                this.child(
+                                    Button::new("reset")
+                                        .icon(IconName::Undo2)
+                                        .ghost()
+                                        .small()
+                                        .tooltip(t!("Settings.Reset All"))
+                                        .on_click({
+                                            let page = self.clone();
+                                            move |_, window, cx| {
+                                                page.reset_all(window, cx);
+                                            }
+                                        }),
+                                )
+                            }),
+                    )
                     .when_some(self.description.clone(), |this, description| {
                         this.child(
                             Label::new(description)

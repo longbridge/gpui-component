@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::{
-    Animation, AnimationExt as _, App, ElementId, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, StyleRefinement, Styled, Window, div, ease_in_out,
-    prelude::FluentBuilder, px, relative,
+    Animation, AnimationExt as _, App, Background, ElementId, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement,
+    Styled, Window, div, ease_in_out, prelude::FluentBuilder, px, relative,
 };
 use instant::Duration;
 
@@ -71,7 +71,10 @@ impl Sizable for Progress {
 
 impl RenderOnce for Progress {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = self.color.unwrap_or(cx.theme().progress_bar);
+        let bg = self
+            .color
+            .map(Background::from)
+            .unwrap_or(cx.theme().tokens.progress_bar.into());
         let value = self.value;
         let loading = self.loading;
 
@@ -93,19 +96,23 @@ impl RenderOnce for Progress {
 
         div()
             .id(self.id)
+            .role(Role::ProgressIndicator)
+            .aria_numeric_value(value as f64)
+            .aria_min_numeric_value(0.0)
+            .aria_max_numeric_value(100.0)
             .w_full()
             .relative()
             .h(height)
             .rounded(radius)
             .refine_style(&self.style)
-            .bg(color.opacity(0.2))
+            .bg(bg.opacity(0.2))
             .child(
                 div()
                     .absolute()
                     .top_0()
                     .left_0()
                     .h_full()
-                    .bg(color)
+                    .bg(bg)
                     .rounded(radius)
                     .refine_style(&inner_style)
                     .map(|this| match value {

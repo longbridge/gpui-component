@@ -6,7 +6,7 @@ use gpui::{
 };
 
 use crate::{
-    AxisExt, Sizable, StyledExt,
+    AxisExt, Disableable, Sizable, StyledExt,
     button::Button,
     menu::{DropdownMenu, PopupMenuItem},
     setting::{
@@ -17,13 +17,18 @@ use crate::{
 
 pub(crate) struct DropdownField<T> {
     options: Vec<(SharedString, SharedString)>,
+    scrollable: bool,
     _marker: std::marker::PhantomData<T>,
 }
 
 impl<T> DropdownField<T> {
-    pub(crate) fn new(options: Option<&Vec<(SharedString, SharedString)>>) -> Self {
+    pub(crate) fn new(
+        options: Option<&Vec<(SharedString, SharedString)>>,
+        scrollable: bool,
+    ) -> Self {
         Self {
-            options: options.cloned().unwrap_or(vec![]),
+            options: options.cloned().unwrap_or_default(),
+            scrollable,
             _marker: std::marker::PhantomData,
         }
     }
@@ -44,6 +49,7 @@ where
         let old_value = get_value::<T>(&field, cx);
         let set_value = set_value::<T>(&field, cx);
         let dropdown_options = self.options.clone();
+        let scrollable = self.scrollable;
 
         let old_label = dropdown_options
             .iter()
@@ -56,6 +62,7 @@ where
             .label(old_label)
             .dropdown_caret(true)
             .outline()
+            .disabled(options.disabled)
             .with_size(options.size)
             .refine_style(style)
             .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, _, _| {
@@ -75,7 +82,7 @@ where
                             }),
                     )
                 });
-                menu
+                menu.scrollable(scrollable)
             })
             .into_any_element()
     }

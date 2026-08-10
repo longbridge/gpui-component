@@ -1,6 +1,6 @@
-use gpui::{ Anchor,
-    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    ParentElement, Render, Styled, Window,
+use gpui::{
+    Anchor, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
+    IntoElement, ParentElement, Render, Styled, Window,
 };
 
 use gpui_component::{
@@ -77,29 +77,59 @@ impl Render for NotificationStory {
             .size_full()
             .gap_3()
             .child(
-                h_flex().gap_3().child(
-                    Button::new("placement")
-                        .outline()
-                        .label(format!("{:?}", cx.theme().notification.placement))
-                        .dropdown_menu(move |menu, window, cx| {
-                            let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
-                                menu.item(
-                                    PopupMenuItem::new(format!("{:?}", placement))
-                                        .checked(cx.theme().notification.placement == placement)
-                                        .on_click(window.listener_for(
-                                            &view,
-                                            move |_, _, _, cx| {
-                                                Theme::global_mut(cx).notification.placement =
-                                                    placement;
-                                                cx.notify();
-                                            },
-                                        )),
-                                )
-                            });
+                h_flex()
+                    .gap_3()
+                    .child(
+                        Button::new("placement")
+                            .outline()
+                            .label(format!("{:?}", cx.theme().notification.placement))
+                            .dropdown_menu({
+                                let view = view.clone();
+                                move |menu, window, cx| {
+                                    let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
+                                        menu.item(
+                                            PopupMenuItem::new(format!("{:?}", placement))
+                                                .checked(
+                                                    cx.theme().notification.placement == placement,
+                                                )
+                                                .on_click(window.listener_for(
+                                                    &view,
+                                                    move |_, _, _, cx| {
+                                                        Theme::global_mut(cx)
+                                                            .notification
+                                                            .placement = placement;
+                                                        cx.notify();
+                                                    },
+                                                )),
+                                        )
+                                    });
 
-                            menu
-                        }),
-                ),
+                                    menu
+                                }
+                            }),
+                    )
+                    .child(
+                        Button::new("max-items")
+                            .outline()
+                            .label(format!("Max items: {}", cx.theme().notification.max_items))
+                            .dropdown_menu(move |menu, window, cx| {
+                                const MAX_ITEMS: [usize; 5] = [1, 2, 3, 5, 10];
+                                MAX_ITEMS.into_iter().fold(menu, |menu, max_items| {
+                                    menu.item(
+                                        PopupMenuItem::new(format!("{}", max_items))
+                                            .checked(cx.theme().notification.max_items == max_items)
+                                            .on_click(window.listener_for(
+                                                &view,
+                                                move |_, _, _, cx| {
+                                                    Theme::global_mut(cx).notification.max_items =
+                                                        max_items;
+                                                    cx.notify();
+                                                },
+                                            )),
+                                    )
+                                })
+                            }),
+                    ),
             )
             .child(
                 section("Simple Notification").child(
@@ -122,20 +152,6 @@ impl Render for NotificationStory {
                                     (
                                         NotificationType::Info,
                                         "You have been saved file successfully.",
-                                    ),
-                                    cx,
-                                )
-                            })),
-                    )
-                    .child(
-                        Button::new("show-notify-error")
-                            .danger()
-                            .label("Error")
-                            .on_click(cx.listener(|_, _, window, cx| {
-                                window.push_notification(
-                                    (
-                                        NotificationType::Error,
-                                        "There have some error occurred. Please try again later.",
                                     ),
                                     cx,
                                 )
@@ -168,6 +184,83 @@ impl Render for NotificationStory {
                                     cx,
                                 )
                             })),
+                    )
+                    .child(
+                        Button::new("show-notify-error")
+                            .danger()
+                            .label("Error")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    (
+                                        NotificationType::Error,
+                                        "There have some error occurred. Please try again later.",
+                                    ),
+                                    cx,
+                                )
+                            })),
+                    ),
+            )
+            .child(
+                section("Type with Title and Description")
+                    .child(
+                        Button::new("show-typed-info")
+                            .info()
+                            .label("Info")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::info(
+                                        "Your changes have been saved to the cloud \
+                                        and will sync across all of your devices.",
+                                    )
+                                    .title("All changes saved"),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-typed-success")
+                            .success()
+                            .label("Success")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::success(
+                                        "Your payment of $99.00 was processed and a \
+                                        receipt has been emailed to you.",
+                                    )
+                                    .title("Payment received"),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-typed-warning")
+                            .warning()
+                            .label("Warning")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::warning(
+                                        "Your network connection is unstable. \
+                                        Some changes may take longer to save.",
+                                    )
+                                    .title("Connection unstable"),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-typed-error")
+                            .danger()
+                            .label("Error")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::error(
+                                        "We couldn't reach the server. Check your \
+                                        internet connection and try again.",
+                                    )
+                                    .title("Request failed"),
+                                    cx,
+                                )
+                            })),
                     ),
             )
             .child(
@@ -179,7 +272,10 @@ impl Render for NotificationStory {
                             window.push_notification(
                                 Notification::info("This is a unique notification.")
                                     .id::<NotificationStory>()
-                                    .message("This is a unique notification."),
+                                    .message("This is a unique notification.")
+                                    .on_close(|_, _| {
+                                        println!("Notification closed");
+                                    }),
                                 cx,
                             )
                         })),
@@ -240,6 +336,33 @@ impl Render for NotificationStory {
                                         println!("Notification clicked");
                                         cx.notify();
                                     })),
+                                cx,
+                            )
+                        })),
+                ),
+            )
+            .child(
+                section("on_click vs on_close").child(
+                    Button::new("show-notify-click-close")
+                        .outline()
+                        .label("Click vs Close")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            struct ClickCloseNotification;
+
+                            window.push_notification(
+                                Notification::info(
+                                    "Click the body to fire on_click; click the X to close. \
+                                    Watch the console.",
+                                )
+                                .id::<ClickCloseNotification>()
+                                .title("on_click vs on_close")
+                                .autohide(false)
+                                .on_click(|_, _, _| {
+                                    println!("[notification] on_click fired");
+                                })
+                                .on_close(|_, _| {
+                                    println!("[notification] on_close fired");
+                                }),
                                 cx,
                             )
                         })),

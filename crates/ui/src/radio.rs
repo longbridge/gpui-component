@@ -6,8 +6,8 @@ use crate::{
 };
 use gpui::{
     AnyElement, App, Axis, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder, px, relative, rems,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder, px, relative, rems,
 };
 
 /// A Radio element.
@@ -27,6 +27,8 @@ pub struct Radio {
     size: Size,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
     tooltip: ComponentTooltip,
+    position_in_set: Option<usize>,
+    size_of_set: Option<usize>,
 }
 
 impl Radio {
@@ -45,6 +47,8 @@ impl Radio {
             size: Size::default(),
             on_click: None,
             tooltip: ComponentTooltip::default(),
+            position_in_set: None,
+            size_of_set: None,
         }
     }
 
@@ -153,90 +157,97 @@ impl RenderOnce for Radio {
             (border_color, bg)
         };
 
-        // wrap a flex to patch for let Radio display inline
-        div().child(
-            self.base
-                .id(self.id.clone())
-                .when(!self.disabled, |this| {
-                    this.track_focus(
-                        &focus_handle
-                            .tab_stop(self.tab_stop)
-                            .tab_index(self.tab_index),
-                    )
-                })
-                .h_flex()
-                .gap_x_2()
-                .text_color(cx.theme().foreground)
-                .items_start()
-                .line_height(relative(1.))
-                .rounded(cx.theme().radius * 0.5)
-                .focus_ring(is_focused, px(2.), window, cx)
-                .map(|this| match self.size {
-                    Size::XSmall => this.text_xs(),
-                    Size::Small => this.text_sm(),
-                    Size::Medium => this.text_base(),
-                    Size::Large => this.text_lg(),
-                    _ => this,
-                })
-                .refine_style(&self.style)
-                .child(
-                    div()
-                        .relative()
-                        .map(|this| match self.size {
-                            Size::XSmall => this.size_3(),
-                            Size::Small => this.size_3p5(),
-                            Size::Medium => this.size_4(),
-                            Size::Large => this.size(rems(1.125)),
-                            _ => this.size_4(),
-                        })
-                        .flex_shrink_0()
-                        .rounded_full()
-                        .border_1()
-                        .border_color(border_color)
-                        .when(cx.theme().shadow && !disabled, |this| this.shadow_xs())
-                        .map(|this| match self.checked {
-                            false => this.bg(cx.theme().input_background()),
-                            _ => this.bg(bg),
-                        })
-                        .child(checkbox_check_icon(
-                            self.id, self.size, checked, disabled, window, cx,
-                        )),
+        self.base
+            .id(self.id.clone())
+            .role(Role::RadioButton)
+            .aria_selected(self.checked)
+            .when_some(
+                self.label.as_ref().map(|l| l.get_text(cx)),
+                |this, label| this.aria_label(label),
+            )
+            .when_some(self.position_in_set, |this, pos| {
+                this.aria_position_in_set(pos)
+            })
+            .when_some(self.size_of_set, |this, size| this.aria_size_of_set(size))
+            .when(!self.disabled, |this| {
+                this.track_focus(
+                    &focus_handle
+                        .tab_stop(self.tab_stop)
+                        .tab_index(self.tab_index),
                 )
-                .when(!self.children.is_empty() || self.label.is_some(), |this| {
-                    this.child(
-                        v_flex()
-                            .w_full()
-                            .line_height(relative(1.2))
-                            .gap_1()
-                            .when_some(self.label, |this, label| {
-                                this.child(
-                                    div()
-                                        .size_full()
-                                        .line_height(relative(1.))
-                                        .when(self.disabled, |this| {
-                                            this.text_color(cx.theme().muted_foreground)
-                                        })
-                                        .child(label),
-                                )
-                            })
-                            .children(self.children),
-                    )
-                })
-                .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
-                    // Avoid focus on mouse down.
-                    window.prevent_default();
-                })
-                .when(!self.disabled, |this| {
-                    this.on_click({
-                        let on_click = self.on_click.clone();
-                        move |_, window, cx| {
-                            window.prevent_default();
-                            Self::handle_click(&on_click, checked, window, cx);
-                        }
+            })
+            .h_flex()
+            .gap_x_2()
+            .text_color(cx.theme().foreground)
+            .items_start()
+            .line_height(relative(1.))
+            .rounded(cx.theme().radius * 0.5)
+            .focus_ring(is_focused, px(2.), window, cx)
+            .map(|this| match self.size {
+                Size::XSmall => this.text_xs(),
+                Size::Small => this.text_sm(),
+                Size::Medium => this.text_base(),
+                Size::Large => this.text_lg(),
+                _ => this,
+            })
+            .refine_style(&self.style)
+            .child(
+                div()
+                    .relative()
+                    .map(|this| match self.size {
+                        Size::XSmall => this.size_3(),
+                        Size::Small => this.size_3p5(),
+                        Size::Medium => this.size_4(),
+                        Size::Large => this.size(rems(1.125)),
+                        _ => this.size_4(),
                     })
+                    .flex_shrink_0()
+                    .rounded_full()
+                    .border_1()
+                    .border_color(border_color)
+                    .map(|this| match self.checked {
+                        false => this.bg(cx.theme().input_background()),
+                        true if disabled => this.bg(bg),
+                        true => this.bg(cx.theme().tokens.primary),
+                    })
+                    .child(checkbox_check_icon(
+                        self.id, self.size, checked, disabled, window, cx,
+                    )),
+            )
+            .when(!self.children.is_empty() || self.label.is_some(), |this| {
+                this.child(
+                    v_flex()
+                        .w_full()
+                        .line_height(relative(1.2))
+                        .gap_1()
+                        .when_some(self.label, |this, label| {
+                            this.child(
+                                div()
+                                    .size_full()
+                                    .line_height(relative(1.))
+                                    .when(self.disabled, |this| {
+                                        this.text_color(cx.theme().muted_foreground)
+                                    })
+                                    .child(label),
+                            )
+                        })
+                        .children(self.children),
+                )
+            })
+            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                // Avoid focus on mouse down.
+                window.prevent_default();
+            })
+            .when(!self.disabled, |this| {
+                this.on_click({
+                    let on_click = self.on_click.clone();
+                    move |_, window, cx| {
+                        window.prevent_default();
+                        Self::handle_click(&on_click, checked, window, cx);
+                    }
                 })
-                .map(|this| self.tooltip.apply(this)),
-        )
+            })
+            .map(|this| self.tooltip.apply(this))
     }
 }
 
@@ -350,7 +361,8 @@ impl RenderOnce for RadioGroup {
             h_flex().w_full().flex_wrap()
         };
 
-        let mut container = div().id(self.id);
+        let total = self.radios.len();
+        let mut container = div().id(self.id).role(Role::RadioGroup);
         *container.style() = self.style;
 
         container.child(
@@ -359,6 +371,8 @@ impl RenderOnce for RadioGroup {
                     let checked = selected_ix == Some(ix);
 
                     radio.id = ix.into();
+                    radio.position_in_set = Some(ix + 1);
+                    radio.size_of_set = Some(total);
                     radio.disabled(disabled).checked(checked).when_some(
                         on_click.clone(),
                         |this, on_click| {

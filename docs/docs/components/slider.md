@@ -203,9 +203,10 @@ let range_value: SliderValue = (10.0..90.0).into();
 
 ### SliderEvent
 
-| Event                 | Description                       |
-| --------------------- | --------------------------------- |
-| `Change(SliderValue)` | Emitted when slider value changes |
+| Event                  | Description                                                     |
+| ---------------------- | --------------------------------------------------------------- |
+| `Change(SliderValue)`  | Emitted continuously while the slider value is being changed    |
+| `Release(SliderValue)` | Emitted once when the user releases the slider after interaction |
 
 ### Styling
 

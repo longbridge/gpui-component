@@ -1,14 +1,14 @@
 use gpui::{
-    App, AppContext as _, ClickEvent, Context, Entity, Focusable, IntoElement, ParentElement as _,
-    Render, Styled, Window, px,
+    App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled, Subscription, Window, div, px,
 };
 
 use crate::section;
 use gpui_component::{
-    Sizable,
+    ActiveTheme as _, Sizable,
     button::Button,
     h_flex,
-    input::{Input, InputState},
+    input::{Input, InputEvent, InputState},
     v_flex,
 };
 
@@ -19,6 +19,9 @@ pub struct TextareaStory {
     textarea_auto_grow: Entity<InputState>,
     textarea_no_wrap: Entity<InputState>,
     textarea_auto_grow_no_wrap: Entity<InputState>,
+    chat_input: Entity<InputState>,
+    chat_messages: Vec<String>,
+    _subscriptions: Vec<Subscription>,
 }
 
 impl super::Story for TextareaStory {
@@ -108,11 +111,39 @@ impl TextareaStory {
                 .default_value("Hello 世界，this is GPUI component.")
         });
 
+        let chat_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .auto_grow(1, 5)
+                .submit_on_enter(true)
+                .placeholder("Type a message, Enter to send, Shift+Enter for newline")
+        });
+
+        let _subscriptions = vec![cx.subscribe_in(
+            &chat_input,
+            window,
+            |this: &mut Self, input, event, window, cx| match event {
+                InputEvent::PressEnter { shift, .. } if !shift => {
+                    let text = input.read(cx).value().trim().to_string();
+                    if !text.is_empty() {
+                        this.chat_messages.push(text);
+                        input.update(cx, |state, cx| {
+                            state.set_value("", window, cx);
+                        });
+                        cx.notify();
+                    }
+                }
+                _ => {}
+            },
+        )];
+
         Self {
             textarea,
             textarea_auto_grow,
             textarea_no_wrap,
             textarea_auto_grow_no_wrap,
+            chat_input,
+            chat_messages: Vec::new(),
+            _subscriptions,
         }
     }
 
@@ -201,6 +232,25 @@ impl Render for TextareaStory {
                 section("Auto Grow with No Wrap")
                     .max_w_md()
                     .child(Input::new(&self.textarea_auto_grow_no_wrap)),
+            )
+            .child(
+                section("Submit on Enter (Chat)").max_w_md().child(
+                    v_flex()
+                        .gap_2()
+                        .w_full()
+                        .child(v_flex().gap_1().children(
+                            self.chat_messages.iter().enumerate().map(|(i, msg)| {
+                                div()
+                                    .id(("chat-msg", i))
+                                    .px_2()
+                                    .py_1()
+                                    .rounded(px(4.))
+                                    .bg(cx.theme().muted)
+                                    .child(msg.clone())
+                            }),
+                        ))
+                        .child(Input::new(&self.chat_input)),
+                ),
             )
     }
 }

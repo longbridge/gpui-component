@@ -40,18 +40,23 @@ pub fn run() -> Result<(), JsValue> {
         // Load fonts for WASM (system fonts are not available in the browser).
         // - Noto Sans SC: subset covering GB2312 Level 1 (~3755 common Chinese characters) + Latin
         // - Noto Emoji: monochrome emoji glyphs
+        // - JetBrains Mono: code editor monospace font for story examples.
         let cjk_font = Cow::Borrowed(
             include_bytes!("../fonts/NotoSansSC-Regular-subset.ttf").as_slice(),
         );
         let emoji_font = Cow::Borrowed(
             include_bytes!("../fonts/NotoEmoji-Regular.ttf").as_slice(),
         );
+        let jetbrains_mono = Cow::Borrowed(
+            include_bytes!("../fonts/JetBrainsMono-Regular.ttf").as_slice(),
+        );
         cx.text_system()
-            .add_fonts(vec![cjk_font, emoji_font])
+            .add_fonts(vec![cjk_font, emoji_font, jetbrains_mono])
             .expect("Failed to load fonts");
 
         // Use Noto Sans SC as the default font family for unified CJK + Latin rendering.
         cx.global_mut::<Theme>().font_family = "Noto Sans SC".into();
+        cx.global_mut::<Theme>().mono_font_family = "JetBrains Mono".into();
 
         cx.open_window(WindowOptions::default(), |window, cx| {
             let view = Gallery::view(None, window, cx);

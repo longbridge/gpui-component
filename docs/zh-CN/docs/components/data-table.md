@@ -77,8 +77,8 @@ impl TableDelegate for MyTableDelegate {
         self.data.len()
     }
 
-    fn column(&self, col_ix: usize, _: &App) -> &Column {
-        &self.columns[col_ix]
+    fn column(&self, col_ix: usize, _: &App) -> Column {
+        self.columns[col_ix].clone()
     }
 
     fn render_td(&mut self, row_ix: usize, col_ix: usize, _: &mut Window, _: &mut Context<TableState<Self>>) -> impl IntoElement {
@@ -321,8 +321,14 @@ impl TableDelegate for MyTableDelegate {
 
 ## 表格样式
 
+`DataTable` 实现了 `Sizable`：可以用 `.small()`、`.large()` 等预设尺寸调整表格密度，也可以传入自定义像素值来设置统一的表头和表体行高。
+
 ```rust
+use gpui::px;
+use gpui_component::Sizable as _;
+
 DataTable::new(&state)
+    .with_size(px(48.))
     .stripe(true)
     .bordered(true)
     .scrollbar_visible(true, true)

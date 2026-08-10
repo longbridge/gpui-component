@@ -8,7 +8,6 @@ use gpui::{
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
-const MAX_MENU_WIDTH: Pixels = px(320.);
 const MAX_MENU_HEIGHT: Pixels = px(240.);
 const POPOVER_GAP: Pixels = px(4.);
 
@@ -111,7 +110,7 @@ impl RenderOnce for CompletionMenuItem {
             .when(item.deprecated.unwrap_or(false), |this| this.line_through())
             .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
             .when(self.selected, |this| {
-                this.bg(cx.theme().accent)
+                this.bg(cx.theme().tokens.accent)
                     .text_color(cx.theme().accent_foreground)
             })
             .child(div().child(StyledText::new(item.label.clone()).with_highlights(highlights)))
@@ -282,7 +281,7 @@ impl CompletionMenu {
         }
 
         cx.propagate();
-        if action.partial_eq(&input::Enter { secondary: false }) {
+        if input::Enter::is_primary(&*action) {
             self.on_action_enter(window, cx);
         } else if action.partial_eq(&input::Escape) {
             self.on_action_escape(window, cx);
@@ -408,10 +407,11 @@ impl Render for CompletionMenu {
             .selected_item()
             .and_then(|item| item.documentation.clone());
 
-        let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
+        let configured_max = self.editor.read(cx).lsp.completion_menu.max_width;
+        let max_width = configured_max.min(window.bounds().size.width - pos.x);
         let abs_pos = self.editor.read(cx).input_bounds.origin + pos;
         let vertical_layout =
-            abs_pos.x + MAX_MENU_WIDTH + POPOVER_GAP + MAX_MENU_WIDTH + POPOVER_GAP
+            abs_pos.x + configured_max + POPOVER_GAP + configured_max + POPOVER_GAP
                 > window.bounds().size.width;
 
         deferred(
@@ -442,7 +442,7 @@ impl Render for CompletionMenu {
                     this.child(
                         div().child(
                             editor_popover("completion-menu", cx)
-                                .w(MAX_MENU_WIDTH)
+                                .w(configured_max)
                                 .px_2()
                                 .child(render_markdown("doc", doc, window, cx)),
                         ),

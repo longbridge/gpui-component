@@ -62,10 +62,12 @@ impl Popover {
         }
     }
 
-    /// Set the anchor corner of the popover, default is `Anchor::TopLeft`.
+    /// Set the anchor corner of the popover, default is [`Anchor::TopLeft`].
     ///
-    /// This method is kept for backward compatibility with `Anchor` type.
-    /// Internally, it converts `Anchor` to `Anchor`.
+    /// Imagine the popover has a pointer tip (like a speech bubble's tail). The
+    /// anchor is where that tip sits relative to the trigger: `Anchor::TopLeft`
+    /// places it at the trigger's top-left corner, `Anchor::BottomRight` at the
+    /// bottom-right, and so on. The popover then hangs off that point.
     pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
         self.anchor = anchor.into();
         self

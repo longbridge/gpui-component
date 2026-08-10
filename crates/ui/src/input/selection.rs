@@ -1,69 +1,10 @@
-use std::{char, ops::Range};
+use std::ops::Range;
 
 use gpui::{Context, Window};
 use ropey::Rope;
 use sum_tree::Bias;
 
-use crate::{RopeExt as _, input::InputState};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CharType {
-    /// a-z, A-Z, 0-9, _
-    Word,
-    /// '\t', ' ', '\u{00A0}' etc.
-    Whitespace,
-    /// \n, \r
-    Newline,
-    /// . , ; : ( ) [ ] { } ... or CJK characters: `汉`, `🎉` etc.
-    Other,
-}
-
-/// Implementation based on <https://github.com/zed-industries/zed/blob/main/crates/gpui/src/text_system/line_wrapper.rs>
-fn is_word_char(c: char) -> bool {
-    matches!(c, '_' ) ||
-    // ASCII alphanumeric characters, for English, numbers: `Hello123`, etc.
-    c.is_ascii_alphanumeric() ||
-    // Latin script in Unicode for French, German, Spanish, etc.
-    // Latin-1 Supplement
-    // https://en.wikipedia.org/wiki/Latin-1_Supplement
-    matches!(c, '\u{00C0}'..='\u{00FF}') ||
-    // Latin Extended-A
-    // https://en.wikipedia.org/wiki/Latin_Extended-A
-    matches!(c, '\u{0100}'..='\u{017F}') ||
-    // Latin Extended-B
-    // https://en.wikipedia.org/wiki/Latin_Extended-B
-    matches!(c, '\u{0180}'..='\u{024F}') ||
-    // Cyrillic for Russian, Ukrainian, etc.
-    // https://en.wikipedia.org/wiki/Cyrillic_script_in_Unicode
-    matches!(c, '\u{0400}'..='\u{04FF}') ||
-
-    // Vietnamese (https://vietunicode.sourceforge.net/charset/)
-    matches!(c, '\u{1E00}'..='\u{1EFF}') || // Latin Extended Additional
-    matches!(c, '\u{0300}'..='\u{036F}') // Combining Diacritical Marks
-}
-
-impl From<char> for CharType {
-    fn from(c: char) -> Self {
-        match c {
-            c if is_word_char(c) => CharType::Word,
-            c if c == '\n' || c == '\r' => CharType::Newline,
-            c if c.is_whitespace() => CharType::Whitespace,
-            _ => CharType::Other,
-        }
-    }
-}
-
-impl CharType {
-    /// Check if two CharTypes are connectable
-    fn is_connectable(self, c: char) -> bool {
-        let other = CharType::from(c);
-        match (self, other) {
-            (CharType::Word, CharType::Word) => true,
-            (CharType::Whitespace, CharType::Whitespace) => true,
-            _ => false,
-        }
-    }
-}
+use crate::{RopeExt as _, input::InputState, text::selection::word_range_from_chars};
 
 impl InputState {
     /// Select the word at the given offset on double-click.
@@ -117,29 +58,10 @@ impl TextSelector {
             return None;
         };
 
-        let char_type = CharType::from(char);
-        let mut start = offset;
-        let mut end = offset + char.len_utf8();
-        let prev_chars = text.chars_at(start).reversed().take(128);
+        let end = offset + char.len_utf8();
+        let prev_chars = text.chars_at(offset).reversed().take(128);
         let next_chars = text.chars_at(end).take(128);
-
-        for ch in prev_chars {
-            if char_type.is_connectable(ch) {
-                start -= ch.len_utf8();
-            } else {
-                break;
-            }
-        }
-
-        for ch in next_chars {
-            if char_type.is_connectable(ch) {
-                end += ch.len_utf8();
-            } else {
-                break;
-            }
-        }
-
-        Some(start..end)
+        Some(word_range_from_chars(offset, char, prev_chars, next_chars))
     }
 }
 
@@ -147,34 +69,6 @@ impl TextSelector {
 mod tests {
     use super::*;
     use ropey::Rope;
-
-    #[test]
-    fn test_char_type_from_char() {
-        assert_eq!(CharType::from('a'), CharType::Word);
-        assert_eq!(CharType::from('Z'), CharType::Word);
-        assert_eq!(CharType::from('0'), CharType::Word);
-        assert_eq!(CharType::from('_'), CharType::Word);
-        assert_eq!(CharType::from('.'), CharType::Other);
-        assert_eq!(CharType::from(','), CharType::Other);
-        assert_eq!(CharType::from(';'), CharType::Other);
-        assert_eq!(CharType::from('!'), CharType::Other);
-        assert_eq!(CharType::from('?'), CharType::Other);
-        assert_eq!(CharType::from('['), CharType::Other);
-        assert_eq!(CharType::from('{'), CharType::Other);
-        assert_eq!(CharType::from(' '), CharType::Whitespace);
-        assert_eq!(CharType::from('\t'), CharType::Whitespace);
-        assert_eq!(CharType::from('\u{00A0}'), CharType::Whitespace);
-        assert_eq!(CharType::from('\n'), CharType::Newline);
-        assert_eq!(CharType::from('\r'), CharType::Newline);
-        assert_eq!(CharType::from('汉'), CharType::Other);
-        // European letters
-        assert_eq!(CharType::from('é'), CharType::Word);
-        assert_eq!(CharType::from('ä'), CharType::Word);
-        assert_eq!(CharType::from('ö'), CharType::Word);
-        assert_eq!(CharType::from('ü'), CharType::Word);
-        //Cyrillic letters
-        assert_eq!(CharType::from('д'), CharType::Word);
-    }
 
     #[test]
     fn test_word_range() {

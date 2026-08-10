@@ -2,11 +2,11 @@ use std::ops::Range;
 
 use crate::{ActiveTheme, AxisExt, ElementExt, StyledExt, h_flex};
 use gpui::{
-    Along, App, AppContext as _, Axis, Background, Bounds, Context, Corners, DefiniteLength,
-    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, Hsla, InteractiveElement, IntoElement,
-    IsZero, MouseButton, MouseDownEvent, ParentElement as _, Pixels, Point, Render, RenderOnce,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px, relative,
+    AccessibleAction, Along, App, AppContext as _, Axis, Background, Bounds, Context, Corners,
+    DefiniteLength, DragMoveEvent, Empty, Entity, EntityId, EventEmitter, InteractiveElement,
+    IntoElement, IsZero, MouseButton, MouseDownEvent, Orientation, ParentElement as _, Pixels,
+    Point, Render, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px, relative,
 };
 
 #[derive(Clone)]
@@ -29,7 +29,10 @@ impl Render for DragSlider {
 
 /// Events emitted by the [`SliderState`].
 pub enum SliderEvent {
+    /// Emitted continuously while the slider value is being changed by the user.
     Change(SliderValue),
+    /// Emitted once when the user releases the slider after a drag or click.
+    Release(SliderValue),
 }
 
 /// The value of the slider, can be a single value or a range of values.
@@ -190,6 +193,9 @@ pub struct SliderState {
     /// The bounds of the slider after rendered.
     bounds: Bounds<Pixels>,
     scale: SliderScale,
+    /// Tracks whether the user is currently interacting with the slider so we
+    /// only emit [`SliderEvent::Release`] after a real press/drag.
+    dragging: bool,
 }
 
 impl SliderState {
@@ -203,6 +209,7 @@ impl SliderState {
             percentage: (0.0..0.0),
             bounds: Bounds::default(),
             scale: SliderScale::default(),
+            dragging: false,
         }
     }
 
@@ -283,6 +290,21 @@ impl SliderState {
         self.value
     }
 
+    /// Get the minimum value.
+    pub fn min_value(&self) -> f32 {
+        self.min
+    }
+
+    /// Get the maximum value.
+    pub fn max_value(&self) -> f32 {
+        self.max
+    }
+
+    /// Get the step value.
+    pub fn step_value(&self) -> f32 {
+        self.step
+    }
+
     /// Converts a value between 0.0 and 1.0 to a value between the minimum and maximum value,
     /// depending on the chosen scale.
     fn percentage_to_value(&self, percentage: f32) -> f32 {
@@ -341,6 +363,7 @@ impl SliderState {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.dragging = true;
         let bounds = self.bounds;
         let step = self.step;
 
@@ -371,6 +394,16 @@ impl SliderState {
         cx.emit(SliderEvent::Change(self.value));
         cx.notify();
     }
+
+    /// Emit [`SliderEvent::Release`] if the user was actively interacting
+    /// with the slider. Called on mouse-up both inside and outside the slider.
+    fn handle_release(&mut self, cx: &mut Context<Self>) {
+        if !self.dragging {
+            return;
+        }
+        self.dragging = false;
+        cx.emit(SliderEvent::Release(self.value));
+    }
 }
 
 impl EventEmitter<SliderEvent> for SliderState {}
@@ -382,6 +415,7 @@ pub struct Slider {
     axis: Axis,
     style: StyleRefinement,
     disabled: bool,
+    reverse: bool,
 }
 
 impl Slider {
@@ -392,6 +426,7 @@ impl Slider {
             state: state.clone(),
             style: StyleRefinement::default(),
             disabled: false,
+            reverse: false,
         }
     }
 
@@ -413,16 +448,30 @@ impl Slider {
         self
     }
 
+    /// Reverse the filled (highlighted) side of the track, default: false.
+    ///
+    /// By default the track is filled from the min end to the thumb. With
+    /// `reverse`, the fill goes from the thumb to the max end instead — useful
+    /// when the slider represents a remaining amount (e.g. time left).
+    ///
+    /// This only changes the visual fill; values, events and interactions are
+    /// unaffected. It applies to single-value sliders and is ignored for
+    /// range sliders.
+    pub fn reverse(mut self) -> Self {
+        self.reverse = true;
+        self
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn render_thumb(
         &self,
         start: DefiniteLength,
         is_start: bool,
         bar_color: Background,
-        thumb_color: Hsla,
+        thumb_bg: Background,
         radius: Corners<Pixels>,
         window: &mut Window,
-        cx: &mut App,
+        _cx: &mut App,
     ) -> impl gpui::IntoElement {
         let entity_id = self.state.entity_id();
         let axis = self.axis;
@@ -447,7 +496,6 @@ impl Slider {
             .flex_shrink_0()
             .corner_radii(radius)
             .bg(bar_color.opacity(0.5))
-            .when(cx.theme().shadow, |this| this.shadow_md())
             .size_4()
             .p(px(1.))
             .child(
@@ -455,7 +503,7 @@ impl Slider {
                     .flex_shrink_0()
                     .size_full()
                     .corner_radii(radius)
-                    .bg(thumb_color),
+                    .bg(thumb_bg),
             )
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                 cx.stop_propagation();
@@ -501,8 +549,12 @@ impl RenderOnce for Slider {
         let state = self.state.read(cx);
         let is_range = state.value().is_range();
         let percentage = state.percentage.clone();
-        let bar_start = relative(percentage.start);
-        let bar_end = relative(1. - percentage.end);
+        let (bar_start, bar_end) = if self.reverse && !is_range {
+            // Fill from the thumb to the max end (remaining side).
+            (relative(percentage.end), relative(0.))
+        } else {
+            (relative(percentage.start), relative(1. - percentage.end))
+        };
         let rem_size = window.rem_size();
 
         let bar_color = self
@@ -510,12 +562,13 @@ impl RenderOnce for Slider {
             .background
             .clone()
             .and_then(|bg| bg.color())
-            .unwrap_or(cx.theme().slider_bar.into());
-        let thumb_color = self
+            .unwrap_or(cx.theme().tokens.slider_bar.into());
+        let thumb_bg: Background = self
             .style
             .text
             .color
-            .unwrap_or_else(|| cx.theme().slider_thumb);
+            .map(Into::into)
+            .unwrap_or_else(|| cx.theme().tokens.slider_thumb.into());
         let corner_radii = self.style.corner_radii.clone();
         let default_radius = px(999.);
         let mut radius = Corners {
@@ -543,8 +596,43 @@ impl RenderOnce for Slider {
             radius.bottom_right = px(0.);
         }
 
+        let slider_min = state.min_value() as f64;
+        let slider_max = state.max_value() as f64;
+        let _slider_step = state.step_value() as f64;
+        let slider_value = state.value().end() as f64;
+        let slider_state_ref = self.state.clone();
+
         div()
             .id(("slider", self.state.entity_id()))
+            .role(Role::Slider)
+            .aria_numeric_value(slider_value)
+            .aria_min_numeric_value(slider_min)
+            .aria_max_numeric_value(slider_max)
+            .aria_orientation(if axis.is_vertical() {
+                Orientation::Vertical
+            } else {
+                Orientation::Horizontal
+            })
+            .on_a11y_action(AccessibleAction::Increment, {
+                let state = slider_state_ref.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        let new_val =
+                            (state.value().end() + state.step_value()).min(state.max_value());
+                        state.set_value(new_val, window, cx);
+                    });
+                }
+            })
+            .on_a11y_action(AccessibleAction::Decrement, {
+                let state = slider_state_ref.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        let new_val =
+                            (state.value().end() - state.step_value()).max(state.min_value());
+                        state.set_value(new_val, window, cx);
+                    });
+                }
+            })
             .flex()
             .flex_1()
             .items_center()
@@ -554,6 +642,20 @@ impl RenderOnce for Slider {
             .refine_style(&self.style)
             .bg(cx.theme().transparent)
             .text_color(cx.theme().foreground)
+            .when(!self.disabled, |this| {
+                this.on_mouse_up(
+                    MouseButton::Left,
+                    window.listener_for(&self.state, |state, _, _, cx| {
+                        state.handle_release(cx);
+                    }),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    window.listener_for(&self.state, |state, _, _, cx| {
+                        state.handle_release(cx);
+                    }),
+                )
+            })
             .child(
                 h_flex()
                     .id("slider-bar-container")
@@ -642,7 +744,7 @@ impl RenderOnce for Slider {
                                     relative(percentage.start),
                                     true,
                                     bar_color,
-                                    thumb_color,
+                                    thumb_bg,
                                     radius,
                                     window,
                                     cx,
@@ -652,7 +754,7 @@ impl RenderOnce for Slider {
                                 relative(percentage.end),
                                 false,
                                 bar_color,
-                                thumb_color,
+                                thumb_bg,
                                 radius,
                                 window,
                                 cx,

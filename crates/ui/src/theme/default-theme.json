@@ -91,6 +91,8 @@
         "tiles.background": "#fafafa",
         "title_bar.background": "#F8F8F8",
         "title_bar.border": "#e5e5e5",
+        "status_bar.background": "#F8F8F8",
+        "status_bar.border": "#e5e5e5",
         "warning.background": "yellow-500",
         "warning.foreground": "neutral-50",
         "overlay": "#0000000d",
@@ -144,6 +146,12 @@
           "embedded": {
             "color": "#333333"
           },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
+          },
           "function": {
             "color": "#0000A2"
           },
@@ -180,6 +188,9 @@
             "color": "#0433ff"
           },
           "text.literal": {
+            "color": "#6F42C1"
+          },
+          "text.code.span": {
             "color": "#6F42C1"
           },
           "title": {
@@ -281,9 +292,11 @@
         "tiles.background": "#171717",
         "title_bar.background": "#171717",
         "title_bar.border": "#262626",
+        "status_bar.background": "#171717",
+        "status_bar.border": "#262626",
         "warning.background": "yellow-400",
         "warning.foreground": "yellow-600",
-        "overlay": "#ffffff08",
+        "overlay": "#00000033",
         "window.border": "#262626",
         "base.red": "red-400",
         "base.red.light": "red-300",
@@ -345,6 +358,12 @@
           "embedded": {
             "color": "#CACCCA"
           },
+          "emphasis": {
+            "font_style": "italic"
+          },
+          "emphasis.strong": {
+            "font_weight": 700
+          },
           "function": {
             "color": "#fdd888"
           },
@@ -381,6 +400,9 @@
             "color": "#b5af9a"
           },
           "text.literal": {
+            "color": "#E1D797"
+          },
+          "text.code.span": {
             "color": "#E1D797"
           },
           "title": {

@@ -121,14 +121,14 @@ impl RenderOnce for StepperTrigger {
                     .rounded_full()
                     .items_center()
                     .justify_center()
-                    .bg(cx.theme().secondary)
+                    .bg(cx.theme().tokens.secondary)
                     .when(!self.disabled && !is_checked, |this| {
-                        this.hover(|this| this.bg(cx.theme().secondary_hover))
-                            .active(|this| this.bg(cx.theme().secondary_active))
+                        this.hover(|this| this.bg(cx.theme().tokens.secondary_hover))
+                            .active(|this| this.bg(cx.theme().tokens.secondary_active))
                     })
                     .text_color(cx.theme().secondary_foreground)
                     .when(is_checked, |this| {
-                        this.bg(cx.theme().primary)
+                        this.bg(cx.theme().tokens.primary)
                             .text_color(cx.theme().primary_foreground)
                     })
                     .when(self.size != Size::XSmall, |this| {

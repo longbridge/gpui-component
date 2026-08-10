@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window, px,
+    Window, bounce, ease_in_out, ease_out_quint, linear, px,
 };
 use gpui_component::{ActiveTheme as _, IconName, Sizable, spinner::Spinner, v_flex};
 
@@ -79,6 +79,17 @@ impl Render for SpinnerStory {
                             .large()
                             .color(cx.theme().cyan),
                     ),
+            )
+            .child(
+                section("Spinners with custom Easing Function")
+                    .gap_x_2()
+                    .child(Spinner::new().icon(IconName::Loader).ease(linear))
+                    .child(
+                        Spinner::new()
+                            .icon(IconName::Loader)
+                            .ease(bounce(ease_in_out)),
+                    )
+                    .child(Spinner::new().icon(IconName::Loader).ease(ease_out_quint())),
             )
     }
 }

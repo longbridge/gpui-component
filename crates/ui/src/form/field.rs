@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    AlignItems, AnyElement, AnyView, App, Axis, Div, Element, ElementId, InteractiveElement as _,
+    AlignItems, AnyElement, AnyView, App, Axis, Div, ElementId, InteractiveElement as _,
     IntoElement, ParentElement, Pixels, Rems, RenderOnce, SharedString, StyleRefinement, Styled,
     Window, div, prelude::FluentBuilder as _, px,
 };
@@ -53,7 +53,7 @@ impl RenderOnce for FieldBuilder {
         match self {
             FieldBuilder::String(value) => value.into_any_element(),
             FieldBuilder::Element(builder) => builder(window, cx),
-            FieldBuilder::View(view) => view.into_any(),
+            FieldBuilder::View(view) => view.into_any_element(),
         }
     }
 }

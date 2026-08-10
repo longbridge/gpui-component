@@ -2,8 +2,8 @@ use std::{cell::Cell, rc::Rc};
 
 use gpui::{
     AnyElement, App, Corners, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Toggled,
+    Window, div, prelude::FluentBuilder as _,
 };
 use smallvec::{SmallVec, smallvec};
 
@@ -156,6 +156,12 @@ impl RenderOnce for Toggle {
 
         div()
             .id(self.id)
+            .role(Role::Button)
+            .aria_toggled(if checked { Toggled::True } else { Toggled::False })
+            .when_some(
+                self.tooltip.text.as_ref().map(|(text, _)| text.clone()),
+                |this, label| this.aria_label(label),
+            )
             .flex()
             .flex_row()
             .items_center()
@@ -184,17 +190,16 @@ impl RenderOnce for Toggle {
                     .when(self.border_edges.top, |this| this.border_t_1())
                     .when(self.border_edges.bottom, |this| this.border_b_1())
                     .border_color(cx.theme().border)
-                    .bg(cx.theme().background)
-                    .when(cx.theme().shadow, |this| this.shadow_xs())
+                    .bg(cx.theme().tokens.background)
             })
             .when(hoverable, |this| {
                 this.hover(|this| {
-                    this.bg(cx.theme().accent)
+                    this.bg(cx.theme().tokens.accent)
                         .text_color(cx.theme().accent_foreground)
                 })
             })
             .when(checked, |this| {
-                this.bg(cx.theme().accent)
+                this.bg(cx.theme().tokens.accent)
                     .text_color(cx.theme().accent_foreground)
             })
             .refine_style(&self.style)
@@ -309,6 +314,7 @@ impl RenderOnce for ToggleGroup {
 
         h_flex()
             .id(self.id)
+            .role(Role::Toolbar)
             .when(!self.segmented, |this| this.gap_2())
             .refine_style(&self.style)
             .children(self.items.into_iter().enumerate().map({

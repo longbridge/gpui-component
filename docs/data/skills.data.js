@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "fs";
-import { join } from "path";
+import { join, relative } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 
@@ -37,39 +37,46 @@ function parseFrontmatter(content) {
 
 export default {
   async load() {
-    const skillsDir = join(__dirname, "../../.claude/skills");
+    const repoRoot = join(__dirname, "../..");
+    const skillsDirs = [
+      join(repoRoot, "skills"),
+      join(repoRoot, ".claude/skills"),
+    ];
     const skills = [];
-    
-    try {
-      const skillDirs = readdirSync(skillsDir, { withFileTypes: true })
-        .filter(dirent => dirent.isDirectory())
-        .map(dirent => dirent.name);
-      
-      for (const skillDir of skillDirs) {
-        const skillPath = join(skillsDir, skillDir, "SKILL.md");
-        try {
-          const content = readFileSync(skillPath, "utf-8");
-          const { frontmatter, content: body } = parseFrontmatter(content);
-          
-          skills.push({
-            id: skillDir,
-            name: frontmatter.name || skillDir,
-            description: frontmatter.description || "",
-            content: body,
-            path: skillPath,
-          });
-        } catch (err) {
-          console.warn(`Failed to read skill ${skillDir}:`, err.message);
+
+    for (const skillsDir of skillsDirs) {
+      try {
+        const skillDirs = readdirSync(skillsDir, { withFileTypes: true })
+          .filter(dirent => dirent.isDirectory())
+          .map(dirent => dirent.name);
+
+        for (const skillDir of skillDirs) {
+          const skillPath = join(skillsDir, skillDir, "SKILL.md");
+          try {
+            const content = readFileSync(skillPath, "utf-8");
+            const { frontmatter, content: body } = parseFrontmatter(content);
+
+            const relDir = relative(repoRoot, join(skillsDir, skillDir)).replaceAll("\\", "/");
+            skills.push({
+              id: relDir,
+              name: frontmatter.name || skillDir,
+              description: frontmatter.description || "",
+              content: body,
+              skillPath: relative(repoRoot, skillPath).replaceAll("\\", "/"),
+              path: skillPath,
+            });
+          } catch (err) {
+            console.warn(`Failed to read skill ${skillDir}:`, err.message);
+          }
         }
+      } catch (err) {
+        console.warn(`Failed to read skills directory ${skillsDir}:`, err.message);
       }
-      
-      // Sort skills by name
-      skills.sort((a, b) => a.name.localeCompare(b.name));
-      
-      return skills;
-    } catch (err) {
-      console.error("Failed to load skills:", err);
-      return [];
     }
+
+    // Sort skills by name
+    skills.sort((a, b) => a.name.localeCompare(b.name));
+
+    return skills;
   },
 };

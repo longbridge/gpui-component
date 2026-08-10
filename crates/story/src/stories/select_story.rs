@@ -1,5 +1,5 @@
 use gpui::*;
-use gpui_component::{button::*, checkbox::*, divider::*, input::*, select::*, *};
+use gpui_component::{button::*, checkbox::*, input::*, select::*, separator::*, *};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
@@ -257,13 +257,13 @@ impl Render for SelectStory {
                     Select::new(&self.simple_select3)
                         .disabled(self.disabled)
                         .small()
-                        .empty(
+                        .empty(|_, cx| {
                             h_flex()
                                 .h_24()
                                 .justify_center()
                                 .text_color(cx.theme().muted_foreground)
-                                .child("No Data"),
-                        ),
+                                .child("No Data")
+                        }),
                 ),
             )
             .child(
@@ -283,7 +283,7 @@ impl Render for SelectStory {
                                     .pl_3(),
                             ),
                         )
-                        .child(Divider::vertical())
+                        .child(Separator::vertical())
                         .child(
                             div().flex_1().child(
                                 Input::new(&self.input_state)

@@ -4,7 +4,7 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
@@ -14,19 +14,28 @@ use gpui::{
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
+use std::borrow::Cow;
+use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DisplayMap, MASK_CHAR, blink_cursor::BlinkCursor, change::Change, element::TextElement,
-    mask_pattern::MaskPattern, mode::InputMode, number_input,
+    DisplayMap, MASK_CHAR, WrappingIndent,
+    blink_cursor::BlinkCursor,
+    change::Change,
+    decorations::DecorationCollections,
+    element::{EditorScrollbarSnapshot, TextElement},
+    mask_pattern::{MaskPattern, normalize_number_input},
+    mode::InputMode,
+    number_input,
+    number_input::{NumberStep, StepAction},
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::highlighter::DiagnosticSet;
-#[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "tree-sitter")]
 use crate::highlighter::LanguageRegistry;
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
@@ -34,10 +43,11 @@ use crate::input::{
     HoverDefinition, InlineCompletion, Lsp, Position, RopeExt as _, Selection,
     display_map::LineLayout,
     element::RIGHT_MARGIN,
-    popovers::{ContextMenu, DiagnosticPopover, HoverPopover, InputContextMenu},
-    search::{self, SearchPanel},
+    popovers::{ContextMenu, DiagnosticPopover, HoverPopover},
+    search::SearchPanel,
 };
-use crate::menu::PopupMenu;
+use crate::native_menu::NativeMenu;
+use crate::scroll::AutoScroll;
 use crate::{Root, history::History};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -45,6 +55,22 @@ use crate::{Root, history::History};
 pub struct Enter {
     /// Is confirm with secondary.
     pub secondary: bool,
+    /// Whether the Shift modifier was held when Enter was pressed.
+    pub shift: bool,
+}
+
+impl Enter {
+    /// Returns true if `action` is a primary `Enter` action (`secondary: false`),
+    /// regardless of whether Shift was held.
+    pub fn is_primary(action: &dyn Action) -> bool {
+        action.partial_eq(&Enter {
+            secondary: false,
+            shift: false,
+        }) || action.partial_eq(&Enter {
+            secondary: false,
+            shift: true,
+        })
+    }
 }
 
 actions!(
@@ -90,6 +116,7 @@ actions!(
         Escape,
         ToggleCodeActions,
         Search,
+        Replace,
         GoToDefinition,
     ]
 );
@@ -97,7 +124,7 @@ actions!(
 #[derive(Clone)]
 pub enum InputEvent {
     Change,
-    PressEnter { secondary: bool },
+    PressEnter { secondary: bool, shift: bool },
     Focus,
     Blur,
 }
@@ -124,9 +151,30 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("alt-delete", DeleteToNextWordEnd, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-delete", DeleteToNextWordEnd, Some(CONTEXT)),
-        KeyBinding::new("enter", Enter { secondary: false }, Some(CONTEXT)),
-        KeyBinding::new("shift-enter", Enter { secondary: false }, Some(CONTEXT)),
-        KeyBinding::new("secondary-enter", Enter { secondary: true }, Some(CONTEXT)),
+        KeyBinding::new(
+            "enter",
+            Enter {
+                secondary: false,
+                shift: false,
+            },
+            Some(CONTEXT),
+        ),
+        KeyBinding::new(
+            "shift-enter",
+            Enter {
+                secondary: false,
+                shift: true,
+            },
+            Some(CONTEXT),
+        ),
+        KeyBinding::new(
+            "secondary-enter",
+            Enter {
+                secondary: true,
+                shift: false,
+            },
+            Some(CONTEXT),
+        ),
         KeyBinding::new("escape", Escape, Some(CONTEXT)),
         KeyBinding::new("up", MoveUp, Some(CONTEXT)),
         KeyBinding::new("down", MoveDown, Some(CONTEXT)),
@@ -226,9 +274,12 @@ pub(crate) fn init(cx: &mut App) {
         KeyBinding::new("cmd-f", Search, Some(CONTEXT)),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("ctrl-f", Search, Some(CONTEXT)),
+        #[cfg(target_os = "macos")]
+        KeyBinding::new("cmd-shift-f", Replace, Some(CONTEXT)),
+        #[cfg(not(target_os = "macos"))]
+        KeyBinding::new("ctrl-h", Replace, Some(CONTEXT)),
     ]);
 
-    search::init(cx);
     number_input::init(cx);
 }
 
@@ -257,10 +308,12 @@ pub(super) struct LastLayout {
     pub(super) visible_range_offset: Range<usize>,
     /// The last layout lines (Only have visible lines, no empty entries for hidden lines).
     pub(super) lines: Rc<Vec<LineLayout>>,
-    /// The line_height of text layout, this will change will InputElement painted.
+    /// The line_height of text layout, this may change when InputElement is painted.
     pub(super) line_height: Pixels,
-    /// The wrap width of text layout, this will change will InputElement painted.
+    /// The wrap width of text layout, this may change when InputElement is painted.
     pub(super) wrap_width: Option<Pixels>,
+    /// The wrapping indent mode of text layout, this may change when InputElement is painted.
+    pub(super) wrapping_indent: WrappingIndent,
     /// The line number area width of text layout, if not line number, this will be 0px.
     pub(super) line_number_width: Pixels,
     /// The cursor position (top, left) in pixels.
@@ -307,6 +360,7 @@ pub struct InputState {
     pub(super) selected_range: Selection,
     pub(super) search_panel: Option<Entity<SearchPanel>>,
     pub(super) searchable: bool,
+    pub(super) replaceable: bool,
     /// Range for save the selected word, use to keep word range when drag move.
     pub(super) selected_word_range: Option<Selection>,
     pub(super) selection_reversed: bool,
@@ -324,38 +378,58 @@ pub struct InputState {
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
+    pub(super) submit_on_enter: bool,
     pub(super) soft_wrap: bool,
+    pub(super) wrapping_indent: WrappingIndent,
+    /// See [`Self::scroll_beyond_last_line`].
+    pub(super) scroll_beyond_last_line: Option<usize>,
+    /// See [`Self::cursor_surrounding_lines`].
+    pub(super) cursor_surrounding_lines: Option<usize>,
     pub(super) show_whitespaces: bool,
     /// This flag tells the renderer to prefer the end of the current visual line.
     pub(crate) cursor_line_end_affinity: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
+    /// The step strategy for [`super::NumberInput`] to increment/decrement.
+    /// See [`Self::step`] and [`Self::step_by`].
+    pub(super) number_step: Option<NumberStep>,
+    /// The minimum value for [`super::NumberInput`]. See [`Self::min`].
+    pub(super) number_min: Option<f64>,
+    /// The maximum value for [`super::NumberInput`]. See [`Self::max`].
+    pub(super) number_max: Option<f64>,
     pub(crate) scroll_handle: ScrollHandle,
     /// The deferred scroll offset to apply on next layout.
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
+    pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
+    pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) text_align: TextAlign,
+    pub(super) decorations: DecorationCollections,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
+    /// Whether the `mask_pattern` was explicitly set (via [`Self::mask_pattern`]
+    /// or [`Self::set_mask_pattern`]), to let [`super::NumberInput`] only apply
+    /// its default mask when the user has not made an explicit choice.
+    pub(super) mask_pattern_set: bool,
     pub(super) placeholder: SharedString,
 
     /// Popover
     diagnostic_popover: Option<Entity<DiagnosticPopover>>,
     /// Completion/CodeAction context menu
     pub(super) context_menu_content: Option<ContextMenu>,
-    pub(super) context_menu: Entity<InputContextMenu>,
 
-    /// An optional context menu builder to allow a custom context menu on the input.
+    /// An optional context menu builder to allow a custom right-click context menu on the input.
     ///
-    /// If set, this will override the built-in context menu and ignore the value set in [`Self::enable_context_menu`].
+    /// If set, this overrides the built-in context menu (and ignores [`Self::enable_context_menu`]).
     pub(super) context_menu_builder:
-        Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
+        Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
+    pending_context_menu: Option<(Point<Pixels>, usize)>,
 
     /// Whether the context menu that shows on right-click is enabled.
     ///
-    /// This value will be ignored if a context menu builder is defined in [`Self::context_menu_builder`].
+    /// This value is ignored if a context menu builder is defined in [`Self::context_menu_builder`].
     pub(super) enable_context_menu: bool,
 
     /// A flag to indicate if we are currently inserting a completion item.
@@ -384,6 +458,8 @@ pub struct InputState {
 
     pub(super) _context_menu_task: Task<Result<()>>,
     pub(super) inline_completion: InlineCompletion,
+
+    pub(super) auto_scroll: AutoScroll,
 }
 
 impl EventEmitter<InputEvent> for InputState {}
@@ -416,7 +492,6 @@ impl InputState {
         ];
 
         let text_style = window.text_style();
-        let mouse_context_menu = InputContextMenu::new(cx.entity(), window, cx);
 
         Self {
             focus_handle: focus_handle.clone(),
@@ -427,6 +502,7 @@ impl InputState {
             selected_range: Selection::default(),
             search_panel: None,
             searchable: false,
+            replaceable: true,
             selected_word_range: None,
             selection_reversed: false,
             ime_marked_range: None,
@@ -435,11 +511,18 @@ impl InputState {
             disabled: false,
             masked: false,
             clean_on_escape: false,
+            submit_on_enter: false,
             soft_wrap: true,
+            wrapping_indent: WrappingIndent::default(),
+            scroll_beyond_last_line: None,
+            cursor_surrounding_lines: None,
             show_whitespaces: false,
             loading: false,
             pattern: None,
             validate: None,
+            number_step: Some(NumberStep::Fixed(1.)),
+            number_min: None,
+            number_max: None,
             mode: InputMode::default(),
             last_layout: None,
             last_bounds: None,
@@ -447,16 +530,25 @@ impl InputState {
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
             scroll_size: gpui::size(px(0.), px(0.)),
+            editor_scrollbar_paddings: Cell::new(Edges {
+                top: px(0.),
+                right: px(0.),
+                bottom: px(0.),
+                left: px(0.),
+            }),
+            editor_scrollbar_snapshot: Cell::new(None),
             deferred_scroll_offset: None,
             preferred_column: None,
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
+            mask_pattern_set: false,
             text_align: TextAlign::Left,
+            decorations: DecorationCollections::default(),
             lsp: Lsp::default(),
             diagnostic_popover: None,
             context_menu_content: None,
-            context_menu: mouse_context_menu,
             context_menu_builder: None,
+            pending_context_menu: None,
             enable_context_menu: true,
             completion_inserting: false,
             hover_popover: None,
@@ -469,6 +561,7 @@ impl InputState {
             _pending_update: false,
             inline_completion: InlineCompletion::default(),
             cursor_line_end_affinity: false,
+            auto_scroll: AutoScroll::default(),
         }
     }
 
@@ -517,7 +610,7 @@ impl InputState {
     /// Sets whether the context menu that shows on right-click is enabled.
     ///
     /// The context menu is enabled by default.
-    /// This value will be ignored if a custom context menu is defined on the input.
+    /// This value is ignored if a custom context menu builder is defined on the input.
     pub fn context_menu(mut self, enable: bool) -> Self {
         self.enable_context_menu = enable;
         self
@@ -527,6 +620,12 @@ impl InputState {
     pub fn searchable(mut self, searchable: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.searchable = searchable;
+        self
+    }
+
+    /// Set whether search UI allows replacement, default is true.
+    pub fn replaceable(mut self, allow: bool) -> Self {
+        self.replaceable = allow;
         self
     }
 
@@ -692,7 +791,10 @@ impl InputState {
 
     /// Set the text of the input field.
     ///
-    /// And the selection_range will be reset to 0..0.
+    /// For single-line inputs the caret is placed at the end of the text while
+    /// the view is scrolled back to the start, so a long value shows its
+    /// beginning instead of its tail (matching HTML `<input>`). Multi-line
+    /// inputs reset the selection to `0..0`.
     pub fn set_value(
         &mut self,
         value: impl Into<SharedString>,
@@ -705,22 +807,34 @@ impl InputState {
         self.history.ignore = false;
         self.emit_events = true;
 
-        // Ensure cursor to start when set text
-        if self.mode.is_single_line() {
-            self.selected_range = (self.text.len()..self.text.len()).into();
-        } else {
-            self.selected_range.clear();
-        }
-
-        if self.mode.is_code_editor() {
-            self._pending_update = true;
-            self.lsp.reset();
-        }
-
-        // Move scroll to top
-        self.scroll_handle.set_offset(point(px(0.), px(0.)));
+        self.reset_selection();
+        self.reset_lsp_state();
+        self.reset_scroll_to_start();
 
         self.history.clear();
+        cx.notify();
+    }
+
+    /// Replace the entire text content while preserving undo history.
+    ///
+    /// Unlike [`set_value`](Self::set_value), this method records the
+    /// replacement in the undo stack, allowing the user to undo/redo
+    /// the change. The selection is placed at the end of the new text
+    /// for single-line inputs, or cleared (0..0) for multi-line inputs.
+    ///
+    /// Use this when programmatically replacing the full text but the
+    /// user should still be able to undo the operation — e.g. formatting.
+    pub fn replace_all(
+        &mut self,
+        text: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.replace_text(text, window, cx);
+        self.reset_selection();
+        self.reset_lsp_state();
+        self.reset_scroll_to_start();
+
         cx.notify();
     }
 
@@ -774,6 +888,35 @@ impl InputState {
         self.disabled = was_disabled;
     }
 
+    fn reset_selection(&mut self) {
+        // For single-line inputs the caret is placed at the end of the text
+        // (matching HTML `<input>`); multi-line inputs reset the selection to
+        // `0..0`.
+        if self.mode.is_single_line() {
+            let end = self.text.len();
+            self.selected_range = (end..end).into();
+        } else {
+            self.selected_range.clear();
+        }
+    }
+
+    fn reset_lsp_state(&mut self) {
+        if self.mode.is_code_editor() {
+            self._pending_update = true;
+            self.lsp.reset();
+        }
+    }
+
+    fn reset_scroll_to_start(&mut self) {
+        // Move scroll to the start. For single-line the caret is at the end, so
+        // override the cursor-follow scroll for the next painted frame to keep
+        // the start visible; the deferred offset is consumed during that paint.
+        self.scroll_handle.set_offset(point(px(0.), px(0.)));
+        if self.mode.is_single_line() {
+            self.deferred_scroll_offset = Some(point(px(0.), px(0.)));
+        }
+    }
+
     /// Set with disabled mode.
     ///
     /// See also: [`Self::set_disabled`], [`Self::is_disabled`].
@@ -807,6 +950,15 @@ impl InputState {
         self
     }
 
+    /// Set true to treat `Enter` as a submit action in multi-line mode,
+    /// while `Shift+Enter` inserts a newline.
+    ///
+    /// Default is `false` (both `Enter` and `Shift+Enter` insert a newline).
+    pub fn submit_on_enter(mut self, submit: bool) -> Self {
+        self.submit_on_enter = submit;
+        self
+    }
+
     /// Set the soft wrap mode for multi-line input, default is true.
     pub fn soft_wrap(mut self, wrap: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
@@ -817,6 +969,13 @@ impl InputState {
     /// Set whether to show whitespace characters.
     pub fn show_whitespaces(mut self, show: bool) -> Self {
         self.show_whitespaces = show;
+        self
+    }
+
+    /// Set how soft-wrapped continuation lines are indented, default is [`WrappingIndent::Same`]
+    pub fn wrapping_indent(mut self, wrapping_indent: WrappingIndent) -> Self {
+        debug_assert!(self.mode.is_multi_line());
+        self.wrapping_indent = wrapping_indent;
         self
     }
 
@@ -846,6 +1005,75 @@ impl InputState {
     /// Update whether to show whitespace characters.
     pub fn set_show_whitespaces(&mut self, show: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.show_whitespaces = show;
+        cx.notify();
+    }
+
+    /// Update how soft-wrapped continuation lines are indented.
+    pub fn set_wrapping_indent(
+        &mut self,
+        wrapping_indent: WrappingIndent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.wrapping_indent = wrapping_indent;
+        self.display_map.set_wrapping_indent(wrapping_indent, cx);
+        cx.notify();
+    }
+
+    /// Empty rows reserved below the last line of content ("scroll
+    /// beyond last line"), code-editor mode only. Mirrors VSCode's
+    /// `editor.scrollBeyondLastLine` / Zed's `scroll_beyond_last_line`.
+    ///
+    /// - `None` (default): half the viewport, floored at
+    ///   [`BOTTOM_MARGIN_ROWS`] line-heights.
+    /// - `Some(0)`: no trailing space; the cursor sits flush with the
+    ///   last row at scroll-max.
+    /// - `Some(n)`: exactly `n` rows.
+    pub fn scroll_beyond_last_line(mut self, rows: Option<usize>) -> Self {
+        self.scroll_beyond_last_line = rows;
+        self
+    }
+
+    /// Update [`Self::scroll_beyond_last_line`] after construction.
+    pub fn set_scroll_beyond_last_line(
+        &mut self,
+        rows: Option<usize>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.scroll_beyond_last_line == rows {
+            return;
+        }
+        self.scroll_beyond_last_line = rows;
+        cx.notify();
+    }
+
+    /// Minimum number of lines the cursor is kept clear of the viewport's
+    /// top/bottom edge before auto-scroll engages. Mirrors VSCode's
+    /// `editor.cursorSurroundingLines` / Zed's `vertical_scroll_margin`.
+    /// Orthogonal to [`Self::scroll_beyond_last_line`], which sizes the
+    /// empty region; this controls the cursor's resting distance from the
+    /// edge.
+    ///
+    /// - `None` (default): [`BOTTOM_MARGIN_ROWS`] lines, falling back to
+    ///   one line on small viewports.
+    /// - `Some(n)`: exactly `n` lines, clamped to half the viewport.
+    pub fn cursor_surrounding_lines(mut self, lines: Option<usize>) -> Self {
+        self.cursor_surrounding_lines = lines;
+        self
+    }
+
+    /// Update [`Self::cursor_surrounding_lines`] after construction.
+    pub fn set_cursor_surrounding_lines(
+        &mut self,
+        lines: Option<usize>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.cursor_surrounding_lines == lines {
+            return;
+        }
+        self.cursor_surrounding_lines = lines;
         cx.notify();
     }
 
@@ -880,6 +1108,107 @@ impl InputState {
         self
     }
 
+    /// Set the step value of the [`super::NumberInput`] for increment/decrement.
+    ///
+    /// Only for [`InputMode::SingleLine`] mode with [`super::NumberInput`].
+    ///
+    /// If any of `step`, `min`, `max` is set, the [`super::NumberInput`] will
+    /// update the value internally (step by `step`, default 1, clamp to the
+    /// `min`/`max` range and emit [`InputEvent::Change`]) instead of emitting
+    /// [`super::NumberInputEvent::Step`].
+    ///
+    /// See also [`Self::step_by`] to calculate the step value
+    /// based on the current value.
+    pub fn step(mut self, step: impl Into<NumberStep>) -> Self {
+        debug_assert!(self.mode.is_single_line());
+        self.number_step = Some(step.into());
+        self
+    }
+
+    /// Set a function to calculate the step value from the current value and
+    /// direction on stepping, e.g. a step size that varies by range.
+    ///
+    /// The current value is the value before stepping; an empty or invalid
+    /// value is treated as 0. The [`StepAction`] tells whether the value is
+    /// being incremented or decremented, useful when the step differs by
+    /// direction at a range boundary.
+    ///
+    /// This is a shorthand of `step(NumberStep::by_value(f))`. See also [`Self::step`].
+    ///
+    /// The closure receives a [`Context<Self>`] to read or update other
+    /// entities while computing the step, but must not re-enter the owning
+    /// [`InputState`] (it is mutably borrowed during stepping).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // At the boundary 1.0 the step is 0.1 going down and 0.5 going up.
+    /// InputState::new(window, cx).step_by(|value, action, _cx| match action {
+    ///     StepAction::Increment => if value < 1.0 { 0.1 } else { 0.5 },
+    ///     StepAction::Decrement => if value <= 1.0 { 0.1 } else { 0.5 },
+    /// })
+    /// ```
+    pub fn step_by(
+        mut self,
+        f: impl Fn(f64, StepAction, &mut Context<Self>) -> f64 + 'static,
+    ) -> Self {
+        debug_assert!(self.mode.is_single_line());
+        self.number_step = Some(NumberStep::by_value(f));
+        self
+    }
+
+    /// Set the minimum value of the [`super::NumberInput`].
+    ///
+    /// Only for [`InputMode::SingleLine`] mode with [`super::NumberInput`].
+    ///
+    /// The value will be clamped to the minimum value on stepping and on
+    /// blur (only if the clamped value passes the `pattern`/`validate` check).
+    /// See also [`Self::step`].
+    pub fn min(mut self, min: f64) -> Self {
+        debug_assert!(self.mode.is_single_line());
+        self.number_min = Some(min);
+        self
+    }
+
+    /// Set the maximum value of the [`super::NumberInput`].
+    ///
+    /// Only for [`InputMode::SingleLine`] mode with [`super::NumberInput`].
+    ///
+    /// The value will be clamped to the maximum value on stepping and on
+    /// blur (only if the clamped value passes the `pattern`/`validate` check).
+    /// See also [`Self::step`].
+    pub fn max(mut self, max: f64) -> Self {
+        debug_assert!(self.mode.is_single_line());
+        self.number_max = Some(max);
+        self
+    }
+
+    /// Update the step value after construction, `None` to fall back to
+    /// emitting [`super::NumberInputEvent::Step`] (if `min`, `max` are unset).
+    ///
+    /// See [`Self::step`] and [`Self::step_by`].
+    pub fn set_step(
+        &mut self,
+        step: impl Into<Option<NumberStep>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) {
+        debug_assert!(self.mode.is_single_line());
+        self.number_step = step.into();
+    }
+
+    /// Update the minimum value after construction. See [`Self::min`].
+    pub fn set_min(&mut self, min: Option<f64>, _: &mut Window, _: &mut Context<Self>) {
+        debug_assert!(self.mode.is_single_line());
+        self.number_min = min;
+    }
+
+    /// Update the maximum value after construction. See [`Self::max`].
+    pub fn set_max(&mut self, max: Option<f64>, _: &mut Window, _: &mut Context<Self>) {
+        debug_assert!(self.mode.is_single_line());
+        self.number_max = max;
+    }
+
     /// Set true to show spinner at the input right.
     ///
     /// Only for [`InputMode::SingleLine`] mode.
@@ -892,7 +1221,7 @@ impl InputState {
     /// Set the default value of the input field.
     pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
         let text: SharedString = value.into();
-        self.text = Rope::from(text.as_str());
+        self.text = Rope::from(self.normalize_input(&text).as_ref());
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -952,6 +1281,24 @@ impl InputState {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });
+    }
+
+    /// Refresh the input, so the next render re-runs syntax highlighting and
+    /// the LSP providers, not just a redraw.
+    ///
+    /// Assigning the `lsp` providers (or other render-affecting state) at
+    /// runtime does not take effect until the text next changes. Call this
+    /// afterwards to force the refresh on the next render.
+    ///
+    /// ```ignore
+    /// input.update(cx, |state, cx| {
+    ///     state.lsp.hover_provider = Some(provider);
+    ///     state.refresh(cx);
+    /// });
+    /// ```
+    pub fn refresh(&mut self, cx: &mut Context<Self>) {
+        self._pending_update = true;
+        cx.notify();
     }
 
     pub(super) fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
@@ -1081,7 +1428,7 @@ impl InputState {
 
         if self.soft_wrap && self.mode.is_code_editor() {
             let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
-            if let Some(line) = self.display_map.lines().get(row)
+            if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_start = logical_start + range.start;
@@ -1109,7 +1456,7 @@ impl InputState {
 
         if self.soft_wrap && self.mode.is_code_editor() {
             let wrap_point = self.display_map.offset_to_wrap_display_point(self.cursor());
-            if let Some(line) = self.display_map.lines().get(row)
+            if let Some(line) = self.display_map.line(row)
                 && let Some(range) = line.wrapped_lines.get(wrap_point.local_row)
             {
                 let visual_end = logical_start + range.end;
@@ -1308,7 +1655,13 @@ impl InputState {
             self.clear_inline_completion(cx);
         }
 
-        if self.mode.is_multi_line() {
+        // In multi-line mode with `submit_on_enter` enabled, a plain `Enter`
+        // (without Shift) is treated as submit: propagate the action and emit
+        // PressEnter without inserting a newline. `Shift+Enter` still inserts
+        // a newline.
+        let insert_newline = self.mode.is_multi_line() && (!self.submit_on_enter || action.shift);
+
+        if insert_newline {
             // Get current line indent
             let indent = if self.mode.is_code_editor() {
                 self.indent_of_next_line()
@@ -1321,12 +1674,14 @@ impl InputState {
             self.replace_text_in_range_silent(None, &new_line_text, window, cx);
             self.pause_blink_cursor(cx);
         } else {
-            // Single line input, just emit the event (e.g.: In a dialog to confirm).
+            // Single line input or submit-on-enter: just emit the event
+            // (e.g.: in a dialog to confirm, or a chat textarea to send).
             cx.propagate();
         }
 
         cx.emit(InputEvent::PressEnter {
             secondary: action.secondary,
+            shift: action.shift,
         });
     }
 
@@ -1358,12 +1713,88 @@ impl InputState {
         cx.propagate();
     }
 
+    /// Show the right-click context menu as a native OS menu.
+    pub(crate) fn handle_right_click_menu(
+        &mut self,
+        position: Point<Pixels>,
+        offset: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if crate::global_state::GlobalState::global(cx).is_in_deferred_context() {
+            return;
+        }
+
+        if !self.selected_range.contains(offset) {
+            self.move_to(offset, None, cx);
+        }
+
+        // A custom builder fully replaces the built-in context menu.
+        let menu = if let Some(builder) = self.context_menu_builder.clone() {
+            builder(NativeMenu::new(), window, cx)
+        } else {
+            let is_code_editor = self.mode.is_code_editor();
+            if is_code_editor {
+                self.handle_hover_definition(offset, window, cx);
+            }
+
+            let is_enable = !self.disabled;
+            let has_goto_definition = is_enable && self.lsp.definition_provider.is_some();
+            let has_code_action = is_enable && !self.lsp.code_action_providers.is_empty();
+            let is_selected = !self.selected_range.is_empty();
+            let has_paste = is_enable && cx.read_from_clipboard().is_some();
+
+            let mut menu = NativeMenu::new();
+            if is_code_editor {
+                menu = menu
+                    .menu_with_disabled(
+                        rust_i18n::t!("Input.Go to Definition"),
+                        !has_goto_definition,
+                        Box::new(crate::input::GoToDefinition),
+                    )
+                    .menu_with_disabled(
+                        rust_i18n::t!("Input.Show Code Actions"),
+                        !has_code_action,
+                        Box::new(crate::input::ToggleCodeActions),
+                    )
+                    .separator();
+            }
+
+            menu.menu_with_disabled(
+                rust_i18n::t!("Input.Cut"),
+                !(is_enable && is_selected),
+                Box::new(crate::input::Cut),
+            )
+            .menu_with_disabled(
+                rust_i18n::t!("Input.Copy"),
+                !is_selected,
+                Box::new(crate::input::Copy),
+            )
+            .menu_with_disabled(
+                rust_i18n::t!("Input.Paste"),
+                !has_paste,
+                Box::new(crate::input::Paste),
+            )
+            .separator()
+            .menu(
+                rust_i18n::t!("Input.Select All"),
+                Box::new(crate::input::SelectAll),
+            )
+        };
+
+        menu.show(position, window, cx);
+    }
+
     pub(super) fn on_mouse_down(
         &mut self,
         event: &MouseDownEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Input has its own text selection; suppress the window-level text
+        // selection (Root) so it does not start a drag from here.
+        crate::global_state::GlobalState::suppress_text_selection(cx);
+
         // Clear inline completion on any mouse interaction
         self.clear_inline_completion(cx);
 
@@ -1397,7 +1828,10 @@ impl InputState {
         // Show Mouse context menu
         if event.button == MouseButton::Right {
             if self.enable_context_menu || self.context_menu_builder.is_some() {
-                self.handle_right_click_menu(event, offset, window, cx);
+                if !self.selected_range.contains(offset) {
+                    self.move_to(offset, None, cx);
+                }
+                self.pending_context_menu = Some((event.position, offset));
             }
             return;
         }
@@ -1411,15 +1845,21 @@ impl InputState {
 
     pub(super) fn on_mouse_up(
         &mut self,
-        _: &MouseUpEvent,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
+        event: &MouseUpEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
+        if event.button == MouseButton::Right {
+            if let Some((position, offset)) = self.pending_context_menu.take() {
+                self.handle_right_click_menu(position, offset, window, cx);
+            }
+        }
         if self.selected_range.is_empty() {
             self.selection_reversed = false;
         }
         self.selecting = false;
         self.selected_word_range = None;
+        self.auto_scroll.stop();
     }
 
     pub(super) fn on_mouse_move(
@@ -1549,16 +1989,8 @@ impl InputState {
 
         let row = point.row;
 
-        let mut row_offset_y = px(0.);
-        for (ix, _wrap_line) in self.display_map.lines().iter().enumerate() {
-            if ix == row {
-                break;
-            }
-
-            // Only accumulate height for visible (non-folded) wrap rows
-            let visible_wrap_rows = self.display_map.visible_wrap_row_count_for_buffer_line(ix);
-            row_offset_y += line_height * visible_wrap_rows;
-        }
+        // Calculate row offset by multiplying the number of lines before it with the line height
+        let mut row_offset_y = line_height * self.display_map.buffer_line_to_display_row(row);
 
         // For Right alignment use 0 margin: the cursor indicator is clamped inside bounds
         // in layout_cursor, so shifting the text here would cause a first-click visual jump.
@@ -1585,10 +2017,17 @@ impl InputState {
             }
         }
 
-        // Check if row_offset_y is out of the viewport
-        // If row offset is not in the viewport, scroll to make it visible
+        // Scroll the row into view. Use the same edge clearance helper as
+        // `TextElement::layout_cursor` so both scroll-into-view paths agree
+        // (a mismatch flickered on `Down` at end-of-buffer with a small
+        // `cursor_surrounding_lines` override).
         let edge_height = if direction.is_some() && self.mode.is_code_editor() {
-            3 * line_height
+            super::element::cursor_surrounding_padding(
+                self.mode.is_auto_grow(),
+                self.cursor_surrounding_lines,
+                last_layout.visible_range.len(),
+                line_height,
+            )
         } else {
             line_height
         };
@@ -1607,8 +2046,12 @@ impl InputState {
             scroll_offset.y = scroll_offset.y.min(was_offset.y);
         }
 
+        // Clamp the deferred target into the same safe range that
+        // `update_scroll_offset` enforces on persist, so paint never shows an
+        // over-scrolled frame before the post-paint clamp pulls it back.
+        let safe_y_min = (-self.scroll_size.height + self.input_bounds.size.height).min(px(0.));
         scroll_offset.x = scroll_offset.x.min(px(0.));
-        scroll_offset.y = scroll_offset.y.min(px(0.));
+        scroll_offset.y = scroll_offset.y.clamp(safe_y_min, px(0.));
         self.deferred_scroll_offset = Some(scroll_offset);
         cx.notify();
     }
@@ -1644,11 +2087,7 @@ impl InputState {
 
     pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
-            let mut new_text = clipboard.text().unwrap_or_default();
-            if !self.mode.is_multi_line() {
-                new_text = new_text.replace('\n', "");
-            }
-
+            let new_text = clipboard.text().unwrap_or_default();
             self.replace_text_in_range_silent(None, &new_text, window, cx);
             self.scroll_to(self.cursor(), None, cx);
         }
@@ -1715,6 +2154,14 @@ impl InputState {
         self.scroll_handle.offset()
     }
 
+    /// Set scroll offset of the editor viewport.
+    ///
+    /// The offset will be clamped to the valid range, and applied after the next layout.
+    pub fn set_scroll_offset(&mut self, offset: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        self.deferred_scroll_offset = Some(offset);
+        cx.notify();
+    }
+
     /// Laid-out line height; `None` before first layout.
     pub fn line_height(&self) -> Option<gpui::Pixels> {
         self.last_layout.as_ref().map(|l| l.line_height)
@@ -1727,6 +2174,18 @@ impl InputState {
     /// in the underlying rope's byte units.
     pub fn selected_range(&self) -> std::ops::Range<usize> {
         self.selected_range.into()
+    }
+
+    /// Set the selected range using UTF-8 byte offsets.
+    pub fn set_selected_range(&mut self, range: Range<usize>, cx: &mut Context<Self>) {
+        let len = self.text.len();
+        let start = range.start.min(len);
+        let end = range.end.min(len);
+
+        self.move_to(start, None, cx);
+        self.selection_reversed = false;
+        self.selected_word_range = None;
+        self.select_to(end, cx);
     }
 
     pub(crate) fn index_for_mouse_position(&self, position: Point<Pixels>) -> usize {
@@ -1953,8 +2412,45 @@ impl InputState {
         Root::update(window, cx, |root, _, _| {
             root.focused_input = None;
         });
+        self.clamp_number_value(window, cx);
         cx.emit(InputEvent::Blur);
         cx.notify();
+    }
+
+    /// Clamp the number value to the `min`/`max` range, used on blur.
+    ///
+    /// Out-of-range values are allowed while typing (e.g. `1` is an
+    /// intermediate state of `15` when min is 10), and clamped on blur.
+    fn clamp_number_value(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.mode.is_single_line() {
+            return;
+        }
+        if !matches!(self.mask_pattern, MaskPattern::Number { .. }) {
+            return;
+        }
+        if self.number_min.is_none() && self.number_max.is_none() {
+            return;
+        }
+
+        let Ok(value) = self.unmask_value().parse::<f64>() else {
+            return;
+        };
+
+        let clamped = match (self.number_min, self.number_max) {
+            (Some(min), _) if value < min => min,
+            (_, Some(max)) if value > max => max,
+            _ => return,
+        };
+
+        // The clamped value must pass the `pattern`/`validate` check,
+        // otherwise keep the value as is.
+        let new_text = clamped.to_string();
+        if !self.is_valid_input(&new_text, cx) {
+            return;
+        }
+
+        let range = self.range_to_utf16(&(0..self.text.len()));
+        self.replace_text_in_range_silent(Some(range), &new_text, window, cx);
     }
 
     pub(super) fn pause_blink_cursor(&mut self, cx: &mut Context<Self>) {
@@ -1989,11 +2485,59 @@ impl InputState {
             return;
         }
 
+        self.auto_scroll.last_drag_position = Some(event.position);
         let offset = self.index_for_mouse_position(event.position);
         self.select_to(offset, cx);
+
+        if !self.mode.is_single_line() {
+            // Expand input_bounds by the CSS padding so the bounds reflect the full
+            // visible element. Without this, mouse positions in the padding area
+            // (visually inside the input) would appear outside bounds and trigger max speed.
+            let pad = self.editor_scrollbar_paddings.get();
+            let scroll_bounds = gpui::Bounds::new(
+                point(
+                    self.input_bounds.origin.x - pad.left,
+                    self.input_bounds.origin.y - pad.top,
+                ),
+                gpui::size(
+                    self.input_bounds.size.width + pad.left + pad.right,
+                    self.input_bounds.size.height + pad.top + pad.bottom,
+                ),
+            );
+            let delta = AutoScroll::compute_delta(event.position.y, scroll_bounds);
+            // Input's ScrollHandle uses negative-y-is-down; negate the positive-towards-bottom delta.
+            let scroll_delta = delta.map(|d| -d);
+            self.auto_scroll.set(scroll_delta, cx, |delta, state, cx| {
+                let current = state.scroll_handle.offset();
+                state.update_scroll_offset(Some(point(current.x, current.y + delta)), cx);
+                if let Some(pos) = state.auto_scroll.last_drag_position {
+                    let offset = state.index_for_mouse_position(pos);
+                    state.select_to(offset, cx);
+                }
+            });
+        }
     }
 
-    fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
+    /// Normalize the inserted text before applying it to the input.
+    ///
+    /// For number inputs (with [`MaskPattern::Number`]), this converts
+    /// full-width number characters into their ASCII equivalents,
+    /// e.g. `12。5` -> `12.5`.
+    fn normalize_input<'a>(&self, new_text: &'a str) -> Cow<'a, str> {
+        let normalized = if matches!(self.mask_pattern, MaskPattern::Number { .. }) {
+            normalize_number_input(new_text)
+        } else {
+            Cow::Borrowed(new_text)
+        };
+
+        if self.mode.is_single_line() && normalized.contains(['\n', '\r']) {
+            Cow::Owned(normalized.replace(['\n', '\r'], ""))
+        } else {
+            normalized
+        }
+    }
+
+    pub(super) fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
         if new_text.is_empty() {
             return true;
         }
@@ -2026,6 +2570,7 @@ impl InputState {
     /// Example: "(999)999-999" for phone numbers
     pub fn mask_pattern(mut self, pattern: impl Into<MaskPattern>) -> Self {
         self.mask_pattern = pattern.into();
+        self.mask_pattern_set = true;
         if let Some(placeholder) = self.mask_pattern.placeholder() {
             self.placeholder = placeholder.into();
         }
@@ -2039,6 +2584,7 @@ impl InputState {
         cx: &mut Context<Self>,
     ) {
         self.mask_pattern = pattern.into();
+        self.mask_pattern_set = true;
         if let Some(placeholder) = self.mask_pattern.placeholder() {
             self.placeholder = placeholder.into();
         }
@@ -2172,16 +2718,23 @@ impl InputState {
     ///
     /// Dropping the returned `Task` (stored in `parse_task`) cancels the
     /// parse, which naturally debounces rapid edits.
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(feature = "tree-sitter")]
     fn dispatch_background_parse(
         pending: super::mode::PendingBackgroundParse,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        const PARSE_DEBOUNCE: Duration = Duration::from_millis(150);
+
         let highlighter_rc = pending.highlighter;
         let parse_task_rc = pending.parse_task;
         let language = pending.language;
         let text = pending.text;
+        let is_folding = pending.is_folding;
 
         let old_tree = highlighter_rc
             .borrow()
@@ -2195,19 +2748,45 @@ impl InputState {
             .as_ref()
             .and_then(|h| h.injection_parse_data());
 
+        let cancel = Arc::new(AtomicBool::new(false));
+
         let text_for_apply = text.clone();
         let task = cx.spawn_in(window, async move |entity, cx| {
+            struct CancelOnDrop(Arc<AtomicBool>);
+            impl Drop for CancelOnDrop {
+                fn drop(&mut self) {
+                    self.0.store(true, Ordering::Relaxed);
+                }
+            }
+            let _cancel_guard = CancelOnDrop(cancel.clone());
+
+            // Debounce
+            cx.background_executor().timer(PARSE_DEBOUNCE).await;
+
+            let parse_cancel = cancel.clone();
             let result = cx
                 .background_executor()
                 .spawn(async move {
                     let Some(config) = LanguageRegistry::singleton().language(&language) else {
                         return None;
                     };
+                    let Some(grammar) = config.language.as_ref() else {
+                        return None;
+                    };
 
                     let mut parser = tree_sitter::Parser::new();
-                    if parser.set_language(&config.language).is_err() {
+                    if parser.set_language(grammar).is_err() {
                         return None;
                     }
+
+                    let mut progress = |_: &tree_sitter::ParseState| -> std::ops::ControlFlow<()> {
+                        if parse_cancel.load(Ordering::Relaxed) {
+                            std::ops::ControlFlow::Break(())
+                        } else {
+                            std::ops::ControlFlow::Continue(())
+                        }
+                    };
+                    let options = tree_sitter::ParseOptions::new().progress_callback(&mut progress);
 
                     let new_tree = parser.parse_with_options(
                         &mut |offset, _| {
@@ -2219,8 +2798,13 @@ impl InputState {
                             }
                         },
                         old_tree.as_ref(),
-                        None,
+                        Some(options),
                     )?;
+
+                    // Disrcard the partial result on cancel
+                    if parse_cancel.load(Ordering::Relaxed) {
+                        return None;
+                    }
 
                     // Compute injection layers in the background to avoid blocking the
                     // main thread with combined-injection parsing (e.g. PHP, HTML+JS/CSS).
@@ -2232,19 +2816,28 @@ impl InputState {
                         Default::default()
                     };
 
-                    Some((new_tree, injection_layers))
+                    // Walk the syntax tree to extract fold ranges off the main thread.
+                    let fold_ranges = if is_folding {
+                        crate::input::display_map::extract_fold_ranges(&new_tree)
+                    } else {
+                        Vec::new()
+                    };
+
+                    Some((new_tree, injection_layers, fold_ranges))
                 })
                 .await;
 
-            if let Some((new_tree, injection_layers)) = result {
+            if let Some((new_tree, injection_layers, fold_ranges)) = result {
                 if let Some(h) = highlighter_rc.borrow_mut().as_mut() {
                     h.apply_background_tree(new_tree, &text_for_apply, injection_layers);
                 }
 
-                // Trigger re-render so the new highlights are displayed.
-                // Also update fold candidates now that the tree is ready.
+                // Trigger re-render so the new highlights are displayed and
+                // apply the fold candidates extracted in the background.
                 _ = entity.update(cx, |state, cx| {
-                    state.update_fold_candidates();
+                    if is_folding {
+                        state.display_map.set_fold_candidates(fold_ranges);
+                    }
                     cx.notify();
                 });
             }
@@ -2253,7 +2846,7 @@ impl InputState {
         parse_task_rc.borrow_mut().replace(task);
     }
 
-    #[cfg(target_family = "wasm")]
+    #[cfg(not(feature = "tree-sitter"))]
     fn dispatch_background_parse(
         _pending: super::mode::PendingBackgroundParse,
         _window: &mut Window,
@@ -2320,6 +2913,12 @@ impl EntityInputHandler for InputState {
             self.pause_blink_cursor(cx);
         }
 
+        // NOTE: The normalization keeps the UTF-16 length, but may change the
+        // UTF-8 byte length, so all the byte-offset calculations below must
+        // use the normalized text.
+        let new_text = self.normalize_input(new_text);
+        let new_text: &str = &new_text;
+
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
@@ -2334,16 +2933,27 @@ impl EntityInputHandler for InputState {
 
         let mut new_offset = (range.start + new_text.len()).min(self.text.len());
 
+        // True if the mask has changed the text, e.g. regrouping the
+        // separators or completing a leading dot.
+        let mut mask_changed = false;
+
         if self.mode.is_single_line() {
             let pending_text = self.text.to_string();
-            // Check if the new text is valid
-            if !self.is_valid_input(&pending_text, cx) {
+            // Check if the new text is valid.
+            //
+            // Only reject the edit if the old text was valid, to avoid
+            // trapping a pre-existing invalid text (e.g. a `default_value`
+            // that does not conform), the user can still edit to fix it.
+            if !self.is_valid_input(&pending_text, cx)
+                && self.is_valid_input(&old_text.to_string(), cx)
+            {
                 self.text = old_text;
                 return;
             }
 
             if !self.mask_pattern.is_none() {
                 let mask_text = self.mask_pattern.mask(&pending_text);
+                mask_changed = mask_text.as_str() != pending_text;
                 self.text = Rope::from(mask_text.as_str());
                 let new_text_len =
                     (new_text.len() + mask_text.len()).saturating_sub(pending_text.len());
@@ -2351,7 +2961,19 @@ impl EntityInputHandler for InputState {
             }
         }
 
-        self.push_history(&old_text, &range, &new_text);
+        if mask_changed {
+            self.decorations.clear();
+        } else {
+            self.decorations.adjust_for_edit(&range, new_text.len());
+        }
+        if mask_changed {
+            // A segment-based history entry no longer matches the masked
+            // document, record a whole-document change instead, so that
+            // undo/redo can restore the text exactly.
+            self.push_history(&old_text, &(0..old_text.len()), &self.text.to_string());
+        } else {
+            self.push_history(&old_text, &range, &new_text);
+        }
         self.history.end_grouping();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
@@ -2364,7 +2986,7 @@ impl EntityInputHandler for InputState {
 
         let bg = self
             .mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
         if let Some(bg) = bg {
             Self::dispatch_background_parse(bg, window, cx);
         }
@@ -2400,6 +3022,10 @@ impl EntityInputHandler for InputState {
 
         self.lsp.reset();
 
+        // See the same NOTE in `replace_text_in_range`.
+        let new_text = self.normalize_input(new_text);
+        let new_text: &str = &new_text;
+
         let range = range_utf16
             .as_ref()
             .map(|range_utf16| self.range_from_utf16(range_utf16))
@@ -2414,12 +3040,16 @@ impl EntityInputHandler for InputState {
 
         if self.mode.is_single_line() {
             let pending_text = self.text.to_string();
-            if !self.is_valid_input(&pending_text, cx) {
+            // See the same NOTE in `replace_text_in_range`.
+            if !self.is_valid_input(&pending_text, cx)
+                && self.is_valid_input(&old_text.to_string(), cx)
+            {
                 self.text = old_text;
                 return;
             }
         }
 
+        self.decorations.adjust_for_edit(&range, new_text.len());
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -2431,7 +3061,7 @@ impl EntityInputHandler for InputState {
 
         let bg = self
             .mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
         if let Some(bg) = bg {
             Self::dispatch_background_parse(bg, window, cx);
         }
@@ -2446,8 +3076,11 @@ impl EntityInputHandler for InputState {
             self.ime_marked_range = Some((range.start..range.start + new_text.len()).into());
             self.selected_range = new_selected_range_utf16
                 .as_ref()
-                .map(|range_utf16| self.range_from_utf16(range_utf16))
-                .map(|new_range| new_range.start + range.start..new_range.end + range.end)
+                .map(|range_utf16| {
+                    let new_text = Rope::from(new_text);
+                    range.start + new_text.offset_utf16_to_offset(range_utf16.start)
+                        ..range.start + new_text.offset_utf16_to_offset(range_utf16.end)
+                })
                 .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len())
                 .into();
         }
@@ -2548,7 +3181,7 @@ impl Render for InputState {
         if self._pending_update {
             let bg = self
                 .mode
-                .update_highlighter(&(0..0), &self.text, "", false, cx);
+                .update_highlighter(&(0..0), &self.text, &self.text, "", false, cx);
             if let Some(bg) = bg {
                 Self::dispatch_background_parse(bg, window, cx);
             }
@@ -2562,7 +3195,7 @@ impl Render for InputState {
             .id("input-state")
             .flex_1()
             .when(self.mode.is_multi_line(), |this| this.h_full())
-            .flex_grow()
+            .flex_grow_1()
             .overflow_x_hidden()
             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
             .children(self.diagnostic_popover.clone())
@@ -2574,6 +3207,7 @@ impl Render for InputState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::theme::Theme;
     use gpui::{TestAppContext, VisualTestContext};
 
@@ -2585,6 +3219,13 @@ mod tests {
     /// Helper to create an InputState in a window for testing
     impl InputView {
         pub fn new(cx: &mut TestAppContext) -> Self {
+            Self::build(cx, |state| state.code_editor("sql"))
+        }
+
+        pub fn build(
+            cx: &mut TestAppContext,
+            f: impl FnOnce(InputState) -> InputState + 'static,
+        ) -> Self {
             let mut input: Option<Entity<InputState>> = None;
 
             let window = cx.update(|cx| {
@@ -2594,7 +3235,7 @@ mod tests {
                     // Initialize input keybindings
                     super::super::init(cx);
 
-                    input = Some(cx.new(|cx| InputState::new(window, cx).code_editor("sql")));
+                    input = Some(cx.new(|cx| f(InputState::new(window, cx))));
 
                     cx.new(|cx| crate::Root::new(input.clone().unwrap(), window, cx))
                 })
@@ -2724,5 +3365,579 @@ ORDER BY id
              Before: {:?}\nAfter: {:?}",
             colored_before, colored_after
         );
+    }
+
+    /// Regression test: `scroll_to` at end-of-buffer must produce a deferred
+    /// scroll target within the safe scroll range, so the painted frame
+    /// matches what `update_scroll_offset` persists (no jitter). A small
+    /// `cursor_surrounding_lines` override used to mismatch the hardcoded
+    /// 3-line edge clearance in `scroll_to`, overshooting `safe_y_min`.
+    #[gpui::test]
+    fn test_scroll_to_eob_does_not_overshoot_safe_range(cx: &mut TestAppContext) {
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // JetBrains-style: 1 trailing empty row + 1-line cursor surrounding.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_scroll_beyond_last_line(Some(1), window, cx);
+                state.set_cursor_surrounding_lines(Some(1), window, cx);
+                let text: String = (1..=50)
+                    .map(|i| format!("line {i}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                state.set_value(text, window, cx);
+            });
+        });
+        cx.run_until_parked();
+
+        // Sanity: paint populated `scroll_size` and `input_bounds` — without
+        // these, `safe_y_min` below collapses to 0 and the assertion is vacuous.
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert!(
+                    state.scroll_size.height > px(0.),
+                    "scroll_size not populated by initial paint"
+                );
+                assert!(
+                    state.input_bounds.size.height > px(0.),
+                    "input_bounds not populated by initial paint"
+                );
+            });
+        });
+
+        // Move cursor to end with downward direction — same code path as a
+        // `Down` keystroke at EOB. `scroll_to` runs synchronously inside
+        // `move_to`; inspect `deferred_scroll_offset` in the same closure
+        // before the next paint consumes and clears it.
+        cx.update(|_, cx| {
+            input.update(cx, |state, cx| {
+                let end = state.text.len();
+                state.move_to(end, Some(MoveDirection::Down), cx);
+
+                let deferred = state
+                    .deferred_scroll_offset
+                    .expect("scroll_to should populate deferred_scroll_offset");
+                let safe_y_min =
+                    (-state.scroll_size.height + state.input_bounds.size.height).min(px(0.));
+
+                assert!(
+                    deferred.y >= safe_y_min,
+                    "deferred_scroll_offset.y = {:?} below safe_y_min = {:?} \
+                     — paint would jitter (Bug C regression)",
+                    deferred.y,
+                    safe_y_min,
+                );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_step(cx: &mut TestAppContext) {
+        let input = InputView::build(cx, |state| state).input;
+
+        cx.update(|cx| {
+            input.update(cx, |_state, cx| {
+                assert_eq!(
+                    NumberStep::from(5.).value(123., StepAction::Increment, cx),
+                    5.
+                );
+
+                // The step can differ by direction at a boundary: at 1.0 it
+                // is 0.1 going down and 0.5 going up.
+                let step = NumberStep::by_value(|value, action, _cx| {
+                    let below = match action {
+                        StepAction::Increment => value < 1.0,
+                        StepAction::Decrement => value <= 1.0,
+                    };
+                    if below { 0.1 } else { 0.5 }
+                });
+                assert_eq!(step.value(0.5, StepAction::Increment, cx), 0.1);
+                assert_eq!(step.value(1.0, StepAction::Increment, cx), 0.5);
+                assert_eq!(step.value(1.0, StepAction::Decrement, cx), 0.1);
+                assert_eq!(step.value(2.0, StepAction::Decrement, cx), 0.5);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_normalization(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: None,
+                fraction: None,
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Full-width digits and the ideographic full stop are normalized,
+        // and the cursor is at the end (in normalized bytes, not the
+        // original 12 bytes).
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "12。5", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert_eq!(state.value(), "12.5");
+                let cursor: Range<usize> = state.selected_range.into();
+                assert_eq!(cursor, 4..4);
+            });
+        });
+
+        // Non-numeric input is rejected.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "abc", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert_eq!(state.value(), "12.5");
+            });
+        });
+
+        // A bare leading dot is kept as-is (normalized from the ideographic
+        // full stop), not completed to "0.", so it stays editable.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                let range = state.range_to_utf16(&(0..state.text.len()));
+                state.replace_text_in_range(Some(range), "。", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert_eq!(state.value(), ".");
+                let cursor: Range<usize> = state.selected_range.into();
+                assert_eq!(cursor, 1..1);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_normalization_with_separator(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: Some(','),
+                fraction: Some(2),
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "1234", window, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert_eq!(state.value(), "1,234");
+                assert_eq!(state.unmask_value(), "1234");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_clamp_on_blur(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state
+                .mask_pattern(MaskPattern::Number {
+                    separator: None,
+                    fraction: None,
+                })
+                .min(10.)
+                .max(100.)
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Out-of-range values are allowed while typing, and clamped on blur.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "1000", window, cx);
+                assert_eq!(state.value(), "1000");
+                state.clamp_number_value(window, cx);
+                assert_eq!(state.value(), "100");
+
+                let range = state.range_to_utf16(&(0..state.text.len()));
+                state.replace_text_in_range(Some(range), "1", window, cx);
+                assert_eq!(state.value(), "1");
+                state.clamp_number_value(window, cx);
+                assert_eq!(state.value(), "10");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_undo_with_mask(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: Some(','),
+                fraction: None,
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // When the mask changes the text (regrouping separators), a
+        // whole-document change is recorded, so undo/redo can restore it.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "1234", window, cx);
+                assert_eq!(state.value(), "1,234");
+                state.replace_text_in_range(None, "5", window, cx);
+                assert_eq!(state.value(), "12,345");
+
+                // The two edits are grouped into one undo step (by the
+                // history group interval). Before the whole-document history
+                // fix, this undo produced a corrupted value like "1,2344".
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "12,345");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_leading_dot_editable(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: None,
+                fraction: None,
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "1.2", window, cx);
+
+                // Delete the integer part "1": the value keeps the leading dot
+                // (".2"), not completed to "0.2", so the digits before the dot
+                // stay editable.
+                let range = state.range_to_utf16(&(0..1));
+                state.replace_text_in_range(Some(range), "", window, cx);
+                assert_eq!(state.value(), ".2");
+                let cursor: Range<usize> = state.selected_range.into();
+                assert_eq!(cursor, 0..0);
+
+                // The user can type a new integer part.
+                state.replace_text_in_range(Some(0..0), "3", window, cx);
+                assert_eq!(state.value(), "3.2");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_number_input_escape_invalid_text(cx: &mut TestAppContext) {
+        // A pre-existing invalid text (e.g. a `default_value` that does not
+        // conform) must not trap the user, the edit is allowed to fix it.
+        let input_view = InputView::build(cx, |state| {
+            state
+                .mask_pattern(MaskPattern::Number {
+                    separator: None,
+                    fraction: None,
+                })
+                .default_value("1,234")
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // Delete the last char, the pending text "1,23" is still
+                // invalid, but the edit is allowed since the old text was
+                // already invalid.
+                let range = state.range_to_utf16(&(4..5));
+                state.replace_text_in_range(Some(range), "", window, cx);
+                assert_eq!(state.value(), "1,23");
+
+                // Once the text becomes valid, the validation works as usual.
+                let range = state.range_to_utf16(&(1..2));
+                state.replace_text_in_range(Some(range), "", window, cx);
+                assert_eq!(state.value(), "123");
+                state.replace_text_in_range(None, "a", window, cx);
+                assert_eq!(state.value(), "123");
+            });
+        });
+    }
+
+    /// After `set_value` on a single-line input the caret sits at the end (like
+    /// HTML `<input>`), yet the view is scrolled back to the start so a long
+    /// value shows its beginning instead of its tail.
+    #[gpui::test]
+    fn test_set_value_single_line_caret_at_end_view_at_start(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Long enough to overflow any reasonable single-line input width.
+        let value = format!("https://example.com/v1/users?{}", "x=1&".repeat(120));
+        let len = value.len();
+
+        // Right after `set_value`, before the next paint consumes the deferred
+        // offset: caret is at the end, and the view is forced back to the start.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value(value.clone(), window, cx);
+
+                assert_eq!(
+                    state.selected_range,
+                    Selection::new(len, len),
+                    "single-line caret should be at the end after set_value"
+                );
+                assert_eq!(
+                    state.deferred_scroll_offset,
+                    Some(point(px(0.), px(0.))),
+                    "the view should be forced back to the start"
+                );
+            });
+        });
+
+        // After a paint, the steady-state view stays at the start (x == 0) even
+        // though the caret is at the far end.
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert!(
+                    state.scroll_size.width > state.input_bounds.size.width,
+                    "value must overflow the input width or this test is vacuous"
+                );
+                assert_eq!(
+                    state.scroll_handle.offset().x,
+                    px(0.),
+                    "long value should display from its start, not its tail"
+                );
+            });
+        });
+    }
+
+    /// `replace_all` on a single-line input replaces the text, puts the
+    /// caret at the end, and — like `set_value` — snaps the view back to the
+    /// start so a long value shows its beginning instead of its tail.
+    #[gpui::test]
+    fn test_replace_all_single_line(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        // Long enough to overflow any reasonable single-line input width.
+        let value = format!("https://example.com/v1/users?{}", "x=1&".repeat(120));
+        let len = value.len();
+
+        // Right after `replace_all`, before the next paint consumes the
+        // deferred offset: caret is at the end, and the view is forced back
+        // to the start.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("hello", window, cx);
+                state.replace_all(value.clone(), window, cx);
+                assert_eq!(state.value(), value);
+                assert_eq!(
+                    state.selected_range,
+                    Selection::new(len, len),
+                    "single-line caret should be at the end after replace_all"
+                );
+                assert_eq!(
+                    state.scroll_handle.offset(),
+                    point(px(0.), px(0.)),
+                    "the scroll offset should be reset to the start"
+                );
+                assert_eq!(
+                    state.deferred_scroll_offset,
+                    Some(point(px(0.), px(0.))),
+                    "single-line should set a deferred scroll offset to keep the start visible"
+                );
+            });
+        });
+
+        // After a paint, the steady-state view stays at the start (x == 0)
+        // even though the caret is at the far end.
+        cx.run_until_parked();
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert!(
+                    state.scroll_size.width > state.input_bounds.size.width,
+                    "value must overflow the input width or this test is vacuous"
+                );
+                assert_eq!(
+                    state.scroll_handle.offset().x,
+                    px(0.),
+                    "long value should display from its start, not its tail"
+                );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_single_line_removes_newlines(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.default_value("default\nvalue"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                assert_eq!(state.value(), "defaultvalue");
+
+                state.set_value("first\nsecond\r\nthird\rfourth", window, cx);
+                assert_eq!(state.value(), "firstsecondthirdfourth");
+
+                state.set_value("", window, cx);
+                state.insert("a\nb", window, cx);
+                assert_eq!(state.value(), "ab");
+            });
+
+            cx.write_to_clipboard(ClipboardItem::new_string("a\r\nb\nc\rd".to_string()));
+            input.update(cx, |state, cx| {
+                state.set_value("", window, cx);
+                state.paste(&Paste, window, cx);
+                assert_eq!(state.value(), "abcd");
+            });
+        });
+
+        cx.run_until_parked();
+    }
+
+    /// `replace_all` on a multi-line (non-code-editor) input clears the
+    /// selection to `0..0` and resets the scroll offset, but does not set a
+    /// deferred scroll offset (single-line only).
+    #[gpui::test]
+    fn test_replace_all_multi_line(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.multi_line(true));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("foo\nbar", window, cx);
+                state.replace_all("baz\nqux", window, cx);
+                assert_eq!(state.value(), "baz\nqux");
+                assert_eq!(
+                    state.selected_range,
+                    Selection::new(0, 0),
+                    "multi-line selection should be cleared after replace_all"
+                );
+                assert_eq!(
+                    state.scroll_handle.offset(),
+                    point(px(0.), px(0.)),
+                    "the scroll offset should be reset to the start"
+                );
+                assert!(
+                    state.deferred_scroll_offset.is_none(),
+                    "multi-line should not set a deferred scroll offset"
+                );
+            });
+        });
+    }
+
+    /// Unlike `set_value`, `replace_all` records the change so the user can
+    /// undo it back to the previous text and redo to the new text.
+    #[gpui::test]
+    fn test_replace_all_preserves_undo_history(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // Seed with a value and clear history so the baseline is clean.
+                state.set_value("first", window, cx);
+                assert!(
+                    state.history.undos().is_empty(),
+                    "history should be empty after set_value"
+                );
+
+                // replace_all records a single undoable change.
+                state.replace_all("second", window, cx);
+                assert_eq!(state.value(), "second");
+                assert!(
+                    !state.history.undos().is_empty(),
+                    "replace_all should record an undo step"
+                );
+
+                // Undo restores the previous text.
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "first");
+
+                // Redo reapplies the replacement.
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "second");
+            });
+        });
+    }
+
+    /// `replace_all` on a code editor marks a pending update and resets LSP
+    /// state, so diagnostics/completions refresh against the new text.
+    #[gpui::test]
+    fn test_replace_all_code_editor(cx: &mut TestAppContext) {
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                // Plant a pending-update flag and some LSP state to verify reset.
+                state.set_value("select 1", window, cx);
+                state._pending_update = false;
+
+                state.replace_all("select 2", window, cx);
+                assert_eq!(state.value(), "select 2");
+                assert!(
+                    state._pending_update,
+                    "replace_all on a code editor should request a pending update"
+                );
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_set_selected_range(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.default_value("hello world"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|_, cx| {
+            input.update(cx, |s, cx| {
+                s.set_selected_range(0..5, cx);
+                assert_eq!(s.selected_range(), 0..5);
+                assert_eq!(s.selected_text().to_string(), "hello");
+
+                s.set_selected_range(6..11, cx);
+                assert_eq!(s.selected_text().to_string(), "world");
+
+                // clamped + collapsed
+                s.set_selected_range(100..100, cx);
+                assert_eq!(s.selected_range(), 11..11);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_ime_selection_is_relative_to_replacement_start(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.default_value("你好 "));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_selected_range(7..7, cx);
+                state.replace_and_mark_text_in_range(None, "s", Some(1..1), window, cx);
+                state.replace_and_mark_text_in_range(None, "sh", Some(2..2), window, cx);
+
+                assert_eq!(state.value(), "你好 sh");
+                assert_eq!(state.selected_range(), 9..9);
+                assert_eq!(state.ime_marked_range, Some((7..9).into()));
+            });
+        });
     }
 }

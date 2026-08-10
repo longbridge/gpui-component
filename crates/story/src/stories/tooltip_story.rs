@@ -1,6 +1,7 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding, ParentElement,
     Render, StatefulInteractiveElement as _, Styled, Window, actions, div,
+    prelude::FluentBuilder as _,
 };
 
 use gpui_component::{
@@ -26,6 +27,7 @@ pub fn init(cx: &mut App) {
 
 pub struct TooltipStory {
     focus_handle: gpui::FocusHandle,
+    removable_button_visible: bool,
 }
 
 impl TooltipStory {
@@ -36,6 +38,7 @@ impl TooltipStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            removable_button_visible: true,
         }
     }
 }
@@ -68,7 +71,7 @@ impl Render for TooltipStory {
     fn render(
         &mut self,
         _: &mut gpui::Window,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         v_flex()
             .w_full()
@@ -142,6 +145,34 @@ impl Render for TooltipStory {
                             .build(window, cx)
                     },
                 )),
+            )
+            .child(
+                section("Tooltip trigger removed on click").child(
+                    h_flex()
+                        .gap_2()
+                        .when(self.removable_button_visible, |this| {
+                            this.child(
+                                Button::new("remove-tooltip-trigger")
+                                    .danger()
+                                    .label("Remove me")
+                                    .tooltip("Clicking this button removes the trigger.")
+                                    .on_click(cx.listener(|story, _, _, cx| {
+                                        story.removable_button_visible = false;
+                                        cx.notify();
+                                    })),
+                            )
+                        })
+                        .when(!self.removable_button_visible, |this| {
+                            this.child(
+                                Button::new("restore-tooltip-trigger")
+                                    .label("Restore button")
+                                    .on_click(cx.listener(|story, _, _, cx| {
+                                        story.removable_button_visible = true;
+                                        cx.notify();
+                                    })),
+                            )
+                        }),
+                ),
             )
     }
 }

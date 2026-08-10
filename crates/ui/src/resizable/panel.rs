@@ -6,10 +6,13 @@ use std::{
 use gpui::{
     Along, AnyElement, App, AppContext, Axis, Bounds, Context, Element, ElementId, Empty, Entity,
     EventEmitter, InteractiveElement as _, IntoElement, IsZero as _, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Render, RenderOnce, Style, Styled, Window, div, prelude::FluentBuilder,
+    ParentElement, Pixels, Render, RenderOnce, Style, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder,
 };
 
-use crate::{AxisExt, ElementExt, h_flex, resizable::PANEL_MIN_SIZE, v_flex};
+use crate::{
+    AxisExt, ElementExt, h_flex, resizable::PANEL_MIN_SIZE, styled::StyledExt as _, v_flex,
+};
 
 use super::{ResizableState, resizable_panel, resize_handle};
 
@@ -177,6 +180,32 @@ impl RenderOnce for ResizablePanelGroup {
 }
 
 /// A resizable panel inside a [`ResizablePanelGroup`].
+///
+/// Implements [`Styled`], so call sites can override the panel's
+/// rendered styles. User overrides are applied **between** the panel's
+/// flex defaults and its size management — the caller can override the
+/// internal `flex_grow: 1` (e.g. via `.flex_none()`) and add their own
+/// padding / colors / borders, while the panel's runtime size
+/// constraints (`min_w`/`max_w`/`flex_basis` driven by `ResizableState`)
+/// always win.
+///
+/// A common override is `.flex_none()`: the panel sets `flex_grow: 1`
+/// internally, so a sized panel that should hold its width when a
+/// sibling collapses needs to opt out of growth via `.flex_none()`.
+///
+/// ```ignore
+/// h_resizable("layout")
+///     .child(resizable_panel().size(px(220.)).flex_none().child(sidebar))
+///     .child(resizable_panel().child(content))                // flex
+///     .child(resizable_panel().size(px(280.)).flex_none().child(metadata))
+/// ```
+///
+/// **Reserved styles**: do not call these from outside — they fight the
+/// panel's own layout management:
+/// - `.flex_basis(...)` — driven by `ResizableState`, not by the caller.
+/// - `.absolute()` — would remove the panel from the resizable's flex flow.
+/// - `.overflow_hidden()` — may clip the resize handle, which is positioned
+///   absolute at `left: -4px` of each panel after the first.
 #[derive(IntoElement)]
 pub struct ResizablePanel {
     axis: Axis,
@@ -188,6 +217,7 @@ pub struct ResizablePanel {
     size_range: Range<Pixels>,
     children: Vec<AnyElement>,
     visible: bool,
+    style: StyleRefinement,
 }
 
 impl ResizablePanel {
@@ -201,6 +231,7 @@ impl ResizablePanel {
             axis: Axis::Horizontal,
             children: vec![],
             visible: true,
+            style: StyleRefinement::default(),
         }
     }
 
@@ -222,6 +253,12 @@ impl ResizablePanel {
     pub fn size_range(mut self, range: impl Into<Range<Pixels>>) -> Self {
         self.size_range = range.into();
         self
+    }
+}
+
+impl Styled for ResizablePanel {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
     }
 }
 
@@ -250,9 +287,17 @@ impl RenderOnce for ResizablePanel {
         div()
             .id(("resizable-panel", self.panel_ix))
             .flex()
-            .flex_grow()
+            .flex_grow_1()
             .size_full()
             .relative()
+            // Apply caller style overrides here — between the flex defaults
+            // above and the size management below. This lets callers cancel
+            // the unconditional `.flex_grow_1()` (via `.flex_none()`, the load-
+            // bearing case for sized panels next to a collapsing sibling) and
+            // add their own padding / colors / borders, while keeping the
+            // panel's runtime size constraints (min/max + `flex_basis` driven
+            // by `ResizableState`) authoritative.
+            .refine_style(&self.style)
             .when(self.axis.is_vertical(), |this| {
                 this.min_h(size_range.start).max_h(size_range.end)
             })
@@ -262,7 +307,7 @@ impl RenderOnce for ResizablePanel {
             // 1. initial_size is None, to use auto size.
             // 2. initial_size is Some and size is none, to use the initial size of the panel for first time render.
             // 3. initial_size is Some and size is Some, use `size`.
-            .when(self.initial_size.is_none(), |this| this.flex_shrink())
+            .when(self.initial_size.is_none(), |this| this.flex_shrink_1())
             .when_some(self.initial_size, |this, initial_size| {
                 // The `self.size` is None, that mean the initial size for the panel,
                 // so we need set `flex_shrink_0` To let it keep the initial size.
@@ -374,12 +419,18 @@ impl Element for ResizePanelGroupElement {
                     let panel = state.panels.get(ix).expect("BUG: invalid panel index");
 
                     match axis {
-                        Axis::Horizontal => {
-                            state.resize_panel(ix, e.position.x - panel.bounds.left(), window, cx)
-                        }
-                        Axis::Vertical => {
-                            state.resize_panel(ix, e.position.y - panel.bounds.top(), window, cx);
-                        }
+                        Axis::Horizontal => state.resize_panel_at_handle(
+                            ix,
+                            e.position.x - panel.bounds.left(),
+                            window,
+                            cx,
+                        ),
+                        Axis::Vertical => state.resize_panel_at_handle(
+                            ix,
+                            e.position.y - panel.bounds.top(),
+                            window,
+                            cx,
+                        ),
                     }
                     cx.notify();
                 })

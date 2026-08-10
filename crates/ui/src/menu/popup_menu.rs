@@ -7,8 +7,8 @@ use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
     Action, Anchor, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Edges, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
-    WeakEntity, Window, anchored, div, prelude::FluentBuilder, px, rems,
+    ParentElement, Pixels, Render, Role, ScrollHandle, SharedString, StatefulInteractiveElement,
+    Styled, WeakEntity, Window, anchored, deferred, div, prelude::FluentBuilder, px, rems,
 };
 use gpui::{ClickEvent, Half, MouseDownEvent, OwnedMenuItem, Point, Subscription};
 
@@ -268,6 +268,15 @@ impl PopupMenuItem {
             _ => false,
         }
     }
+
+    fn a11y_label(&self) -> Option<SharedString> {
+        match self {
+            PopupMenuItem::Item { label, .. }
+            | PopupMenuItem::Label(label)
+            | PopupMenuItem::Submenu { label, .. } => Some(label.clone()),
+            PopupMenuItem::Separator | PopupMenuItem::ElementItem { .. } => None,
+        }
+    }
 }
 
 pub struct PopupMenu {
@@ -275,6 +284,10 @@ pub struct PopupMenu {
     pub(crate) menu_items: Vec<PopupMenuItem>,
     /// The focus handle of Entity to handle actions.
     pub(crate) action_context: Option<FocusHandle>,
+    /// The focus to restore on dismiss. Unlike `action_context`, this does not
+    /// change where actions are dispatched: they still bubble from the menu's
+    /// own focus path (through the trigger element's ancestors).
+    pub(crate) previous_focus_handle: Option<FocusHandle>,
     selected_index: Option<usize>,
     min_width: Option<Pixels>,
     max_width: Option<Pixels>,
@@ -291,6 +304,19 @@ pub struct PopupMenu {
     // This will update on render
     submenu_anchor: (Anchor, Pixels),
 
+    /// Paint priority for this menu layer. The top-level menu starts at 1 and
+    /// each nested submenu increments it, so deeper levels are always drawn on
+    /// top of shallower ones. This fixes background content (e.g. the
+    /// underlying list) bleeding through multi-level submenus, which happens
+    /// when nested `anchored` popovers share the same paint order.
+    ///
+    /// The top-level menu relies on its container (e.g. `Popover`,
+    /// `ContextMenu`) to `deferred`-draw it, and each submenu is deferred once
+    /// in `render_item` with `priority + 1`. Keeping a single deferred layer
+    /// per level matters because GPUI caps nested deferred depth (see
+    /// `prepaint_deferred_draws`).
+    priority: usize,
+
     _subscriptions: Vec<Subscription>,
 }
 
@@ -299,6 +325,7 @@ impl PopupMenu {
         Self {
             focus_handle: cx.focus_handle(),
             action_context: None,
+            previous_focus_handle: None,
             parent_menu: None,
             menu_items: Vec::new(),
             selected_index: None,
@@ -312,6 +339,7 @@ impl PopupMenu {
             external_link_icon: true,
             size: Size::default(),
             submenu_anchor: (Anchor::TopLeft, Pixels::ZERO),
+            priority: 1,
             _subscriptions: vec![],
         }
     }
@@ -321,25 +349,7 @@ impl PopupMenu {
         cx: &mut App,
         f: impl FnOnce(Self, &mut Window, &mut Context<PopupMenu>) -> Self,
     ) -> Entity<Self> {
-        let menu = cx.new(|cx| f(Self::new(cx), window, cx));
-
-        // Let the submenus know their parent, so that they can dismiss the
-        // entire menu chain.
-        //
-        // This is done here, because [`PopupMenuItem::submenu`] has no way to
-        // know the parent menu at the time the item is created.
-        let parent_menu = menu.downgrade();
-        menu.update(cx, |this, cx| {
-            for item in this.menu_items.iter() {
-                if let PopupMenuItem::Submenu { menu, .. } = item {
-                    menu.update(cx, |submenu, _| {
-                        submenu.parent_menu = Some(parent_menu.clone());
-                    });
-                }
-            }
-        });
-
-        menu
+        cx.new(|cx| f(Self::new(cx), window, cx))
     }
 
     /// Set the focus handle of Entity to handle actions.
@@ -350,6 +360,40 @@ impl PopupMenu {
     pub fn action_context(mut self, handle: FocusHandle) -> Self {
         self.action_context = Some(handle);
         self
+    }
+
+    pub(crate) fn set_action_context(
+        &mut self,
+        action_context: Option<FocusHandle>,
+        cx: &mut Context<Self>,
+    ) {
+        self.action_context = action_context.clone();
+
+        for item in &self.menu_items {
+            if let PopupMenuItem::Submenu { menu, .. } = item {
+                menu.update(cx, |menu, cx| {
+                    menu.set_action_context(action_context.clone(), cx);
+                });
+            }
+        }
+    }
+
+    /// Set the focus to restore when the menu is dismissed, without changing
+    /// where actions are dispatched.
+    pub(crate) fn set_previous_focus(
+        &mut self,
+        handle: Option<FocusHandle>,
+        cx: &mut Context<Self>,
+    ) {
+        self.previous_focus_handle = handle.clone();
+
+        for item in &self.menu_items {
+            if let PopupMenuItem::Submenu { menu, .. } = item {
+                menu.update(cx, |menu, cx| {
+                    menu.set_previous_focus(handle.clone(), cx);
+                });
+            }
+        }
     }
 
     /// Set min width of the popup menu, default is 120px
@@ -640,6 +684,13 @@ impl PopupMenu {
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
         let submenu = PopupMenu::build(window, cx, f);
+        let parent_menu = cx.entity().downgrade();
+        let parent_priority = self.priority;
+        submenu.update(cx, |view, _| {
+            view.parent_menu = Some(parent_menu);
+            view.priority = parent_priority + 1;
+        });
+
         self.menu_items.push(
             PopupMenuItem::submenu(label, submenu).when_some(icon, |this, icon| this.icon(icon)),
         );
@@ -653,10 +704,36 @@ impl PopupMenu {
         self
     }
 
-    /// Use small size, the menu item will have smaller height.
-    pub(crate) fn small(mut self) -> Self {
-        self.size = Size::Small;
-        self
+    /// Replace all menu items by re-running a builder on this menu, keeping its
+    /// identity (focus, parent menu, layer priority).
+    ///
+    /// For menus whose content arrives asynchronously after the menu is shown,
+    /// e.g. swapping a "loading…" placeholder for the loaded items:
+    ///
+    /// ```ignore
+    /// cx.spawn_in(window, async move |menu, cx| {
+    ///     let items = fetch_items().await;
+    ///     _ = menu.update_in(cx, |menu, window, cx| {
+    ///         menu.rebuild(window, cx, |menu, _, _| {
+    ///             items.into_iter().fold(menu, |menu, item| {
+    ///                 menu.menu(item.label, Box::new(item.action))
+    ///             })
+    ///         });
+    ///     });
+    /// })
+    /// .detach();
+    /// ```
+    pub fn rebuild(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        f: impl FnOnce(Self, &mut Window, &mut Context<Self>) -> Self,
+    ) {
+        let mut menu = std::mem::replace(self, Self::new(cx));
+        menu.menu_items.clear();
+        menu.selected_index = None;
+        *self = f(menu, window, cx);
+        cx.notify();
     }
 
     fn add_menu_item(
@@ -952,9 +1029,19 @@ impl PopupMenu {
         self.selected_index = None;
         cx.emit(DismissEvent);
 
-        // Focus back to the previous focused handle.
-        if let Some(action_context) = self.action_context.as_ref() {
-            window.focus(action_context, cx);
+        // Focus back to the previous focused handle, unless the item's click
+        // handler has already moved focus elsewhere (e.g. opened a dialog and
+        // focused its input) -- stealing focus back would break that.
+        let focus_moved_away =
+            window.focused(cx).is_some() && !self.focus_handle.contains_focused(window, cx);
+        if !focus_moved_away {
+            if let Some(handle) = self
+                .previous_focus_handle
+                .as_ref()
+                .or(self.action_context.as_ref())
+            {
+                window.focus(handle, cx);
+            }
         }
 
         let Some(parent_menu) = self.parent_menu.clone() else {
@@ -1013,6 +1100,7 @@ impl PopupMenu {
         match self
             .action_context
             .as_ref()
+            .or(self.previous_focus_handle.as_ref())
             .and_then(|handle| Kbd::binding_for_action_in(action.as_ref(), handle, window))
         {
             Some(kbd) => Some(kbd),
@@ -1117,7 +1205,8 @@ impl PopupMenu {
                 }
 
                 cx.notify();
-            }));
+            }))
+            .when_some(item.a11y_label(), |this, label| this.aria_label(label));
 
         match item {
             PopupMenuItem::Separator => this
@@ -1257,18 +1346,21 @@ impl PopupMenu {
                         let (anchor, left) = self.submenu_anchor;
                         let is_bottom_pos =
                             matches!(anchor, Anchor::BottomLeft | Anchor::BottomRight);
-                        anchored()
-                            .anchor(anchor)
-                            .child(
-                                div()
-                                    .id("submenu")
-                                    .occlude()
-                                    .when(is_bottom_pos, |this| this.bottom_0())
-                                    .when(!is_bottom_pos, |this| this.top_neg_1())
-                                    .left(left)
-                                    .child(menu.clone()),
-                            )
-                            .snap_to_window_with_margin(Edges::all(EDGE_PADDING))
+                        deferred(
+                            anchored()
+                                .anchor(anchor)
+                                .child(
+                                    div()
+                                        .id("submenu")
+                                        .occlude()
+                                        .when(is_bottom_pos, |this| this.bottom_0())
+                                        .when(!is_bottom_pos, |this| this.top_neg_1())
+                                        .left(left)
+                                        .child(menu.clone()),
+                                )
+                                .snap_to_window_with_margin(Edges::all(EDGE_PADDING)),
+                        )
+                        .with_priority(self.priority + 1)
                     })
                 }),
         }
@@ -1294,6 +1386,24 @@ impl Render for PopupMenu {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.update_submenu_menu_anchor(window);
 
+        // Submenus attached via the public `item()` + `PopupMenuItem::submenu()`
+        // path (from contexts that only have the menu value, e.g. a table
+        // delegate's `context_menu`) have no parent wired at construction time.
+        // Wire them here so the dismiss chain, click-outside checks and keyboard
+        // navigation treat them the same as `submenu()`-built children.
+        let parent = cx.entity().downgrade();
+        let parent_priority = self.priority;
+        for item in &self.menu_items {
+            if let PopupMenuItem::Submenu { menu, .. } = item {
+                if menu.read(cx).parent_menu.is_none() {
+                    menu.update(cx, |menu, _| {
+                        menu.parent_menu = Some(parent.clone());
+                        menu.priority = parent_priority + 1;
+                    });
+                }
+            }
+        }
+
         let view = cx.entity().clone();
         let items_count = self.menu_items.len();
 
@@ -1316,6 +1426,7 @@ impl Render for PopupMenu {
 
         v_flex()
             .id("popup-menu")
+            .role(Role::Menu)
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::select_up))
@@ -1356,5 +1467,31 @@ impl Render for PopupMenu {
                 // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will cannot be displayed.
                 this.vertical_scrollbar(&self.scroll_handle)
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn popup_menu_item_a11y_label_uses_visible_label(cx: &mut gpui::TestAppContext) {
+        let submenu = cx.update(|cx| cx.new(|cx| PopupMenu::new(cx)));
+
+        assert_eq!(PopupMenuItem::new("Open").a11y_label(), Some("Open".into()));
+        assert_eq!(
+            PopupMenuItem::link("Docs", "https://example.com").a11y_label(),
+            Some("Docs".into())
+        );
+        assert_eq!(
+            PopupMenuItem::label("Recent files").a11y_label(),
+            Some("Recent files".into())
+        );
+        assert_eq!(
+            PopupMenuItem::submenu("More", submenu).a11y_label(),
+            Some("More".into())
+        );
+        assert_eq!(PopupMenuItem::separator().a11y_label(), None);
+        assert_eq!(PopupMenuItem::element(|_, _| div()).a11y_label(), None);
     }
 }

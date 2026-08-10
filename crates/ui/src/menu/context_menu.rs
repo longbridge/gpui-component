@@ -15,6 +15,7 @@ pub trait ContextMenuExt: InteractiveElement + ParentElement + Styled {
     ///
     /// This will changed the element to be `relative` positioned, and add a child `ContextMenu` element.
     /// Because the `ContextMenu` element is positioned `absolute`, it will not affect the layout of the parent element.
+    #[track_caller]
     fn context_menu(
         mut self,
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
@@ -22,14 +23,15 @@ pub trait ContextMenuExt: InteractiveElement + ParentElement + Styled {
     where
         Self: Sized,
     {
-        // Generate a unique ID based on the element's memory address to ensure
-        // each context menu has its own state and doesn't share with others
+        // The ID must be stable across renders, otherwise the element state
+        // (open menu) is lost on every re-render.
+        let caller = std::panic::Location::caller();
         let id = self
             .interactivity()
             .element_id
             .clone()
-            .map(|id| format!("context-menu-{:?}", id))
-            .unwrap_or_else(|| format!("context-menu-{:p}", &self as *const _));
+            .map(|id| ElementId::Name(format!("context-menu-{:?}", id).into()))
+            .unwrap_or_else(|| ElementId::CodeLocation(*caller));
         ContextMenu::new(id, self).menu(f)
     }
 }
@@ -277,6 +279,18 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                         && event.button == MouseButton::Right
                         && hitbox.is_hovered(window)
                     {
+                        // Capture the focused element to restore focus to on dismiss.
+                        // If focus is still on the previous menu, keep its captured focus.
+                        let previous_focus_handle = window.focused(cx).and_then(|focused| {
+                            let shared_state = shared_state.borrow();
+                            match shared_state.menu_view.as_ref() {
+                                Some(menu) if menu.read(cx).focus_handle == focused => {
+                                    menu.read(cx).previous_focus_handle.clone()
+                                }
+                                _ => Some(focused),
+                            }
+                        });
+
                         {
                             let mut shared_state = shared_state.borrow_mut();
                             // Clear any existing menu view to allow immediate replacement
@@ -297,6 +311,9 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                                         return menu;
                                     };
                                     build(menu, window, cx)
+                                });
+                                menu.update(cx, |menu, cx| {
+                                    menu.set_previous_focus(previous_focus_handle, cx);
                                 });
 
                                 // Set up the subscription for dismiss handling
@@ -321,5 +338,108 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                 });
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::Theme;
+    use gpui::{
+        Context, FocusHandle, IntoElement, Render, TestAppContext, VisualTestContext, actions,
+        point, px,
+    };
+    use std::cell::Cell;
+
+    actions!(context_menu_test, [RemoveTab]);
+
+    /// The regression shape: the action handler lives on the trigger's
+    /// ancestor (like an action bar), which is NOT on the focus path while
+    /// focus is in the content area.
+    struct TestRoot {
+        content_focus: FocusHandle,
+        received: Rc<Cell<bool>>,
+    }
+
+    impl Render for TestRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let received = self.received.clone();
+            div()
+                .size_full()
+                .child(
+                    div()
+                        .id("content")
+                        .h(px(40.))
+                        .track_focus(&self.content_focus),
+                )
+                .child(
+                    div()
+                        .id("action-bar")
+                        .h(px(60.))
+                        .on_action(move |_: &RemoveTab, _, _| received.set(true))
+                        .child(
+                            div()
+                                .id("tab")
+                                .size_full()
+                                .context_menu(|menu, _, _| menu.menu("Close", Box::new(RemoveTab))),
+                        ),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn action_bubbles_from_trigger_and_focus_restores_on_dismiss(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            cx.set_global(Theme::default());
+            super::super::popup_menu::init(cx);
+        });
+
+        let received = Rc::new(Cell::new(false));
+        let (root, cx) = cx.add_window_view({
+            let received = received.clone();
+            move |window, cx| {
+                let content_focus = cx.focus_handle();
+                content_focus.focus(window, cx);
+                TestRoot {
+                    content_focus,
+                    received,
+                }
+            }
+        });
+        let content_focus = root.read_with(cx, |root, _| root.content_focus.clone());
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        // Right-click inside the tab to open the context menu.
+        cx.simulate_event(MouseDownEvent {
+            button: MouseButton::Right,
+            position: point(px(50.), px(70.)),
+            modifiers: Default::default(),
+            click_count: 1,
+            first_mouse: false,
+        });
+        // The menu entity is built in a deferred callback, then rendered
+        // (which also focuses it) on the next draw.
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            _ = window.draw(cx);
+        });
+
+        // Select "Close" and confirm. Keyboard confirm and mouse click share
+        // the same `confirm` path in `PopupMenu`.
+        cx.simulate_keystrokes("down enter");
+        cx.run_until_parked();
+
+        // The action must reach the handler on the trigger's ancestor chain,
+        // even though the action bar was never on the focus path.
+        assert!(received.get());
+        // And dismiss must restore focus to where it was before the menu
+        // opened, keeping the dangling-focus fix (#2614).
+        cx.update(|window, cx| {
+            assert_eq!(window.focused(cx).as_ref(), Some(&content_focus));
+        });
     }
 }

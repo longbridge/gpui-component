@@ -37,7 +37,7 @@ impl ListDelegate for MyListDelegate {
         &mut self,
         ix: IndexPath,
         _window: &mut Window,
-        _cx: &mut Context<TableState<Self>>,
+        _cx: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
         self.items.get(ix.row).map(|item| {
             ListItem::new(ix)
@@ -98,7 +98,7 @@ impl ListDelegate for MyListDelegate {
         &mut self,
         section: usize,
         _window: &mut Window,
-        cx: &mut Context<TableState<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         let title = match section {
             0 => "Section 1",
@@ -123,7 +123,7 @@ impl ListDelegate for MyListDelegate {
         &mut self,
         section: usize,
         _window: &mut Window,
-        cx: &mut Context<TableState<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) -> Option<impl IntoElement> {
         Some(
             div()
@@ -144,7 +144,7 @@ fn render_item(
     &mut self,
     ix: IndexPath,
     _window: &mut Window,
-    cx: &mut Context<TableState<Self>>,
+    cx: &mut Context<ListState<Self>>,
 ) -> Option<Self::Item> {
     self.items.get(ix.row).map(|item| {
         ListItem::new(ix)
@@ -209,7 +209,7 @@ impl ListDelegate for MyListDelegate {
     fn render_loading(
         &mut self,
         _window: &mut Window,
-        _cx: &mut Context<TableState<Self>>,
+        _cx: &mut Context<ListState<Self>>,
     ) -> impl IntoElement {
         // Custom loading view
         v_flex()
@@ -303,11 +303,50 @@ ListSeparatorItem::new()
     )
 ```
 
+### Drag and Drop Reordering
+
+`ListItem` implements GPUI's `InteractiveElement` and `StatefulInteractiveElement`
+traits, so all native interaction APIs such as `on_drag`, `on_drop`, `drag_over`
+and `on_hover` are directly available:
+
+```rust
+#[derive(Clone)]
+struct DragItem {
+    ix: IndexPath,
+    name: SharedString,
+}
+
+impl Render for DragItem {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The preview element that follows the cursor while dragging.
+        div()
+            .px_2()
+            .py_1()
+            .bg(cx.theme().accent)
+            .text_color(cx.theme().accent_foreground)
+            .rounded(cx.theme().radius)
+            .child(self.name.clone())
+    }
+}
+
+// In `render_item` of your `ListDelegate`:
+ListItem::new(ix)
+    .child(Label::new(item.name.clone()))
+    .on_drag(DragItem { ix, name: item.name.clone() }, |drag, _, _, cx| {
+        cx.new(|_| drag.clone())
+    })
+    .drag_over::<DragItem>(|style, _, _, cx| style.bg(cx.theme().drop_target))
+    .on_drop(cx.listener(move |this, drag: &DragItem, _, cx| {
+        this.delegate_mut().move_item(drag.ix, ix);
+        cx.notify();
+    }))
+```
+
 ### Custom Empty State
 
 ```rust
 impl ListDelegate for MyListDelegate {
-    fn render_empty(&mut self, _window: &mut Window, cx: &mut Context<TableState<Self>>) -> impl IntoElement {
+    fn render_empty(&mut self, _window: &mut Window, cx: &mut Context<ListState<Self>>) -> impl IntoElement {
         v_flex()
             .size_full()
             .justify_center()
@@ -382,7 +421,7 @@ struct FileInfo {
 impl ListDelegate for FileBrowserDelegate {
     type Item = ListItem;
 
-    fn render_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<TableState<Self>>) -> Option<Self::Item> {
+    fn render_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<ListState<Self>>) -> Option<Self::Item> {
         self.files.get(ix.row).map(|file| {
             let icon = if file.is_directory {
                 IconName::Folder
@@ -432,7 +471,7 @@ impl ListDelegate for ContactListDelegate {
         self.contacts_by_letter.len()
     }
 
-    fn render_section_header(&mut self, section: usize, _window: &mut Window, cx: &mut Context<TableState<Self>>) -> Option<impl IntoElement> {
+    fn render_section_header(&mut self, section: usize, _window: &mut Window, cx: &mut Context<ListState<Self>>) -> Option<impl IntoElement> {
         let letter = self.contacts_by_letter.keys().nth(section)?;
 
         Some(

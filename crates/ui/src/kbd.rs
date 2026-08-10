@@ -89,9 +89,9 @@ impl Kbd {
     /// Windows: https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec
     pub fn format(key: &Keystroke) -> String {
         #[cfg(target_os = "macos")]
-        const DIVIDER: &str = "";
+        const SEPARATOR: &str = "";
         #[cfg(not(target_os = "macos"))]
-        const DIVIDER: &str = "+";
+        const SEPARATOR: &str = "+";
 
         let mut parts = vec![];
 
@@ -204,7 +204,7 @@ impl Kbd {
         }
 
         parts.push(&keys);
-        parts.join(DIVIDER)
+        parts.join(SEPARATOR)
     }
 }
 
@@ -222,11 +222,11 @@ impl RenderOnce for Kbd {
 
         div()
             .text_color(cx.theme().muted_foreground)
-            .bg(cx.theme().muted)
+            .bg(cx.theme().tokens.muted)
             .when(self.outline, |this| {
                 this.border_1()
                     .border_color(cx.theme().border)
-                    .bg(cx.theme().background)
+                    .bg(cx.theme().tokens.background)
             })
             .py_0p5()
             .px_1()

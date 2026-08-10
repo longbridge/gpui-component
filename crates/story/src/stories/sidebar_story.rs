@@ -6,15 +6,16 @@ use gpui::{
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Side, Sizable,
+    ActiveTheme, Icon, IconName, Selectable as _, Side, Sizable,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
-    divider::Divider,
+    button::{Button, ButtonGroup},
     h_flex,
     menu::DropdownMenu,
+    separator::Separator,
     sidebar::{
-        Sidebar, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem,
-        SidebarToggleButton,
+        Sidebar, SidebarCollapsible, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,
+        SidebarMenuItem, SidebarToggleButton,
     },
     switch::Switch,
     v_flex,
@@ -30,6 +31,7 @@ pub struct SidebarStory {
     last_active_item: Item,
     active_subitem: Option<SubItem>,
     collapsed: bool,
+    collapsible: SidebarCollapsible,
     side: Side,
     click_to_open_submenu: bool,
     show_dynamic_children: bool,
@@ -51,6 +53,7 @@ impl SidebarStory {
             last_active_item: Item::Playground,
             active_subitem: None,
             collapsed: false,
+            collapsible: SidebarCollapsible::Icon,
             side: Side::Left,
             focus_handle: cx.focus_handle(),
             checked: false,
@@ -60,37 +63,80 @@ impl SidebarStory {
     }
 
     fn render_content(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex().gap_3().child(
-            h_flex()
-                .gap_3()
-                .child(
-                    Switch::new("side")
-                        .label("Placement Right")
-                        .checked(self.side.is_right())
-                        .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                            this.side = if *checked { Side::Right } else { Side::Left };
-                            cx.notify();
-                        })),
-                )
-                .child(
-                    Switch::new("click-to-open")
-                        .checked(self.click_to_open_submenu)
-                        .label("Click to open submenu")
-                        .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                            this.click_to_open_submenu = *checked;
-                            cx.notify();
-                        })),
-                )
-                .child(
-                    Switch::new("dynamic-children")
-                        .checked(self.show_dynamic_children)
-                        .label("Show dynamic children (test default_open)")
-                        .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                            this.show_dynamic_children = *checked;
+        v_flex()
+            .w_full()
+            .gap_3()
+            .child(
+                h_flex().w_full().items_center().child(
+                    ButtonGroup::new("collapsible-mode")
+                        .outline()
+                        .compact()
+                        .flex_shrink_0()
+                        .child(
+                            Button::new("collapsible-icon")
+                                .label("Icon")
+                                .selected(self.collapsible == SidebarCollapsible::Icon),
+                        )
+                        .child(
+                            Button::new("collapsible-offcanvas")
+                                .label("Offcanvas")
+                                .selected(self.collapsible == SidebarCollapsible::Offcanvas),
+                        )
+                        .child(
+                            Button::new("collapsible-none")
+                                .label("None")
+                                .selected(self.collapsible == SidebarCollapsible::None),
+                        )
+                        .on_click(cx.listener(|this, selecteds: &Vec<usize>, _, cx| {
+                            let Some(selected) = selecteds.first().copied() else {
+                                return;
+                            };
+
+                            this.collapsible = match selected {
+                                0 => SidebarCollapsible::Icon,
+                                1 => SidebarCollapsible::Offcanvas,
+                                2 => SidebarCollapsible::None,
+                                _ => return,
+                            };
                             cx.notify();
                         })),
                 ),
-        )
+            )
+            .child(
+                h_flex()
+                    .w_full()
+                    .items_center()
+                    .gap_3()
+                    .gap_y_2()
+                    .flex_wrap()
+                    .child(
+                        Switch::new("side")
+                            .label("Placement Right")
+                            .checked(self.side.is_right())
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                this.side = if *checked { Side::Right } else { Side::Left };
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Switch::new("click-to-open")
+                            .checked(self.click_to_open_submenu)
+                            .label("Click to open submenu")
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                this.click_to_open_submenu = *checked;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Switch::new("dynamic-children")
+                            .checked(self.show_dynamic_children)
+                            .label("Show dynamic children (test default_open)")
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                this.show_dynamic_children = *checked;
+                                cx.notify();
+                            })),
+                    ),
+            )
     }
 
     fn switch_checked_handler(
@@ -290,6 +336,9 @@ impl Render for SidebarStory {
                 Item::Travel,
             ],
         ];
+        let collapsible = self.collapsible;
+        let icon_collapsed = self.collapsed && collapsible == SidebarCollapsible::Icon;
+        let toggle_collapsed = self.collapsed && collapsible != SidebarCollapsible::None;
 
         h_flex()
             .rounded(cx.theme().radius)
@@ -300,6 +349,7 @@ impl Render for SidebarStory {
             .child(
                 Sidebar::new("sidebar-story")
                     .side(self.side)
+                    .collapsible(collapsible)
                     .collapsed(self.collapsed)
                     .w(px(220.))
                     .gap_0()
@@ -315,17 +365,17 @@ impl Render for SidebarStory {
                                     .text_color(cx.theme().success_foreground)
                                     .size_8()
                                     .flex_shrink_0()
-                                    .when(!self.collapsed, |this| {
+                                    .when(!icon_collapsed, |this| {
                                         this.child(Icon::new(IconName::GalleryVerticalEnd))
                                     })
-                                    .when(self.collapsed, |this| {
+                                    .when(icon_collapsed, |this| {
                                         this.size_4()
                                             .bg(cx.theme().transparent)
                                             .text_color(cx.theme().foreground)
                                             .child(Icon::new(IconName::GalleryVerticalEnd))
                                     }),
                             )
-                            .when(!self.collapsed, |this| {
+                            .when(!icon_collapsed, |this| {
                                 this.child(
                                     v_flex()
                                         .gap_0()
@@ -338,7 +388,7 @@ impl Render for SidebarStory {
                                         .child(div().child("Enterprise").text_xs()),
                                 )
                             })
-                            .when(!self.collapsed, |this| {
+                            .when(!icon_collapsed, |this| {
                                 this.child(
                                     Icon::new(IconName::ChevronsUpDown).size_4().flex_shrink_0(),
                                 )
@@ -449,35 +499,41 @@ impl Render for SidebarStory {
                                 h_flex()
                                     .gap_2()
                                     .child(IconName::CircleUser)
-                                    .when(!self.collapsed, |this| this.child("Jason Lee")),
+                                    .when(!icon_collapsed, |this| this.child("Jason Lee")),
                             )
-                            .when(!self.collapsed, |this| {
+                            .when(!icon_collapsed, |this| {
                                 this.child(Icon::new(IconName::ChevronsUpDown).size_4())
                             }),
                     ),
             )
             .child(
                 v_flex()
-                    .size_full()
+                    .h_full()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
                     .gap_4()
                     .p_4()
                     .child(
                         h_flex()
                             .items_center()
                             .gap_3()
-                            .when(self.side.is_right(), |this| {
-                                this.flex_row_reverse().justify_between()
-                            })
-                            .child(
-                                SidebarToggleButton::new()
-                                    .side(self.side)
-                                    .collapsed(self.collapsed)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.collapsed = !this.collapsed;
-                                        cx.notify();
-                                    })),
+                            .when(
+                                self.side.is_right() && collapsible != SidebarCollapsible::None,
+                                |this| this.flex_row_reverse().justify_between(),
                             )
-                            .child(Divider::vertical().h_4())
+                            .when(collapsible != SidebarCollapsible::None, |this| {
+                                this.child(
+                                    SidebarToggleButton::new()
+                                        .side(self.side)
+                                        .collapsed(toggle_collapsed)
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.collapsed = !this.collapsed;
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(Separator::vertical().h_4())
+                            })
                             .child(
                                 Breadcrumb::new()
                                     .child("Breadcrumb")

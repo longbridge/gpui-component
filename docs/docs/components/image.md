@@ -477,7 +477,7 @@ fn image_comparison(before_src: &str, after_src: &str) -> impl IntoElement {
                 )
         )
         .child(
-            // Divider line
+            // Separator line
             div()
                 .absolute()
                 .top_0()

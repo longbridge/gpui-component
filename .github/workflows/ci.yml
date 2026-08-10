@@ -55,6 +55,10 @@ jobs:
         if: ${{ matrix.run_on == 'macos-latest' }}
         run: |
           cargo clippy -- --deny warnings
+      - name: Check without default features (tree-sitter disabled)
+        if: ${{ matrix.run_on == 'ubuntu-latest' }}
+        run: |
+          cargo check -p gpui-component --no-default-features
       - name: Test Linux
         if: ${{ matrix.run_on == 'ubuntu-latest' }}
         run: |

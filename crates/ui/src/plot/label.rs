@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
 use gpui::{
-    point, px, App, Bounds, FontWeight, Hsla, Pixels, Point, SharedString, TextAlign, TextRun,
-    Window,
+    App, Bounds, FontWeight, Hsla, Pixels, Point, ShapedLine, SharedString, TextAlign, TextRun,
+    Window, point, px,
 };
 
 use super::origin_point;
@@ -10,6 +10,87 @@ use super::origin_point;
 pub const TEXT_SIZE: f32 = 10.;
 pub const TEXT_GAP: f32 = 2.;
 pub const TEXT_HEIGHT: f32 = TEXT_SIZE + TEXT_GAP;
+
+fn shape_label(
+    text: &SharedString,
+    font_size: Pixels,
+    color: Hsla,
+    window: &mut Window,
+) -> ShapedLine {
+    let text_run = TextRun {
+        len: text.len(),
+        font: window.text_style().font(),
+        color,
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    window
+        .text_system()
+        .shape_line(text.clone(), font_size, &[text_run], None)
+}
+
+/// Returns the rendered width of `text` at `font_size` using the window's
+/// current text style.  Used for layout calculations that need to reserve
+/// space for labels before the scale ranges are fixed.
+pub fn measure_text_width(text: &SharedString, font_size: Pixels, window: &mut Window) -> f32 {
+    if text.is_empty() {
+        return 0.;
+    }
+    shape_label(
+        text,
+        font_size,
+        Hsla {
+            h: 0.,
+            s: 0.,
+            l: 0.,
+            a: 1.,
+        },
+        window,
+    )
+    .width()
+    .as_f32()
+}
+
+/// Truncate `text` with a trailing ellipsis so it fits within `max_width` at
+/// `font_size`. Returns `text` unchanged when it already fits; returns just
+/// the ellipsis when not even one character fits. `max_width <= 0` is treated
+/// as "no budget" and returns `text` unchanged (the caller has no room to
+/// reason about).
+pub fn truncate_text_to_width(
+    text: &SharedString,
+    font_size: Pixels,
+    max_width: f32,
+    window: &mut Window,
+) -> SharedString {
+    if max_width <= 0. || measure_text_width(text, font_size, window) <= max_width {
+        return text.clone();
+    }
+
+    const ELLIPSIS: &str = "…";
+    // Byte offsets of every char boundary after the first char; cutting at
+    // `cuts[k]` keeps the first `k + 1` chars.
+    let cuts: Vec<usize> = text.char_indices().skip(1).map(|(i, _)| i).collect();
+
+    // Binary search the largest prefix whose text + ellipsis still fits.
+    let mut best: Option<usize> = None;
+    let (mut lo, mut hi) = (0usize, cuts.len());
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        let candidate = SharedString::from(format!("{}{ELLIPSIS}", &text[..cuts[mid]]));
+        if measure_text_width(&candidate, font_size, window) <= max_width {
+            best = Some(mid);
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+
+    match best {
+        Some(mid) => SharedString::from(format!("{}{ELLIPSIS}", &text[..cuts[mid]])),
+        None => SharedString::from(ELLIPSIS),
+    }
+}
 
 pub struct Text {
     pub text: SharedString,
@@ -80,36 +161,19 @@ impl PlotLabel {
             origin,
             color,
             font_size,
-            font_weight,
+            font_weight: _,
             align,
         } in self.0.iter()
         {
             let origin = origin_point(origin.x, origin.y, bounds.origin);
 
-            let text_run = TextRun {
-                len: text.len(),
-                font: window.text_style().highlight(*font_weight).font(),
-                color: *color,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
+            let line = shape_label(text, *font_size, *color, window);
+            let origin = match align {
+                TextAlign::Left => origin,
+                TextAlign::Right => origin - point(line.width(), px(0.)),
+                _ => origin - point(line.width() / 2., px(0.)),
             };
-
-            if let Ok(text) =
-                window
-                    .text_system()
-                    .shape_text(text.clone(), *font_size, &[text_run], None, None)
-            {
-                for line in text {
-                    let origin = match align {
-                        TextAlign::Left => origin,
-                        TextAlign::Right => origin - point(line.size(*font_size).width, px(0.)),
-                        _ => origin - point(line.size(*font_size).width / 2., px(0.)),
-                    };
-
-                    let _ = line.paint(origin, *font_size, *align, None, window, cx);
-                }
-            }
+            let _ = line.paint(origin, *font_size, *align, None, window, cx);
         }
     }
 }

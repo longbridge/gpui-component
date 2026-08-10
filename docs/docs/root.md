@@ -27,6 +27,16 @@ fn main() {
 }
 ```
 
+## Window Border
+
+By default, [Root] renders GPUI Component's client-side window border wrapper. For
+layer-shell fullscreen windows or other surfaces that should not render this
+wrapper, disable it with `bordered(false)`:
+
+```rs
+cx.new(|cx| Root::new(view, window, cx).bordered(false))
+```
+
 ## Overlays
 
 We have dialogs, sheets, notifications, we need placement for them to show, so [Root] provides methods to render these overlays:

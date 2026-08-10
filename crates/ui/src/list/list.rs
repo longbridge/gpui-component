@@ -1,5 +1,5 @@
-use std::ops::Range;
 use instant::Duration;
+use std::ops::Range;
 
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::input::InputState;
@@ -14,7 +14,7 @@ use crate::{Icon, IndexPath, Selectable, Sizable, StyledExt};
 use crate::{VirtualListScrollHandle, list::ListDelegate, v_virtual_list};
 use gpui::{
     App, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement, EventEmitter,
-    ListSizingBehavior, RenderOnce, ScrollStrategy, SharedString, StatefulInteractiveElement,
+    ListSizingBehavior, RenderOnce, Role, ScrollStrategy, SharedString, StatefulInteractiveElement,
     StyleRefinement, Subscription, px, size,
 };
 use gpui::{
@@ -215,8 +215,11 @@ where
     pub fn set_query(&mut self, query: &str, window: &mut Window, cx: &mut Context<Self>) {
         let query = query.to_string();
         self.query_input.update(cx, |input, cx| {
-            input.set_value(query, window, cx);
+            input.set_value(query.clone(), window, cx);
         });
+
+        // `set_value` does not emit `InputEvent::Change`, so start the search here.
+        self.start_search(query, window, cx);
     }
 
     /// Set a specific list item for measurement.
@@ -277,32 +280,39 @@ where
                     return;
                 }
 
-                self.set_searching(true, window, cx);
-                let search = self.delegate.perform_search(&text, window, cx);
-
-                if self.rows_cache.len() > 0 {
-                    self._set_selected_index(Some(IndexPath::default()), window, cx);
-                } else {
-                    self._set_selected_index(None, window, cx);
-                }
-
-                self._search_task = cx.spawn_in(window, async move |this, window| {
-                    search.await;
-
-                    _ = this.update_in(window, |this, _, _| {
-                        this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
-                        this.last_query = Some(text);
-                    });
-
-                    // Always wait 100ms to avoid flicker
-                    window.background_executor().timer(Duration::from_millis(100)).await;
-                    _ = this.update_in(window, |this, window, cx| {
-                        this.set_searching(false, window, cx);
-                    });
-                });
+                self.start_search(text, window, cx);
             }
             _ => {}
         }
+    }
+
+    fn start_search(&mut self, query: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_searching(true, window, cx);
+        let search = self.delegate.perform_search(&query, window, cx);
+
+        if self.rows_cache.len() > 0 {
+            self._set_selected_index(Some(IndexPath::default()), window, cx);
+        } else {
+            self._set_selected_index(None, window, cx);
+        }
+
+        self._search_task = cx.spawn_in(window, async move |this, window| {
+            search.await;
+
+            _ = this.update_in(window, |this, _, _| {
+                this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
+                this.last_query = Some(query);
+            });
+
+            // Always wait 100ms to avoid flicker
+            window
+                .background_executor()
+                .timer(Duration::from_millis(100))
+                .await;
+            _ = this.update_in(window, |this, window, cx| {
+                this.set_searching(false, window, cx);
+            });
+        });
     }
 
     fn set_searching(&mut self, searching: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -460,8 +470,14 @@ where
             .unwrap_or(false);
         let id = SharedString::from(format!("list-item-{}", ix));
 
+        let total_items = self.rows_cache.items_count();
+
         div()
             .id(id)
+            .role(Role::ListItem)
+            .aria_position_in_set(ix.row + 1)
+            .aria_size_of_set(total_items)
+            .aria_selected(selected)
             .w_full()
             .relative()
             .overflow_hidden()
@@ -501,9 +517,13 @@ where
         let rows_cache = self.rows_cache.clone();
         let scrollbar_visible = self.options.scrollbar_visible;
         let scroll_handle = self.scroll_handle.clone();
+        let item_to_measure_index = rows_cache
+            .position_of(&self.item_to_measure_index)
+            .or_else(|| rows_cache.first_entry_position())
+            .unwrap_or(0);
 
         v_flex()
-            .flex_grow()
+            .flex_grow_1()
             .relative()
             .size_full()
             .when_some(self.options.max_height, |this, h| this.max_h(h))
@@ -554,6 +574,7 @@ where
                                     .collect::<Vec<_>>()
                             },
                         )
+                        .with_item_to_measure_index(item_to_measure_index)
                         .paddings(self.options.paddings.clone())
                         .when(self.options.max_height.is_some(), |this| {
                             this.with_sizing_behavior(ListSizingBehavior::Infer)
@@ -751,6 +772,7 @@ where
 
         div()
             .id("list")
+            .role(Role::List)
             .size_full()
             .refine_style(&self.style)
             .child(self.state.clone())
