@@ -1,12 +1,25 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
-
-use gpui::{
-    AnyElement, App, ElementId, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    Role, SharedString, StatefulInteractiveElement as _, Styled, Window, div,
-    prelude::FluentBuilder as _, rems,
+use std::{
+    cell::RefCell,
+    collections::HashSet,
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, Instant},
 };
 
-use crate::{ActiveTheme as _, Icon, IconName, Sizable, Size, h_flex, v_flex};
+use gpui::{
+    AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId,
+    InspectorElementId, InteractiveElement as _, IntoElement, LayoutId, ParentElement, Pixels,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, Style, Styled, Window, div,
+    percentage, prelude::FluentBuilder as _, px, relative, rems, size,
+};
+
+use crate::{
+    ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt as _, animation::ease_out_cubic,
+    h_flex, v_flex,
+};
+
+/// Duration of the expand/collapse animation.
+const ANIMATION_DURATION: Duration = Duration::from_millis(200);
 
 /// Accordion element.
 #[derive(IntoElement)]
@@ -85,6 +98,7 @@ impl RenderOnce for Accordion {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let open_ixs = Rc::new(RefCell::new(HashSet::new()));
         let is_multiple = self.multiple;
+        let last_ix = self.children.len().saturating_sub(1);
 
         v_flex()
             .id(self.id)
@@ -101,6 +115,7 @@ impl RenderOnce for Accordion {
 
                         accordion
                             .index(ix)
+                            .last(ix == last_ix)
                             .with_size(self.size)
                             .bordered(self.bordered)
                             .disabled(self.disabled)
@@ -134,10 +149,185 @@ impl RenderOnce for Accordion {
     }
 }
 
+/// The content of an [`AccordionItem`], animating its height on toggle.
+///
+/// The content stays in the element tree while closed (clipped to zero height),
+/// so that the collapse can be animated, and so that its natural height is
+/// still measured for the next expand.
+struct AccordionContent {
+    id: ElementId,
+    open: bool,
+    child: AnyElement,
+}
+
+#[derive(Clone, Copy)]
+struct AccordionContentState {
+    /// The `open` of the last frame, to detect a toggle.
+    open: bool,
+    /// The progress at the time the current animation started.
+    from: f32,
+    /// `None` when the content is settled at its target height.
+    started_at: Option<Instant>,
+    /// The natural height measured in the last prepaint.
+    height: Option<Pixels>,
+}
+
+impl AccordionContentState {
+    fn new(open: bool) -> Self {
+        Self {
+            open,
+            from: if open { 1. } else { 0. },
+            started_at: None,
+            height: None,
+        }
+    }
+
+    /// The progress of the animation, from 0. (closed) to 1. (open).
+    ///
+    /// This finishes the animation when the duration has passed, so it takes
+    /// `&mut self`.
+    fn progress(&mut self) -> f32 {
+        let target = if self.open { 1. } else { 0. };
+        let Some(started_at) = self.started_at else {
+            return target;
+        };
+
+        let t = started_at.elapsed().as_secs_f32() / ANIMATION_DURATION.as_secs_f32();
+        if t >= 1. {
+            self.started_at = None;
+            return target;
+        }
+
+        self.from + (target - self.from) * ease_out_cubic(t)
+    }
+}
+
+impl AccordionContent {
+    fn new(id: impl Into<ElementId>, open: bool, child: AnyElement) -> Self {
+        Self {
+            id: id.into(),
+            open,
+            child,
+        }
+    }
+}
+
+impl IntoElement for AccordionContent {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for AccordionContent {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        Some(self.id.clone())
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        global_id: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let open = self.open;
+        let (progress, height) = window.with_element_state(
+            global_id.expect("AccordionContent must have an id"),
+            |state: Option<AccordionContentState>, window| {
+                let mut state = state.unwrap_or_else(|| AccordionContentState::new(open));
+
+                if state.open != open {
+                    state.from = state.progress();
+                    state.open = open;
+                    state.started_at = Some(Instant::now());
+                }
+
+                let progress = state.progress();
+                if state.started_at.is_some() {
+                    window.request_animation_frame();
+                }
+
+                ((progress, state.height), state)
+            },
+        );
+
+        let mut style = Style::default();
+        style.size.width = relative(1.).into();
+        match height {
+            // Before the first measure there is nothing to animate to, let the
+            // content lay itself out to get its natural height measured.
+            None if open => {}
+            None => style.size.height = px(0.).into(),
+            Some(height) => style.size.height = (height * progress).into(),
+        }
+
+        (window.request_layout(style, None, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        global_id: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        // Lay the content out at its natural height, the visible part is the
+        // one clipped by `bounds`.
+        let available = size(
+            AvailableSpace::Definite(bounds.size.width),
+            AvailableSpace::MinContent,
+        );
+        let measured = self.child.layout_as_root(available, window, cx);
+
+        window.with_element_state(
+            global_id.expect("AccordionContent must have an id"),
+            |state: Option<AccordionContentState>, _| {
+                let mut state = state.unwrap_or_else(|| AccordionContentState::new(self.open));
+                state.height = Some(measured.height);
+                ((), state)
+            },
+        );
+
+        // Mask here as well as in paint, to keep the hidden content from
+        // taking mouse events.
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            self.child.prepaint_at(bounds.origin, window, cx);
+        });
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        _: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            self.child.paint(window, cx);
+        });
+    }
+}
+
 /// An Accordion is a vertically stacked list of items, each of which can be expanded to reveal the content associated with it.
 #[derive(IntoElement)]
 pub struct AccordionItem {
     index: usize,
+    /// The last item does not need a separator under it.
+    last: bool,
     icon: Option<Icon>,
     title: AnyElement,
     children: Vec<AnyElement>,
@@ -153,6 +343,7 @@ impl AccordionItem {
     pub fn new() -> Self {
         Self {
             index: 0,
+            last: false,
             icon: None,
             title: SharedString::default().into_any_element(),
             children: Vec::new(),
@@ -196,6 +387,11 @@ impl AccordionItem {
         self
     }
 
+    fn last(mut self, last: bool) -> Self {
+        self.last = last;
+        self
+    }
+
     fn on_toggle_click(
         mut self,
         on_toggle_click: impl Fn(&bool, &mut Window, &mut App) + 'static,
@@ -231,10 +427,18 @@ impl RenderOnce for AccordionItem {
                 .w_full()
                 .bg(cx.theme().tokens.accordion)
                 .overflow_hidden()
-                .when(self.bordered, |this| {
-                    this.border_1()
-                        .rounded(cx.theme().radius)
-                        .border_color(cx.theme().border)
+                .map(|this| {
+                    if self.bordered {
+                        this.border_1()
+                            .rounded(cx.theme().radius)
+                            .border_color(cx.theme().border)
+                    } else if self.last {
+                        this
+                    } else {
+                        // Without borders the items are separated by a single
+                        // line under each of them, below the content.
+                        this.border_b_1().border_color(cx.theme().border)
+                    }
                 })
                 .text_size(text_size)
                 .child(
@@ -244,22 +448,14 @@ impl RenderOnce for AccordionItem {
                         .aria_expanded(self.open)
                         .justify_between()
                         .gap_3()
+                        .font_medium()
                         .map(|this| match self.size {
-                            Size::XSmall => this.py_0().px_1p5(),
-                            Size::Small => this.py_0p5().px_2(),
-                            Size::Large => this.py_1p5().px_4(),
-                            _ => this.py_1().px_3(),
+                            Size::XSmall => this.py_1().px_2(),
+                            Size::Small => this.py_1p5().px_2p5(),
+                            Size::Large => this.py_3().px_4(),
+                            _ => this.py_2p5().px_3(),
                         })
-                        .when(self.open, |this| {
-                            this.when(self.bordered, |this| {
-                                this.text_color(cx.theme().foreground)
-                                    .border_b_1()
-                                    .border_color(cx.theme().border)
-                            })
-                        })
-                        .when(!self.bordered, |this| {
-                            this.border_b_1().border_color(cx.theme().border)
-                        })
+                        .when(self.open, |this| this.text_color(cx.theme().foreground))
                         .child(
                             h_flex()
                                 .items_center()
@@ -279,13 +475,10 @@ impl RenderOnce for AccordionItem {
                         .when(!self.disabled, |this| {
                             this.hover(|this| this.bg(cx.theme().tokens.accordion_hover))
                                 .child(
-                                    Icon::new(if self.open {
-                                        IconName::ChevronUp
-                                    } else {
-                                        IconName::ChevronDown
-                                    })
-                                    .xsmall()
-                                    .text_color(cx.theme().muted_foreground),
+                                    Icon::new(IconName::ChevronDown)
+                                        .xsmall()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .rotate(percentage(if self.open { 0.5 } else { 0. })),
                                 )
                                 .when_some(self.on_toggle_click, |this, on_toggle_click| {
                                     this.on_click({
@@ -296,18 +489,20 @@ impl RenderOnce for AccordionItem {
                                 })
                         }),
                 )
-                .when(self.open, |this| {
-                    this.child(
-                        div()
-                            .map(|this| match self.size {
-                                Size::XSmall => this.p_1p5(),
-                                Size::Small => this.p_2(),
-                                Size::Large => this.p_4(),
-                                _ => this.p_3(),
-                            })
-                            .children(self.children),
-                    )
-                }),
+                .child(AccordionContent::new(
+                    ("content", self.index),
+                    self.open,
+                    div()
+                        .text_color(cx.theme().muted_foreground)
+                        .map(|this| match self.size {
+                            Size::XSmall => this.px_2().pb_2(),
+                            Size::Small => this.px_2p5().pb_2p5(),
+                            Size::Large => this.px_4().pb_4(),
+                            _ => this.px_3().pb_3(),
+                        })
+                        .children(self.children)
+                        .into_any_element(),
+                )),
         )
     }
 }
