@@ -321,24 +321,25 @@ impl PopupMenu {
         cx: &mut App,
         f: impl FnOnce(Self, &mut Window, &mut Context<PopupMenu>) -> Self,
     ) -> Entity<Self> {
-        cx.new(|cx| {
-            let menu = f(Self::new(cx), window, cx);
-            // Wire parent_menu on any submenu children that were added via
-            // the PopupMenuItem::submenu(label, entity) data constructor —
-            // unlike PopupMenu::submenu() (the builder), it can't reach the
-            // parent's entity at construction time. Runs once per menu build.
-            let parent = cx.entity().downgrade();
-            for item in &menu.menu_items {
-                if let PopupMenuItem::Submenu { menu: sub, .. } = item {
-                    sub.update(cx, |sub, _| {
-                        if sub.parent_menu.is_none() {
-                            sub.parent_menu = Some(parent.clone());
-                        }
+        let menu = cx.new(|cx| f(Self::new(cx), window, cx));
+
+        // Let the submenus know their parent, so that they can dismiss the
+        // entire menu chain.
+        //
+        // This is done here, because [`PopupMenuItem::submenu`] has no way to
+        // know the parent menu at the time the item is created.
+        let parent_menu = menu.downgrade();
+        menu.update(cx, |this, cx| {
+            for item in this.menu_items.iter() {
+                if let PopupMenuItem::Submenu { menu, .. } = item {
+                    menu.update(cx, |submenu, _| {
+                        submenu.parent_menu = Some(parent_menu.clone());
                     });
                 }
             }
-            menu
-        })
+        });
+
+        menu
     }
 
     /// Set the focus handle of Entity to handle actions.
@@ -639,11 +640,6 @@ impl PopupMenu {
         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
         let submenu = PopupMenu::build(window, cx, f);
-        let parent_menu = cx.entity().downgrade();
-        submenu.update(cx, |view, _| {
-            view.parent_menu = Some(parent_menu);
-        });
-
         self.menu_items.push(
             PopupMenuItem::submenu(label, submenu).when_some(icon, |this, icon| this.icon(icon)),
         );
@@ -770,7 +766,7 @@ impl PopupMenu {
                             self.dispatch_confirm_action(action, window, cx);
                         }
 
-                        self.dismiss_menu(window, cx)
+                        self.dismiss(&Cancel, window, cx)
                     }
                     Some(PopupMenuItem::ElementItem {
                         handler, action, ..
@@ -780,7 +776,7 @@ impl PopupMenu {
                         } else if let Some(action) = action.as_ref() {
                             self.dispatch_confirm_action(action, window, cx);
                         }
-                        self.dismiss_menu(window, cx)
+                        self.dismiss(&Cancel, window, cx)
                     }
                     _ => {}
                 }
@@ -949,17 +945,11 @@ impl PopupMenu {
         }
     }
 
-    /// Cancel/ESC action handler. Closes any active submenu first, then
-    /// dismisses the entire menu chain. This ensures ESC works even when a
-    /// hover-opened submenu is visible and the parent retains focus.
+    /// Dismiss the menu and the entire parent chain.
+    ///
+    /// The submenu is closed together with its parent, same as macOS menus.
     fn dismiss(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
         self.selected_index = None;
-        self.dismiss_menu(window, cx);
-    }
-
-    /// Internal dismiss: emits DismissEvent and propagates up the parent chain.
-    /// Used by `confirm` (item click) and `handle_dismiss` (click-outside).
-    fn dismiss_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.emit(DismissEvent);
 
         // Focus back to the previous focused handle.
@@ -973,8 +963,7 @@ impl PopupMenu {
 
         // Dismiss parent menu, when this menu is dismissed
         _ = parent_menu.update(cx, |view, cx| {
-            view.selected_index = None;
-            view.dismiss_menu(window, cx);
+            view.dismiss(&Cancel, window, cx);
         });
     }
 
@@ -993,15 +982,15 @@ impl PopupMenu {
             }
         }
 
-        // Do not dismiss if a submenu is active — the submenu handles its
-        // own mouse-down-out. Without this guard, clicking a submenu item
-        // would trigger the parent's on_mouse_down_out and tear down the
-        // submenu before the item's on_click fires.
+        // Do not dismiss, if there have an active submenu, the click may be
+        // inside the submenu, let the submenu to handle it.
+        //
+        // Otherwise the submenu will be dismissed before its item's `on_click`.
         if self.active_submenu().is_some() {
             return;
         }
 
-        self.dismiss_menu(window, cx);
+        self.dismiss(&Cancel, window, cx);
     }
 
     fn on_mouse_down_out(
