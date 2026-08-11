@@ -132,4 +132,5 @@ pub fn init(cx: &mut App) {
     dialog::init(cx);
     focus_trap::init(cx);
     popover::init(cx);
+    tree::init(cx);
 }
