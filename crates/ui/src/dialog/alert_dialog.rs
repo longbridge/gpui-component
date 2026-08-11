@@ -79,7 +79,10 @@ impl AlertDialog {
     /// You can change this with `.overlay_closable(true)`.
     pub fn new(cx: &mut App) -> Self {
         Self {
-            base: Dialog::new(cx).overlay_closable(false).close_button(false),
+            base: Dialog::new(cx)
+                .with_base_dialog(gpui_base::AlertDialog::new(cx).into_dialog())
+                .overlay_closable(false)
+                .close_button(false),
             trigger: None,
             icon: None,
             title: None,
@@ -337,8 +340,10 @@ impl AlertDialog {
                 let style = style.clone();
                 let props = props.clone();
                 let button_props = button_props.clone();
-                window.open_dialog(cx, move |dialog, _, _| {
+                window.open_dialog(cx, move |dialog, _, cx| {
                     dialog
+                        .with_base_dialog(gpui_base::AlertDialog::new(cx).into_dialog())
+                        .alert_dialog_role()
                         .refine_style(&style)
                         .button_props(button_props.clone())
                         .with_props(props.clone())

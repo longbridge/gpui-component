@@ -134,7 +134,6 @@ pub fn init(cx: &mut App) {
     select::init(cx);
     input::init(cx);
     list::init(cx);
-    dialog::init(cx);
     popover::init(cx);
     menu::init(cx);
     table::init(cx);

@@ -1,13 +1,15 @@
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StyleRefinement, Styled, Window, div, relative,
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+    relative,
 };
+use gpui_base::DialogTitle as BaseDialogTitle;
 
 use crate::StyledExt as _;
 
 /// Title element for a dialog header.
 #[derive(IntoElement)]
 pub struct DialogTitle {
+    base: BaseDialogTitle,
     style: StyleRefinement,
     children: Vec<AnyElement>,
 }
@@ -15,6 +17,7 @@ pub struct DialogTitle {
 impl DialogTitle {
     pub fn new() -> Self {
         Self {
+            base: BaseDialogTitle::new(),
             style: StyleRefinement::default(),
             children: vec![],
         }
@@ -35,8 +38,7 @@ impl Styled for DialogTitle {
 
 impl RenderOnce for DialogTitle {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div()
-            .id("dialog-title")
+        self.base
             .text_base()
             .font_semibold()
             .line_height(relative(1.))

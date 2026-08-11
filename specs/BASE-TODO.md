@@ -588,9 +588,9 @@ accessibility without prescribing presentation.
 - [ ] Tree
   - [x] Move the existing public `TreeItem`, `TreeEntry`, and `TreeEvent`
     hierarchy/state model into Base with shared clone state and type identity.
-  - [ ] Move selection, expansion navigation, focus, and scroll behavior only
-    after `TreeState` is separated from UI `ListItem`, `PopupMenu`, and context
-    menu rendering callbacks.
+  - [x] Move selection, expansion navigation, focus, virtual-list scrolling, and
+    entry interaction into Base. The legacy UI façade adapts Base's application-
+    owned item slot to styled `ListItem` and keeps `PopupMenu` composition in UI.
 
 ### M5 — Overlay and Compound Components
 
@@ -634,7 +634,18 @@ trap, and keyboard behavior; Registry owns trigger/content structure and style.
 - [ ] Select
 - [ ] Combobox
 - [ ] Dialog
+  - [x] Base owns the shared Cancel/Confirm actions, key bindings, focus trap,
+    keyboard dismissal/confirmation, callback ordering, and the unstyled
+    DialogTitle, DialogDescription, and DialogClose parts.
+  - [x] Base exposes outside-dismiss policy and application-provided
+    overlay/surface slots.
+  - [ ] The UI façade still owns its legacy outside-dismiss/title-bar filter;
+    delegate that final policy to Base without changing layered animation.
 - [ ] Alert Dialog
+  - [x] Base AlertDialog specializes the modal host with `Role::AlertDialog`
+    and non-dismissible overlay defaults.
+  - [ ] The UI façade still owns legacy button variants and declarative header
+    presentation until those slots are projected onto the Base host.
 - [ ] Sheet
 - [ ] Date Picker
 - [ ] Color Picker

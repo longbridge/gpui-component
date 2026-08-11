@@ -46,6 +46,28 @@ fn base_avatar_uses_application_owned_image_and_fallback_slots() {
 }
 
 #[test]
+fn base_dialog_owns_modal_actions_and_alert_defaults() {
+    let _ = gpui_base::DialogCallbacks::default()
+        .on_confirm(|_, _, _| true)
+        .on_cancel(|_, _, _| true)
+        .on_close(|_, _, _| {});
+
+    fn dialog(cx: &mut gpui::App) {
+        let _ = gpui_base::Dialog::new(cx)
+            .overlay(gpui::div())
+            .surface(gpui::div());
+        let _ = gpui_base::AlertDialog::new(cx).into_dialog();
+    }
+
+    let _ = dialog;
+    let _ = gpui_base::DialogTitle::new().child("Title");
+    let _ = gpui_base::DialogDescription::new().child("Description");
+    let _ = gpui_base::DialogClose::new().child(gpui::div());
+    let _: gpui_base::CancelDialog = gpui_component::dialog::CancelDialog;
+    let _: gpui_base::ConfirmDialog = gpui_component::dialog::ConfirmDialog;
+}
+
+#[test]
 fn base_button_accepts_application_owned_state_styles() {
     let _button = gpui_base::Button::new("save")
         .accessibility_label("Save")

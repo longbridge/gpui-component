@@ -6,6 +6,7 @@
 
 mod accordion;
 pub mod actions;
+mod alert_dialog;
 pub mod animation;
 #[doc(hidden)]
 pub mod async_util;
@@ -15,6 +16,7 @@ mod button;
 mod checkbox;
 mod collapsible;
 pub mod component_traits;
+mod dialog;
 mod element_ext;
 mod event;
 mod focus_trap;
@@ -50,6 +52,7 @@ mod tree;
 mod virtual_list;
 
 pub use accordion::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger};
+pub use alert_dialog::AlertDialog;
 pub use auto_scroll::AutoScroll;
 pub use avatar::{Avatar, AvatarFallback, AvatarImage};
 pub use button::{Button, ButtonStyles};
@@ -58,6 +61,10 @@ pub use checkbox::{
 };
 pub use collapsible::Collapsible;
 pub use component_traits::{Disableable, Selectable};
+pub use dialog::{
+    CancelDialog, ConfirmDialog, Dialog, DialogCallbacks, DialogClose, DialogDescription,
+    DialogTitle,
+};
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;
 pub use focus_trap::FocusTrapElement;
@@ -122,6 +129,7 @@ use gpui::App;
 pub fn init(cx: &mut App) {
     let _ = Theme::global_mut(cx);
     GlobalState::init(cx);
+    dialog::init(cx);
     focus_trap::init(cx);
     popover::init(cx);
 }
