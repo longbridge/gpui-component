@@ -22,7 +22,7 @@ pub mod motion;
 mod radio;
 mod radio_group;
 mod scrollbar;
-pub mod slider_state;
+pub mod slider;
 mod state_style;
 mod styled;
 mod switch;
@@ -55,6 +55,7 @@ pub use scrollbar::{
     Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
     ScrollbarTrackStyle,
 };
+pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use styled::styled_ext_reflection_methods;

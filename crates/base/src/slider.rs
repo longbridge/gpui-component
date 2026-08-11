@@ -1,8 +1,14 @@
 use std::ops::Range;
 
-use gpui::{Along, Axis, Bounds, Context, EventEmitter, Pixels, Point, Window, px};
+use gpui::{
+    AccessibleAction, Along, AnyElement, App, AppContext as _, Axis, Bounds, Context, Div,
+    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, InteractiveElement, IntoElement,
+    MouseButton, MouseDownEvent, Orientation, ParentElement, Pixels, Point, Render, RenderOnce,
+    Role, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _, px,
+};
 
-use crate::geometry::AxisExt;
+use crate::{element_ext::ElementExt, geometry::AxisExt};
 
 /// Events emitted by the [`SliderState`].
 pub enum SliderEvent {
@@ -382,6 +388,386 @@ impl SliderState {
         }
         self.dragging = false;
         cx.emit(SliderEvent::Release(self.value));
+    }
+}
+
+#[derive(Clone)]
+struct DragThumb((EntityId, bool));
+
+impl Render for DragThumb {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
+
+#[derive(Clone)]
+struct DragSlider(EntityId);
+
+impl Render for DragSlider {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        Empty
+    }
+}
+
+/// An unstyled slider behavior root.
+///
+/// Applications provide the track, range, and thumb presentation as children.
+#[derive(IntoElement)]
+pub struct Slider {
+    state: Entity<SliderState>,
+    axis: Axis,
+    disabled: bool,
+    base: Div,
+    children: Vec<AnyElement>,
+}
+
+impl Slider {
+    pub fn new(state: &Entity<SliderState>) -> Self {
+        Self {
+            state: state.clone(),
+            axis: Axis::Horizontal,
+            disabled: false,
+            base: div(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn horizontal(mut self) -> Self {
+        self.axis = Axis::Horizontal;
+        self
+    }
+
+    pub fn vertical(mut self) -> Self {
+        self.axis = Axis::Vertical;
+        self
+    }
+
+    pub fn axis(mut self, axis: Axis) -> Self {
+        self.axis = axis;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl ParentElement for Slider {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for Slider {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl RenderOnce for Slider {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let axis = self.axis;
+        let entity_id = self.state.entity_id();
+        let state = self.state.read(cx);
+        let slider_state = self.state.clone();
+
+        self.base
+            .id(("slider", entity_id))
+            .role(Role::Slider)
+            .aria_numeric_value(state.value().end() as f64)
+            .aria_min_numeric_value(state.min_value() as f64)
+            .aria_max_numeric_value(state.max_value() as f64)
+            .aria_orientation(if axis.is_vertical() {
+                Orientation::Vertical
+            } else {
+                Orientation::Horizontal
+            })
+            .on_a11y_action(AccessibleAction::Increment, {
+                let state = slider_state.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        let value =
+                            (state.value().end() + state.step_value()).min(state.max_value());
+                        state.set_value(value, window, cx);
+                    });
+                }
+            })
+            .on_a11y_action(AccessibleAction::Decrement, {
+                let state = slider_state.clone();
+                move |_, window, cx| {
+                    state.update(cx, |state, cx| {
+                        let value =
+                            (state.value().end() - state.step_value()).max(state.min_value());
+                        state.set_value(value, window, cx);
+                    });
+                }
+            })
+            .when(!self.disabled, |this| {
+                this.on_mouse_up(
+                    MouseButton::Left,
+                    window.listener_for(&self.state, |state, _, _, cx| state.handle_release(cx)),
+                )
+                .on_mouse_up_out(
+                    MouseButton::Left,
+                    window.listener_for(&self.state, |state, _, _, cx| state.handle_release(cx)),
+                )
+            })
+            .children(self.children)
+    }
+}
+
+/// An unstyled track that records the geometry used to map pointer positions.
+#[derive(IntoElement)]
+pub struct SliderTrack {
+    state: Entity<SliderState>,
+    axis: Axis,
+    disabled: bool,
+    base: Div,
+    children: Vec<AnyElement>,
+}
+
+impl SliderTrack {
+    pub fn new(state: &Entity<SliderState>) -> Self {
+        Self {
+            state: state.clone(),
+            axis: Axis::Horizontal,
+            disabled: false,
+            base: div(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn axis(mut self, axis: Axis) -> Self {
+        self.axis = axis;
+        self
+    }
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl ParentElement for SliderTrack {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for SliderTrack {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl InteractiveElement for SliderTrack {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl RenderOnce for SliderTrack {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let axis = self.axis;
+        let entity_id = self.state.entity_id();
+        let state = self.state.read(cx);
+        let is_range = state.value().is_range();
+        let percentage = state.percentage();
+        self.base
+            .id("slider-bar-container")
+            .children(self.children)
+            .when(!self.disabled, |this| {
+                this.on_mouse_down(
+                    MouseButton::Left,
+                    window.listener_for(
+                        &self.state,
+                        move |state, event: &MouseDownEvent, window, cx| {
+                            let is_start = if is_range {
+                                let size = state.bounds().size.along(axis);
+                                let position = if axis.is_horizontal() {
+                                    event.position.x - state.bounds().left()
+                                } else {
+                                    state.bounds().bottom() - event.position.y
+                                };
+                                let center = ((percentage.end - percentage.start) / 2.
+                                    + percentage.start)
+                                    * size;
+                                position < center
+                            } else {
+                                false
+                            };
+                            state.update_value_by_position(
+                                axis,
+                                event.position,
+                                is_start,
+                                window,
+                                cx,
+                            );
+                        },
+                    ),
+                )
+                .when(!is_range, |this| {
+                    this.on_drag(DragSlider(entity_id), |drag, _, _, cx| {
+                        cx.stop_propagation();
+                        cx.new(|_| drag.clone())
+                    })
+                    .on_drag_move(window.listener_for(
+                        &self.state,
+                        move |state, event: &DragMoveEvent<DragSlider>, window, cx| {
+                            let DragSlider(id) = event.drag(cx);
+                            if *id == entity_id {
+                                state.update_value_by_position(
+                                    axis,
+                                    event.event.position,
+                                    false,
+                                    window,
+                                    cx,
+                                );
+                            }
+                        },
+                    ))
+                })
+            })
+    }
+}
+
+/// An unstyled slider indicator that records the value-mapping bounds.
+#[derive(IntoElement)]
+pub struct SliderIndicator {
+    state: Entity<SliderState>,
+    base: Div,
+    children: Vec<AnyElement>,
+}
+
+impl SliderIndicator {
+    pub fn new(state: &Entity<SliderState>) -> Self {
+        Self {
+            state: state.clone(),
+            base: div(),
+            children: Vec::new(),
+        }
+    }
+}
+
+impl ParentElement for SliderIndicator {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for SliderIndicator {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl InteractiveElement for SliderIndicator {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for SliderIndicator {}
+
+impl RenderOnce for SliderIndicator {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        self.base
+            .id("slider-bar")
+            .children(self.children)
+            .on_prepaint({
+                let state = self.state;
+                move |bounds, _, cx| state.update(cx, |state, _| state.set_bounds(bounds))
+            })
+    }
+}
+
+/// An unstyled draggable slider thumb.
+#[derive(IntoElement)]
+pub struct SliderThumb {
+    state: Entity<SliderState>,
+    axis: Axis,
+    start: bool,
+    disabled: bool,
+    base: Div,
+    children: Vec<AnyElement>,
+}
+
+impl SliderThumb {
+    pub fn new(state: &Entity<SliderState>) -> Self {
+        Self {
+            state: state.clone(),
+            axis: Axis::Horizontal,
+            start: false,
+            disabled: false,
+            base: div(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn axis(mut self, axis: Axis) -> Self {
+        self.axis = axis;
+        self
+    }
+    pub fn start(mut self, start: bool) -> Self {
+        self.start = start;
+        self
+    }
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl ParentElement for SliderThumb {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl Styled for SliderThumb {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl InteractiveElement for SliderThumb {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for SliderThumb {}
+
+impl RenderOnce for SliderThumb {
+    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
+        let entity_id = self.state.entity_id();
+        let axis = self.axis;
+        let start = self.start;
+        self.base
+            .id(("slider-thumb", start as u32))
+            .children(self.children)
+            .when(!self.disabled, |this| {
+                this.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_drag(DragThumb((entity_id, start)), |drag, _, _, cx| {
+                        cx.stop_propagation();
+                        cx.new(|_| drag.clone())
+                    })
+                    .on_drag_move(window.listener_for(
+                        &self.state,
+                        move |state, event: &DragMoveEvent<DragThumb>, window, cx| {
+                            let DragThumb((id, start)) = event.drag(cx);
+                            if *id == entity_id {
+                                state.update_value_by_position(
+                                    axis,
+                                    event.event.position,
+                                    *start,
+                                    window,
+                                    cx,
+                                );
+                            }
+                        },
+                    ))
+            })
     }
 }
 
