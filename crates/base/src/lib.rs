@@ -4,6 +4,7 @@
 //! colors, sizing, and motion belong to applications or the
 //! `gpui-component` façade.
 
+pub mod actions;
 pub mod animation;
 mod auto_scroll;
 mod button;

@@ -20,7 +20,9 @@ mod virtual_list;
 mod window_border;
 mod window_ext;
 
-pub(crate) mod actions;
+pub(crate) mod actions {
+    pub use gpui_base::actions::*;
+}
 
 pub mod accordion;
 pub mod alert;

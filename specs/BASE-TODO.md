@@ -323,6 +323,8 @@ checking the component milestone:
 - [x] Preserve the original focus-trap initialization order in `gpui_component::init`.
 - [x] Move geometry primitives and extension traits into Base.
 - [x] Move interaction event extensions into Base.
+- [x] Move the shared `ui` action namespace (`Confirm`, `Cancel`, and directional/
+  paging selection actions) into Base without changing existing action types.
 - [x] Move pure `ElementExt::on_prepaint` into Base while retaining UI-sized
   child composition types in `crates/ui`.
 - [x] Move `IndexPath` into Base and preserve its legacy type identity.
@@ -338,8 +340,6 @@ checking the component milestone:
   and component traits in `crates/ui`; make `ui/styled.rs` re-export only.
 - [x] Re-export migrated APIs from their existing `gpui-component` public paths.
 - [x] Add compile-time compatibility coverage for migrated public types.
-- [ ] Verify Base and facade packaging after the Base version is visible on crates.io.
-- [ ] Document and verify the release order: dependencies, Base, then facade.
 
 ## Base Component Milestones
 
@@ -507,6 +507,9 @@ template is delivered and its required behavior is composed from existing Base A
   painting, dragging, and fade lifecycle into Base while keeping UI-specific
   Scrollable wrappers and masks in `crates/ui`.
 - [x] Move VirtualList into Base without depending on styled scrollbar components.
+- [ ] Migrate Resizable only after its state, panel layout, window-level drag
+  lifecycle, and unstyled resize-handle part can move as one coherent boundary;
+  do not expose the current private panel controller as hidden public methods.
 - [ ] Extract an unstyled overlay host and entry model.
 - [ ] Extract popup positioning and focus-restoration behavior.
 - [ ] Extract Dock's serializable layout model from its styled runtime views.

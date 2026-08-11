@@ -20,6 +20,37 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 - **Editor**: High performance code editor (Up to 200K lines for stable performance) with LSP (diagnostics, completion, hover, etc).
 - **Syntax Highlighting**: Syntax highlighting for editor and markdown components using Tree Sitter.
 
+## Ecosystem Architecture
+
+```text
+                         GPUI Component
+                       (project and brand)
+
+       ┌──────────────────────┐    ┌────────────────────────┐
+       │ crates/ui            │    │ Registry               │
+       │ Default styled UI    │    │ Editable UI source     │
+       └──────────┬───────────┘    └───────────┬────────────┘
+                  │                            │
+                  └──────────────┬─────────────┘
+                                 ▼
+                       ┌──────────────────┐
+                       │ gpui-base        │
+                       │ Behavior and     │
+                       │ infrastructure   │
+                       └────────┬─────────┘
+                                ▼
+                              GPUI
+```
+
+GPUI Component brings the [shadcn](https://ui.shadcn.com) approach to GPUI applications. The main concepts correspond as follows:
+
+| GPUI ecosystem                       | shadcn ecosystem               |
+| ------------------------------------ | ------------------------------ |
+| [GPUI](https://gpui.rs)              | HTML + Tailwind CSS            |
+| [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com) |
+| GPUI Component                       | shadcn                         |
+| `crates/ui` in GPUI Component        | shadcn's default UI            |
+
 ## Showcase
 
 https://longbridge.github.io/gpui-component/gallery/
