@@ -8,6 +8,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::StateStyle;
+
 type ChangeHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 
 /// An unstyled, controlled toggle button.
@@ -19,6 +21,7 @@ pub struct Toggle {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
+    semantic_styles: ToggleStyles,
     pressed: bool,
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
@@ -29,6 +32,27 @@ pub struct Toggle {
     focusable: bool,
 }
 
+/// Semantic root styles supported by [`Toggle`].
+#[derive(Default)]
+pub struct ToggleStyles {
+    pressed: StyleRefinement,
+    disabled: StyleRefinement,
+}
+
+impl ToggleStyles {
+    pub fn pressed(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.pressed
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+}
+
 impl Toggle {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id = id.into();
@@ -36,6 +60,7 @@ impl Toggle {
             base: div().id(id.clone()),
             id,
             style: StyleRefinement::default(),
+            semantic_styles: ToggleStyles::default(),
             pressed: false,
             disabled: false,
             children: SmallVec::new(),
@@ -55,6 +80,23 @@ impl Toggle {
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    /// Configures application-owned styles for the toggle's semantic states.
+    pub fn styles(mut self, build: impl FnOnce(ToggleStyles) -> ToggleStyles) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = self.style.clone();
+        if self.pressed {
+            style.refine(&self.semantic_styles.pressed);
+        }
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style
     }
 
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
@@ -121,7 +163,7 @@ impl RenderOnce for Toggle {
         let focus_handle = self.focus_handle(window, cx);
         let pressed = self.pressed;
         let disabled = self.disabled;
-        let style = self.style;
+        let style = self.resolved_style();
         let on_change = self.on_change;
 
         self.base
@@ -266,9 +308,42 @@ mod tests {
     fn state_styling_and_children_are_application_owned() {
         let _ = Toggle::new("styled")
             .child("Label")
+            .styles(|styles| {
+                styles
+                    .pressed(|style| style.opacity(0.8))
+                    .disabled(|style| style.opacity(0.5))
+            })
             .hover(|style| style.opacity(0.9))
             .active(|style| style.opacity(0.8))
             .focus_visible(|style| style.opacity(0.7));
+    }
+
+    #[test]
+    fn semantic_root_styles_follow_toggle_priority() {
+        let styled = |toggle: Toggle| {
+            toggle.opacity(0.9).styles(|styles| {
+                styles
+                    .pressed(|style| style.opacity(0.8))
+                    .disabled(|style| style.opacity(0.5))
+            })
+        };
+
+        assert_eq!(
+            styled(Toggle::new("normal")).resolved_style().opacity,
+            Some(0.9)
+        );
+        assert_eq!(
+            styled(Toggle::new("pressed").pressed(true))
+                .resolved_style()
+                .opacity,
+            Some(0.8)
+        );
+        assert_eq!(
+            styled(Toggle::new("pressed-disabled").pressed(true).disabled(true))
+                .resolved_style()
+                .opacity,
+            Some(0.5)
+        );
     }
 
     #[gpui::test]

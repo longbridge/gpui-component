@@ -221,10 +221,16 @@ fn source_checkout_registry_adds_checkbox_switch_and_radio_presentations() {
     let radio = fs::read_to_string(temp.path().join("src/ui/radio.rs")).unwrap();
     assert!(checkbox.contains("base::Checkbox::new"));
     assert!(checkbox.contains("pub fn on_change"));
+    assert!(checkbox.contains(".styles(|styles| styles.disabled"));
+    assert!(checkbox.contains("state != CheckboxState::Unchecked"));
     assert!(switch.contains("base::Switch::new"));
     assert!(switch.contains("pub fn on_toggle"));
+    assert!(switch.contains(".styles(|styles| styles.disabled"));
+    assert!(switch.contains(".when(checked"));
     assert!(radio.contains("base::Radio::new"));
     assert!(radio.contains("pub fn on_change"));
+    assert!(radio.contains(".styles(|styles| styles.disabled"));
+    assert!(radio.contains(".when(checked"));
 }
 
 fn uppercase_first(value: &str) -> String {

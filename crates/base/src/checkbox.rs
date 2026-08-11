@@ -8,6 +8,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::StateStyle;
+
 type ChangeHandler = Rc<dyn Fn(CheckboxState, &mut Window, &mut App)>;
 
 /// The semantic value exposed by an unstyled [`Checkbox`].
@@ -45,6 +47,7 @@ pub struct Checkbox {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
+    semantic_styles: CheckboxStyles,
     state: CheckboxState,
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
@@ -65,6 +68,7 @@ impl Checkbox {
             base: div().id(id.clone()),
             id,
             style: StyleRefinement::default(),
+            semantic_styles: CheckboxStyles::default(),
             state: CheckboxState::Unchecked,
             disabled: false,
             children: SmallVec::new(),
@@ -110,6 +114,12 @@ impl Checkbox {
     /// Sets whether pointer and keyboard activation are ignored.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Defines application-owned styles for the checkbox's semantic states.
+    pub fn styles(mut self, build: impl FnOnce(CheckboxStyles) -> CheckboxStyles) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
         self
     }
 
@@ -176,6 +186,50 @@ impl Checkbox {
             .read(cx)
             .clone()
     }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = self.style.clone();
+        match self.state {
+            CheckboxState::Unchecked => {}
+            CheckboxState::Checked => style.refine(&self.semantic_styles.checked),
+            CheckboxState::Indeterminate => style.refine(&self.semantic_styles.indeterminate),
+        }
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style
+    }
+}
+
+/// Semantic styles supported by [`Checkbox`].
+#[derive(Default)]
+pub struct CheckboxStyles {
+    checked: StyleRefinement,
+    indeterminate: StyleRefinement,
+    disabled: StyleRefinement,
+}
+
+impl CheckboxStyles {
+    /// Refines the root style when the checkbox is checked.
+    pub fn checked(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.checked
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    /// Refines the root style when the checkbox is indeterminate.
+    pub fn indeterminate(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.indeterminate
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    /// Refines the root style when the checkbox is disabled.
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
 }
 
 impl Styled for Checkbox {
@@ -203,7 +257,7 @@ impl RenderOnce for Checkbox {
         let focus_handle = self.focus_handle(window, cx);
         let disabled = self.disabled;
         let next_state = self.state.activated();
-        let style = self.style;
+        let style = self.resolved_style();
         let on_change = self.on_change;
         let prevent_default_on_activation = self.prevent_default_on_activation;
 
@@ -408,9 +462,73 @@ mod tests {
         let _ = Checkbox::new("states")
             .checked(true)
             .indeterminate(true)
+            .styles(|styles| {
+                styles
+                    .checked(|style| style.opacity(0.8))
+                    .indeterminate(|style| style.opacity(0.7))
+                    .disabled(|style| style.when(true, |style| style.opacity(0.5)))
+            })
             .hover(|style| style.opacity(0.9))
             .active(|style| style.opacity(0.8))
             .focus_visible(|style| style.opacity(0.7));
+    }
+
+    #[test]
+    fn semantic_root_styles_follow_checkbox_priority() {
+        let styles = |checkbox: Checkbox| {
+            checkbox.opacity(0.9).styles(|styles| {
+                styles
+                    .checked(|style| style.opacity(0.8))
+                    .indeterminate(|style| style.opacity(0.7))
+                    .disabled(|style| style.opacity(0.5))
+            })
+        };
+
+        assert_eq!(
+            styles(Checkbox::new("normal")).resolved_style().opacity,
+            Some(0.9)
+        );
+        assert_eq!(
+            styles(Checkbox::new("checked").checked(true))
+                .resolved_style()
+                .opacity,
+            Some(0.8)
+        );
+        assert_eq!(
+            styles(Checkbox::new("indeterminate").indeterminate(true))
+                .resolved_style()
+                .opacity,
+            Some(0.7)
+        );
+        assert_eq!(
+            styles(Checkbox::new("disabled").disabled(true))
+                .resolved_style()
+                .opacity,
+            Some(0.5)
+        );
+        assert_eq!(
+            styles(
+                Checkbox::new("checked-disabled")
+                    .checked(true)
+                    .disabled(true),
+            )
+            .resolved_style()
+            .opacity,
+            Some(0.5)
+        );
+
+        let checked_color = gpui::hsla(0.6, 0.7, 0.5, 1.0);
+        let combined = Checkbox::new("combined")
+            .checked(true)
+            .disabled(true)
+            .styles(|styles| {
+                styles
+                    .checked(|style| style.border_color(checked_color))
+                    .disabled(|style| style.opacity(0.5))
+            })
+            .resolved_style();
+        assert_eq!(combined.border_color, Some(checked_color));
+        assert_eq!(combined.opacity, Some(0.5));
     }
 
     #[test]

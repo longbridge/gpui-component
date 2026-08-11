@@ -116,6 +116,12 @@ after its implementation and compatibility requirements have been verified.
 - 2026-08-11: User manually exercised Button, Switch, Checkbox, and Slider in
   the running gallery and found their behavior and presentation correct. Radio,
   Toggle, and Link still require the same manual old/new comparison.
+- 2026-08-11: M1/M2 Base controls gained typed semantic root style contexts;
+  application-owned Registry templates use them for disabled root appearance
+  without moving indicator/thumb presentation into Base.
+- 2026-08-11: Generic CSS-like `transition(...)` landed with ElementId-like
+  scalar/tuple identity, delay/easing, smooth target reversal, reduce-motion,
+  and per-window/view keyed lifecycle. No Base component installs motion.
 
 ## Crate Foundation
 
@@ -164,6 +170,20 @@ retaining behavior-relevant content ownership outside Base.
 - [x] Toggle
 - [x] Slider
 - [x] Link
+
+### M1/M2 — Stateful Presentation
+
+- [x] Typed `StateStyle` preserving GPUI `Styled` and `FluentBuilder`.
+- [x] Button semantic root style: disabled.
+- [x] Checkbox semantic root styles: checked, indeterminate, disabled.
+- [x] Radio semantic root styles: checked, disabled.
+- [x] Switch semantic root styles: checked, disabled.
+- [x] Toggle semantic root styles: pressed, disabled.
+- [x] Slider semantic root style: disabled.
+- [x] Link semantic root style: disabled.
+- [x] Generic application-owned value transitions with no component defaults.
+- [ ] Typed state projection for Indicator, Thumb, Track, and other slots.
+- [ ] Interaction transition spike for GPUI hover/active edges.
 
 ### M3 — Input Controls
 

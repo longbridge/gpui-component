@@ -8,6 +8,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::StateStyle;
+
 type ChangeHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 
 /// An unstyled radio control that owns activation, focus, and accessibility behavior.
@@ -20,6 +22,7 @@ pub struct Radio {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
+    semantic_styles: RadioStyles,
     checked: bool,
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
@@ -35,6 +38,27 @@ pub struct Radio {
     selected_accessibility_state: bool,
 }
 
+/// Semantic root styles supported by [`Radio`].
+#[derive(Default)]
+pub struct RadioStyles {
+    checked: StyleRefinement,
+    disabled: StyleRefinement,
+}
+
+impl RadioStyles {
+    pub fn checked(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.checked
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+}
+
 impl Radio {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id = id.into();
@@ -42,6 +66,7 @@ impl Radio {
             base: div().id(id.clone()),
             id,
             style: StyleRefinement::default(),
+            semantic_styles: RadioStyles::default(),
             checked: false,
             disabled: false,
             children: SmallVec::new(),
@@ -66,6 +91,23 @@ impl Radio {
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    /// Configures application-owned styles for the radio's semantic states.
+    pub fn styles(mut self, build: impl FnOnce(RadioStyles) -> RadioStyles) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = self.style.clone();
+        if self.checked {
+            style.refine(&self.semantic_styles.checked);
+        }
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style
     }
 
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
@@ -167,7 +209,7 @@ impl RenderOnce for Radio {
         let focus_handle = self.focus_handle(window, cx);
         let disabled = self.disabled;
         let checked = self.checked;
-        let style = self.style;
+        let style = self.resolved_style();
         let on_change = self.on_change;
         let toggle_on_activate = self.toggle_on_activate;
 
@@ -292,6 +334,49 @@ mod tests {
         Context, Element as _, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
         TestAppContext, VisualTestContext, accesskit, canvas, point, px,
     };
+
+    #[test]
+    fn semantic_state_styles_are_available_to_applications() {
+        let _ = Radio::new("states").styles(|styles| {
+            styles
+                .checked(|style| style.opacity(0.8))
+                .disabled(|style| {
+                    style
+                        .opacity(0.5)
+                        .when(true, |style| style.border_1())
+                        .when_some(Some(0.4), |style, opacity| style.opacity(opacity))
+                        .when_none(&None::<f32>, |style| style.rounded_sm())
+                })
+        });
+    }
+
+    #[test]
+    fn semantic_root_styles_follow_radio_priority() {
+        let styled = |radio: Radio| {
+            radio.opacity(0.9).styles(|styles| {
+                styles
+                    .checked(|style| style.opacity(0.8))
+                    .disabled(|style| style.opacity(0.5))
+            })
+        };
+
+        assert_eq!(
+            styled(Radio::new("normal")).resolved_style().opacity,
+            Some(0.9)
+        );
+        assert_eq!(
+            styled(Radio::new("checked").checked(true))
+                .resolved_style()
+                .opacity,
+            Some(0.8)
+        );
+        assert_eq!(
+            styled(Radio::new("checked-disabled").checked(true).disabled(true))
+                .resolved_style()
+                .opacity,
+            Some(0.5)
+        );
+    }
 
     struct RadioHarness {
         checked: bool,

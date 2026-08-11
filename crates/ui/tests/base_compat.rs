@@ -1,6 +1,7 @@
 use gpui::{
     Axis, Div, InteractiveElement as _, Length, ParentElement as _, Pixels, Stateful,
-    StatefulInteractiveElement as _, Styled as _, blue, green, px, red,
+    StatefulInteractiveElement as _, Styled as _, blue, green, prelude::FluentBuilder as _, px,
+    red,
 };
 use gpui_component::{
     AxisExt as _, FocusTrapElement, InteractiveElementExt, LengthExt as _, Placement, Side,
@@ -46,4 +47,35 @@ fn base_button_accepts_application_owned_state_styles() {
         .hover(|style| style.bg(green()))
         .active(|style| style.bg(blue()))
         .focus_visible(|style| style.border_1());
+}
+
+#[test]
+fn base_controls_expose_typed_semantic_style_contexts() {
+    let _ = gpui_component_base::Button::new("button")
+        .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+    let _ = gpui_component_base::Checkbox::new("checkbox").styles(|styles| {
+        styles
+            .checked(|style| style.bg(green()))
+            .indeterminate(|style| style.bg(blue()))
+            .disabled(|style| style.when(true, |style| style.opacity(0.5)))
+    });
+    let _ = gpui_component_base::Radio::new("radio")
+        .styles(|styles| styles.checked(|style| style.bg(green())));
+    let _ = gpui_component_base::Switch::new("switch")
+        .styles(|styles| styles.checked(|style| style.bg(green())));
+    let _ = gpui_component_base::Toggle::new("toggle")
+        .styles(|styles| styles.pressed(|style| style.bg(green())));
+    let _ = gpui_component_base::Slider::new("slider")
+        .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+    let _ = gpui_component_base::Link::new("link")
+        .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+}
+
+#[test]
+fn transition_ids_accept_strings_and_named_channels() {
+    let _: gpui_component_base::TransitionId = "opacity".into();
+    let _: gpui_component_base::TransitionId = ("checkbox", "fill").into();
+
+    fn requires_interpolation<T: gpui_component_base::Interpolate>() {}
+    requires_interpolation::<f32>();
 }

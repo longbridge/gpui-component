@@ -8,6 +8,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::StateStyle;
+
 type ChangeHandler = Rc<dyn Fn(f32, &mut Window, &mut App)>;
 
 /// An unstyled, controlled single-value slider.
@@ -20,6 +22,7 @@ pub struct Slider {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
+    semantic_styles: SliderStyles,
     value: f32,
     min: f32,
     max: f32,
@@ -33,6 +36,20 @@ pub struct Slider {
     tab_stop: bool,
 }
 
+/// Semantic root styles supported by [`Slider`].
+#[derive(Default)]
+pub struct SliderStyles {
+    disabled: StyleRefinement,
+}
+
+impl SliderStyles {
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+}
+
 impl Slider {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id = id.into();
@@ -40,6 +57,7 @@ impl Slider {
             base: div().id(id.clone()),
             id,
             style: StyleRefinement::default(),
+            semantic_styles: SliderStyles::default(),
             value: 0.,
             min: 0.,
             max: 100.,
@@ -78,6 +96,20 @@ impl Slider {
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    /// Configures application-owned styles for the slider's semantic states.
+    pub fn styles(mut self, build: impl FnOnce(SliderStyles) -> SliderStyles) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = self.style.clone();
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style
     }
 
     pub fn orientation(mut self, orientation: Orientation) -> Self {
@@ -149,7 +181,7 @@ impl RenderOnce for Slider {
         let step = valid_step(self.step);
         let value = normalize(self.value, min, max, step);
         let disabled = self.disabled;
-        let style = self.style;
+        let style = self.resolved_style();
         let on_change = self.on_change;
 
         self.base
@@ -274,6 +306,25 @@ mod tests {
         assert_eq!(Slider::value_for_fraction(10., 20., 2., 0.49), 14.);
         assert_eq!(Slider::value_for_fraction(10., 20., 2., -1.), 10.);
         assert_eq!(Slider::value_for_fraction(10., 20., 2., 2.), 20.);
+    }
+
+    #[test]
+    fn semantic_state_styles_are_available_to_applications() {
+        let _ = Slider::new("states").styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+    }
+
+    #[test]
+    fn disabled_semantic_style_refines_instance_style_only_when_active() {
+        let enabled = Slider::new("enabled")
+            .opacity(0.9)
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+        assert_eq!(enabled.resolved_style().opacity, Some(0.9));
+
+        let disabled = Slider::new("disabled")
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
+            .opacity(0.9)
+            .disabled(true);
+        assert_eq!(disabled.resolved_style().opacity, Some(0.5));
     }
 
     #[gpui::test]

@@ -10,29 +10,33 @@ mod event;
 mod focus_trap;
 mod geometry;
 mod link;
+pub mod motion;
 mod radio;
 mod slider;
 pub mod slider_state;
+mod state_style;
 mod switch;
 pub mod theme_tokens;
 mod toggle;
 
-pub use button::Button;
-pub use checkbox::{Checkbox, CheckboxState};
+pub use button::{Button, ButtonStyles};
+pub use checkbox::{Checkbox, CheckboxState, CheckboxStyles};
 pub use event::InteractiveElementExt;
 pub use focus_trap::FocusTrapElement;
 #[doc(hidden)]
 pub use focus_trap::active_focus_trap;
 pub use geometry::*;
-pub use link::Link;
-pub use radio::{Radio, RadioGroupState};
-pub use slider::Slider;
-pub use switch::Switch;
+pub use link::{Link, LinkStyles};
+pub use motion::{Interpolate, Transition, TransitionId, transition};
+pub use radio::{Radio, RadioGroupState, RadioStyles};
+pub use slider::{Slider, SliderStyles};
+pub use state_style::StateStyle;
+pub use switch::{Switch, SwitchStyles};
 pub use theme_tokens::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,
     TypographyTokens,
 };
-pub use toggle::Toggle;
+pub use toggle::{Toggle, ToggleStyles};
 
 use gpui::App;
 

@@ -70,6 +70,7 @@ impl RenderOnce for Checkbox {
         base::Checkbox::new(self.id)
             .state(state)
             .disabled(self.disabled)
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .accessibility_label(self.label.clone())
             .when_some(self.on_change, |this, on_change| {
                 this.on_change(move |state, window, cx| on_change(state, window, cx))
@@ -77,7 +78,6 @@ impl RenderOnce for Checkbox {
             .flex()
             .items_center()
             .gap_2()
-            .when(self.disabled, |this| this.opacity(0.5))
             .child(
                 div()
                     .flex()

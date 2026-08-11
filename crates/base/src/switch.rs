@@ -8,6 +8,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::StateStyle;
+
 type ToggleHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 type PointerDownToggleHandler = Rc<dyn Fn(bool, &MouseDownEvent, &mut Window, &mut App)>;
 
@@ -22,6 +24,7 @@ pub struct Switch {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
+    semantic_styles: SwitchStyles,
     checked: bool,
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
@@ -34,6 +37,27 @@ pub struct Switch {
     block_pointer_when_disabled: bool,
 }
 
+/// Semantic root styles supported by [`Switch`].
+#[derive(Default)]
+pub struct SwitchStyles {
+    checked: StyleRefinement,
+    disabled: StyleRefinement,
+}
+
+impl SwitchStyles {
+    pub fn checked(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.checked
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+}
+
 impl Switch {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id = id.into();
@@ -41,6 +65,7 @@ impl Switch {
             base: div().id(id.clone()),
             id,
             style: StyleRefinement::default(),
+            semantic_styles: SwitchStyles::default(),
             checked: false,
             disabled: false,
             children: SmallVec::new(),
@@ -64,6 +89,23 @@ impl Switch {
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    /// Configures application-owned styles for the switch's semantic states.
+    pub fn styles(mut self, build: impl FnOnce(SwitchStyles) -> SwitchStyles) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = self.style.clone();
+        if self.checked {
+            style.refine(&self.semantic_styles.checked);
+        }
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style
     }
 
     /// Handles activation with the next checked value and its input event.
@@ -152,7 +194,7 @@ impl RenderOnce for Switch {
         let focus_handle = self.focus_handle(window, cx);
         let checked = self.checked;
         let disabled = self.disabled;
-        let style = self.style;
+        let style = self.resolved_style();
         let on_pointer_down_toggle = self.on_pointer_down_toggle;
 
         self.base
@@ -376,9 +418,42 @@ mod tests {
     #[test]
     fn application_owned_state_styles_are_available() {
         let _ = Switch::new("states")
+            .styles(|styles| {
+                styles
+                    .checked(|style| style.opacity(0.8))
+                    .disabled(|style| style.opacity(0.5))
+            })
             .hover(|style| style.opacity(0.9))
             .active(|style| style.opacity(0.8))
             .focus_visible(|style| style.opacity(0.7));
+    }
+
+    #[test]
+    fn semantic_root_styles_follow_switch_priority() {
+        let styled = |switch: Switch| {
+            switch.opacity(0.9).styles(|styles| {
+                styles
+                    .checked(|style| style.opacity(0.8))
+                    .disabled(|style| style.opacity(0.5))
+            })
+        };
+
+        assert_eq!(
+            styled(Switch::new("normal")).resolved_style().opacity,
+            Some(0.9)
+        );
+        assert_eq!(
+            styled(Switch::new("checked").checked(true))
+                .resolved_style()
+                .opacity,
+            Some(0.8)
+        );
+        assert_eq!(
+            styled(Switch::new("checked-disabled").checked(true).disabled(true))
+                .resolved_style()
+                .opacity,
+            Some(0.5)
+        );
     }
 
     #[gpui::test]

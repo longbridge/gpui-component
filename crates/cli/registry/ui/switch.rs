@@ -54,6 +54,7 @@ impl RenderOnce for Switch {
         base::Switch::new(self.id)
             .checked(checked)
             .disabled(self.disabled)
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .accessibility_label(self.label.clone())
             .when_some(self.on_toggle, |this, on_toggle| {
                 this.on_toggle(move |checked, event, window, cx| {
@@ -63,7 +64,6 @@ impl RenderOnce for Switch {
             .flex()
             .items_center()
             .gap_2()
-            .when(self.disabled, |this| this.opacity(0.5))
             .child(
                 div()
                     .flex()

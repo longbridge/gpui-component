@@ -8,6 +8,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::StateStyle;
+
 type ActivationHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 type OpenHandler = Rc<dyn Fn(&str, &ClickEvent, &mut Window, &mut App)>;
 
@@ -23,6 +25,7 @@ pub struct Link {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
+    semantic_styles: LinkStyles,
     href: Option<SharedString>,
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
@@ -35,6 +38,20 @@ pub struct Link {
     tab_stop: bool,
 }
 
+/// Semantic root styles supported by [`Link`].
+#[derive(Default)]
+pub struct LinkStyles {
+    disabled: StyleRefinement,
+}
+
+impl LinkStyles {
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+}
+
 impl Link {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id = id.into();
@@ -42,6 +59,7 @@ impl Link {
             base: div().id(id.clone()),
             id,
             style: StyleRefinement::default(),
+            semantic_styles: LinkStyles::default(),
             href: None,
             disabled: false,
             children: SmallVec::new(),
@@ -85,6 +103,20 @@ impl Link {
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    /// Configures application-owned styles for the link's semantic states.
+    pub fn styles(mut self, build: impl FnOnce(LinkStyles) -> LinkStyles) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = self.style.clone();
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style
     }
 
     /// Sets the name exposed to accessibility clients.
@@ -150,7 +182,7 @@ impl RenderOnce for Link {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let focus_handle = self.focusable.then(|| self.focus_handle(window, cx));
         let disabled = self.disabled;
-        let style = self.style;
+        let style = self.resolved_style();
         let href = self.href;
         let open_with = self.open_with;
         let on_activate = self.on_activate;
@@ -377,9 +409,24 @@ mod tests {
     #[test]
     fn visual_state_styles_remain_application_owned() {
         let _ = Link::new("states")
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .hover(|style| style.opacity(0.9))
             .active(|style| style.opacity(0.8))
             .focus_visible(|style| style.opacity(0.7));
+    }
+
+    #[test]
+    fn disabled_semantic_style_refines_instance_style_only_when_active() {
+        let enabled = Link::new("enabled")
+            .opacity(0.9)
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+        assert_eq!(enabled.resolved_style().opacity, Some(0.9));
+
+        let disabled = Link::new("disabled")
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
+            .opacity(0.9)
+            .disabled(true);
+        assert_eq!(disabled.resolved_style().opacity, Some(0.5));
     }
 
     #[gpui::test]

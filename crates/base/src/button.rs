@@ -8,6 +8,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
+use crate::StateStyle;
+
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 /// An unstyled button that owns interaction, focus, keyboard, and accessibility behavior.
@@ -19,6 +21,7 @@ pub struct Button {
     id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
+    semantic_styles: ButtonStyles,
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
     on_click: Option<ClickHandler>,
@@ -38,6 +41,7 @@ impl Button {
             base: div().id(id.clone()),
             id,
             style: StyleRefinement::default(),
+            semantic_styles: ButtonStyles::default(),
             disabled: false,
             children: SmallVec::new(),
             on_click: None,
@@ -64,6 +68,12 @@ impl Button {
     /// Sets whether the button ignores pointer and keyboard activation.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Defines application-owned styles for the button's semantic states.
+    pub fn styles(mut self, build: impl FnOnce(ButtonStyles) -> ButtonStyles) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
         self
     }
 
@@ -127,12 +137,20 @@ impl Button {
         })
     }
 
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = self.style.clone();
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style
+    }
+
     /// Applies behavior to the underlying stateful div without introducing a
     /// wrapper element.
     pub fn into_stateful(self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
         let focus_handle = self.focus_handle(window, cx);
         let disabled = self.disabled;
-        let style = self.style;
+        let style = self.resolved_style();
         let on_click = self.on_click;
 
         self.base
@@ -172,6 +190,21 @@ impl Button {
                 this.style().refine(&style);
                 this
             })
+    }
+}
+
+/// Semantic styles supported by [`Button`].
+#[derive(Default)]
+pub struct ButtonStyles {
+    disabled: StyleRefinement,
+}
+
+impl ButtonStyles {
+    /// Refines the root style when the button is disabled.
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
     }
 }
 
@@ -325,9 +358,32 @@ mod tests {
     #[test]
     fn state_styling_methods_are_available_to_applications() {
         let _ = Button::new("states")
+            .styles(|styles| {
+                styles.disabled(|style| {
+                    style
+                        .opacity(0.5)
+                        .when(true, |style| style.border_1())
+                        .when_some(Some(0.4), |style, opacity| style.opacity(opacity))
+                        .when_none(&None::<f32>, |style| style.rounded_sm())
+                })
+            })
             .hover(|style| style.opacity(0.9))
             .active(|style| style.opacity(0.8))
             .focus_visible(|style| style.opacity(0.7));
+    }
+
+    #[test]
+    fn disabled_semantic_style_refines_instance_style_only_when_active() {
+        let enabled = Button::new("enabled")
+            .opacity(0.9)
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+        assert_eq!(enabled.resolved_style().opacity, Some(0.9));
+
+        let disabled = Button::new("disabled")
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
+            .opacity(0.9)
+            .disabled(true);
+        assert_eq!(disabled.resolved_style().opacity, Some(0.5));
     }
 
     #[gpui::test]

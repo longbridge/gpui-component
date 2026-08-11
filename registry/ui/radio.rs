@@ -54,6 +54,7 @@ impl RenderOnce for Radio {
         base::Radio::new(self.id)
             .checked(checked)
             .disabled(self.disabled)
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .accessibility_label(self.label.clone())
             .when_some(self.on_change, |this, on_change| {
                 this.on_change(move |checked, event, window, cx| {
@@ -63,7 +64,6 @@ impl RenderOnce for Radio {
             .flex()
             .items_center()
             .gap_2()
-            .when(self.disabled, |this| this.opacity(0.5))
             .child(
                 div()
                     .flex()
