@@ -31,6 +31,7 @@ mod styled;
 mod switch;
 mod theme;
 pub mod theme_tokens;
+mod tooltip;
 mod toggle;
 mod toggle_group;
 mod virtual_list;
@@ -74,6 +75,7 @@ pub use theme_tokens::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,
     TypographyTokens,
 };
+pub use tooltip::{Tooltip, TooltipOverlay, TooltipPositioner, TooltipRequest, TooltipTransition};
 pub use toggle::{Toggle, ToggleStyles};
 pub use toggle_group::ToggleGroup;
 #[doc(hidden)]

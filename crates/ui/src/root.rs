@@ -6,7 +6,7 @@ use crate::{
     notification::{Notification, NotificationList},
     sheet::Sheet,
     text::{SelectionScope, TextSelectionController, TextViewState, WindowTextSelection},
-    tooltip::TooltipOverlay,
+    tooltip::render_tooltip,
     window_border,
 };
 use gpui::{
@@ -41,7 +41,7 @@ pub struct Root {
     pub(crate) active_dialogs: Vec<ActiveDialog>,
     pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
-    pub(crate) tooltip_overlay: Entity<TooltipOverlay>,
+    pub(crate) tooltip_overlay: Entity<gpui_base::TooltipOverlay>,
     pub(crate) native_menu_overlay: Entity<FallbackMenuOverlay>,
     sheet_size: Option<DefiniteLength>,
     window_shadow_size: Pixels,
@@ -103,7 +103,8 @@ impl Root {
             active_dialogs: Vec::new(),
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
-            tooltip_overlay: cx.new(|_| TooltipOverlay::new()),
+            tooltip_overlay: cx
+                .new(|_| gpui_base::TooltipOverlay::new().render_with(render_tooltip)),
             native_menu_overlay: cx.new(|_| FallbackMenuOverlay::new()),
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
@@ -444,7 +445,10 @@ impl Root {
     }
 
     /// Get the tooltip overlay entity for this window.
-    pub(crate) fn tooltip_overlay(window: &Window, cx: &App) -> Option<Entity<TooltipOverlay>> {
+    pub(crate) fn tooltip_overlay(
+        window: &Window,
+        cx: &App,
+    ) -> Option<Entity<gpui_base::TooltipOverlay>> {
         let root = window.root::<Root>()??;
         Some(root.read(cx).tooltip_overlay.clone())
     }
