@@ -93,10 +93,12 @@ impl RenderOnce for Avatar {
         const BG_OPACITY: f32 = 0.2;
 
         let fallback = AvatarFallback::new()
-            .size(avatar_size(self.size))
+            .size_full()
             .flex()
             .items_center()
             .justify_center()
+            .rounded_full()
+            .overflow_hidden()
             .when(self.name.is_none(), |this| {
                 this.text_size(avatar_size(self.size) * 0.6)
                     .child(self.placeholder)
@@ -107,7 +109,8 @@ impl RenderOnce for Avatar {
                 this.bg(color.opacity(BG_OPACITY))
                     .text_color(color)
                     .child(div().avatar_text_size(self.size).child(self.short_name))
-            });
+            })
+            .refine_style(&inner_style);
 
         self.base
             .size(avatar_size(self.size))
@@ -122,7 +125,7 @@ impl RenderOnce for Avatar {
             .when_some(self.src, |this, src| {
                 this.image(
                     AvatarImage::new(src)
-                        .size(avatar_size(self.size))
+                        .size_full()
                         .rounded_full()
                         .refine_style(&inner_style),
                 )
