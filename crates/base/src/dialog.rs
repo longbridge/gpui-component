@@ -3,19 +3,15 @@ use std::rc::Rc;
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Edges, FocusHandle, InteractiveElement as _, IntoElement,
     KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, Role,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, actions, div,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 
+use crate::actions::{Cancel, Confirm};
 use crate::{FocusTrapElement as _, StyledExt as _};
 
 const CONTEXT: &str = "Dialog";
-actions!(
-    dialog,
-    [AcceptDialog, CancelDialog, ConfirmDialog, DismissDialog]
-);
-
 type Decision = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool>;
 type Closed = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 type CloseRequest = Rc<dyn Fn(bool, &mut Window, &mut App)>;
@@ -23,34 +19,17 @@ type OpenRequest = Rc<dyn Fn(&mut Window, &mut App)>;
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("escape", CancelDialog, Some(CONTEXT)),
-        KeyBinding::new("enter", ConfirmDialog, Some(CONTEXT)),
+        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
+        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
     ]);
 }
 
-#[derive(Clone)]
-pub struct DialogCallbacks {
-    confirm: Decision,
-    cancel: Decision,
-    closed: Closed,
-}
-
-impl Default for DialogCallbacks {
-    fn default() -> Self {
-        Self {
-            confirm: Rc::new(|_, _, _| true),
-            cancel: Rc::new(|_, _, _| true),
-            closed: Rc::new(|_, _, _| {}),
-        }
-    }
-}
-
-impl DialogCallbacks {
-    pub fn on_confirm(
+impl Dialog {
+    pub fn on_ok(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static,
     ) -> Self {
-        self.confirm = Rc::new(handler);
+        self.on_ok = Rc::new(handler);
         self
     }
 
@@ -58,7 +37,7 @@ impl DialogCallbacks {
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static,
     ) -> Self {
-        self.cancel = Rc::new(handler);
+        self.on_cancel = Rc::new(handler);
         self
     }
 
@@ -66,7 +45,7 @@ impl DialogCallbacks {
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.closed = Rc::new(handler);
+        self.on_close = Rc::new(handler);
         self
     }
 }
@@ -85,7 +64,9 @@ pub struct Dialog {
     overlay: Option<AnyElement>,
     surface: Option<AnyElement>,
     children: SmallVec<[AnyElement; 2]>,
-    callbacks: DialogCallbacks,
+    on_ok: Decision,
+    on_cancel: Decision,
+    on_close: Closed,
     request_close: CloseRequest,
 }
 
@@ -240,12 +221,14 @@ impl RenderOnce for DialogDescription {
 /// Wrapper that dispatches the dialog cancel action when activated.
 #[derive(IntoElement)]
 pub struct DialogClose {
+    style: StyleRefinement,
     children: SmallVec<[AnyElement; 1]>,
 }
 
 impl DialogClose {
     pub fn new() -> Self {
         Self {
+            style: StyleRefinement::default(),
             children: SmallVec::new(),
         }
     }
@@ -260,12 +243,18 @@ impl ParentElement for DialogClose {
         self.children.extend(elements);
     }
 }
+impl Styled for DialogClose {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
 impl RenderOnce for DialogClose {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div()
             .id("dialog-close")
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(CancelDialog), cx))
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(Cancel), cx))
             .children(self.children)
+            .refine_style(&self.style)
     }
 }
 
@@ -283,7 +272,9 @@ impl Dialog {
             overlay: None,
             surface: None,
             children: SmallVec::new(),
-            callbacks: DialogCallbacks::default(),
+            on_ok: Rc::new(|_, _, _| true),
+            on_cancel: Rc::new(|_, _, _| true),
+            on_close: Rc::new(|_, _, _| {}),
             request_close: Rc::new(|_, _, _| {}),
         }
     }
@@ -312,11 +303,6 @@ impl Dialog {
         self.role = role;
         self
     }
-    pub fn callbacks(mut self, value: DialogCallbacks) -> Self {
-        self.callbacks = value;
-        self
-    }
-
     #[doc(hidden)]
     pub fn layer(mut self, index: usize, topmost: bool) -> Self {
         self.layer = index;
@@ -351,11 +337,10 @@ impl ParentElement for Dialog {
 
 impl RenderOnce for Dialog {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let callbacks = self.callbacks;
         let request_close = self.request_close;
-        let cancel = callbacks.cancel.clone();
-        let confirm = callbacks.confirm.clone();
-        let closed = callbacks.closed.clone();
+        let cancel = self.on_cancel.clone();
+        let confirm = self.on_ok.clone();
+        let closed = self.on_close.clone();
         let overlay_closable = self.overlay_closable && self.topmost;
         let dismiss_below_y = self.dismiss_below_y;
 
@@ -369,47 +354,24 @@ impl RenderOnce for Dialog {
                 let request_cancel = request_close.clone();
                 let request_confirm = request_close.clone();
                 let closed_cancel = closed.clone();
-                this.on_action(move |_: &CancelDialog, window, cx| {
+                this.on_action(move |_: &Cancel, window, cx| {
                     let event = ClickEvent::default();
                     if cancel(&event, window, cx) {
                         request_cancel(false, window, cx);
                         closed_cancel(&event, window, cx);
                     }
                 })
-                .on_action(move |_: &ConfirmDialog, window, cx| {
+                .on_action(move |_: &Confirm, window, cx| {
                     let event = ClickEvent::default();
                     if confirm(&event, window, cx) {
                         request_confirm(true, window, cx);
                         closed(&event, window, cx);
                     }
                 })
-                .on_action({
-                    let request_close = request_close.clone();
-                    let confirm = callbacks.confirm.clone();
-                    let closed = callbacks.closed.clone();
-                    move |_: &AcceptDialog, window, cx| {
-                        let event = ClickEvent::default();
-                        if confirm(&event, window, cx) {
-                            request_close(false, window, cx);
-                            closed(&event, window, cx);
-                        }
-                    }
-                })
-                .on_action({
-                    let request_close = request_close.clone();
-                    let cancel = callbacks.cancel.clone();
-                    let closed = callbacks.closed.clone();
-                    move |_: &DismissDialog, window, cx| {
-                        let event = ClickEvent::default();
-                        request_close(false, window, cx);
-                        let _ = cancel(&event, window, cx);
-                        closed(&event, window, cx);
-                    }
-                })
             })
             .when_some(self.overlay, |this, overlay| {
-                let cancel = callbacks.cancel.clone();
-                let closed = callbacks.closed.clone();
+                let cancel = self.on_cancel.clone();
+                let closed = self.on_close.clone();
                 let request_close = request_close.clone();
                 this.child(
                     div()

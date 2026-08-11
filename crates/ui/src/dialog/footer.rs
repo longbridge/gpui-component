@@ -3,7 +3,7 @@ use gpui::{
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div, relative,
 };
 
-use crate::{ActiveTheme as _, StyledExt as _, dialog::ConfirmDialog, h_flex};
+use crate::{ActiveTheme as _, StyledExt as _, dialog::Confirm, h_flex};
 
 /// Footer section of a dialog, typically contains action buttons.
 ///
@@ -111,7 +111,9 @@ impl RenderOnce for DialogAction {
         div()
             .size_full()
             .id("dialog-action")
-            .on_click(move |_, window, cx| window.dispatch_action(Box::new(ConfirmDialog), cx))
+            .on_click(move |_, window, cx| {
+                window.dispatch_action(Box::new(Confirm { secondary: false }), cx)
+            })
             .children(self.children)
     }
 }

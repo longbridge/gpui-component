@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub static ANIMATION_DURATION: LazyLock<Duration> = LazyLock::new(|| Duration::from_secs_f64(0.25));
-pub use gpui_base::{CancelDialog, ConfirmDialog};
+pub use gpui_base::actions::{Cancel, Confirm};
 
 /// Dialog button props.
 #[derive(Clone)]
@@ -112,7 +112,9 @@ impl DialogButtonProps {
         Button::new("ok")
             .label(ok_text)
             .with_variant(ok_variant)
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(gpui_base::AcceptDialog), cx))
+            .on_click(|_, window, cx| {
+                window.dispatch_action(Box::new(Confirm { secondary: false }), cx)
+            })
             .into_any_element()
     }
 
@@ -126,7 +128,7 @@ impl DialogButtonProps {
         Button::new("cancel")
             .label(cancel_text)
             .with_variant(cancel_variant)
-            .on_click(|_, window, cx| window.dispatch_action(Box::new(CancelDialog), cx))
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(Cancel), cx))
             .into_any_element()
     }
 }
@@ -488,14 +490,9 @@ impl RenderOnce for Dialog {
                                         }),
                                 )
                             })
-                            .callbacks(
-                                gpui_base::DialogCallbacks::default()
-                                    .on_confirm(move |event, window, cx| on_ok(event, window, cx))
-                                    .on_cancel(move |event, window, cx| {
-                                        on_cancel(event, window, cx)
-                                    })
-                                    .on_close(move |event, window, cx| on_close(event, window, cx)),
-                            )
+                            .on_ok(move |event, window, cx| on_ok(event, window, cx))
+                            .on_cancel(move |event, window, cx| on_cancel(event, window, cx))
+                            .on_close(move |event, window, cx| on_close(event, window, cx))
                             .request_close(move |deferred, window, cx| {
                                 if deferred {
                                     Self::defer_close_dialog(window, cx);
@@ -581,19 +578,16 @@ impl RenderOnce for Dialog {
                                         let top = (paddings.top - px(10.)).max(px(8.));
                                         let right = (paddings.right - px(10.)).max(px(8.));
 
-                                        Button::new("close")
+                                        gpui_base::DialogClose::new()
                                             .absolute()
                                             .top(top)
                                             .right(right)
-                                            .small()
-                                            .ghost()
-                                            .icon(IconName::Close)
-                                            .on_click(|_, window, cx| {
-                                                window.dispatch_action(
-                                                    Box::new(gpui_base::DismissDialog),
-                                                    cx,
-                                                )
-                                            })
+                                            .child(
+                                                Button::new("close")
+                                                    .small()
+                                                    .ghost()
+                                                    .icon(IconName::Close),
+                                            )
                                     }))
                                     .with_animation(
                                         "slide-down",

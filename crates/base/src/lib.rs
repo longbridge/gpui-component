@@ -66,8 +66,7 @@ pub use collapsible::Collapsible;
 pub use combobox::Combobox;
 pub use component_traits::{Disableable, Selectable};
 pub use dialog::{
-    AcceptDialog, CancelDialog, ConfirmDialog, Dialog, DialogCallbacks, DialogClose,
-    DialogDescription, DialogPlacement, DialogTitle, DialogTrigger, DismissDialog,
+    Dialog, DialogClose, DialogDescription, DialogPlacement, DialogTitle, DialogTrigger,
 };
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;

@@ -60,15 +60,13 @@ fn base_sheet_accepts_application_owned_overlay_and_surface() {
 
 #[test]
 fn base_dialog_owns_modal_actions_and_alert_defaults() {
-    let _ = gpui_base::DialogCallbacks::default()
-        .on_confirm(|_, _, _| true)
-        .on_cancel(|_, _, _| true)
-        .on_close(|_, _, _| {});
-
     fn dialog(cx: &mut gpui::App) {
         let _ = gpui_base::Dialog::new(cx)
             .overlay(gpui::div())
-            .surface(gpui::div());
+            .surface(gpui::div())
+            .on_ok(|_, _, _| true)
+            .on_cancel(|_, _, _| true)
+            .on_close(|_, _, _| {});
         let _ = gpui_base::AlertDialog::new(cx).into_dialog();
     }
 
@@ -76,8 +74,8 @@ fn base_dialog_owns_modal_actions_and_alert_defaults() {
     let _ = gpui_base::DialogTitle::new().child("Title");
     let _ = gpui_base::DialogDescription::new().child("Description");
     let _ = gpui_base::DialogClose::new().child(gpui::div());
-    let _: gpui_base::CancelDialog = gpui_component::dialog::CancelDialog;
-    let _: gpui_base::ConfirmDialog = gpui_component::dialog::ConfirmDialog;
+    let _: gpui_base::actions::Cancel = gpui_component::dialog::Cancel;
+    let _: gpui_base::actions::Confirm = gpui_component::dialog::Confirm { secondary: false };
 }
 
 #[test]
