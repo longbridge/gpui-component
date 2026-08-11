@@ -1,20 +1,25 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, actions, div, prelude::FluentBuilder as _,
+    AnyElement, App, Bounds, ClickEvent, Edges, FocusHandle, InteractiveElement as _, IntoElement,
+    KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, Role,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, actions, div,
+    prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 
 use crate::{FocusTrapElement as _, StyledExt as _};
 
 const CONTEXT: &str = "Dialog";
-actions!(dialog, [CancelDialog, ConfirmDialog]);
+actions!(
+    dialog,
+    [AcceptDialog, CancelDialog, ConfirmDialog, DismissDialog]
+);
 
 type Decision = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool>;
 type Closed = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 type CloseRequest = Rc<dyn Fn(bool, &mut Window, &mut App)>;
+type OpenRequest = Rc<dyn Fn(&mut Window, &mut App)>;
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([
@@ -76,11 +81,76 @@ pub struct Dialog {
     keyboard: bool,
     overlay_closable: bool,
     topmost: bool,
+    dismiss_below_y: Pixels,
     overlay: Option<AnyElement>,
     surface: Option<AnyElement>,
     children: SmallVec<[AnyElement; 2]>,
     callbacks: DialogCallbacks,
     request_close: CloseRequest,
+}
+
+/// Resolved geometry for a dialog layer. Base owns the positioning policy;
+/// applications use these values when rendering their styled surface.
+#[derive(Clone, Copy, Debug)]
+pub struct DialogPlacement {
+    pub view_size: gpui::Size<Pixels>,
+    pub x: Pixels,
+    pub y: Pixels,
+}
+
+impl DialogPlacement {
+    pub fn resolve(
+        window: &Window,
+        window_paddings: Edges<Pixels>,
+        width: Pixels,
+        margin_top: Option<Pixels>,
+        layer: usize,
+    ) -> Self {
+        let view_size = window.viewport_size()
+            - gpui::size(
+                window_paddings.left + window_paddings.right,
+                window_paddings.top + window_paddings.bottom,
+            );
+        let bounds = Bounds {
+            origin: Point::default(),
+            size: view_size,
+        };
+        let y = margin_top.unwrap_or(view_size.height / 10.) + px(layer as f32 * 16.);
+        let x = bounds.center().x - width / 2.;
+        Self { view_size, x, y }
+    }
+}
+
+/// Unstyled trigger that owns pointer activation for opening a dialog.
+#[derive(IntoElement)]
+pub struct DialogTrigger {
+    trigger: AnyElement,
+    open: OpenRequest,
+}
+
+impl DialogTrigger {
+    pub fn new(trigger: impl IntoElement) -> Self {
+        Self {
+            trigger: trigger.into_any_element(),
+            open: Rc::new(|_, _| {}),
+        }
+    }
+
+    pub fn on_open(mut self, open: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.open = Rc::new(open);
+        self
+    }
+}
+
+impl RenderOnce for DialogTrigger {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                (self.open)(window, cx);
+                cx.stop_propagation();
+            })
+            .child(self.trigger)
+    }
 }
 
 /// Unstyled title slot for a dialog surface.
@@ -209,6 +279,7 @@ impl Dialog {
             keyboard: true,
             overlay_closable: true,
             topmost: true,
+            dismiss_below_y: px(0.),
             overlay: None,
             surface: None,
             children: SmallVec::new(),
@@ -231,6 +302,10 @@ impl Dialog {
     }
     pub fn overlay_closable(mut self, value: bool) -> Self {
         self.overlay_closable = value;
+        self
+    }
+    pub fn dismiss_below_y(mut self, value: Pixels) -> Self {
+        self.dismiss_below_y = value;
         self
     }
     pub fn role(mut self, role: Role) -> Self {
@@ -282,14 +357,15 @@ impl RenderOnce for Dialog {
         let confirm = callbacks.confirm.clone();
         let closed = callbacks.closed.clone();
         let overlay_closable = self.overlay_closable && self.topmost;
+        let dismiss_below_y = self.dismiss_below_y;
 
         div()
             .id(("dialog-host", self.layer))
             .role(self.role)
             .track_focus(&self.focus)
             .focus_trap(format!("dialog-{}", self.layer), &self.focus)
-            .key_context(CONTEXT)
-            .when(self.keyboard, |this| {
+            .when(self.keyboard, |this| this.key_context(CONTEXT))
+            .map(|this| {
                 let request_cancel = request_close.clone();
                 let request_confirm = request_close.clone();
                 let closed_cancel = closed.clone();
@@ -307,6 +383,29 @@ impl RenderOnce for Dialog {
                         closed(&event, window, cx);
                     }
                 })
+                .on_action({
+                    let request_close = request_close.clone();
+                    let confirm = callbacks.confirm.clone();
+                    let closed = callbacks.closed.clone();
+                    move |_: &AcceptDialog, window, cx| {
+                        let event = ClickEvent::default();
+                        if confirm(&event, window, cx) {
+                            request_close(false, window, cx);
+                            closed(&event, window, cx);
+                        }
+                    }
+                })
+                .on_action({
+                    let request_close = request_close.clone();
+                    let cancel = callbacks.cancel.clone();
+                    let closed = callbacks.closed.clone();
+                    move |_: &DismissDialog, window, cx| {
+                        let event = ClickEvent::default();
+                        request_close(false, window, cx);
+                        let _ = cancel(&event, window, cx);
+                        closed(&event, window, cx);
+                    }
+                })
             })
             .when_some(self.overlay, |this, overlay| {
                 let cancel = callbacks.cancel.clone();
@@ -314,12 +413,19 @@ impl RenderOnce for Dialog {
                 let request_close = request_close.clone();
                 this.child(
                     div()
-                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        .on_any_mouse_down(move |event, window, cx| {
+                            if event.position.y < dismiss_below_y {
+                                return;
+                            }
+                            let button = event.button;
                             cx.stop_propagation();
                             let event = ClickEvent::default();
-                            if overlay_closable && cancel(&event, window, cx) {
-                                request_close(false, window, cx);
+                            if button == MouseButton::Left
+                                && overlay_closable
+                                && cancel(&event, window, cx)
+                            {
                                 closed(&event, window, cx);
+                                request_close(false, window, cx);
                             }
                         })
                         .child(overlay),

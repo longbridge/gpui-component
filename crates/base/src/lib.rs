@@ -63,8 +63,8 @@ pub use checkbox::{
 pub use collapsible::Collapsible;
 pub use component_traits::{Disableable, Selectable};
 pub use dialog::{
-    CancelDialog, ConfirmDialog, Dialog, DialogCallbacks, DialogClose, DialogDescription,
-    DialogTitle,
+    AcceptDialog, CancelDialog, ConfirmDialog, Dialog, DialogCallbacks, DialogClose,
+    DialogDescription, DialogPlacement, DialogTitle, DialogTrigger, DismissDialog,
 };
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;

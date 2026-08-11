@@ -638,14 +638,15 @@ trap, and keyboard behavior; Registry owns trigger/content structure and style.
     keyboard dismissal/confirmation, callback ordering, and the unstyled
     DialogTitle, DialogDescription, and DialogClose parts.
   - [x] Base exposes outside-dismiss policy and application-provided
-    overlay/surface slots.
-  - [ ] The UI façade still owns its legacy outside-dismiss/title-bar filter;
-    delegate that final policy to Base without changing layered animation.
-- [ ] Alert Dialog
+        overlay/surface slots.
+  - [x] Base owns trigger activation, layer positioning policy, topmost and
+        title-bar-filtered outside dismissal, and every Confirm/Cancel callback
+        path. UI supplies Root open/close hosts and styled surface animation.
+- [x] Alert Dialog
   - [x] Base AlertDialog specializes the modal host with `Role::AlertDialog`
-    and non-dismissible overlay defaults.
-  - [ ] The UI façade still owns legacy button variants and declarative header
-    presentation until those slots are projected onto the Base host.
+        and non-dismissible overlay defaults.
+  - [x] The UI façade projects legacy button variants and declarative header
+        presentation onto the Base alert host without duplicating lifecycle.
 - [x] Sheet — Base owns the focus trap, Escape action, overlay dismissal policy,
   close callback ordering, and application-provided overlay/surface slots. The
   UI façade retains window/title-bar geometry, placement, size, borders,

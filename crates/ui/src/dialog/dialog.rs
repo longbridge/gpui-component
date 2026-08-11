@@ -1,10 +1,10 @@
 use std::{rc::Rc, sync::LazyLock, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Bounds, BoxShadow, ClickEvent, Edges,
-    FocusHandle, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, Point,
-    RenderOnce, Role, SharedString, StyleRefinement, Styled, Window, WindowControlArea, anchored,
-    div, hsla, point, prelude::FluentBuilder, px,
+    Animation, AnimationExt as _, AnyElement, App, BoxShadow, ClickEvent, Edges, FocusHandle, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, Role, SharedString,
+    StyleRefinement, Styled, Window, WindowControlArea, anchored, div, hsla, point,
+    prelude::FluentBuilder, px,
 };
 use rust_i18n::t;
 
@@ -103,9 +103,6 @@ impl DialogButtonProps {
     }
 
     pub(crate) fn render_ok(&self, _: &mut Window, _: &mut App) -> AnyElement {
-        let on_ok = self.on_ok.clone();
-        let on_close = self.on_close.clone();
-
         let ok_text = self
             .ok_text
             .clone()
@@ -115,23 +112,11 @@ impl DialogButtonProps {
         Button::new("ok")
             .label(ok_text)
             .with_variant(ok_variant)
-            .on_click({
-                let on_ok = on_ok.clone();
-                let on_close = on_close.clone();
-
-                move |_, window, cx| {
-                    if on_ok(&ClickEvent::default(), window, cx) {
-                        window.close_dialog(cx);
-                        on_close(&ClickEvent::default(), window, cx);
-                    }
-                }
-            })
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(gpui_base::AcceptDialog), cx))
             .into_any_element()
     }
 
     pub(crate) fn render_cancel(&self, _: &mut Window, _: &mut App) -> AnyElement {
-        let on_cancel = self.on_cancel.clone();
-        let on_close = self.on_close.clone();
         let cancel_text = self
             .cancel_text
             .clone()
@@ -141,18 +126,7 @@ impl DialogButtonProps {
         Button::new("cancel")
             .label(cancel_text)
             .with_variant(cancel_variant)
-            .on_click({
-                let on_cancel = on_cancel.clone();
-                let on_close = on_close.clone();
-                move |_, window, cx| {
-                    if !on_cancel(&ClickEvent::default(), window, cx) {
-                        return;
-                    }
-
-                    window.close_dialog(cx);
-                    on_close(&ClickEvent::default(), window, cx);
-                }
-            })
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(CancelDialog), cx))
             .into_any_element()
     }
 }
@@ -201,7 +175,7 @@ pub struct Dialog {
     pub(crate) props: DialogProps,
     pub(crate) a11y_role: Role,
 
-    button_props: DialogButtonProps,
+    pub(super) button_props: DialogButtonProps,
 
     /// This will be change when open the dialog, the focus handle is create when open the dialog.
     pub(crate) focus_handle: FocusHandle,
@@ -411,8 +385,8 @@ impl Dialog {
         let props = self.props.clone();
         let button_props = self.button_props.clone();
 
-        div()
-            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+        gpui_base::DialogTrigger::new(trigger)
+            .on_open(move |window, cx| {
                 let content_builder = content_builder.clone();
                 let style = style.clone();
                 let props = props.clone();
@@ -433,9 +407,7 @@ impl Dialog {
                             }
                         })
                 });
-                cx.stop_propagation();
             })
-            .child(trigger)
             .into_any_element()
     }
 }
@@ -452,18 +424,16 @@ impl RenderOnce for Dialog {
         let on_cancel = self.button_props.on_cancel.clone();
 
         let window_paddings = crate::window_border::window_paddings(window);
-        let view_size = window.viewport_size()
-            - gpui::size(
-                window_paddings.left + window_paddings.right,
-                window_paddings.top + window_paddings.bottom,
-            );
-        let bounds = Bounds {
-            origin: Point::default(),
-            size: view_size,
-        };
-        let offset_top = px(layer_ix as f32 * 16.);
-        let y = self.props.margin_top.unwrap_or(view_size.height / 10.) + offset_top;
-        let x = bounds.center().x - self.props.width / 2.;
+        let placement = gpui_base::DialogPlacement::resolve(
+            window,
+            window_paddings,
+            self.props.width,
+            self.props.margin_top,
+            layer_ix,
+        );
+        let view_size = placement.view_size;
+        let x = placement.x;
+        let y = placement.y;
 
         let base_size = window.text_style().font_size;
         let rem_size = window.rem_size();
@@ -494,36 +464,6 @@ impl RenderOnce for Dialog {
                     .occlude()
                     .w(view_size.width)
                     .h(view_size.height)
-                    .when(self.props.overlay_visible, |this| {
-                        this.bg(overlay_color(self.props.overlay, cx))
-                    })
-                    .when(self.props.overlay, |this| {
-                        // Only the last dialog owns the `mouse down - close dialog` event.
-                        if (self.layer_ix + 1) != Root::read(window, cx).active_dialogs.len() {
-                            return this;
-                        }
-
-                        this.window_control_area(WindowControlArea::Drag)
-                            .on_any_mouse_down({
-                                let on_cancel = on_cancel.clone();
-                                let on_close = on_close.clone();
-                                move |event, window, cx| {
-                                    if event.position.y < TITLE_BAR_HEIGHT {
-                                        return;
-                                    }
-
-                                    cx.stop_propagation();
-                                    if self.props.overlay_closable
-                                        && event.button == MouseButton::Left
-                                    {
-                                        if on_cancel(&ClickEvent::default(), window, cx) {
-                                            on_close(&ClickEvent::default(), window, cx);
-                                            window.close_dialog(cx);
-                                        }
-                                    }
-                                }
-                            })
-                    })
                     .child(
                         self.base
                             .take()
@@ -535,6 +475,19 @@ impl RenderOnce for Dialog {
                             )
                             .focus_handle(self.focus_handle.clone())
                             .keyboard(self.props.keyboard)
+                            .overlay_closable(self.props.overlay_closable)
+                            .dismiss_below_y(TITLE_BAR_HEIGHT)
+                            .when(self.props.overlay, |this| {
+                                this.overlay(
+                                    div()
+                                        .absolute()
+                                        .size_full()
+                                        .window_control_area(WindowControlArea::Drag)
+                                        .when(self.props.overlay_visible, |overlay| {
+                                            overlay.bg(overlay_color(true, cx))
+                                        }),
+                                )
+                            })
                             .callbacks(
                                 gpui_base::DialogCallbacks::default()
                                     .on_confirm(move |event, window, cx| on_ok(event, window, cx))
@@ -635,14 +588,11 @@ impl RenderOnce for Dialog {
                                             .small()
                                             .ghost()
                                             .icon(IconName::Close)
-                                            .on_click({
-                                                let on_cancel = self.button_props.on_cancel.clone();
-                                                let on_close = self.button_props.on_close.clone();
-                                                move |_, window, cx| {
-                                                    window.close_dialog(cx);
-                                                    on_cancel(&ClickEvent::default(), window, cx);
-                                                    on_close(&ClickEvent::default(), window, cx);
-                                                }
+                                            .on_click(|_, window, cx| {
+                                                window.dispatch_action(
+                                                    Box::new(gpui_base::DismissDialog),
+                                                    cx,
+                                                )
                                             })
                                     }))
                                     .with_animation(

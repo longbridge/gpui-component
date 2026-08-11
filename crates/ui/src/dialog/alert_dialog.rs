@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, App, ClickEvent, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
-    Pixels, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+    AnyElement, App, ClickEvent, IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement,
+    Styled, Window, prelude::FluentBuilder as _,
 };
 
 use crate::{
@@ -332,10 +332,11 @@ impl AlertDialog {
         let content_builder = self.base.content_builder.clone();
         let style = self.base.style.clone();
         let props = self.base.props.clone();
-        let button_props = self.button_props.clone();
+        let mut button_props = self.button_props.clone();
+        button_props.on_close = self.base.button_props.on_close.clone();
 
-        div()
-            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+        gpui_base::DialogTrigger::new(trigger)
+            .on_open(move |window, cx| {
                 let content_builder = content_builder.clone();
                 let style = style.clone();
                 let props = props.clone();
@@ -353,9 +354,7 @@ impl AlertDialog {
                             })
                         })
                 });
-                cx.stop_propagation();
             })
-            .child(trigger)
             .into_any_element()
     }
 }
