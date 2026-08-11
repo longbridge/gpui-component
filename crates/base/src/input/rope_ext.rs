@@ -33,7 +33,7 @@ pub struct InputEdit {
     pub new_end_position: Point,
 }
 
-use crate::input::Position;
+use lsp_types::Position;
 
 /// An iterator over the lines of a `Rope`.
 pub struct RopeLines<'a> {
@@ -462,7 +462,7 @@ mod tests {
     use ropey::Rope;
     use sum_tree::Bias;
 
-    use crate::{RopeExt, input::Position};
+    use crate::input::{Position, RopeExt};
 
     #[test]
     fn test_slice_line() {

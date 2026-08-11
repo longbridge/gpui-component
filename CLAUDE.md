@@ -186,7 +186,10 @@ Text input system based on Rope data structure:
 4. **Style system**: Provides CSS-like styling API via `Styled` trait and `ElementExt` extensions
 5. **Base controls are no-style**: Base controls and parts do not install layout,
    positioning, colors, sizing, gaps, radius, borders, shadows, variants, or animation.
-   Complete presentation belongs to `crates/ui` or the application.
+   Complete presentation belongs to `crates/ui` or the application. The deliberate
+   exception is the foundational Base Input frame, which provides only a semantic
+   one-pixel input border and semantic radius baseline; UI/application layers own
+   its background, sizing, padding, typography, adornments, and richer focus style.
 6. **GPUI builder style**: Keep element construction as one fluent builder chain. Express
    conditions with `when`, `when_some`, `when_none`, and `map`; do not split a chain into a
    mutable temporary element followed by imperative reassignment when the builder API can

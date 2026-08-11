@@ -424,7 +424,8 @@ fn is_sign(ch: &char) -> bool {
 /// marked-range offsets (in UTF-16) stay valid. The UTF-8 byte length may
 /// shrink (3 bytes to 1), the caller must use the normalized string for all
 /// byte-offset calculations.
-pub(crate) fn normalize_number_input(text: &str) -> Cow<'_, str> {
+#[doc(hidden)]
+pub fn normalize_number_input(text: &str) -> Cow<'_, str> {
     #[inline]
     fn normalize_char(ch: char) -> Option<char> {
         match ch {
@@ -455,7 +456,7 @@ pub(crate) fn normalize_number_input(text: &str) -> Cow<'_, str> {
 
 #[cfg(test)]
 mod tests {
-    use crate::input::mask_pattern::{MaskPattern, MaskToken};
+    use super::{MaskPattern, MaskToken};
 
     #[test]
     fn test_is_match() {
@@ -701,7 +702,7 @@ mod tests {
     fn test_normalize_number_input() {
         use std::borrow::Cow;
 
-        use crate::input::mask_pattern::normalize_number_input;
+        use super::normalize_number_input;
 
         // Fast path: no allocation when nothing to normalize
         assert!(matches!(

@@ -93,12 +93,12 @@ pub use gpui_base::{
     AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Measure, Placement, Side,
     measure, measure_if,
 };
+#[doc(hidden)]
+pub(crate) use gpui_base::{PANEL_MIN_SIZE, resize_handle};
 pub use gpui_base::{
     ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
     resizable_panel, v_resizable,
 };
-#[doc(hidden)]
-pub(crate) use gpui_base::{PANEL_MIN_SIZE, resize_handle};
 pub use gpui_component_macros::icon_named;
 pub use icon::*;
 pub use index_path::IndexPath;
@@ -130,7 +130,6 @@ pub fn init(cx: &mut App) {
     date_picker::init(cx);
     dock::init(cx);
     sheet::init(cx);
-    input::init(cx);
     list::init(cx);
     popover::init(cx);
     menu::init(cx);

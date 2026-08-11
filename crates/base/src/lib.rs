@@ -13,25 +13,32 @@ pub mod async_util;
 mod auto_scroll;
 mod avatar;
 mod button;
+mod calendar;
 mod checkbox;
 mod collapsible;
+mod color_picker;
 mod combobox;
 pub mod component_traits;
+mod date_picker;
 mod dialog;
 mod element_ext;
 mod event;
 mod focus_trap;
 mod geometry;
 mod global_state;
+pub mod highlighter;
 mod history;
 mod hover_card;
 mod index_path;
+pub mod input;
 mod link;
 mod list_settings;
 #[cfg(all(target_os = "macos", not(test)))]
 mod macos_accessibility;
 mod measure;
 pub mod motion;
+mod number_input;
+mod pagination;
 mod popover;
 mod popup;
 mod progress;
@@ -59,12 +66,18 @@ pub use alert_dialog::AlertDialog;
 pub use auto_scroll::AutoScroll;
 pub use avatar::{Avatar, AvatarFallback, AvatarImage};
 pub use button::{Button, ButtonStyles};
+pub use calendar::{
+    Calendar, CalendarEvent, CalendarItem, CalendarItemKind, CalendarItemState, CalendarState,
+    CalendarView, Date, IntervalMatcher, Matcher, RangeMatcher,
+};
 pub use checkbox::{
     Checkbox, CheckboxIndicator, CheckboxIndicatorStyles, CheckboxState, CheckboxStyles,
 };
 pub use collapsible::Collapsible;
+pub use color_picker::ColorPickerState;
 pub use combobox::Combobox;
 pub use component_traits::{Disableable, Selectable};
+pub use date_picker::DatePicker;
 pub use dialog::{
     Dialog, DialogClose, DialogDescription, DialogPlacement, DialogTitle, DialogTrigger,
 };
@@ -78,6 +91,7 @@ pub use global_state::GlobalState;
 pub use history::{History, HistoryItem};
 pub use hover_card::{HoverCard, HoverCardState};
 pub use index_path::IndexPath;
+pub use input::{Input, InputContentType, OtpInput, OtpState};
 pub use link::{Link, LinkStyles};
 pub use list_settings::ListSettings;
 #[cfg(all(target_os = "macos", not(test)))]
@@ -87,6 +101,10 @@ pub use macos_accessibility::install_window_hit_test_forwarder;
 pub use measure::measurement_enabled;
 pub use measure::{Measure, measure, measure_if};
 pub use motion::{Interpolate, Transition, TransitionId, transition};
+pub use number_input::{
+    Decrement, Increment, NumberInput, NumberInputEvent, NumberStep, StepAction, step_value,
+};
+pub use pagination::{Pagination, PaginationItem, PaginationState};
 pub use popover::{Popover, PopoverState};
 pub use popup::Popup;
 pub use progress::{Progress, ProgressIndicator, ProgressTrack};
@@ -113,7 +131,7 @@ pub use switch::{
     Switch, SwitchStyles, SwitchThumb, SwitchThumbStyles, SwitchTrack, SwitchTrackStyles,
 };
 pub use tabs::{Tab, TabStyles, Tabs};
-pub use theme::{ResizableTheme, ScrollbarTheme, Theme};
+pub use theme::{InputEditorTheme, ResizableTheme, ScrollbarTheme, Theme};
 pub use theme_tokens::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,
     TypographyTokens,
@@ -136,9 +154,11 @@ pub fn init(cx: &mut App) {
     GlobalState::init(cx);
     dialog::init(cx);
     focus_trap::init(cx);
-    sheet::init(cx);
     popover::init(cx);
+    sheet::init(cx);
     combobox::init(cx);
     select::init(cx);
+    number_input::init(cx);
+    input::init(cx);
     tree::init(cx);
 }

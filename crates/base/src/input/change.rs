@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::{history::HistoryItem, input::Selection};
+use crate::{HistoryItem, input::Selection};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Change {
@@ -25,6 +25,22 @@ impl Change {
             new_text: new_text.to_string(),
             version: 0,
         }
+    }
+
+    pub fn old_range(&self) -> Selection {
+        self.old_range
+    }
+
+    pub fn old_text(&self) -> &str {
+        &self.old_text
+    }
+
+    pub fn new_range(&self) -> Selection {
+        self.new_range
+    }
+
+    pub fn new_text(&self) -> &str {
+        &self.new_text
     }
 }
 

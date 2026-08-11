@@ -4,14 +4,11 @@ use std::{
     usize,
 };
 
-use gpui::{App, HighlightStyle, Hsla, SharedString, UnderlineStyle, px};
+use gpui::SharedString;
 use ropey::Rope;
 use sum_tree::{Bias, SeekTarget, SumTree};
 
-use crate::{
-    ActiveTheme,
-    input::{Position, RopeExt as _},
-};
+use crate::input::{Position, RopeExt as _};
 
 pub type DiagnosticRelatedInformation = lsp_types::DiagnosticRelatedInformation;
 pub type CodeDescription = lsp_types::CodeDescription;
@@ -98,60 +95,6 @@ impl From<lsp_types::DiagnosticSeverity> for DiagnosticSeverity {
     }
 }
 
-impl DiagnosticSeverity {
-    pub(crate) fn bg(&self, cx: &App) -> Hsla {
-        let theme = &cx.theme().highlight_theme;
-
-        match self {
-            Self::Error => theme.style.status.error_background(cx),
-            Self::Warning => theme.style.status.warning_background(cx),
-            Self::Info => theme.style.status.info_background(cx),
-            Self::Hint => theme.style.status.hint_background(cx),
-        }
-    }
-
-    pub(crate) fn fg(&self, cx: &App) -> Hsla {
-        let theme = &cx.theme().highlight_theme;
-
-        match self {
-            Self::Error => theme.style.status.error(cx),
-            Self::Warning => theme.style.status.warning(cx),
-            Self::Info => theme.style.status.info(cx),
-            Self::Hint => theme.style.status.hint(cx),
-        }
-    }
-
-    pub(crate) fn border(&self, cx: &App) -> Hsla {
-        let theme = &cx.theme().highlight_theme;
-        match self {
-            Self::Error => theme.style.status.error_border(cx),
-            Self::Warning => theme.style.status.warning_border(cx),
-            Self::Info => theme.style.status.info_border(cx),
-            Self::Hint => theme.style.status.hint_border(cx),
-        }
-    }
-
-    pub(crate) fn highlight_style(&self, cx: &App) -> HighlightStyle {
-        let theme = &cx.theme().highlight_theme;
-
-        let color = match self {
-            Self::Error => Some(theme.style.status.error(cx)),
-            Self::Warning => Some(theme.style.status.warning(cx)),
-            Self::Info => Some(theme.style.status.info(cx)),
-            Self::Hint => Some(theme.style.status.hint(cx)),
-        };
-
-        let mut style = HighlightStyle::default();
-        style.underline = Some(UnderlineStyle {
-            color: color,
-            thickness: px(1.),
-            wavy: true,
-        });
-
-        style
-    }
-}
-
 impl Diagnostic {
     pub fn new(range: Range<impl Into<Position>>, message: impl Into<SharedString>) -> Self {
         Self {
@@ -178,7 +121,7 @@ impl Diagnostic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct DiagnosticEntry {
+pub struct DiagnosticEntry {
     /// The byte range of the diagnostic in the rope.
     pub range: Range<usize>,
     pub diagnostic: Diagnostic,
@@ -295,7 +238,7 @@ impl DiagnosticSet {
         self.diagnostics.is_empty()
     }
 
-    pub(crate) fn range(&self, range: Range<usize>) -> impl Iterator<Item = &DiagnosticEntry> {
+    pub fn range(&self, range: Range<usize>) -> impl Iterator<Item = &DiagnosticEntry> {
         let mut cursor = self.diagnostics.cursor::<DiagnosticSummary>(&());
         cursor.seek(&range.start, Bias::Left);
         std::iter::from_fn(move || {
@@ -309,30 +252,12 @@ impl DiagnosticSet {
         })
     }
 
-    pub(crate) fn for_offset(&self, offset: usize) -> Option<&DiagnosticEntry> {
+    pub fn for_offset(&self, offset: usize) -> Option<&DiagnosticEntry> {
         self.range(offset..offset + 1).next()
     }
 
-    pub(crate) fn styles_for_range(
-        &self,
-        range: &Range<usize>,
-        cx: &App,
-    ) -> Vec<(Range<usize>, HighlightStyle)> {
-        if self.diagnostics.is_empty() {
-            return vec![];
-        }
-
-        let mut styles = vec![];
-        for entry in self.range(range.clone()) {
-            let range = entry.range.clone();
-            styles.push((range, entry.diagnostic.severity.highlight_style(cx)));
-        }
-
-        styles
-    }
-
     #[allow(unused)]
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &DiagnosticEntry> {
+    pub fn iter(&self) -> impl Iterator<Item = &DiagnosticEntry> {
         self.diagnostics.iter()
     }
 }

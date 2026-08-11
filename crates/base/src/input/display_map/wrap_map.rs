@@ -12,7 +12,7 @@ use ropey::Rope;
 use super::fold_map::FoldMap;
 use super::text_wrapper::{LineItem, TextWrapper, WrapDisplayPoint, WrappingIndent};
 use super::{BufferPoint, WrapPoint};
-use crate::input::rope_ext::RopeExt;
+use crate::input::RopeExt;
 
 /// WrapMap manages soft-wrapping and provides buffer ↔ wrap coordinate mapping.
 ///

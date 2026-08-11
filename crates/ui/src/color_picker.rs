@@ -6,6 +6,8 @@ use gpui::{
 };
 use rust_i18n::t;
 
+use gpui_base::ColorPickerState as BaseColorPickerState;
+
 use crate::{
     ActiveTheme as _, Colorize as _, Icon, Selectable, Sizable, Size, StyleSized,
     actions::Confirm,
@@ -132,14 +134,11 @@ impl HslaSliders {
 /// State of the [`ColorPicker`].
 pub struct ColorPickerState {
     focus_handle: FocusHandle,
-    value: Option<Hsla>,
-    hovered_color: Option<Hsla>,
+    base: BaseColorPickerState,
     state: Entity<InputState>,
     hsla_sliders: HslaSliders,
     needs_slider_sync: bool,
     suppress_input_change: bool,
-    active_tab: usize,
-    open: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -162,15 +161,14 @@ impl ColorPickerState {
                             return;
                         }
                         let value = state.read(cx).value();
-                        if let Ok(color) = Hsla::parse_hex(value.as_str()) {
-                            this.hovered_color = Some(color);
+                        if this.base.preview_hex(value.as_str()) {
+                            let color = this.base.preview().expect("valid hex has a preview");
                             this.sync_sliders(Some(color), window, cx);
                         }
                     }
                     InputEvent::PressEnter { .. } => {
                         let val = this.state.read(cx).value();
-                        if let Ok(color) = Hsla::parse_hex(&val) {
-                            this.open = false;
+                        if let Some(color) = this.base.commit_hex(&val) {
                             this.update_value(Some(color), true, window, cx);
                         }
                     }
@@ -213,14 +211,11 @@ impl ColorPickerState {
 
         Self {
             focus_handle: cx.focus_handle(),
-            value: None,
-            hovered_color: None,
+            base: BaseColorPickerState::new(),
             state,
             hsla_sliders,
             needs_slider_sync: false,
             suppress_input_change: false,
-            active_tab: 0,
-            open: false,
             _subscriptions,
         }
     }
@@ -228,8 +223,7 @@ impl ColorPickerState {
     /// Set default color value.
     pub fn default_value(mut self, value: impl Into<Hsla>) -> Self {
         let value = value.into();
-        self.value = Some(value);
-        self.hovered_color = Some(value);
+        self.base = self.base.clone().default_value(value);
         self.needs_slider_sync = true;
         self
     }
@@ -246,7 +240,7 @@ impl ColorPickerState {
 
     /// Get current color value.
     pub fn value(&self) -> Option<Hsla> {
-        self.value
+        self.base.value()
     }
 
     /// Open or close the picker popover.
@@ -254,20 +248,20 @@ impl ColorPickerState {
     /// Lets a caller drive the picker from something other than its own
     /// trigger, e.g. selecting a color by clicking the element it paints.
     pub fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
-        if self.open == open {
+        if self.base.is_open() == open {
             return;
         }
-        self.open = open;
+        self.base.set_open(open);
         cx.notify();
     }
 
     /// Whether the picker popover is open.
     pub fn is_open(&self) -> bool {
-        self.open
+        self.base.is_open()
     }
 
     fn on_confirm(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
-        self.open = !self.open;
+        self.base.toggle_open();
         cx.notify();
     }
 
@@ -279,8 +273,7 @@ impl ColorPickerState {
         cx: &mut Context<Self>,
     ) {
         self.needs_slider_sync = false;
-        self.value = value;
-        self.hovered_color = value;
+        self.base.set_value(value);
         // Suppress the InputEvent::Change that set_value will trigger, to avoid
         // the Hsla→hex→Hsla precision loss from feeding back into sync_sliders.
         self.suppress_input_change = true;
@@ -308,8 +301,7 @@ impl ColorPickerState {
         cx: &mut Context<Self>,
     ) {
         self.needs_slider_sync = false;
-        self.value = Some(value);
-        self.hovered_color = Some(value);
+        self.base.update_color(value);
         // Keep the hex input in sync with the slider, but suppress the resulting
         // InputEvent::Change to avoid the Hsla→hex→Hsla precision loss loop.
         self.suppress_input_change = true;
@@ -426,7 +418,7 @@ impl ColorPicker {
                     .on_hover(
                         window.listener_for(&state, move |state, enter, window, cx| {
                             if *enter {
-                                state.hovered_color = Some(color);
+                                state.base.preview_color(color);
                                 state.state.update(cx, |input, cx| {
                                     input.set_value(color.to_hex(), window, cx);
                                 });
@@ -435,7 +427,7 @@ impl ColorPicker {
                         }),
                     )
                     .on_click(window.listener_for(&state, move |state, _, window, cx| {
-                        state.open = false;
+                        state.base.select_color(color);
                         state.update_value(Some(color), true, window, cx);
                         cx.notify();
                     }))
@@ -445,20 +437,20 @@ impl ColorPicker {
     fn render_colors(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| {
             if state.needs_slider_sync {
-                let value = state.value;
+                let value = state.base.value();
                 state.update_value(value, false, window, cx);
             }
         });
 
-        let active_tab = self.state.read(cx).active_tab;
+        let active_tab = self.state.read(cx).base.active_tab();
 
         let (slider_color, hovered_color) = {
             let state = self.state.read(cx);
             let slider_color = state
-                .hovered_color
-                .or(state.value)
+                .base
+                .displayed_color()
                 .unwrap_or_else(|| hsla(0., 0., 0., 1.));
-            (slider_color, state.hovered_color)
+            (slider_color, state.base.preview())
         };
 
         v_flex()
@@ -470,7 +462,7 @@ impl ColorPicker {
                     .selected_index(active_tab)
                     .on_click(
                         window.listener_for(&self.state, |state, ix: &usize, _, cx| {
-                            state.active_tab = *ix;
+                            state.base.set_active_tab(*ix);
                             cx.notify();
                         }),
                     )
@@ -759,7 +751,7 @@ impl Styled for ColorPicker {
 impl RenderOnce for ColorPicker {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = self.state.read(cx);
-        let display_title: SharedString = if let Some(value) = state.value {
+        let display_title: SharedString = if let Some(value) = state.base.value() {
             value.to_hex()
         } else {
             "".to_string()
@@ -775,11 +767,11 @@ impl RenderOnce for ColorPicker {
             .on_action(window.listener_for(&self.state, ColorPickerState::on_confirm))
             .child(
                 Popover::new("popover")
-                    .open(state.open)
+                    .open(state.base.is_open())
                     .w_72()
                     .on_open_change(
                         window.listener_for(&self.state, |this, open: &bool, _, cx| {
-                            this.open = *open;
+                            this.base.set_open(*open);
                             cx.notify();
                         }),
                     )
@@ -787,7 +779,7 @@ impl RenderOnce for ColorPicker {
                         id: "trigger".into(),
                         size: self.size,
                         label: self.label.clone(),
-                        value: state.value,
+                        value: state.base.value(),
                         tooltip: if display_title.is_empty() {
                             None
                         } else {

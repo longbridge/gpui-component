@@ -8,10 +8,15 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use crate::{
-    ActiveTheme, DEFAULT_THEME_COLORS, ThemeMode,
-    highlighter::{Language, languages},
-};
+use crate::highlighter::{Language, languages};
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HighlightThemeMode {
+    #[default]
+    Light,
+    Dark,
+}
 
 pub(super) const HIGHLIGHT_NAMES: [&str; 41] = [
     "attribute",
@@ -345,13 +350,13 @@ pub struct StatusColors {
 
 impl StatusColors {
     #[inline]
-    pub fn error(&self, cx: &App) -> Hsla {
-        self.error.unwrap_or(cx.theme().red)
+    pub fn error(&self, _cx: &App) -> Hsla {
+        self.error.unwrap_or_else(gpui::red)
     }
 
     #[inline]
     pub fn error_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = gpui::transparent_black();
         self.error_background
             .unwrap_or(bg.blend(self.error(cx).alpha(0.2)))
     }
@@ -362,13 +367,13 @@ impl StatusColors {
     }
 
     #[inline]
-    pub fn warning(&self, cx: &App) -> Hsla {
-        self.warning.unwrap_or(cx.theme().yellow)
+    pub fn warning(&self, _cx: &App) -> Hsla {
+        self.warning.unwrap_or_else(gpui::yellow)
     }
 
     #[inline]
     pub fn warning_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = gpui::transparent_black();
         self.warning_background
             .unwrap_or(bg.blend(self.warning(cx).alpha(0.2)))
     }
@@ -379,13 +384,13 @@ impl StatusColors {
     }
 
     #[inline]
-    pub fn info(&self, cx: &App) -> Hsla {
-        self.info.unwrap_or(cx.theme().blue)
+    pub fn info(&self, _cx: &App) -> Hsla {
+        self.info.unwrap_or_else(gpui::blue)
     }
 
     #[inline]
     pub fn info_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = gpui::transparent_black();
         self.info_background
             .unwrap_or(bg.blend(self.info(cx).alpha(0.2)))
     }
@@ -396,13 +401,13 @@ impl StatusColors {
     }
 
     #[inline]
-    pub fn success(&self, cx: &App) -> Hsla {
-        self.success.unwrap_or(cx.theme().green)
+    pub fn success(&self, _cx: &App) -> Hsla {
+        self.success.unwrap_or_else(gpui::green)
     }
 
     #[inline]
     pub fn success_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = gpui::transparent_black();
         self.success_background
             .unwrap_or(bg.blend(self.success(cx).alpha(0.2)))
     }
@@ -413,13 +418,13 @@ impl StatusColors {
     }
 
     #[inline]
-    pub fn hint(&self, cx: &App) -> Hsla {
-        self.hint.unwrap_or(cx.theme().cyan)
+    pub fn hint(&self, _cx: &App) -> Hsla {
+        self.hint.unwrap_or_else(gpui::blue)
     }
 
     #[inline]
     pub fn hint_background(&self, cx: &App) -> Hsla {
-        let bg = cx.theme().background;
+        let bg = gpui::transparent_black();
         self.hint_background
             .unwrap_or(bg.blend(self.hint(cx).alpha(0.2)))
     }
@@ -463,7 +468,7 @@ pub struct HighlightThemeStyle {
 pub struct HighlightTheme {
     pub name: String,
     #[serde(default)]
-    pub appearance: ThemeMode,
+    pub appearance: HighlightThemeMode,
     pub style: HighlightThemeStyle,
 }
 
@@ -477,11 +482,19 @@ impl Deref for HighlightTheme {
 
 impl HighlightTheme {
     pub fn default_dark() -> Arc<Self> {
-        DEFAULT_THEME_COLORS[&ThemeMode::Dark].1.clone()
+        Arc::new(Self {
+            name: "Base Dark".into(),
+            appearance: HighlightThemeMode::Dark,
+            style: HighlightThemeStyle::default(),
+        })
     }
 
     pub fn default_light() -> Arc<Self> {
-        DEFAULT_THEME_COLORS[&ThemeMode::Light].1.clone()
+        Arc::new(Self {
+            name: "Base Light".into(),
+            appearance: HighlightThemeMode::Light,
+            style: HighlightThemeStyle::default(),
+        })
     }
 }
 

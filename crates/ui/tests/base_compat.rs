@@ -67,7 +67,7 @@ fn base_dialog_owns_modal_actions_and_alert_defaults() {
             .on_ok(|_, _, _| true)
             .on_cancel(|_, _, _| true)
             .on_close(|_, _, _| {});
-        let _ = gpui_base::AlertDialog::new(cx).into_dialog();
+        let _ = gpui_base::AlertDialog::new(cx);
     }
 
     let _ = dialog;
@@ -195,6 +195,23 @@ fn base_combobox_accepts_application_owned_content() {
     }
 
     let _ = build;
+}
+
+#[test]
+fn base_input_frames_accept_application_owned_content() {
+    let _ = gpui_base::Input::new("input")
+        .appearance(true)
+        .bordered(true)
+        .focused(false)
+        .child(gpui::div());
+    let _ = gpui_base::NumberInput::new("number")
+        .value(Some(42.))
+        .on_step(|_, _, _| {})
+        .child(gpui::div());
+
+    fn accepts_base(_: gpui_base::InputContentType) {}
+    accepts_base(gpui_component::input::InputContentType::EmailAddress);
+    let _: gpui_base::StepAction = gpui_component::input::StepAction::Increment;
 }
 
 #[test]

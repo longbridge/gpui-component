@@ -1,10 +1,10 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    AnyElement, App, AppContext as _, AvailableSpace, Bounds, Element, ElementId, Entity,
+    AnyElement, App, AppContext as _, AvailableSpace, Bounds, Element, ElementId, Empty, Entity,
     InteractiveElement, IntoElement, MouseDownEvent, MouseMoveEvent, ParentElement as _, Pixels,
-    Render, StatefulInteractiveElement as _, StyleRefinement, Styled, Window, deferred, div, point,
-    px,
+    Render, StatefulInteractiveElement as _, StyleRefinement, Styled, WeakEntity, Window, deferred,
+    div, point, px,
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub struct HoverPopover {
-    editor: Entity<InputState>,
+    editor: WeakEntity<InputState>,
     /// The symbol range byte of the hover trigger.
     pub(crate) symbol_range: Range<usize>,
     pub(crate) hover: Rc<lsp_types::Hover>,
@@ -29,19 +29,18 @@ impl HoverPopover {
         let hover = Rc::new(hover.clone());
 
         cx.new(|_| Self {
-            editor,
+            editor: editor.downgrade(),
             symbol_range,
             hover,
         })
-    }
-
-    pub(crate) fn is_same(&self, offset: usize) -> bool {
-        self.symbol_range.contains(&offset)
     }
 }
 
 impl Render for HoverPopover {
     fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+        let Some(editor) = self.editor.upgrade() else {
+            return Empty.into_any_element();
+        };
         let contents = match self.hover.contents.clone() {
             lsp_types::HoverContents::Scalar(scalar) => match scalar {
                 lsp_types::MarkedString::String(s) => s,
@@ -60,7 +59,7 @@ impl Render for HoverPopover {
 
         Popover::new(
             "hover-popover",
-            self.editor.clone(),
+            editor,
             self.symbol_range.clone(),
             move |window, cx| render_markdown("message", contents.clone(), window, cx),
         )
@@ -71,7 +70,7 @@ impl Render for HoverPopover {
 pub(crate) struct Popover {
     id: ElementId,
     style: StyleRefinement,
-    editor: Entity<InputState>,
+    editor: WeakEntity<InputState>,
     range: Range<usize>,
     width_limit: Range<Pixels>,
     content_builder: Box<dyn Fn(&mut Window, &mut App) -> AnyElement>,
@@ -96,7 +95,7 @@ impl Popover {
     {
         Self {
             id: id.into(),
-            editor,
+            editor: editor.downgrade(),
             range,
             style: StyleRefinement::default(),
             width_limit: px(200.)..px(500.),
@@ -106,17 +105,18 @@ impl Popover {
 
     /// Get the bounds of the range in the editor, if it is visible.
     fn trigger_bounds(&self, cx: &App) -> Option<Bounds<Pixels>> {
-        let editor = self.editor.read(cx);
-        let Some(last_layout) = editor.last_layout.as_ref() else {
+        let editor = self.editor.upgrade()?;
+        let editor = editor.read(cx);
+        let Some(last_layout) = editor.last_layout() else {
             return None;
         };
 
-        let Some(last_bounds) = editor.last_bounds else {
+        let Some(last_bounds) = editor.text_bounds() else {
             return None;
         };
 
-        let (_, _, start_pos) = editor.line_and_position_for_offset(self.range.start);
-        let (_, _, end_pos) = editor.line_and_position_for_offset(self.range.end);
+        let start_pos = editor.position_for_offset(self.range.start);
+        let end_pos = editor.position_for_offset(self.range.end);
 
         let Some(start_pos) = start_pos else {
             return None;

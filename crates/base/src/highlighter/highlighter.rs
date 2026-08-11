@@ -1273,7 +1273,6 @@ mod tests {
     use gpui::Hsla;
 
     use super::*;
-    use crate::Colorize as _;
 
     fn color_style(color: Hsla) -> HighlightStyle {
         let mut style = HighlightStyle::default();

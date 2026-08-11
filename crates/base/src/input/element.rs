@@ -6,22 +6,57 @@ use gpui::{
 };
 use gpui::{
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, MouseMoveEvent, MouseUpEvent, Path, Pixels, Point, Position, ShapedLine,
-    SharedString, Size, Style, Styled as _, TextAlign, TextRun, TextStyle, UnderlineStyle, Window,
-    fill, point, px, relative, size,
+    MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement as _, Path, Pixels, Point, Position,
+    ShapedLine, SharedString, Size, Style, Styled as _, TextAlign, TextRun, TextStyle,
+    UnderlineStyle, Window, fill, point, px, relative, size,
 };
 use ropey::Rope;
 use smallvec::SmallVec;
 use std::{ops::Range, rc::Rc};
 
 use crate::{
-    ActiveTheme as _, Colorize, IconName, Root, Selectable, Sizable as _,
-    button::{Button, ButtonVariants as _},
+    InputEditorTheme, Scrollbar, Theme,
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
-    scroll::Scrollbar,
 };
 
 use super::{InputState, LastLayout, TextDecoration, WhitespaceIndicators, mode::InputMode};
+
+trait EditorThemeExt {
+    fn theme(&self) -> InputEditorTheme;
+}
+
+impl EditorThemeExt for App {
+    fn theme(&self) -> InputEditorTheme {
+        Theme::global(self).input_editor
+    }
+}
+
+impl InputEditorTheme {
+    fn editor_background(&self) -> Hsla {
+        self.background
+    }
+}
+
+fn diagnostic_highlight_style(
+    severity: crate::highlighter::DiagnosticSeverity,
+    cx: &App,
+) -> HighlightStyle {
+    let colors = Theme::global(cx).tokens.colors;
+    let color = match severity {
+        crate::highlighter::DiagnosticSeverity::Error => colors.destructive,
+        crate::highlighter::DiagnosticSeverity::Warning => colors.accent_foreground,
+        crate::highlighter::DiagnosticSeverity::Info => colors.primary,
+        crate::highlighter::DiagnosticSeverity::Hint => colors.muted_foreground,
+    };
+    HighlightStyle {
+        underline: Some(UnderlineStyle {
+            color: Some(color),
+            thickness: px(1.),
+            wavy: true,
+        }),
+        ..Default::default()
+    }
+}
 
 const BOTTOM_MARGIN_ROWS: usize = 3;
 pub(super) const RIGHT_MARGIN: Pixels = px(10.);
@@ -357,6 +392,39 @@ impl TextElement {
         self
     }
 
+    pub(crate) fn layout_hover_definition(
+        &self,
+        cx: &App,
+    ) -> Option<(Range<usize>, HighlightStyle)> {
+        let editor = self.state.read(cx);
+        if !editor.mode.is_code_editor() || editor.hover_definition.is_empty() {
+            return None;
+        }
+        let mut style: HighlightStyle = Theme::global(cx)
+            .input_editor
+            .highlight_theme
+            .style("link_text")?
+            .into();
+        style.underline = Some(UnderlineStyle {
+            thickness: px(1.),
+            ..Default::default()
+        });
+        Some((editor.hover_definition.symbol_range.clone(), style))
+    }
+
+    pub(crate) fn layout_hover_definition_hitbox(
+        &self,
+        editor: &InputState,
+        window: &mut Window,
+        _cx: &App,
+    ) -> Option<Hitbox> {
+        if !editor.mode.is_code_editor() || editor.hover_definition.is_empty() {
+            return None;
+        }
+        let bounds = editor.range_to_bounds(&editor.hover_definition.symbol_range)?;
+        Some(window.insert_hitbox(bounds, HitboxBehavior::Normal))
+    }
+
     fn paint_mouse_listeners(&mut self, window: &mut Window, _: &mut App) {
         window.on_mouse_event({
             let state = self.state.clone();
@@ -528,8 +596,8 @@ impl TextElement {
 
             // cursor bounds
             let cursor_height = match state.size {
-                crate::Size::Large => 1.,
-                crate::Size::Small => 0.75,
+                super::InputSize::Large => 1.,
+                super::InputSize::Small => 0.75,
                 _ => 0.85,
             } * line_height;
 
@@ -726,17 +794,11 @@ impl TextElement {
         cx: &mut App,
     ) -> Vec<(Path<Pixels>, bool)> {
         let state = self.state.read(cx);
-        let search_panel = state.search_panel.clone();
-
-        let Some((ranges, current_match_ix)) = search_panel.and_then(|panel| {
-            if let Some(matcher) = panel.read(cx).matcher() {
-                Some((matcher.matched_ranges.clone(), matcher.current_match_ix))
-            } else {
-                None
-            }
-        }) else {
+        if !state.search_session.open {
             return vec![];
-        };
+        }
+        let ranges = state.search_session.matcher.matched_ranges();
+        let current_match_ix = state.search_session.matcher.current_match_index();
 
         let mut paths = Vec::with_capacity(ranges.as_ref().len());
         for (index, range) in ranges.as_ref().iter().enumerate() {
@@ -755,9 +817,10 @@ impl TextElement {
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let state = self.state.read(cx);
-        let hover_popover = state.hover_popover.clone();
-
-        let Some(symbol_range) = hover_popover.map(|popover| popover.read(cx).symbol_range.clone())
+        let Some(symbol_range) = state
+            .hover_session
+            .as_ref()
+            .map(|session| session.symbol_range.clone())
         else {
             return None;
         };
@@ -1167,17 +1230,10 @@ impl TextElement {
             );
 
             // Create and prepaint icon
-            let mut icon = Button::new(("fold", ix))
-                .ghost()
-                .icon(if info.is_folded {
-                    IconName::ChevronRight
-                } else {
-                    IconName::ChevronDown
-                })
-                .xsmall()
-                .rounded_xs()
+            let mut icon = gpui::div()
+                .id(("fold", ix))
                 .size(FOLD_ICON_WIDTH)
-                .selected(info.is_folded)
+                .child(if info.is_folded { "›" } else { "⌄" })
                 .on_mouse_down(MouseButton::Left, {
                     let state = self.state.clone();
                     let buffer_line = info.buffer_line;
@@ -1440,7 +1496,15 @@ impl TextElement {
             flush_range(start_line, line, false, &mut styles);
         }
 
-        let diagnostic_styles = diagnostics.styles_for_range(&visible_byte_range, cx);
+        let diagnostic_styles: Vec<_> = diagnostics
+            .range(visible_byte_range.clone())
+            .map(|entry| {
+                (
+                    entry.range.clone(),
+                    diagnostic_highlight_style(entry.severity, cx),
+                )
+            })
+            .collect();
 
         // Range semantic tokens, resolved from the LSP provider's cached
         // result through the active highlight theme so it shares the same
@@ -2023,30 +2087,6 @@ impl Element for TextElement {
             cx,
         );
 
-        // Set Root focused_input when self is focused
-        if focused {
-            let state = self.state.clone();
-            if Root::read(window, cx).focused_input.as_ref() != Some(&state) {
-                Root::update(window, cx, |root, _, cx| {
-                    root.focused_input = Some(state);
-                    cx.notify();
-                });
-            }
-        }
-
-        // And reset focused_input when next_frame start
-        window.on_next_frame({
-            let state = self.state.clone();
-            move |window, cx| {
-                if !focused && Root::read(window, cx).focused_input.as_ref() == Some(&state) {
-                    Root::update(window, cx, |root, _, cx| {
-                        root.focused_input = None;
-                        cx.notify();
-                    });
-                }
-            }
-        });
-
         // Paint multi line text
         let line_height = window.line_height();
         let origin = bounds.origin;
@@ -2097,7 +2137,7 @@ impl Element for TextElement {
 
         // Paint selections
         if window.is_window_active() {
-            let secondary_selection = cx.theme().selection.saturation(0.1);
+            let secondary_selection = cx.theme().selection.opacity(0.35);
             for (path, is_active) in prepaint.search_match_paths.iter() {
                 window.paint_path(path.clone(), secondary_selection);
 

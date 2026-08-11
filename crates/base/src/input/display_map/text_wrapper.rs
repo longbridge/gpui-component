@@ -22,24 +22,24 @@ pub enum WrappingIndent {
 
 /// A line with soft wrapped lines info.
 #[derive(Debug, Clone)]
-pub(crate) struct LineItem {
+pub struct LineItem {
     /// The byte length of the line, without the end `\n`.
     len: usize,
     /// Number of leading characters of the line reserved as indentation for continuation wrapped
     /// lines, when [`WrappingIndent::Same`] is used.
     ///
     /// Zero when [`WrappingIndent::None`] is used or the line is not wrapped.
-    pub(crate) indent: u32,
+    pub indent: u32,
     /// The soft wrapped lines relative byte range (0..len) of this line (Include first line).
     ///
     /// Not contains the line end `\n`.
-    pub(crate) wrapped_lines: SmallVec<[Range<usize>; 1]>,
+    pub wrapped_lines: SmallVec<[Range<usize>; 1]>,
 }
 
 impl LineItem {
     /// Get the bytes length of this line.
     #[inline]
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.len
     }
 
@@ -52,7 +52,7 @@ impl LineItem {
 
 /// Summary of a subtree of [`LineItem`]s, maintained incrementally by the [`SumTree`].
 #[derive(Debug, Clone)]
-pub(crate) struct LineSummary {
+pub struct LineSummary {
     /// Number of buffer lines.
     buffer_rows: usize,
     /// Number of wrap rows (sum of each line's `lines_len()`).
@@ -474,7 +474,7 @@ impl TextWrapper {
 /// with an additional `local_row` field tracking the wrap line
 /// within the original buffer line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct WrapDisplayPoint {
+pub struct WrapDisplayPoint {
     /// The 0-based soft wrapped row index in the text.
     pub row: usize,
     /// The 0-based row index in local line (include first line).
@@ -496,22 +496,22 @@ impl WrapDisplayPoint {
 }
 
 /// The layout info of a line with soft wrapped lines.
-pub(crate) struct LineLayout {
+pub struct LineLayout {
     /// Total bytes length of this line.
     len: usize,
     /// The soft wrapped lines of this line (Include the first line).
-    pub(crate) wrapped_lines: SmallVec<[ShapedLine; 1]>,
+    pub wrapped_lines: SmallVec<[ShapedLine; 1]>,
     /// Extra left offset applied to continuation wrapped lines, used to reserve the first line's
     /// indentation when [`WrappingIndent::Same`] is used.
-    pub(crate) wrap_indent: Pixels,
-    pub(crate) longest_width: Pixels,
-    pub(crate) whitespace_indicators: Option<WhitespaceIndicators>,
+    pub wrap_indent: Pixels,
+    pub longest_width: Pixels,
+    pub whitespace_indicators: Option<WhitespaceIndicators>,
     /// Whitespace indicators: (line_index, x_position, is_tab)
-    pub(crate) whitespace_chars: Vec<(usize, Pixels, bool)>,
+    pub whitespace_chars: Vec<(usize, Pixels, bool)>,
 }
 
 impl LineLayout {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             len: 0,
             longest_width: px(0.),
@@ -523,7 +523,7 @@ impl LineLayout {
     }
 
     /// Set the left offset reserved for continuation wrapped lines.
-    pub(crate) fn wrap_indent(mut self, wrap_indent: Pixels) -> Self {
+    pub fn wrap_indent(mut self, wrap_indent: Pixels) -> Self {
         self.wrap_indent = wrap_indent;
         self
     }
@@ -539,12 +539,12 @@ impl LineLayout {
         }
     }
 
-    pub(crate) fn lines(mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) -> Self {
+    pub fn lines(mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) -> Self {
         self.set_wrapped_lines(wrapped_lines);
         self
     }
 
-    pub(crate) fn set_wrapped_lines(&mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) {
+    pub fn set_wrapped_lines(&mut self, wrapped_lines: SmallVec<[ShapedLine; 1]>) {
         self.len = wrapped_lines.iter().map(|l| l.len).sum();
         let width = wrapped_lines
             .iter()
@@ -555,7 +555,7 @@ impl LineLayout {
         self.wrapped_lines = wrapped_lines;
     }
 
-    pub(crate) fn with_whitespaces(mut self, indicators: Option<WhitespaceIndicators>) -> Self {
+    pub fn with_whitespaces(mut self, indicators: Option<WhitespaceIndicators>) -> Self {
         self.whitespace_indicators = indicators;
         let Some(indicators) = self.whitespace_indicators.as_ref() else {
             return self;
@@ -584,7 +584,7 @@ impl LineLayout {
     }
 
     #[inline]
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.len
     }
 
@@ -594,7 +594,7 @@ impl LineLayout {
     /// - When `line_end_affinity` is true, an offset at a soft wrap boundary is placed at
     ///   the end of the current visual line rather than the start of the next one.
     /// - The return value is relative to the top-left corner of this line layout, start from (0, 0)
-    pub(crate) fn position_for_index(
+    pub fn position_for_index(
         &self,
         offset: usize,
         last_layout: &LastLayout,
@@ -636,7 +636,7 @@ impl LineLayout {
     }
 
     /// Get the closest index for the given x in this line layout.
-    pub(crate) fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
+    pub fn closest_index_for_x(&self, x: Pixels, last_layout: &LastLayout) -> usize {
         let mut acc_len = 0;
         let x_offset = last_layout.alignment_offset(self.longest_width);
         let x = x - x_offset;
@@ -664,7 +664,7 @@ impl LineLayout {
     ///
     /// The `pos` is relative to the top-left corner of this line layout, start from (0, 0)
     /// The return value is a local byte index in this line layout, start from 0.
-    pub(crate) fn closest_index_for_position(
+    pub fn closest_index_for_position(
         &self,
         pos: Point<Pixels>,
         last_layout: &LastLayout,
@@ -692,7 +692,7 @@ impl LineLayout {
         None
     }
 
-    pub(crate) fn index_for_position(
+    pub fn index_for_position(
         &self,
         pos: Point<Pixels>,
         last_layout: &LastLayout,
@@ -714,7 +714,7 @@ impl LineLayout {
         None
     }
 
-    pub(crate) fn size(&self, line_height: Pixels) -> Size<Pixels> {
+    pub fn size(&self, line_height: Pixels) -> Size<Pixels> {
         let width = self
             .wrapped_lines
             .iter()
@@ -725,7 +725,7 @@ impl LineLayout {
         size(width, self.wrapped_lines.len() * line_height)
     }
 
-    pub(crate) fn paint(
+    pub fn paint(
         &self,
         pos: Point<Pixels>,
         line_height: Pixels,

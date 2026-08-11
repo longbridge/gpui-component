@@ -3,11 +3,11 @@ use std::rc::Rc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AccessibleAction, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
-    InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Rems,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    TextAlign, Window, div, px, relative,
+    InteractiveElement as _, IntoElement, ParentElement as _, Rems, RenderOnce, Role, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
+use crate::Root;
 use crate::button::{Button, ButtonVariants as _};
 use crate::input::clear_button;
 use crate::native_menu::NativeMenu;
@@ -16,10 +16,10 @@ use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
 use crate::{Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
+use gpui_base::Input as BaseInput;
+use gpui_base::input::NativeMenuItem as BaseNativeMenuItem;
 
-use super::{
-    InputContentType, InputState, content_type::sync_native_content_type, element::EditorScrollbar,
-};
+use super::{InputContentType, InputState, content_type::sync_native_content_type};
 
 /// Returns `(background, foreground)` colors for input-like components.
 pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
@@ -209,7 +209,7 @@ impl Input {
     }
 
     fn render_toggle_mask_button(state: &Entity<InputState>, cx: &App) -> impl IntoElement {
-        let masked = state.read(cx).masked;
+        let masked = state.read(cx).presentation().masked;
         Button::new("toggle-mask")
             .icon(if masked {
                 IconName::Eye
@@ -223,21 +223,10 @@ impl Input {
                 let state = state.clone();
                 move |_, window, cx| {
                     state.update(cx, |state, cx| {
-                        state.set_masked(!state.masked, window, cx);
+                        state.toggle_masked(window, cx);
                     })
                 }
             })
-    }
-
-    fn mouse_down_handler(
-        state: Entity<InputState>,
-        content_type: Option<InputContentType>,
-        disabled: bool,
-    ) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {
-        move |event, window, cx| {
-            sync_native_content_type(window, content_type, disabled);
-            state.update(cx, |state, cx| state.on_mouse_down(event, window, cx));
-        }
     }
 
     fn accessibility_role(
@@ -253,63 +242,11 @@ impl Input {
             return Role::MultilineTextInput;
         }
 
-        match content_type {
-            None => Role::TextInput,
-            Some(InputContentType::TelephoneNumber) => Role::PhoneNumberInput,
-            Some(InputContentType::EmailAddress) => Role::EmailInput,
-            Some(InputContentType::Url) => Role::UrlInput,
-            Some(InputContentType::Password | InputContentType::NewPassword) => Role::PasswordInput,
-            Some(InputContentType::DateTime) => Role::DateTimeInput,
-            Some(InputContentType::Birthdate) => Role::DateInput,
-            Some(
-                InputContentType::Name
-                | InputContentType::NamePrefix
-                | InputContentType::GivenName
-                | InputContentType::MiddleName
-                | InputContentType::FamilyName
-                | InputContentType::NameSuffix
-                | InputContentType::Nickname
-                | InputContentType::JobTitle
-                | InputContentType::OrganizationName
-                | InputContentType::Location
-                | InputContentType::FullStreetAddress
-                | InputContentType::StreetAddressLine1
-                | InputContentType::StreetAddressLine2
-                | InputContentType::AddressCity
-                | InputContentType::AddressState
-                | InputContentType::AddressCityAndState
-                | InputContentType::Sublocality
-                | InputContentType::CountryName
-                | InputContentType::PostalCode
-                | InputContentType::CreditCardNumber
-                | InputContentType::CreditCardName
-                | InputContentType::CreditCardGivenName
-                | InputContentType::CreditCardMiddleName
-                | InputContentType::CreditCardFamilyName
-                | InputContentType::CreditCardSecurityCode
-                | InputContentType::CreditCardExpiration
-                | InputContentType::CreditCardExpirationMonth
-                | InputContentType::CreditCardExpirationYear
-                | InputContentType::CreditCardType
-                | InputContentType::Username
-                | InputContentType::OneTimeCode
-                | InputContentType::ShipmentTrackingNumber
-                | InputContentType::FlightNumber
-                | InputContentType::BirthdateDay
-                | InputContentType::BirthdateMonth
-                | InputContentType::BirthdateYear
-                | InputContentType::CellularEid
-                | InputContentType::CellularImei,
-            ) => Role::TextInput,
-        }
+        content_type.map_or(Role::TextInput, InputContentType::accessibility_role)
     }
 
     fn exposes_accessibility_value(masked: bool, content_type: Option<InputContentType>) -> bool {
-        !masked
-            && !matches!(
-                content_type,
-                Some(InputContentType::Password | InputContentType::NewPassword)
-            )
+        !masked && content_type.is_none_or(InputContentType::exposes_accessibility_value)
     }
 
     fn handle_accessibility_set_value(
@@ -355,19 +292,11 @@ impl Input {
                 .unwrap_or(px(0.)),
         };
 
-        state.editor_scrollbar_paddings.set(paddings);
-        state.editor_scrollbar_snapshot.set(None);
+        state.set_editor_scrollbar_paddings(paddings);
 
         v_flex()
             .size_full()
-            .children(state.search_panel.clone())
-            .child(
-                div()
-                    .relative()
-                    .flex_1()
-                    .child(input_state.clone())
-                    .child(EditorScrollbar::new(input_state.clone())),
-            )
+            .child(div().relative().flex_1().child(input_state.clone()))
     }
 }
 
@@ -382,31 +311,59 @@ impl RenderOnce for Input {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
 
-        self.state.update(cx, |state, _| {
-            state.context_menu_builder = self.context_menu_builder.clone();
-            state.disabled = self.disabled;
-            state.size = self.size;
-
-            // Only for single line mode
-            if state.mode.is_single_line() {
-                state.text_align = text_align;
-            }
+        let base_size = match self.size {
+            Size::Small => gpui_base::input::InputSize::Small,
+            Size::Large => gpui_base::input::InputSize::Large,
+            _ => gpui_base::input::InputSize::Medium,
+        };
+        self.state.update(cx, |state, cx| {
+            state.configure_presentation(self.disabled, base_size, text_align);
+            let custom = self.context_menu_builder.clone();
+            state.set_context_menu_presenter(Some(Rc::new(move |menu, position, window, cx| {
+                let menu = if let Some(custom) = custom.as_ref() {
+                    custom(NativeMenu::new(), window, cx)
+                } else {
+                    menu.items
+                        .into_iter()
+                        .fold(NativeMenu::new(), |menu, item| match item {
+                            BaseNativeMenuItem::Separator => menu.separator(),
+                            BaseNativeMenuItem::Action {
+                                label,
+                                disabled,
+                                action,
+                            } => menu.menu_with_disabled(label, disabled, action),
+                        })
+                };
+                menu.show(position, window, cx);
+            })));
+            state.set_focus_host(Some(Rc::new(|focused, state, window, cx| {
+                Root::try_update(window, cx, |root, _, cx| {
+                    if focused {
+                        root.focused_input = Some(state);
+                    } else if root.focused_input.as_ref() == Some(&state) {
+                        root.focused_input = None;
+                    }
+                    cx.notify();
+                });
+            })));
+            state.sync_focus_host(window, cx);
         });
+        let overlays = super::overlay::render_overlays(&self.state, window, cx);
 
-        let state = self.state.read(cx);
+        let presentation = self.state.read(cx).presentation();
         let content_type = self.content_type;
         let disabled = self.disabled;
-        let is_multi_line = state.mode.is_multi_line();
+        let is_multi_line = presentation.multi_line;
         let accessibility_role = Self::accessibility_role(is_multi_line, content_type, self.role);
         let accessibility_state = self.state.clone();
         // Materializing the whole rope is only observable through the
         // accessibility tree, so skip it when no client is listening.
         let accessibility_value = (window.is_a11y_active()
-            && Self::exposes_accessibility_value(state.masked, content_type))
-        .then(|| state.text.to_string());
-        let focused = state.focus_handle.is_focused(window) && !state.disabled;
+            && Self::exposes_accessibility_value(presentation.masked, content_type))
+        .then(|| presentation.value.clone());
+        let focused = presentation.focus_handle.is_focused(window) && !presentation.disabled;
         if focused {
-            sync_native_content_type(window, content_type, state.disabled);
+            sync_native_content_type(window, content_type, presentation.disabled);
         }
 
         let gap_x = match self.size {
@@ -415,33 +372,32 @@ impl RenderOnce for Input {
             _ => px(6.),
         };
 
-        let (bg, _) = input_style(state.disabled, cx);
-        let bg = if state.mode.is_code_editor() {
+        let (bg, _) = input_style(presentation.disabled, cx);
+        let bg = if presentation.code_editor {
             cx.theme().editor_background()
         } else {
             bg
         };
-        let bg = if state.disabled { bg.opacity(0.5) } else { bg };
-        let border_color = if state.disabled {
-            cx.theme().input.opacity(0.5)
+        let bg = if presentation.disabled {
+            bg.opacity(0.5)
         } else {
-            cx.theme().input
+            bg
         };
-
         let prefix = self.prefix;
         let suffix = self.suffix;
         let show_clear_button = self.cleanable
-            && !state.disabled
-            && !state.loading
-            && state.text.len() > 0
-            && state.mode.is_single_line();
-        let has_suffix = suffix.is_some() || state.loading || self.mask_toggle || show_clear_button;
+            && !presentation.disabled
+            && !presentation.loading
+            && !presentation.value.is_empty()
+            && !presentation.multi_line;
+        let has_suffix =
+            suffix.is_some() || presentation.loading || self.mask_toggle || show_clear_button;
 
-        let placeholder = Some(state.placeholder.clone()).filter(|p| !p.is_empty());
+        let placeholder = Some(presentation.placeholder.clone()).filter(|p| !p.is_empty());
 
         // Don't use a mask-derived placeholder ("(___)___-___") as an aria_label fallback.
         let placeholder_is_mask =
-            state.mask_pattern.placeholder().as_deref() == placeholder.as_deref();
+            presentation.mask_placeholder.as_deref() == placeholder.as_deref();
 
         let aria_label = match self.aria_label {
             Some(label) => Some(label),
@@ -449,8 +405,12 @@ impl RenderOnce for Input {
             None => placeholder.clone(),
         };
 
-        div()
-            .id(("input", self.state.entity_id()))
+        let state = self.state.read(cx);
+        BaseInput::new(("input", self.state.entity_id()))
+            .appearance(self.appearance)
+            .bordered(self.bordered)
+            .focus_bordered(self.focus_bordered)
+            .focused(focused)
             .role(accessibility_role)
             .when_some(self.accessibility_id, |this, id| this.accessibility_id(id))
             .when_some(aria_label, |this, label| this.aria_label(label))
@@ -458,93 +418,12 @@ impl RenderOnce for Input {
                 this.aria_placeholder(placeholder)
             })
             .when_some(accessibility_value, |this, value| this.aria_value(value))
-            .flex()
-            .key_context(crate::input::CONTEXT)
-            .track_focus(&state.focus_handle.clone())
-            .tab_index(self.tab_index)
-            .when(!state.disabled, |this| {
+            .when(!disabled, |this| {
                 this.on_a11y_action(AccessibleAction::SetValue, move |data, window, cx| {
                     Self::handle_accessibility_set_value(&accessibility_state, data, window, cx);
                 })
-                .on_action(window.listener_for(&self.state, InputState::backspace))
-                .on_action(window.listener_for(&self.state, InputState::delete))
-                .on_action(
-                    window.listener_for(&self.state, InputState::delete_to_beginning_of_line),
-                )
-                .on_action(window.listener_for(&self.state, InputState::delete_to_end_of_line))
-                .on_action(window.listener_for(&self.state, InputState::delete_previous_word))
-                .on_action(window.listener_for(&self.state, InputState::delete_next_word))
-                .on_action(window.listener_for(&self.state, InputState::enter))
-                .on_action(window.listener_for(&self.state, InputState::escape))
-                .on_action(window.listener_for(&self.state, InputState::paste))
-                .on_action(window.listener_for(&self.state, InputState::cut))
-                .on_action(window.listener_for(&self.state, InputState::undo))
-                .on_action(window.listener_for(&self.state, InputState::redo))
-                .when(state.mode.is_multi_line(), |this| {
-                    this.on_action(window.listener_for(&self.state, InputState::indent_inline))
-                        .on_action(window.listener_for(&self.state, InputState::outdent_inline))
-                        .on_action(window.listener_for(&self.state, InputState::indent_block))
-                        .on_action(window.listener_for(&self.state, InputState::outdent_block))
-                })
-                .on_action(
-                    window.listener_for(&self.state, InputState::on_action_toggle_code_actions),
-                )
             })
-            .on_action(window.listener_for(&self.state, InputState::left))
-            .on_action(window.listener_for(&self.state, InputState::right))
-            .on_action(window.listener_for(&self.state, InputState::select_left))
-            .on_action(window.listener_for(&self.state, InputState::select_right))
-            .when(state.mode.is_multi_line(), |this| {
-                let result = this
-                    .on_action(window.listener_for(&self.state, InputState::up))
-                    .on_action(window.listener_for(&self.state, InputState::down))
-                    .on_action(window.listener_for(&self.state, InputState::select_up))
-                    .on_action(window.listener_for(&self.state, InputState::select_down))
-                    .on_action(window.listener_for(&self.state, InputState::page_up))
-                    .on_action(window.listener_for(&self.state, InputState::page_down));
-
-                let result = result.on_action(
-                    window.listener_for(&self.state, InputState::on_action_go_to_definition),
-                );
-
-                result
-            })
-            .on_action(window.listener_for(&self.state, InputState::select_all))
-            .on_action(window.listener_for(&self.state, InputState::select_to_start_of_line))
-            .on_action(window.listener_for(&self.state, InputState::select_to_end_of_line))
-            .on_action(window.listener_for(&self.state, InputState::select_to_previous_word))
-            .on_action(window.listener_for(&self.state, InputState::select_to_next_word))
-            .on_action(window.listener_for(&self.state, InputState::home))
-            .on_action(window.listener_for(&self.state, InputState::end))
-            .on_action(window.listener_for(&self.state, InputState::move_to_start))
-            .on_action(window.listener_for(&self.state, InputState::move_to_end))
-            .on_action(window.listener_for(&self.state, InputState::move_to_previous_word))
-            .on_action(window.listener_for(&self.state, InputState::move_to_next_word))
-            .on_action(window.listener_for(&self.state, InputState::select_to_start))
-            .on_action(window.listener_for(&self.state, InputState::select_to_end))
-            .on_action(window.listener_for(&self.state, InputState::show_character_palette))
-            .on_action(window.listener_for(&self.state, InputState::copy))
-            .on_action(window.listener_for(&self.state, InputState::on_action_search))
-            .on_action(window.listener_for(&self.state, InputState::on_action_replace))
-            .on_key_down(window.listener_for(&self.state, InputState::on_key_down))
-            .on_mouse_down(
-                MouseButton::Left,
-                Self::mouse_down_handler(self.state.clone(), content_type, disabled),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                Self::mouse_down_handler(self.state.clone(), content_type, disabled),
-            )
-            .on_mouse_up(
-                MouseButton::Left,
-                window.listener_for(&self.state, InputState::on_mouse_up),
-            )
-            .on_mouse_up(
-                MouseButton::Right,
-                window.listener_for(&self.state, InputState::on_mouse_up),
-            )
-            .on_mouse_move(window.listener_for(&self.state, InputState::on_mouse_move))
-            .on_scroll_wheel(window.listener_for(&self.state, InputState::on_scroll_wheel))
+            .flex()
             .size_full()
             .line_height(LINE_HEIGHT)
             .input_px(self.size)
@@ -553,19 +432,15 @@ impl RenderOnce for Input {
             .input_text_size(self.size)
             .when(!self.disabled, |this| this.cursor_text())
             .items_center()
-            .when(state.mode.is_multi_line(), |this| {
+            .when(presentation.multi_line, |this| {
                 this.h_auto()
                     .when_some(self.height, |this, height| this.h(height))
             })
             .when(self.appearance, |this| {
                 this.bg(bg)
                     .rounded(cx.theme().radius)
-                    .when(self.bordered, |this| {
-                        this.border_color(border_color)
-                            .border_1()
-                            .when(focused && self.focus_bordered, |this| {
-                                this.focused_border(cx)
-                            })
+                    .when(self.bordered && focused && self.focus_bordered, |this| {
+                        this.focused_border(cx)
                     })
             })
             .items_center()
@@ -573,14 +448,14 @@ impl RenderOnce for Input {
             .refine_style(&self.style)
             .children(prefix.map(|p| {
                 div()
-                    .when(state.disabled, |this| this.opacity(0.5))
+                    .when(presentation.disabled, |this| this.opacity(0.5))
                     .child(p)
             }))
-            .when(state.mode.is_multi_line(), |mut this| {
+            .when(presentation.multi_line, |mut this| {
                 let paddings = this.style().padding.clone();
                 this.child(Self::render_editor(paddings, &self.state, &state, window))
             })
-            .when(!state.mode.is_multi_line(), |this| {
+            .when(!presentation.multi_line, |this| {
                 this.child(self.state.clone())
             })
             .when(has_suffix, |this| {
@@ -590,8 +465,8 @@ impl RenderOnce for Input {
                         .gap(gap_x)
                         .items_center()
                         .cursor_default()
-                        .when(state.disabled, |this| this.opacity(0.5))
-                        .when(state.loading, |this| {
+                        .when(presentation.disabled, |this| this.opacity(0.5))
+                        .when(presentation.loading, |this| {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
                         })
                         .when(self.mask_toggle, |this| {
@@ -602,8 +477,7 @@ impl RenderOnce for Input {
                                 let state = self.state.clone();
                                 move |_, window, cx| {
                                     state.update(cx, |state, cx| {
-                                        state.clean(window, cx);
-                                        state.focus(window, cx);
+                                        state.clear_and_focus(window, cx);
                                     })
                                 }
                             }))
@@ -611,6 +485,9 @@ impl RenderOnce for Input {
                         .children(suffix),
                 )
             })
+            .relative()
+            .children(overlays)
+            .render(window, cx)
     }
 }
 
@@ -854,5 +731,86 @@ mod tests {
             false,
             Some(InputContentType::NewPassword)
         ));
+    }
+
+    #[gpui::test]
+    fn focused_input_registry_tracks_focus_and_blur(cx: &mut gpui::TestAppContext) {
+        use crate::WindowExt as _;
+        use gpui::{AppContext as _, Render};
+
+        struct Probe {
+            input: Entity<InputState>,
+            otp: Entity<gpui_base::OtpState>,
+            other: gpui::FocusHandle,
+        }
+        impl Render for Probe {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                div()
+                    .child(div().track_focus(&self.other))
+                    .child(Input::new(&self.input))
+                    .child(crate::input::OtpInput::new(&self.otp))
+            }
+        }
+
+        cx.update(crate::init);
+        let mut input = None;
+        let mut other_focus = None;
+        let mut otp = None;
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                let state = cx.new(|cx| InputState::new(window, cx));
+                let otp_state = cx.new(|cx| gpui_base::OtpState::new(6, window, cx));
+                input = Some(state.clone());
+                otp = Some(otp_state.clone());
+                let other = cx.focus_handle();
+                other_focus = Some(other.clone());
+                let probe = cx.new(|_| Probe {
+                    input: state,
+                    otp: otp_state,
+                    other,
+                });
+                cx.new(|cx| Root::new(probe, window, cx))
+            })
+            .unwrap()
+        });
+        let input = input.unwrap();
+        let mut cx = gpui::VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.update(|window, cx| input.update(cx, |state, cx| state.focus(window, cx)));
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(
+            cx.update(|window, cx| window.focused_input(cx)),
+            Some(input.clone())
+        );
+        cx.update(|window, cx| other_focus.clone().unwrap().focus(window, cx));
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(cx.update(|window, cx| window.focused_input(cx)), None);
+
+        let otp = otp.unwrap();
+        let compat = otp.read_with(&cx, |state, _| state.compat_input_state());
+        cx.update(|window, cx| otp.update(cx, |state, cx| state.focus(window, cx)));
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(
+            cx.update(|window, cx| window.focused_input(cx)),
+            Some(compat)
+        );
+        cx.update(|window, cx| other_focus.unwrap().focus(window, cx));
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(cx.update(|window, cx| window.focused_input(cx)), None);
     }
 }

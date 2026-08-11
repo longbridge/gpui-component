@@ -51,19 +51,3 @@ impl RangeBounds<usize> for Selection {
         std::ops::Bound::Excluded(&self.end)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::input::Position;
-
-    #[test]
-    fn test_line_column_from_to() {
-        assert_eq!(
-            Position::new(1, 2),
-            Position {
-                line: 1,
-                character: 2
-            }
-        );
-    }
-}

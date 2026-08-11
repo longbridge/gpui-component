@@ -7,6 +7,14 @@ use gpui::{HighlightStyle, SharedString};
 use std::ops::Range;
 use std::time::Duration;
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HighlightThemeMode {
+    #[default]
+    Light,
+    Dark,
+}
+
 // Syntax highlighter stub
 pub struct SyntaxHighlighter;
 
@@ -418,7 +426,7 @@ pub struct HighlightThemeStyle {
 pub struct HighlightTheme {
     pub name: String,
     #[serde(default)]
-    pub appearance: crate::ThemeMode,
+    pub appearance: HighlightThemeMode,
     pub style: HighlightThemeStyle,
 }
 
@@ -432,13 +440,19 @@ impl std::ops::Deref for HighlightTheme {
 
 impl HighlightTheme {
     pub fn default_dark() -> std::sync::Arc<Self> {
-        use crate::DEFAULT_THEME_COLORS;
-        DEFAULT_THEME_COLORS[&crate::ThemeMode::Dark].1.clone()
+        std::sync::Arc::new(Self {
+            name: "Base Dark".into(),
+            appearance: HighlightThemeMode::Dark,
+            style: HighlightThemeStyle::default(),
+        })
     }
 
     pub fn default_light() -> std::sync::Arc<Self> {
-        use crate::DEFAULT_THEME_COLORS;
-        DEFAULT_THEME_COLORS[&crate::ThemeMode::Light].1.clone()
+        std::sync::Arc::new(Self {
+            name: "Base Light".into(),
+            appearance: HighlightThemeMode::Light,
+            style: HighlightThemeStyle::default(),
+        })
     }
 }
 

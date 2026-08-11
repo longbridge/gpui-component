@@ -145,6 +145,14 @@ impl Root {
         root.update(cx, |root, cx| f(root, window, cx))
     }
 
+    pub(crate) fn try_update<F, R>(window: &mut Window, cx: &mut App, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) -> R,
+    {
+        let root = window.root::<Root>().flatten()?;
+        Some(root.update(cx, |root, cx| f(root, window, cx)))
+    }
+
     pub fn read<'a>(window: &'a Window, cx: &'a App) -> &'a Self {
         &window
             .root::<Root>()
