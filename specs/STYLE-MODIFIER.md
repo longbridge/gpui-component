@@ -31,11 +31,15 @@ gpui-component-base
   projects the active semantic state into style modifiers
   provides generic interpolation/lifecycle primitives
 
-Application / Registry source
+Application / `crates/ui` composition
   may own the controlled value (checked, selected, open, ...)
   owns every target style
   owns duration, easing, delay and animation composition
   decides which root or slot is animated
+
+During the compatibility migration, `crates/ui` is the canonical complete
+presentation implementation. Registry files are not a second authoring surface;
+future Registry output must be produced from the complete `crates/ui` source.
 ```
 
 因此，下面这句过于绝对：
@@ -253,20 +257,31 @@ Registry 源码显式 refine，遵循现有 closest/instance style contract。
 
 每个组件必须声明自己的 semantic priority。共同规则：
 
-1. Registry/default/variant/size 先形成静态样式。
-2. Instance `Styled` refinement 是最后一个静态 application layer。
-3. 激活的 semantic refinements 按组件声明的固定顺序应用。
-4. GPUI interaction refinements按 GPUI 固定运行时顺序应用。
+1. Registry/default/variant/size 与普通 `Styled` 调用先形成 root static style。
+2. 激活的 semantic refinements 按组件声明的固定顺序应用。
+3. GPUI interaction refinements按 GPUI 固定运行时顺序应用。
 
 MVP 顺序：
 
 ```text
-Button:   instance → disabled → GPUI interaction
-Checkbox: instance → checked → indeterminate → disabled → GPUI interaction
+Button:   static → disabled → GPUI interaction
+Checkbox: static → checked → indeterminate → disabled → GPUI interaction
+Toggle:   static → pressed → disabled → GPUI interaction
 ```
 
 `indeterminate` 与 `checked` 在规范化后的 Checkbox state 中互斥。`disabled` 最后
 应用，因此在 semantic refinements 写同一属性时胜出。
+
+兼容 façade 若历史合同要求 caller instance style 胜过 active semantic state，必须在
+对应 semantic closure 的末尾显式 refine caller refinement。Base 不能从同一个
+`Styled` accumulator 中猜测哪些属性来自 component defaults、哪些来自最终调用者；
+不要为此增加第二个公开 instance-style namespace。
+
+Typed part elements such as `CheckboxIndicator` are a separate application-owned
+slot boundary: their state refinements are resolved first and their own `Styled`
+refinement is the closest layer. Canonical UI should keep non-state geometry in
+that refinement and express state-dependent color/border/fill through the typed
+state context, avoiding conflicting component defaults.
 
 Disabled 组件默认不安装 activation handler，但 GPUI 不会自动抑制 hover appearance。
 由于原生 interaction refinement 在 semantic refinement 之后应用，应用若不希望 disabled

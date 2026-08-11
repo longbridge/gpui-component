@@ -2,6 +2,7 @@ use gpui::{App, SharedString};
 use std::ops::Deref;
 
 mod async_util;
+mod component_traits;
 mod element_ext;
 pub mod global_state;
 mod icon;
@@ -11,6 +12,7 @@ mod inspector;
 #[cfg(all(target_os = "macos", not(test)))]
 mod macos_accessibility;
 mod root;
+mod sizing;
 mod styled;
 mod time;
 mod title_bar;

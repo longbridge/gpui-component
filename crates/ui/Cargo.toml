@@ -16,7 +16,7 @@ doctest = false
 
 [features]
 decimal = ["dep:rust_decimal"]
-inspector = ["gpui_macros/inspector", "gpui/inspector"]
+inspector = ["gpui_macros/inspector", "gpui/inspector", "gpui-component-base/inspector"]
 tree-sitter = ["dep:tree-sitter", "dep:tree-sitter-json"]
 
 # For syntax highlighting in Markdown and CodeEditor.

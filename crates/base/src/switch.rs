@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,
-    IntoElement, MouseButton, MouseDownEvent, ParentElement, Refineable as _, RenderOnce, Role,
+    IntoElement, MouseButton, ParentElement, Refineable as _, RenderOnce, Role,
     SharedString, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Toggled, Window,
     div, prelude::FluentBuilder as _,
 };
@@ -11,7 +11,6 @@ use smallvec::SmallVec;
 use crate::StateStyle;
 
 type ToggleHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
-type PointerDownToggleHandler = Rc<dyn Fn(bool, &MouseDownEvent, &mut Window, &mut App)>;
 
 /// An unstyled binary control that owns switch interaction and semantics.
 ///
@@ -29,12 +28,9 @@ pub struct Switch {
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
     on_toggle: Option<ToggleHandler>,
-    on_pointer_down_toggle: Option<PointerDownToggleHandler>,
     accessibility_label: Option<SharedString>,
     tab_index: isize,
     tab_stop: bool,
-    focusable: bool,
-    block_pointer_when_disabled: bool,
 }
 
 /// Semantic root styles supported by [`Switch`].
@@ -58,6 +54,98 @@ impl SwitchStyles {
     }
 }
 
+/// An unstyled switch thumb with typed checked and disabled state projection.
+#[derive(IntoElement)]
+pub struct SwitchThumb {
+    base: Div,
+    style: StyleRefinement,
+    semantic_styles: SwitchThumbStyles,
+    checked: bool,
+    disabled: bool,
+    children: SmallVec<[AnyElement; 1]>,
+}
+
+/// Semantic styles supported by [`SwitchThumb`].
+#[derive(Default)]
+pub struct SwitchThumbStyles {
+    checked: StyleRefinement,
+    disabled: StyleRefinement,
+}
+
+impl SwitchThumbStyles {
+    pub fn checked(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.checked
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+}
+
+impl SwitchThumb {
+    pub fn new(checked: bool) -> Self {
+        Self {
+            base: div(),
+            style: StyleRefinement::default(),
+            semantic_styles: SwitchThumbStyles::default(),
+            checked,
+            disabled: false,
+            children: SmallVec::new(),
+        }
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn styles(
+        mut self,
+        build: impl FnOnce(SwitchThumbStyles) -> SwitchThumbStyles,
+    ) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = StyleRefinement::default();
+        if self.checked {
+            style.refine(&self.semantic_styles.checked);
+        }
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style.refine(&self.style);
+        style
+    }
+}
+
+impl Styled for SwitchThumb {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl ParentElement for SwitchThumb {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for SwitchThumb {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let style = self.resolved_style();
+        self.base.children(self.children).map(|mut this| {
+            this.style().refine(&style);
+            this
+        })
+    }
+}
+
 impl Switch {
     pub fn new(id: impl Into<ElementId>) -> Self {
         let id = id.into();
@@ -70,12 +158,9 @@ impl Switch {
             disabled: false,
             children: SmallVec::new(),
             on_toggle: None,
-            on_pointer_down_toggle: None,
             accessibility_label: None,
             tab_index: 0,
             tab_stop: true,
-            focusable: true,
-            block_pointer_when_disabled: true,
         }
     }
 
@@ -98,13 +183,14 @@ impl Switch {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = self.style.clone();
+        let mut style = StyleRefinement::default();
         if self.checked {
             style.refine(&self.semantic_styles.checked);
         }
         if self.disabled {
             style.refine(&self.semantic_styles.disabled);
         }
+        style.refine(&self.style);
         style
     }
 
@@ -114,20 +200,6 @@ impl Switch {
         handler: impl Fn(bool, &ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_toggle = Some(Rc::new(handler));
-        self.on_pointer_down_toggle = None;
-        self
-    }
-
-    /// Handles pointer activation on left mouse down instead of click.
-    ///
-    /// This is useful for controls whose established interaction contract fires
-    /// before mouse-up. Calling this replaces an existing [`Self::on_toggle`].
-    pub fn on_pointer_down_toggle(
-        mut self,
-        handler: impl Fn(bool, &MouseDownEvent, &mut Window, &mut App) + 'static,
-    ) -> Self {
-        self.on_pointer_down_toggle = Some(Rc::new(handler));
-        self.on_toggle = None;
         self
     }
 
@@ -146,18 +218,6 @@ impl Switch {
     /// Sets whether the switch participates in keyboard focus traversal.
     pub fn tab_stop(mut self, tab_stop: bool) -> Self {
         self.tab_stop = tab_stop;
-        self
-    }
-
-    /// Sets whether this switch installs a focus handle at all.
-    pub fn focusable(mut self, focusable: bool) -> Self {
-        self.focusable = focusable;
-        self
-    }
-
-    /// Sets whether disabled pointer presses stop propagation to ancestors.
-    pub fn block_pointer_when_disabled(mut self, block: bool) -> Self {
-        self.block_pointer_when_disabled = block;
         self
     }
 
@@ -195,7 +255,6 @@ impl RenderOnce for Switch {
         let checked = self.checked;
         let disabled = self.disabled;
         let style = self.resolved_style();
-        let on_pointer_down_toggle = self.on_pointer_down_toggle;
 
         self.base
             .role(Role::Switch)
@@ -207,26 +266,18 @@ impl RenderOnce for Switch {
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
-            .when(!disabled && self.focusable, |this| {
+            .when(!disabled, |this| {
                 this.track_focus(
                     &focus_handle
                         .tab_index(self.tab_index)
                         .tab_stop(self.tab_stop),
                 )
             })
-            .when(disabled && self.block_pointer_when_disabled, |this| {
+            .when(disabled, |this| {
                 this.on_mouse_down(MouseButton::Left, |_, _, cx| {
                     cx.stop_propagation();
                 })
             })
-            .when_some(
-                (!disabled).then_some(on_pointer_down_toggle).flatten(),
-                |this, on_pointer_down_toggle| {
-                    this.on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                        on_pointer_down_toggle(!checked, event, window, cx);
-                    })
-                },
-            )
             .when_some(
                 (!disabled).then_some(self.on_toggle).flatten(),
                 |this, on_toggle| {
@@ -256,6 +307,34 @@ mod tests {
         Context, Element as _, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
         TestAppContext, VisualTestContext, accesskit, canvas, point, px,
     };
+
+    #[test]
+    fn thumb_projects_checked_disabled_and_instance_style_priority() {
+        let checked_color = gpui::hsla(0.6, 0.7, 0.5, 1.0);
+        let disabled_color = gpui::hsla(0.1, 0.2, 0.3, 0.5);
+        let thumb = |checked, disabled| {
+            SwitchThumb::new(checked)
+                .disabled(disabled)
+                .styles(|styles| {
+                    styles
+                        .checked(|style| style.bg(checked_color))
+                        .disabled(|style| style.bg(disabled_color))
+                })
+        };
+
+        assert_eq!(
+            thumb(true, false).resolved_style().background,
+            Some(checked_color.into())
+        );
+        assert_eq!(
+            thumb(true, true).resolved_style().background,
+            Some(disabled_color.into())
+        );
+        assert_eq!(
+            thumb(true, true).bg(checked_color).resolved_style().background,
+            Some(checked_color.into())
+        );
+    }
 
     struct SwitchHarness {
         checked: bool,
@@ -378,43 +457,6 @@ mod tests {
         assert_eq!(parent_clicks.get(), 0);
     }
 
-    #[gpui::test]
-    fn compatibility_options_leave_disabled_pointer_events_to_ancestors(cx: &mut TestAppContext) {
-        struct CompatibilityHarness {
-            parent_mouse_downs: Rc<Cell<usize>>,
-        }
-
-        impl Render for CompatibilityHarness {
-            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-                let parent_mouse_downs = self.parent_mouse_downs.clone();
-                div()
-                    .id("parent")
-                    .size(px(100.))
-                    .on_mouse_down(MouseButton::Left, move |_, _, _| {
-                        parent_mouse_downs.set(parent_mouse_downs.get() + 1)
-                    })
-                    .child(
-                        Switch::new("switch")
-                            .disabled(true)
-                            .focusable(false)
-                            .block_pointer_when_disabled(false)
-                            .size_full(),
-                    )
-            }
-        }
-
-        let parent_mouse_downs = Rc::new(Cell::new(0));
-        let (_, cx) = cx.add_window_view({
-            let parent_mouse_downs = parent_mouse_downs.clone();
-            move |_, _| CompatibilityHarness { parent_mouse_downs }
-        });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
-
-        assert_eq!(parent_mouse_downs.get(), 1);
-        cx.update(|window, cx| assert!(window.focused(cx).is_none()));
-    }
-
     #[test]
     fn application_owned_state_styles_are_available() {
         let _ = Switch::new("states")
@@ -431,7 +473,7 @@ mod tests {
     #[test]
     fn semantic_root_styles_follow_switch_priority() {
         let styled = |switch: Switch| {
-            switch.opacity(0.9).styles(|styles| {
+            switch.styles(|styles| {
                 styles
                     .checked(|style| style.opacity(0.8))
                     .disabled(|style| style.opacity(0.5))
@@ -440,7 +482,7 @@ mod tests {
 
         assert_eq!(
             styled(Switch::new("normal")).resolved_style().opacity,
-            Some(0.9)
+            None
         );
         assert_eq!(
             styled(Switch::new("checked").checked(true))
@@ -453,6 +495,17 @@ mod tests {
                 .resolved_style()
                 .opacity,
             Some(0.5)
+        );
+        assert_eq!(
+            styled(
+                Switch::new("instance-override")
+                    .checked(true)
+                    .disabled(true)
+                    .opacity(0.9),
+            )
+            .resolved_style()
+            .opacity,
+            Some(0.9)
         );
     }
 

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, Div, ElementId, FocusHandle, InteractiveElement, Interactivity, IntoElement,
-    MouseButton, ParentElement, Refineable as _, RenderOnce, Role, SharedString, Stateful,
+    ParentElement, Refineable as _, RenderOnce, Role, SharedString, Stateful,
     StatefulInteractiveElement, StyleRefinement, Styled, Toggled, Window, div,
     prelude::FluentBuilder as _,
 };
@@ -55,9 +55,7 @@ pub struct Checkbox {
     accessibility_label: Option<SharedString>,
     tab_index: isize,
     tab_stop: bool,
-    focus_on_mouse_down: bool,
-    prevent_default_on_activation: bool,
-    block_pointer_when_disabled: bool,
+    provided_focus_handle: Option<FocusHandle>,
 }
 
 impl Checkbox {
@@ -76,9 +74,7 @@ impl Checkbox {
             accessibility_label: None,
             tab_index: 0,
             tab_stop: true,
-            focus_on_mouse_down: true,
-            prevent_default_on_activation: false,
-            block_pointer_when_disabled: true,
+            provided_focus_handle: None,
         }
     }
 
@@ -152,43 +148,23 @@ impl Checkbox {
         self
     }
 
-    /// Sets whether pointer activation may move focus to this checkbox.
-    pub fn focus_on_mouse_down(mut self, focus_on_mouse_down: bool) -> Self {
-        self.focus_on_mouse_down = focus_on_mouse_down;
+    /// Uses a caller-owned focus handle instead of creating keyed state.
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.provided_focus_handle = Some(focus_handle.clone());
         self
     }
 
-    /// Requests `Window::prevent_default` before the activation callback.
-    pub fn prevent_default_on_activation(mut self, prevent_default: bool) -> Self {
-        self.prevent_default_on_activation = prevent_default;
-        self
-    }
-
-    /// Sets whether disabled pointer presses stop propagation to ancestors.
-    pub fn block_pointer_when_disabled(mut self, block: bool) -> Self {
-        self.block_pointer_when_disabled = block;
-        self
-    }
-
-    /// Removes application-owned presentation children for façade composition.
-    ///
-    /// A compatibility façade can preserve an existing label/content layout by
-    /// taking these children, wrapping them in its presentation, and attaching
-    /// that presentation back to this behavior root during render.
-    pub fn take_children(&mut self) -> SmallVec<[AnyElement; 2]> {
-        std::mem::take(&mut self.children)
-    }
-
-    /// Returns the stable focus handle used by this checkbox.
-    pub fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
-        window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx)
-            .clone()
+    fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
+        self.provided_focus_handle.clone().unwrap_or_else(|| {
+            window
+                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+                .read(cx)
+                .clone()
+        })
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = self.style.clone();
+        let mut style = StyleRefinement::default();
         match self.state {
             CheckboxState::Unchecked => {}
             CheckboxState::Checked => style.refine(&self.semantic_styles.checked),
@@ -197,6 +173,7 @@ impl Checkbox {
         if self.disabled {
             style.refine(&self.semantic_styles.disabled);
         }
+        style.refine(&self.style);
         style
     }
 }
@@ -232,6 +209,129 @@ impl CheckboxStyles {
     }
 }
 
+/// An unstyled checkbox indicator part with typed checkbox-state projection.
+///
+/// This renders its `Div` directly. Applications own its geometry, visual
+/// presentation, and children.
+#[derive(IntoElement)]
+pub struct CheckboxIndicator {
+    base: Div,
+    style: StyleRefinement,
+    semantic_styles: CheckboxIndicatorStyles,
+    state: CheckboxState,
+    disabled: bool,
+    children: SmallVec<[AnyElement; 1]>,
+}
+
+/// Semantic styles supported by [`CheckboxIndicator`].
+#[derive(Default)]
+pub struct CheckboxIndicatorStyles {
+    checked: StyleRefinement,
+    indeterminate: StyleRefinement,
+    disabled: StyleRefinement,
+}
+
+impl CheckboxIndicatorStyles {
+    pub fn checked(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.checked
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    pub fn indeterminate(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.indeterminate
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+}
+
+impl CheckboxIndicator {
+    pub fn new() -> Self {
+        Self {
+            base: div(),
+            style: StyleRefinement::default(),
+            semantic_styles: CheckboxIndicatorStyles::default(),
+            state: CheckboxState::Unchecked,
+            disabled: false,
+            children: SmallVec::new(),
+        }
+    }
+
+    pub fn state(mut self, state: CheckboxState) -> Self {
+        self.state = state;
+        self
+    }
+
+    pub fn checked(self, checked: bool) -> Self {
+        self.state(if checked {
+            CheckboxState::Checked
+        } else {
+            CheckboxState::Unchecked
+        })
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn styles(
+        mut self,
+        build: impl FnOnce(CheckboxIndicatorStyles) -> CheckboxIndicatorStyles,
+    ) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = StyleRefinement::default();
+        match self.state {
+            CheckboxState::Unchecked => {}
+            CheckboxState::Checked => style.refine(&self.semantic_styles.checked),
+            CheckboxState::Indeterminate => style.refine(&self.semantic_styles.indeterminate),
+        }
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style.refine(&self.style);
+        style
+    }
+}
+
+impl Default for CheckboxIndicator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Styled for CheckboxIndicator {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl ParentElement for CheckboxIndicator {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for CheckboxIndicator {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let style = self.resolved_style();
+        self.base.children(self.children).map(|mut this| {
+            this.style().refine(&style);
+            this
+        })
+    }
+}
+
 impl Styled for Checkbox {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
@@ -259,7 +359,6 @@ impl RenderOnce for Checkbox {
         let next_state = self.state.activated();
         let style = self.resolved_style();
         let on_change = self.on_change;
-        let prevent_default_on_activation = self.prevent_default_on_activation;
 
         self.base
             .role(Role::CheckBox)
@@ -274,23 +373,10 @@ impl RenderOnce for Checkbox {
                         .tab_stop(self.tab_stop),
                 )
             })
-            .when(disabled && self.block_pointer_when_disabled, |this| {
-                this.on_mouse_down(MouseButton::Left, |_, _, cx| {
-                    cx.stop_propagation();
-                })
-            })
-            .when(!self.focus_on_mouse_down, |this| {
-                this.on_mouse_down(MouseButton::Left, |_, window, _| {
-                    window.prevent_default();
-                })
-            })
             .when_some(
                 (!disabled).then_some(on_change).flatten(),
                 |this, on_change| {
                     this.on_click(move |_, window, cx| {
-                        if prevent_default_on_activation {
-                            window.prevent_default();
-                        }
                         on_change(next_state, window, cx);
                     })
                 },
@@ -316,6 +402,49 @@ mod tests {
         Context, Element as _, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
         TestAppContext, VisualTestContext, accesskit, canvas, point, px,
     };
+
+    #[test]
+    fn indicator_projects_state_styles_and_keeps_instance_as_closest_layer() {
+        let checked_color = gpui::hsla(0.6, 0.7, 0.5, 1.0);
+        let disabled_color = gpui::hsla(0.1, 0.2, 0.3, 0.5);
+
+        let indicator = |state, disabled| {
+            CheckboxIndicator::new().state(state)
+                .disabled(disabled)
+                .styles(|styles| {
+                    styles
+                        .checked(|style| style.border_color(checked_color))
+                        .indeterminate(|style| style.opacity(0.7))
+                        .disabled(|style| style.border_color(disabled_color))
+                })
+        };
+
+        assert_eq!(
+            indicator(CheckboxState::Checked, false)
+                .resolved_style()
+                .border_color,
+            Some(checked_color)
+        );
+        assert_eq!(
+            indicator(CheckboxState::Checked, true)
+                .resolved_style()
+                .border_color,
+            Some(disabled_color)
+        );
+        assert_eq!(
+            indicator(CheckboxState::Indeterminate, false)
+                .resolved_style()
+                .opacity,
+            Some(0.7)
+        );
+        assert_eq!(
+            indicator(CheckboxState::Checked, true)
+                .border_color(checked_color)
+                .resolved_style()
+                .border_color,
+            Some(checked_color)
+        );
+    }
 
     struct CheckboxHarness {
         state: CheckboxState,
@@ -409,52 +538,15 @@ mod tests {
     }
 
     #[gpui::test]
-    fn disabled_checkbox_is_inert_and_blocks_parent(cx: &mut TestAppContext) {
+    fn disabled_checkbox_is_inert_and_allows_pointer_events_to_bubble(
+        cx: &mut TestAppContext,
+    ) {
         let (cx, changes, parent_clicks) = harness(cx, CheckboxState::Unchecked, true);
         cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
         cx.update(|window, cx| window.focus_next(cx));
         cx.simulate_keystrokes("enter space");
         assert!(changes.borrow().is_empty());
-        assert_eq!(parent_clicks.get(), 0);
-    }
-
-    #[gpui::test]
-    fn compatibility_options_prevent_focus_without_blocking_disabled_pointer_bubbling(
-        cx: &mut TestAppContext,
-    ) {
-        struct CompatibilityHarness {
-            parent_mouse_downs: Rc<Cell<usize>>,
-        }
-
-        impl Render for CompatibilityHarness {
-            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-                let parent_mouse_downs = self.parent_mouse_downs.clone();
-                div()
-                    .id("parent")
-                    .size(px(100.))
-                    .on_mouse_down(MouseButton::Left, move |_, _, _| {
-                        parent_mouse_downs.set(parent_mouse_downs.get() + 1)
-                    })
-                    .child(
-                        Checkbox::new("checkbox")
-                            .disabled(true)
-                            .focus_on_mouse_down(false)
-                            .block_pointer_when_disabled(false)
-                            .size_full(),
-                    )
-            }
-        }
-
-        let parent_mouse_downs = Rc::new(Cell::new(0));
-        let (_, cx) = cx.add_window_view({
-            let parent_mouse_downs = parent_mouse_downs.clone();
-            move |_, _| CompatibilityHarness { parent_mouse_downs }
-        });
-        cx.update(|window, cx| window.draw(cx).clear(cx));
-        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
-
-        assert_eq!(parent_mouse_downs.get(), 1);
-        cx.update(|window, cx| assert!(window.focused(cx).is_none()));
+        assert_eq!(parent_clicks.get(), 1);
     }
 
     #[test]
@@ -476,7 +568,7 @@ mod tests {
     #[test]
     fn semantic_root_styles_follow_checkbox_priority() {
         let styles = |checkbox: Checkbox| {
-            checkbox.opacity(0.9).styles(|styles| {
+            checkbox.styles(|styles| {
                 styles
                     .checked(|style| style.opacity(0.8))
                     .indeterminate(|style| style.opacity(0.7))
@@ -486,7 +578,7 @@ mod tests {
 
         assert_eq!(
             styles(Checkbox::new("normal")).resolved_style().opacity,
-            Some(0.9)
+            None
         );
         assert_eq!(
             styles(Checkbox::new("checked").checked(true))
@@ -529,13 +621,15 @@ mod tests {
             .resolved_style();
         assert_eq!(combined.border_color, Some(checked_color));
         assert_eq!(combined.opacity, Some(0.5));
-    }
 
-    #[test]
-    fn presentation_children_can_be_taken_for_facade_composition() {
-        let mut checkbox = Checkbox::new("facade").child("application child");
-        assert_eq!(checkbox.take_children().len(), 1);
-        assert!(checkbox.take_children().is_empty());
+        let instance_override = styles(
+            Checkbox::new("instance-override")
+                .checked(true)
+                .disabled(true)
+                .opacity(0.9),
+        );
+        assert_eq!(instance_override.resolved_style().opacity, Some(0.9));
+
     }
 
     #[gpui::test]

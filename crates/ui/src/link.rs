@@ -1,15 +1,11 @@
 use gpui::{
     AnyElement, ClickEvent, ElementId, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    prelude::FluentBuilder as _,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, div,
 };
 
 use crate::{ActiveTheme as _, StyledExt};
 
 /// A Link element like a `<a>` tag in HTML.
-///
-/// The destination is not presentation content. Add visible content with
-/// [`ParentElement::child`], just as with the original Link implementation.
 #[derive(IntoElement)]
 pub struct Link {
     id: ElementId,
@@ -75,22 +71,8 @@ impl RenderOnce for Link {
         let href = self.href.clone();
         let on_click = self.on_click;
 
-        gpui_component_base::Link::new(self.id)
-            // Preserve the legacy Link contract exactly: it was pointer-only
-            // and exposed no accessibility role or focus stop.
-            .focusable(false)
-            .accessibility_role(None)
-            .when_some(href, |this, href| {
-                this.href(href)
-                    .open_with(|href, _, _, cx| cx.open_url(href))
-            })
-            // The legacy implementation always installed a click listener,
-            // even when no callback was supplied.
-            .on_activate(move |event, window, cx| {
-                if let Some(on_click) = &on_click {
-                    on_click(event, window, cx);
-                }
-            })
+        div()
+            .id(self.id)
             .text_color(cx.theme().link)
             .text_decoration_1()
             .text_decoration_color(cx.theme().link)
@@ -106,6 +88,16 @@ impl RenderOnce for Link {
             .refine_style(&self.style)
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                 cx.stop_propagation();
+            })
+            .on_click({
+                move |e, window, cx| {
+                    if let Some(href) = &href {
+                        cx.open_url(&href.clone());
+                    }
+                    if let Some(on_click) = &on_click {
+                        on_click(e, window, cx);
+                    }
+                }
             })
             .children(self.children)
     }
@@ -141,7 +133,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn base_backed_link_prepaints_legacy_children(cx: &mut TestAppContext) {
+    fn legacy_link_prepaints_children(cx: &mut TestAppContext) {
         let (cx, _) = harness(cx, false);
         let bounds = cx
             .debug_bounds("legacy-link-child")
@@ -166,7 +158,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn base_backed_link_preserves_pointer_open_and_callback(cx: &mut TestAppContext) {
+    fn legacy_link_preserves_pointer_open_and_callback(cx: &mut TestAppContext) {
         let (cx, clicks) = harness(cx, false);
         cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
 
@@ -175,7 +167,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn base_backed_link_preserves_legacy_disabled_behavior(cx: &mut TestAppContext) {
+    fn legacy_link_preserves_disabled_behavior(cx: &mut TestAppContext) {
         let (cx, clicks) = harness(cx, true);
         cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
 
@@ -185,7 +177,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn base_backed_link_remains_pointer_only(cx: &mut TestAppContext) {
+    fn legacy_link_remains_pointer_only(cx: &mut TestAppContext) {
         let (cx, clicks) = harness(cx, false);
         cx.simulate_keystrokes("enter space");
 

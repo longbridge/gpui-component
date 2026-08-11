@@ -181,6 +181,15 @@ impl Theme {
             theme.apply_config(&theme.light_theme.clone());
         }
 
+        let styled_theme = gpui_component_base::StyledTheme {
+            popover: theme.tokens.popover.into(),
+            popover_foreground: theme.popover_foreground,
+            border: theme.border,
+            ring: theme.ring,
+            radius: theme.radius,
+        };
+        cx.set_global(styled_theme);
+
         if let Some(window) = window {
             window.refresh();
         }
@@ -466,5 +475,33 @@ impl From<WindowAppearance> for ThemeMode {
             WindowAppearance::Dark | WindowAppearance::VibrantDark => Self::Dark,
             WindowAppearance::Light | WindowAppearance::VibrantLight => Self::Light,
         }
+    }
+}
+
+#[cfg(test)]
+mod styled_projection_tests {
+    use super::*;
+    use gpui::TestAppContext;
+
+    #[gpui::test]
+    fn styled_theme_tracks_initialization_and_mode_changes(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            init(cx);
+            assert_styled_projection(cx);
+
+            Theme::change(ThemeMode::Dark, None, cx);
+            assert_styled_projection(cx);
+        });
+    }
+
+    fn assert_styled_projection(cx: &App) {
+        let theme = Theme::global(cx);
+        let styled = cx.global::<gpui_component_base::StyledTheme>();
+
+        assert_eq!(styled.popover, theme.tokens.popover.into());
+        assert_eq!(styled.popover_foreground, theme.popover_foreground);
+        assert_eq!(styled.border, theme.border);
+        assert_eq!(styled.ring, theme.ring);
+        assert_eq!(styled.radius, theme.radius);
     }
 }

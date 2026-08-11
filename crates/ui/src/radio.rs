@@ -5,18 +5,18 @@ use crate::{
     checkbox::checkbox_check_icon, h_flex, text::Text, tooltip::ComponentTooltip, v_flex,
 };
 use gpui::{
-    AnyElement, App, Axis, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder, px, relative, rems,
+    AnyElement, App, Axis, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
+    Refineable, RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder, px, relative, rems,
 };
-use gpui_component_base::Radio as BaseRadio;
+use gpui_component_base::RadioGroup as BaseRadioGroup;
 
 /// A Radio element.
 ///
 /// This is not included the Radio group implementation, you can manage the group by yourself.
 #[derive(IntoElement)]
 pub struct Radio {
-    base: BaseRadio,
+    base: Div,
     style: StyleRefinement,
     id: ElementId,
     label: Option<Text>,
@@ -35,10 +35,9 @@ pub struct Radio {
 impl Radio {
     /// Create a new Radio element with the given id.
     pub fn new(id: impl Into<ElementId>) -> Self {
-        let id = id.into();
         Self {
-            base: BaseRadio::new(id.clone()),
-            id,
+            id: id.into(),
+            base: div(),
             style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
@@ -97,6 +96,12 @@ impl Radio {
         self.on_click = Some(Rc::new(handler));
         self
     }
+
+    fn handle_click(on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>, checked: bool, window: &mut Window, cx: &mut App) {
+        let new_checked = !checked;
+        if let Some(f) = on_click { (f)(&new_checked, window, cx); }
+    }
+
 }
 
 impl Sizable for Radio {
@@ -147,31 +152,20 @@ impl RenderOnce for Radio {
             (border_color, bg)
         };
 
-        let on_click = self.on_click.clone();
-        let base = self
-            .base
-            .checked(checked)
-            .disabled(disabled)
-            .tab_stop(self.tab_stop)
-            .tab_index(self.tab_index)
-            .toggle_on_activate(true)
-            .prevent_pointer_focus(true)
-            .stop_disabled_pointer_propagation(false)
-            .selected_accessibility_state(true)
+        self.base
+            .id(self.id.clone())
+            .role(Role::RadioButton)
+            .aria_selected(self.checked)
             .when_some(
                 self.label.as_ref().map(|l| l.get_text(cx)),
-                |this, label| this.accessibility_label(label),
+                |this, label| this.aria_label(label),
             )
-            .when_some(self.position_in_set, |this, pos| this.position_in_set(pos))
-            .when_some(self.size_of_set, |this, size| this.size_of_set(size))
-            .on_change(move |new_checked, _, window, cx| {
-                window.prevent_default();
-                if let Some(on_click) = &on_click {
-                    on_click(&new_checked, window, cx);
-                }
-            });
-
-        base.h_flex()
+            .when_some(self.position_in_set, |this, pos| this.aria_position_in_set(pos))
+            .when_some(self.size_of_set, |this, size| this.aria_size_of_set(size))
+            .when(!self.disabled, |this| {
+                this.track_focus(&focus_handle.tab_stop(self.tab_stop).tab_index(self.tab_index))
+            })
+            .h_flex()
             .gap_x_2()
             .text_color(cx.theme().foreground)
             .items_start()
@@ -200,11 +194,7 @@ impl RenderOnce for Radio {
                     .rounded_full()
                     .border_1()
                     .border_color(border_color)
-                    .map(|this| match self.checked {
-                        false => this.bg(cx.theme().input_background()),
-                        true if disabled => this.bg(bg),
-                        true => this.bg(cx.theme().tokens.primary),
-                    })
+                    .map(|this| match self.checked { false => this.bg(cx.theme().input_background()), true if disabled => this.bg(bg), true => this.bg(cx.theme().tokens.primary) })
                     .child(checkbox_check_icon(
                         self.id, self.size, checked, disabled, window, cx,
                     )),
@@ -229,6 +219,8 @@ impl RenderOnce for Radio {
                         .children(self.children),
                 )
             })
+            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| window.prevent_default())
+            .when(!self.disabled, |this| this.on_click({ let on_click=self.on_click.clone(); move |_,window,cx| { window.prevent_default(); Self::handle_click(&on_click,checked,window,cx); } }))
             .map(|this| self.tooltip.apply(this))
     }
 }
@@ -344,8 +336,8 @@ impl RenderOnce for RadioGroup {
         };
 
         let total = self.radios.len();
-        let mut container = div().id(self.id).role(Role::RadioGroup);
-        *container.style() = self.style;
+        let mut container = BaseRadioGroup::new(self.id).axis(self.layout);
+        container.style().refine(&self.style);
 
         container.child(
             base.gap_3()
@@ -355,14 +347,7 @@ impl RenderOnce for RadioGroup {
                     radio.id = ix.into();
                     radio.position_in_set = Some(ix + 1);
                     radio.size_of_set = Some(total);
-                    radio.disabled(disabled).checked(checked).when_some(
-                        on_click.clone(),
-                        |this, on_click| {
-                            this.on_click(move |_, window, cx| {
-                                on_click(&ix, window, cx);
-                            })
-                        },
-                    )
+                    radio.disabled(disabled).checked(checked).when_some(on_click.clone(), |this,on_click| this.on_click(move|_,window,cx|on_click(&ix,window,cx)))
                 })),
         )
     }

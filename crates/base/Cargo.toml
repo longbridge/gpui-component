@@ -13,8 +13,12 @@ edition.workspace = true
 [lib]
 doctest = false
 
+[features]
+inspector = ["gpui_macros/inspector", "gpui/inspector"]
+
 [dependencies]
 gpui.workspace = true
+gpui_macros.workspace = true
 schemars.workspace = true
 serde.workspace = true
 smallvec.workspace = true

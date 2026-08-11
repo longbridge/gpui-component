@@ -32,8 +32,6 @@ pub struct Link {
     on_activate: Option<ActivationHandler>,
     open_with: Option<OpenHandler>,
     accessibility_label: Option<SharedString>,
-    accessibility_role: Option<Role>,
-    focusable: bool,
     tab_index: isize,
     tab_stop: bool,
 }
@@ -66,8 +64,6 @@ impl Link {
             on_activate: None,
             open_with: None,
             accessibility_label: None,
-            accessibility_role: Some(Role::Link),
-            focusable: true,
             tab_index: 0,
             tab_stop: true,
         }
@@ -112,29 +108,17 @@ impl Link {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = self.style.clone();
+        let mut style = StyleRefinement::default();
         if self.disabled {
             style.refine(&self.semantic_styles.disabled);
         }
+        style.refine(&self.style);
         style
     }
 
     /// Sets the name exposed to accessibility clients.
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
         self.accessibility_label = Some(label.into());
-        self
-    }
-
-    /// Sets the accessibility role. Pass `None` only for a compatibility
-    /// adapter whose previous public behavior exposed no accessibility node.
-    pub fn accessibility_role(mut self, role: Option<Role>) -> Self {
-        self.accessibility_role = role;
-        self
-    }
-
-    /// Sets whether Base installs focus and native keyboard activation behavior.
-    pub fn focusable(mut self, focusable: bool) -> Self {
-        self.focusable = focusable;
         self
     }
 
@@ -180,30 +164,26 @@ impl StatefulInteractiveElement for Link {}
 
 impl RenderOnce for Link {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let focus_handle = self.focusable.then(|| self.focus_handle(window, cx));
+        let focus_handle = self.focus_handle(window, cx);
         let disabled = self.disabled;
         let style = self.resolved_style();
         let href = self.href;
         let open_with = self.open_with;
         let on_activate = self.on_activate;
-        let accessibility_role = self.accessibility_role;
         let activates = on_activate.is_some() || href.is_some() && open_with.is_some();
 
         self.base
-            .when_some(accessibility_role, |this, role| this.role(role))
+            .role(Role::Link)
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
-            .when_some(
-                (!disabled).then_some(focus_handle).flatten(),
-                |this, focus_handle| {
-                    this.track_focus(
-                        &focus_handle
-                            .tab_index(self.tab_index)
-                            .tab_stop(self.tab_stop),
-                    )
-                },
-            )
+            .when(!disabled, |this| {
+                this.track_focus(
+                    &focus_handle
+                        .tab_index(self.tab_index)
+                        .tab_stop(self.tab_stop),
+                )
+            })
             .when(disabled, |this| {
                 this.on_mouse_down(MouseButton::Left, |_, _, cx| {
                     cx.stop_propagation();
@@ -426,7 +406,12 @@ mod tests {
             .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .opacity(0.9)
             .disabled(true);
-        assert_eq!(disabled.resolved_style().opacity, Some(0.5));
+        assert_eq!(disabled.resolved_style().opacity, Some(0.9));
+
+        let semantic_only = Link::new("semantic-only")
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
+            .disabled(true);
+        assert_eq!(semantic_only.resolved_style().opacity, Some(0.5));
     }
 
     #[gpui::test]

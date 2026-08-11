@@ -29,7 +29,7 @@ pub struct Toggle {
     accessibility_label: Option<SharedString>,
     tab_index: isize,
     tab_stop: bool,
-    focusable: bool,
+    tracked_focus: Option<FocusHandle>,
 }
 
 /// Semantic root styles supported by [`Toggle`].
@@ -68,7 +68,7 @@ impl Toggle {
             accessibility_label: None,
             tab_index: 0,
             tab_stop: true,
-            focusable: true,
+            tracked_focus: None,
         }
     }
 
@@ -89,13 +89,14 @@ impl Toggle {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = self.style.clone();
+        let mut style = StyleRefinement::default();
         if self.pressed {
             style.refine(&self.semantic_styles.pressed);
         }
         if self.disabled {
             style.refine(&self.semantic_styles.disabled);
         }
+        style.refine(&self.style);
         style
     }
 
@@ -123,10 +124,8 @@ impl Toggle {
         self
     }
 
-    /// Sets whether this element installs Base focus and keyboard behavior.
-    /// Presentation adapters may disable it to preserve a legacy pointer-only API.
-    pub fn focusable(mut self, focusable: bool) -> Self {
-        self.focusable = focusable;
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.tracked_focus = Some(focus_handle.clone());
         self
     }
 
@@ -160,7 +159,10 @@ impl StatefulInteractiveElement for Toggle {}
 
 impl RenderOnce for Toggle {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let focus_handle = self.focus_handle(window, cx);
+        let focus_handle = self
+            .tracked_focus
+            .clone()
+            .unwrap_or_else(|| self.focus_handle(window, cx));
         let pressed = self.pressed;
         let disabled = self.disabled;
         let style = self.resolved_style();
@@ -176,7 +178,7 @@ impl RenderOnce for Toggle {
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
-            .when(!disabled && self.focusable, |this| {
+            .when(!disabled, |this| {
                 this.track_focus(
                     &focus_handle
                         .tab_index(self.tab_index)
@@ -321,7 +323,7 @@ mod tests {
     #[test]
     fn semantic_root_styles_follow_toggle_priority() {
         let styled = |toggle: Toggle| {
-            toggle.opacity(0.9).styles(|styles| {
+            toggle.styles(|styles| {
                 styles
                     .pressed(|style| style.opacity(0.8))
                     .disabled(|style| style.opacity(0.5))
@@ -330,7 +332,7 @@ mod tests {
 
         assert_eq!(
             styled(Toggle::new("normal")).resolved_style().opacity,
-            Some(0.9)
+            None
         );
         assert_eq!(
             styled(Toggle::new("pressed").pressed(true))
@@ -343,6 +345,17 @@ mod tests {
                 .resolved_style()
                 .opacity,
             Some(0.5)
+        );
+        assert_eq!(
+            styled(
+                Toggle::new("instance-override")
+                    .pressed(true)
+                    .disabled(true)
+                    .opacity(0.9),
+            )
+            .resolved_style()
+            .opacity,
+            Some(0.9)
         );
     }
 

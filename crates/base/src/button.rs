@@ -22,13 +22,12 @@ pub struct Button {
     base: Stateful<Div>,
     style: StyleRefinement,
     semantic_styles: ButtonStyles,
+    selected: bool,
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
     on_click: Option<ClickHandler>,
     accessibility_label: Option<SharedString>,
     role: Role,
-    toggled: Option<bool>,
-    focus_enabled: bool,
     provided_focus_handle: Option<FocusHandle>,
     tab_index: isize,
     tab_stop: bool,
@@ -42,32 +41,32 @@ impl Button {
             id,
             style: StyleRefinement::default(),
             semantic_styles: ButtonStyles::default(),
+            selected: false,
             disabled: false,
             children: SmallVec::new(),
             on_click: None,
             accessibility_label: None,
             role: Role::Button,
-            toggled: None,
-            focus_enabled: true,
             provided_focus_handle: None,
             tab_index: 0,
             tab_stop: true,
         }
     }
 
-    /// Builds button behavior around an existing stateful div.
-    ///
-    /// This is used by styled adapters that must preserve their existing
-    /// element identity, style ordering, and specialized pointer handlers.
-    pub fn from_stateful(id: impl Into<ElementId>, base: Stateful<Div>) -> Self {
-        let mut this = Self::new(id);
-        this.base = base;
-        this
-    }
-
     /// Sets whether the button ignores pointer and keyboard activation.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Sets the application-controlled selected presentation state.
+    ///
+    /// This supports persistent trigger presentation while an associated menu
+    /// or popover is open. It is distinct from momentary `active`, Toggle's
+    /// `pressed` state, and accessibility toggle metadata; selecting a Button
+    /// does not automatically set `aria_toggled`.
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
         self
     }
 
@@ -89,20 +88,8 @@ impl Button {
         self
     }
 
-    /// Exposes an optional toggle-button state to accessibility clients.
-    pub fn toggled(mut self, toggled: Option<bool>) -> Self {
-        self.toggled = toggled;
-        self
-    }
-
-    /// Controls whether this element tracks a focus handle.
-    pub fn focus_enabled(mut self, enabled: bool) -> Self {
-        self.focus_enabled = enabled;
-        self
-    }
-
     /// Uses a caller-owned focus handle instead of creating keyed state.
-    pub fn with_focus_handle(mut self, focus_handle: &FocusHandle) -> Self {
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
         self.provided_focus_handle = Some(focus_handle.clone());
         self
     }
@@ -138,68 +125,34 @@ impl Button {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = self.style.clone();
+        let mut style = StyleRefinement::default();
+        if self.selected {
+            style.refine(&self.semantic_styles.selected);
+        }
         if self.disabled {
             style.refine(&self.semantic_styles.disabled);
         }
+        style.refine(&self.style);
         style
     }
 
-    /// Applies behavior to the underlying stateful div without introducing a
-    /// wrapper element.
-    pub fn into_stateful(self, window: &mut Window, cx: &mut App) -> Stateful<Div> {
-        let focus_handle = self.focus_handle(window, cx);
-        let disabled = self.disabled;
-        let style = self.resolved_style();
-        let on_click = self.on_click;
-
-        self.base
-            .role(self.role)
-            .when_some(self.accessibility_label, |this, label| {
-                this.aria_label(label)
-            })
-            .when_some(self.toggled, |this, toggled| {
-                this.aria_toggled(if toggled {
-                    gpui::accesskit::Toggled::True
-                } else {
-                    gpui::accesskit::Toggled::False
-                })
-            })
-            .when(self.focus_enabled && !disabled, |this| {
-                this.track_focus(
-                    &focus_handle
-                        .tab_index(self.tab_index)
-                        .tab_stop(self.tab_stop),
-                )
-            })
-            .when(disabled, |this| {
-                this.on_mouse_down(MouseButton::Left, |_, _, cx| {
-                    cx.stop_propagation();
-                })
-            })
-            .when_some(
-                (!disabled).then_some(on_click).flatten(),
-                |this, on_click| {
-                    this.on_click(move |event, window, cx| {
-                        on_click(event, window, cx);
-                    })
-                },
-            )
-            .children(self.children)
-            .map(|mut this| {
-                this.style().refine(&style);
-                this
-            })
-    }
 }
 
 /// Semantic styles supported by [`Button`].
 #[derive(Default)]
 pub struct ButtonStyles {
+    selected: StyleRefinement,
     disabled: StyleRefinement,
 }
 
 impl ButtonStyles {
+    /// Refines the root style when the button is selected.
+    pub fn selected(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.selected
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
     /// Refines the root style when the button is disabled.
     pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
         self.disabled
@@ -230,7 +183,41 @@ impl StatefulInteractiveElement for Button {}
 
 impl RenderOnce for Button {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.into_stateful(window, cx)
+        let focus_handle = self.focus_handle(window, cx);
+        let disabled = self.disabled;
+        let style = self.resolved_style();
+        let on_click = self.on_click;
+
+        self.base
+            .role(self.role)
+            .when_some(self.accessibility_label, |this, label| {
+                this.aria_label(label)
+            })
+            .when(!disabled, |this| {
+                this.track_focus(
+                    &focus_handle
+                        .tab_index(self.tab_index)
+                        .tab_stop(self.tab_stop),
+                )
+            })
+            .when(disabled, |this| {
+                this.on_mouse_down(MouseButton::Left, |_, _, cx| {
+                    cx.stop_propagation();
+                })
+            })
+            .when_some(
+                (!disabled).then_some(on_click).flatten(),
+                |this, on_click| {
+                    this.on_click(move |event, window, cx| {
+                        on_click(event, window, cx);
+                    })
+                },
+            )
+            .children(self.children)
+            .map(|mut this| {
+                this.style().refine(&style);
+                this
+            })
     }
 }
 
@@ -383,7 +370,45 @@ mod tests {
             .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .opacity(0.9)
             .disabled(true);
-        assert_eq!(disabled.resolved_style().opacity, Some(0.5));
+        assert_eq!(disabled.resolved_style().opacity, Some(0.9));
+
+        let semantic_only = Button::new("semantic-only")
+            .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
+            .disabled(true);
+        assert_eq!(semantic_only.resolved_style().opacity, Some(0.5));
+    }
+
+    #[test]
+    fn selected_disabled_and_instance_styles_have_explicit_priority() {
+        let selected_color = gpui::hsla(0.6, 0.7, 0.5, 1.0);
+        let disabled_color = gpui::hsla(0.1, 0.2, 0.3, 0.5);
+        let button = |selected, disabled| {
+            Button::new("button")
+                .selected(selected)
+                .disabled(disabled)
+                .styles(|styles| {
+                    styles
+                        .selected(|style| style.bg(selected_color))
+                        .disabled(|style| style.bg(disabled_color))
+                })
+        };
+
+        assert_eq!(button(false, false).resolved_style().background, None);
+        assert_eq!(
+            button(true, false).resolved_style().background,
+            Some(selected_color.into())
+        );
+        assert_eq!(
+            button(true, true).resolved_style().background,
+            Some(disabled_color.into())
+        );
+        assert_eq!(
+            button(true, true)
+                .bg(selected_color)
+                .resolved_style()
+                .background,
+            Some(selected_color.into())
+        );
     }
 
     #[gpui::test]
@@ -443,5 +468,6 @@ mod tests {
         // aria-disabled setter even though AccessKit can represent it. This
         // assertion records that upstream gap instead of claiming support.
         assert!(!disabled.is_disabled());
+
     }
 }

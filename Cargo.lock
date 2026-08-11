@@ -3086,6 +3086,7 @@ name = "gpui-component-base"
 version = "0.5.2"
 dependencies = [
  "gpui",
+ "gpui_macros",
  "schemars",
  "serde",
  "smallvec",

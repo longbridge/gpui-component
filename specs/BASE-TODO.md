@@ -9,8 +9,8 @@ after its implementation and compatibility requirements have been verified.
 - **Overall:** In progress
 - **Completed workstream:** Base Button interaction verification
 - **Completed workstream:** Semantic Theme Tokens compatibility bridge
-- **Completed workstream:** Registry and CLI Button foundation
-- **Active:** Simple-control Registry templates and legacy compatibility gates
+- **Paused workstream:** Hand-authored component Registry templates
+- **Active:** M1/M2 `crates/ui` composition and legacy compatibility gates
 - **Active:** Base Toggle behavior
 - **Next integration gate:** Verify the complete M2 vertical slices before checking
   individual component milestones.
@@ -23,9 +23,16 @@ after its implementation and compatibility requirements have been verified.
 - A legacy component may be checked only when its Base-backed wrapper preserves
   100% of the original behavior, interaction, design, functionality, and public
   API. Compilation or approximate visual similarity is not sufficient evidence.
+  A deliberate behavior change requires explicit user approval and must be
+  recorded as a named compatibility exception with replacement acceptance tests.
 - Base must never depend on `gpui-component`.
-- Base owns behavior and infrastructure; applications and Registry templates own
-  structure, variants, sizing, and visual style.
+- Base owns behavior and infrastructure, but controls and parts remain no-style:
+  they do not install layout, positioning, color, sizing, gap, radius, border,
+  shadow, variant, or animation defaults. `crates/ui` remains the canonical
+  complete presentation source during migration.
+- Do not hand-maintain a second simplified component implementation under
+  `registry/`. A future Registry pipeline must derive complete editable sources
+  from `crates/ui`.
 - Do not run `cargo fmt` during intermediate iterations; format once at the final
   integration gate.
 - Append material decisions, validation results, and blockers to the log below.
@@ -33,7 +40,7 @@ after its implementation and compatibility requirements have been verified.
 ## Decisions and Constraints
 
 - The real legacy Button path is `gpui_component::button::Button`; it must remain
-  distinct from the unstyled `gpui_component_base::Button`.
+  distinct from the foundation `gpui_component_base::Button`.
 - Base Button requires a stable `ElementId`, so its constructor is
   `Button::new(id)`.
 - Base Button relies on GPUI's native click synthesis for pointer, Enter, and
@@ -47,6 +54,9 @@ after its implementation and compatibility requirements have been verified.
   the compatibility projection.
 - `gpui_component::init` calls Base initialization at the former focus-trap
   initialization point to preserve ordering.
+- `crates/ui` is the single canonical source for complete default components.
+  Registry generation is deferred until it can emit those complete components;
+  toy or manually duplicated Registry implementations are not acceptable.
 
 ## Local Reference Implementations
 
@@ -57,6 +67,10 @@ after its implementation and compatibility requirements have been verified.
 - `../reui` — reference for a large real-world Registry taxonomy, alternative
   component bases, item metadata, blocks, and dependency composition. Start with
   `registry-reui/_meta/components/bases/`, `registry/`, and `components.json`.
+- `../base-ui` — reference for primitive Root/Item boundaries, controlled state,
+  axis/orientation naming, disabled semantics, and accessibility. Do not copy its
+  React context/provider plumbing into GPUI; prefer normal elements, builders,
+  `ParentElement`, and GPUI-owned state/focus mechanisms.
 - These are design references, not source-level dependencies. Adapt their
   ownership and workflow ideas to Rust/GPUI; do not copy Web, React, or CSS-specific
   architecture into Base.
@@ -77,6 +91,57 @@ after its implementation and compatibility requirements have been verified.
   public field shape of legacy `ThemeConfig` remains unchanged for source compatibility.
 - Root, Overlay, Dock, VirtualList, and the current Theme are not file-level moves;
   each needs a dependency seam before migration.
+
+## Base Control Review Checklist
+
+Apply this list to every Base control and its `crates/ui` composition before
+checking the component milestone:
+
+- [ ] The UI component constructs the Base primitive directly in `RenderOnce::render`;
+  there is no `compose`, `into_stateful`, `take_children`, or façade-only escape
+  hatch that exposes an intermediate render representation.
+- [ ] Element construction follows GPUI fluent-builder style: one chain using
+  `when`/`when_some`/`when_none`/`map` for conditional composition, without
+  mutable temporary elements and imperative reassignment when a chain suffices.
+- [ ] Base controls and parts are completely unstyled: they install no default
+  layout, positioning, color, size, gap, radius, border, shadow, variant, or
+  animation. All presentation, including structural layout, belongs to `crates/ui`
+  or the application; caller `Styled` refinements remain the closest layer.
+- [ ] Base receives the complete application-owned content through normal
+  `ParentElement` slots. Verify label, icon, loading indicator, custom children,
+  indicator/thumb parts, and trailing affordances in their exact render order.
+- [ ] A semantic state with existing visual presentation is actually expressed
+  through the component's typed `.styles(...)` context. Do not add empty state
+  styles or invent a new disabled/checked appearance merely to exercise the API.
+- [ ] GPUI-native interaction states use the native modifiers: `.hover(...)`,
+  `.active(...)`, `.focus(...)`, and `.focus_visible(...)`. They are not duplicated
+  inside semantic `.styles(...)` and are installed at most once on an element.
+- [ ] Semantic state names match the control contract: Toggle uses `pressed`,
+  Checkbox/Switch/Radio use `checked`, and selectable collection items use
+  `selected`. This project's legacy Button also has a controlled `selected`
+  presentation contract used by DropdownMenu/Popover triggers to retain their
+  trigger appearance while the menu is open. It remains distinct from GPUI's
+  native momentary `active` state and Toggle's persistent `pressed` contract,
+  and it never implies `aria_toggled`; accessibility toggle metadata remains an
+  explicit, independent UI façade choice. The legacy `Selectable` trait remains
+  UI-owned.
+- [ ] Style precedence is explicit and tested. Base resolves root static style,
+  then active semantic states, then GPUI runtime interaction states. If a legacy
+  UI contract requires caller instance style to beat semantic presentation, its
+  semantic closure explicitly refines that caller style last; Base does not add a
+  second public instance-style namespace. Different properties still compose.
+- [ ] Motion is application/UI-owned and uses `transition(...)` only where replacing
+  the existing animation preserves the approved timing and reversal contract.
+  Base controls contain no built-in component animation.
+- [ ] Pointer, keyboard, focus, disabled propagation, controlled callback, role,
+  accessible state/name, and tab behavior have runtime tests. Compile-only API
+  tests are not completion evidence.
+- [ ] A compound control has a real Base root/item contract, controlled selection,
+  orientation, roving focus, Arrow/Home/End navigation, disabled propagation, and
+  group/item accessibility. A vector calculation helper is not a group primitive.
+- [ ] Public façade builders and visual output are compared with the preserved old
+  Story binary. Any deliberate incompatibility is named, approved, and locked by
+  replacement acceptance tests.
 
 ## Validation Log
 
@@ -116,12 +181,98 @@ after its implementation and compatibility requirements have been verified.
 - 2026-08-11: User manually exercised Button, Switch, Checkbox, and Slider in
   the running gallery and found their behavior and presentation correct. Radio,
   Toggle, and Link still require the same manual old/new comparison.
-- 2026-08-11: M1/M2 Base controls gained typed semantic root style contexts;
-  application-owned Registry templates use them for disabled root appearance
-  without moving indicator/thumb presentation into Base.
+- 2026-08-11: M1/M2 Base controls gained typed semantic root style contexts.
+  Registry usage was deliberately deferred: `crates/ui` must first become the
+  canonical complete composition source, and future Registry output will be
+  produced from it rather than maintained as duplicate simplified code.
 - 2026-08-11: Generic CSS-like `transition(...)` landed with ElementId-like
   scalar/tuple identity, delay/easing, smooth target reversal, reduce-motion,
   and per-window/view keyed lifecycle. No Base component installs motion.
+- 2026-08-11: `ui::Button` now directly stores and renders the standard Base
+  Button element. The legacy icon/loading icon, label, application children, and
+  dropdown caret remain UI-owned presentation but are attached as one Base child
+  in their original order. The temporary `from_stateful`/`into_stateful` escape
+  hatch was removed. Base Button tests passed 6, UI Button tests passed 14, and
+  the legacy Button API suite passed 5.
+- 2026-08-11: The Checkbox façade adopted disabled root text styling where exact
+  legacy ordering could be retained. Button disabled styling remains in UI after
+  strict review rejected compatibility-only behavior flags. Radio and Switch
+  require typed part slots; Toggle requires a legacy-compatible state vs. instance
+  priority seam. Slider's Base element is not feature-equivalent to the legacy
+  range/drag implementation, and Link's historical disabled flag is inert.
+- 2026-08-11: Existing Checkbox and Switch animations were not rewritten with
+  `transition(...)`: their old direction-keyed animation/reversal behavior differs
+  from the new smooth current-sample reversal contract. Compatibility takes
+  precedence over superficial API adoption.
+- 2026-08-11: A proposed loading activation flag and disabled pointer-policy flag
+  were rejected and removed after API review. Legacy loading/disabled event guards
+  remain in UI until Base can preserve their exact focus and accessibility action
+  surface without compatibility-only public switches.
+- 2026-08-11: A proposed `SplitButtonState` was rejected and removed because it
+  only wrapped `disabled || loading` and selected getters. DropdownButton remains
+  open until a real popup-trigger/overlay seam can own open/dismiss/anchor/focus
+  behavior without depending on UI PopupMenu or Theme.
+- 2026-08-11: Story migration was explicitly deferred; this phase does not edit
+  `crates/story`.
+- 2026-08-11: Strict Standards/Spec review rejected public ButtonGroupState and
+  ToggleGroupState as shallow wrappers around vector calculations; both types and
+  their UI wiring were removed. Group behavior remains an open M1 seam.
+- 2026-08-11: Strict M2 review reopened every component milestone. Checkbox was
+  rebuilt without façade-only behavior flags or child/focus escape hatches;
+  complete indicator/label/children presentation is attached once to the natural
+  Base root. Exact façade behavior remains under review before completion.
+- 2026-08-11: Radio, Switch, and Toggle compatibility-only Base flags and the
+  shallow RadioGroupState were removed. Their legacy UI implementations were
+  restored because disabling canonical focus/keyboard/a11y behavior through
+  public Base switches is not an acceptable migration seam.
+- 2026-08-11: The disconnected single-value Base Slider was removed; the actually
+  migrated range/log/drag `slider_state` remains. Slider stays open until one
+  unified primitive owns state, keyboard, a11y, pointer, drag, and release.
+- 2026-08-11: Base Link now always keeps natural Link role/focus semantics and no
+  longer exposes façade-only role/focus switches. Legacy UI Link was restored and
+  Link remains open; `href` plus injected navigation policy stays a valid Base API.
+- 2026-08-11: A no-flags Toggle adapter was tested and reverted. `tab_stop(false)`
+  keeps it out of keyboard traversal but pointer activation still focuses it;
+  native mouse-down `prevent_default` preserves legacy no-focus behavior but also
+  prevents GPUI's native click synthesis. Without changing the legacy contract or
+  adding a compatibility switch, the current GPUI seam cannot preserve pointer
+  once, pointer no-focus, and keyboard inert behavior simultaneously.
+- 2026-08-11: **Approved compatibility exception — Toggle interaction.** The user
+  explicitly authorized replacing the legacy pointer-only Toggle contract with
+  the canonical Base/shadcn contract: pointer focus, Tab traversal, Enter/Space
+  activation, and disabled activation/propagation blocking. Visual design,
+  controlled value semantics, callbacks, builders, and public legacy API remain
+  compatibility requirements.
+- 2026-08-11: Toggle now composes the natural Base primitive without compatibility
+  flags. Base owns pressed/disabled state, activation, focus, keyboard behavior,
+  accessibility, and content attachment; `crates/ui` retains the complete visual
+  presentation, tooltip, variants, sizing, and instance-style precedence. Runtime
+  coverage locks pointer, keyboard, disabled propagation, accessibility, and style
+  behavior. ToggleGroup remains a separate open M1 boundary.
+- 2026-08-11: A ToggleGroup item/binding/context and roving-keyboard experiment
+  was removed after API review. Base ToggleGroup is intentionally a simple
+  no-style `ParentElement` root with `axis(Axis)` accessibility metadata; it does
+  not own keydown navigation. UI keeps its existing controlled `Vec<bool>` and
+  bubbling composition without exposing React-style context or binding APIs.
+- 2026-08-11: Checkbox façade no longer installs a Base activation handler when
+  the legacy `on_click` callback is absent. Façade tests cover pointer once/no
+  pointer focus, Tab plus Enter/Space, disabled bubbling/inert behavior, and
+  label/custom-child layout. `CheckboxIndicator` adds a no-wrapper typed part;
+  checked/disabled indicator border and fill now use `.styles(...)`, while the
+  existing UI-owned 250ms checkmark animation remains unchanged. The user's
+  manual Checkbox comparison and these runtime gates complete the Checkbox M2
+  slice.
+- 2026-08-11: `crates/ui/src/styled.rs` is now re-export only. Generic
+  `StyledExt`, `FocusableExt`, flex/shadow helpers, inspector reflection, and the
+  minimal styled-theme projection moved to Base. UI-specific `Size`, `Sizable`,
+  `StyleSized`, `Selectable`, `Disableable`, and `Collapsible` were split into UI
+  modules rather than polluting Base. Theme initialization and supported mode/
+  registry changes synchronize the projection.
+- 2026-08-11: Base Button gained controlled `selected` state and
+  `ButtonStyles::selected`. UI Button now expresses both selected and disabled
+  presentation only through typed styles. Selected is the existing
+  DropdownMenu/Popover trigger contract; it is independent from native `active`,
+  Toggle `pressed`, and explicit toggle accessibility metadata.
 
 ## Crate Foundation
 
@@ -132,6 +283,8 @@ after its implementation and compatibility requirements have been verified.
 - [x] Move interaction event extensions into Base.
 - [x] Move animation and transition behavior into Base.
 - [x] Move focus-trap behavior and state into Base.
+- [x] Move generic styled extensions into Base while keeping UI-specific sizing
+  and component traits in `crates/ui`; make `ui/styled.rs` re-export only.
 - [x] Re-export migrated APIs from their existing `gpui-component` public paths.
 - [x] Add compile-time compatibility coverage for migrated public types.
 - [ ] Verify Base and facade packaging after the Base version is visible on crates.io.
@@ -139,50 +292,79 @@ after its implementation and compatibility requirements have been verified.
 
 ## Base Component Milestones
 
-A component is checked only when its unstyled Base behavior exists, its legacy UI
-remains 100% identical in behavior, interaction, design, functionality, and API,
-and its Registry-owned presentation can compose the Base API.
+A component is checked only when its Base behavior/foundation exists and its
+`crates/ui` composition preserves 100% of the legacy behavior, interaction,
+design, functionality, and API. Registry production is a later milestone and is
+not an M1/M2 completion gate.
 
 ### M1 — Pilot Vertical Slice
 
-Completion definition: prove the Base → Registry → Application ownership model on
-one component, including interaction tests and unchanged legacy UI.
+Completion definition: prove the Base → `crates/ui` composition seam on one
+component, including interaction tests and unchanged legacy UI.
 
-- [x] Button
+- [ ] Button module
 
-Evidence: Base runtime tests, Registry installation/template compilation, legacy
-API and component tests, and an unchanged legacy Button implementation.
+M1 covers the complete public `crates/ui/src/button` module, not only the
+`button::Button` struct:
+
+- [x] Button uses a standard Base `RenderOnce` root element with no
+  `Stateful<Div>` escape hatch.
+- [x] Button activation, disabled state, focus, and semantic root-style delegation
+  from the legacy façade without compatibility-only Base flags.
+- [x] Button content slot composition: icon/loading icon, label, application
+  children, and dropdown caret retain their exact UI order and render through
+  the Base `ParentElement` seam.
+- [x] Button loading inert behavior boundary.
+- [ ] ButtonGroup behavior and child composition boundary.
+- [ ] DropdownButton trigger/menu behavior boundary.
+- [ ] Toggle and ToggleGroup behavior/state boundary.
+- [ ] Verify every public type and builder exported by `button/mod.rs` remains
+  100% compatible.
+
+Current evidence covers the standard Button root, complete content composition,
+activation, disabled/focus behavior, loading inert behavior, and selected/disabled
+typed presentation. Both group behavior models remain open. DropdownButton
+additionally requires the generic popup-trigger/
+overlay seam planned for the overlay phase; `disabled || loading` and
+selected-value passthrough alone would be a shallow Base module.
 
 ### M2 — Simple Controls
 
 Completion definition: migrate independent controls that do not require overlay or
 compound state. Variants, sizes, icons, layout, and colors remain outside Base.
 
-Composition audit rule: compare each slice with `../shadcn`'s primitive/registry
-split. Base owns state, events, accessibility, and composable content slots;
-Registry/UI owns the concrete indicator, label layout, icons, variants, and visual
-tokens. A legacy adapter is incomplete if it only delegates activation while
-retaining behavior-relevant content ownership outside Base.
+Composition audit rule: compare each slice with `../shadcn`'s primitive/component
+split. Base owns state contracts, events, accessibility, and composable content
+slots; `crates/ui` owns the complete indicator, label layout, icons, variants,
+visual tokens, and motion policy. A future Registry exporter uses this complete UI
+source; it must not introduce a parallel reduced implementation.
 
 - [x] Checkbox
-- [x] Radio
-- [x] Switch
-- [x] Toggle
-- [x] Slider
-- [x] Link
+- [ ] Radio
+- [ ] Switch
+- [ ] Toggle — Base behavior and pressed presentation are connected; final old/new
+  Story visual comparison remains.
+- [ ] Slider
+- [ ] Link
 
 ### M1/M2 — Stateful Presentation
 
 - [x] Typed `StateStyle` preserving GPUI `Styled` and `FluentBuilder`.
 - [x] Button semantic root style: disabled.
+- [x] Button semantic root style: selected.
 - [x] Checkbox semantic root styles: checked, indeterminate, disabled.
 - [x] Radio semantic root styles: checked, disabled.
 - [x] Switch semantic root styles: checked, disabled.
-- [x] Toggle semantic root styles: pressed, disabled.
-- [x] Slider semantic root style: disabled.
+- [x] Toggle exposes typed semantic root styles for pressed and disabled.
+- [x] `crates/ui::Toggle` delegates its existing pressed presentation through
+  `.styles(...)`; it intentionally does not invent a disabled appearance that the
+  legacy component never had.
+- [ ] Slider semantic root style: disabled (deferred until the Slider primitive is
+  unified with the migrated range/drag state).
 - [x] Link semantic root style: disabled.
 - [x] Generic application-owned value transitions with no component defaults.
-- [ ] Typed state projection for Indicator, Thumb, Track, and other slots.
+- [x] Checkbox Indicator typed state projection with no wrapper or built-in motion.
+- [ ] Typed state projection for remaining Thumb, Track, and other slots.
 - [ ] Interaction transition spike for GPUI hover/active edges.
 
 ### M3 — Input Controls

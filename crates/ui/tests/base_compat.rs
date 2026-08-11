@@ -65,8 +65,6 @@ fn base_controls_expose_typed_semantic_style_contexts() {
         .styles(|styles| styles.checked(|style| style.bg(green())));
     let _ = gpui_component_base::Toggle::new("toggle")
         .styles(|styles| styles.pressed(|style| style.bg(green())));
-    let _ = gpui_component_base::Slider::new("slider")
-        .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
     let _ = gpui_component_base::Link::new("link")
         .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
 }
@@ -78,4 +76,23 @@ fn transition_ids_accept_strings_and_named_channels() {
 
     fn requires_interpolation<T: gpui_component_base::Interpolate>() {}
     requires_interpolation::<f32>();
+}
+
+#[test]
+fn legacy_styled_and_sizing_exports_remain_available() {
+    use gpui_component::Sizable as _;
+
+    let _: gpui_component::Size = gpui_component::Size::Medium;
+    let _ = gpui_component::StyledExt::font_medium(gpui::div());
+    let _ = gpui_component::h_flex();
+    let _ = gpui_component::v_flex();
+    let _ = gpui_component::box_shadow(0., 0., 0., 0., gpui::hsla(0., 0., 0., 0.));
+
+    struct SizedValue;
+    impl gpui_component::Sizable for SizedValue {
+        fn with_size(self, _: impl Into<gpui_component::Size>) -> Self {
+            self
+        }
+    }
+    let _ = SizedValue.small();
 }

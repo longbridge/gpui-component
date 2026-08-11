@@ -184,6 +184,13 @@ Text input system based on Rope data structure:
 2. **Size system**: Supports `xs`, `sm`, `md` (default), `lg` sizes via `Sizable` trait.
 3. **Mouse cursor**: Buttons use `default` cursor not `pointer` (desktop app convention), unless it's a link button
 4. **Style system**: Provides CSS-like styling API via `Styled` trait and `ElementExt` extensions
+5. **Base controls are no-style**: Base controls and parts do not install layout,
+   positioning, colors, sizing, gaps, radius, borders, shadows, variants, or animation.
+   Complete presentation belongs to `crates/ui` or the application.
+6. **GPUI builder style**: Keep element construction as one fluent builder chain. Express
+   conditions with `when`, `when_some`, `when_none`, and `map`; do not split a chain into a
+   mutable temporary element followed by imperative reassignment when the builder API can
+   express the same operation.
 
 ## Code Style
 
