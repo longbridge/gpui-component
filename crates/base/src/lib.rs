@@ -10,6 +10,7 @@ mod accordion;
 mod auto_scroll;
 mod button;
 mod checkbox;
+mod collapsible;
 mod element_ext;
 mod event;
 mod focus_trap;
@@ -38,6 +39,7 @@ pub use button::{Button, ButtonStyles};
 pub use checkbox::{
     Checkbox, CheckboxIndicator, CheckboxIndicatorStyles, CheckboxState, CheckboxStyles,
 };
+pub use collapsible::Collapsible;
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;
 pub use focus_trap::FocusTrapElement;
