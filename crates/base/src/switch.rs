@@ -54,6 +54,111 @@ impl SwitchStyles {
     }
 }
 
+/// An unstyled switch track with typed checked and disabled state projection.
+#[derive(IntoElement)]
+pub struct SwitchTrack {
+    base: Stateful<Div>,
+    style: StyleRefinement,
+    semantic_styles: SwitchTrackStyles,
+    checked: bool,
+    disabled: bool,
+    children: SmallVec<[AnyElement; 1]>,
+}
+
+/// Semantic styles supported by [`SwitchTrack`].
+#[derive(Default)]
+pub struct SwitchTrackStyles {
+    checked: StyleRefinement,
+    disabled: StyleRefinement,
+}
+
+impl SwitchTrackStyles {
+    pub fn checked(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.checked
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+}
+
+impl SwitchTrack {
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        Self {
+            base: div().id(id),
+            style: StyleRefinement::default(),
+            semantic_styles: SwitchTrackStyles::default(),
+            checked: false,
+            disabled: false,
+            children: SmallVec::new(),
+        }
+    }
+
+    pub fn checked(mut self, checked: bool) -> Self {
+        self.checked = checked;
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn styles(
+        mut self,
+        build: impl FnOnce(SwitchTrackStyles) -> SwitchTrackStyles,
+    ) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = StyleRefinement::default();
+        if self.checked {
+            style.refine(&self.semantic_styles.checked);
+        }
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style.refine(&self.style);
+        style
+    }
+}
+
+impl Styled for SwitchTrack {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl ParentElement for SwitchTrack {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl InteractiveElement for SwitchTrack {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for SwitchTrack {}
+
+impl RenderOnce for SwitchTrack {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let style = self.resolved_style();
+        self.base.children(self.children).map(|mut this| {
+            this.style().refine(&style);
+            this
+        })
+    }
+}
+
 /// An unstyled switch thumb with typed checked and disabled state projection.
 #[derive(IntoElement)]
 pub struct SwitchThumb {
@@ -307,6 +412,73 @@ mod tests {
         Context, Element as _, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
         TestAppContext, VisualTestContext, accesskit, canvas, point, px,
     };
+
+    #[test]
+    fn track_projects_checked_disabled_and_instance_style_priority() {
+        let normal_color = gpui::hsla(0.0, 0.0, 0.2, 1.0);
+        let checked_color = gpui::hsla(0.6, 0.7, 0.5, 1.0);
+        let disabled_color = gpui::hsla(0.6, 0.7, 0.5, 0.5);
+        let track = |checked, disabled| {
+            SwitchTrack::new(("track", usize::from(checked) * 2 + usize::from(disabled)))
+                .checked(checked)
+                .disabled(disabled)
+                .when(!checked, |this| this.bg(normal_color))
+                .styles(|styles| {
+                    styles
+                        .checked(|style| style.bg(checked_color))
+                        .disabled(|style| {
+                            style.when(checked, |style| style.bg(disabled_color))
+                        })
+                })
+        };
+
+        assert_eq!(
+            track(false, false).resolved_style().background,
+            Some(normal_color.into())
+        );
+        assert_eq!(
+            track(false, true).resolved_style().background,
+            Some(normal_color.into())
+        );
+        assert_eq!(
+            track(true, false).resolved_style().background,
+            Some(checked_color.into())
+        );
+        assert_eq!(
+            track(true, true).resolved_style().background,
+            Some(disabled_color.into())
+        );
+        assert_eq!(
+            track(true, true)
+                .bg(normal_color)
+                .resolved_style()
+                .background,
+            Some(normal_color.into())
+        );
+    }
+
+    #[test]
+    fn track_identity_is_scoped_to_its_switch() {
+        fn track(switch_id: &'static str) -> SwitchTrack {
+            SwitchTrack::new((ElementId::from(switch_id), "track"))
+        }
+
+        let first = track("first-switch");
+        let second = track("second-switch");
+
+        assert_eq!(
+            gpui::Element::id(&first.base),
+            Some((ElementId::from("first-switch"), "track").into())
+        );
+        assert_eq!(
+            gpui::Element::id(&second.base),
+            Some((ElementId::from("second-switch"), "track").into())
+        );
+        assert_ne!(
+            gpui::Element::id(&first.base),
+            gpui::Element::id(&second.base)
+        );
+    }
 
     #[test]
     fn thumb_projects_checked_disabled_and_instance_style_priority() {

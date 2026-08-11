@@ -7,7 +7,7 @@ use gpui::{
     IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _, px,
 };
-use gpui_component_base::{Switch as BaseSwitch, SwitchThumb};
+use gpui_component_base::{Switch as BaseSwitch, SwitchThumb, SwitchTrack};
 use std::{rc::Rc, time::Duration};
 
 /// A Switch element that can be toggled on or off.
@@ -108,19 +108,9 @@ impl RenderOnce for Switch {
             .color
             .map(Background::from)
             .unwrap_or(cx.theme().tokens.primary.into());
-        let (bg, toggle_bg): (Background, Background) = match checked {
-            true => (checked_bg, cx.theme().tokens.switch_thumb.into()),
-            false => (
-                cx.theme().tokens.switch.into(),
-                cx.theme().tokens.switch_thumb.into(),
-            ),
-        };
-
-        let bg = if self.disabled {
-            if checked { bg.opacity(0.5) } else { bg }
-        } else {
-            bg
-        };
+        let unchecked_bg: Background = cx.theme().tokens.switch.into();
+        let disabled_checked_bg = checked_bg.clone().opacity(0.5);
+        let toggle_bg: Background = cx.theme().tokens.switch_thumb.into();
 
         let (bg_width, bg_height) = match self.size {
             Size::XSmall | Size::Small => (px(28.), px(16.)),
@@ -157,8 +147,9 @@ impl RenderOnce for Switch {
                 .when(self.label_side.is_left(), |this| this.flex_row_reverse())
                 .child(
                     // Switch Bar
-                    div()
-                        .id(self.id.clone())
+                    SwitchTrack::new((self.id.clone(), "track"))
+                        .checked(checked)
+                        .disabled(self.disabled)
                         .when(cfg!(test), |this| {
                             this.debug_selector(|| "switch-bar".into())
                         })
@@ -169,7 +160,14 @@ impl RenderOnce for Switch {
                         .items_center()
                         .border(inset)
                         .border_color(cx.theme().transparent)
-                        .bg(bg)
+                        .when(!checked, |this| this.bg(unchecked_bg))
+                        .styles(|styles| {
+                            styles
+                                .checked(|style| style.bg(checked_bg))
+                                .disabled(|style| {
+                                    style.when(checked, |style| style.bg(disabled_checked_bg))
+                                })
+                        })
                         .map(|this| self.tooltip.apply(this))
                         .child(
                             // Switch Toggle

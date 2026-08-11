@@ -416,7 +416,7 @@ impl Tiles {
             let bounds = item.bounds;
             let entity_id = item.panel.view().entity_id();
 
-            if !self.history.ignore {
+            if !self.history.is_ignoring() {
                 self.history.push(TileChange {
                     tile_id: entity_id,
                     old_bounds: Some(previous_bounds),
@@ -476,7 +476,7 @@ impl Tiles {
             item.bounds = new_bounds;
 
             // Only push if not during history operations
-            if !self.history.ignore {
+            if !self.history.is_ignoring() {
                 self.history.push(TileChange {
                     tile_id: item.panel.view().entity_id(),
                     old_bounds: Some(previous_bounds),
@@ -563,7 +563,7 @@ impl Tiles {
 
     /// Handle the undo action
     pub fn undo(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.history.ignore = true;
+        self.history.set_ignoring(true);
 
         if let Some(changes) = self.history.undo() {
             for change in changes {
@@ -584,13 +584,13 @@ impl Tiles {
             cx.emit(PanelEvent::LayoutChanged);
         }
 
-        self.history.ignore = false;
+        self.history.set_ignoring(false);
         cx.notify();
     }
 
     /// Handle the redo action
     pub fn redo(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.history.ignore = true;
+        self.history.set_ignoring(true);
 
         if let Some(changes) = self.history.redo() {
             for change in changes {
@@ -611,7 +611,7 @@ impl Tiles {
             cx.emit(PanelEvent::LayoutChanged);
         }
 
-        self.history.ignore = false;
+        self.history.set_ignoring(false);
         cx.notify();
     }
 

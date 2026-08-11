@@ -96,3 +96,52 @@ fn legacy_styled_and_sizing_exports_remain_available() {
     }
     let _ = SizedValue.small();
 }
+
+#[test]
+fn element_ext_is_available_from_base_and_the_legacy_root() {
+    use gpui_component::ElementExt as _;
+
+    fn requires_base<T: gpui_component_base::ElementExt>() {}
+    fn requires_legacy<T: gpui_component::ElementExt>() {}
+    requires_base::<gpui::Div>();
+    requires_legacy::<gpui::Div>();
+
+    let _ = gpui::div().on_prepaint(|_, _, _| {});
+}
+
+#[test]
+fn legacy_history_path_reexports_the_base_type() {
+    #[derive(Clone, PartialEq)]
+    struct Item {
+        version: usize,
+    }
+
+    impl gpui_component_base::HistoryItem for Item {
+        fn version(&self) -> usize {
+            self.version
+        }
+
+        fn set_version(&mut self, version: usize) {
+            self.version = version;
+        }
+    }
+
+    fn through_legacy_path(
+        history: gpui_component_base::History<Item>,
+    ) -> gpui_component::history::History<Item> {
+        history
+    }
+
+    let _ = through_legacy_path(gpui_component_base::History::new());
+}
+
+#[test]
+fn legacy_auto_scroll_path_reexports_the_base_type() {
+    fn through_legacy_path(
+        scroll: gpui_component_base::AutoScroll,
+    ) -> gpui_component::scroll::AutoScroll {
+        scroll
+    }
+
+    let _ = through_legacy_path(gpui_component_base::AutoScroll::default());
+}

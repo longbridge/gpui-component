@@ -89,8 +89,9 @@ after its implementation and compatibility requirements have been verified.
   that checklist item can be completed.
 - Semantic theme-file support uses a standalone `SemanticThemeConfigFile`; the
   public field shape of legacy `ThemeConfig` remains unchanged for source compatibility.
-- Root, Overlay, Dock, VirtualList, and the current Theme are not file-level moves;
-  each needs a dependency seam before migration.
+- Root, Overlay, Dock, and the current Theme are not file-level moves; each needs
+  a dependency seam before migration. VirtualList has moved after reversing its
+  only scrollbar dependency through a UI-local adapter.
 
 ## Base Control Review Checklist
 
@@ -273,6 +274,37 @@ checking the component milestone:
   presentation only through typed styles. Selected is the existing
   DropdownMenu/Popover trigger contract; it is independent from native `active`,
   Toggle `pressed`, and explicit toggle accessibility metadata.
+- 2026-08-11: Switch track presentation now uses a no-style, no-wrapper
+  `SwitchTrack` typed part. Checked and checked+disabled backgrounds flow through
+  typed styles; unchecked background, geometry, tooltip, Thumb, label, and the
+  existing 150ms animation remain UI-owned. The stateful track requires an
+  explicit ElementId, and UI uses the structured `(switch_id, "track")` identity
+  rather than a call-site-derived key.
+- 2026-08-11: Pure GPUI `ElementExt::on_prepaint` moved to Base with its only
+  blanket implementation. UI keeps `ChildElement`/`AnyChildElement` because they
+  depend on UI-specific sizing, and re-exports the Base extension trait.
+- 2026-08-11: `IndexPath` moved intact to Base, including its `ElementId`
+  conversion and behavior tests. UI now re-exports the same type identity.
+- 2026-08-11: ButtonGroup/ToggleGroup characterization tests lock the migration
+  baseline without adding features: callback override rules, rendered snapshot
+  selection results, ButtonGroup disabled builder-order behavior, and the fact
+  that GPUI keyboard Click does not reach either group's bubbling callback.
+- 2026-08-11: Generic `History`/`HistoryItem` moved intact to Base with all undo,
+  redo, grouping, unique, and version tests. UI Input and Dock use a minimal
+  `is_ignoring`/`set_ignoring` seam instead of the former crate-private field;
+  UI re-exports the same type identity.
+- 2026-08-11: VirtualList's complete vertical/horizontal virtualization,
+  measurement, visible-range, deferred scroll, and handle implementation moved
+  to Base. UI retains only re-exports and its local ScrollbarHandle adapter;
+  runtime tests cover both axes, scroll-to-item, and empty lists.
+- 2026-08-11: Generic drag `AutoScroll` timing, edge-speed calculation, task
+  lifecycle, and stop state moved to Base. Input and Text Selection continue to
+  consume the same type through the legacy `scroll::AutoScroll` re-export.
+- 2026-08-11: Collapsible was audited but not migrated. The current UI type is a
+  styled conditional `v_flex` container; it owns no trigger, activation, focus,
+  accessibility, or open-change event contract. Moving it intact would violate
+  Base's no-style boundary, while inventing those missing behaviors would exceed
+  the current migration scope.
 
 ## Crate Foundation
 
@@ -281,6 +313,15 @@ checking the component milestone:
 - [x] Preserve the original focus-trap initialization order in `gpui_component::init`.
 - [x] Move geometry primitives and extension traits into Base.
 - [x] Move interaction event extensions into Base.
+- [x] Move pure `ElementExt::on_prepaint` into Base while retaining UI-sized
+  child composition types in `crates/ui`.
+- [x] Move `IndexPath` into Base and preserve its legacy type identity.
+- [x] Move generic `History`/`HistoryItem` into Base and preserve Input/Dock
+  behavior and the legacy module path.
+- [x] Move VirtualList and its scroll handle into Base while retaining the UI
+  ScrollbarHandle adapter and legacy type identity.
+- [x] Move generic drag AutoScroll behavior into Base and preserve its legacy
+  scroll module type identity.
 - [x] Move animation and transition behavior into Base.
 - [x] Move focus-trap behavior and state into Base.
 - [x] Move generic styled extensions into Base while keeping UI-specific sizing
@@ -364,7 +405,8 @@ source; it must not introduce a parallel reduced implementation.
 - [x] Link semantic root style: disabled.
 - [x] Generic application-owned value transitions with no component defaults.
 - [x] Checkbox Indicator typed state projection with no wrapper or built-in motion.
-- [ ] Typed state projection for remaining Thumb, Track, and other slots.
+- [x] Switch Thumb and Track typed state projection with no wrapper or built-in motion.
+- [ ] Typed state projection for remaining parts.
 - [ ] Interaction transition spike for GPUI hover/active edges.
 
 ### M3 — Input Controls
@@ -412,7 +454,7 @@ trap, and keyboard behavior; Registry owns trigger/content structure and style.
 Completion definition: preserve complex crate-owned behavior and expose presentation
 seams suitable for application-owned wrappers.
 
-- [ ] Virtual List
+- [x] Virtual List
 - [ ] Table
 - [ ] Data Table
 - [ ] Editor
@@ -448,10 +490,12 @@ template is delivered and its required behavior is composed from existing Base A
 
 ## Infrastructure
 
-- [ ] Split application-independent sizing APIs from the legacy styled module.
-- [ ] Split pure GPUI element extensions from themed extensions.
-- [ ] Move the scrollbar behavior interface into Base.
-- [ ] Move VirtualList into Base without depending on styled scrollbar components.
+- [x] Keep UI-specific sizing APIs outside Base while moving generic styled
+  helpers out of the legacy styled module.
+- [x] Split pure GPUI element extensions from UI-sized child composition.
+- [x] Keep the styled scrollbar behavior interface UI-owned; adapt the Base
+  VirtualList handle locally instead of adding a Base dependency on UI scrollbars.
+- [x] Move VirtualList into Base without depending on styled scrollbar components.
 - [ ] Extract an unstyled overlay host and entry model.
 - [ ] Extract popup positioning and focus-restoration behavior.
 - [ ] Extract Dock's serializable layout model from its styled runtime views.

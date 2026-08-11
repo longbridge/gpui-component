@@ -3087,6 +3087,7 @@ version = "0.5.2"
 dependencies = [
  "gpui",
  "gpui_macros",
+ "instant",
  "schemars",
  "serde",
  "smallvec",

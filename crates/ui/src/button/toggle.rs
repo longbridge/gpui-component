@@ -489,6 +489,84 @@ mod tests {
         assert_eq!(parent_clicks.get(), 0);
     }
 
+    struct ToggleGroupHarness {
+        install_group_callback: bool,
+        child_clicks: Rc<Cell<usize>>,
+        group_changes: Rc<RefCell<Vec<Vec<bool>>>>,
+    }
+
+    impl Render for ToggleGroupHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let child_clicks = self.child_clicks.clone();
+            let mut group = ToggleGroup::new("toggle-group")
+                .w(px(120.))
+                .child(Toggle::new("one").label("One").checked(true).on_click(
+                    move |_, _, _| child_clicks.set(child_clicks.get() + 1),
+                ))
+                .child(Toggle::new("two").label("Two"));
+            if self.install_group_callback {
+                let changes = self.group_changes.clone();
+                group = group.on_click(move |next, _, _| changes.borrow_mut().push(next.clone()));
+            }
+            group
+        }
+    }
+
+    fn toggle_group_harness(
+        cx: &mut TestAppContext,
+        install_group_callback: bool,
+    ) -> (
+        &mut VisualTestContext,
+        Rc<Cell<usize>>,
+        Rc<RefCell<Vec<Vec<bool>>>>,
+    ) {
+        cx.update(crate::init);
+        let child_clicks = Rc::new(Cell::new(0));
+        let group_changes = Rc::new(RefCell::new(Vec::new()));
+        let (_, cx) = cx.add_window_view({
+            let child_clicks = child_clicks.clone();
+            let group_changes = group_changes.clone();
+            move |_, _| ToggleGroupHarness {
+                install_group_callback,
+                child_clicks,
+                group_changes,
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, child_clicks, group_changes)
+    }
+
+    #[gpui::test]
+    fn legacy_toggle_group_overrides_child_callback_even_without_group_callback(
+        cx: &mut TestAppContext,
+    ) {
+        let (cx, child_clicks, changes) = toggle_group_harness(cx, false);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        assert_eq!(child_clicks.get(), 0);
+        assert!(changes.borrow().is_empty());
+    }
+
+    #[gpui::test]
+    fn legacy_toggle_group_pointer_flips_only_the_clicked_rendered_value(
+        cx: &mut TestAppContext,
+    ) {
+        let (cx, child_clicks, changes) = toggle_group_harness(cx, true);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        assert_eq!(child_clicks.get(), 0);
+        assert_eq!(changes.borrow().as_slice(), &[vec![false, false]]);
+    }
+
+    #[gpui::test]
+    fn legacy_toggle_group_keyboard_click_does_not_reach_the_group_callback(
+        cx: &mut TestAppContext,
+    ) {
+        let (cx, child_clicks, changes) = toggle_group_harness(cx, true);
+        cx.update(|window, cx| window.focus_next(cx));
+        activate_key(cx, "enter");
+        assert_eq!(child_clicks.get(), 0);
+        assert!(changes.borrow().is_empty());
+    }
+
     #[test]
     fn instance_style_remains_the_final_visual_override() {
         let toggle = Toggle::new("styled").checked(true).opacity(0.37);

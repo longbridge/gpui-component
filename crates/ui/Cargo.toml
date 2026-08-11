@@ -144,7 +144,7 @@ aho-corasick = "1.1.3"
 lsp-types.workspace = true
 
 # Cross-platform time APIs (zero-cost on native, uses web APIs on WASM)
-instant = { version = "0.1", features = ["wasm-bindgen"] }
+instant.workspace = true
 
 # Native-only dependencies (not available on WASM)
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

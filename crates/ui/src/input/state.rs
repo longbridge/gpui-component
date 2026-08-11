@@ -801,10 +801,10 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.history.ignore = true;
+        self.history.set_ignoring(true);
         self.emit_events = false;
         self.replace_text(value, window, cx);
-        self.history.ignore = false;
+        self.history.set_ignoring(false);
         self.emit_events = true;
 
         self.reset_selection();
@@ -2094,7 +2094,7 @@ impl InputState {
     }
 
     fn push_history(&mut self, text: &Rope, range: &Range<usize>, new_text: &str) {
-        if self.history.ignore {
+        if self.history.is_ignoring() {
             return;
         }
 
@@ -2108,25 +2108,25 @@ impl InputState {
     }
 
     pub(super) fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
-        self.history.ignore = true;
+        self.history.set_ignoring(true);
         if let Some(changes) = self.history.undo() {
             for change in changes {
                 let range_utf16 = self.range_to_utf16(&change.new_range.into());
                 self.replace_text_in_range_silent(Some(range_utf16), &change.old_text, window, cx);
             }
         }
-        self.history.ignore = false;
+        self.history.set_ignoring(false);
     }
 
     pub(super) fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
-        self.history.ignore = true;
+        self.history.set_ignoring(true);
         if let Some(changes) = self.history.redo() {
             for change in changes {
                 let range_utf16 = self.range_to_utf16(&change.old_range.into());
                 self.replace_text_in_range_silent(Some(range_utf16), &change.new_text, window, cx);
             }
         }
-        self.history.ignore = false;
+        self.history.set_ignoring(false);
     }
 
     /// Get byte offset of the cursor.
