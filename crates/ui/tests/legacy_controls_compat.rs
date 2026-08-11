@@ -85,11 +85,11 @@ fn legacy_switch_builder_and_trait_methods_remain_available() {
 fn base_controls_do_not_replace_legacy_module_paths() {
     fn legacy_checkbox(_: Checkbox) {}
     fn legacy_switch(_: Switch) {}
-    fn base_checkbox(_: gpui_component_base::Checkbox) {}
-    fn base_switch(_: gpui_component_base::Switch) {}
+    fn base_checkbox(_: gpui_base::Checkbox) {}
+    fn base_switch(_: gpui_base::Switch) {}
 
     legacy_checkbox(Checkbox::new("legacy"));
     legacy_switch(Switch::new("legacy"));
-    base_checkbox(gpui_component_base::Checkbox::new("base"));
-    base_switch(gpui_component_base::Switch::new("base"));
+    base_checkbox(gpui_base::Checkbox::new("base"));
+    base_switch(gpui_base::Switch::new("base"));
 }

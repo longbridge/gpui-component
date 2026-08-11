@@ -57,6 +57,20 @@ impl AsRef<ScrollHandle> for VirtualListScrollHandle {
     }
 }
 
+impl crate::ScrollbarHandle for VirtualListScrollHandle {
+    fn offset(&self) -> Point<Pixels> {
+        self.base_handle.offset()
+    }
+
+    fn set_offset(&self, offset: Point<Pixels>) {
+        self.base_handle.set_offset(offset);
+    }
+
+    fn content_size(&self) -> Size<Pixels> {
+        self.base_handle.content_size()
+    }
+}
+
 impl Deref for VirtualListScrollHandle {
     type Target = ScrollHandle;
 
@@ -769,11 +783,7 @@ mod tests {
                 move |_, visible_range, _, _| {
                     visible_ranges.borrow_mut().push(visible_range.clone());
                     visible_range
-                        .map(|ix| {
-                            div()
-                                .w(item_sizes[ix].width)
-                                .h(item_sizes[ix].height)
-                        })
+                        .map(|ix| div().w(item_sizes[ix].width).h(item_sizes[ix].height))
                         .collect::<Vec<_>>()
                 },
             )

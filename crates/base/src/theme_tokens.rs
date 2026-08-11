@@ -7,7 +7,7 @@ use gpui::{BoxShadow, FontWeight, Hsla, Pixels, SharedString, point, px};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SemanticThemeTokens {
     pub colors: ColorTokens,
     pub radius: RadiusTokens,

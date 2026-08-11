@@ -1,23 +1,5 @@
-pub use gpui_component_base::{
-    VirtualList, VirtualListScrollHandle, h_virtual_list, v_virtual_list,
-};
-pub(crate) use gpui_component_base::virtual_list;
-
-use gpui::{Pixels, Point, Size};
-
-impl crate::scroll::ScrollbarHandle for VirtualListScrollHandle {
-    fn offset(&self) -> Point<Pixels> {
-        self.base_handle().offset()
-    }
-
-    fn set_offset(&self, offset: Point<Pixels>) {
-        self.base_handle().set_offset(offset);
-    }
-
-    fn content_size(&self) -> Size<Pixels> {
-        self.base_handle().content_size()
-    }
-}
+pub(crate) use gpui_base::virtual_list;
+pub use gpui_base::{VirtualList, VirtualListScrollHandle, h_virtual_list, v_virtual_list};
 
 #[cfg(test)]
 mod tests {
@@ -25,10 +7,10 @@ mod tests {
 
     #[test]
     fn legacy_handle_is_the_base_type_and_a_scrollbar_handle() {
-        fn accepts_base(_: gpui_component_base::VirtualListScrollHandle) {}
+        fn accepts_base(_: gpui_base::VirtualListScrollHandle) {}
         fn accepts_scrollbar(_: impl crate::scroll::ScrollbarHandle) {}
         fn legacy_list_is_base(value: crate::VirtualList) {
-            fn accepts_base(_: gpui_component_base::VirtualList) {}
+            fn accepts_base(_: gpui_base::VirtualList) {}
             accepts_base(value);
         }
 

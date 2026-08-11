@@ -3,7 +3,7 @@
   "name": "button",
   "type": "registry:ui",
   "description": "A customizable application-owned button component.",
-  "dependencies": ["gpui-component-base"],
+  "dependencies": ["gpui-base"],
   "registryDependencies": [],
   "files": [
     {

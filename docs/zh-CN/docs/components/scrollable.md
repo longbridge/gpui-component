@@ -11,7 +11,7 @@ Scrollable 是一个功能完整的可滚动容器组件，支持自定义滚动
 
 ```rust
 use gpui_component::{
-    scroll::{ScrollableElement, ScrollbarAxis, ScrollbarShow},
+    scroll::{ScrollableElement, ScrollbarAxis, ScrollbarMode},
     StyledExt as _,
 };
 ```
@@ -213,11 +213,11 @@ VirtualList::new(
 控制滚动条何时显示：
 
 ```rust
-use gpui_component::scroll::ScrollbarShow;
+use gpui_component::{Theme, scroll::ScrollbarMode};
 
-theme.scrollbar_show = ScrollbarShow::Scrolling;
-theme.scrollbar_show = ScrollbarShow::Hover;
-theme.scrollbar_show = ScrollbarShow::Always;
+Theme::set_scrollbar_mode(ScrollbarMode::Scrolling, cx);
+Theme::set_scrollbar_mode(ScrollbarMode::Hover, cx);
+Theme::set_scrollbar_mode(ScrollbarMode::Always, cx);
 ```
 
 ### 跟随系统设置

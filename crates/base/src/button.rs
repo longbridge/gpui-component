@@ -135,7 +135,6 @@ impl Button {
         style.refine(&self.style);
         style
     }
-
 }
 
 /// Semantic styles supported by [`Button`].
@@ -468,6 +467,5 @@ mod tests {
         // aria-disabled setter even though AccessKit can represent it. This
         // assertion records that upstream gap instead of claiming support.
         assert!(!disabled.is_disabled());
-
     }
 }

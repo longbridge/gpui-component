@@ -2,8 +2,8 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,
-    IntoElement, ParentElement, Refineable as _, RenderOnce, Role, SharedString,
-    Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Toggled, Window, div,
+    IntoElement, ParentElement, Refineable as _, RenderOnce, Role, SharedString, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Toggled, Window, div,
     prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
@@ -126,7 +126,6 @@ impl Radio {
         self
     }
 
-
     fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
         window
             .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
@@ -235,10 +234,7 @@ mod tests {
             })
         };
 
-        assert_eq!(
-            styled(Radio::new("normal")).resolved_style().opacity,
-            None
-        );
+        assert_eq!(styled(Radio::new("normal")).resolved_style().opacity, None);
         assert_eq!(
             styled(Radio::new("checked").checked(true))
                 .resolved_style()
@@ -373,5 +369,4 @@ mod tests {
         assert_eq!(node.toggled(), Some(Toggled::True));
         assert!(!node.supports_action(accesskit::Action::Click));
     }
-
 }

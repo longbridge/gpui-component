@@ -35,7 +35,7 @@ fn init_scaffolds_an_application_and_is_idempotent() {
     assert!(cli(temp.path(), &["init"]).status.success());
     let theme = fs::read_to_string(temp.path().join("src/theme.rs")).unwrap();
     assert!(theme.contains("SemanticThemeTokens"));
-    assert!(theme.contains("gpui_component_base"));
+    assert!(theme.contains("gpui_base"));
     fs::write(temp.path().join("src/theme.rs"), "// application edit\n").unwrap();
     assert!(cli(temp.path(), &["init"]).status.success());
 
@@ -46,7 +46,7 @@ fn init_scaffolds_an_application_and_is_idempotent() {
         "// application edit\n"
     );
     let manifest = fs::read_to_string(temp.path().join("Cargo.toml")).unwrap();
-    assert_eq!(manifest.matches("gpui-component-base").count(), 1);
+    assert_eq!(manifest.matches("gpui-base").count(), 1);
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn add_button_installs_editable_source_and_updates_module() {
     let button = temp.path().join("src/ui/button.rs");
     let source = fs::read_to_string(&button).unwrap();
     assert!(source.contains("pub struct Button"));
-    assert!(source.contains("gpui_component_base as base"));
+    assert!(source.contains("gpui_base as base"));
     let module = fs::read_to_string(temp.path().join("src/ui/mod.rs")).unwrap();
     assert!(module.contains("mod button;"));
     assert!(module.contains("pub use button::*;"));
@@ -93,7 +93,7 @@ fn add_resolves_registry_dependencies_before_the_requested_item() {
     fs::write(
         registry.path().join("ui/button.json"),
         r#"{
-          "name":"button","type":"registry:ui","dependencies":["gpui-component-base"],
+          "name":"button","type":"registry:ui","dependencies":["gpui-base"],
           "registryDependencies":["utils"],
           "files":[{"path":"ui/button.rs","type":"registry:ui","target":"src/ui/button.rs"}]
         }"#,
@@ -182,7 +182,7 @@ fn installed_binary_fallback_adds_checkbox_switch_and_radio_without_overwriting(
     for name in ["checkbox", "switch", "radio"] {
         let path = temp.path().join(format!("src/ui/{name}.rs"));
         let source = fs::read_to_string(&path).unwrap();
-        assert!(source.contains("gpui_component_base"));
+        assert!(source.contains("gpui_base"));
         assert!(source.contains(&format!("pub struct {}", uppercase_first(name))));
         assert!(source.contains(if name == "switch" {
             "pub fn on_toggle"

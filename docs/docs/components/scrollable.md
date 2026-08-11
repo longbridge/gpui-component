@@ -11,7 +11,7 @@ A comprehensive scrollable container component that provides custom scrollbars, 
 
 ```rust
 use gpui_component::{
-    scroll::{ScrollableElement, ScrollbarAxis, ScrollbarShow},
+    scroll::{ScrollableElement, ScrollbarAxis, ScrollbarMode},
     StyledExt as _,
 };
 ```
@@ -218,12 +218,12 @@ Customize scrollbar appearance through theme configuration:
 Control when scrollbars are visible:
 
 ```rust
-use gpui_component::scroll::ScrollbarShow;
+use gpui_component::{Theme, scroll::ScrollbarMode};
 
 // In theme initialization
-theme.scrollbar_show = ScrollbarShow::Scrolling;  // Show only when scrolling
-theme.scrollbar_show = ScrollbarShow::Hover;      // Show on hover
-theme.scrollbar_show = ScrollbarShow::Always;     // Always visible
+Theme::set_scrollbar_mode(ScrollbarMode::Scrolling, cx); // Only while scrolling
+Theme::set_scrollbar_mode(ScrollbarMode::Hover, cx);     // On hover
+Theme::set_scrollbar_mode(ScrollbarMode::Always, cx);    // Always visible
 ```
 
 ### System Integration

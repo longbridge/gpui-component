@@ -1,6 +1,6 @@
-# gpui-component-base Migration Checklist
+# gpui-base Migration Checklist
 
-This checklist tracks the migration to `gpui-component-base`. Check an item only
+This checklist tracks the migration to `gpui-base`. Check an item only
 after its implementation and compatibility requirements have been verified.
 
 ## Current Status
@@ -40,7 +40,7 @@ after its implementation and compatibility requirements have been verified.
 ## Decisions and Constraints
 
 - The real legacy Button path is `gpui_component::button::Button`; it must remain
-  distinct from the foundation `gpui_component_base::Button`.
+  distinct from the foundation `gpui_base::Button`.
 - Base Button requires a stable `ElementId`, so its constructor is
   `Button::new(id)`.
 - Base Button relies on GPUI's native click synthesis for pointer, Enter, and
@@ -81,9 +81,8 @@ after its implementation and compatibility requirements have been verified.
 
 ## Known Blockers and Risks
 
-- Cargo can package Base locally, but cannot package the facade against an
-  unpublished Base version until crates.io exposes that version. Release must
-  publish Base first and retry the facade after index propagation.
+- Publishing `gpui-base` is intentionally deferred; this phase validates it only
+  as an internal workspace dependency.
 - GPUI currently has no obvious public `aria_disabled` helper. Disabled Button
   accessibility and propagation need runtime evidence or an upstream seam before
   that checklist item can be completed.
@@ -146,14 +145,10 @@ checking the component milestone:
 
 ## Validation Log
 
-- 2026-08-11: `cargo check -p gpui-component-base -p gpui-component` passed after
+- 2026-08-11: `cargo check -p gpui-base -p gpui-component` passed after
   the initial foundation extraction.
 - 2026-08-11: `cargo test -p gpui-component --test base_compat` passed 3 tests,
   covering legacy type identity and application-owned Button state styling.
-- 2026-08-11: `cargo package -p gpui-component-base --allow-dirty --no-verify`
-  succeeded (10 files packaged).
-- 2026-08-11: Facade packaging confirmed the expected crates.io propagation
-  dependency: `gpui-component-base` 0.5.2 is not published yet.
 - 2026-08-11: Semantic token projection and configuration tests passed (6 tests).
 - 2026-08-11: CLI initialization, path safety, dependency resolution,
   non-destructive installation, and editable-source tests passed (6 tests).
@@ -264,11 +259,12 @@ checking the component milestone:
   manual Checkbox comparison and these runtime gates complete the Checkbox M2
   slice.
 - 2026-08-11: `crates/ui/src/styled.rs` is now re-export only. Generic
-  `StyledExt`, `FocusableExt`, flex/shadow helpers, inspector reflection, and the
-  minimal styled-theme projection moved to Base. UI-specific `Size`, `Sizable`,
-  `StyleSized`, `Selectable`, `Disableable`, and `Collapsible` were split into UI
-  modules rather than polluting Base. Theme initialization and supported mode/
-  registry changes synchronize the projection.
+  `StyledExt`, `FocusableExt`, flex/shadow helpers, and inspector reflection moved
+  to Base. The temporary ad-hoc `StyledTheme` field projection was removed;
+  themed helpers now consume the semantic tokens in `gpui_base::Theme`.
+  UI-specific `Size`, `Sizable`, `StyleSized`, `Selectable`, `Disableable`, and
+  `Collapsible` remain in UI modules. Theme initialization and supported mode/
+  registry changes synchronize the Base Theme projection.
 - 2026-08-11: Base Button gained controlled `selected` state and
   `ButtonStyles::selected`. UI Button now expresses both selected and disabled
   presentation only through typed styles. Selected is the existing
@@ -295,8 +291,7 @@ checking the component milestone:
   UI re-exports the same type identity.
 - 2026-08-11: VirtualList's complete vertical/horizontal virtualization,
   measurement, visible-range, deferred scroll, and handle implementation moved
-  to Base. UI retains only re-exports and its local ScrollbarHandle adapter;
-  runtime tests cover both axes, scroll-to-item, and empty lists.
+  to Base. Runtime tests cover both axes, scroll-to-item, and empty lists.
 - 2026-08-11: Generic drag `AutoScroll` timing, edge-speed calculation, task
   lifecycle, and stop state moved to Base. Input and Text Selection continue to
   consume the same type through the legacy `scroll::AutoScroll` re-export.
@@ -305,10 +300,25 @@ checking the component milestone:
   accessibility, or open-change event contract. Moving it intact would violate
   Base's no-style boundary, while inventing those missing behaviors would exceed
   the current migration scope.
+- 2026-08-11: The complete generic Scrollbar module moved to Base: handle
+  adapters, both axes, track click, thumb drag lifecycle, automatic visibility,
+  fade timing, and custom painting. A deliberately small `ScrollbarStyles`
+  interface follows GPUI fluent composition and exposes track width/background/
+  border plus normal/hover/active thumb width, inset, radius, minimum length,
+  and background. `ScrollbarMode` controls `Scrolling`, `Hover`, and `Always`;
+  the former `ScrollbarShow` API was removed rather than retained as an alias.
+  The Theme setter synchronizes the Base projection so Story mode changes take effect.
+  Project-specific `Scrollable<E>` and `ScrollableMask` remain in UI with all
+  existing tests.
+- 2026-08-11: The Base package was renamed from `gpui-component-base` to the
+  concise `gpui-base` (`gpui_base` in Rust paths). Base now has one coherent
+  `Theme` Global containing semantic tokens and per-module defaults; Scrollbar
+  contributes `ScrollbarTheme { mode, styles }` rather than registering
+  scattered globals or adding component fields to a generic styled projection.
 
 ## Crate Foundation
 
-- [x] Add `gpui-component-base` as a publishable workspace crate.
+- [x] Add `gpui-base` as an internal workspace crate; publishing is deferred.
 - [x] Keep the dependency direction one-way: `gpui-component` depends on Base.
 - [x] Preserve the original focus-trap initialization order in `gpui_component::init`.
 - [x] Move geometry primitives and extension traits into Base.
@@ -319,7 +329,7 @@ checking the component milestone:
 - [x] Move generic `History`/`HistoryItem` into Base and preserve Input/Dock
   behavior and the legacy module path.
 - [x] Move VirtualList and its scroll handle into Base while retaining the UI
-  ScrollbarHandle adapter and legacy type identity.
+  legacy type identity.
 - [x] Move generic drag AutoScroll behavior into Base and preserve its legacy
   scroll module type identity.
 - [x] Move animation and transition behavior into Base.
@@ -493,8 +503,9 @@ template is delivered and its required behavior is composed from existing Base A
 - [x] Keep UI-specific sizing APIs outside Base while moving generic styled
   helpers out of the legacy styled module.
 - [x] Split pure GPUI element extensions from UI-sized child composition.
-- [x] Keep the styled scrollbar behavior interface UI-owned; adapt the Base
-  VirtualList handle locally instead of adding a Base dependency on UI scrollbars.
+- [x] Move the generic Scrollbar behavior, handle interface, axis/show modes,
+  painting, dragging, and fade lifecycle into Base while keeping UI-specific
+  Scrollable wrappers and masks in `crates/ui`.
 - [x] Move VirtualList into Base without depending on styled scrollbar components.
 - [ ] Extract an unstyled overlay host and entry model.
 - [ ] Extract popup positioning and focus-restoration behavior.
@@ -549,12 +560,11 @@ template is delivered and its required behavior is composed from existing Base A
 ## Completion Gates
 
 - [ ] `cargo fmt --all --check`
-- [ ] `cargo check -p gpui-component-base`
-- [ ] `cargo test -p gpui-component-base`
+- [ ] `cargo check -p gpui-base`
+- [ ] `cargo test -p gpui-base`
 - [ ] `cargo check -p gpui-component --no-default-features`
 - [ ] `cargo test -p gpui-component`
 - [ ] Story Web / WASM check
 - [ ] `cargo clippy --workspace --all-targets -- --deny warnings`
-- [ ] `cargo package -p gpui-component-base`
 - [ ] `cargo package -p gpui-component` after Base is available from crates.io
 - [ ] Requirement-by-requirement review against `RFC.md` acceptance criteria

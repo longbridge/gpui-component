@@ -16,7 +16,7 @@ doctest = false
 
 [features]
 decimal = ["dep:rust_decimal"]
-inspector = ["gpui_macros/inspector", "gpui/inspector", "gpui-component-base/inspector"]
+inspector = ["gpui_macros/inspector", "gpui/inspector", "gpui-base/inspector"]
 tree-sitter = ["dep:tree-sitter", "dep:tree-sitter-json"]
 
 # For syntax highlighting in Markdown and CodeEditor.
@@ -98,7 +98,7 @@ tree-sitter-zig = ["tree-sitter", "dep:tree-sitter-zig"]
 anyhow.workspace = true
 gpui = { workspace = true }
 gpui_macros.workspace = true
-gpui-component-base.workspace = true
+gpui-base.workspace = true
 gpui-component-macros = { workspace = true }
 gpui-component-assets = { workspace = true }
 notify.workspace = true

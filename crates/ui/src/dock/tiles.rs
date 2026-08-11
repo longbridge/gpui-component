@@ -7,7 +7,7 @@ use std::{
 use crate::{
     ActiveTheme, ElementExt, Icon, IconName, h_flex,
     history::{History, HistoryItem},
-    scroll::{Scrollbar, ScrollbarShow},
+    scroll::{Scrollbar, ScrollbarMode},
     v_flex,
 };
 
@@ -140,7 +140,7 @@ pub struct Tiles {
     bounds: Bounds<Pixels>,
     history: History<TileChange>,
     scroll_handle: ScrollHandle,
-    scrollbar_show: Option<ScrollbarShow>,
+    scrollbar_mode: Option<ScrollbarMode>,
 }
 
 impl Panel for Tiles {
@@ -190,7 +190,7 @@ impl Tiles {
             dragging_initial_mouse: Point::default(),
             dragging_initial_bounds: Bounds::default(),
             resizing_id: None,
-            scrollbar_show: None,
+            scrollbar_mode: None,
             resizing_drag_data: None,
             bounds: Bounds::default(),
             history: History::new().group_interval(std::time::Duration::from_millis(100)),
@@ -198,13 +198,13 @@ impl Tiles {
         }
     }
 
-    /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
-    pub fn set_scrollbar_show(
+    /// Set the scrollbar show mode [`ScrollbarMode`], if not set use the `cx.theme().scrollbar_mode`.
+    pub fn set_scrollbar_mode(
         &mut self,
-        scrollbar_show: Option<ScrollbarShow>,
+        scrollbar_mode: Option<ScrollbarMode>,
         cx: &mut Context<Self>,
     ) {
-        self.scrollbar_show = scrollbar_show;
+        self.scrollbar_mode = scrollbar_mode;
         cx.notify();
     }
 
@@ -1313,8 +1313,8 @@ impl Render for Tiles {
                     .child(
                         Scrollbar::new(&self.scroll_handle)
                             .scroll_size(scroll_size)
-                            .when_some(self.scrollbar_show, |this, scrollbar_show| {
-                                this.scrollbar_show(scrollbar_show)
+                            .when_some(self.scrollbar_mode, |this, scrollbar_mode| {
+                                this.mode(scrollbar_mode)
                             }),
                     ),
             )

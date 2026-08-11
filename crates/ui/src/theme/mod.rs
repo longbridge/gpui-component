@@ -1,9 +1,9 @@
 use crate::{
     highlighter::HighlightTheme, list::ListSettings, notification::NotificationSettings,
-    scroll::ScrollbarShow, sheet::SheetSettings,
+    scroll::ScrollbarMode, sheet::SheetSettings,
 };
 use gpui::{App, Global, Hsla, Pixels, SharedString, Window, WindowAppearance, px};
-pub use gpui_component_base::{
+pub use gpui_base::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,
     TypographyTokens,
 };
@@ -76,7 +76,8 @@ pub struct Theme {
     pub shadow: bool,
     pub transparent: Hsla,
     /// Show the scrollbar mode, default: Scrolling
-    pub scrollbar_show: ScrollbarShow,
+    #[serde(alias = "scrollbar_show")]
+    pub scrollbar_mode: ScrollbarMode,
     /// The notification setting.
     #[serde(skip)]
     pub notification: NotificationSettings,
@@ -156,11 +157,18 @@ impl Theme {
 
     /// Sync the Scrollbar showing behavior with the system
     pub fn sync_scrollbar_appearance(cx: &mut App) {
-        Theme::global_mut(cx).scrollbar_show = if cx.should_auto_hide_scrollbars() {
-            ScrollbarShow::Scrolling
+        let mode = if cx.should_auto_hide_scrollbars() {
+            ScrollbarMode::Scrolling
         } else {
-            ScrollbarShow::Hover
+            ScrollbarMode::Hover
         };
+        Self::set_scrollbar_mode(mode, cx);
+    }
+
+    /// Changes the scrollbar display mode and synchronizes the Base projection.
+    pub fn set_scrollbar_mode(mode: ScrollbarMode, cx: &mut App) {
+        Theme::global_mut(cx).scrollbar_mode = mode;
+        gpui_base::Theme::global_mut(cx).scrollbar.mode = mode;
     }
 
     /// Change the theme mode.
@@ -181,14 +189,20 @@ impl Theme {
             theme.apply_config(&theme.light_theme.clone());
         }
 
-        let styled_theme = gpui_component_base::StyledTheme {
-            popover: theme.tokens.popover.into(),
-            popover_foreground: theme.popover_foreground,
-            border: theme.border,
-            ring: theme.ring,
-            radius: theme.radius,
+        let base_theme = gpui_base::Theme {
+            tokens: theme.semantic_tokens(),
+            scrollbar: gpui_base::ScrollbarTheme {
+                mode: theme.scrollbar_mode,
+                styles: gpui_base::ScrollbarStyles::default()
+                    .track(|style| style.bg(theme.scrollbar))
+                    .track_hover(|style| style.bg(theme.scrollbar))
+                    .track_active(|style| style.bg(theme.scrollbar).border_color(theme.border))
+                    .thumb(|style| style.bg(theme.tokens.scrollbar_thumb))
+                    .thumb_hover(|style| style.bg(theme.tokens.scrollbar_thumb_hover))
+                    .thumb_active(|style| style.bg(theme.tokens.scrollbar_thumb_hover)),
+            },
         };
-        cx.set_global(styled_theme);
+        cx.set_global(base_theme);
 
         if let Some(window) = window {
             window.refresh();
@@ -417,7 +431,7 @@ impl From<&ThemeColor> for Theme {
             radius: px(6.),
             radius_lg: px(8.),
             shadow: true,
-            scrollbar_show: ScrollbarShow::default(),
+            scrollbar_mode: ScrollbarMode::default(),
             notification: NotificationSettings::default(),
             tile_grid_size: px(8.),
             tile_shadow: true,
@@ -479,29 +493,33 @@ impl From<WindowAppearance> for ThemeMode {
 }
 
 #[cfg(test)]
-mod styled_projection_tests {
+mod base_theme_projection_tests {
     use super::*;
     use gpui::TestAppContext;
 
     #[gpui::test]
-    fn styled_theme_tracks_initialization_and_mode_changes(cx: &mut TestAppContext) {
+    fn base_theme_tracks_initialization_and_mode_changes(cx: &mut TestAppContext) {
         cx.update(|cx| {
             init(cx);
             assert_styled_projection(cx);
 
             Theme::change(ThemeMode::Dark, None, cx);
             assert_styled_projection(cx);
+
+            Theme::set_scrollbar_mode(ScrollbarMode::Always, cx);
+            assert_eq!(Theme::global(cx).scrollbar_mode, ScrollbarMode::Always);
+            assert_eq!(
+                gpui_base::Theme::global(cx).scrollbar.mode,
+                gpui_base::ScrollbarMode::Always
+            );
         });
     }
 
     fn assert_styled_projection(cx: &App) {
         let theme = Theme::global(cx);
-        let styled = cx.global::<gpui_component_base::StyledTheme>();
+        let base = gpui_base::Theme::global(cx);
 
-        assert_eq!(styled.popover, theme.tokens.popover.into());
-        assert_eq!(styled.popover_foreground, theme.popover_foreground);
-        assert_eq!(styled.border, theme.border);
-        assert_eq!(styled.ring, theme.ring);
-        assert_eq!(styled.radius, theme.radius);
+        assert_eq!(base.tokens, theme.semantic_tokens());
+        assert_eq!(base.scrollbar.mode, theme.scrollbar_mode);
     }
 }

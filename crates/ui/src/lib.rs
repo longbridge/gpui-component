@@ -81,8 +81,8 @@ pub mod tree;
 pub use crate::Disableable;
 pub use element_ext::*;
 pub use global_state::GlobalState;
-pub use gpui_component_base::animation;
-pub use gpui_component_base::{
+pub use gpui_base::animation;
+pub use gpui_base::{
     AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Placement, Side,
 };
 pub use gpui_component_macros::icon_named;
@@ -111,7 +111,7 @@ pub fn init(cx: &mut App) {
     #[cfg(any(feature = "inspector", debug_assertions))]
     inspector::init(cx);
     root::init(cx);
-    gpui_component_base::init(cx);
+    gpui_base::init(cx);
     color_picker::init(cx);
     date_picker::init(cx);
     dock::init(cx);

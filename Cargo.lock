@@ -2984,6 +2984,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-base"
+version = "0.5.2"
+dependencies = [
+ "gpui",
+ "gpui_macros",
+ "instant",
+ "schemars",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
 name = "gpui-component"
 version = "0.5.2"
 dependencies = [
@@ -2995,8 +3007,8 @@ dependencies = [
  "enum-iterator",
  "futures",
  "gpui",
+ "gpui-base",
  "gpui-component-assets",
- "gpui-component-base",
  "gpui-component-macros",
  "gpui_macros",
  "html5ever 0.27.0",
@@ -3079,18 +3091,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "zed-reqwest",
-]
-
-[[package]]
-name = "gpui-component-base"
-version = "0.5.2"
-dependencies = [
- "gpui",
- "gpui_macros",
- "instant",
- "schemars",
- "serde",
- "smallvec",
 ]
 
 [[package]]
@@ -5176,7 +5176,7 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "680998035259dcfcafe653688bf2aa6d3e2dc05e98be6ab46afb089dc84f1df8"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 3.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{Context, IntoElement, Render, Styled as _, TestAppContext, Window, div, px};
-use gpui_component_base::ElementExt as _;
+use gpui_base::ElementExt as _;
 
 struct PrepaintHarness {
     captured: Rc<RefCell<Option<gpui::Bounds<gpui::Pixels>>>>,

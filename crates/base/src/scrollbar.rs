@@ -2,20 +2,20 @@ use std::{cell::Cell, ops::Deref, panic::Location, rc::Rc};
 
 use instant::{Duration, Instant};
 
-use crate::{ActiveTheme, AxisExt};
+use crate::{AxisExt, Theme};
 use gpui::{
     Anchor, App, Axis, Background, BorderStyle, Bounds, ContentMask, CursorStyle, Edges, Element,
     ElementId, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement,
     IsZero, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels,
     Point, Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window,
-    fill, point, px, relative, size,
+    fill, point, prelude::FluentBuilder, px, relative, size,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// The width of the scrollbar (THUMB_ACTIVE_INSET * 2 + THUMB_ACTIVE_WIDTH)
 const WIDTH: Pixels = px(4. * 2. + 8.);
-const MIN_THUMB_SIZE: f32 = 48.;
+const MIN_THUMB_SIZE: Pixels = px(48.);
 
 const THUMB_WIDTH: Pixels = px(6.);
 const THUMB_RADIUS: Pixels = px(6. / 2.);
@@ -30,7 +30,7 @@ const FADE_OUT_DELAY: f32 = 2.0;
 
 /// Scrollbar show mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Default, JsonSchema)]
-pub enum ScrollbarShow {
+pub enum ScrollbarMode {
     /// Show scrollbar when scrolling, will fade out after idle.
     #[default]
     Scrolling,
@@ -40,7 +40,7 @@ pub enum ScrollbarShow {
     Always,
 }
 
-impl ScrollbarShow {
+impl ScrollbarMode {
     fn is_hover(&self) -> bool {
         matches!(self, Self::Hover)
     }
@@ -250,6 +250,129 @@ pub enum ScrollbarAxis {
     Both,
 }
 
+/// Paint-only styles for a scrollbar track.
+#[derive(Clone, Default)]
+pub struct ScrollbarTrackStyle {
+    background: Option<Hsla>,
+    border: Option<Hsla>,
+    width: Option<Pixels>,
+}
+
+impl ScrollbarTrackStyle {
+    pub fn bg(mut self, background: Hsla) -> Self {
+        self.background = Some(background);
+        self
+    }
+
+    pub fn border_color(mut self, border: Hsla) -> Self {
+        self.border = Some(border);
+        self
+    }
+
+    pub fn width(mut self, width: impl Into<Pixels>) -> Self {
+        self.width = Some(width.into());
+        self
+    }
+}
+
+impl FluentBuilder for ScrollbarTrackStyle {}
+
+/// Paint-only styles for a scrollbar thumb.
+#[derive(Clone, Default)]
+pub struct ScrollbarThumbStyle {
+    background: Option<Background>,
+    width: Option<Pixels>,
+    inset: Option<Pixels>,
+    radius: Option<Pixels>,
+    min_length: Option<Pixels>,
+}
+
+impl ScrollbarThumbStyle {
+    pub fn bg(mut self, background: impl Into<Background>) -> Self {
+        self.background = Some(background.into());
+        self
+    }
+
+    pub fn width(mut self, width: impl Into<Pixels>) -> Self {
+        self.width = Some(width.into());
+        self
+    }
+
+    pub fn inset(mut self, inset: impl Into<Pixels>) -> Self {
+        self.inset = Some(inset.into());
+        self
+    }
+
+    pub fn radius(mut self, radius: impl Into<Pixels>) -> Self {
+        self.radius = Some(radius.into());
+        self
+    }
+
+    pub fn min_length(mut self, min_length: impl Into<Pixels>) -> Self {
+        self.min_length = Some(min_length.into());
+        self
+    }
+}
+
+impl FluentBuilder for ScrollbarThumbStyle {}
+
+/// Typed paint styles supported by [`Scrollbar`].
+#[derive(Clone, Default)]
+pub struct ScrollbarStyles {
+    track: ScrollbarTrackStyle,
+    track_hover: ScrollbarTrackStyle,
+    track_active: ScrollbarTrackStyle,
+    thumb: ScrollbarThumbStyle,
+    thumb_hover: ScrollbarThumbStyle,
+    thumb_active: ScrollbarThumbStyle,
+}
+
+impl ScrollbarStyles {
+    pub fn track(mut self, build: impl FnOnce(ScrollbarTrackStyle) -> ScrollbarTrackStyle) -> Self {
+        self.track = build(self.track);
+        self
+    }
+
+    pub fn track_hover(
+        mut self,
+        build: impl FnOnce(ScrollbarTrackStyle) -> ScrollbarTrackStyle,
+    ) -> Self {
+        self.track_hover = build(self.track_hover);
+        self
+    }
+
+    pub fn track_active(
+        mut self,
+        build: impl FnOnce(ScrollbarTrackStyle) -> ScrollbarTrackStyle,
+    ) -> Self {
+        self.track_active = build(self.track_active);
+        self
+    }
+
+    pub fn thumb(mut self, build: impl FnOnce(ScrollbarThumbStyle) -> ScrollbarThumbStyle) -> Self {
+        self.thumb = build(self.thumb);
+        self
+    }
+
+    pub fn thumb_hover(
+        mut self,
+        build: impl FnOnce(ScrollbarThumbStyle) -> ScrollbarThumbStyle,
+    ) -> Self {
+        self.thumb_hover = build(self.thumb_hover);
+        self
+    }
+
+    pub fn thumb_active(
+        mut self,
+        build: impl FnOnce(ScrollbarThumbStyle) -> ScrollbarThumbStyle,
+    ) -> Self {
+        self.thumb_active = build(self.thumb_active);
+        self
+    }
+}
+
+impl FluentBuilder for ScrollbarStyles {}
+
 impl From<Axis> for ScrollbarAxis {
     fn from(axis: Axis) -> Self {
         match axis {
@@ -306,7 +429,7 @@ impl ScrollbarAxis {
 pub struct Scrollbar {
     pub(crate) id: ElementId,
     axis: ScrollbarAxis,
-    scrollbar_show: Option<ScrollbarShow>,
+    mode: Option<ScrollbarMode>,
     scroll_handle: Rc<dyn ScrollbarHandle>,
     scroll_size: Option<Size<Pixels>>,
     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
@@ -314,6 +437,7 @@ pub struct Scrollbar {
     /// This is used to limit the update rate of the scrollbar when it is
     /// being dragged for some complex interactions for reducing CPU usage.
     max_fps: usize,
+    styles: ScrollbarStyles,
 }
 
 impl Scrollbar {
@@ -326,10 +450,11 @@ impl Scrollbar {
         Self {
             id: ElementId::CodeLocation(*caller),
             axis: ScrollbarAxis::Both,
-            scrollbar_show: None,
+            mode: None,
             scroll_handle: Rc::new(scroll_handle.clone()),
             max_fps: 120,
             scroll_size: None,
+            styles: ScrollbarStyles::default(),
         }
     }
 
@@ -353,9 +478,11 @@ impl Scrollbar {
         self
     }
 
-    /// Set the scrollbar show mode [`ScrollbarShow`], if not set use the `cx.theme().scrollbar_show`.
-    pub fn scrollbar_show(mut self, scrollbar_show: ScrollbarShow) -> Self {
-        self.scrollbar_show = Some(scrollbar_show);
+    /// Set the scrollbar show mode [`ScrollbarMode`].
+    ///
+    /// If unset, the current application theme projection is used.
+    pub fn mode(mut self, mode: ScrollbarMode) -> Self {
+        self.mode = Some(mode);
         self
     }
 
@@ -373,78 +500,237 @@ impl Scrollbar {
         self
     }
 
+    pub fn styles(mut self, build: impl FnOnce(ScrollbarStyles) -> ScrollbarStyles) -> Self {
+        self.styles = build(self.styles);
+        self
+    }
+
     /// Set maximum frames per second for scrolling by drag. Default is 120 FPS.
     ///
     /// If you have very high CPU usage, consider reducing this value to improve performance.
     ///
     /// Available values: 30..120
-    pub(crate) fn max_fps(mut self, max_fps: usize) -> Self {
+    #[doc(hidden)]
+    pub fn max_fps(mut self, max_fps: usize) -> Self {
         self.max_fps = max_fps.clamp(30, 120);
         self
     }
 
     // Get the width of the scrollbar.
-    pub(crate) const fn width() -> Pixels {
+    #[doc(hidden)]
+    pub const fn width() -> Pixels {
         WIDTH
     }
 
-    fn style_for_active(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
+    fn resolve_track(
+        &self,
+        cx: &App,
+        state: &ScrollbarTrackStyle,
+        global_state: &ScrollbarTrackStyle,
+        default_border: Hsla,
+    ) -> (Hsla, Hsla) {
+        let global = Theme::global(cx).scrollbar.styles;
         (
-            cx.theme().tokens.scrollbar_thumb_hover.into(),
-            cx.theme().scrollbar,
-            cx.theme().border,
-            THUMB_ACTIVE_WIDTH,
-            THUMB_ACTIVE_INSET,
-            THUMB_ACTIVE_RADIUS,
+            state
+                .background
+                .or(self.styles.track.background)
+                .or(global_state.background)
+                .or(global.track.background)
+                .unwrap_or_else(gpui::transparent_black),
+            state
+                .border
+                .or(self.styles.track.border)
+                .or(global_state.border)
+                .or(global.track.border)
+                .unwrap_or(default_border),
         )
     }
 
-    fn style_for_hovered_thumb(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
+    fn resolve_thumb(
+        &self,
+        cx: &App,
+        state: &ScrollbarThumbStyle,
+        global_state: &ScrollbarThumbStyle,
+        defaults: ScrollbarThumbStyle,
+    ) -> (Background, Pixels, Pixels, Pixels, Pixels) {
+        let global = Theme::global(cx).scrollbar.styles;
         (
-            cx.theme().tokens.scrollbar_thumb_hover.into(),
-            cx.theme().scrollbar,
-            cx.theme().border,
-            THUMB_ACTIVE_WIDTH,
-            THUMB_ACTIVE_INSET,
-            THUMB_ACTIVE_RADIUS,
+            state
+                .background
+                .or(self.styles.thumb.background)
+                .or(global_state.background)
+                .or(global.thumb.background)
+                .unwrap_or_else(|| defaults.background.unwrap()),
+            state
+                .width
+                .or(self.styles.thumb.width)
+                .or(global_state.width)
+                .or(global.thumb.width)
+                .unwrap_or_else(|| defaults.width.unwrap()),
+            state
+                .inset
+                .or(self.styles.thumb.inset)
+                .or(global_state.inset)
+                .or(global.thumb.inset)
+                .unwrap_or_else(|| defaults.inset.unwrap()),
+            state
+                .radius
+                .or(self.styles.thumb.radius)
+                .or(global_state.radius)
+                .or(global.thumb.radius)
+                .unwrap_or_else(|| defaults.radius.unwrap()),
+            state
+                .min_length
+                .or(self.styles.thumb.min_length)
+                .or(global_state.min_length)
+                .or(global.thumb.min_length)
+                .or(defaults.min_length)
+                .unwrap_or(MIN_THUMB_SIZE),
         )
     }
 
-    fn style_for_hovered_bar(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-        (
-            cx.theme().tokens.scrollbar_thumb.into(),
-            cx.theme().scrollbar,
+    fn normal_thumb_background(&self, cx: &App) -> Background {
+        self.styles
+            .thumb
+            .background
+            .or(Theme::global(cx).scrollbar.styles.thumb.background)
+            .unwrap_or_else(|| gpui::black().alpha(0.35).into())
+    }
+
+    fn thumb_defaults(
+        background: Background,
+        width: Pixels,
+        inset: Pixels,
+        radius: Pixels,
+    ) -> ScrollbarThumbStyle {
+        ScrollbarThumbStyle {
+            background: Some(background),
+            width: Some(width),
+            inset: Some(inset),
+            radius: Some(radius),
+            min_length: Some(MIN_THUMB_SIZE),
+        }
+    }
+
+    fn style_for_active(
+        &self,
+        cx: &App,
+    ) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels, Pixels) {
+        let global = Theme::global(cx).scrollbar.styles;
+        let (track, border) = self.resolve_track(
+            cx,
+            &self.styles.track_active,
+            &global.track_active,
             gpui::transparent_black(),
-            THUMB_ACTIVE_WIDTH,
-            THUMB_ACTIVE_INSET,
-            THUMB_ACTIVE_RADIUS,
-        )
+        );
+        let (thumb, width, inset, radius, min_length) = self.resolve_thumb(
+            cx,
+            &self.styles.thumb_active,
+            &global.thumb_active,
+            Self::thumb_defaults(
+                gpui::black().alpha(0.55).into(),
+                THUMB_ACTIVE_WIDTH,
+                THUMB_ACTIVE_INSET,
+                THUMB_ACTIVE_RADIUS,
+            ),
+        );
+        (thumb, track, border, width, inset, radius, min_length)
     }
 
-    fn style_for_normal(&self, cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
-        let (width, inset, radius) = match scrollbar_show {
-            ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
+    fn style_for_hovered_thumb(
+        &self,
+        cx: &App,
+    ) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels, Pixels) {
+        let global = Theme::global(cx).scrollbar.styles;
+        let (track, border) = self.resolve_track(
+            cx,
+            &self.styles.track_active,
+            &global.track_active,
+            gpui::transparent_black(),
+        );
+        let (thumb, width, inset, radius, min_length) = self.resolve_thumb(
+            cx,
+            &self.styles.thumb_hover,
+            &global.thumb_hover,
+            Self::thumb_defaults(
+                gpui::black().alpha(0.55).into(),
+                THUMB_ACTIVE_WIDTH,
+                THUMB_ACTIVE_INSET,
+                THUMB_ACTIVE_RADIUS,
+            ),
+        );
+        (thumb, track, border, width, inset, radius, min_length)
+    }
+
+    fn style_for_hovered_bar(
+        &self,
+        cx: &App,
+    ) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels, Pixels) {
+        let global = Theme::global(cx).scrollbar.styles;
+        let (track, border) = self.resolve_track(
+            cx,
+            &self.styles.track_hover,
+            &global.track_hover,
+            gpui::transparent_black(),
+        );
+        let (thumb, width, inset, radius, min_length) = self.resolve_thumb(
+            cx,
+            &self.styles.thumb,
+            &global.thumb,
+            Self::thumb_defaults(
+                gpui::black().alpha(0.35).into(),
+                THUMB_ACTIVE_WIDTH,
+                THUMB_ACTIVE_INSET,
+                THUMB_ACTIVE_RADIUS,
+            ),
+        );
+        (thumb, track, border, width, inset, radius, min_length)
+    }
+
+    fn style_for_normal(
+        &self,
+        cx: &App,
+    ) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels, Pixels) {
+        let global = Theme::global(cx).scrollbar.styles;
+        let mode = self
+            .mode
+            .unwrap_or_else(|| Theme::global(cx).scrollbar.mode);
+        let (width, inset, radius) = match mode {
+            ScrollbarMode::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
             _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
         };
 
-        (
-            cx.theme().tokens.scrollbar_thumb.into(),
-            cx.theme().scrollbar,
+        let (track, border) = self.resolve_track(
+            cx,
+            &self.styles.track,
+            &global.track,
             gpui::transparent_black(),
-            width,
-            inset,
-            radius,
-        )
+        );
+        let (thumb, width, inset, radius, min_length) = self.resolve_thumb(
+            cx,
+            &self.styles.thumb,
+            &global.thumb,
+            Self::thumb_defaults(gpui::black().alpha(0.35).into(), width, inset, radius),
+        );
+        (thumb, track, border, width, inset, radius, min_length)
     }
 
-    fn style_for_idle(&self, cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
-        let (width, inset, radius) = match scrollbar_show {
-            ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
+    fn style_for_idle(&self, cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels, Pixels) {
+        let global = Theme::global(cx).scrollbar.styles;
+        let mode = self
+            .mode
+            .unwrap_or_else(|| Theme::global(cx).scrollbar.mode);
+        let (width, inset, radius) = match mode {
+            ScrollbarMode::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
             _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
         };
 
+        let (_, width, inset, radius, min_length) = self.resolve_thumb(
+            cx,
+            &self.styles.thumb,
+            &global.thumb,
+            Self::thumb_defaults(gpui::transparent_black().into(), width, inset, radius),
+        );
         (
             gpui::transparent_black().into(),
             gpui::transparent_black(),
@@ -452,6 +738,7 @@ impl Scrollbar {
             width,
             inset,
             radius,
+            min_length,
         )
     }
 }
@@ -544,6 +831,12 @@ impl Element for Scrollbar {
 
         for axis in self.axis.all().into_iter() {
             let is_vertical = axis.is_vertical();
+            let track_width = self
+                .styles
+                .track
+                .width
+                .or(Theme::global(cx).scrollbar.styles.track.width)
+                .unwrap_or(WIDTH);
             let (scroll_area_size, container_size, scroll_position) = if is_vertical {
                 (
                     scroll_size.height,
@@ -560,7 +853,7 @@ impl Element for Scrollbar {
 
             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
             let margin_end = if has_both && !is_vertical {
-                WIDTH
+                track_width
             } else {
                 px(0.)
             };
@@ -571,58 +864,55 @@ impl Element for Scrollbar {
                 continue;
             }
 
-            let thumb_length =
-                (container_size / scroll_area_size * container_size).max(px(MIN_THUMB_SIZE));
-            let thumb_start = -(scroll_position / (scroll_area_size - container_size)
-                * (container_size - margin_end - thumb_length));
-            let thumb_end = (thumb_start + thumb_length).min(container_size - margin_end);
-
             let bounds = Bounds {
                 origin: if is_vertical {
-                    point(hitbox.origin.x + hitbox.size.width - WIDTH, hitbox.origin.y)
+                    point(
+                        hitbox.origin.x + hitbox.size.width - track_width,
+                        hitbox.origin.y,
+                    )
                 } else {
                     point(
                         hitbox.origin.x,
-                        hitbox.origin.y + hitbox.size.height - WIDTH,
+                        hitbox.origin.y + hitbox.size.height - track_width,
                     )
                 },
                 size: gpui::Size {
                     width: if is_vertical {
-                        WIDTH
+                        track_width
                     } else {
                         hitbox.size.width
                     },
                     height: if is_vertical {
                         hitbox.size.height
                     } else {
-                        WIDTH
+                        track_width
                     },
                 },
             };
 
-            let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
-            let is_always_to_show = scrollbar_show.is_always();
-            let is_hover_to_show = scrollbar_show.is_hover();
+            let mode = self.mode.unwrap_or(Theme::global(cx).scrollbar.mode);
+            let is_always_to_show = mode.is_always();
+            let is_hover_to_show = mode.is_hover();
             let is_hovered_on_bar = state.get().hovered_axis == Some(axis);
             let is_hovered_on_thumb = state.get().hovered_on_thumb == Some(axis);
             let is_offset_changed = state.get().last_scroll_offset != self.scroll_handle.offset();
 
-            let (thumb_bg, bar_bg, bar_border, thumb_width, inset, radius) =
+            let (thumb_bg, bar_bg, bar_border, thumb_width, inset, radius, min_length) =
                 if state.get().dragged_axis == Some(axis) {
-                    Self::style_for_active(cx)
+                    self.style_for_active(cx)
                 } else if is_hover_to_show && (is_hovered_on_bar || is_hovered_on_thumb) {
                     if is_hovered_on_thumb {
-                        Self::style_for_hovered_thumb(cx)
+                        self.style_for_hovered_thumb(cx)
                     } else {
-                        Self::style_for_hovered_bar(cx)
+                        self.style_for_hovered_bar(cx)
                     }
                 } else if is_offset_changed {
                     self.style_for_normal(cx)
                 } else if is_always_to_show {
                     if is_hovered_on_thumb {
-                        Self::style_for_hovered_thumb(cx)
+                        self.style_for_hovered_thumb(cx)
                     } else {
-                        Self::style_for_hovered_bar(cx)
+                        self.style_for_hovered_bar(cx)
                     }
                 } else {
                     let mut idle_state = self.style_for_idle(cx);
@@ -632,12 +922,12 @@ impl Element for Scrollbar {
                         if is_hovered_on_bar {
                             state.set(state.get().with_last_scroll_time(Some(Instant::now())));
                             idle_state = if is_hovered_on_thumb {
-                                Self::style_for_hovered_thumb(cx)
+                                self.style_for_hovered_thumb(cx)
                             } else {
-                                Self::style_for_hovered_bar(cx)
+                                self.style_for_hovered_bar(cx)
                             };
                         } else if elapsed < FADE_OUT_DELAY {
-                            idle_state.0 = cx.theme().tokens.scrollbar_thumb.into();
+                            idle_state.0 = self.normal_thumb_background(cx);
 
                             if !state.get().idle_timer_scheduled {
                                 let state = state.clone();
@@ -654,12 +944,7 @@ impl Element for Scrollbar {
                             }
                         } else if elapsed < FADE_OUT_DURATION {
                             let opacity = 1.0 - (elapsed - FADE_OUT_DELAY).powi(10);
-                            idle_state.0 = cx
-                                .theme()
-                                .tokens
-                                .scrollbar_thumb
-                                .background
-                                .opacity(opacity);
+                            idle_state.0 = self.normal_thumb_background(cx).opacity(opacity);
 
                             window.request_animation_frame();
                         }
@@ -668,19 +953,24 @@ impl Element for Scrollbar {
                     idle_state
                 };
 
+            let thumb_size = (container_size / scroll_area_size * container_size).max(min_length);
+            let thumb_start = -(scroll_position / (scroll_area_size - container_size)
+                * (container_size - margin_end - thumb_size));
+            let thumb_end = (thumb_start + thumb_size).min(container_size - margin_end);
+
             // The clickable area of the thumb
             let thumb_length = thumb_end - thumb_start - inset * 2;
             let thumb_bounds = if is_vertical {
                 Bounds::from_anchor_and_size(
                     Anchor::TopRight,
                     bounds.top_right() + point(-inset, inset + thumb_start),
-                    size(WIDTH, thumb_length),
+                    size(track_width, thumb_length),
                 )
             } else {
                 Bounds::from_anchor_and_size(
                     Anchor::BottomLeft,
                     bounds.bottom_left() + point(inset + thumb_start, -inset),
-                    size(thumb_length, WIDTH),
+                    size(thumb_length, track_width),
                 )
             };
 
@@ -738,11 +1028,12 @@ impl Element for Scrollbar {
         cx: &mut App,
     ) {
         let scrollbar_state = &prepaint.scrollbar_state;
-        let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
+        let theme = Theme::global(cx);
+        let mode = self.mode.unwrap_or(theme.scrollbar.mode);
         let view_id = window.current_view();
         let hitbox_bounds = prepaint.hitbox.bounds;
-        let is_visible = scrollbar_state.get().is_scrollbar_visible() || scrollbar_show.is_always();
-        let is_hover_to_show = scrollbar_show.is_hover();
+        let is_visible = scrollbar_state.get().is_scrollbar_visible() || mode.is_always();
+        let is_hover_to_show = mode.is_hover();
 
         // Update last_scroll_time when offset is changed.
         if self.scroll_handle.offset() != scrollbar_state.get().last_scroll_offset {
@@ -762,7 +1053,7 @@ impl Element for Scrollbar {
                 for state in prepaint.states.iter() {
                     let axis = state.axis;
                     let mut radius = state.radius;
-                    if cx.theme().radius.is_zero() {
+                    if theme.tokens.radius.md.is_zero() {
                         radius = px(0.);
                     }
                     let bounds = state.bounds;
@@ -978,5 +1269,203 @@ impl Element for Scrollbar {
                 }
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::cell::Cell;
+
+    use gpui::{
+        Context, Modifiers, MouseButton, ParentElement as _, Render, Styled as _, TestAppContext,
+        VisualTestContext, div,
+    };
+
+    #[derive(Clone)]
+    struct TestHandle {
+        offset: Rc<Cell<Point<Pixels>>>,
+        content_size: Size<Pixels>,
+        drag_starts: Rc<Cell<usize>>,
+        drag_ends: Rc<Cell<usize>>,
+    }
+
+    impl TestHandle {
+        fn new(content_size: Size<Pixels>) -> Self {
+            Self {
+                offset: Rc::new(Cell::new(Point::default())),
+                content_size,
+                drag_starts: Rc::new(Cell::new(0)),
+                drag_ends: Rc::new(Cell::new(0)),
+            }
+        }
+    }
+
+    impl ScrollbarHandle for TestHandle {
+        fn offset(&self) -> Point<Pixels> {
+            self.offset.get()
+        }
+
+        fn set_offset(&self, offset: Point<Pixels>) {
+            self.offset.set(offset);
+        }
+
+        fn content_size(&self) -> Size<Pixels> {
+            self.content_size
+        }
+
+        fn start_drag(&self) {
+            self.drag_starts.set(self.drag_starts.get() + 1);
+        }
+
+        fn end_drag(&self) {
+            self.drag_ends.set(self.drag_ends.get() + 1);
+        }
+    }
+
+    struct ScrollbarHarness {
+        handle: TestHandle,
+        axis: ScrollbarAxis,
+    }
+
+    impl Render for ScrollbarHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().relative().size(px(100.)).child(
+                Scrollbar::new(&self.handle)
+                    .axis(self.axis)
+                    .mode(ScrollbarMode::Always),
+            )
+        }
+    }
+
+    fn harness(
+        cx: &mut TestAppContext,
+        axis: ScrollbarAxis,
+        content_size: Size<Pixels>,
+    ) -> (&mut VisualTestContext, TestHandle) {
+        let handle = TestHandle::new(content_size);
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |_, _| ScrollbarHarness { handle, axis }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, handle)
+    }
+
+    #[test]
+    fn typed_styles_are_fluent_and_include_geometry() {
+        let track = gpui::hsla(0.1, 0.2, 0.3, 1.0);
+        let border = gpui::hsla(0.2, 0.3, 0.4, 1.0);
+        let thumb = gpui::hsla(0.3, 0.4, 0.5, 1.0);
+        let hover = gpui::hsla(0.4, 0.5, 0.6, 1.0);
+        let active = gpui::hsla(0.5, 0.6, 0.7, 1.0);
+        let scrollbar = Scrollbar::new(&TestHandle::new(Size::default())).styles(|styles| {
+            styles
+                .track(|style| {
+                    style
+                        .width(px(14.))
+                        .bg(track)
+                        .border_color(border)
+                        .when(false, |style| style.width(px(99.)))
+                })
+                .thumb(|style| {
+                    style
+                        .width(px(7.))
+                        .inset(px(3.))
+                        .radius(px(3.5))
+                        .min_length(px(40.))
+                        .bg(thumb)
+                })
+                .thumb_hover(|style| style.width(px(9.)).bg(hover))
+                .thumb_active(|style| style.radius(px(4.5)).bg(active))
+        });
+
+        assert_eq!(scrollbar.styles.track.background, Some(track));
+        assert_eq!(scrollbar.styles.track.border, Some(border));
+        assert_eq!(scrollbar.styles.track.width, Some(px(14.)));
+        assert!(scrollbar.styles.thumb.background.is_some());
+        assert_eq!(scrollbar.styles.thumb.width, Some(px(7.)));
+        assert_eq!(scrollbar.styles.thumb.inset, Some(px(3.)));
+        assert_eq!(scrollbar.styles.thumb.radius, Some(px(3.5)));
+        assert_eq!(scrollbar.styles.thumb.min_length, Some(px(40.)));
+        assert!(scrollbar.styles.thumb_hover.background.is_some());
+        assert_eq!(scrollbar.styles.thumb_hover.width, Some(px(9.)));
+        assert!(scrollbar.styles.thumb_active.background.is_some());
+        assert_eq!(scrollbar.styles.thumb_active.radius, Some(px(4.5)));
+    }
+
+    #[gpui::test]
+    fn instance_styles_override_theme_scrollbar_defaults(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            let theme_track = gpui::hsla(0.1, 0.2, 0.3, 1.0);
+            let theme_thumb = gpui::hsla(0.2, 0.3, 0.4, 1.0);
+            let instance_thumb = gpui::hsla(0.3, 0.4, 0.5, 1.0);
+
+            Theme::global_mut(cx).scrollbar = crate::ScrollbarTheme {
+                mode: ScrollbarMode::Always,
+                styles: ScrollbarStyles::default()
+                    .track(|style| style.width(px(13.)).bg(theme_track))
+                    .thumb(|style| style.width(px(7.)).bg(theme_thumb)),
+            };
+
+            let scrollbar = Scrollbar::new(&TestHandle::new(Size::default()))
+                .styles(|styles| styles.thumb(|style| style.bg(instance_thumb)));
+            let (thumb, track, _, width, _, _, _) = scrollbar.style_for_normal(cx);
+
+            assert_eq!(thumb, Background::from(instance_thumb));
+            assert_eq!(track, theme_track);
+            assert_eq!(width, px(7.));
+            assert_eq!(
+                Theme::global(cx).scrollbar.styles.track.width,
+                Some(px(13.))
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn vertical_track_click_updates_vertical_offset(cx: &mut TestAppContext) {
+        let (cx, vertical) = harness(cx, ScrollbarAxis::Vertical, size(px(100.), px(500.)));
+        cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
+        assert!(vertical.offset().y < px(0.));
+        assert_eq!(vertical.offset().x, px(0.));
+    }
+
+    #[gpui::test]
+    fn horizontal_track_click_updates_horizontal_offset(cx: &mut TestAppContext) {
+        let (cx, horizontal) = harness(cx, ScrollbarAxis::Horizontal, size(px(500.), px(100.)));
+        cx.simulate_click(point(px(80.), px(95.)), Modifiers::default());
+        assert!(horizontal.offset().x < px(0.));
+        assert_eq!(horizontal.offset().y, px(0.));
+    }
+
+    #[gpui::test]
+    fn no_overflow_has_no_interactive_track(cx: &mut TestAppContext) {
+        let (cx, handle) = harness(cx, ScrollbarAxis::Both, size(px(100.), px(100.)));
+        cx.simulate_click(point(px(95.), px(80.)), Modifiers::default());
+        assert_eq!(handle.offset(), Point::default());
+    }
+
+    #[gpui::test]
+    fn thumb_drag_notifies_handle_start_and_end(cx: &mut TestAppContext) {
+        let (cx, handle) = harness(cx, ScrollbarAxis::Vertical, size(px(100.), px(500.)));
+        cx.simulate_mouse_down(
+            point(px(95.), px(20.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(95.), px(70.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(95.), px(70.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+
+        assert_eq!(handle.drag_starts.get(), 1);
+        assert_eq!(handle.drag_ends.get(), 1);
     }
 }

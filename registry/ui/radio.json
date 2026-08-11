@@ -3,7 +3,7 @@
   "name": "radio",
   "type": "registry:ui",
   "description": "An application-owned radio presentation.",
-  "dependencies": ["gpui-component-base"],
+  "dependencies": ["gpui-base"],
   "registryDependencies": [],
   "files": [
     {

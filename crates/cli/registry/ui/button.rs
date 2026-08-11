@@ -3,7 +3,7 @@
 //! Edit this file freely to match your design system.
 
 use gpui::{ElementId, IntoElement, ParentElement, RenderOnce, SharedString, Styled as _, Window};
-use gpui_component_base as base;
+use gpui_base as base;
 
 pub struct Button {
     id: ElementId,

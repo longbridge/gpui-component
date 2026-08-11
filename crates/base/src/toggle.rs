@@ -330,10 +330,7 @@ mod tests {
             })
         };
 
-        assert_eq!(
-            styled(Toggle::new("normal")).resolved_style().opacity,
-            None
-        );
+        assert_eq!(styled(Toggle::new("normal")).resolved_style().opacity, None);
         assert_eq!(
             styled(Toggle::new("pressed").pressed(true))
                 .resolved_style()

@@ -63,7 +63,7 @@ gpui-component 提供的是：
                (Project / Brand)
 
  ┌────────────────────────────────────┐
- │ gpui-component-base                │
+ │ gpui-base                │
  │                                    │
  │ Button                             │
  │ Dialog                             │
@@ -100,17 +100,17 @@ gpui-component
 而基础 crate 命名为：
 
 ```
-gpui-component-base
+gpui-base
 ```
 
 ---
 
-# 为什么选择 gpui-component-base
+# 为什么选择 gpui-base
 
 最终决定使用：
 
 ```
-gpui-component-base
+gpui-base
 ```
 
 原因：
@@ -136,8 +136,8 @@ gpui-component-base
 以后：
 
 ```rust
-use gpui_component_base::Button;
-use gpui_component_base::Dialog;
+use gpui_base::Button;
+use gpui_base::Dialog;
 ```
 
 这里的 Button 并不是官方风格，而是 Headless Foundation。
@@ -433,7 +433,7 @@ use gpui_component::button::Button;
 内部逐步迁移到：
 
 ```
-gpui-component-base
+gpui-base
 ```
 
 作为实现基础。
@@ -556,7 +556,7 @@ gpui-component 不再只是一个 Component Library。
 
 其中：
 
-- **gpui-component-base**：提供行为、交互、基础设施与 Design Tokens。
+- **gpui-base**：提供行为、交互、基础设施与 Design Tokens。
 - **Registry**：提供官方组件源码与 Blocks。
 - **Application**：拥有最终 UI，实现自己的 Design System。
 
@@ -566,7 +566,7 @@ gpui-component 不再只是一个 Component Library。
 GPUI
     │
     ▼
-gpui-component-base
+gpui-base
     │
     ▼
 Registry Components / Blocks
@@ -579,4 +579,4 @@ Application-owned UI
 
 > **Behavior belongs to the framework. Style belongs to the application.**
 
-如果需要，我也可以进一步补充一份 **API 设计草案**（包括 `gpui-component-base::Button`、Registry JSON 格式、CLI 工作流、目录结构以及迁移示例），作为重构 RFC 文档。
+如果需要，我也可以进一步补充一份 **API 设计草案**（包括 `gpui-base::Button`、Registry JSON 格式、CLI 工作流、目录结构以及迁移示例），作为重构 RFC 文档。

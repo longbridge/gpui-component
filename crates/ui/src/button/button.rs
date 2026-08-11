@@ -184,7 +184,7 @@ impl ButtonVariant {
 #[derive(IntoElement)]
 pub struct Button {
     id: ElementId,
-    base: gpui_component_base::Button,
+    base: gpui_base::Button,
     icon: Option<ButtonIcon>,
     label: Option<SharedString>,
     children: Vec<AnyElement>,
@@ -225,7 +225,7 @@ impl Button {
 
         Self {
             id: id.clone(),
-            base: gpui_component_base::Button::new(id),
+            base: gpui_base::Button::new(id),
             icon: None,
             label: None,
             children: Vec::new(),
@@ -498,9 +498,10 @@ impl RenderOnce for Button {
                 interactive && (self.variant.is_link() || self.variant.is_text()),
                 |this| this.cursor_pointer(),
             )
-            .when(!disabled && cx.theme().shadow && normal_style.shadow, |this| {
-                this.shadow_xs()
-            })
+            .when(
+                !disabled && cx.theme().shadow && normal_style.shadow,
+                |this| this.shadow_xs(),
+            )
             .when(!style.no_padding(), |this| {
                 if self.label.is_none() && children.is_empty() {
                     // Icon Button
@@ -599,98 +600,97 @@ impl RenderOnce for Button {
                 this.when(has_content, |this| this.justify_between())
                     .child(Caret::new(self.size).text_color(normal_style.fg.opacity(0.75)))
             });
-        root
-            .role(if self.variant.is_link() {
-                Role::Link
+        root.role(if self.variant.is_link() {
+            Role::Link
+        } else {
+            Role::Button
+        })
+        .selected(self.selected)
+        .disabled(disabled)
+        .styles(|styles| {
+            styles
+                .selected(|style| {
+                    style
+                        .bg(selected_style.bg)
+                        .border_color(selected_style.border)
+                        .text_color(selected_style.fg)
+                })
+                .disabled(|style| {
+                    style
+                        .bg(disabled_style.bg)
+                        .text_color(disabled_style.fg)
+                        .border_color(disabled_style.border)
+                        .shadow_none()
+                })
+        })
+        .when_some(accessibility_label, |this, label| {
+            this.accessibility_label(label)
+        })
+        .when_some(self.toggled, |this, toggled| {
+            this.aria_toggled(if toggled {
+                gpui::accesskit::Toggled::True
             } else {
-                Role::Button
+                gpui::accesskit::Toggled::False
             })
-            .selected(self.selected)
-            .disabled(disabled)
-            .styles(|styles| {
-                styles
-                    .selected(|style| {
-                        style
-                            .bg(selected_style.bg)
-                            .border_color(selected_style.border)
-                            .text_color(selected_style.fg)
-                    })
-                    .disabled(|style| {
-                        style
-                            .bg(disabled_style.bg)
-                            .text_color(disabled_style.fg)
-                            .border_color(disabled_style.border)
-                            .shadow_none()
-                    })
-            })
-            .when_some(accessibility_label, |this, label| {
-                this.accessibility_label(label)
-            })
-            .when_some(self.toggled, |this, toggled| {
-                this.aria_toggled(if toggled {
-                    gpui::accesskit::Toggled::True
-                } else {
-                    gpui::accesskit::Toggled::False
-                })
-            })
-            .track_focus(&focus_handle)
-            .tab_index(self.tab_index)
-            .tab_stop(self.tab_stop)
-            .child(content)
-            // Fade the whole button while loading, so every variant is dimmed by
-            // the same amount. Fading `bg`, `border` and `fg` one by one instead
-            // only shows up on variants that have a background to begin with:
-            // `Ghost`, `Link` and `Text` are transparent, so an alpha on their
-            // background changes nothing.
-            .when(loading && !disabled, |this| this.opacity(0.8))
-            .when(!disabled, |this| {
-                this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                    if loading {
-                        cx.stop_propagation();
-                        return;
-                    }
-
-                    // Avoid focus on mouse down.
-                    window.prevent_default();
-
-                    // Pressing a button must not start the window-level text selection.
-                    crate::global_state::GlobalState::suppress_text_selection(cx);
-                })
-            })
-            .when_some(self.on_click, |this, on_click| {
-                this.on_click(move |event, window, cx| {
-                    if loading {
-                        cx.stop_propagation();
-                        return;
-                    }
-
-                    on_click(event, window, cx);
-                })
-            })
-            .when_some(self.on_hover.filter(|_| hoverable), |this, on_hover| {
-                this.on_hover(move |hovered, window, cx| {
-                    on_hover(hovered, window, cx);
-                })
-            })
-            .map(|this| {
-                if let Some(builder) = self.tooltip_builder {
-                    this.managed_tooltip(move |window, cx| builder(window, cx))
-                } else if let Some((tooltip, action)) = self.tooltip {
-                    this.managed_tooltip(move |window, cx| {
-                        Tooltip::new(tooltip.clone())
-                            .when_some(action.clone(), |this, (action, context)| {
-                                this.action(
-                                    action.boxed_clone().as_ref(),
-                                    context.as_ref().map(|c| c.as_ref()),
-                                )
-                            })
-                            .build(window, cx)
-                    })
-                } else {
-                    this
+        })
+        .track_focus(&focus_handle)
+        .tab_index(self.tab_index)
+        .tab_stop(self.tab_stop)
+        .child(content)
+        // Fade the whole button while loading, so every variant is dimmed by
+        // the same amount. Fading `bg`, `border` and `fg` one by one instead
+        // only shows up on variants that have a background to begin with:
+        // `Ghost`, `Link` and `Text` are transparent, so an alpha on their
+        // background changes nothing.
+        .when(loading && !disabled, |this| this.opacity(0.8))
+        .when(!disabled, |this| {
+            this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                if loading {
+                    cx.stop_propagation();
+                    return;
                 }
+
+                // Avoid focus on mouse down.
+                window.prevent_default();
+
+                // Pressing a button must not start the window-level text selection.
+                crate::global_state::GlobalState::suppress_text_selection(cx);
             })
-            .focus_ring(is_focused, px(0.), window, cx)
+        })
+        .when_some(self.on_click, |this, on_click| {
+            this.on_click(move |event, window, cx| {
+                if loading {
+                    cx.stop_propagation();
+                    return;
+                }
+
+                on_click(event, window, cx);
+            })
+        })
+        .when_some(self.on_hover.filter(|_| hoverable), |this, on_hover| {
+            this.on_hover(move |hovered, window, cx| {
+                on_hover(hovered, window, cx);
+            })
+        })
+        .map(|this| {
+            if let Some(builder) = self.tooltip_builder {
+                this.managed_tooltip(move |window, cx| builder(window, cx))
+            } else if let Some((tooltip, action)) = self.tooltip {
+                this.managed_tooltip(move |window, cx| {
+                    Tooltip::new(tooltip.clone())
+                        .when_some(action.clone(), |this, (action, context)| {
+                            this.action(
+                                action.boxed_clone().as_ref(),
+                                context.as_ref().map(|c| c.as_ref()),
+                            )
+                        })
+                        .build(window, cx)
+                })
+            } else {
+                this
+            }
+        })
+        .focus_ring(is_focused, px(0.), window, cx)
     }
 }
 
@@ -1205,9 +1205,7 @@ mod tests {
                         Button::new("disabled-legacy")
                             .disabled(true)
                             .size_full()
-                            .on_click(move |_, _, _| {
-                                button_clicks.set(button_clicks.get() + 1)
-                            }),
+                            .on_click(move |_, _, _| button_clicks.set(button_clicks.get() + 1)),
                     )
             }
         }
@@ -1307,9 +1305,7 @@ mod tests {
                         Button::new("loading-legacy")
                             .loading(true)
                             .size_full()
-                            .on_click(move |_, _, _| {
-                                button_clicks.set(button_clicks.get() + 1)
-                            }),
+                            .on_click(move |_, _, _| button_clicks.set(button_clicks.get() + 1)),
                     )
             }
         }
@@ -1350,7 +1346,11 @@ mod tests {
                     .tab_group()
                     .size(px(100.))
                     .on_click(move |_, _, _| parent_clicks.set(parent_clicks.get() + 1))
-                    .child(Button::new("loading-without-callback").loading(true).size_full())
+                    .child(
+                        Button::new("loading-without-callback")
+                            .loading(true)
+                            .size_full(),
+                    )
             }
         }
 
@@ -1409,9 +1409,7 @@ mod tests {
         assert!(selected.selected);
         assert_eq!(selected.toggled, None);
 
-        let selected_toggle = Button::new("explicit-toggle")
-            .selected(true)
-            .toggled(true);
+        let selected_toggle = Button::new("explicit-toggle").selected(true).toggled(true);
         assert!(selected_toggle.selected);
         assert_eq!(selected_toggle.toggled, Some(true));
     }

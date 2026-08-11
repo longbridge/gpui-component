@@ -233,10 +233,7 @@ impl SemanticThemeConfig {
     }
 }
 
-fn apply_text_style(
-    config: &SemanticTextStyleConfig,
-    token: &mut gpui_component_base::TextStyleToken,
-) {
+fn apply_text_style(config: &SemanticTextStyleConfig, token: &mut gpui_base::TextStyleToken) {
     if let Some(value) = config.size {
         token.size = px(value);
     }

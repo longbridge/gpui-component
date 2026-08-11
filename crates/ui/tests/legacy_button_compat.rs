@@ -155,8 +155,8 @@ fn legacy_toggle_types_under_button_module_remain_available() {
 #[test]
 fn base_button_does_not_replace_legacy_button_module_path() {
     fn legacy(_: Button) {}
-    fn base(_: gpui_component_base::Button) {}
+    fn base(_: gpui_base::Button) {}
 
     legacy(Button::new("legacy"));
-    base(gpui_component_base::Button::new("base"));
+    base(gpui_base::Button::new("base"));
 }

@@ -6,10 +6,10 @@ use crate::{
 };
 use gpui::{
     AnyElement, App, Axis, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
-    Refineable, RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
-    Window, div, prelude::FluentBuilder, px, relative, rems,
+    Refineable, RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement,
+    Styled, Window, div, prelude::FluentBuilder, px, relative, rems,
 };
-use gpui_component_base::RadioGroup as BaseRadioGroup;
+use gpui_base::RadioGroup as BaseRadioGroup;
 
 /// A Radio element.
 ///
@@ -97,11 +97,17 @@ impl Radio {
         self
     }
 
-    fn handle_click(on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>, checked: bool, window: &mut Window, cx: &mut App) {
+    fn handle_click(
+        on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+        checked: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
         let new_checked = !checked;
-        if let Some(f) = on_click { (f)(&new_checked, window, cx); }
+        if let Some(f) = on_click {
+            (f)(&new_checked, window, cx);
+        }
     }
-
 }
 
 impl Sizable for Radio {
@@ -160,10 +166,16 @@ impl RenderOnce for Radio {
                 self.label.as_ref().map(|l| l.get_text(cx)),
                 |this, label| this.aria_label(label),
             )
-            .when_some(self.position_in_set, |this, pos| this.aria_position_in_set(pos))
+            .when_some(self.position_in_set, |this, pos| {
+                this.aria_position_in_set(pos)
+            })
             .when_some(self.size_of_set, |this, size| this.aria_size_of_set(size))
             .when(!self.disabled, |this| {
-                this.track_focus(&focus_handle.tab_stop(self.tab_stop).tab_index(self.tab_index))
+                this.track_focus(
+                    &focus_handle
+                        .tab_stop(self.tab_stop)
+                        .tab_index(self.tab_index),
+                )
             })
             .h_flex()
             .gap_x_2()
@@ -194,7 +206,11 @@ impl RenderOnce for Radio {
                     .rounded_full()
                     .border_1()
                     .border_color(border_color)
-                    .map(|this| match self.checked { false => this.bg(cx.theme().input_background()), true if disabled => this.bg(bg), true => this.bg(cx.theme().tokens.primary) })
+                    .map(|this| match self.checked {
+                        false => this.bg(cx.theme().input_background()),
+                        true if disabled => this.bg(bg),
+                        true => this.bg(cx.theme().tokens.primary),
+                    })
                     .child(checkbox_check_icon(
                         self.id, self.size, checked, disabled, window, cx,
                     )),
@@ -219,8 +235,18 @@ impl RenderOnce for Radio {
                         .children(self.children),
                 )
             })
-            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| window.prevent_default())
-            .when(!self.disabled, |this| this.on_click({ let on_click=self.on_click.clone(); move |_,window,cx| { window.prevent_default(); Self::handle_click(&on_click,checked,window,cx); } }))
+            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
+                window.prevent_default()
+            })
+            .when(!self.disabled, |this| {
+                this.on_click({
+                    let on_click = self.on_click.clone();
+                    move |_, window, cx| {
+                        window.prevent_default();
+                        Self::handle_click(&on_click, checked, window, cx);
+                    }
+                })
+            })
             .map(|this| self.tooltip.apply(this))
     }
 }
@@ -347,7 +373,12 @@ impl RenderOnce for RadioGroup {
                     radio.id = ix.into();
                     radio.position_in_set = Some(ix + 1);
                     radio.size_of_set = Some(total);
-                    radio.disabled(disabled).checked(checked).when_some(on_click.clone(), |this,on_click| this.on_click(move|_,window,cx|on_click(&ix,window,cx)))
+                    radio.disabled(disabled).checked(checked).when_some(
+                        on_click.clone(),
+                        |this, on_click| {
+                            this.on_click(move |_, window, cx| on_click(&ix, window, cx))
+                        },
+                    )
                 })),
         )
     }

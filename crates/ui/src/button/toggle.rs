@@ -1,11 +1,11 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-    AnyElement, App, Axis, Corners, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    prelude::FluentBuilder as _,
+    AnyElement, App, Axis, Corners, Edges, ElementId, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Window, prelude::FluentBuilder as _,
 };
-use gpui_component_base::{Toggle as BaseToggle, ToggleGroup as BaseToggleGroup};
+use gpui_base::{Toggle as BaseToggle, ToggleGroup as BaseToggleGroup};
 use smallvec::{SmallVec, smallvec};
 
 use crate::{ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt, tooltip::ComponentTooltip};
@@ -163,12 +163,9 @@ impl RenderOnce for Toggle {
                 self.tooltip.text.as_ref().map(|(text, _)| text.clone()),
                 |this, label| this.accessibility_label(label),
             )
-            .when_some(
-                self.on_click,
-                |this, on_click| {
-                    this.on_change(move |next, _, window, cx| on_click(&next, window, cx))
-                },
-            )
+            .when_some(self.on_click, |this, on_click| {
+                this.on_change(move |next, _, window, cx| on_click(&next, window, cx))
+            })
             .flex()
             .flex_row()
             .items_center()
@@ -320,77 +317,84 @@ impl RenderOnce for ToggleGroup {
 
         BaseToggleGroup::new(self.id)
             .axis(Axis::Horizontal)
-            .child(crate::h_flex()
-            .items_center()
-            .when(!self.segmented, |this| this.gap_2())
-            .refine_style(&self.style)
-            .children(self.items.into_iter().enumerate().map({
-                {
-                    let clicked_index = clicked_index.clone();
-                    move |(ix, item)| {
-                    let item = if !self.segmented || items_len == 1 {
-                        item
-                    } else if ix == 0 {
-                        item.border_corners(Corners {
-                            top_left: true,
-                            top_right: false,
-                            bottom_left: true,
-                            bottom_right: false,
-                        })
-                        .border_edges(Edges {
-                            left: true,
-                            top: true,
-                            right: true,
-                            bottom: true,
-                        })
-                    } else if ix == items_len - 1 {
-                        item.border_corners(Corners {
-                            top_left: false,
-                            top_right: true,
-                            bottom_left: false,
-                            bottom_right: true,
-                        })
-                        .border_edges(Edges {
-                            left: false,
-                            top: true,
-                            right: true,
-                            bottom: true,
-                        })
-                    } else {
-                        item.border_corners(Corners {
-                            top_left: false,
-                            top_right: false,
-                            bottom_left: false,
-                            bottom_right: false,
-                        })
-                        .border_edges(Edges {
-                            left: false,
-                            top: true,
-                            right: true,
-                            bottom: true,
-                        })
-                    };
+            .child(
+                crate::h_flex()
+                    .items_center()
+                    .when(!self.segmented, |this| this.gap_2())
+                    .refine_style(&self.style)
+                    .children(self.items.into_iter().enumerate().map({
+                        {
+                            let clicked_index = clicked_index.clone();
+                            move |(ix, item)| {
+                                let item = if !self.segmented || items_len == 1 {
+                                    item
+                                } else if ix == 0 {
+                                    item.border_corners(Corners {
+                                        top_left: true,
+                                        top_right: false,
+                                        bottom_left: true,
+                                        bottom_right: false,
+                                    })
+                                    .border_edges(Edges {
+                                        left: true,
+                                        top: true,
+                                        right: true,
+                                        bottom: true,
+                                    })
+                                } else if ix == items_len - 1 {
+                                    item.border_corners(Corners {
+                                        top_left: false,
+                                        top_right: true,
+                                        bottom_left: false,
+                                        bottom_right: true,
+                                    })
+                                    .border_edges(Edges {
+                                        left: false,
+                                        top: true,
+                                        right: true,
+                                        bottom: true,
+                                    })
+                                } else {
+                                    item.border_corners(Corners {
+                                        top_left: false,
+                                        top_right: false,
+                                        bottom_left: false,
+                                        bottom_right: false,
+                                    })
+                                    .border_edges(Edges {
+                                        left: false,
+                                        top: true,
+                                        right: true,
+                                        bottom: true,
+                                    })
+                                };
 
-                    let effective_disabled = disabled || item.disabled;
-                    let clicked_index = clicked_index.clone();
-                    item.disabled(effective_disabled)
-                        .with_size(self.size)
-                        .with_variant(self.variant)
-                        .on_click(move |_, _, cx| {
-                            clicked_index.set(Some(ix));
-                            cx.propagate();
-                        })
-                    }
-                }
-            })))
-            .when_some((!disabled).then_some(self.on_click).flatten(), |this, on_click| {
-                this.on_click(move |_, window, cx| {
-                    let Some(ix) = clicked_index.take() else { return };
-                    let mut next = checks.clone();
-                    next[ix] = !next[ix];
-                    on_click(&next, window, cx);
-                })
-            })
+                                let effective_disabled = disabled || item.disabled;
+                                let clicked_index = clicked_index.clone();
+                                item.disabled(effective_disabled)
+                                    .with_size(self.size)
+                                    .with_variant(self.variant)
+                                    .on_click(move |_, _, cx| {
+                                        clicked_index.set(Some(ix));
+                                        cx.propagate();
+                                    })
+                            }
+                        }
+                    })),
+            )
+            .when_some(
+                (!disabled).then_some(self.on_click).flatten(),
+                |this, on_click| {
+                    this.on_click(move |_, window, cx| {
+                        let Some(ix) = clicked_index.take() else {
+                            return;
+                        };
+                        let mut next = checks.clone();
+                        next[ix] = !next[ix];
+                        on_click(&next, window, cx);
+                    })
+                },
+            )
     }
 }
 
@@ -500,9 +504,12 @@ mod tests {
             let child_clicks = self.child_clicks.clone();
             let mut group = ToggleGroup::new("toggle-group")
                 .w(px(120.))
-                .child(Toggle::new("one").label("One").checked(true).on_click(
-                    move |_, _, _| child_clicks.set(child_clicks.get() + 1),
-                ))
+                .child(
+                    Toggle::new("one")
+                        .label("One")
+                        .checked(true)
+                        .on_click(move |_, _, _| child_clicks.set(child_clicks.get() + 1)),
+                )
                 .child(Toggle::new("two").label("Two"));
             if self.install_group_callback {
                 let changes = self.group_changes.clone();
@@ -547,9 +554,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn legacy_toggle_group_pointer_flips_only_the_clicked_rendered_value(
-        cx: &mut TestAppContext,
-    ) {
+    fn legacy_toggle_group_pointer_flips_only_the_clicked_rendered_value(cx: &mut TestAppContext) {
         let (cx, child_clicks, changes) = toggle_group_harness(cx, true);
         cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
         assert_eq!(child_clicks.get(), 0);

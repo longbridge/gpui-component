@@ -28,7 +28,7 @@ fn legacy_foundation_exports_remain_available() {
 #[test]
 fn base_crate_exports_the_same_foundation_types() {
     let legacy = gpui_component::Edges::all(1_u8);
-    let base: gpui_component_base::Edges<u8> = legacy;
+    let base: gpui_base::Edges<u8> = legacy;
 
     assert_eq!(base.top, 1);
     assert_eq!(base.right, 1);
@@ -38,7 +38,7 @@ fn base_crate_exports_the_same_foundation_types() {
 
 #[test]
 fn base_button_accepts_application_owned_state_styles() {
-    let _button = gpui_component_base::Button::new("save")
+    let _button = gpui_base::Button::new("save")
         .accessibility_label("Save")
         .disabled(false)
         .on_click(|_, _, _| {})
@@ -51,30 +51,30 @@ fn base_button_accepts_application_owned_state_styles() {
 
 #[test]
 fn base_controls_expose_typed_semantic_style_contexts() {
-    let _ = gpui_component_base::Button::new("button")
+    let _ = gpui_base::Button::new("button")
         .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
-    let _ = gpui_component_base::Checkbox::new("checkbox").styles(|styles| {
+    let _ = gpui_base::Checkbox::new("checkbox").styles(|styles| {
         styles
             .checked(|style| style.bg(green()))
             .indeterminate(|style| style.bg(blue()))
             .disabled(|style| style.when(true, |style| style.opacity(0.5)))
     });
-    let _ = gpui_component_base::Radio::new("radio")
-        .styles(|styles| styles.checked(|style| style.bg(green())));
-    let _ = gpui_component_base::Switch::new("switch")
-        .styles(|styles| styles.checked(|style| style.bg(green())));
-    let _ = gpui_component_base::Toggle::new("toggle")
-        .styles(|styles| styles.pressed(|style| style.bg(green())));
-    let _ = gpui_component_base::Link::new("link")
-        .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+    let _ =
+        gpui_base::Radio::new("radio").styles(|styles| styles.checked(|style| style.bg(green())));
+    let _ =
+        gpui_base::Switch::new("switch").styles(|styles| styles.checked(|style| style.bg(green())));
+    let _ =
+        gpui_base::Toggle::new("toggle").styles(|styles| styles.pressed(|style| style.bg(green())));
+    let _ =
+        gpui_base::Link::new("link").styles(|styles| styles.disabled(|style| style.opacity(0.5)));
 }
 
 #[test]
 fn transition_ids_accept_strings_and_named_channels() {
-    let _: gpui_component_base::TransitionId = "opacity".into();
-    let _: gpui_component_base::TransitionId = ("checkbox", "fill").into();
+    let _: gpui_base::TransitionId = "opacity".into();
+    let _: gpui_base::TransitionId = ("checkbox", "fill").into();
 
-    fn requires_interpolation<T: gpui_component_base::Interpolate>() {}
+    fn requires_interpolation<T: gpui_base::Interpolate>() {}
     requires_interpolation::<f32>();
 }
 
@@ -101,7 +101,7 @@ fn legacy_styled_and_sizing_exports_remain_available() {
 fn element_ext_is_available_from_base_and_the_legacy_root() {
     use gpui_component::ElementExt as _;
 
-    fn requires_base<T: gpui_component_base::ElementExt>() {}
+    fn requires_base<T: gpui_base::ElementExt>() {}
     fn requires_legacy<T: gpui_component::ElementExt>() {}
     requires_base::<gpui::Div>();
     requires_legacy::<gpui::Div>();
@@ -116,7 +116,7 @@ fn legacy_history_path_reexports_the_base_type() {
         version: usize,
     }
 
-    impl gpui_component_base::HistoryItem for Item {
+    impl gpui_base::HistoryItem for Item {
         fn version(&self) -> usize {
             self.version
         }
@@ -127,21 +127,19 @@ fn legacy_history_path_reexports_the_base_type() {
     }
 
     fn through_legacy_path(
-        history: gpui_component_base::History<Item>,
+        history: gpui_base::History<Item>,
     ) -> gpui_component::history::History<Item> {
         history
     }
 
-    let _ = through_legacy_path(gpui_component_base::History::new());
+    let _ = through_legacy_path(gpui_base::History::new());
 }
 
 #[test]
 fn legacy_auto_scroll_path_reexports_the_base_type() {
-    fn through_legacy_path(
-        scroll: gpui_component_base::AutoScroll,
-    ) -> gpui_component::scroll::AutoScroll {
+    fn through_legacy_path(scroll: gpui_base::AutoScroll) -> gpui_component::scroll::AutoScroll {
         scroll
     }
 
-    let _ = through_legacy_path(gpui_component_base::AutoScroll::default());
+    let _ = through_legacy_path(gpui_base::AutoScroll::default());
 }

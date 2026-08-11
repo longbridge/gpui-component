@@ -2,9 +2,9 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,
-    IntoElement, MouseButton, ParentElement, Refineable as _, RenderOnce, Role,
-    SharedString, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Toggled, Window,
-    div, prelude::FluentBuilder as _,
+    IntoElement, MouseButton, ParentElement, Refineable as _, RenderOnce, Role, SharedString,
+    Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Toggled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
@@ -108,10 +108,7 @@ impl SwitchTrack {
         self
     }
 
-    pub fn styles(
-        mut self,
-        build: impl FnOnce(SwitchTrackStyles) -> SwitchTrackStyles,
-    ) -> Self {
+    pub fn styles(mut self, build: impl FnOnce(SwitchTrackStyles) -> SwitchTrackStyles) -> Self {
         self.semantic_styles = build(self.semantic_styles);
         self
     }
@@ -208,10 +205,7 @@ impl SwitchThumb {
         self
     }
 
-    pub fn styles(
-        mut self,
-        build: impl FnOnce(SwitchThumbStyles) -> SwitchThumbStyles,
-    ) -> Self {
+    pub fn styles(mut self, build: impl FnOnce(SwitchThumbStyles) -> SwitchThumbStyles) -> Self {
         self.semantic_styles = build(self.semantic_styles);
         self
     }
@@ -426,9 +420,7 @@ mod tests {
                 .styles(|styles| {
                     styles
                         .checked(|style| style.bg(checked_color))
-                        .disabled(|style| {
-                            style.when(checked, |style| style.bg(disabled_color))
-                        })
+                        .disabled(|style| style.when(checked, |style| style.bg(disabled_color)))
                 })
         };
 
@@ -503,7 +495,10 @@ mod tests {
             Some(disabled_color.into())
         );
         assert_eq!(
-            thumb(true, true).bg(checked_color).resolved_style().background,
+            thumb(true, true)
+                .bg(checked_color)
+                .resolved_style()
+                .background,
             Some(checked_color.into())
         );
     }
@@ -652,10 +647,7 @@ mod tests {
             })
         };
 
-        assert_eq!(
-            styled(Switch::new("normal")).resolved_style().opacity,
-            None
-        );
+        assert_eq!(styled(Switch::new("normal")).resolved_style().opacity, None);
         assert_eq!(
             styled(Switch::new("checked").checked(true))
                 .resolved_style()

@@ -409,7 +409,8 @@ mod tests {
         let disabled_color = gpui::hsla(0.1, 0.2, 0.3, 0.5);
 
         let indicator = |state, disabled| {
-            CheckboxIndicator::new().state(state)
+            CheckboxIndicator::new()
+                .state(state)
                 .disabled(disabled)
                 .styles(|styles| {
                     styles
@@ -538,9 +539,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn disabled_checkbox_is_inert_and_allows_pointer_events_to_bubble(
-        cx: &mut TestAppContext,
-    ) {
+    fn disabled_checkbox_is_inert_and_allows_pointer_events_to_bubble(cx: &mut TestAppContext) {
         let (cx, changes, parent_clicks) = harness(cx, CheckboxState::Unchecked, true);
         cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
         cx.update(|window, cx| window.focus_next(cx));
@@ -629,7 +628,6 @@ mod tests {
                 .opacity(0.9),
         );
         assert_eq!(instance_override.resolved_style().opacity, Some(0.9));
-
     }
 
     #[gpui::test]

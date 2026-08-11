@@ -3,7 +3,9 @@
 pub trait Selectable: Sized {
     fn selected(mut self, selected: bool) -> Self;
     fn is_selected(&self) -> bool;
-    fn secondary_selected(self, _: bool) -> Self { self }
+    fn secondary_selected(self, _: bool) -> Self {
+        self
+    }
 }
 
 /// A trait for defining an element that can be disabled.

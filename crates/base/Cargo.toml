@@ -2,12 +2,12 @@
 description = "Behavior, interaction, and infrastructure foundations for GPUI applications."
 keywords = ["desktop", "gpui", "ui", "foundation"]
 license = "Apache-2.0"
-name = "gpui-component-base"
+name = "gpui-base"
 repository = "https://github.com/longbridge/gpui-component"
 homepage = "https://longbridge.github.io/gpui-component"
-documentation = "https://docs.rs/gpui-component-base"
+documentation = "https://docs.rs/gpui-base"
 version = "0.5.2"
-publish = true
+publish = false
 edition.workspace = true
 
 [lib]

@@ -465,7 +465,7 @@ impl Root {
 
     fn on_action_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         // Check if we're inside a focus trap
-        if let Some(container_focus_handle) = gpui_component_base::active_focus_trap(window, cx) {
+        if let Some(container_focus_handle) = gpui_base::active_focus_trap(window, cx) {
             // We're in a focus trap - try to focus next, then check if we're still inside
             let before_focus = window.focused(cx);
 
@@ -500,7 +500,7 @@ impl Root {
 
     fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
         // Check if we're inside a focus trap
-        if let Some(container_focus_handle) = gpui_component_base::active_focus_trap(window, cx) {
+        if let Some(container_focus_handle) = gpui_base::active_focus_trap(window, cx) {
             // We're in a focus trap - try to focus previous, then check if we're still inside
             let before_focus = window.focused(cx);
 

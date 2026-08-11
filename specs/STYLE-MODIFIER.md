@@ -25,7 +25,7 @@ unimplemented and are not part of the current public contract.
 GPUI
   owns hover / active / focus / focus-visible runtime detection
 
-gpui-component-base
+gpui-base
   defines component semantic-state contracts
   normalizes activation and accessibility behavior
   projects the active semantic state into style modifiers

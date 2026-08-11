@@ -6,7 +6,7 @@ use gpui::{
     App, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
     black, div, prelude::FluentBuilder as _, white,
 };
-use gpui_component_base::{self as base, CheckboxState};
+use gpui_base::{self as base, CheckboxState};
 
 type ChangeHandler = Rc<dyn Fn(CheckboxState, &mut Window, &mut App)>;
 

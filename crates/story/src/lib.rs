@@ -13,7 +13,7 @@ use gpui_component::{
     h_flex,
     menu::PopupMenu,
     notification::Notification,
-    scroll::{ScrollableElement as _, ScrollbarShow},
+    scroll::{ScrollableElement as _, ScrollbarMode},
     text::markdown,
     v_flex,
 };
@@ -33,7 +33,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
-pub struct SelectScrollbarShow(ScrollbarShow);
+pub struct SelectScrollbarMode(ScrollbarMode);
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]

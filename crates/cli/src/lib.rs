@@ -7,7 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 const CONFIG_FILE: &str = "gpui-components.json";
-const BASE_DEPENDENCY: &str = "gpui-component-base";
+const BASE_DEPENDENCY: &str = "gpui-base";
 const EMBEDDED_BUTTON_ITEM: &str = include_str!("../registry/ui/button.json");
 const EMBEDDED_CHECKBOX_ITEM: &str = include_str!("../registry/ui/checkbox.json");
 const EMBEDDED_SWITCH_ITEM: &str = include_str!("../registry/ui/switch.json");
@@ -104,7 +104,7 @@ fn init(root: &Path) -> Result<String, String> {
     }
     write_if_missing(
         &theme_path,
-        "//! Semantic theme tokens for application-owned components.\n\npub use gpui_component_base::{\n    ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens,\n    TextStyleToken, TypographyTokens,\n};\n",
+        "//! Semantic theme tokens for application-owned components.\n\npub use gpui_base::{\n    ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens,\n    TextStyleToken, TypographyTokens,\n};\n",
     )?;
     ensure_dependency(&root.join("Cargo.toml"), BASE_DEPENDENCY)?;
 

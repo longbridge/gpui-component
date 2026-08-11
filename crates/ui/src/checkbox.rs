@@ -9,13 +9,13 @@ use gpui::{
     MouseButton, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
     StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative, rems, svg,
 };
-use gpui_component_base::CheckboxIndicator;
+use gpui_base::CheckboxIndicator;
 
 /// A Checkbox element.
 #[derive(IntoElement)]
 pub struct Checkbox {
     id: ElementId,
-    base: gpui_component_base::Checkbox,
+    base: gpui_base::Checkbox,
     style: StyleRefinement,
     // `Text` is legacy presentation state. During render it is composed into
     // the Base Checkbox child seam together with application children.
@@ -36,7 +36,7 @@ impl Checkbox {
         let id = id.into();
         Self {
             id: id.clone(),
-            base: gpui_component_base::Checkbox::new(id),
+            base: gpui_base::Checkbox::new(id),
             style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
@@ -87,7 +87,6 @@ impl Checkbox {
         self.tab_index = tab_index;
         self
     }
-
 }
 
 impl InteractiveElement for Checkbox {
@@ -367,11 +366,7 @@ mod tests {
     fn harness(
         cx: &mut TestAppContext,
         disabled: bool,
-    ) -> (
-        &mut VisualTestContext,
-        Rc<Cell<usize>>,
-        Rc<Cell<usize>>,
-    ) {
+    ) -> (&mut VisualTestContext, Rc<Cell<usize>>, Rc<Cell<usize>>) {
         cx.update(crate::init);
         let clicks = Rc::new(Cell::new(0));
         let parent_clicks = Rc::new(Cell::new(0));
@@ -430,9 +425,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn facade_prepaints_label_and_custom_content_through_the_base_slot(
-        cx: &mut TestAppContext,
-    ) {
+    fn facade_prepaints_label_and_custom_content_through_the_base_slot(cx: &mut TestAppContext) {
         struct ContentHarness;
 
         impl Render for ContentHarness {

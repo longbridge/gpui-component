@@ -2,7 +2,7 @@
 
 - **Status:** Draft
 - **Project:** GPUI Components
-- **Affected crates:** `gpui-component`, `gpui-component-base`
+- **Affected crates:** `gpui-component`, `gpui-base`
 - **Goal:** Application-owned UI with reusable behavior and infrastructure
 
 ---
@@ -53,7 +53,7 @@ Application 主要通过：
 GPUI
  │
  ▼
-gpui-component-base
+gpui-base
  │
  │ Behavior / State / Interaction
  │ Infrastructure
@@ -101,7 +101,7 @@ Application 可以自由修改。
 
 ---
 
-### 2.2 gpui-component-base owns reusable behavior
+### 2.2 gpui-base owns reusable behavior
 
 复杂且通用的：
 
@@ -218,34 +218,34 @@ gpui-component/
 
 ```text
 gpui-component
-gpui-component-base
+gpui-base
 ```
 
 职责完全不同。
 
 ---
 
-# 5. gpui-component-base
+# 5. gpui-base
 
-`gpui-component-base` 是新架构最重要的基础 crate。
+`gpui-base` 是新架构最重要的基础 crate。
 
 Application 可以直接依赖：
 
 ```toml
 [dependencies]
-gpui-component-base = "..."
+gpui-base = "..."
 ```
 
 Rust：
 
 ```rust
-use gpui_component_base::Button;
+use gpui_base::Button;
 ```
 
 注意这里：
 
 ```rust
-gpui_component_base::Button
+gpui_base::Button
 ```
 
 不是最终 Styled Button。
@@ -263,14 +263,14 @@ gpui_component_base::Button
 Base 提供：
 
 ```rust
-use gpui_component_base::Button;
+use gpui_base::Button;
 ```
 
 Application-owned Button：
 
 ```rust
 use gpui::*;
-use gpui_component_base as base;
+use gpui_base as base;
 
 pub struct Button {
     label: SharedString,
@@ -535,7 +535,7 @@ Tooltip
 例如：
 
 ```rust
-use gpui_component_base as base;
+use gpui_base as base;
 
 base::Dialog::new(state)
     .trigger(...)
@@ -756,7 +756,7 @@ registry/
   "name": "button",
   "type": "registry:ui",
   "description": "A customizable button component.",
-  "dependencies": ["gpui-component-base"],
+  "dependencies": ["gpui-base"],
   "registryDependencies": [],
   "files": [
     {
@@ -776,7 +776,7 @@ registry/
   "name": "dialog",
   "type": "registry:ui",
   "description": "A modal dialog with focus management.",
-  "dependencies": ["gpui-component-base"],
+  "dependencies": ["gpui-base"],
   "registryDependencies": ["button"],
   "files": [
     {
@@ -1215,7 +1215,7 @@ my-app/
 
 # 29. 验收
 
-1. `gpui-component-base` 提供基础行为和交互实现。
+1. `gpui-base` 提供基础行为和交互实现。
 2. `gpui-component` 提供 Registry + CLI，并确保 gpui-component 现有 API 继续工作。任何改为包装或组合 Base 的现有 UI 组件，其行为、交互、设计、功能和公开 API 必须与迁移前 100% 一模一样；绝对不能改变现有 UI 或 UX。
 3. `gpui-component` CLI 可以在 Application 中创建 `src/ui`，并添加组件源码。
 4. Application 可以自由修改 `src/ui` 中的组件源码，形成自己的 Design System。

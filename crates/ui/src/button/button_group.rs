@@ -288,9 +288,11 @@ mod tests {
             let mut group = ButtonGroup::new("group")
                 .multiple(self.multiple)
                 .size(px(120.))
-                .child(Button::new("one").label("One").on_click(
-                    move |_, _, _| child_clicks.set(child_clicks.get() + 1),
-                ))
+                .child(
+                    Button::new("one")
+                        .label("One")
+                        .on_click(move |_, _, _| child_clicks.set(child_clicks.get() + 1)),
+                )
                 .child(Button::new("two").label("Two").selected(true));
             if self.install_group_callback {
                 let changes = self.group_changes.clone();
@@ -388,16 +390,20 @@ mod tests {
                         ButtonGroup::new("disabled-before-child")
                             .size(px(120.))
                             .disabled(true)
-                            .child(Button::new("first").label("First").on_click(move |_, _, _| {
-                                first.set(first.get() + 1)
-                            })),
+                            .child(
+                                Button::new("first")
+                                    .label("First")
+                                    .on_click(move |_, _, _| first.set(first.get() + 1)),
+                            ),
                     )
                     .child(
                         ButtonGroup::new("disabled-after-child")
                             .size(px(120.))
-                            .child(Button::new("second").label("Second").on_click(
-                                move |_, _, _| second.set(second.get() + 1),
-                            ))
+                            .child(
+                                Button::new("second")
+                                    .label("Second")
+                                    .on_click(move |_, _, _| second.set(second.get() + 1)),
+                            )
                             .disabled(true),
                     )
             }

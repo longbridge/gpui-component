@@ -3,7 +3,7 @@
   "name": "switch",
   "type": "registry:ui",
   "description": "An application-owned switch presentation.",
-  "dependencies": ["gpui-component-base"],
+  "dependencies": ["gpui-base"],
   "registryDependencies": [],
   "files": [
     {

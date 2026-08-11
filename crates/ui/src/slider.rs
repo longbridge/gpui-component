@@ -1,5 +1,5 @@
 use crate::{ActiveTheme, AxisExt, ElementExt, StyledExt, h_flex};
-pub use gpui_component_base::slider_state::{SliderEvent, SliderScale, SliderState, SliderValue};
+pub use gpui_base::slider_state::{SliderEvent, SliderScale, SliderState, SliderValue};
 
 use gpui::{
     AccessibleAction, Along, App, AppContext as _, Axis, Background, Context, Corners,

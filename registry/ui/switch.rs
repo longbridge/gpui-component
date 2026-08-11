@@ -6,7 +6,7 @@ use gpui::{
     App, ClickEvent, ElementId, IntoElement, ParentElement as _, RenderOnce, SharedString,
     Styled as _, Window, black, div, prelude::FluentBuilder as _, white,
 };
-use gpui_component_base as base;
+use gpui_base as base;
 
 type ToggleHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 

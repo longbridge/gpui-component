@@ -1,13 +1,12 @@
 use crate::{
-    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, text::Text,
-    tooltip::ComponentTooltip,
+    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, text::Text, tooltip::ComponentTooltip,
 };
 use gpui::{
     Animation, AnimationExt as _, App, Background, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _, px,
 };
-use gpui_component_base::{Switch as BaseSwitch, SwitchThumb, SwitchTrack};
+use gpui_base::{Switch as BaseSwitch, SwitchThumb, SwitchTrack};
 use std::{rc::Rc, time::Duration};
 
 /// A Switch element that can be toggled on or off.
@@ -131,9 +130,10 @@ impl RenderOnce for Switch {
             BaseSwitch::new(self.id.clone())
                 .checked(checked)
                 .disabled(self.disabled)
-                .when_some(self.label.as_ref().map(|l| l.get_text(cx)), |this, label| {
-                    this.accessibility_label(label)
-                })
+                .when_some(
+                    self.label.as_ref().map(|l| l.get_text(cx)),
+                    |this, label| this.accessibility_label(label),
+                )
                 .when_some(on_click, |this, on_click| {
                     let toggle_state = toggle_state.clone();
                     this.on_toggle(move |next, _, window, cx| {
@@ -176,10 +176,12 @@ impl RenderOnce for Switch {
                                 .rounded(radius)
                                 .size(bar_width)
                                 .when(!checked, |this| this.left(px(0.)))
-                                    .when(!self.disabled, |this| this.bg(toggle_bg))
+                                .when(!self.disabled, |this| this.bg(toggle_bg))
                                 .styles(|styles| {
                                     styles
-                                        .checked(|style| style.left(bg_width - bar_width - inset * 2))
+                                        .checked(|style| {
+                                            style.left(bg_width - bar_width - inset * 2)
+                                        })
                                         .disabled(|style| style.bg(toggle_bg.clone().opacity(0.35)))
                                 })
                                 .map(|this| {
@@ -241,8 +243,8 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use gpui::{
-        Context, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render, TestAppContext,
-        VisualTestContext, StatefulInteractiveElement as _, point,
+        Context, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
+        StatefulInteractiveElement as _, TestAppContext, VisualTestContext, point,
     };
 
     use super::*;
@@ -262,25 +264,19 @@ mod tests {
                 .tab_group()
                 .size(px(100.))
                 .on_click(move |_, _, _| parent_clicks.set(parent_clicks.get() + 1))
-                .child(
-                    Switch::new("switch")
-                        .disabled(self.disabled)
-                        .on_click(move |checked, _, _| {
-                            assert!(*checked);
-                            toggles.set(toggles.get() + 1);
-                        }),
-                )
+                .child(Switch::new("switch").disabled(self.disabled).on_click(
+                    move |checked, _, _| {
+                        assert!(*checked);
+                        toggles.set(toggles.get() + 1);
+                    },
+                ))
         }
     }
 
     fn harness(
         cx: &mut TestAppContext,
         disabled: bool,
-    ) -> (
-        &mut VisualTestContext,
-        Rc<Cell<usize>>,
-        Rc<Cell<usize>>,
-    ) {
+    ) -> (&mut VisualTestContext, Rc<Cell<usize>>, Rc<Cell<usize>>) {
         cx.update(crate::init);
         let toggles = Rc::new(Cell::new(0));
         let parent_clicks = Rc::new(Cell::new(0));

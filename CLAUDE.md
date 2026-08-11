@@ -78,7 +78,7 @@ The architecture draft and RFC are documented in `specs/PHASE1.md` and
 when designing or implementing this architecture:
 
 - Keep `gpui-component` as the ecosystem and product brand.
-- Name the foundation crate `gpui-component-base`.
+- Name the foundation crate `gpui-base`.
 - Follow the ownership boundary: the framework owns behavior and infrastructure;
   the application owns component source and visual style.
 - Keep the base layer visually unopinionated. It may provide interaction behavior,
