@@ -6,6 +6,7 @@
 
 pub mod actions;
 pub mod animation;
+mod accordion;
 mod auto_scroll;
 mod button;
 mod checkbox;
@@ -31,6 +32,7 @@ mod toggle_group;
 mod virtual_list;
 
 pub use auto_scroll::AutoScroll;
+pub use accordion::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger};
 pub use button::{Button, ButtonStyles};
 pub use checkbox::{
     Checkbox, CheckboxIndicator, CheckboxIndicatorStyles, CheckboxState, CheckboxStyles,
