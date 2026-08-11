@@ -6,7 +6,7 @@ use gpui::{
     RenderOnce, StyleRefinement, Styled, Window, WindowControlArea, anchored, div, point,
     prelude::FluentBuilder as _, px,
 };
-use gpui_base::{CancelSheet, Sheet as BaseSheet};
+use gpui_base::{Sheet as BaseSheet, actions::Cancel};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -203,7 +203,7 @@ impl RenderOnce for Sheet {
                             .ghost()
                             .icon(IconName::Close)
                             .on_click(|_, window, cx| {
-                                window.dispatch_action(Box::new(CancelSheet), cx);
+                                window.dispatch_action(Box::new(Cancel), cx);
                             }),
                     ),
             )

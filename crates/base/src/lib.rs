@@ -100,7 +100,7 @@ pub use scrollbar::{
     Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
     ScrollbarTrackStyle,
 };
-pub use sheet::{CancelSheet, Sheet};
+pub use sheet::Sheet;
 pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
 #[cfg(any(feature = "inspector", debug_assertions))]

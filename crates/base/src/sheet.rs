@@ -2,14 +2,13 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, actions, div,
+    MouseButton, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, div,
     prelude::FluentBuilder as _,
 };
 
-use crate::{FocusTrapElement as _, StyledExt as _};
+use crate::{FocusTrapElement as _, StyledExt as _, actions::Cancel};
 
 const CONTEXT: &str = "Sheet";
-actions!(sheet, [CancelSheet]);
 
 type CloseHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 type CloseRequest = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -21,7 +20,7 @@ fn close(request: &CloseRequest, notify: &CloseHandler, window: &mut Window, cx:
 }
 
 pub fn init(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("escape", CancelSheet, Some(CONTEXT))]);
+    cx.bind_keys([KeyBinding::new("escape", Cancel, Some(CONTEXT))]);
 }
 
 /// An unstyled modal sheet host.
@@ -124,7 +123,7 @@ impl RenderOnce for Sheet {
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .focus_trap("sheet", &self.focus)
-            .on_action(move |_: &CancelSheet, window, cx| {
+            .on_action(move |_: &Cancel, window, cx| {
                 cx.propagate();
                 close(&escape_request, &escape_notify, window, cx);
             })
@@ -223,7 +222,7 @@ mod tests {
     fn escape_uses_the_same_close_order_and_registers_focus_trap(cx: &mut gpui::TestAppContext) {
         let (cx, events) = harness(cx, true);
         assert!(cx.update(|window, cx| crate::active_focus_trap(window, cx).is_some()));
-        cx.dispatch_action(CancelSheet);
+        cx.dispatch_action(Cancel);
         assert_eq!(&*events.borrow(), &["request", "closed"]);
     }
 
