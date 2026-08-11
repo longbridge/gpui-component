@@ -7,6 +7,7 @@ use crate::{ScrollbarMode, ScrollbarStyles, SemanticThemeTokens};
 pub struct Theme {
     pub tokens: SemanticThemeTokens,
     pub scrollbar: ScrollbarTheme,
+    pub resizable: ResizableTheme,
 }
 
 impl Global for Theme {}
@@ -29,4 +30,14 @@ impl Theme {
 pub struct ScrollbarTheme {
     pub mode: ScrollbarMode,
     pub styles: ScrollbarStyles,
+}
+
+/// Global visual defaults used by resizable panel handles.
+///
+/// The Base default is transparent. Applications and styled façades may
+/// project their own colors without coupling resize behavior to a theme crate.
+#[derive(Clone, Copy, Default)]
+pub struct ResizableTheme {
+    pub handle: gpui::Hsla,
+    pub active_handle: gpui::Hsla,
 }

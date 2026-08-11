@@ -24,6 +24,7 @@ mod popup;
 pub mod motion;
 mod radio;
 mod radio_group;
+mod resizable;
 mod scrollbar;
 pub mod slider;
 mod state_style;
@@ -58,6 +59,12 @@ pub use popup::Popup;
 pub use motion::{Interpolate, Transition, TransitionId, transition};
 pub use radio::{Radio, RadioStyles};
 pub use radio_group::RadioGroup;
+#[doc(hidden)]
+pub use resizable::{PANEL_MIN_SIZE, resize_handle};
+pub use resizable::{
+    ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
+    resizable_panel, v_resizable,
+};
 pub use scrollbar::{
     Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
     ScrollbarTrackStyle,

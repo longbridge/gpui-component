@@ -1,13 +1,8 @@
 use std::sync::Arc;
 
 use crate::{
-    ActiveTheme, AxisExt as _, Placement,
-    dock::PanelInfo,
-    h_flex,
-    resizable::{
-        PANEL_MIN_SIZE, ResizablePanelEvent, ResizablePanelGroup, ResizablePanelState,
-        ResizableState, resizable_panel,
-    },
+    ActiveTheme, AxisExt as _, PANEL_MIN_SIZE, Placement, ResizablePanelEvent, ResizablePanelGroup,
+    ResizableState, dock::PanelInfo, h_flex, resizable_panel,
 };
 
 use super::{DockArea, Panel, PanelEvent, PanelState, PanelView, TabPanel};
@@ -301,9 +296,8 @@ impl StackPanel {
         if let Some(ix) = self.index_of_panel(old_panel.clone()) {
             self.panels[ix] = Arc::new(new_panel.clone());
 
-            let panel_state = ResizablePanelState::default();
             self.state.update(cx, |state, cx| {
-                state.replace_panel(ix, panel_state, cx);
+                state.reset_panel(ix, cx);
             });
             cx.emit(PanelEvent::LayoutChanged);
         }

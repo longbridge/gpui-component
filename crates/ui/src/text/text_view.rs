@@ -526,9 +526,9 @@ mod tests {
                 _cx: &mut Context<Self>,
             ) -> impl IntoElement {
                 div().w(px(840.)).h(px(400.)).child(
-                    crate::resizable::h_resizable("markdown-width-test")
-                        .child(crate::resizable::resizable_panel().child(div()))
-                        .child(crate::resizable::resizable_panel().child(
+                    crate::h_resizable("markdown-width-test")
+                        .child(crate::resizable_panel().child(div()))
+                        .child(crate::resizable_panel().child(
                             TextView::markdown(
                                 "list-with-code",
                                 "1. List item\n   ```rust\n   nested code\n   ```\n\n```rust\ntop-level code\n```",

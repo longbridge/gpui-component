@@ -143,3 +143,39 @@ fn legacy_auto_scroll_path_reexports_the_base_type() {
 
     let _ = through_legacy_path(gpui_base::AutoScroll::default());
 }
+
+#[test]
+fn root_resizable_paths_reexport_base_types() {
+    fn state_through_facade(state: gpui_base::ResizableState) -> gpui_component::ResizableState {
+        state
+    }
+
+    fn group_through_facade(
+        group: gpui_base::ResizablePanelGroup,
+    ) -> gpui_component::ResizablePanelGroup {
+        group
+    }
+
+    fn panel_through_facade(panel: gpui_base::ResizablePanel) -> gpui_component::ResizablePanel {
+        panel
+    }
+
+    let _ = state_through_facade(gpui_base::ResizableState::default());
+    let _ = group_through_facade(gpui_base::ResizablePanelGroup::new("group"));
+    let _ = panel_through_facade(gpui_base::resizable_panel());
+    let _ = gpui_component::h_resizable("horizontal");
+    let _ = gpui_component::v_resizable("vertical");
+}
+
+#[test]
+fn legacy_resizable_module_paths_remain_available() {
+    fn panel_through_legacy(
+        panel: gpui_base::ResizablePanel,
+    ) -> gpui_component::resizable::ResizablePanel {
+        panel
+    }
+
+    let _ = panel_through_legacy(gpui_base::resizable_panel());
+    let _ = gpui_component::resizable::h_resizable("horizontal");
+    let _ = gpui_component::resizable::v_resizable("vertical");
+}

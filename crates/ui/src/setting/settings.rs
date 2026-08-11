@@ -3,8 +3,9 @@ use std::ops::Range;
 use crate::{
     IconName, Sizable, Size, StyledExt,
     group_box::GroupBoxVariant,
+    h_resizable,
     input::{Input, InputState},
-    resizable::{h_resizable, resizable_panel},
+    resizable_panel,
     setting::{SettingGroup, SettingPage},
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
 };

@@ -9,10 +9,7 @@ use gpui::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    StyledExt,
-    resizable::{PANEL_MIN_SIZE, resize_handle},
-};
+use crate::{PANEL_MIN_SIZE, Side, StyledExt, resize_handle};
 
 use super::{DockArea, DockItem, PanelView, TabPanel};
 
@@ -297,7 +294,9 @@ impl Dock {
         let view = cx.entity().clone();
 
         resize_handle("resize-handle", axis)
-            .placement(self.placement)
+            .when(self.placement == DockPlacement::Left, |this| {
+                this.placement(Side::Left)
+            })
             .on_drag(ResizePanel {}, move |info, _, _, cx| {
                 cx.stop_propagation();
                 view.update(cx, |view, _| {

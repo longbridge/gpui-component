@@ -58,7 +58,13 @@ pub mod popover;
 pub mod progress;
 pub mod radio;
 pub mod rating;
-pub mod resizable;
+/// Backwards-compatible resizable component paths.
+pub mod resizable {
+    pub use super::{
+        ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
+        resizable_panel, v_resizable,
+    };
+}
 pub mod scroll;
 pub mod searchable_list;
 pub mod select;
@@ -87,6 +93,12 @@ pub use gpui_base::animation;
 pub use gpui_base::{
     AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Placement, Side,
 };
+pub use gpui_base::{
+    ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
+    resizable_panel, v_resizable,
+};
+#[doc(hidden)]
+pub(crate) use gpui_base::{PANEL_MIN_SIZE, resize_handle};
 pub use gpui_component_macros::icon_named;
 pub use icon::*;
 pub use index_path::IndexPath;

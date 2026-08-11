@@ -7,9 +7,11 @@ use gpui::{
 mod panel;
 mod resize_handle;
 pub use panel::*;
-pub(crate) use resize_handle::*;
+#[doc(hidden)]
+pub use resize_handle::*;
 
-pub(crate) const PANEL_MIN_SIZE: Pixels = px(100.);
+#[doc(hidden)]
+pub const PANEL_MIN_SIZE: Pixels = px(100.);
 
 /// Create a [`ResizablePanelGroup`] with horizontal resizing
 pub fn h_resizable(id: impl Into<ElementId>) -> ResizablePanelGroup {
@@ -33,7 +35,7 @@ pub struct ResizableState {
     axis: Axis,
     panels: Vec<ResizablePanelState>,
     sizes: Vec<Pixels>,
-    pub(crate) resizing_panel_ix: Option<usize>,
+    resizing_panel_ix: Option<usize>,
     bounds: Bounds<Pixels>,
 }
 
@@ -86,7 +88,11 @@ impl ResizableState {
         self.done_resizing(cx);
     }
 
-    pub(crate) fn insert_panel(
+    /// Insert a panel state at `ix`, or append it when no index is supplied.
+    ///
+    /// Existing panel sizes are redistributed so their total remains equal to
+    /// the current container size.
+    pub fn insert_panel(
         &mut self,
         size: Option<Pixels>,
         ix: Option<usize>,
@@ -170,7 +176,8 @@ impl ResizableState {
         cx.notify();
     }
 
-    pub(crate) fn remove_panel(&mut self, panel_ix: usize, cx: &mut Context<Self>) {
+    /// Remove the panel at `panel_ix` and redistribute the remaining space.
+    pub fn remove_panel(&mut self, panel_ix: usize, cx: &mut Context<Self>) {
         self.panels.remove(panel_ix);
         self.sizes.remove(panel_ix);
         if let Some(resizing_panel_ix) = self.resizing_panel_ix {
@@ -181,26 +188,24 @@ impl ResizableState {
         self.adjust_to_container_size(cx);
     }
 
-    pub(crate) fn replace_panel(
-        &mut self,
-        panel_ix: usize,
-        panel: ResizablePanelState,
-        cx: &mut Context<Self>,
-    ) {
+    /// Reset the panel at `panel_ix` while preserving its current size.
+    pub fn reset_panel(&mut self, panel_ix: usize, cx: &mut Context<Self>) {
         let old_size = self.sizes[panel_ix];
 
-        self.panels[panel_ix] = panel;
+        self.panels[panel_ix] = ResizablePanelState::default();
         self.sizes[panel_ix] = old_size;
         self.adjust_to_container_size(cx);
     }
 
-    pub(crate) fn clear(&mut self) {
+    /// Remove all panel state.
+    pub fn clear(&mut self) {
         self.panels.clear();
         self.sizes.clear();
     }
 
     #[inline]
-    pub(crate) fn container_size(&self) -> Pixels {
+    /// Return the measured size of the group along its resize axis.
+    pub fn container_size(&self) -> Pixels {
         self.bounds.size.along(self.axis)
     }
 
@@ -335,4 +340,139 @@ pub(crate) struct ResizablePanelState {
     pub size: Option<Pixels>,
     pub size_range: Range<Pixels>,
     bounds: Bounds<Pixels>,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{
+        AppContext as _, Context, InteractiveElement as _, IntoElement, Modifiers, MouseButton,
+        ParentElement as _, Render, Styled as _, TestAppContext, VisualTestContext, Window, div,
+        point, px, size,
+    };
+
+    use super::{ResizableState, h_resizable, resizable_panel};
+
+    struct ResizableHarness {
+        state: gpui::Entity<ResizableState>,
+        resizes: Rc<Cell<usize>>,
+    }
+
+    impl Render for ResizableHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().w(px(400.)).h(px(100.)).child(
+                h_resizable("resizable")
+                    .with_state(&self.state)
+                    .on_resize({
+                        let resizes = self.resizes.clone();
+                        move |_, _, _| resizes.set(resizes.get() + 1)
+                    })
+                    .child(
+                        resizable_panel()
+                            .size(px(150.))
+                            .child(div().size_full().debug_selector(|| "first-panel".into())),
+                    )
+                    .child(
+                        resizable_panel()
+                            .size(px(250.))
+                            .child(div().size_full().debug_selector(|| "second-panel".into())),
+                    ),
+            )
+        }
+    }
+
+    fn harness(
+        cx: &mut TestAppContext,
+    ) -> (
+        &mut VisualTestContext,
+        gpui::Entity<ResizableState>,
+        Rc<Cell<usize>>,
+    ) {
+        let state = cx.update(|cx| cx.new(|_| ResizableState::default()));
+        let resizes = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let state = state.clone();
+            let resizes = resizes.clone();
+            move |_, _| ResizableHarness { state, resizes }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, state, resizes)
+    }
+
+    #[gpui::test]
+    fn dynamic_panel_lifecycle_is_owned_by_resizable_state(cx: &mut TestAppContext) {
+        let state = cx.update(|cx| cx.new(|_| ResizableState::default()));
+
+        cx.update(|cx| {
+            state.update(cx, |state, cx| {
+                state.bounds.size = size(px(400.), px(100.));
+                state.panels.push(Default::default());
+                state.sizes.push(px(400.));
+                state.insert_panel(Some(px(200.)), None, cx);
+                assert_eq!(state.sizes(), &vec![px(200.), px(200.)]);
+
+                state.reset_panel(0, cx);
+                assert_eq!(state.sizes(), &vec![px(200.), px(200.)]);
+
+                state.remove_panel(0, cx);
+                assert_eq!(state.sizes(), &vec![px(400.)]);
+
+                state.clear();
+                assert!(state.sizes().is_empty());
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn group_measures_panels_and_programmatic_resize_uses_drag_rules(cx: &mut TestAppContext) {
+        let (cx, state, _) = harness(cx);
+        let first = cx.debug_bounds("first-panel").unwrap();
+        let second = cx.debug_bounds("second-panel").unwrap();
+        assert_eq!(first.size.width + second.size.width, px(400.));
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.resize_panel(0, px(220.), window, cx);
+            });
+            window.draw(cx).clear(cx);
+        });
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.sizes(), &vec![px(220.), px(180.)]);
+        });
+    }
+
+    #[gpui::test]
+    fn dragging_the_handle_resizes_and_emits_once(cx: &mut TestAppContext) {
+        let (cx, state, resizes) = harness(cx);
+        let boundary = cx.debug_bounds("second-panel").unwrap().left();
+
+        cx.simulate_mouse_down(
+            point(boundary - px(2.), px(50.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(boundary + px(10.), px(50.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(220.), px(50.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(220.), px(50.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+
+        state.read_with(cx, |state, _| {
+            assert_eq!(state.sizes(), &vec![px(220.), px(180.)]);
+        });
+        assert_eq!(resizes.get(), 1);
+    }
 }

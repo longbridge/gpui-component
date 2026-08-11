@@ -48,6 +48,10 @@ impl ActiveTheme for App {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Theme {
     pub colors: ThemeColor,
+    /// Component-specific resolved tokens retained for legacy compatibility.
+    ///
+    /// New application-owned presentation should use [`Self::semantic_tokens`]
+    /// rather than extending this legacy surface.
     #[serde(default)]
     pub tokens: ThemeTokens,
     pub highlight_theme: Arc<HighlightTheme>,
@@ -200,6 +204,10 @@ impl Theme {
                     .thumb(|style| style.bg(theme.tokens.scrollbar_thumb))
                     .thumb_hover(|style| style.bg(theme.tokens.scrollbar_thumb_hover))
                     .thumb_active(|style| style.bg(theme.tokens.scrollbar_thumb_hover)),
+            },
+            resizable: gpui_base::ResizableTheme {
+                handle: theme.border,
+                active_handle: theme.drag_border,
             },
         };
         cx.set_global(base_theme);
@@ -521,5 +529,7 @@ mod base_theme_projection_tests {
 
         assert_eq!(base.tokens, theme.semantic_tokens());
         assert_eq!(base.scrollbar.mode, theme.scrollbar_mode);
+        assert_eq!(base.resizable.handle, theme.border);
+        assert_eq!(base.resizable.active_handle, theme.drag_border);
     }
 }

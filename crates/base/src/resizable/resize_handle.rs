@@ -6,24 +6,26 @@ use gpui::{
     StatefulInteractiveElement, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{ActiveTheme as _, AxisExt as _, dock::DockPlacement};
+use crate::{AxisExt as _, Side, Theme};
 
 pub(crate) const HANDLE_PADDING: Pixels = px(4.);
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);
 
 /// Create a resize handle for a resizable panel.
-pub(crate) fn resize_handle<T: 'static, E: 'static + Render>(
+#[doc(hidden)]
+pub fn resize_handle<T: 'static, E: 'static + Render>(
     id: impl Into<ElementId>,
     axis: Axis,
 ) -> ResizeHandle<T, E> {
     ResizeHandle::new(id, axis)
 }
 
-pub(crate) struct ResizeHandle<T: 'static, E: 'static + Render> {
+#[doc(hidden)]
+pub struct ResizeHandle<T: 'static, E: 'static + Render> {
     id: ElementId,
     axis: Axis,
     drag_value: Option<Rc<T>>,
-    placement: Option<DockPlacement>,
+    placement: Option<Side>,
     on_drag: Option<Rc<dyn Fn(&Point<Pixels>, &mut Window, &mut App) -> Entity<E>>>,
 }
 
@@ -39,7 +41,7 @@ impl<T: 'static, E: 'static + Render> ResizeHandle<T, E> {
         }
     }
 
-    pub(crate) fn on_drag(
+    pub fn on_drag(
         mut self,
         value: T,
         f: impl Fn(Rc<T>, &Point<Pixels>, &mut Window, &mut App) -> Entity<E> + 'static,
@@ -52,7 +54,7 @@ impl<T: 'static, E: 'static + Render> ResizeHandle<T, E> {
         self
     }
 
-    pub(crate) fn placement(mut self, placement: DockPlacement) -> Self {
+    pub fn placement(mut self, placement: Side) -> Self {
         self.placement = Some(placement);
         self
     }
@@ -105,10 +107,11 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
         window.with_element_state(id.unwrap(), |state, window| {
             let state = state.unwrap_or(ResizeHandleState::default());
 
+            let theme = Theme::global(cx);
             let bg_color = if state.is_active() {
-                cx.theme().drag_border
+                theme.resizable.active_handle
             } else {
-                cx.theme().border
+                theme.resizable.handle
             };
 
             let mut el = div()
@@ -124,7 +127,7 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
                     )
                 })
                 .map(|this| match self.placement {
-                    Some(DockPlacement::Left) => {
+                    Some(Side::Left) => {
                         // Special for Left Dock
                         //  FIXME: Improve this to let the scroll bar have px(HANDLE_PADDING)
                         this.cursor_col_resize()
