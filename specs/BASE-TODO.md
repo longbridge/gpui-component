@@ -437,6 +437,10 @@ accessibility without prescribing presentation.
 - [ ] Collapsible
 - [ ] Accordion
 - [ ] Tabs
+  - Blocked: legacy `Tab::new()` has no stable `ElementId`, while the existing
+    Base activation primitive requires one. `TabBar` also owns indicator bounds,
+    overflow-menu projection, and callback override semantics. Do not synthesize
+    identities or add new keyboard behavior merely to claim a Base connection.
 - [ ] Pagination
 - [ ] Stepper
 - [ ] List
