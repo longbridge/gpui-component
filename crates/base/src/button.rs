@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::StateStyle;
+use crate::{StateStyle, StyledExt as _};
 
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -213,10 +213,7 @@ impl RenderOnce for Button {
                 },
             )
             .children(self.children)
-            .map(|mut this| {
-                this.style().refine(&style);
-                this
-            })
+            .refine_style(&style)
     }
 }
 

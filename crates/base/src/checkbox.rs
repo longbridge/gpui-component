@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::StateStyle;
+use crate::{StateStyle, StyledExt as _};
 
 type ChangeHandler = Rc<dyn Fn(CheckboxState, &mut Window, &mut App)>;
 
@@ -325,10 +325,7 @@ impl ParentElement for CheckboxIndicator {
 impl RenderOnce for CheckboxIndicator {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let style = self.resolved_style();
-        self.base.children(self.children).map(|mut this| {
-            this.style().refine(&style);
-            this
-        })
+        self.base.children(self.children).refine_style(&style)
     }
 }
 
@@ -382,10 +379,7 @@ impl RenderOnce for Checkbox {
                 },
             )
             .children(self.children)
-            .map(|mut this| {
-                this.style().refine(&style);
-                this
-            })
+            .refine_style(&style)
     }
 }
 

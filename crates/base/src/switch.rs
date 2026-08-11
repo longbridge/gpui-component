@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::StateStyle;
+use crate::{StateStyle, StyledExt as _};
 
 type ToggleHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 
@@ -149,10 +149,7 @@ impl StatefulInteractiveElement for SwitchTrack {}
 impl RenderOnce for SwitchTrack {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let style = self.resolved_style();
-        self.base.children(self.children).map(|mut this| {
-            this.style().refine(&style);
-            this
-        })
+        self.base.children(self.children).refine_style(&style)
     }
 }
 
@@ -238,10 +235,7 @@ impl ParentElement for SwitchThumb {
 impl RenderOnce for SwitchThumb {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let style = self.resolved_style();
-        self.base.children(self.children).map(|mut this| {
-            this.style().refine(&style);
-            this
-        })
+        self.base.children(self.children).refine_style(&style)
     }
 }
 
@@ -386,10 +380,7 @@ impl RenderOnce for Switch {
                 },
             )
             .children(self.children)
-            .map(|mut this| {
-                this.style().refine(&style);
-                this
-            })
+            .refine_style(&style)
     }
 }
 

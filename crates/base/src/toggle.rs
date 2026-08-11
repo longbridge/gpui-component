@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::StateStyle;
+use crate::{StateStyle, StyledExt as _};
 
 type ChangeHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 
@@ -199,10 +199,7 @@ impl RenderOnce for Toggle {
                 },
             )
             .children(self.children)
-            .map(|mut this| {
-                this.style().refine(&style);
-                this
-            })
+            .refine_style(&style)
     }
 }
 
