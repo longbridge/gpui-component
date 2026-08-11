@@ -2,9 +2,10 @@ use std::{cell::Cell, rc::Rc};
 
 use gpui::{
     AnyElement, App, Corners, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Toggled,
-    Window, div, prelude::FluentBuilder as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    prelude::FluentBuilder as _,
 };
+use gpui_component_base::Toggle as BaseToggle;
 use smallvec::{SmallVec, smallvec};
 
 use crate::{
@@ -153,20 +154,19 @@ impl RenderOnce for Toggle {
         let disabled = self.disabled;
         let hoverable = !disabled && !checked;
         let rounding = cx.theme().radius;
-
-        div()
-            .id(self.id)
-            .role(Role::Button)
-            .aria_toggled(if checked {
-                Toggled::True
-            } else {
-                Toggled::False
+        let accessibility_label = self.tooltip.text.as_ref().map(|(text, _)| text.clone());
+        let base = BaseToggle::new(self.id)
+            .pressed(checked)
+            .disabled(disabled)
+            .focusable(false)
+            .when_some(accessibility_label, |this, label| {
+                this.accessibility_label(label)
             })
-            .when_some(
-                self.tooltip.text.as_ref().map(|(text, _)| text.clone()),
-                |this, label| this.aria_label(label),
-            )
-            .flex()
+            .when_some(self.on_click, |this, on_click| {
+                this.on_change(move |next, _, window, cx| on_click(&next, window, cx))
+            });
+
+        base.flex()
             .flex_row()
             .items_center()
             .justify_center()
@@ -208,11 +208,6 @@ impl RenderOnce for Toggle {
             })
             .refine_style(&self.style)
             .children(self.children)
-            .when(!disabled, |this| {
-                this.when_some(self.on_click, |this, on_click| {
-                    this.on_click(move |_, window, cx| on_click(&!checked, window, cx))
-                })
-            })
             .map(|this| self.tooltip.apply(this))
     }
 }

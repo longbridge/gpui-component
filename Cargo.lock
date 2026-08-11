@@ -2996,6 +2996,7 @@ dependencies = [
  "futures",
  "gpui",
  "gpui-component-assets",
+ "gpui-component-base",
  "gpui-component-macros",
  "gpui_macros",
  "html5ever 0.27.0",
@@ -3078,6 +3079,25 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "zed-reqwest",
+]
+
+[[package]]
+name = "gpui-component-base"
+version = "0.5.2"
+dependencies = [
+ "gpui",
+ "schemars",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
+name = "gpui-component-cli"
+version = "0.5.2"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

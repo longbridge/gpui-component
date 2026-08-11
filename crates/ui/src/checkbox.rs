@@ -5,19 +5,20 @@ use crate::{
     icon::IconNamed, text::Text, tooltip::ComponentTooltip, v_flex,
 };
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, Div, ElementId, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Toggled, Window, div, prelude::FluentBuilder as _, px, relative, rems, svg,
+    Animation, AnimationExt, AnyElement, App, ElementId, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Window, div, prelude::FluentBuilder as _, px, relative, rems, svg,
 };
 
 /// A Checkbox element.
 #[derive(IntoElement)]
 pub struct Checkbox {
     id: ElementId,
-    base: Div,
+    base: gpui_component_base::Checkbox,
     style: StyleRefinement,
+    // `Text` is legacy presentation state. During render it is composed into
+    // the Base Checkbox child seam together with application children.
     label: Option<Text>,
-    children: Vec<AnyElement>,
     checked: bool,
     disabled: bool,
     size: Size,
@@ -30,12 +31,12 @@ pub struct Checkbox {
 impl Checkbox {
     /// Create a new Checkbox with the given id.
     pub fn new(id: impl Into<ElementId>) -> Self {
+        let id = id.into();
         Self {
-            id: id.into(),
-            base: div(),
+            id: id.clone(),
+            base: gpui_component_base::Checkbox::new(id),
             style: StyleRefinement::default(),
             label: None,
-            children: Vec::new(),
             checked: false,
             disabled: false,
             size: Size::default(),
@@ -129,7 +130,7 @@ impl Selectable for Checkbox {
 
 impl ParentElement for Checkbox {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+        self.base.extend(elements);
     }
 }
 
@@ -201,11 +202,11 @@ impl RenderOnce for Checkbox {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
 
-        let focus_handle = window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx)
-            .clone();
-        let is_focused = focus_handle.is_focused(window);
+        let mut base = self.base;
+        let children = base.take_children();
+        let accessibility_label = self.label.as_ref().map(|label| label.get_text(cx));
+        let on_click = self.on_click.clone();
+        let is_focused = base.focus_handle(window, cx).is_focused(window);
 
         let border_color = if checked {
             cx.theme().primary
@@ -219,24 +220,18 @@ impl RenderOnce for Checkbox {
         };
         let radius = cx.theme().radius.min(px(4.));
 
-        self.base
-            .id(self.id.clone())
-            .role(Role::CheckBox)
-            .aria_toggled(if checked {
-                Toggled::True
-            } else {
-                Toggled::False
+        base.checked(checked)
+            .disabled(self.disabled)
+            .tab_stop(self.tab_stop)
+            .tab_index(self.tab_index)
+            .focus_on_mouse_down(false)
+            .prevent_default_on_activation(true)
+            .block_pointer_when_disabled(false)
+            .when_some(accessibility_label, |this, label| {
+                this.accessibility_label(label)
             })
-            .when_some(
-                self.label.as_ref().map(|l| l.get_text(cx)),
-                |this, label| this.aria_label(label),
-            )
-            .when(!self.disabled, |this| {
-                this.track_focus(
-                    &focus_handle
-                        .tab_stop(self.tab_stop)
-                        .tab_index(self.tab_index),
-                )
+            .on_change(move |_, window, cx| {
+                Self::handle_click(&on_click, checked, window, cx);
             })
             .h_flex()
             .gap_2()
@@ -284,7 +279,7 @@ impl RenderOnce for Checkbox {
                         cx,
                     )),
             )
-            .when(self.label.is_some() || !self.children.is_empty(), |this| {
+            .when(self.label.is_some() || !children.is_empty(), |this| {
                 this.child(
                     v_flex()
                         .flex_1()
@@ -307,21 +302,8 @@ impl RenderOnce for Checkbox {
                                 this
                             }
                         })
-                        .children(self.children),
+                        .children(children),
                 )
-            })
-            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
-                // Avoid focus on mouse down.
-                window.prevent_default();
-            })
-            .when(!self.disabled, |this| {
-                this.on_click({
-                    let on_click = self.on_click.clone();
-                    move |_, window, cx| {
-                        window.prevent_default();
-                        Self::handle_click(&on_click, checked, window, cx);
-                    }
-                })
             })
             .map(|this| self.tooltip.apply(this))
     }

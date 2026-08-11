@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gpui.rs/components.schema.json",
+  "title": "GPUI Components Project Configuration",
+  "type": "object",
+  "required": ["style", "ui", "theme", "icons"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "style": { "type": "string" },
+    "ui": { "type": "string" },
+    "theme": { "type": "string" },
+    "icons": { "type": "string" }
+  },
+  "additionalProperties": false
+}

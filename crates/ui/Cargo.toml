@@ -98,6 +98,7 @@ tree-sitter-zig = ["tree-sitter", "dep:tree-sitter-zig"]
 anyhow.workspace = true
 gpui = { workspace = true }
 gpui_macros.workspace = true
+gpui-component-base.workspace = true
 gpui-component-macros = { workspace = true }
 gpui-component-assets = { workspace = true }
 notify.workspace = true

@@ -8,9 +8,8 @@ use gpui::{
 };
 
 use crate::{
-    ActiveTheme, StyledExt,
+    ActiveTheme, Placement, StyledExt,
     animation::{Transition, ease_in_out_cubic, ease_out_cubic},
-    geometry::Placement,
     h_flex,
     kbd::Kbd,
     root::Root,

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://gpui.rs/registry-item.schema.json",
+  "name": "checkbox",
+  "type": "registry:ui",
+  "description": "An application-owned checkbox presentation.",
+  "dependencies": ["gpui-component-base"],
+  "registryDependencies": [],
+  "files": [
+    {
+      "path": "ui/checkbox.rs",
+      "type": "registry:ui",
+      "target": "src/ui/checkbox.rs"
+    }
+  ]
+}

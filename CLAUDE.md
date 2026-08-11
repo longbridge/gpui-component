@@ -71,6 +71,33 @@ samply record cargo run
 
 ## Core Architecture
 
+### Architecture Refactoring Constraints
+
+The architecture draft and RFC are documented in `specs/PHASE1.md` and
+`specs/RFC.md`. Migration status is tracked in `specs/BASE-TODO.md`. Preserve these constraints
+when designing or implementing this architecture:
+
+- Keep `gpui-component` as the ecosystem and product brand.
+- Name the foundation crate `gpui-component-base`.
+- Follow the ownership boundary: the framework owns behavior and infrastructure;
+  the application owns component source and visual style.
+- Keep the base layer visually unopinionated. It may provide interaction behavior,
+  accessibility, focus, overlay and popup infrastructure, positioning, animation,
+  virtual lists, dock infrastructure, and semantic design tokens.
+- Theme APIs must expose semantic tokens (colors, spacing, radius, typography, and
+  shadows), not an ever-growing set of component-specific styling fields.
+- Distribute the official styled components and blocks as registry source copied
+  into the application's `src/ui/` directory, where the application can modify
+  and maintain them.
+- Preserve 100% backward compatibility for existing consumers, including current
+  imports such as `use gpui_component::button::Button;`, while migration proceeds in
+  phases.
+- Prefer the new registry workflow for new applications, using
+  `gpui-component init` and `gpui-component add <component>`.
+- Execute migration incrementally: extract foundations first, establish the
+  registry with simple components, migrate complex components, add blocks, then
+  add selectable design styles.
+
 ### Component Initialization
 
 **Critical requirement**: You must call `gpui_component::init(cx)` at your application's entry point before using any GPUI Component features.

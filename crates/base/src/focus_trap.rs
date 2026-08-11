@@ -6,7 +6,7 @@ use gpui::{
 use std::collections::HashMap;
 
 /// Initialize the focus trap manager as a global
-pub(crate) fn init(cx: &mut App) {
+pub fn init(cx: &mut App) {
     cx.set_global(FocusTrapManager::new());
 }
 
@@ -81,7 +81,7 @@ impl FocusTrapManager {
     }
 
     /// Find which focus trap contains the currently focused element
-    pub(crate) fn find_active_trap(window: &Window, cx: &App) -> Option<FocusHandle> {
+    fn find_active_trap(window: &Window, cx: &App) -> Option<FocusHandle> {
         for (_id, container_handle) in Self::global(cx).traps.iter() {
             let Some(container) = container_handle.upgrade() else {
                 continue;
@@ -219,4 +219,10 @@ impl<E: InteractiveElement + ParentElement + Styled + Element + 'static> Element
             cx,
         )
     }
+}
+
+/// Returns the focus handle for the active focus trap, if any.
+#[doc(hidden)]
+pub fn active_focus_trap(window: &Window, cx: &App) -> Option<FocusHandle> {
+    FocusTrapManager::find_active_trap(window, cx)
 }

@@ -1,11 +1,15 @@
 use gpui::{
     AnyElement, ClickEvent, ElementId, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, div,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{ActiveTheme as _, StyledExt};
 
 /// A Link element like a `<a>` tag in HTML.
+///
+/// The destination is not presentation content. Add visible content with
+/// [`ParentElement::child`], just as with the original Link implementation.
 #[derive(IntoElement)]
 pub struct Link {
     id: ElementId,
@@ -71,8 +75,22 @@ impl RenderOnce for Link {
         let href = self.href.clone();
         let on_click = self.on_click;
 
-        div()
-            .id(self.id)
+        gpui_component_base::Link::new(self.id)
+            // Preserve the legacy Link contract exactly: it was pointer-only
+            // and exposed no accessibility role or focus stop.
+            .focusable(false)
+            .accessibility_role(None)
+            .when_some(href, |this, href| {
+                this.href(href)
+                    .open_with(|href, _, _, cx| cx.open_url(href))
+            })
+            // The legacy implementation always installed a click listener,
+            // even when no callback was supplied.
+            .on_activate(move |event, window, cx| {
+                if let Some(on_click) = &on_click {
+                    on_click(event, window, cx);
+                }
+            })
             .text_color(cx.theme().link)
             .text_decoration_1()
             .text_decoration_color(cx.theme().link)
@@ -89,16 +107,89 @@ impl RenderOnce for Link {
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                 cx.stop_propagation();
             })
-            .on_click({
-                move |e, window, cx| {
-                    if let Some(href) = &href {
-                        cx.open_url(&href.clone());
-                    }
-                    if let Some(on_click) = &on_click {
-                        on_click(e, window, cx);
-                    }
-                }
-            })
             .children(self.children)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{Context, Modifiers, Render, TestAppContext, div, point, px};
+
+    use super::*;
+
+    struct LinkHarness {
+        disabled: bool,
+        clicks: Rc<Cell<usize>>,
+    }
+
+    impl Render for LinkHarness {
+        fn render(&mut self, _: &mut gpui::Window, _: &mut Context<Self>) -> impl IntoElement {
+            let clicks = self.clicks.clone();
+            Link::new("legacy-link")
+                .href("https://example.com")
+                .disabled(self.disabled)
+                .size(px(100.))
+                .child(
+                    div()
+                        .debug_selector(|| "legacy-link-child".into())
+                        .child("Visible link"),
+                )
+                .on_click(move |_, _, _| clicks.set(clicks.get() + 1))
+        }
+    }
+
+    #[gpui::test]
+    fn base_backed_link_prepaints_legacy_children(cx: &mut TestAppContext) {
+        let (cx, _) = harness(cx, false);
+        let bounds = cx
+            .debug_bounds("legacy-link-child")
+            .expect("legacy Link child must participate in layout and prepaint");
+
+        assert!(bounds.size.width > px(0.));
+        assert!(bounds.size.height > px(0.));
+    }
+
+    fn harness(
+        cx: &mut TestAppContext,
+        disabled: bool,
+    ) -> (&mut gpui::VisualTestContext, Rc<Cell<usize>>) {
+        cx.update(crate::init);
+        let clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let clicks = clicks.clone();
+            move |_, _| LinkHarness { disabled, clicks }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, clicks)
+    }
+
+    #[gpui::test]
+    fn base_backed_link_preserves_pointer_open_and_callback(cx: &mut TestAppContext) {
+        let (cx, clicks) = harness(cx, false);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+
+        assert_eq!(cx.opened_url().as_deref(), Some("https://example.com"));
+        assert_eq!(clicks.get(), 1);
+    }
+
+    #[gpui::test]
+    fn base_backed_link_preserves_legacy_disabled_behavior(cx: &mut TestAppContext) {
+        let (cx, clicks) = harness(cx, true);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+
+        // `disabled` was historically a stored but behaviorally inert field.
+        assert_eq!(cx.opened_url().as_deref(), Some("https://example.com"));
+        assert_eq!(clicks.get(), 1);
+    }
+
+    #[gpui::test]
+    fn base_backed_link_remains_pointer_only(cx: &mut TestAppContext) {
+        let (cx, clicks) = harness(cx, false);
+        cx.simulate_keystrokes("enter space");
+
+        assert_eq!(cx.opened_url(), None);
+        assert_eq!(clicks.get(), 0);
     }
 }

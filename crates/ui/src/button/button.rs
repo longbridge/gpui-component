@@ -490,29 +490,21 @@ impl RenderOnce for Button {
             ButtonRounded::None => Pixels::ZERO,
         };
 
-        self.base
+        gpui_component_base::Button::from_stateful(self.id.clone(), self.base)
             .role(if self.variant.is_link() {
                 Role::Link
             } else {
                 Role::Button
             })
             .when_some(self.label.as_ref(), |this, label| {
-                this.aria_label(label.clone())
+                this.accessibility_label(label.clone())
             })
-            .when_some(self.toggled, |this, toggled| {
-                this.aria_toggled(if toggled {
-                    gpui::accesskit::Toggled::True
-                } else {
-                    gpui::accesskit::Toggled::False
-                })
-            })
-            .when(!self.disabled, |this| {
-                this.track_focus(
-                    &focus_handle
-                        .tab_index(self.tab_index)
-                        .tab_stop(self.tab_stop),
-                )
-            })
+            .toggled(self.toggled)
+            .focus_enabled(!self.disabled)
+            .with_focus_handle(&focus_handle)
+            .tab_index(self.tab_index)
+            .tab_stop(self.tab_stop)
+            .into_stateful(window, cx)
             .cursor_default()
             .flex()
             .flex_shrink_0()
@@ -1363,6 +1355,33 @@ mod tests {
         assert!(ButtonVariant::Link.no_padding());
         assert!(ButtonVariant::Text.no_padding());
         assert!(!ButtonVariant::Ghost.no_padding());
+    }
+
+    #[gpui::test]
+    fn link_button_prepaints_its_child(cx: &mut gpui::TestAppContext) {
+        use gpui::{Context, Render};
+
+        struct LinkButtonHarness;
+
+        impl Render for LinkButtonHarness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                Button::new("link-button").link().child(
+                    div()
+                        .debug_selector(|| "link-button-child".into())
+                        .child("Visible link button"),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| LinkButtonHarness);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let bounds = cx
+            .debug_bounds("link-button-child")
+            .expect("link button child must participate in layout and prepaint");
+        assert!(bounds.size.width > px(0.));
+        assert!(bounds.size.height > px(0.));
     }
 
     #[gpui::test]

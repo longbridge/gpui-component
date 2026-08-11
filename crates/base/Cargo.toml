@@ -1,0 +1,26 @@
+[package]
+description = "Behavior, interaction, and infrastructure foundations for GPUI applications."
+keywords = ["desktop", "gpui", "ui", "foundation"]
+license = "Apache-2.0"
+name = "gpui-component-base"
+repository = "https://github.com/longbridge/gpui-component"
+homepage = "https://longbridge.github.io/gpui-component"
+documentation = "https://docs.rs/gpui-component-base"
+version = "0.5.2"
+publish = true
+edition.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+gpui.workspace = true
+schemars.workspace = true
+serde.workspace = true
+smallvec.workspace = true
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

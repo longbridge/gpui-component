@@ -1,0 +1,23 @@
+[package]
+name = "gpui-component-cli"
+description = "Install application-owned GPUI components from the GPUI Component registry."
+version = "0.5.2"
+edition.workspace = true
+license = "Apache-2.0"
+repository = "https://github.com/longbridge/gpui-component"
+homepage = "https://longbridge.github.io/gpui-component"
+publish = true
+
+[[bin]]
+name = "gpui-component"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

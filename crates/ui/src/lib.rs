@@ -3,9 +3,6 @@ use std::ops::Deref;
 
 mod async_util;
 mod element_ext;
-mod event;
-mod focus_trap;
-mod geometry;
 pub mod global_state;
 mod icon;
 mod index_path;
@@ -25,7 +22,6 @@ pub(crate) mod actions;
 
 pub mod accordion;
 pub mod alert;
-pub mod animation;
 pub mod avatar;
 pub mod badge;
 pub mod breadcrumb;
@@ -82,10 +78,11 @@ pub mod tree;
 
 pub use crate::Disableable;
 pub use element_ext::*;
-pub use event::InteractiveElementExt;
-pub use focus_trap::FocusTrapElement;
-pub use geometry::*;
 pub use global_state::GlobalState;
+pub use gpui_component_base::animation;
+pub use gpui_component_base::{
+    AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Placement, Side,
+};
 pub use gpui_component_macros::icon_named;
 pub use icon::*;
 pub use index_path::IndexPath;
@@ -112,7 +109,7 @@ pub fn init(cx: &mut App) {
     #[cfg(any(feature = "inspector", debug_assertions))]
     inspector::init(cx);
     root::init(cx);
-    focus_trap::init(cx);
+    gpui_component_base::init(cx);
     color_picker::init(cx);
     date_picker::init(cx);
     dock::init(cx);

@@ -1,12 +1,10 @@
 use crate::{
-    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, h_flex, text::Text,
-    tooltip::ComponentTooltip,
+    ActiveTheme, Disableable, Side, Sizable, Size, StyledExt, text::Text, tooltip::ComponentTooltip,
 };
 use gpui::{
     Animation, AnimationExt as _, App, Background, ElementId, Hsla, InteractiveElement,
-    IntoElement, ParentElement as _, RenderOnce, Role, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Toggled, Window, div,
-    prelude::FluentBuilder as _, px,
+    IntoElement, ParentElement as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _, px,
 };
 use std::{rc::Rc, time::Duration};
 
@@ -101,7 +99,6 @@ impl Disableable for Switch {
 impl RenderOnce for Switch {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
-        let on_click = self.on_click.clone();
         let toggle_state = window.use_keyed_state(self.id.clone(), cx, |_, _| checked);
 
         let checked_bg = self
@@ -141,18 +138,26 @@ impl RenderOnce for Switch {
         };
 
         div().refine_style(&self.style).child(
-            h_flex()
-                .id(self.id.clone())
-                .role(Role::Switch)
-                .aria_toggled(if checked {
-                    Toggled::True
-                } else {
-                    Toggled::False
-                })
+            gpui_component_base::Switch::new(self.id.clone())
+                .checked(checked)
+                .disabled(self.disabled)
+                .focusable(false)
+                .block_pointer_when_disabled(false)
                 .when_some(
                     self.label.as_ref().map(|l| l.get_text(cx)),
-                    |this, label| this.aria_label(label),
+                    |this, label| this.accessibility_label(label),
                 )
+                .when_some(self.on_click.clone().filter(|_| !self.disabled), {
+                    let toggle_state = toggle_state.clone();
+                    move |this, on_click| {
+                        this.on_pointer_down_toggle(move |_, _, window, cx| {
+                            cx.stop_propagation();
+                            _ = toggle_state.update(cx, |this, _| *this = checked);
+                            on_click(&!checked, window, cx);
+                        })
+                    }
+                })
+                .h_flex()
                 .gap_2()
                 .items_start()
                 .when(self.label_side.is_left(), |this| this.flex_row_reverse())
@@ -218,21 +223,7 @@ impl RenderOnce for Switch {
                             _ => this.text_base(),
                         },
                     ))
-                })
-                .when_some(
-                    on_click
-                        .as_ref()
-                        .map(|c| c.clone())
-                        .filter(|_| !self.disabled),
-                    |this, on_click| {
-                        let toggle_state = toggle_state.clone();
-                        this.on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
-                            cx.stop_propagation();
-                            _ = toggle_state.update(cx, |this, _| *this = checked);
-                            on_click(&!checked, window, cx);
-                        })
-                    },
-                ),
+                }),
         )
     }
 }
