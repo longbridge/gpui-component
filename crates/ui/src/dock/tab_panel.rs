@@ -1703,6 +1703,86 @@ mod tests {
     }
 
     #[gpui::test]
+    fn fresh_center_is_empty(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        assert!(
+            cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)),
+            "DockArea::new starts with an empty StackPanel centre"
+        );
+    }
+
+    #[gpui::test]
+    fn center_holding_a_tab_group_is_not_empty(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (item, _, _) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.update(|window, cx| {
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(item, window, cx))
+        });
+        cx.run_until_parked();
+
+        assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    /// The `DockItem` tree still lists the tab group here, so anything reading
+    /// `DockItem::Split { items }` would report non-empty.
+    #[gpui::test]
+    fn center_is_empty_again_once_every_panel_is_removed(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (item, tab_panel, panels) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.update(|window, cx| {
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(item, window, cx))
+        });
+        cx.run_until_parked();
+
+        for panel in panels {
+            cx.update(|window, cx| {
+                tab_panel.update(cx, |tab_panel, cx| {
+                    tab_panel.remove_panel(Arc::new(panel.clone()), window, cx)
+                })
+            });
+        }
+        cx.run_until_parked();
+
+        assert!(cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    #[gpui::test]
+    fn center_is_not_empty_after_adding_to_a_tab_group(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (item, tab_panel, _) = build_tabs(&fixture, &[], None, &mut cx);
+        cx.update(|window, cx| {
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(item, window, cx))
+        });
+        cx.run_until_parked();
+        assert!(cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+
+        let log = fixture.log.clone();
+        cx.update(|window, cx| {
+            let panel = test_panel("A", &log, cx);
+            tab_panel.update(cx, |tab_panel, cx| {
+                tab_panel.add_panel(Arc::new(panel), window, cx)
+            });
+        });
+        cx.run_until_parked();
+
+        assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    #[gpui::test]
     fn single_panel_group_receives_initial_active(cx: &mut TestAppContext) {
         let fixture = setup(cx);
         let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);

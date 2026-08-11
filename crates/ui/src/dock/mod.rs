@@ -642,6 +642,34 @@ impl DockArea {
         &self.center
     }
 
+    /// Whether the center area currently holds no panel.
+    ///
+    /// Walks the live panel entities; the [`DockItem`] tree is only rebuilt by
+    /// [`Self::load`] and [`Self::set_center`], so it goes stale.
+    pub fn is_center_empty(&self, cx: &App) -> bool {
+        fn is_empty(panel: &Arc<dyn PanelView>, cx: &App) -> bool {
+            let view = panel.view();
+
+            if let Ok(stack) = view.clone().downcast::<StackPanel>() {
+                return stack
+                    .read(cx)
+                    .panels
+                    .iter()
+                    .all(|panel| is_empty(panel, cx));
+            }
+            if let Ok(tabs) = view.clone().downcast::<TabPanel>() {
+                return tabs.read(cx).panels.is_empty();
+            }
+            if let Ok(tiles) = view.downcast::<Tiles>() {
+                return tiles.read(cx).panels().is_empty();
+            }
+
+            false
+        }
+
+        is_empty(&self.center.view(), cx)
+    }
+
     /// Return the left dock item.
     pub fn left_dock(&self) -> Option<&Entity<Dock>> {
         self.left_dock.as_ref()
