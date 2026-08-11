@@ -667,43 +667,59 @@ fn compute_node_values(graph: &mut SankeyGraph) {
     }
 }
 
-/// Assign topological ranks by BFS waves; later waves overwrite, yielding the
-/// longest-path rank. More waves than nodes means a cycle.
+/// Assign longest-path ranks in topological order.
 ///
 /// `forward` walks source links to their targets and writes `depth`;
 /// otherwise it walks target links to their sources and writes `height`.
 fn compute_node_ranks(graph: &mut SankeyGraph, forward: bool) -> Result<(), SankeyError> {
     let n = graph.nodes.len();
-    let mut current: Vec<usize> = (0..n).collect();
-    let mut x = 0;
-    while !current.is_empty() {
-        let mut next = vec![false; n];
-        for &index in &current {
-            let node = &graph.nodes[index];
-            let links = if forward {
-                &node.source_links
-            } else {
-                &node.target_links
-            };
-            for &link in links {
-                let neighbor = if forward {
-                    graph.links[link].target
-                } else {
-                    graph.links[link].source
-                };
-                next[neighbor] = true;
-            }
+    let mut degree: Vec<usize> = graph
+        .nodes
+        .iter()
+        .map(|node| {
             if forward {
-                graph.nodes[index].depth = x;
+                node.target_links.len()
             } else {
-                graph.nodes[index].height = x;
+                node.source_links.len()
+            }
+        })
+        .collect();
+    let mut ranks = vec![0; n];
+    let mut pending: Vec<usize> = (0..n).filter(|&index| degree[index] == 0).collect();
+    let mut visited = 0;
+
+    while let Some(index) = pending.pop() {
+        visited += 1;
+        let next_rank = ranks[index] + 1;
+        let node = &graph.nodes[index];
+        let links = if forward {
+            &node.source_links
+        } else {
+            &node.target_links
+        };
+        for &link in links {
+            let neighbor = if forward {
+                graph.links[link].target
+            } else {
+                graph.links[link].source
+            };
+            ranks[neighbor] = ranks[neighbor].max(next_rank);
+            degree[neighbor] -= 1;
+            if degree[neighbor] == 0 {
+                pending.push(neighbor);
             }
         }
-        x += 1;
-        if x > n {
-            return Err(SankeyError::CircularLink);
+    }
+
+    if visited != n {
+        return Err(SankeyError::CircularLink);
+    }
+    for (node, rank) in graph.nodes.iter_mut().zip(ranks) {
+        if forward {
+            node.depth = rank;
+        } else {
+            node.height = rank;
         }
-        current = (0..n).filter(|&index| next[index]).collect();
     }
     Ok(())
 }
@@ -1030,6 +1046,18 @@ mod tests {
         for (a, b) in completed.links.iter().zip(&graph.links) {
             assert_eq!((a.y0, a.y1, a.width), (b.y0, b.y1, b.width));
         }
+    }
+
+    #[test]
+    fn test_sankey_topology_large_chain() {
+        const NODE_COUNT: usize = 50_000;
+        let links: Vec<SankeyLink> = (0..NODE_COUNT - 1)
+            .map(|source| SankeyLink::new(source, source + 1, 1.))
+            .collect();
+        let graph = Sankey::new().topology(NODE_COUNT, &links).unwrap();
+
+        assert_eq!(graph.nodes[0].height, NODE_COUNT - 1);
+        assert_eq!(graph.nodes[NODE_COUNT - 1].depth, NODE_COUNT - 1);
     }
 
     #[test]
