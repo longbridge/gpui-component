@@ -38,6 +38,7 @@ mod radio;
 mod radio_group;
 mod resizable;
 mod scrollbar;
+mod sheet;
 pub mod slider;
 mod state_style;
 mod styled;
@@ -99,6 +100,7 @@ pub use scrollbar::{
     Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
     ScrollbarTrackStyle,
 };
+pub use sheet::{CancelSheet, Sheet};
 pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
 #[cfg(any(feature = "inspector", debug_assertions))]
@@ -131,6 +133,7 @@ pub fn init(cx: &mut App) {
     GlobalState::init(cx);
     dialog::init(cx);
     focus_trap::init(cx);
+    sheet::init(cx);
     popover::init(cx);
     tree::init(cx);
 }

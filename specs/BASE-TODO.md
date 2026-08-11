@@ -646,7 +646,10 @@ trap, and keyboard behavior; Registry owns trigger/content structure and style.
     and non-dismissible overlay defaults.
   - [ ] The UI façade still owns legacy button variants and declarative header
     presentation until those slots are projected onto the Base host.
-- [ ] Sheet
+- [x] Sheet — Base owns the focus trap, Escape action, overlay dismissal policy,
+  close callback ordering, and application-provided overlay/surface slots. The
+  UI façade retains window/title-bar geometry, placement, size, borders,
+  title/footer/body composition, scrolling, animation, and selection scope.
 - [ ] Date Picker
 - [ ] Color Picker
 

@@ -46,6 +46,19 @@ fn base_avatar_uses_application_owned_image_and_fallback_slots() {
 }
 
 #[test]
+fn base_sheet_accepts_application_owned_overlay_and_surface() {
+    fn build(cx: &mut gpui::App) {
+        let _ = gpui_base::Sheet::new(cx)
+            .overlay(gpui::div())
+            .surface(gpui::div())
+            .overlay_closable(false)
+            .on_close(|_, _, _| {});
+    }
+
+    let _ = build;
+}
+
+#[test]
 fn base_dialog_owns_modal_actions_and_alert_defaults() {
     let _ = gpui_base::DialogCallbacks::default()
         .on_confirm(|_, _, _| true)
