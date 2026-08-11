@@ -130,8 +130,6 @@ pub fn init(cx: &mut App) {
     date_picker::init(cx);
     dock::init(cx);
     sheet::init(cx);
-    combobox::init(cx);
-    select::init(cx);
     input::init(cx);
     list::init(cx);
     popover::init(cx);

@@ -184,6 +184,22 @@ fn legacy_tree_models_are_base_types() {
 }
 
 #[test]
+fn base_combobox_accepts_application_owned_content() {
+    fn build(trigger: gpui::FocusHandle, content: gpui::FocusHandle) {
+        let _ = gpui_base::Combobox::new("language")
+            .open(true)
+            .disabled(false)
+            .focus_handle(&trigger)
+            .content_focus_handle(&content)
+            .on_open_change(|_, _, _| {})
+            .on_confirm(|_, _| {})
+            .child(gpui::div());
+    }
+
+    let _ = build;
+}
+
+#[test]
 fn legacy_list_settings_are_the_base_type() {
     fn accepts_base(_: gpui_base::ListSettings) {}
     accepts_base(gpui_component::list::ListSettings::default());

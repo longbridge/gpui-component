@@ -15,6 +15,7 @@ mod avatar;
 mod button;
 mod checkbox;
 mod collapsible;
+mod combobox;
 pub mod component_traits;
 mod dialog;
 mod element_ext;
@@ -38,6 +39,7 @@ mod radio;
 mod radio_group;
 mod resizable;
 mod scrollbar;
+mod select;
 mod sheet;
 pub mod slider;
 mod state_style;
@@ -61,6 +63,7 @@ pub use checkbox::{
     Checkbox, CheckboxIndicator, CheckboxIndicatorStyles, CheckboxState, CheckboxStyles,
 };
 pub use collapsible::Collapsible;
+pub use combobox::Combobox;
 pub use component_traits::{Disableable, Selectable};
 pub use dialog::{
     AcceptDialog, CancelDialog, ConfirmDialog, Dialog, DialogCallbacks, DialogClose,
@@ -100,6 +103,7 @@ pub use scrollbar::{
     Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
     ScrollbarTrackStyle,
 };
+pub use select::Select;
 pub use sheet::Sheet;
 pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
@@ -135,5 +139,7 @@ pub fn init(cx: &mut App) {
     focus_trap::init(cx);
     sheet::init(cx);
     popover::init(cx);
+    combobox::init(cx);
+    select::init(cx);
     tree::init(cx);
 }
