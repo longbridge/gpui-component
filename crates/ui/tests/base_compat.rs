@@ -37,6 +37,15 @@ fn base_crate_exports_the_same_foundation_types() {
 }
 
 #[test]
+fn base_avatar_uses_application_owned_image_and_fallback_slots() {
+    let _ = gpui_base::Avatar::new()
+        .image(gpui_base::AvatarImage::new(gpui::ImageSource::from(
+            "avatar.png",
+        )))
+        .fallback(gpui_base::AvatarFallback::new().child("JL"));
+}
+
+#[test]
 fn base_button_accepts_application_owned_state_styles() {
     let _button = gpui_base::Button::new("save")
         .accessibility_label("Save")

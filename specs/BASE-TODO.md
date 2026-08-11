@@ -507,6 +507,9 @@ source; it must not introduce a parallel reduced implementation.
   legacy Slider has no separate disabled root appearance, so no empty semantic
   style is invented.
 - [x] Link semantic root style: disabled.
+- [x] Avatar exposes unstyled root, image, and fallback slots in Base. The UI
+  façade retains sizing, initials, hash-derived colors, placeholder icons,
+  borders, and theme presentation; AvatarGroup remains UI-owned overlap layout.
 - [x] Generic application-owned value transitions with no component defaults.
 - [x] Checkbox Indicator typed state projection with no wrapper or built-in motion.
 - [x] Switch Thumb and Track typed state projection with no wrapper or built-in motion.
@@ -660,8 +663,6 @@ template is delivered and its required behavior is composed from existing Base A
   conditional rendering, `Role::Alert` belongs directly on the styled root,
   and the close affordance has no reusable lifecycle. A Base wrapper would only
   forward role, children, and style without removing caller complexity.
-- [x] Avatar — UI-only image/initial/placeholder presentation and overlap layout;
-  it has no independent interaction or state contract for Base.
 - [x] Badge — UI-only presentation; count formatting, dot/icon placement, color,
   and visibility do not form a separate Base interaction primitive.
 - [x] Breadcrumb — UI-only navigation presentation. Base UI has no Breadcrumb
