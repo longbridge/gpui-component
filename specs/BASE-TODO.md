@@ -30,6 +30,11 @@ after its implementation and compatibility requirements have been verified.
   they do not install layout, positioning, color, sizing, gap, radius, border,
   shadow, variant, or animation defaults. `crates/ui` remains the canonical
   complete presentation source during migration.
+- Base control and part taxonomy follows `../base-ui` unless an existing GPUI or
+  gpui-component API must be preserved. Use shadcn as a presentation and
+  composition reference, not as authority for Radix-specific primitive names.
+  When Base UI and Radix differ, prefer the Base UI name; for example, expose
+  `SliderIndicator`, not Radix's `SliderRange`.
 - Do not hand-maintain a second simplified component implementation under
   `registry/`. A future Registry pipeline must derive complete editable sources
   from `crates/ui`.
@@ -222,7 +227,7 @@ checking the component milestone:
   restored because disabling canonical focus/keyboard/a11y behavior through
   public Base switches is not an acceptable migration seam.
 - 2026-08-11: The disconnected single-value Base Slider was removed; the actually
-  migrated range/log/drag `slider_state` remains. Slider stays open until one
+  migrated range/log/drag state in `slider` remains. Slider stays open until one
   unified primitive owns state, keyboard, a11y, pointer, drag, and release.
 - 2026-08-11: Base Link now always keeps natural Link role/focus semantics and no
   longer exposes façade-only role/focus switches. Legacy UI Link was restored and
@@ -315,6 +320,78 @@ checking the component milestone:
   `Theme` Global containing semantic tokens and per-module defaults; Scrollbar
   contributes `ScrollbarTheme { mode, styles }` rather than registering
   scattered globals or adding component fields to a generic styled projection.
+- 2026-08-11: Public `GlobalState` application-menu storage and pointer
+  text-selection suppression moved to Base with legacy type identity. UI-only
+  TextView selection stacks and modal selection scopes remain in a private UI
+  global. Base tests, the 20-test compatibility suite,
+  21 window-selection tests, 13 TextView tests, and the full 448-test UI suite pass.
+- 2026-08-11: Deferred-popup registration moved from the UI sidecar into Base
+  `GlobalState` and is shared by Popover, Select, Combobox, and Input. The full
+  existing `PopoverState` lifecycle then moved to Base with legacy type identity:
+  open/dismiss, Escape and DismissEvent handling, focus capture/restore, tracked
+  focus, and callbacks remain one implementation. Base `Popup` subsequently
+  centralized trigger measurement, anchor positioning, first-frame capture,
+  deferred rendering, and edge snapping for both Popover and HoverCard; UI
+  retains outside-click policy, appearance, and content.
+- 2026-08-11: A state-only `HoverCardState` extraction was rejected as shallow.
+  Base now exposes the complete unstyled `HoverCard`, owning trigger/content
+  hover handoff, delayed open/close, stale-task cancellation, callbacks, and the
+  generic `Popup` positioning host. UI owns only Popover appearance and content.
+- 2026-08-11: Base `Popup` replaced the duplicated Popover/HoverCard anchor
+  helpers and trigger-bounds fields. Runtime coverage proves first-frame
+  measurement followed by deferred content, and the UI Popover runtime opens
+  and dismisses through that host. The test also characterizes the existing
+  duplicate `false` open-change notification on outside click; it remains an
+  explicit compatibility issue rather than being silently changed during the
+  structural migration.
+- 2026-08-11: Tooltip's custom positioner moved intact to Base. It measures
+  application-owned children, chooses or flips among Top/Bottom/Left/Right,
+  clamps to viewport plus client inset, and applies the prepaint offset. Base
+  owns no tooltip style or animation; five Base geometry tests and the retained
+  UI lifecycle test pass.
+- 2026-08-11: Resizable moved as one coherent Base boundary: `ResizableState`,
+  panel/group layout, programmatic resizing, dynamic panel lifecycle,
+  window-level pointer drag, resize completion events, and the resize-handle
+  interaction element now have one implementation. The UI module only
+  re-exports the same public types and projects its existing border/drag colors
+  through the application-wide Base `Theme`; Base defaults remain transparent.
+  Dock no longer imports the private panel controller. Runtime tests cover
+  lifecycle redistribution, measured layout/programmatic resize, and real
+  handle drag with one resize callback.
+- 2026-08-11: Button module source-compatibility coverage now exercises all
+  exported types and builder families, including icon/loading icon, action
+  tooltip, DropdownButton menu/anchor, group callbacks, Toggle content, and
+  Base/legacy type separation. ButtonGroup is intentionally UI-only; adding a
+  Base wrapper would not remove any caller complexity.
+- 2026-08-11: Automated old/new Story capture was attempted without modifying
+  either binary, but bare GPUI executables are not exposed as individually
+  addressable macOS applications to the available accessibility automation.
+  The existing release binary remains preserved; visual comparison stays open
+  rather than treating source inspection or tests as screenshot evidence.
+- 2026-08-11: Removed the shallow Base `Alert`. Its implementation only
+  forwarded controlled visibility, `Role::Alert`, style, and children; deleting
+  it returns no behavior complexity to callers. The UI Alert again applies the
+  role directly to its existing styled root and keeps the exact legacy tree.
+- 2026-08-11: Accordion now exposes the five Base UI structural parts
+  (`Accordion`, `AccordionItem`, `AccordionHeader`, `AccordionTrigger`, and
+  `AccordionPanel`) without item contexts, bindings, render adapters, or
+  constructor-only synthetic IDs. Header/Panel use optional GPUI-style `.id()`
+  only when emitting Heading/Region accessibility nodes. The façade keeps its
+  existing single/multiple aggregation and exact presentation, while its 200ms
+  measured-height interpolation uses the application-owned Base `transition`
+  API. A façade layout test locks expanded content between its own header and
+  the next item; final Story comparison remains open.
+- 2026-08-11: Accordion Story comparison caught a real layout regression: the
+  migration had merged the legacy `outer flex_1 -> inner v_flex/overflow_hidden`
+  nodes, placing clipping on the flex-constrained item and truncating expanded
+  content under the next row. A fixed-height two-item regression test reproduced
+  the overlap before the fix. Restoring the original two-node layout turns that
+  test green and preserves the Base Item as the inner semantic root.
+- 2026-08-11: Removed the shallow Base `StepperTrigger` after comparison with
+  the full UI Stepper and `../base-ui` (which has no matching Stepper
+  primitive). The wrapper only duplicated one `div().on_click` and owned none
+  of selected-index projection, item state, separator geometry, or axis layout;
+  the original UI trigger path is restored unchanged.
 
 ## Crate Foundation
 
@@ -366,18 +443,30 @@ M1 covers the complete public `crates/ui/src/button` module, not only the
   children, and dropdown caret retain their exact UI order and render through
   the Base `ParentElement` seam.
 - [x] Button loading inert behavior boundary.
-- [ ] ButtonGroup behavior and child composition boundary.
-- [ ] DropdownButton trigger/menu behavior boundary.
-- [ ] Toggle and ToggleGroup behavior/state boundary.
-- [ ] Verify every public type and builder exported by `button/mod.rs` remains
-  100% compatible.
+- [x] ButtonGroup remains UI composition rather than gaining a shallow Base
+  wrapper. Individual Base Buttons already own activation and selected state;
+  joined borders, axis layout, variants, sizing, legacy `Vec<usize>` aggregation,
+  callback override, and builder-order behavior remain façade contracts.
+- [x] DropdownButton trigger/menu behavior boundary: its two styled Buttons and
+  PopupMenu remain UI composition, while DropdownMenu uses the Base-backed
+  PopoverState and Popup host for open/dismiss/focus/anchor lifecycle. No
+  Button-specific split-state helper is introduced.
+- [x] Toggle and ToggleGroup boundary: Base Toggle owns controlled pressed,
+  disabled, activation, focus, and accessibility behavior. Base ToggleGroup is
+  limited to the existing semantic group root, `Axis` orientation, style, and
+  normal children; the façade retains its legacy `Vec<bool>` aggregation and
+  segmented presentation without adding roving focus or keydown behavior.
+- [x] Verify every public type and builder exported by `button/mod.rs` remains
+  source compatible through compile coverage for Button, variants/rounding,
+  ButtonGroup, DropdownButton, Toggle, ToggleGroup, traits, callbacks, normal
+  children, icon/loading/tooltip/menu builders, and Base/legacy type separation.
 
 Current evidence covers the standard Button root, complete content composition,
-activation, disabled/focus behavior, loading inert behavior, and selected/disabled
-typed presentation. Both group behavior models remain open. DropdownButton
-additionally requires the generic popup-trigger/
-overlay seam planned for the overlay phase; `disabled || loading` and
-selected-value passthrough alone would be a shallow Base module.
+activation, disabled/focus behavior, loading inert behavior, selected/disabled
+typed presentation, and the established UI-only group composition boundaries.
+DropdownButton now composes the generic Base-backed Popover lifecycle and Popup
+positioning host through DropdownMenu; `disabled || loading`, selected-value
+passthrough, split layout, menu construction, and appearance remain UI concerns.
 
 ### M2 — Simple Controls
 
@@ -395,7 +484,11 @@ source; it must not introduce a parallel reduced implementation.
 - [ ] Switch
 - [ ] Toggle — Base behavior and pressed presentation are connected; final old/new
   Story visual comparison remains.
-- [ ] Slider
+- [ ] Slider — Base `Slider`, `SliderTrack`, `SliderIndicator`, and `SliderThumb`
+  now own the existing a11y, pointer/range selection, drag, bounds, disabled,
+  Change, and Release behavior over the single migrated `SliderState`. The UI
+  façade retains the exact track/range/thumb presentation. Final post-migration
+  Story visual comparison remains.
 - [ ] Link
 
 ### M1/M2 — Stateful Presentation
@@ -410,8 +503,9 @@ source; it must not introduce a parallel reduced implementation.
 - [x] `crates/ui::Toggle` delegates its existing pressed presentation through
   `.styles(...)`; it intentionally does not invent a disabled appearance that the
   legacy component never had.
-- [ ] Slider semantic root style: disabled (deferred until the Slider primitive is
-  unified with the migrated range/drag state).
+- [x] Slider disabled behavior is projected through the Base root and parts. The
+  legacy Slider has no separate disabled root appearance, so no empty semantic
+  style is invented.
 - [x] Link semantic root style: disabled.
 - [x] Generic application-owned value transitions with no component defaults.
 - [x] Checkbox Indicator typed state projection with no wrapper or built-in motion.
@@ -427,33 +521,112 @@ templates own field structure and appearance.
 - [ ] Input
 - [ ] Number Input
 - [ ] OTP Input
-- [ ] Form
+- [x] Form — current implementation is UI-only grid/label/description layout;
+  it has no validation, submission, field registration, or accessibility
+  behavior contract to migrate into Base.
 
 ### M4 — Disclosure and Navigation
 
 Completion definition: provide reusable state, keyboard navigation, focus, and
 accessibility without prescribing presentation.
 
-- [ ] Collapsible
+- [x] Collapsible — Base owns controlled content visibility and normal
+  child/content slots; the façade preserves the legacy vertical layout.
 - [ ] Accordion
+  - [x] Base exports the complete structural primitive set: `Accordion`,
+    `AccordionItem`, `AccordionHeader`, `AccordionTrigger`, and
+    `AccordionPanel`.
+  - [x] `Accordion` is the unstyled semantic group root with normal GPUI
+    children. Existing single/multiple open-set projection, group-disabled
+    propagation, and root-bubbling callback timing remain in the façade; moving
+    them would require context/binding machinery that is larger than the
+    existing behavior.
+  - [x] `AccordionItem` connects one controlled trigger/header/panel pair;
+    `AccordionHeader` projects heading level, `AccordionTrigger` projects
+    button/expanded state, and `AccordionPanel` owns region mounting.
+  - [x] The façade uses Base `transition` for its existing 200ms measured-height
+    disclosure motion. Base primitives do not install default animation.
+  - [ ] Final façade visual/interaction comparison against the old Story.
+  - GPUI does not currently expose `aria-controls` / `aria-labelledby`; the
+    trigger-panel accessibility relationship remains an explicit upstream gap.
+    Title/icon/content layout, sizing, borders, colors, and measurement/clipping
+    presentation remain façade-owned.
 - [ ] Tabs
-  - Blocked: legacy `Tab::new()` has no stable `ElementId`, while the existing
-    Base activation primitive requires one. `TabBar` also owns indicator bounds,
-    overflow-menu projection, and callback override semantics. Do not synthesize
-    identities or add new keyboard behavior merely to claim a Base connection.
-- [ ] Pagination
+  - [x] Base `Tab` owns the existing pointer activation, disabled gating,
+    `Role::Tab`, accessible label, selected state, children, and typed
+    selected/disabled root styles.
+  - [x] Legacy `Tab::new()` remains parameterless. `TabBar` assigns the existing
+    index identity through Base Tab's GPUI-style `.id(...)` before render; Base
+    does not synthesize an identity or add keyboard/focus behavior.
+  - [x] Base `Tabs` owns `Role::TabList`, normal GPUI `child`/`children`, style,
+    and interaction forwarding. Controlled selection and callbacks are expressed
+    directly on each Base `Tab`; the façade keeps its existing index projection
+    and callback override without exposing a binding/context interface.
+  - [ ] Final façade behavior/visual comparison remains required before marking
+    the compound control complete.
+  - `TabBar` must continue to own indicator bounds and animation, overflow menu,
+    variants, sizing, and layout because those are façade presentation. Do not
+    introduce item bindings, contexts, render helpers, or keyboard behavior to
+    force the remaining selection seam.
+- [ ] Pagination — keep in UI until page items and ellipsis navigation can form
+  one real behavior seam; do not migrate only `calculate_page_range` or wrap
+  styled `Button`/`PopupMenu` composition in a shallow Base type.
 - [ ] Stepper
+  - Current Stepper is UI-only item numbering, separator geometry, axis layout,
+    icon/text presentation, and a small pointer callback. The former Base
+    `StepperTrigger` merely wrapped the same `div().on_click` and was removed as
+    a shallow middle man. Revisit only when Stepper gains a real process/state
+    contract that can move as one coherent boundary.
 - [ ] List
+  - [x] Move the public pure `ListSettings` configuration into Base with the
+    legacy module path re-exporting the same type.
+  - [ ] Separate selection, navigation, scrolling, loading, and section models
+    from the styled `ListItem` and rendering delegate before moving List state.
 - [ ] Tree
+  - [x] Move the existing public `TreeItem`, `TreeEntry`, and `TreeEvent`
+    hierarchy/state model into Base with shared clone state and type identity.
+  - [ ] Move selection, expansion navigation, focus, and scroll behavior only
+    after `TreeState` is separated from UI `ListItem`, `PopupMenu`, and context
+    menu rendering callbacks.
 
 ### M5 — Overlay and Compound Components
 
 Completion definition: Base owns overlay lifecycle, positioning, dismissal, focus
 trap, and keyboard behavior; Registry owns trigger/content structure and style.
 
-- [ ] Popover
+- [x] Popover
+  - [x] Base exposes the complete unstyled `Popover`; it owns trigger
+    activation, controlled/uncontrolled open state, focus, Escape and outside
+    dismissal, callbacks, and `Popup` composition. The UI façade now delegates
+    those behaviors and contributes only appearance and application content.
+  - [x] `PopoverState` is a single Base type owning the existing controlled
+    open state, deferred-context registration, DismissEvent subscription,
+    Escape dismissal, tracked focus, focus capture/restore, and open callback.
+    The legacy `popover::PopoverState` path re-exports the same type.
+  - [x] Base `Popup` owns trigger measurement, anchor-point calculation,
+    first-frame synchronization, deferred rendering, and window-edge snapping;
+    both Popover and HoverCard use it without presentation defaults.
+  - [x] Move outside-click policy into the unstyled Base Popover host; appearance
+    and application content remain UI-owned.
+  - [x] Existing outside-click characterization emits `on_open_change(false)`
+    twice because the trigger wrapper and content mouse-down-out paths both run.
+    Preserve it during structural migration; fix only as an explicit behavior
+    change with replacement acceptance tests.
 - [ ] Tooltip
+  - [x] Base `TooltipPositioner` owns the existing child measurement,
+    preferred-side selection, four-direction flipping, viewport/client-inset
+    clamping, and prepaint offset without appearance or motion.
+  - [x] Base `TooltipOverlay` is the per-window provider and owns show delay,
+    hide grace, active request switching, dismissal, and positioning. UI trigger
+    adapters submit `TooltipRequest` values instead of driving duplicate state.
+  - [x] UI injects the existing enter/switch animation renderer through
+    `render_with`; appearance, key-binding content, and motion remain UI-owned.
 - [ ] Hover Card
+  - [x] Base `HoverCard` owns trigger/content hover handoff, delayed open/close,
+    stale-task cancellation, open callbacks, and popup positioning. Do not split
+    its state back out into a façade-driven timer holder.
+  - [x] Popover and HoverCard consume the same Base `Popup` positioning host.
+  - [ ] Appearance and content remain UI/application-owned.
 - [ ] Menu
 - [ ] Select
 - [ ] Combobox
@@ -473,7 +646,7 @@ seams suitable for application-owned wrappers.
 - [ ] Data Table
 - [ ] Editor
 - [ ] Text View
-- [ ] Resizable
+- [x] Resizable
 - [ ] Scrollable
 - [ ] Notification
 - [ ] Dock
@@ -483,24 +656,60 @@ seams suitable for application-owned wrappers.
 These do not get standalone Base components. Check each item when its Registry
 template is delivered and its required behavior is composed from existing Base APIs.
 
-- [ ] Alert
-- [ ] Avatar
-- [ ] Badge
-- [ ] Breadcrumb
-- [ ] Description List
-- [ ] Group Box
-- [ ] Kbd
-- [ ] Label
+- [x] Alert — UI-only presentation. Controlled visibility is ordinary
+  conditional rendering, `Role::Alert` belongs directly on the styled root,
+  and the close affordance has no reusable lifecycle. A Base wrapper would only
+  forward role, children, and style without removing caller complexity.
+- [x] Avatar — UI-only image/initial/placeholder presentation and overlap layout;
+  it has no independent interaction or state contract for Base.
+- [x] Badge — UI-only presentation; count formatting, dot/icon placement, color,
+  and visibility do not form a separate Base interaction primitive.
+- [x] Breadcrumb — UI-only navigation presentation. Base UI has no Breadcrumb
+  primitive, and the existing item behavior is only a styled `div` with an
+  optional click handler and link/list-item role. Separators, ordering, last-item
+  semantics, labels, and navigation presentation remain one cohesive UI module.
+- [x] Description List — UI-only structured presentation; column grouping,
+  spans, separators, label widths, borders, and layout do not define an
+  interaction primitive.
+- [x] Group Box — UI-only presentation container; title/content slots remain
+  normal application composition and variants are visual.
+- [x] Kbd — UI-only keybinding presentation and platform formatting helper;
+  it does not own input behavior or key dispatch.
+- [x] Label — UI-only text presentation; masking, secondary text, and highlight
+  rendering do not define a Base interaction primitive.
 - [ ] Progress
-- [ ] Rating
-- [ ] Separator
+  - [x] Base linear `Progress` owns the existing clamped controlled value,
+    progress role, numeric accessibility metadata, normal children, style, and
+    interaction forwarding without presentation or motion.
+  - [x] `ProgressCircle` composes the same Base `Progress` root, so linear and
+    circular façades share one controlled value and accessibility contract while
+    retaining their existing application-owned drawing and animation.
+  - [x] Base exposes unstyled `ProgressTrack` and `ProgressIndicator`; the
+    linear façade uses both instead of a raw indicator div. Indeterminate
+    loading is projected by the Base root without an incorrect numeric value.
+  - [ ] Final linear façade visual/animation comparison and ProgressCircle
+    accessibility boundary review.
+- [ ] Rating — requires one Base-owned group/item state path for controlled
+  value, hover preview, and activation. Do not expose the current keyed state or
+  add item bindings solely to move the existing icon loop.
+- [x] Separator — UI-only presentation; solid/dashed painting, label layout,
+  axis geometry, and color remain application-owned.
 - [ ] Sidebar
-- [ ] Skeleton
-- [ ] Spinner
-- [ ] Status Bar
-- [ ] Tag
-- [ ] Title Bar
-- [ ] Settings
+- [x] Skeleton — UI-only presentation and animation; do not add built-in motion
+  to Base.
+- [x] Spinner — UI-only icon presentation and animation; do not add built-in
+  motion to Base.
+- [x] Status Bar — UI-only three-region layout and theme presentation; its
+  contents retain their own behavior primitives.
+- [x] Tag — UI-only presentation; variants, sizing, borders, colors, and child
+  layout do not define a Base behavior primitive.
+- [x] Title Bar — UI- and platform-specific window chrome. Native window drag,
+  double-click behavior, drag regions, context menus, and window controls remain
+  together in `crates/ui`; do not add a shallow Base primitive.
+- [x] Settings — application-level composition of Sidebar, Input, Resizable,
+  List, Button, GroupBox, and concrete setting-field renderers. Its search,
+  reset, page, group, and field protocols remain in UI; it does not define a
+  standalone unstyled Base primitive.
 
 ## Infrastructure
 
@@ -511,9 +720,25 @@ template is delivered and its required behavior is composed from existing Base A
   painting, dragging, and fade lifecycle into Base while keeping UI-specific
   Scrollable wrappers and masks in `crates/ui`.
 - [x] Move VirtualList into Base without depending on styled scrollbar components.
-- [ ] Migrate Resizable only after its state, panel layout, window-level drag
-  lifecycle, and unstyled resize-handle part can move as one coherent boundary;
-  do not expose the current private panel controller as hidden public methods.
+- [x] Move the native/WASM async channel compatibility layer into Base; the UI
+  crate keeps its internal path as a direct re-export.
+- [x] Move the generic `Selectable` and `Disableable` behavior contracts into
+  Base while preserving the legacy root exports. Keep the legacy `Collapsible`
+  trait in UI because its public name conflicts with the Base element.
+- [x] Move generic measurement helpers into Base while preserving the legacy
+  root function and `Measure` type identity.
+- [x] Move the macOS accessibility hit-test forwarding shim into Base; the UI
+  Root only invokes the platform foundation hook.
+- [x] Move the public application-menu and pointer text-selection suppression
+  `GlobalState` into Base with legacy type identity. Keep TextView selection
+  stacks and deferred-popover bookkeeping in a private UI sidecar so Base does
+  not depend on UI text or overlay types.
+- [x] Migrate Resizable state, panel layout, window-level drag lifecycle, and
+  resize-handle interaction as one coherent boundary. The private panel
+  controller remains private; `ResizableState` owns dynamic
+  insert/remove/reset/clear and container-size operations directly. Base has
+  transparent handle defaults, while the UI Theme projects the exact existing
+  border and active-drag colors.
 - [ ] Extract an unstyled overlay host and entry model.
 - [ ] Extract popup positioning and focus-restoration behavior.
 - [ ] Extract Dock's serializable layout model from its styled runtime views.
@@ -533,7 +758,9 @@ template is delivered and its required behavior is composed from existing Base A
 - [x] Support semantic tokens in standalone theme configuration files without
   changing the public shape of legacy `ThemeConfig`.
 - [ ] Verify legacy themes render exactly as before.
-- [ ] Mark the existing component-specific `ThemeTokens` surface as compatibility-only.
+- [x] Mark the existing component-specific `ThemeTokens` surface as compatibility-only.
+  Its public fields remain unchanged for legacy themes and façade components;
+  new application-owned presentation uses `SemanticThemeTokens` instead.
 
 ## Legacy Compatibility
 

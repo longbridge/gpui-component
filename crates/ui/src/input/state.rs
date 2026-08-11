@@ -1721,7 +1721,7 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if crate::global_state::GlobalState::global(cx).is_in_deferred_context() {
+        if gpui_base::GlobalState::is_in_deferred_context(cx) {
             return;
         }
 

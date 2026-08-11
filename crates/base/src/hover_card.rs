@@ -9,8 +9,13 @@ use instant::Duration;
 
 use crate::Popup;
 
-type ContentBuilder =
-    Box<dyn FnOnce(&mut HoverCardState, &mut Window, &mut Context<HoverCardState>) -> Stateful<gpui::Div>>;
+type ContentBuilder = Box<
+    dyn FnOnce(
+        &mut HoverCardState,
+        &mut Window,
+        &mut Context<HoverCardState>,
+    ) -> Stateful<gpui::Div>,
+>;
 type OpenChangeHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 
 /// An unstyled hover-triggered popup with delayed open and close behavior.
@@ -204,10 +209,11 @@ impl RenderOnce for HoverCard {
         let trigger = self.trigger.unwrap_or_else(|| div().into_any_element());
         let popup = Popup::new(
             self.id,
-            div().id("trigger").child(trigger).on_hover(window.listener_for(
-                &state,
-                |state, hovered, _, cx| state.on_trigger_hover(*hovered, cx),
-            )),
+            div().id("trigger").child(trigger).on_hover(
+                window.listener_for(&state, |state, hovered, _, cx| {
+                    state.on_trigger_hover(*hovered, cx)
+                }),
+            ),
         )
         .anchor(self.anchor);
 
@@ -219,9 +225,7 @@ impl RenderOnce for HoverCard {
             let hover = window.listener_for(&state, |state, hovered, _, cx| {
                 state.on_content_hover(*hovered, cx)
             });
-            popup.content(
-                state.update(cx, |state, cx| content(state, window, cx).on_hover(hover)),
-            )
+            popup.content(state.update(cx, |state, cx| content(state, window, cx).on_hover(hover)))
         })
     }
 }

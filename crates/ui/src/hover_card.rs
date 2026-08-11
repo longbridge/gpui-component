@@ -2,8 +2,7 @@ use std::rc::Rc;
 
 use gpui::{
     Anchor, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement,
-    ParentElement, RenderOnce, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    ParentElement, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_base::HoverCard as BaseHoverCard;
 pub use gpui_base::HoverCardState;

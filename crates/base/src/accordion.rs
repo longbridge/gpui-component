@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement,
-    ParentElement, RenderOnce, Role, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    div, prelude::FluentBuilder as _,
+    AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
+    RenderOnce, Role, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
@@ -101,7 +101,6 @@ impl AccordionItem {
         self.panel = Some(panel);
         self
     }
-
 }
 
 impl Styled for AccordionItem {
@@ -122,9 +121,7 @@ impl RenderOnce for AccordionItem {
             .when_some(self.header, |this, header| {
                 this.child(header.open(self.open).disabled(self.disabled))
             })
-            .when_some(self.panel, |this, panel| {
-                this.child(panel.open(self.open))
-            })
+            .when_some(self.panel, |this, panel| this.child(panel.open(self.open)))
             .children(self.children)
             .refine_style(&self.style)
     }
@@ -168,7 +165,6 @@ impl AccordionHeader {
         self.trigger = self.trigger.disabled(disabled);
         self
     }
-
 }
 
 impl Styled for AccordionHeader {
@@ -255,9 +251,7 @@ impl RenderOnce for AccordionPanel {
             return gpui::Empty.into_any_element();
         }
 
-        let content = div()
-            .children(self.children)
-            .refine_style(&self.style);
+        let content = div().children(self.children).refine_style(&self.style);
         match self.id {
             Some(id) => content.id(id).role(Role::Region).into_any_element(),
             None => content.into_any_element(),
@@ -438,9 +432,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn pointer_requests_next_controlled_state_and_respects_disabled(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn pointer_requests_next_controlled_state_and_respects_disabled(cx: &mut gpui::TestAppContext) {
         let (cx, requested) = harness(cx, false, false);
         cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
         assert_eq!(&*requested.borrow(), &[true]);
@@ -463,11 +455,11 @@ mod tests {
                     move |_, window, cx| {
                         let mut header_node = accesskit::Node::new(Role::Heading);
                         AccordionHeader::new(AccordionTrigger::new("trigger"))
-                        .id("header")
-                        .level(2)
-                        .render(window, cx)
-                        .into_element()
-                        .write_a11y_info(&mut header_node);
+                            .id("header")
+                            .level(2)
+                            .render(window, cx)
+                            .into_element()
+                            .write_a11y_info(&mut header_node);
 
                         let mut panel_node = accesskit::Node::new(Role::Region);
                         AccordionPanel::new()

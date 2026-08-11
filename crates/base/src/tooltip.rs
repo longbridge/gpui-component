@@ -4,7 +4,7 @@ use gpui::{
     AnyElement, AnyView, App, Bounds, Context, Display, Div, Element, ElementId, GlobalElementId,
     Half, InspectorElementId, InteractiveElement, IntoElement, LayoutId, ParentElement, Pixels,
     Point, Position, Render, RenderOnce, Role, Size, Stateful, StatefulInteractiveElement, Style,
-    Styled, Task, Window, deferred, div, point, px, prelude::FluentBuilder as _,
+    Styled, Task, Window, deferred, div, point, prelude::FluentBuilder as _, px,
 };
 
 use crate::Placement;
@@ -14,9 +14,7 @@ const GRACE_PERIOD: Duration = Duration::from_millis(300);
 const SHOW_DELAY: Duration = Duration::from_millis(500);
 
 type TooltipBuilder = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
-type TooltipRenderer = Rc<
-    dyn Fn(AnyView, TooltipTransition, &mut Window, &mut App) -> AnyElement,
->;
+type TooltipRenderer = Rc<dyn Fn(AnyView, TooltipTransition, &mut Window, &mut App) -> AnyElement>;
 
 /// An unstyled tooltip popup.
 ///
@@ -82,7 +80,9 @@ impl TooltipRequest {
 /// Presentation transition requested by the Base tooltip lifecycle.
 #[derive(Clone, Copy, Debug)]
 pub enum TooltipTransition {
-    Enter { epoch: usize },
+    Enter {
+        epoch: usize,
+    },
     Switch {
         epoch: usize,
         previous: Bounds<Pixels>,
@@ -227,7 +227,9 @@ impl Render for TooltipOverlay {
         let rendered = (self.renderer)(view, transition, window, cx);
         deferred(
             TooltipPositioner::new(content.trigger_bounds)
-                .when_some(content.preferred_placement, |this, placement| this.placement(placement))
+                .when_some(content.preferred_placement, |this, placement| {
+                    this.placement(placement)
+                })
                 .child(rendered),
         )
         .with_priority(2)
@@ -380,10 +382,7 @@ impl Element for TooltipPositioner {
             cx,
         );
 
-        (
-            layout_id,
-            TooltipPositionerState { child_layout_ids },
-        )
+        (layout_id, TooltipPositionerState { child_layout_ids })
     }
 
     fn prepaint(

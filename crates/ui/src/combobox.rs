@@ -14,7 +14,6 @@ use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Sizable, Size,
     StyleSized, StyledExt,
     actions::{Cancel, Confirm, SelectDown, SelectUp},
-    global_state::GlobalState,
     h_flex,
     input::{clear_button, input_style},
     list::{List, ListState},
@@ -24,6 +23,7 @@ use crate::{
     },
     v_flex,
 };
+use gpui_base::GlobalState;
 
 const CONTEXT: &str = "Combobox";
 
@@ -544,9 +544,9 @@ where
         self.state.open = open;
 
         if self.state.open {
-            GlobalState::global_mut(cx).register_deferred_popover(&self.state.focus_handle)
+            GlobalState::register_deferred_popover(&self.state.focus_handle, cx)
         } else {
-            GlobalState::global_mut(cx).unregister_deferred_popover(&self.state.focus_handle)
+            GlobalState::unregister_deferred_popover(&self.state.focus_handle, cx)
         }
 
         cx.notify();

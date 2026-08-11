@@ -23,6 +23,19 @@ instant.workspace = true
 schemars.workspace = true
 serde.workspace = true
 smallvec.workspace = true
+tracing.workspace = true
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+smol.workspace = true
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+async-channel = "2.3.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+raw-window-handle.workspace = true
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSView", "NSWindow"] }
+objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }

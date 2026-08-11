@@ -1,4 +1,4 @@
-use gpui::{App, SharedString};
+use gpui::App;
 use std::ops::Deref;
 
 mod async_util;
@@ -9,8 +9,6 @@ mod icon;
 mod index_path;
 #[cfg(any(feature = "inspector", debug_assertions))]
 mod inspector;
-#[cfg(all(target_os = "macos", not(test)))]
-mod macos_accessibility;
 mod root;
 mod sizing;
 mod styled;
@@ -90,8 +88,10 @@ pub use crate::Disableable;
 pub use element_ext::*;
 pub use global_state::GlobalState;
 pub use gpui_base::animation;
+pub(crate) use gpui_base::measurement_enabled as measure_enable;
 pub use gpui_base::{
-    AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Placement, Side,
+    AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Measure, Placement, Side,
+    measure, measure_if,
 };
 pub use gpui_base::{
     ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
@@ -151,52 +151,4 @@ pub fn locale() -> impl Deref<Target = str> {
 #[inline]
 pub fn set_locale(locale: &str) {
     rust_i18n::set_locale(locale)
-}
-
-#[inline]
-pub(crate) fn measure_enable() -> bool {
-    std::env::var("ZED_MEASUREMENTS").is_ok() || std::env::var("GPUI_MEASUREMENTS").is_ok()
-}
-
-/// Measures the execution time of a function and logs it if `if_` is true.
-///
-/// And need env `GPUI_MEASUREMENTS=1`
-#[inline]
-#[track_caller]
-pub fn measure_if(name: impl Into<SharedString>, if_: bool, f: impl FnOnce()) {
-    if if_ && measure_enable() {
-        let measure = Measure::new(name);
-        f();
-        measure.end();
-    } else {
-        f();
-    }
-}
-
-/// Measures the execution time.
-#[inline]
-#[track_caller]
-pub fn measure(name: impl Into<SharedString>, f: impl FnOnce()) {
-    measure_if(name, true, f);
-}
-
-pub struct Measure {
-    name: SharedString,
-    start: std::time::Instant,
-}
-
-impl Measure {
-    #[track_caller]
-    pub fn new(name: impl Into<SharedString>) -> Self {
-        Self {
-            name: name.into(),
-            start: std::time::Instant::now(),
-        }
-    }
-
-    #[track_caller]
-    pub fn end(self) {
-        let duration = self.start.elapsed();
-        tracing::trace!("{} in {:?}", self.name, duration);
-    }
 }

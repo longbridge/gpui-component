@@ -1,11 +1,10 @@
 use crate::{ActiveTheme, Sizable, Size, StyledExt};
 use gpui::{
     Animation, AnimationExt as _, App, Background, ElementId, Hsla, IntoElement, ParentElement,
-    RenderOnce, StyleRefinement, Styled, Window, ease_in_out, prelude::FluentBuilder, px,
-    relative,
+    RenderOnce, StyleRefinement, Styled, Window, ease_in_out, prelude::FluentBuilder, px, relative,
 };
-use instant::Duration;
 use gpui_base::{Progress as BaseProgress, ProgressIndicator, ProgressTrack};
+use instant::Duration;
 
 use super::ProgressState;
 

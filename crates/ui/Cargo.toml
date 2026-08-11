@@ -122,7 +122,6 @@ unicode-segmentation = "1.12.0"
 uuid = "1.10"
 
 # Async primitives (cross-platform, including WASM)
-async-channel = "2.3.1"
 futures = "0.3"
 
 # Chart

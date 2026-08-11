@@ -91,9 +91,7 @@ mod tests {
     use super::*;
 
     #[gpui::test]
-    fn initialization_is_idempotent_and_suppression_can_be_reset(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn initialization_is_idempotent_and_suppression_can_be_reset(cx: &mut gpui::TestAppContext) {
         cx.update(|cx| {
             GlobalState::init(cx);
             GlobalState::suppress_text_selection(cx);

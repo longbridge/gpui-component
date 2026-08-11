@@ -1,6 +1,8 @@
 use gpui::{Axis, InteractiveElement as _, ParentElement as _, Styled as _, blue, green, px, red};
 use gpui_component::{
     Disableable as _, Selectable as _, Sizable as _, Size,
+    Icon, IconName,
+    input::Enter,
     button::{
         Button, ButtonCustomVariant, ButtonGroup, ButtonRounded, ButtonVariant,
         ButtonVariants as _, DropdownButton, Toggle, ToggleGroup, ToggleVariant,
@@ -12,7 +14,16 @@ use gpui_component::{
 fn legacy_button_path_and_builder_surface_remain_available() {
     let button = Button::new("legacy-button")
         .label("Save")
+        .icon(IconName::Check)
         .tooltip("Save changes")
+        .tooltip_with_action(
+            "Save changes",
+            &Enter {
+                secondary: false,
+                shift: false,
+            },
+            Some("Button"),
+        )
         .accessibility_id("settings.save")
         .primary()
         .with_variant(ButtonVariant::Secondary)
@@ -21,6 +32,7 @@ fn legacy_button_path_and_builder_surface_remain_available() {
         .rounded(px(6.))
         .compact()
         .loading(false)
+        .loading_icon(Icon::new(IconName::LoaderCircle))
         .dropdown_caret(true)
         .toggled(false)
         .disabled(false)
@@ -110,6 +122,8 @@ fn legacy_button_group_and_dropdown_paths_remain_available() {
 
     let dropdown = DropdownButton::new("legacy-dropdown-button")
         .button(Button::new("dropdown-primary").label("Export"))
+        .dropdown_menu(|menu, _, _| menu)
+        .dropdown_menu_with_anchor(gpui::Anchor::BottomLeft, |menu, _, _| menu)
         .tooltip("Export options")
         .rounded(ButtonRounded::Small)
         .compact()
@@ -127,6 +141,7 @@ fn legacy_button_group_and_dropdown_paths_remain_available() {
 fn legacy_toggle_types_under_button_module_remain_available() {
     let toggle = Toggle::new("legacy-toggle")
         .label("Bold")
+        .icon(IconName::Check)
         .tooltip("Toggle bold")
         .checked(true)
         .with_variant(ToggleVariant::Outline)

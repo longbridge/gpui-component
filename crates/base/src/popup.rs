@@ -90,9 +90,8 @@ impl StatefulInteractiveElement for Popup {}
 
 impl RenderOnce for Popup {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state((self.id, "anchor"), cx, |_, _| {
-            PopupAnchorState::default()
-        });
+        let state =
+            window.use_keyed_state((self.id, "anchor"), cx, |_, _| PopupAnchorState::default());
         let anchor = self.anchor;
         let position = Rc::new(Cell::new(Self::resolved_corner(
             anchor,
@@ -151,8 +150,14 @@ mod tests {
             origin: Point::new(px(100.), px(100.)),
             size: gpui::Size::new(px(200.), px(50.)),
         };
-        assert_eq!(Popup::resolved_corner(Anchor::TopCenter, bounds), Point::new(px(200.), px(100.)));
-        assert_eq!(Popup::resolved_corner(Anchor::BottomRight, bounds), Point::new(px(300.), px(50.)));
+        assert_eq!(
+            Popup::resolved_corner(Anchor::TopCenter, bounds),
+            Point::new(px(200.), px(100.))
+        );
+        assert_eq!(
+            Popup::resolved_corner(Anchor::BottomRight, bounds),
+            Point::new(px(300.), px(50.))
+        );
     }
 
     struct Harness;
@@ -174,9 +179,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn trigger_capture_enables_deferred_content_on_the_next_frame(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn trigger_capture_enables_deferred_content_on_the_next_frame(cx: &mut gpui::TestAppContext) {
         let (_, window) = cx.add_window_view(|_, _| Harness);
         window.update(|window, cx| window.draw(cx).clear(cx));
         window.update(|window, cx| window.draw(cx).clear(cx));

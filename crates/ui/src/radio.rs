@@ -6,8 +6,8 @@ use crate::{
 };
 use gpui::{
     AnyElement, App, Axis, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
-    Refineable, RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Window, div, prelude::FluentBuilder, px, relative, rems,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder, px, relative, rems,
 };
 use gpui_base::RadioGroup as BaseRadioGroup;
 
@@ -362,24 +362,24 @@ impl RenderOnce for RadioGroup {
         };
 
         let total = self.radios.len();
-        let mut container = BaseRadioGroup::new(self.id).axis(self.layout);
-        container.style().refine(&self.style);
+        BaseRadioGroup::new(self.id)
+            .axis(self.layout)
+            .refine_style(&self.style)
+            .child(
+                base.gap_3()
+                    .children(self.radios.into_iter().enumerate().map(|(ix, mut radio)| {
+                        let checked = selected_ix == Some(ix);
 
-        container.child(
-            base.gap_3()
-                .children(self.radios.into_iter().enumerate().map(|(ix, mut radio)| {
-                    let checked = selected_ix == Some(ix);
-
-                    radio.id = ix.into();
-                    radio.position_in_set = Some(ix + 1);
-                    radio.size_of_set = Some(total);
-                    radio.disabled(disabled).checked(checked).when_some(
-                        on_click.clone(),
-                        |this, on_click| {
-                            this.on_click(move |_, window, cx| on_click(&ix, window, cx))
-                        },
-                    )
-                })),
-        )
+                        radio.id = ix.into();
+                        radio.position_in_set = Some(ix + 1);
+                        radio.size_of_set = Some(total);
+                        radio.disabled(disabled).checked(checked).when_some(
+                            on_click.clone(),
+                            |this, on_click| {
+                                this.on_click(move |_, window, cx| on_click(&ix, window, cx))
+                            },
+                        )
+                    })),
+            )
     }
 }

@@ -2987,12 +2987,19 @@ dependencies = [
 name = "gpui-base"
 version = "0.5.2"
 dependencies = [
+ "async-channel",
  "gpui",
  "gpui_macros",
  "instant",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "raw-window-handle",
  "schemars",
  "serde",
  "smallvec",
+ "smol",
+ "tracing",
 ]
 
 [[package]]
@@ -3001,7 +3008,6 @@ version = "0.5.2"
 dependencies = [
  "aho-corasick",
  "anyhow",
- "async-channel",
  "chrono",
  "core-text",
  "enum-iterator",

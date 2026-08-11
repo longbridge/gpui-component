@@ -13,7 +13,7 @@ use crate::text::TextViewFormat;
 use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 use crate::text::node::CodeBlock;
 use crate::text::state::{SelectionFormat, TextViewState};
-use crate::{global_state::GlobalState, text::TextViewStyle};
+use crate::{global_state::UiGlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
@@ -399,11 +399,11 @@ impl Element for TextView {
             crate::Root::register_selectable_text_view(state, hitbox, window, cx);
         }
 
-        GlobalState::global_mut(cx)
+        UiGlobalState::global_mut(cx)
             .text_view_state_stack
             .push(state.clone());
         request_layout.element.paint(window, cx);
-        GlobalState::global_mut(cx).text_view_state_stack.pop();
+        UiGlobalState::global_mut(cx).text_view_state_stack.pop();
     }
 }
 

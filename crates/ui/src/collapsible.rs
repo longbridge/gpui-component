@@ -1,4 +1,6 @@
-use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window};
+use gpui::{
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
+};
 
 use crate::StyledExt;
 
@@ -47,9 +49,7 @@ impl ParentElement for Collapsible {
 
 impl RenderOnce for Collapsible {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base
-            .v_flex()
-            .refine_style(&self.style)
+        self.base.v_flex().refine_style(&self.style)
     }
 }
 

@@ -67,6 +67,122 @@ fn base_controls_expose_typed_semantic_style_contexts() {
         gpui_base::Toggle::new("toggle").styles(|styles| styles.pressed(|style| style.bg(green())));
     let _ =
         gpui_base::Link::new("link").styles(|styles| styles.disabled(|style| style.opacity(0.5)));
+    let _ = gpui_base::Tab::new("tab").styles(|styles| {
+        styles
+            .selected(|style| style.bg(green()))
+            .disabled(|style| style.opacity(0.5))
+    });
+    let _ = gpui_base::Tabs::new("tabs").child(
+        gpui_base::Tab::new("first")
+            .selected(true)
+            .on_click(|_, _, _| {}),
+    );
+}
+
+#[test]
+fn base_collapsible_uses_normal_child_and_content_slots() {
+    let _ = gpui_base::Collapsible::new()
+        .open(true)
+        .child("Trigger")
+        .content("Content");
+    let _ = gpui_component::collapsible::Collapsible::new()
+        .open(true)
+        .child("Trigger")
+        .content("Content");
+}
+
+#[test]
+fn base_accordion_uses_normal_parts_and_children() {
+    let trigger = gpui_base::AccordionTrigger::new("trigger")
+        .open(true)
+        .disabled(false)
+        .child("Title");
+    let header = gpui_base::AccordionHeader::new(trigger).level(3);
+    let panel = gpui_base::AccordionPanel::new().open(true).child("Content");
+    let item = gpui_base::AccordionItem::new()
+        .open(true)
+        .header(header)
+        .panel(panel);
+    let _ = gpui_base::Accordion::new("accordion").child(item);
+}
+
+#[test]
+fn legacy_behavior_traits_are_the_base_traits() {
+    fn selectable<T: gpui_base::Selectable>(value: T) -> T {
+        value
+    }
+    fn disableable<T: gpui_base::Disableable>(value: T) -> T {
+        value
+    }
+
+    let _ = selectable(gpui_component::button::Button::new("selectable"));
+    let _ = disableable(gpui_component::button::Button::new("disableable"));
+}
+
+#[test]
+fn legacy_measure_type_is_the_base_type() {
+    fn accepts_base(_: gpui_base::Measure) {}
+    accepts_base(gpui_component::Measure::new("compat"));
+}
+
+#[test]
+fn base_progress_accepts_application_owned_indicator_content() {
+    let _ = gpui_base::Progress::new("progress")
+        .value(42.)
+        .child(gpui_base::ProgressTrack::new())
+        .child(gpui_base::ProgressIndicator::new().child(gpui::div()));
+}
+
+#[test]
+fn legacy_tree_models_are_base_types() {
+    fn accepts_base(_: gpui_base::TreeItem) {}
+    accepts_base(gpui_component::tree::TreeItem::new("id", "Label"));
+}
+
+#[test]
+fn legacy_list_settings_are_the_base_type() {
+    fn accepts_base(_: gpui_base::ListSettings) {}
+    accepts_base(gpui_component::list::ListSettings::default());
+}
+
+#[test]
+fn legacy_global_state_is_the_base_type() {
+    fn accepts_base(_: &gpui_base::GlobalState) {}
+    fn through_legacy(state: &gpui_component::GlobalState) {
+        accepts_base(state);
+    }
+
+    let _ = through_legacy;
+}
+
+#[test]
+fn legacy_popover_state_is_the_base_type() {
+    fn accepts_base(_: &gpui_base::PopoverState) {}
+    fn through_legacy(state: &gpui_component::popover::PopoverState) {
+        accepts_base(state);
+    }
+
+    let _ = through_legacy;
+}
+
+#[test]
+fn legacy_hover_card_state_is_the_base_type() {
+    fn accepts_base(_: &gpui_base::HoverCardState) {}
+    fn through_legacy(state: &gpui_component::hover_card::HoverCardState) {
+        accepts_base(state);
+    }
+
+    let _ = through_legacy;
+}
+
+#[test]
+fn base_tooltip_positioner_uses_normal_children() {
+    let _ = gpui_base::Tooltip::new("tooltip-popup")
+        .child("Tooltip")
+        .child("⌘K");
+    let _ = gpui_base::TooltipPositioner::new(gpui::Bounds::default())
+        .placement(gpui_component::Placement::Right)
+        .child("Tooltip");
 }
 
 #[test]

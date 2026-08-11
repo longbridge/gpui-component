@@ -28,7 +28,8 @@ impl Collapsible {
     }
 
     pub fn content(mut self, content: impl IntoElement) -> Self {
-        self.children.push(Child::Content(content.into_any_element()));
+        self.children
+            .push(Child::Content(content.into_any_element()));
         self
     }
 }
@@ -47,16 +48,18 @@ impl Styled for Collapsible {
 
 impl ParentElement for Collapsible {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements.into_iter().map(Child::Element));
+        self.children
+            .extend(elements.into_iter().map(Child::Element));
     }
 }
 
 impl RenderOnce for Collapsible {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base.children(self.children.into_iter().filter_map(|child| match child {
-            Child::Element(element) => Some(element),
-            Child::Content(content) => self.open.then_some(content),
-        }))
+        self.base
+            .children(self.children.into_iter().filter_map(|child| match child {
+                Child::Element(element) => Some(element),
+                Child::Content(content) => self.open.then_some(content),
+            }))
     }
 }
 

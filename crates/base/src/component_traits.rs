@@ -14,3 +14,9 @@ pub trait Selectable: Sized {
 pub trait Disableable {
     fn disabled(mut self, disabled: bool) -> Self;
 }
+
+/// An element or component that exposes collapsed state.
+pub trait Collapsible {
+    fn collapsed(self, collapsed: bool) -> Self;
+    fn is_collapsed(&self) -> bool;
+}

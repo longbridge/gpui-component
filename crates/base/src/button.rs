@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{StateStyle, StyledExt as _};
+use crate::{Selectable, StateStyle, StyledExt as _};
 
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -134,6 +134,16 @@ impl Button {
         }
         style.refine(&self.style);
         style
+    }
+}
+
+impl Selectable for Button {
+    fn selected(self, selected: bool) -> Self {
+        Button::selected(self, selected)
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
     }
 }
 

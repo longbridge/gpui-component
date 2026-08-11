@@ -13,7 +13,7 @@ use objc2_app_kit::{NSView, NSWindow};
 use objc2_foundation::NSPoint;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-pub(crate) fn install_window_hit_test_forwarder(window: &Window) {
+pub fn install_window_hit_test_forwarder(window: &Window) {
     let Some(view) = ns_view(window) else {
         return;
     };
@@ -61,9 +61,6 @@ where
 
     let types = method_type_encoding(&F::Return::ENCODING_RETURN, encs);
     let success = unsafe { class_addMethod(class, sel, func.__imp(), types.as_ptr()) };
-
-    // A false result usually means the class already has this method, for example
-    // after GPUI grows its own hit-test forwarder. Keep the shim non-invasive.
     let _ = success.as_bool();
 }
 

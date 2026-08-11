@@ -265,10 +265,9 @@ pub(crate) trait ManagedTooltipExt:
                         let bounds = trigger_bounds_cell.get();
                         overlay.update(cx, |o: &mut BaseTooltipOverlay, cx| {
                             let build = build_tooltip.clone();
-                            let request = BaseTooltipRequest::new(
-                                bounds,
-                                move |window, cx| build(window, cx),
-                            );
+                            let request = BaseTooltipRequest::new(bounds, move |window, cx| {
+                                build(window, cx)
+                            });
                             let request = match preferred_placement {
                                 Some(placement) => request.placement(placement),
                                 None => request,
