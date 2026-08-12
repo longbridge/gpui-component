@@ -146,8 +146,8 @@ pub use theme_tokens::{
     TypographyTokens,
 };
 pub use toast::{
-    Toast, ToastLifecycle, ToastMotion, ToastStack, ToastStackState, ToastStore,
-    ToastTransitionStatus, ToastViewport, ToastViewportState,
+    Toast, ToastAdvance, ToastManager, ToastMotion, ToastOptions, ToastStack, ToastStackState,
+    ToastTransitionStatus,
 };
 pub use toggle::{Toggle, ToggleStyles};
 pub use toggle_group::ToggleGroup;

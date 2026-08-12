@@ -2,12 +2,12 @@ use std::{any::TypeId, borrow::Cow, collections::HashMap, rc::Rc, time::Duration
 
 use gpui::{
     Anchor, Animation, AnimationExt, AnyElement, App, AppContext, ClickEvent, Context,
-    DismissEvent, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Render, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Subscription, Window, div, prelude::FluentBuilder, px,
+    DismissEvent, ElementId, Entity, EventEmitter, FocusHandle, InteractiveElement as _,
+    IntoElement, ParentElement as _, Pixels, Render, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Subscription, Window, div, prelude::FluentBuilder, px,
 };
 use gpui_base::{
-    Toast as BaseToast, ToastLifecycle, ToastStack, ToastStackState, ToastStore,
+    Toast as BaseToast, ToastManager, ToastMotion, ToastOptions, ToastStack, ToastStackState,
     ToastTransitionStatus,
 };
 
@@ -20,6 +20,7 @@ use crate::{
 
 const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(500);
 const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
+struct DismissRequest;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NotificationType {
@@ -76,7 +77,7 @@ pub struct Notification {
     content_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> AnyElement>>,
     on_click: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
     on_close: Option<Rc<dyn Fn(&mut Window, &mut App)>>,
-    lifecycle: ToastLifecycle,
+    transition_status: ToastTransitionStatus,
 }
 
 impl From<String> for Notification {
@@ -134,7 +135,7 @@ impl Notification {
             content_builder: None,
             on_click: None,
             on_close: None,
-            lifecycle: ToastLifecycle::new(),
+            transition_status: ToastTransitionStatus::Starting,
         }
     }
 
@@ -249,26 +250,22 @@ impl Notification {
 
     /// Dismiss the notification.
     pub fn dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.lifecycle.close() {
-            return;
-        }
-        cx.notify();
+        let _ = window;
+        cx.emit(DismissRequest);
+    }
 
-        let on_close = self.on_close.clone();
-        // Keep the toast mounted until the Base UI-style exit transition completes.
-        cx.spawn_in(window, async move |view, cx| {
-            cx.background_executor()
-                .timer(NOTIFICATION_TRANSITION_DURATION)
-                .await;
-            _ = view.update_in(cx, |_, _, cx| {
-                cx.emit(DismissEvent);
-                cx.notify();
-            });
-            if let Some(on_close) = on_close {
-                _ = cx.update(|window, cx| on_close(window, cx));
-            }
-        })
-        .detach();
+    fn begin_close(&mut self, cx: &mut Context<Self>) {
+        if self.transition_status != ToastTransitionStatus::Ending {
+            self.transition_status = ToastTransitionStatus::Ending;
+            cx.notify();
+        }
+    }
+
+    fn complete_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        cx.emit(DismissEvent);
+        if let Some(on_close) = self.on_close.clone() {
+            on_close(window, cx);
+        }
     }
 
     /// Set the content of the notification.
@@ -282,6 +279,7 @@ impl Notification {
 }
 
 impl EventEmitter<DismissEvent> for Notification {}
+impl EventEmitter<DismissRequest> for Notification {}
 impl FluentBuilder for Notification {}
 impl Styled for Notification {
     fn style(&mut self) -> &mut StyleRefinement {
@@ -300,7 +298,7 @@ impl Render for Notification {
             .clone()
             .map(|builder| builder(self, window, cx).small().mr_3p5());
 
-        let transition_status = self.lifecycle.status();
+        let transition_status = self.transition_status;
         let closing = transition_status == ToastTransitionStatus::Ending;
         let icon = match self.type_ {
             None => self.icon.clone(),
@@ -444,16 +442,33 @@ impl Default for NotificationSettings {
 /// A list of notifications.
 pub struct NotificationList {
     /// Notifications that will be auto hidden.
-    pub(crate) notifications: ToastStore<NotificationId, Entity<Notification>>,
+    pub(crate) notifications: ToastManager<NotificationId, Entity<Notification>>,
     stack_state: ToastStackState,
+    focus_handle: FocusHandle,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
 
 impl NotificationList {
-    pub fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let view = cx.entity().downgrade();
+        cx.spawn_in(window, async move |_, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(50))
+                    .await;
+                if view
+                    .update_in(cx, |view, window, cx| view.advance(window, cx))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
         Self {
-            notifications: ToastStore::default(),
+            notifications: ToastManager::new(ToastMotion::base_ui()),
             stack_state: ToastStackState::default(),
+            focus_handle: cx.focus_handle().tab_stop(true),
             _subscriptions: HashMap::new(),
         }
     }
@@ -461,7 +476,7 @@ impl NotificationList {
     pub fn push(
         &mut self,
         notification: impl Into<Notification>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let notification = notification.into();
@@ -470,40 +485,45 @@ impl NotificationList {
 
         let notification = cx.new(|_| notification);
 
-        let entering_notification = notification.clone();
-        cx.spawn_in(window, async move |_, cx| {
-            cx.background_executor()
-                .timer(NOTIFICATION_TRANSITION_DURATION)
-                .await;
-            _ = entering_notification.update_in(cx, |note, _, cx| {
-                note.lifecycle.finish_enter();
-                cx.notify();
-            });
-        })
-        .detach();
-
         let dismiss_id = id.clone();
         self._subscriptions.insert(
             id.clone(),
-            cx.subscribe(&notification, move |view, _, _: &DismissEvent, _| {
-                view.notifications.remove(&dismiss_id);
-                view._subscriptions.remove(&dismiss_id);
+            cx.subscribe(&notification, move |view, _, _: &DismissRequest, cx| {
+                if view
+                    .notifications
+                    .dismiss(&dismiss_id, cx.background_executor().now())
+                {
+                    if let Some(note) = view.notifications.get(&dismiss_id) {
+                        note.update(cx, |note, cx| note.begin_close(cx));
+                    }
+                }
             }),
         );
 
-        self.notifications.push(id, notification.clone());
-        if autohide {
-            // Sleep for 5 seconds to autohide the notification
-            cx.spawn_in(window, async move |_, cx| {
-                cx.background_executor().timer(Duration::from_secs(5)).await;
+        self.notifications.push(
+            id,
+            notification,
+            ToastOptions {
+                timeout: autohide.then_some(Duration::from_secs(5)),
+            },
+            cx.background_executor().now(),
+        );
+        cx.notify();
+    }
 
-                if let Err(err) =
-                    notification.update_in(cx, |note, window, cx| note.dismiss(window, cx))
-                {
-                    tracing::error!("failed to auto hide notification: {:?}", err);
-                }
-            })
-            .detach();
+    fn advance(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let changes = self.notifications.advance(
+            cx.background_executor().now(),
+            self.stack_state.is_expanded() || !window.is_window_active(),
+        );
+        for id in changes.ending {
+            if let Some(note) = self.notifications.get(&id) {
+                note.update(cx, |note, cx| note.begin_close(cx));
+            }
+        }
+        for (id, note) in changes.removed {
+            self._subscriptions.remove(&id);
+            note.update(cx, |note, cx| note.complete_close(window, cx));
         }
         cx.notify();
     }
@@ -511,12 +531,17 @@ impl NotificationList {
     pub(crate) fn close(
         &mut self,
         id: impl Into<NotificationId>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let id: NotificationId = id.into();
-        if let Some(n) = self.notifications.get(&id) {
-            n.update(cx, |note, cx| note.dismiss(window, cx))
+        if self
+            .notifications
+            .dismiss(&id, cx.background_executor().now())
+        {
+            if let Some(n) = self.notifications.get(&id) {
+                n.update(cx, |note, cx| note.begin_close(cx))
+            }
         }
         cx.notify();
     }
@@ -526,31 +551,47 @@ impl NotificationList {
     pub(crate) fn close_by_type(
         &mut self,
         type_id: TypeId,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let matched: Vec<_> = self
             .notifications
             .iter()
-            .filter(|(id, _)| match id {
+            .filter(|(id, _, _)| match id {
                 NotificationId::Id(t) | NotificationId::IdAndElementId(t, _) => *t == type_id,
             })
-            .map(|(_, notification)| notification)
+            .map(|(_, notification, _)| notification)
             .cloned()
             .collect();
         for n in matched {
-            n.update(cx, |note, cx| note.dismiss(window, cx));
+            let id = n.read(cx).id.clone();
+            if self
+                .notifications
+                .dismiss(&id, cx.background_executor().now())
+            {
+                n.update(cx, |note, cx| note.begin_close(cx));
+            }
         }
         cx.notify();
     }
 
     pub fn clear(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        self.notifications.clear();
+        for id in self
+            .notifications
+            .dismiss_all(cx.background_executor().now())
+        {
+            if let Some(note) = self.notifications.get(&id) {
+                note.update(cx, |note, cx| note.begin_close(cx));
+            }
+        }
         cx.notify();
     }
 
     pub fn notifications(&self) -> Vec<Entity<Notification>> {
-        self.notifications.values().cloned().collect()
+        self.notifications
+            .iter()
+            .map(|(_, value, _)| value.clone())
+            .collect()
     }
 }
 
@@ -562,14 +603,24 @@ impl Render for NotificationList {
     ) -> impl IntoElement {
         let size = window.viewport_size();
         let max_items = cx.theme().notification.max_items;
-        let items = self.notifications.visible_values(max_items).cloned();
+        let items = self
+            .notifications
+            .visible(max_items)
+            .map(|(id, value, _)| (id.clone(), value.clone()))
+            .collect::<Vec<_>>();
 
         let placement = cx.theme().notification.placement;
         let margins = &cx.theme().notification.margins;
+        let stack = items.into_iter().fold(
+            ToastStack::new("notification-list", self.stack_state.clone()),
+            |stack, (id, item)| stack.item(format!("{id:?}"), item),
+        );
 
-        ToastStack::new("notification-list", self.stack_state.clone())
+        stack
             .placement(placement)
+            .focus_handle(self.focus_handle.clone())
             .v_flex()
+            .w_112()
             .max_h(size.height)
             .pt(margins.top)
             .pb(margins.bottom)
@@ -581,18 +632,13 @@ impl Render for NotificationList {
                 matches!(placement, Anchor::TopLeft),
                 |this| this.pl(margins.left), // ignore right
             )
-            .when(
-                matches!(placement, Anchor::BottomLeft),
-                |this| this.flex_col_reverse().pl(margins.left), // ignore right
-            )
+            .when(matches!(placement, Anchor::BottomLeft), |this| {
+                this.pl(margins.left)
+            })
             .when(
                 matches!(placement, Anchor::BottomRight),
-                |this| this.flex_col_reverse().pr(margins.right), // ignore left
+                |this| this.pr(margins.right), // ignore left
             )
-            .when(matches!(placement, Anchor::BottomCenter), |this| {
-                this.flex_col_reverse()
-            })
-            .children(items)
     }
 }
 
@@ -618,8 +664,8 @@ mod tests {
     fn ids(list: &Entity<NotificationList>, cx: &mut VisualTestContext) -> Vec<NotificationId> {
         list.read_with(cx, |l, cx| {
             l.notifications
-                .values()
-                .map(|n| n.read(cx).id.clone())
+                .iter()
+                .map(|(_, n, _)| n.read(cx).id.clone())
                 .collect()
         })
     }

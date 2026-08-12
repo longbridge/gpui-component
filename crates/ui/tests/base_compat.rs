@@ -196,7 +196,7 @@ fn base_table_and_toast_accept_application_owned_composition() {
         .child(gpui_base::TableBody::new("body"))
         .child(gpui_base::TableCaption::new("caption").child("People"));
 
-    let _ = gpui_base::ToastViewport::new("toasts")
+    let _ = gpui_base::ToastStack::new("toasts", gpui_base::ToastStackState::default())
         .child(gpui_base::Toast::new("toast").child("Saved"));
 }
 

@@ -175,7 +175,7 @@ Styles applied directly in the main builder chain have the highest priority. Sem
 | `Toggle` / `ToggleGroup`                 | A controlled pressed state and grouping container                                                     |
 | `Link`                                   | Link semantics and activation with an application-provided `open_with` navigation strategy            |
 | `Table` and semantic table parts         | Table, row-group, row, column-header, cell roles, and accessibility indices without layout or styling  |
-| `Toast` / `ToastViewport` / `ToastStore` | Alert semantics, transition/viewport state, visible-limit projection, and unique-id ordered storage     |
+| `Toast` / `ToastStack` / `ToastManager`  | Alert semantics, lifecycle, timers, limits, measured stack geometry, and interaction-aware motion       |
 
 The base layer never opens a URL by itself. This allows the same `Link` to target internal routing, an embedded web view, or the system browser.
 

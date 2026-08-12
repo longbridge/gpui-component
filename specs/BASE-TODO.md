@@ -466,14 +466,12 @@ checking the component milestone:
   Cell/Caption parts. The legacy basic Table composes them directly while keeping
   sizing propagation, flex layout, colors, borders, padding, and typography in UI.
   Base owns table roles and one-based row/column accessibility indices.
-- 2026-08-12: Notification now composes Base `Toast` and `ToastViewport`, exposes
-  Base UI-style starting/ending transition status to presentation, and uses Base
-  `ToastStore` for ordered unique-id replacement. This is not yet the complete
-  Base UI provider/store contract: timer pause/resume, full stack metadata, focus
-  expansion, and event-driven removal after transition completion remain open. Base now owns
-  transition lifecycle, hover expansion state, duplicate-close protection, and
-  visible-limit projection; UI owns the concrete visual animation values. Dock
-  was explicitly classified as UI-owned and will not migrate.
+- 2026-08-12: Notification now composes Base `Toast`, `ToastStack`, and
+  `ToastManager`. Base owns unique-id replacement, starting/present/ending
+  lifecycle, auto-hide timers paused by hover/focus/window inactivity, limits,
+  measured stack geometry, and removal after the exit duration. UI owns concrete
+  animation values, placement, actions, icons, and presentation. The earlier
+  shallow Store/Lifecycle/Viewport interfaces were removed. Dock remains UI-owned.
 - 2026-08-12: Notification enter/exit motion now follows the Base UI Toast demo's
   500ms `cubic-bezier(0.22, 1, 0.36, 1)` transition and moves along the configured
   viewport edge. Exit removal uses the same duration, so an ending toast remains
@@ -836,13 +834,11 @@ seams suitable for application-owned wrappers.
 - [x] Resizable
 - [ ] Scrollable
 - [ ] Notification / Toast
-  - [x] Base owns unstyled Toast/ToastViewport semantics, starting/present/ending
-        lifecycle, duplicate-close protection, hover expansion state, visible-
-        limit projection, and ordered unique-id storage. UI retains concrete
-        animation values, placement, actions, icons, and presentation.
-  - [ ] Move Base UI-style provider lifecycle into Base: timer pause/resume on
-        hover/focus/window activity, full stack metadata, update coordination,
-        focus expansion, and event-driven removal after exit completion.
+  - [x] Base owns Toast semantics, ordered unique-id storage, transition lifecycle,
+        duplicate-close protection, auto-hide pause/resume for hover/focus/window
+        activity, visible limits, variable-height stack geometry, expansion, and
+        removal after the exit duration. UI retains concrete motion values,
+        placement, actions, icons, and presentation.
   - [ ] Complete final legacy visual/interaction/accessibility comparison.
 - [x] Dock — deliberately remains UI-owned; do not migrate.
 
