@@ -1,9 +1,5 @@
-pub use gpui_base::input::{
-    Diagnostic, DiagnosticEntry, DiagnosticRelatedInformation, DiagnosticSet, DiagnosticSeverity,
-    DiagnosticSummary, DiagnosticTag, RelatedInformation,
-};
-
 use gpui::{App, Hsla};
+use gpui_base::input::DiagnosticSeverity;
 
 use crate::ActiveTheme as _;
 

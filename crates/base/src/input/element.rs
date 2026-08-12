@@ -774,7 +774,7 @@ impl TextElement {
     ) -> Option<Path<Pixels>> {
         let state = self.state.read(cx);
         let Some(symbol_range) = state
-            .hover_session
+            .hover_popover
             .as_ref()
             .map(|session| session.symbol_range.clone())
         else {

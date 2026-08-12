@@ -3,7 +3,7 @@ use gpui::{App, Context, MouseMoveEvent, Task, Window};
 use instant::Duration;
 use ropey::Rope;
 
-use crate::input::{HoverSession, InputState, RopeExt};
+use crate::input::{HoverPopoverState, InputState, RopeExt};
 
 /// Hover provider
 ///
@@ -37,8 +37,8 @@ impl InputState {
             return;
         };
 
-        if let Some(hover_session) = self.hover_session.as_ref() {
-            if hover_session.symbol_range.contains(&offset) {
+        if let Some(hover_popover) = self.hover_popover.as_ref() {
+            if hover_popover.symbol_range.contains(&offset) {
                 return;
             }
         }
@@ -47,7 +47,7 @@ impl InputState {
         let task = provider.hover(&self.text, offset, window, cx);
         let mut symbol_range = self.text.word_range(offset).unwrap_or(offset..offset);
         let editor = cx.entity();
-        let should_delay = self.hover_session.is_none();
+        let should_delay = self.hover_popover.is_none();
         self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
             if should_delay {
                 cx.background_executor()
@@ -64,13 +64,13 @@ impl InputState {
                         let end = editor.text.position_to_offset(&range.end);
                         symbol_range = start..end;
                     }
-                    editor.hover_session = Some(HoverSession {
+                    editor.hover_popover = Some(HoverPopoverState {
                         symbol_range,
                         hover,
                     });
                 }
                 None => {
-                    editor.hover_session = None;
+                    editor.hover_popover = None;
                 }
             });
 
@@ -95,9 +95,9 @@ impl InputState {
     }
 
     pub fn clear_hover_state(&mut self, cx: &mut Context<Self>) {
-        let changed = !self.hover_definition.is_empty() || self.hover_session.is_some();
+        let changed = !self.hover_definition.is_empty() || self.hover_popover.is_some();
         self.hover_definition.clear();
-        self.hover_session = None;
+        self.hover_popover = None;
         self.lsp._hover_task = Task::ready(Ok(()));
         if changed {
             cx.notify();

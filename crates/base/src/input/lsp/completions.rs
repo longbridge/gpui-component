@@ -150,7 +150,8 @@ impl InputState {
         }
 
         let start_offset = self
-            .completion_session
+            .context_menu_content
+            .completion
             .trigger_start_offset
             .unwrap_or(start);
         if new_offset < start_offset {
@@ -166,8 +167,11 @@ impl InputState {
             )
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        self.completion_session.trigger_start_offset = Some(start_offset);
-        self.completion_session.query.clone_from(&query);
+        self.context_menu_content.completion.trigger_start_offset = Some(start_offset);
+        self.context_menu_content
+            .completion
+            .query
+            .clone_from(&query);
 
         let completion_context = CompletionContext {
             trigger_kind: lsp_types::CompletionTriggerKind::TRIGGER_CHARACTER,
@@ -187,8 +191,8 @@ impl InputState {
 
             if completions.is_empty() {
                 editor.update(cx, |editor, cx| {
-                    editor.completion_session.open = false;
-                    editor.completion_session.items.clear();
+                    editor.context_menu_content.completion.open = false;
+                    editor.context_menu_content.completion.items.clear();
                     cx.notify();
                 })?;
                 return Ok(());
@@ -200,8 +204,9 @@ impl InputState {
                         return;
                     }
 
-                    editor.completion_session.items = completions;
-                    editor.completion_session.open = !editor.completion_session.items.is_empty();
+                    editor.context_menu_content.completion.items = completions;
+                    editor.context_menu_content.completion.open =
+                        !editor.context_menu_content.completion.items.is_empty();
 
                     cx.notify();
                 })
@@ -212,14 +217,14 @@ impl InputState {
     }
 
     pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
-        self.completion_session.open = false;
-        self.code_action_session.open = false;
+        self.context_menu_content.completion.open = false;
+        self.context_menu_content.code_action.open = false;
         self._context_menu_task = Task::ready(Ok(()));
         cx.notify();
     }
 
     pub(crate) fn is_context_menu_open(&self, _cx: &gpui::App) -> bool {
-        self.completion_session.open || self.code_action_session.open
+        self.context_menu_content.completion.open || self.context_menu_content.code_action.open
     }
 
     pub(crate) fn handle_action_for_context_menu(
@@ -230,9 +235,9 @@ impl InputState {
     ) -> bool {
         let closes_overlay =
             crate::input::Enter::is_primary(&*action) || action.partial_eq(&crate::input::Escape);
-        let kind = if self.completion_session.open {
+        let kind = if self.context_menu_content.completion.open {
             Some(super::InputOverlayKind::Completion)
-        } else if self.code_action_session.open {
+        } else if self.context_menu_content.code_action.open {
             Some(super::InputOverlayKind::CodeAction)
         } else {
             None
@@ -243,8 +248,12 @@ impl InputState {
         let handled = handler(kind, action, window, cx);
         if handled && closes_overlay {
             match kind {
-                super::InputOverlayKind::Completion => self.completion_session.open = false,
-                super::InputOverlayKind::CodeAction => self.code_action_session.open = false,
+                super::InputOverlayKind::Completion => {
+                    self.context_menu_content.completion.open = false
+                }
+                super::InputOverlayKind::CodeAction => {
+                    self.context_menu_content.code_action.open = false
+                }
             }
             cx.notify();
         }

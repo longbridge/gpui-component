@@ -1,6 +1,10 @@
-// Diagnostics module - works on all platforms (no tree-sitter dependency)
-mod diagnostics;
-pub use diagnostics::*;
+pub use gpui_base::input::{
+    Diagnostic, DiagnosticEntry, DiagnosticRelatedInformation, DiagnosticSet, DiagnosticSeverity,
+    DiagnosticSummary, DiagnosticTag, RelatedInformation,
+};
+
+mod diagnostic_styles;
+pub(crate) use diagnostic_styles::*;
 
 #[cfg(feature = "tree-sitter")]
 mod input_adapter;

@@ -80,8 +80,8 @@ impl InputState {
 
             if code_actions.is_empty() {
                 editor.update(cx, |editor, cx| {
-                    editor.code_action_session.open = false;
-                    editor.code_action_session.items.clear();
+                    editor.context_menu_content.code_action.open = false;
+                    editor.context_menu_content.code_action.items.clear();
                     cx.notify();
                 })?;
                 return Ok(());
@@ -92,8 +92,9 @@ impl InputState {
                         return;
                     }
 
-                    editor.code_action_session.items = code_actions;
-                    editor.code_action_session.open = !editor.code_action_session.items.is_empty();
+                    editor.context_menu_content.code_action.items = code_actions;
+                    editor.context_menu_content.code_action.open =
+                        !editor.context_menu_content.code_action.items.is_empty();
 
                     cx.notify();
                 })

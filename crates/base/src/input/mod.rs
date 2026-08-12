@@ -16,7 +16,6 @@ mod cursor;
 mod decorations;
 mod diagnostics;
 mod display_map;
-mod editing_indent;
 mod element;
 mod highlighting;
 mod indent;
@@ -50,9 +49,9 @@ pub use highlighting::{
 };
 pub use indent::TabSize;
 pub use lsp::{
-    CodeActionItem, CodeActionProvider, CodeActionSession, CompletionMenuOptions,
-    CompletionProvider, CompletionSession, DefinitionProvider, DocumentColorProvider,
-    DocumentRangeSemanticTokensProvider, HoverProvider, HoverSession, InputOverlayKind, Lsp,
+    CodeActionItem, CodeActionMenuState, CodeActionProvider, CompletionMenuOptions,
+    CompletionMenuState, CompletionProvider, DefinitionProvider, DocumentColorProvider,
+    DocumentRangeSemanticTokensProvider, HoverPopoverState, HoverProvider, InputOverlayKind, Lsp,
     ShowDocumentHandler,
 };
 pub(super) use lsp::{HoverDefinition, InlineCompletion};

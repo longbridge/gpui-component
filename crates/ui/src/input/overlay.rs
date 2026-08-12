@@ -88,8 +88,8 @@ impl InputOverlayHost {
         ) = {
             let state = state.read(cx);
             let search = state.search_session();
-            let completion = state.completion_session();
-            let code_actions = state.code_action_session();
+            let completion = state.completion_menu_state();
+            let code_actions = state.code_action_menu_state();
             (
                 search.open,
                 search.replace_mode,
@@ -99,8 +99,8 @@ impl InputOverlayHost {
                 completion.items.clone(),
                 code_actions.open,
                 code_actions.items.clone(),
-                state.hover_session().cloned(),
-                state.diagnostic_overlay(),
+                state.hover_popover().cloned(),
+                state.diagnostic_popover(),
                 state.cursor(),
                 search.clone(),
             )
@@ -205,10 +205,10 @@ pub(super) fn render_overlays(
     let has_overlay = {
         let state = state.read(cx);
         state.search_session().open
-            || state.completion_session().open
-            || state.code_action_session().open
-            || state.hover_session().is_some()
-            || state.diagnostic_overlay().is_some()
+            || state.completion_menu_state().open
+            || state.code_action_menu_state().open
+            || state.hover_popover().is_some()
+            || state.diagnostic_popover().is_some()
     };
     if !has_overlay {
         if cx.has_global::<InputOverlayRegistry>() {
@@ -349,11 +349,11 @@ mod tests {
 
             state.update(cx, |state, cx| {
                 assert!(state.route_overlay_action(Box::new(super::super::Escape), window, cx));
-                assert!(!state.completion_session().open);
+                assert!(!state.completion_menu_state().open);
                 state.dismiss_code_action_overlay(cx);
                 state.close_search(cx);
                 state.clear_hover_state(cx);
-                state.clear_diagnostic_overlay(cx);
+                state.clear_diagnostic_popover(cx);
             });
             assert!(host.sync(&state, window, cx).is_empty());
             assert!(render_overlays(&state, window, cx).is_empty());

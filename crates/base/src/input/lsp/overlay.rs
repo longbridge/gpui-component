@@ -4,7 +4,7 @@ use std::ops::Range;
 use lsp_types::{CompletionItem, Hover};
 
 #[derive(Clone, Debug, Default)]
-pub struct CompletionSession {
+pub struct CompletionMenuState {
     pub open: bool,
     pub trigger_start_offset: Option<usize>,
     pub query: String,
@@ -12,15 +12,21 @@ pub struct CompletionSession {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct CodeActionSession {
+pub struct CodeActionMenuState {
     pub open: bool,
     pub items: Vec<CodeActionItem>,
 }
 
 #[derive(Clone, Debug)]
-pub struct HoverSession {
+pub struct HoverPopoverState {
     pub symbol_range: Range<usize>,
     pub hover: Hover,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ContextMenuContent {
+    pub(crate) completion: CompletionMenuState,
+    pub(crate) code_action: CodeActionMenuState,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -37,16 +43,18 @@ impl InputState {
         items: Vec<CompletionItem>,
         cx: &mut Context<Self>,
     ) {
-        self.completion_session.trigger_start_offset = Some(trigger_start_offset);
-        self.completion_session.query = query.into();
-        self.completion_session.items = items;
-        self.completion_session.open = !self.completion_session.items.is_empty();
+        self.context_menu_content.completion.trigger_start_offset = Some(trigger_start_offset);
+        self.context_menu_content.completion.query = query.into();
+        self.context_menu_content.completion.items = items;
+        self.context_menu_content.completion.open =
+            !self.context_menu_content.completion.items.is_empty();
         cx.notify();
     }
 
     pub fn present_code_actions(&mut self, items: Vec<CodeActionItem>, cx: &mut Context<Self>) {
-        self.code_action_session.items = items;
-        self.code_action_session.open = !self.code_action_session.items.is_empty();
+        self.context_menu_content.code_action.items = items;
+        self.context_menu_content.code_action.open =
+            !self.context_menu_content.code_action.items.is_empty();
         cx.notify();
     }
 
@@ -56,7 +64,7 @@ impl InputState {
         hover: Hover,
         cx: &mut Context<Self>,
     ) {
-        self.hover_session = Some(HoverSession {
+        self.hover_popover = Some(HoverPopoverState {
             symbol_range,
             hover,
         });
@@ -68,12 +76,12 @@ impl InputState {
         diagnostic: crate::input::DiagnosticEntry,
         cx: &mut Context<Self>,
     ) {
-        self.diagnostic_overlay = Some(Rc::new(diagnostic));
+        self.diagnostic_popover = Some(Rc::new(diagnostic));
         cx.notify();
     }
 
-    pub fn clear_diagnostic_overlay(&mut self, cx: &mut Context<Self>) {
-        if self.diagnostic_overlay.take().is_some() {
+    pub fn clear_diagnostic_popover(&mut self, cx: &mut Context<Self>) {
+        if self.diagnostic_popover.take().is_some() {
             cx.notify();
         }
     }
@@ -105,15 +113,15 @@ impl InputState {
     }
 
     pub fn dismiss_completion_overlay(&mut self, cx: &mut Context<Self>) {
-        if self.completion_session.open {
-            self.completion_session.open = false;
+        if self.context_menu_content.completion.open {
+            self.context_menu_content.completion.open = false;
             cx.notify();
         }
     }
 
     pub fn dismiss_code_action_overlay(&mut self, cx: &mut Context<Self>) {
-        if self.code_action_session.open {
-            self.code_action_session.open = false;
+        if self.context_menu_content.code_action.open {
+            self.context_menu_content.code_action.open = false;
             cx.notify();
         }
     }
@@ -151,16 +159,18 @@ impl InputState {
         self.focus(window, cx);
     }
 
-    pub fn completion_session(&self) -> &CompletionSession {
-        &self.completion_session
+    #[doc(hidden)]
+    pub fn completion_menu_state(&self) -> &CompletionMenuState {
+        &self.context_menu_content.completion
     }
 
-    pub fn code_action_session(&self) -> &CodeActionSession {
-        &self.code_action_session
+    #[doc(hidden)]
+    pub fn code_action_menu_state(&self) -> &CodeActionMenuState {
+        &self.context_menu_content.code_action
     }
 
-    pub fn hover_session(&self) -> Option<&HoverSession> {
-        self.hover_session.as_ref()
+    pub fn hover_popover(&self) -> Option<&HoverPopoverState> {
+        self.hover_popover.as_ref()
     }
 
     pub fn dismiss_lsp_overlays(&mut self, cx: &mut Context<Self>) {

@@ -11,18 +11,18 @@ pub use gpui_base::InputContentType;
 #[cfg(not(feature = "tree-sitter"))]
 pub struct Tree;
 pub use gpui_base::input::{
-    Backspace, BufferPoint, CodeActionItem, CodeActionProvider, CodeActionSession,
-    CompletionMenuOptions, CompletionProvider, CompletionSession, Copy, Cut, DefinitionProvider,
-    Delete, DeleteToBeginningOfLine, DeleteToEndOfLine, DeleteToNextWordEnd,
-    DeleteToPreviousWordStart, DisplayMap, DisplayPoint, DocumentColorProvider,
-    DocumentRangeSemanticTokensProvider, Enter, Escape, FoldRange, GoToDefinition, HoverProvider,
-    HoverSession, Indent, IndentInline, InputEdit, InputEvent, InputState, Lsp, MaskPattern,
-    MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight, MoveToEnd,
-    MoveToEndOfLine, MoveToNextWord, MoveToPreviousWord, MoveToStart, MoveToStartOfLine, MoveUp,
-    Outdent, OutdentInline, Paste, Point, Redo, Replace, Rope, RopeExt, RopeLines, Search,
-    SelectAll, SelectToEnd, SelectToEndOfLine, SelectToNextWordEnd, SelectToPreviousWordStart,
-    SelectToStart, SelectToStartOfLine, Selection, ShowCharacterPalette, ShowDocumentHandler,
-    TabSize, TextDecoration, TextDecorationCollection, ToggleCodeActions, Undo, WrappingIndent,
+    Backspace, BufferPoint, CodeActionItem, CodeActionProvider, CompletionMenuOptions,
+    CompletionProvider, Copy, Cut, DefinitionProvider, Delete, DeleteToBeginningOfLine,
+    DeleteToEndOfLine, DeleteToNextWordEnd, DeleteToPreviousWordStart, DisplayMap, DisplayPoint,
+    DocumentColorProvider, DocumentRangeSemanticTokensProvider, Enter, Escape, FoldRange,
+    GoToDefinition, HoverPopoverState, HoverProvider, Indent, IndentInline, InputEdit, InputEvent,
+    InputState, Lsp, MaskPattern, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp,
+    MoveRight, MoveToEnd, MoveToEndOfLine, MoveToNextWord, MoveToPreviousWord, MoveToStart,
+    MoveToStartOfLine, MoveUp, Outdent, OutdentInline, Paste, Point, Redo, Replace, Rope, RopeExt,
+    RopeLines, Search, SelectAll, SelectToEnd, SelectToEndOfLine, SelectToNextWordEnd,
+    SelectToPreviousWordStart, SelectToStart, SelectToStartOfLine, Selection, ShowCharacterPalette,
+    ShowDocumentHandler, TabSize, TextDecoration, TextDecorationCollection, ToggleCodeActions,
+    Undo, WrappingIndent,
 };
 pub use input::*;
 pub use lsp_types::Position;

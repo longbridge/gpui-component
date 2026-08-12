@@ -343,7 +343,7 @@ pub struct InputState {
     pub(super) placeholder: SharedString,
 
     /// Diagnostic currently requested by pointer hover; applications render it.
-    pub(super) diagnostic_overlay: Option<Rc<crate::input::DiagnosticEntry>>,
+    pub(super) diagnostic_popover: Option<Rc<crate::input::DiagnosticEntry>>,
 
     /// An optional context menu builder to allow a custom right-click context menu on the input.
     ///
@@ -362,8 +362,8 @@ pub struct InputState {
 
     /// A flag to indicate if we are currently inserting a completion item.
     pub(super) completion_inserting: bool,
-    pub(super) completion_session: super::CompletionSession,
-    pub(super) code_action_session: super::CodeActionSession,
+    /// Completion/CodeAction context menu.
+    pub(super) context_menu_content: super::lsp::ContextMenuContent,
     pub(super) overlay_action_handler: Option<
         Rc<
             dyn Fn(
@@ -374,7 +374,7 @@ pub struct InputState {
             ) -> bool,
         >,
     >,
-    pub(super) hover_session: Option<super::HoverSession>,
+    pub(super) hover_popover: Option<super::HoverPopoverState>,
     /// The LSP definitions locations for "Go to Definition" feature.
     pub(super) hover_definition: HoverDefinition,
 
@@ -442,8 +442,8 @@ impl InputState {
         self.select_all(&SelectAll, window, cx);
     }
 
-    pub fn diagnostic_overlay(&self) -> Option<Rc<crate::input::DiagnosticEntry>> {
-        self.diagnostic_overlay.clone()
+    pub fn diagnostic_popover(&self) -> Option<Rc<crate::input::DiagnosticEntry>> {
+        self.diagnostic_popover.clone()
     }
 
     pub fn presentation(&self) -> InputPresentation {
@@ -618,17 +618,16 @@ impl InputState {
             decorations: DecorationCollections::default(),
             editor_style: InputEditorStyle::default(),
             lsp: Lsp::default(),
-            diagnostic_overlay: None,
+            diagnostic_popover: None,
             context_menu_builder: None,
             context_menu_presenter: None,
             pending_context_menu: None,
             focus_host: None,
             enable_context_menu: true,
             completion_inserting: false,
-            completion_session: super::CompletionSession::default(),
-            code_action_session: super::CodeActionSession::default(),
+            context_menu_content: super::lsp::ContextMenuContent::default(),
             overlay_action_handler: None,
-            hover_session: None,
+            hover_popover: None,
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
             emit_events: true,
@@ -2018,10 +2017,10 @@ impl InputState {
                 .diagnostics()
                 .and_then(|set| set.for_offset(offset))
             {
-                self.diagnostic_overlay = Some(Rc::new(diagnostic.clone()));
+                self.diagnostic_popover = Some(Rc::new(diagnostic.clone()));
                 cx.notify();
             } else {
-                self.diagnostic_overlay = None;
+                self.diagnostic_popover = None;
             }
         }
     }
@@ -2047,7 +2046,7 @@ impl InputState {
             cx.stop_propagation();
         }
 
-        self.diagnostic_overlay = None;
+        self.diagnostic_popover = None;
     }
 
     pub(super) fn update_scroll_offset(
@@ -2518,8 +2517,8 @@ impl InputState {
         // NOTE: Do not cancel select, when blur.
         // Because maybe user want to copy the selected text by AppMenuBar (will take focus handle).
 
-        self.hover_session = None;
-        self.diagnostic_overlay = None;
+        self.hover_popover = None;
+        self.diagnostic_popover = None;
         self.clear_inline_completion(cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
