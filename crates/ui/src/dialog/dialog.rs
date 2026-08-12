@@ -2,7 +2,7 @@ use std::{rc::Rc, sync::LazyLock, time::Duration};
 
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, BoxShadow, ClickEvent, Edges, FocusHandle, Hsla,
-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, Role, SharedString,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
     StyleRefinement, Styled, Window, WindowControlArea, anchored, div, hsla, point,
     prelude::FluentBuilder, px,
 };
@@ -163,10 +163,78 @@ impl Default for DialogProps {
     }
 }
 
+enum BaseDialogRoot {
+    Dialog(gpui_base::Dialog),
+    AlertDialog(gpui_base::AlertDialog),
+}
+
+macro_rules! map_base_root {
+    ($self:expr, $method:ident($($arg:expr),* $(,)?)) => {
+        match $self {
+            BaseDialogRoot::Dialog(root) => BaseDialogRoot::Dialog(root.$method($($arg),*)),
+            BaseDialogRoot::AlertDialog(root) => {
+                BaseDialogRoot::AlertDialog(root.$method($($arg),*))
+            }
+        }
+    };
+}
+
+impl BaseDialogRoot {
+    fn layer(self, index: usize, topmost: bool) -> Self {
+        map_base_root!(self, layer(index, topmost))
+    }
+    fn focus_handle(self, focus: FocusHandle) -> Self {
+        map_base_root!(self, focus_handle(focus))
+    }
+    fn close_on_escape(self, value: bool) -> Self {
+        map_base_root!(self, close_on_escape(value))
+    }
+    fn close_on_backdrop_press(self, value: bool) -> Self {
+        match self {
+            Self::Dialog(root) => Self::Dialog(root.close_on_backdrop_press(value)),
+            Self::AlertDialog(root) => Self::AlertDialog(root),
+        }
+    }
+    fn dismiss_below_y(self, value: Pixels) -> Self {
+        map_base_root!(self, dismiss_below_y(value))
+    }
+    fn backdrop(self, element: impl IntoElement) -> Self {
+        map_base_root!(self, backdrop(element))
+    }
+    fn popup(self, element: impl IntoElement) -> Self {
+        map_base_root!(self, popup(element))
+    }
+    fn on_ok(self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static) -> Self {
+        map_base_root!(self, on_ok(handler))
+    }
+    fn on_cancel(
+        self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) -> bool + 'static,
+    ) -> Self {
+        map_base_root!(self, on_cancel(handler))
+    }
+    fn on_close(self, handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
+        map_base_root!(self, on_close(handler))
+    }
+    fn request_close(self, handler: impl Fn(bool, &mut Window, &mut App) + 'static) -> Self {
+        map_base_root!(self, request_close(handler))
+    }
+}
+
+impl IntoElement for BaseDialogRoot {
+    type Element = <gpui_base::Dialog as IntoElement>::Element;
+    fn into_element(self) -> Self::Element {
+        match self {
+            Self::Dialog(root) => root.into_element(),
+            Self::AlertDialog(root) => root.into_element(),
+        }
+    }
+}
+
 /// A modal to display content in a dialog box.
 #[derive(IntoElement)]
 pub struct Dialog {
-    base: Option<gpui_base::Dialog>,
+    base: Option<BaseDialogRoot>,
     pub(crate) style: StyleRefinement,
     children: Vec<AnyElement>,
     trigger: Option<AnyElement>,
@@ -175,7 +243,6 @@ pub struct Dialog {
     pub(crate) footer: Option<AnyElement>,
     pub(crate) content_builder: Option<ContentBuilderFn>,
     pub(crate) props: DialogProps,
-    pub(crate) a11y_role: Role,
 
     pub(super) button_props: DialogButtonProps,
 
@@ -196,7 +263,7 @@ impl Dialog {
     /// Create a new dialog.
     pub fn new(cx: &mut App) -> Self {
         Self {
-            base: Some(gpui_base::Dialog::new(cx)),
+            base: Some(BaseDialogRoot::Dialog(gpui_base::Dialog::new(cx))),
             focus_handle: cx.focus_handle(),
             style: StyleRefinement::default(),
             trigger: None,
@@ -208,7 +275,6 @@ impl Dialog {
             children: Vec::new(),
             layer_ix: 0,
             button_props: DialogButtonProps::default(),
-            a11y_role: Role::Dialog,
         }
     }
 
@@ -256,14 +322,9 @@ impl Dialog {
         self.button_props = button_props;
         self
     }
-
-    pub(crate) fn alert_dialog_role(mut self) -> Self {
-        self.a11y_role = Role::AlertDialog;
-        self
-    }
-
-    pub(crate) fn with_base_dialog(mut self, dialog: gpui_base::Dialog) -> Self {
-        self.base = Some(dialog);
+    pub(crate) fn with_base_alert_dialog(mut self, base: gpui_base::AlertDialog) -> Self {
+        self.base = Some(BaseDialogRoot::AlertDialog(base));
+        self.props.overlay_closable = false;
         self
     }
 
@@ -426,16 +487,13 @@ impl RenderOnce for Dialog {
         let on_cancel = self.button_props.on_cancel.clone();
 
         let window_paddings = crate::window_border::window_paddings(window);
-        let placement = gpui_base::DialogPlacement::resolve(
-            window,
-            window_paddings,
-            self.props.width,
-            self.props.margin_top,
-            layer_ix,
-        );
-        let view_size = placement.view_size;
-        let x = placement.x;
-        let y = placement.y;
+        let view_size = window.viewport_size()
+            - gpui::size(
+                window_paddings.left + window_paddings.right,
+                window_paddings.top + window_paddings.bottom,
+            );
+        let y = self.props.margin_top.unwrap_or(view_size.height / 10.) + px(layer_ix as f32 * 16.);
+        let x = view_size.width / 2. - self.props.width / 2.;
 
         let base_size = window.text_style().font_size;
         let rem_size = window.rem_size();
@@ -470,17 +528,16 @@ impl RenderOnce for Dialog {
                         self.base
                             .take()
                             .expect("Dialog base host is always present")
-                            .role(self.a11y_role)
                             .layer(
                                 layer_ix,
                                 (self.layer_ix + 1) == Root::read(window, cx).active_dialogs.len(),
                             )
                             .focus_handle(self.focus_handle.clone())
-                            .keyboard(self.props.keyboard)
-                            .overlay_closable(self.props.overlay_closable)
+                            .close_on_escape(self.props.keyboard)
+                            .close_on_backdrop_press(self.props.overlay_closable)
                             .dismiss_below_y(TITLE_BAR_HEIGHT)
                             .when(self.props.overlay, |this| {
-                                this.overlay(
+                                this.backdrop(
                                     div()
                                         .absolute()
                                         .size_full()
@@ -500,7 +557,7 @@ impl RenderOnce for Dialog {
                                     window.close_dialog(cx);
                                 }
                             })
-                            .surface(
+                            .popup(
                                 v_flex()
                                     .id(layer_ix)
                                     .bg(cx.theme().tokens.background)

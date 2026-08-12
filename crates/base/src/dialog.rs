@@ -1,10 +1,9 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Bounds, ClickEvent, Edges, FocusHandle, InteractiveElement as _, IntoElement,
-    KeyBinding, MouseButton, ParentElement, Pixels, Point, RenderOnce, Role,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
+    MouseButton, ParentElement, Pixels, RenderOnce, Role, StatefulInteractiveElement as _,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 
@@ -61,45 +60,13 @@ pub struct Dialog {
     overlay_closable: bool,
     topmost: bool,
     dismiss_below_y: Pixels,
-    overlay: Option<AnyElement>,
-    surface: Option<AnyElement>,
+    backdrop: Option<AnyElement>,
+    popup: Option<AnyElement>,
     children: SmallVec<[AnyElement; 2]>,
     on_ok: Decision,
     on_cancel: Decision,
     on_close: Closed,
     request_close: CloseRequest,
-}
-
-/// Resolved geometry for a dialog layer. Base owns the positioning policy;
-/// applications use these values when rendering their styled surface.
-#[derive(Clone, Copy, Debug)]
-pub struct DialogPlacement {
-    pub view_size: gpui::Size<Pixels>,
-    pub x: Pixels,
-    pub y: Pixels,
-}
-
-impl DialogPlacement {
-    pub fn resolve(
-        window: &Window,
-        window_paddings: Edges<Pixels>,
-        width: Pixels,
-        margin_top: Option<Pixels>,
-        layer: usize,
-    ) -> Self {
-        let view_size = window.viewport_size()
-            - gpui::size(
-                window_paddings.left + window_paddings.right,
-                window_paddings.top + window_paddings.bottom,
-            );
-        let bounds = Bounds {
-            origin: Point::default(),
-            size: view_size,
-        };
-        let y = margin_top.unwrap_or(view_size.height / 10.) + px(layer as f32 * 16.);
-        let x = bounds.center().x - width / 2.;
-        Self { view_size, x, y }
-    }
 }
 
 /// Unstyled trigger that owns pointer activation for opening a dialog.
@@ -133,6 +100,65 @@ impl RenderOnce for DialogTrigger {
             .child(self.trigger)
     }
 }
+
+macro_rules! dialog_part {
+    ($(#[$meta:meta])* $name:ident, $id:literal) => {
+        $(#[$meta])*
+        #[derive(IntoElement)]
+        pub struct $name {
+            style: StyleRefinement,
+            children: SmallVec<[AnyElement; 2]>,
+        }
+
+        impl $name {
+            pub fn new() -> Self {
+                Self {
+                    style: StyleRefinement::default(),
+                    children: SmallVec::new(),
+                }
+            }
+        }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
+        impl Styled for $name {
+            fn style(&mut self) -> &mut StyleRefinement {
+                &mut self.style
+            }
+        }
+
+        impl ParentElement for $name {
+            fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+                self.children.extend(elements);
+            }
+        }
+
+        impl RenderOnce for $name {
+            fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+                div()
+                    .id($id)
+                    .children(self.children)
+                    .refine_style(&self.style)
+            }
+        }
+    };
+}
+
+dialog_part!(
+    /// Unstyled backdrop part rendered behind a dialog popup.
+    DialogBackdrop,
+    "dialog-backdrop"
+);
+
+dialog_part!(
+    /// Unstyled popup part containing dialog content.
+    DialogPopup,
+    "dialog-popup"
+);
 
 /// Unstyled title slot for a dialog surface.
 #[derive(IntoElement)]
@@ -269,8 +295,8 @@ impl Dialog {
             overlay_closable: true,
             topmost: true,
             dismiss_below_y: px(0.),
-            overlay: None,
-            surface: None,
+            backdrop: None,
+            popup: None,
             children: SmallVec::new(),
             on_ok: Rc::new(|_, _, _| true),
             on_cancel: Rc::new(|_, _, _| true),
@@ -279,19 +305,19 @@ impl Dialog {
         }
     }
 
-    pub fn overlay(mut self, element: impl IntoElement) -> Self {
-        self.overlay = Some(element.into_any_element());
+    pub fn backdrop(mut self, element: impl IntoElement) -> Self {
+        self.backdrop = Some(element.into_any_element());
         self
     }
-    pub fn surface(mut self, element: impl IntoElement) -> Self {
-        self.surface = Some(element.into_any_element());
+    pub fn popup(mut self, element: impl IntoElement) -> Self {
+        self.popup = Some(element.into_any_element());
         self
     }
-    pub fn keyboard(mut self, value: bool) -> Self {
+    pub fn close_on_escape(mut self, value: bool) -> Self {
         self.keyboard = value;
         self
     }
-    pub fn overlay_closable(mut self, value: bool) -> Self {
+    pub fn close_on_backdrop_press(mut self, value: bool) -> Self {
         self.overlay_closable = value;
         self
     }
@@ -299,7 +325,7 @@ impl Dialog {
         self.dismiss_below_y = value;
         self
     }
-    pub fn role(mut self, role: Role) -> Self {
+    pub(crate) fn role(mut self, role: Role) -> Self {
         self.role = role;
         self
     }
@@ -369,7 +395,7 @@ impl RenderOnce for Dialog {
                     }
                 })
             })
-            .when_some(self.overlay, |this, overlay| {
+            .when_some(self.backdrop, |this, backdrop| {
                 let cancel = self.on_cancel.clone();
                 let closed = self.on_close.clone();
                 let request_close = request_close.clone();
@@ -390,10 +416,10 @@ impl RenderOnce for Dialog {
                                 request_close(false, window, cx);
                             }
                         })
-                        .child(overlay),
+                        .child(backdrop),
                 )
             })
-            .children(self.surface)
+            .children(self.popup)
             .children(self.children)
             .refine_style(&self.style)
     }

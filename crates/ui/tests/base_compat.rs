@@ -62,18 +62,25 @@ fn base_sheet_accepts_application_owned_overlay_and_surface() {
 fn base_dialog_owns_modal_actions_and_alert_defaults() {
     fn dialog(cx: &mut gpui::App) {
         let _ = gpui_base::Dialog::new(cx)
-            .overlay(gpui::div())
-            .surface(gpui::div())
+            .backdrop(gpui_base::DialogBackdrop::new())
+            .popup(gpui_base::DialogPopup::new())
             .on_ok(|_, _, _| true)
             .on_cancel(|_, _, _| true)
             .on_close(|_, _, _| {});
-        let _ = gpui_base::AlertDialog::new(cx);
+        let _ = gpui_base::AlertDialog::new(cx)
+            .backdrop(gpui_base::AlertDialogBackdrop::new())
+            .popup(gpui_base::AlertDialogPopup::new());
     }
 
     let _ = dialog;
     let _ = gpui_base::DialogTitle::new().child("Title");
     let _ = gpui_base::DialogDescription::new().child("Description");
     let _ = gpui_base::DialogClose::new().child(gpui::div());
+    let _ = gpui_base::AlertDialogTrigger::new(gpui::div());
+    let _ = gpui_base::AlertDialogTitle::new().child("Title");
+    let _ = gpui_base::AlertDialogDescription::new().child("Description");
+    let _ = gpui_base::AlertDialogAction::new().child(gpui::div());
+    let _ = gpui_base::AlertDialogCancel::new().child(gpui::div());
     let _: gpui_base::actions::Cancel = gpui_component::dialog::Cancel;
     let _: gpui_base::actions::Confirm = gpui_component::dialog::Confirm { secondary: false };
 }

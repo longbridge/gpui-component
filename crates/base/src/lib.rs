@@ -62,7 +62,10 @@ mod tree;
 mod virtual_list;
 
 pub use accordion::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger};
-pub use alert_dialog::AlertDialog;
+pub use alert_dialog::{
+    AlertDialog, AlertDialogAction, AlertDialogBackdrop, AlertDialogCancel, AlertDialogClose,
+    AlertDialogDescription, AlertDialogPopup, AlertDialogTitle, AlertDialogTrigger,
+};
 pub use auto_scroll::AutoScroll;
 pub use avatar::{Avatar, AvatarFallback, AvatarImage};
 pub use button::{Button, ButtonStyles};
@@ -79,7 +82,7 @@ pub use combobox::Combobox;
 pub use component_traits::{Disableable, Selectable};
 pub use date_picker::DatePicker;
 pub use dialog::{
-    Dialog, DialogClose, DialogDescription, DialogPlacement, DialogTitle, DialogTrigger,
+    Dialog, DialogBackdrop, DialogClose, DialogDescription, DialogPopup, DialogTitle, DialogTrigger,
 };
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;
