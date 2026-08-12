@@ -8,6 +8,8 @@ use gpui::{AsyncApp, Bounds, Context, Pixels, Point, Task, WeakEntity, px};
 /// Delta convention: positive moves toward the bottom and negative moves
 /// toward the top.
 pub struct AutoScroll {
+    /// Shared between the main thread and the background task.
+    /// Writing `None` is the stop signal; the task exits on its next tick.
     shared: Arc<Mutex<Option<Pixels>>>,
     task: Option<Task<()>>,
     /// Last drag position, available to the interaction that owns selection.
@@ -34,7 +36,12 @@ impl AutoScroll {
     pub fn compute_delta(y: Pixels, bounds: Bounds<Pixels>) -> Option<Pixels> {
         const MIN_SPEED: f32 = 12.0;
         const MAX_SPEED: f32 = 64.0;
+        // Trigger starts this far inside the bounds so scrolling works even in
+        // full-screen where the mouse can't travel far outside the element.
         const INNER_ZONE: f32 = 16.0;
+        // Distance from the bounds edge to reach MAX_SPEED.
+        // Total ramp = INNER_ZONE + OUTER_RAMP, giving a single smooth curve
+        // with no flat sections or discontinuities.
         const OUTER_RAMP: f32 = 80.0;
 
         let bottom_trigger = bounds.bottom() - px(INNER_ZONE);
@@ -52,6 +59,9 @@ impl AutoScroll {
     }
 
     /// Updates the scroll delta and starts the background task when needed.
+    ///
+    /// `tick` is called each frame (~60 fps) with the current delta.
+    /// It should perform the actual scroll action for this entity.
     pub fn set<T, F>(&mut self, delta: Option<Pixels>, cx: &mut Context<T>, tick: F)
     where
         T: 'static,
