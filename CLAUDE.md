@@ -73,8 +73,8 @@ samply record cargo run
 
 ### Architecture Refactoring Constraints
 
-The architecture draft and RFC are documented in `specs/PHASE1.md` and
-`specs/RFC.md`. Migration status is tracked in `specs/BASE-TODO.md`. Preserve these constraints
+The architecture draft and RFC are documented in `docs/PHASE1.md` and
+`docs/RFC.md`. Migration status is tracked in `docs/BASE-TODO.md`. Preserve these constraints
 when designing or implementing this architecture:
 
 - Keep `gpui-component` as the ecosystem and product brand.
@@ -231,9 +231,11 @@ Uses `rust-i18n` crate.
 
 ## Documentation
 
-- Documentation source files are in `docs/`.
-- Docs have two locales: English (`docs/docs/`) and Chinese (`docs/zh-CN/docs/`).
+- The documentation site source is in `website/`.
+- Site docs have two locales: English (`website/docs/`) and Chinese (`website/zh-CN/docs/`).
 - When modifying any documentation file, always sync changes to both `en` and `zh-CN` versions.
+- `docs/` holds internal architecture specifications (RFC, migration status, reviews).
+  These are single-language and are not published to the site; see `docs/README.md`.
 
 ## Platform Support
 

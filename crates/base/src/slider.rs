@@ -478,6 +478,7 @@ impl RenderOnce for Slider {
             .aria_numeric_value(state.value().end() as f64)
             .aria_min_numeric_value(state.min_value() as f64)
             .aria_max_numeric_value(state.max_value() as f64)
+            .aria_numeric_value_step(state.step_value() as f64)
             .aria_orientation(if axis.is_vertical() {
                 Orientation::Vertical
             } else {

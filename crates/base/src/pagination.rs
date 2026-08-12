@@ -7,7 +7,7 @@ use gpui::{
 
 use crate::StyledExt as _;
 
-type PageChangeHandler = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
+type PageChangeHandler = Rc<dyn Fn(usize, &mut Window, &mut App)>;
 
 /// A visible destination in a pagination control.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -48,7 +48,12 @@ impl PaginationState {
         self
     }
 
-    pub fn on_change(mut self, handler: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Self {
+    /// Handles a requested page change.
+    ///
+    /// Unlike the element-level controls, this is a model-level request that
+    /// may also come from the keyboard or from application code, so it does not
+    /// carry a pointer event.
+    pub fn on_change(mut self, handler: impl Fn(usize, &mut Window, &mut App) + 'static) -> Self {
         self.on_change = Some(Rc::new(handler));
         self
     }
@@ -85,7 +90,7 @@ impl PaginationState {
         }
 
         if let Some(on_change) = &self.on_change {
-            on_change(&page, window, cx);
+            on_change(page, window, cx);
         }
     }
 
@@ -242,7 +247,7 @@ mod tests {
             let requested = Rc::new(Cell::new(None));
             let state = PaginationState::new(3, 5).on_change({
                 let requested = requested.clone();
-                move |page, _, _| requested.set(Some(*page))
+                move |page, _, _| requested.set(Some(page))
             });
 
             state.request_page(3, window, cx);

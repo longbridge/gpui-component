@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Div, ElementId, FocusHandle, InteractiveElement, Interactivity, IntoElement,
-    ParentElement, Refineable as _, RenderOnce, Role, SharedString, Stateful,
+    AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,
+    IntoElement, ParentElement, Refineable as _, RenderOnce, Role, SharedString, Stateful,
     StatefulInteractiveElement, StyleRefinement, Styled, Toggled, Window, div,
     prelude::FluentBuilder as _,
 };
@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 
 use crate::{RoleOverride, StateStyle, StyledExt as _};
 
-type ChangeHandler = Rc<dyn Fn(CheckboxState, &mut Window, &mut App)>;
+type ChangeHandler = Rc<dyn Fn(CheckboxState, &ClickEvent, &mut Window, &mut App)>;
 
 /// The semantic value exposed by an unstyled [`Checkbox`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -133,10 +133,12 @@ impl Checkbox {
 
     /// Handles an activation with the next controlled state.
     ///
-    /// An indeterminate checkbox becomes checked when activated.
+    /// An indeterminate checkbox becomes checked when activated. The activating
+    /// [`ClickEvent`] is reported so callers can read its modifiers, for example
+    /// to extend a selection.
     pub fn on_change(
         mut self,
-        handler: impl Fn(CheckboxState, &mut Window, &mut App) + 'static,
+        handler: impl Fn(CheckboxState, &ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_change = Some(Rc::new(handler));
         self
@@ -170,17 +172,19 @@ impl Checkbox {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        match self.state {
-            CheckboxState::Unchecked => {}
-            CheckboxState::Checked => style.refine(&self.semantic_styles.checked),
-            CheckboxState::Indeterminate => style.refine(&self.semantic_styles.indeterminate),
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                match self.state {
+                    CheckboxState::Unchecked => None,
+                    CheckboxState::Checked => Some(&self.semantic_styles.checked),
+                    CheckboxState::Indeterminate => Some(&self.semantic_styles.indeterminate),
+                },
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 }
 
@@ -296,17 +300,19 @@ impl CheckboxIndicator {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        match self.state {
-            CheckboxState::Unchecked => {}
-            CheckboxState::Checked => style.refine(&self.semantic_styles.checked),
-            CheckboxState::Indeterminate => style.refine(&self.semantic_styles.indeterminate),
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                match self.state {
+                    CheckboxState::Unchecked => None,
+                    CheckboxState::Checked => Some(&self.semantic_styles.checked),
+                    CheckboxState::Indeterminate => Some(&self.semantic_styles.indeterminate),
+                },
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 }
 
@@ -381,8 +387,8 @@ impl RenderOnce for Checkbox {
             .when_some(
                 (!disabled).then_some(on_change).flatten(),
                 |this, on_change| {
-                    this.on_click(move |_, window, cx| {
-                        on_change(next_state, window, cx);
+                    this.on_click(move |event, window, cx| {
+                        on_change(next_state, event, window, cx);
                     })
                 },
             )
@@ -406,7 +412,7 @@ mod tests {
     };
 
     #[test]
-    fn indicator_projects_state_styles_and_keeps_instance_as_closest_layer() {
+    fn indicator_projects_state_styles_over_the_instance_layer() {
         let checked_color = gpui::hsla(0.6, 0.7, 0.5, 1.0);
         let disabled_color = gpui::hsla(0.1, 0.2, 0.3, 0.5);
 
@@ -445,7 +451,7 @@ mod tests {
                 .border_color(checked_color)
                 .resolved_style()
                 .border_color,
-            Some(checked_color)
+            Some(disabled_color)
         );
     }
 
@@ -470,7 +476,7 @@ mod tests {
                         .state(self.state)
                         .disabled(self.disabled)
                         .size_full()
-                        .on_change(move |state, _, _| changes.borrow_mut().push(state)),
+                        .on_change(move |state, _, _, _| changes.borrow_mut().push(state)),
                 )
         }
     }
@@ -623,13 +629,13 @@ mod tests {
         assert_eq!(combined.border_color, Some(checked_color));
         assert_eq!(combined.opacity, Some(0.5));
 
-        let instance_override = styles(
-            Checkbox::new("instance-override")
+        let state_over_instance = styles(
+            Checkbox::new("state-over-instance")
                 .checked(true)
                 .disabled(true)
                 .opacity(0.9),
         );
-        assert_eq!(instance_override.resolved_style().opacity, Some(0.9));
+        assert_eq!(state_over_instance.resolved_style().opacity, Some(0.5));
     }
 
     #[gpui::test]
@@ -657,22 +663,22 @@ mod tests {
                             info(
                                 Checkbox::new("unchecked")
                                     .accessibility_label("Remember me")
-                                    .on_change(|_, _, _| {}),
+                                    .on_change(|_, _, _, _| {}),
                             ),
                             info(
                                 Checkbox::new("checked")
                                     .checked(true)
-                                    .on_change(|_, _, _| {}),
+                                    .on_change(|_, _, _, _| {}),
                             ),
                             info(
                                 Checkbox::new("mixed")
                                     .indeterminate(true)
-                                    .on_change(|_, _, _| {}),
+                                    .on_change(|_, _, _, _| {}),
                             ),
                             info(
                                 Checkbox::new("disabled")
                                     .disabled(true)
-                                    .on_change(|_, _, _| {}),
+                                    .on_change(|_, _, _, _| {}),
                             ),
                         ]);
                     },

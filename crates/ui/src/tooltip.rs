@@ -12,7 +12,7 @@ use gpui_base::{
 
 use crate::{
     ActiveTheme, Placement, StyledExt,
-    animation::{Transition, ease_in_out_cubic, ease_out_cubic},
+    animation::{EffectTransition, ease_in_out_cubic, ease_out_cubic},
     kbd::Kbd,
     root::Root,
     text::Text,
@@ -166,7 +166,7 @@ pub(crate) fn render_tooltip(
                 return element.into_any_element();
             }
             let dx = current.center().x - previous.center().x;
-            Transition::new(SLIDE_DURATION)
+            EffectTransition::new(SLIDE_DURATION)
                 .ease(ease_in_out_cubic)
                 .slide_x(-dx, px(0.))
                 .apply(
@@ -175,7 +175,7 @@ pub(crate) fn render_tooltip(
                 )
                 .into_any_element()
         }
-        BaseTooltipTransition::Enter { epoch } => Transition::new(ENTER_DURATION)
+        BaseTooltipTransition::Enter { epoch } => EffectTransition::new(ENTER_DURATION)
             .ease(ease_out_cubic)
             .slide_y(px(4.), px(0.))
             .fade(0.0, 1.0)

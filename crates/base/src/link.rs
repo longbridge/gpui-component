@@ -108,12 +108,10 @@ impl Link {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            self.disabled.then_some(&self.semantic_styles.disabled),
+        )
     }
 
     /// Sets the name exposed to accessibility clients.
@@ -393,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn disabled_semantic_style_refines_instance_style_only_when_active() {
+    fn disabled_style_applies_only_while_disabled_and_then_wins() {
         let enabled = Link::new("enabled")
             .opacity(0.9)
             .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
@@ -403,7 +401,7 @@ mod tests {
             .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .opacity(0.9)
             .disabled(true);
-        assert_eq!(disabled.resolved_style().opacity, Some(0.9));
+        assert_eq!(disabled.resolved_style().opacity, Some(0.5));
 
         let semantic_only = Link::new("semantic-only")
             .styles(|styles| styles.disabled(|style| style.opacity(0.5)))

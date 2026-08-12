@@ -2,6 +2,7 @@
 default-members = ["crates/ui", "crates/story", "crates/assets"]
 members = [
     "crates/base",
+    "crates/base/examples/wasm",
     "crates/macros",
     "crates/story",
     "crates/story-web",

@@ -96,19 +96,24 @@ impl Lerp for Hsla {
 
 // ── Transition combinator ───────────────────────────────────────────────────
 
-/// A composable transition that describes animated style changes.
+/// A composable transition that applies concrete fade, slide, and size effects
+/// to an element.
+///
+/// This is distinct from [`crate::motion::Transition`], which is a timing
+/// policy for a caller-chosen value and never picks a visual property. Prefer
+/// `motion` for new code.
 ///
 /// # Example
 ///
 /// ```ignore
-/// Transition::new(Duration::from_millis(150))
+/// EffectTransition::new(Duration::from_millis(150))
 ///     .ease(ease_out_cubic)
 ///     .slide_y(px(-4.), px(0.))
 ///     .fade(0.0, 1.0)
 ///     .apply(element, "enter-anim")
 /// ```
 #[derive(Clone)]
-pub struct Transition {
+pub struct EffectTransition {
     pub duration: Duration,
     easing: Rc<dyn Fn(f32) -> f32>,
     effects: SmallVec<[TransitionEffect; 2]>,
@@ -123,7 +128,7 @@ enum TransitionEffect {
     Height(Pixels, Pixels),
 }
 
-impl Transition {
+impl EffectTransition {
     pub fn new(duration: Duration) -> Self {
         Self {
             duration,
@@ -205,4 +210,11 @@ impl Transition {
     }
 }
 
-impl FluentBuilder for Transition {}
+impl FluentBuilder for EffectTransition {}
+
+/// Former name of [`EffectTransition`].
+///
+/// Renamed because `motion::Transition` and this type were two different
+/// concepts sharing one name.
+#[deprecated(since = "0.5.2", note = "renamed to `EffectTransition`")]
+pub type Transition = EffectTransition;

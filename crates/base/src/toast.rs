@@ -1,9 +1,8 @@
-use std::{
-    cell::RefCell,
-    collections::VecDeque,
-    rc::Rc,
-    time::{Duration, Instant},
-};
+#[cfg(not(target_family = "wasm"))]
+use std::time::Instant;
+use std::{cell::RefCell, collections::VecDeque, rc::Rc, time::Duration};
+#[cfg(target_family = "wasm")]
+use web_time::Instant;
 
 use gpui::{
     Anchor, AnyElement, App, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,

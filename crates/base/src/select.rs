@@ -27,7 +27,7 @@ pub fn init(cx: &mut App) {
 }
 
 type OpenChangeHandler = Rc<dyn Fn(bool, &mut Window, &mut App)>;
-type EscapeHandler = Rc<dyn Fn(&mut Window, &mut App)>;
+type ActionHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// An unstyled controlled select root.
 ///
@@ -35,6 +35,10 @@ type EscapeHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 /// and the selected value. This root owns combobox accessibility semantics,
 /// keyboard opening and dismissal, and focus transfer between the trigger and
 /// popup content.
+///
+/// GPUI marks the active option on the option element itself rather than on the
+/// container, so the application marks its highlighted option with
+/// `aria_active_descendant()`; this root cannot do it on the caller's behalf.
 #[derive(IntoElement)]
 pub struct Select {
     id: ElementId,
@@ -47,7 +51,8 @@ pub struct Select {
     children: Vec<AnyElement>,
     on_open_change: Option<OpenChangeHandler>,
     key_context: &'static str,
-    on_escape: Option<EscapeHandler>,
+    on_dismiss: Option<ActionHandler>,
+    on_confirm: Option<ActionHandler>,
 }
 
 impl Select {
@@ -63,7 +68,8 @@ impl Select {
             children: Vec::new(),
             on_open_change: None,
             key_context: CONTEXT,
-            on_escape: None,
+            on_dismiss: None,
+            on_confirm: None,
         }
     }
 
@@ -112,9 +118,22 @@ impl Select {
         self
     }
 
-    #[doc(hidden)]
-    pub fn on_escape(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        self.on_escape = Some(Rc::new(handler));
+    /// Handles a dismissal requested through the Cancel action.
+    ///
+    /// This runs before the controlled open state is asked to close, so a
+    /// caller that commits its pending value on dismissal can still read that
+    /// value here.
+    pub fn on_dismiss(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_dismiss = Some(Rc::new(handler));
+        self
+    }
+
+    /// Handles the Confirm action while the select is open.
+    ///
+    /// Confirming a closed select opens it instead, so this never runs for
+    /// that case.
+    pub fn on_confirm(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_confirm = Some(Rc::new(handler));
         self
     }
 }
@@ -138,7 +157,8 @@ impl RenderOnce for Select {
         let focus_handle = self.focus_handle;
         let content_focus_handle = self.content_focus_handle;
         let on_open_change = self.on_open_change;
-        let on_escape = self.on_escape;
+        let on_dismiss = self.on_dismiss;
+        let on_confirm = self.on_confirm;
 
         div()
             .id(self.id)
@@ -203,10 +223,12 @@ impl RenderOnce for Select {
                     }
 
                     cx.propagate();
-                    if !open {
-                        if let Some(handler) = on_open_change.as_ref() {
-                            handler(true, window, cx);
+                    if open {
+                        if let Some(handler) = on_confirm.as_ref() {
+                            handler(window, cx);
                         }
+                    } else if let Some(handler) = on_open_change.as_ref() {
+                        handler(true, window, cx);
                     }
 
                     if let Some(handle) = content_focus_handle.as_ref() {
@@ -221,7 +243,7 @@ impl RenderOnce for Select {
                 }
 
                 cx.stop_propagation();
-                if let Some(handler) = on_escape.as_ref() {
+                if let Some(handler) = on_dismiss.as_ref() {
                     handler(window, cx);
                 }
                 if let Some(handler) = on_open_change.as_ref() {

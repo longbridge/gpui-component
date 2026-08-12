@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
-    RenderOnce, Role, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _,
+    AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement, Interactivity, IntoElement,
+    ParentElement, RenderOnce, Role, StatefulInteractiveElement, StyleRefinement, Styled, Window,
+    div, prelude::FluentBuilder as _,
 };
 use smallvec::SmallVec;
 
 use crate::StyledExt as _;
 
-type ToggleHandler = Rc<dyn Fn(bool, &mut Window, &mut App)>;
+type ChangeHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 
 /// An unstyled accordion root for application-owned items.
 #[derive(IntoElement)]
@@ -270,7 +270,7 @@ pub struct AccordionTrigger {
     children: SmallVec<[AnyElement; 2]>,
     open: bool,
     disabled: bool,
-    on_toggle: Option<ToggleHandler>,
+    on_change: Option<ChangeHandler>,
 }
 
 impl AccordionTrigger {
@@ -281,7 +281,7 @@ impl AccordionTrigger {
             children: SmallVec::new(),
             open: false,
             disabled: false,
-            on_toggle: None,
+            on_change: None,
         }
     }
 
@@ -295,8 +295,12 @@ impl AccordionTrigger {
         self
     }
 
-    pub fn on_toggle(mut self, handler: impl Fn(bool, &mut Window, &mut App) + 'static) -> Self {
-        self.on_toggle = Some(Rc::new(handler));
+    /// Handles a requested change to the controlled expanded state.
+    pub fn on_change(
+        mut self,
+        handler: impl Fn(bool, &ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_change = Some(Rc::new(handler));
         self
     }
 }
@@ -329,9 +333,9 @@ impl RenderOnce for AccordionTrigger {
             .role(Role::Button)
             .aria_expanded(self.open)
             .when_some(
-                (!self.disabled).then_some(self.on_toggle).flatten(),
-                move |this, on_toggle| {
-                    this.on_click(move |_, window, cx| on_toggle(next_open, window, cx))
+                (!self.disabled).then_some(self.on_change).flatten(),
+                move |this, on_change| {
+                    this.on_click(move |event, window, cx| on_change(next_open, event, window, cx))
                 },
             )
             .children(self.children)
@@ -368,7 +372,7 @@ mod tests {
                         let mut node = accesskit::Node::new(Role::Button);
                         AccordionTrigger::new("trigger")
                             .open(true)
-                            .on_toggle(move |open, _, _| requested.borrow_mut().push(open))
+                            .on_change(move |open, _, _, _| requested.borrow_mut().push(open))
                             .render(window, cx)
                             .into_element()
                             .write_a11y_info(&mut node);
@@ -409,7 +413,7 @@ mod tests {
                 .open(self.open)
                 .disabled(self.disabled)
                 .size(px(100.))
-                .on_toggle(move |open, _, _| requested.borrow_mut().push(open))
+                .on_change(move |open, _, _, _| requested.borrow_mut().push(open))
         }
     }
 

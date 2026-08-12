@@ -3,10 +3,13 @@ use std::{cell::Cell, rc::Rc};
 use gpui::{
     Anchor, AnyElement, App, Bounds, Div, ElementId, InteractiveElement, Interactivity,
     IntoElement, ParentElement, Pixels, Point, RenderOnce, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window, anchored, deferred, div, px,
+    StyleRefinement, Styled, Window, deferred, div, px,
 };
 
-use crate::{ElementExt as _, StyledExt as _};
+use crate::{ElementExt as _, Positioner, StyledExt as _};
+
+/// Distance kept between a popup and the window edge.
+const WINDOW_MARGIN: Pixels = px(8.);
 
 #[derive(Default)]
 struct PopupAnchorState {
@@ -128,11 +131,9 @@ impl RenderOnce for Popup {
 
         root.child(
             deferred(
-                anchored()
-                    .snap_to_window_with_margin(px(8.))
-                    .anchor(anchor)
-                    .position(position.get())
-                    .child(div().relative().child(content)),
+                Positioner::corner(anchor, position.get())
+                    .margin(WINDOW_MARGIN)
+                    .child(content),
             )
             .with_priority(1),
         )

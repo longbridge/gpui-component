@@ -165,7 +165,7 @@ impl RenderOnce for Pagination {
             .visible_pages(self.visible_pages)
             .disabled(self.disabled);
         if let Some(on_click) = self.on_click.clone() {
-            state = state.on_change(move |page, window, cx| on_click(page, window, cx));
+            state = state.on_change(move |page, window, cx| on_click(&page, window, cx));
         }
         let page_numbers = (!self.compact).then(|| state.items()).unwrap_or_default();
 

@@ -237,7 +237,7 @@ impl RenderOnce for Checkbox {
                 this.accessibility_label(label)
             })
             .when_some(on_click, |this, on_click| {
-                this.on_change(move |_, window, cx| {
+                this.on_change(move |_, _, window, cx| {
                     window.prevent_default();
                     on_click(&!checked, window, cx);
                 })

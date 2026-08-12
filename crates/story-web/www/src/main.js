@@ -1,19 +1,18 @@
 async function init() {
   const loadingEl = document.getElementById('loading');
-  const appEl = document.getElementById('app');
 
   try {
     // Import the WASM module
     const wasm = await import('./wasm/gpui_component_story_web.js');
     await wasm.default();
 
-    // Initialize the story gallery
-    await wasm.run();
+    // A documentation page can deep-link to the matching Rust story while the
+    // standalone gallery keeps its normal overview.
+    const story = new URLSearchParams(window.location.search).get('story');
+    await wasm.run(story || undefined);
 
     // Hide loading indicator
-    if (appEl) {
-      appEl.remove();
-    }
+    loadingEl?.remove();
   } catch (error) {
     console.error('Failed to initialize:', error);
 

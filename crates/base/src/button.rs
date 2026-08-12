@@ -125,15 +125,15 @@ impl Button {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        if self.selected {
-            style.refine(&self.semantic_styles.selected);
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                self.selected.then_some(&self.semantic_styles.selected),
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 }
 
@@ -368,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn disabled_semantic_style_refines_instance_style_only_when_active() {
+    fn disabled_style_applies_only_while_disabled_and_then_wins() {
         let enabled = Button::new("enabled")
             .opacity(0.9)
             .styles(|styles| styles.disabled(|style| style.opacity(0.5)));
@@ -378,7 +378,7 @@ mod tests {
             .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
             .opacity(0.9)
             .disabled(true);
-        assert_eq!(disabled.resolved_style().opacity, Some(0.9));
+        assert_eq!(disabled.resolved_style().opacity, Some(0.5));
 
         let semantic_only = Button::new("semantic-only")
             .styles(|styles| styles.disabled(|style| style.opacity(0.5)))
@@ -387,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_disabled_and_instance_styles_have_explicit_priority() {
+    fn selected_disabled_and_instance_styles_follow_the_shared_priority() {
         let selected_color = gpui::hsla(0.6, 0.7, 0.5, 1.0);
         let disabled_color = gpui::hsla(0.1, 0.2, 0.3, 0.5);
         let button = |selected, disabled| {
@@ -415,7 +415,7 @@ mod tests {
                 .bg(selected_color)
                 .resolved_style()
                 .background,
-            Some(selected_color.into())
+            Some(disabled_color.into())
         );
     }
 

@@ -10,12 +10,12 @@ use smallvec::SmallVec;
 
 use crate::{StateStyle, StyledExt as _};
 
-type ToggleHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
+type ChangeHandler = Rc<dyn Fn(bool, &ClickEvent, &mut Window, &mut App)>;
 
 /// An unstyled binary control that owns switch interaction and semantics.
 ///
 /// The checked value is controlled by the application. Activation reports the
-/// next value through [`Switch::on_toggle`]; the application must render that
+/// next value through [`Switch::on_change`]; the application must render that
 /// value back through [`Switch::checked`]. Children and all visual states remain
 /// application-owned.
 #[derive(IntoElement)]
@@ -27,7 +27,7 @@ pub struct Switch {
     checked: bool,
     disabled: bool,
     children: SmallVec<[AnyElement; 2]>,
-    on_toggle: Option<ToggleHandler>,
+    on_change: Option<ChangeHandler>,
     accessibility_label: Option<SharedString>,
     tab_index: isize,
     tab_stop: bool,
@@ -114,15 +114,15 @@ impl SwitchTrack {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        if self.checked {
-            style.refine(&self.semantic_styles.checked);
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                self.checked.then_some(&self.semantic_styles.checked),
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 }
 
@@ -208,15 +208,15 @@ impl SwitchThumb {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        if self.checked {
-            style.refine(&self.semantic_styles.checked);
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                self.checked.then_some(&self.semantic_styles.checked),
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 }
 
@@ -250,7 +250,7 @@ impl Switch {
             checked: false,
             disabled: false,
             children: SmallVec::new(),
-            on_toggle: None,
+            on_change: None,
             accessibility_label: None,
             tab_index: 0,
             tab_stop: true,
@@ -276,23 +276,23 @@ impl Switch {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        if self.checked {
-            style.refine(&self.semantic_styles.checked);
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                self.checked.then_some(&self.semantic_styles.checked),
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 
     /// Handles activation with the next checked value and its input event.
-    pub fn on_toggle(
+    pub fn on_change(
         mut self,
         handler: impl Fn(bool, &ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        self.on_toggle = Some(Rc::new(handler));
+        self.on_change = Some(Rc::new(handler));
         self
     }
 
@@ -372,10 +372,10 @@ impl RenderOnce for Switch {
                 })
             })
             .when_some(
-                (!disabled).then_some(self.on_toggle).flatten(),
-                |this, on_toggle| {
+                (!disabled).then_some(self.on_change).flatten(),
+                |this, on_change| {
                     this.on_click(move |event, window, cx| {
-                        on_toggle(!checked, event, window, cx);
+                        on_change(!checked, event, window, cx);
                     })
                 },
             )
@@ -431,12 +431,14 @@ mod tests {
             track(true, true).resolved_style().background,
             Some(disabled_color.into())
         );
+        // Semantic states layer over the instance chain, so an instance
+        // background does not defeat the disabled state.
         assert_eq!(
             track(true, true)
                 .bg(normal_color)
                 .resolved_style()
                 .background,
-            Some(normal_color.into())
+            Some(disabled_color.into())
         );
     }
 
@@ -490,7 +492,7 @@ mod tests {
                 .bg(checked_color)
                 .resolved_style()
                 .background,
-            Some(checked_color.into())
+            Some(disabled_color.into())
         );
     }
 
@@ -520,7 +522,7 @@ mod tests {
                         .checked(self.checked)
                         .disabled(self.disabled)
                         .size_full()
-                        .on_toggle(move |value, event, _, _| {
+                        .on_change(move |value, event, _, _| {
                             toggles.set(toggles.get() + 1);
                             last_value.set(value);
                             if matches!(event, ClickEvent::Keyboard(_)) {
@@ -653,14 +655,14 @@ mod tests {
         );
         assert_eq!(
             styled(
-                Switch::new("instance-override")
+                Switch::new("state-over-instance")
                     .checked(true)
                     .disabled(true)
                     .opacity(0.9),
             )
             .resolved_style()
             .opacity,
-            Some(0.9)
+            Some(0.5)
         );
     }
 
@@ -689,14 +691,14 @@ mod tests {
                             Switch::new("enabled")
                                 .checked(true)
                                 .accessibility_label("Airplane mode")
-                                .on_toggle(|_, _, _, _| {}),
+                                .on_change(|_, _, _, _| {}),
                         );
                         let disabled = info(
                             Switch::new("disabled")
                                 .checked(false)
                                 .disabled(true)
                                 .accessibility_label("Airplane mode")
-                                .on_toggle(|_, _, _, _| {}),
+                                .on_change(|_, _, _, _| {}),
                         );
                         *captured.lock().unwrap() = Some((enabled, disabled));
                     },

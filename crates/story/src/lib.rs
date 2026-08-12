@@ -194,17 +194,6 @@ pub fn init(cx: &mut App) {
         cx.set_http_client(std::sync::Arc::new(http_client));
     }
 
-    #[cfg(target_family = "wasm")]
-    {
-        // Safety: the web examples run single-threaded; the client is
-        // created and used exclusively on the main thread.
-        let http_client = unsafe {
-            gpui_web::FetchHttpClient::with_user_agent("gpui-component/story")
-                .expect("failed to create FetchHttpClient")
-        };
-        cx.set_http_client(std::sync::Arc::new(http_client));
-    }
-
     cx.bind_keys([
         KeyBinding::new("/", ToggleSearch, None),
         #[cfg(target_os = "macos")]
@@ -635,6 +624,7 @@ pub struct StoryRoot {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) title_bar: Entity<AppTitleBar>,
     pub(crate) view: AnyView,
+    pub(crate) embedded: bool,
 }
 
 impl StoryRoot {
@@ -649,6 +639,17 @@ impl StoryRoot {
             focus_handle: cx.focus_handle(),
             title_bar,
             view: view.into(),
+            embedded: false,
+        }
+    }
+
+    pub fn embedded(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let title_bar = cx.new(|cx| AppTitleBar::new("", window, cx));
+        Self {
+            focus_handle: cx.focus_handle(),
+            title_bar,
+            view: view.into(),
+            embedded: true,
         }
     }
 
@@ -704,7 +705,7 @@ impl Render for StoryRoot {
             .child(
                 v_flex()
                     .size_full()
-                    .child(self.title_bar.clone())
+                    .when(!self.embedded, |this| this.child(self.title_bar.clone()))
                     .child(
                         div()
                             .track_focus(&self.focus_handle)

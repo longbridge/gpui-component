@@ -464,7 +464,7 @@ impl RenderOnce for AccordionItem {
                         .rotate(percentage(if self.open { 0.5 } else { 0. })),
                 )
                 .when_some(self.on_toggle_click, |this, on_toggle_click| {
-                    this.on_toggle(move |open, window, cx| {
+                    this.on_change(move |open, _, window, cx| {
                         on_toggle_click(&open, window, cx);
                     })
                 })

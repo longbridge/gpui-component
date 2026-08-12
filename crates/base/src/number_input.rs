@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gpui::{
     AnyElement, App, Entity, EventEmitter, InteractiveElement as _, IntoElement, KeyBinding,
     ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled,
-    Window, actions, prelude::FluentBuilder as _,
+    Window, actions, div, prelude::FluentBuilder as _,
 };
 
 use crate::input::InputState;
@@ -109,6 +109,7 @@ pub struct NumberInput {
     decrement_button: Option<ButtonDecorator>,
     increment_button: Option<ButtonDecorator>,
     input: Option<AnyElement>,
+    controls_right: bool,
 }
 
 /// The built-in text region of a [`NumberInput`].
@@ -169,6 +170,7 @@ impl NumberInput {
             decrement_button: None,
             increment_button: None,
             input: None,
+            controls_right: false,
         }
     }
 
@@ -200,6 +202,12 @@ impl NumberInput {
     /// Decorate the built-in text region with an editor, adornments, and styles.
     pub fn input(mut self, input: impl IntoElement) -> Self {
         self.input = Some(input.into_any_element());
+        self
+    }
+
+    /// Stack both step buttons on the right side of the text region.
+    pub fn controls_right(mut self) -> Self {
+        self.controls_right = true;
         self
     }
 }
@@ -261,6 +269,32 @@ impl RenderOnce for NumberInput {
                 }
             });
 
+        let content = if self.controls_right {
+            div()
+                .flex()
+                .items_center()
+                .size_full()
+                .child(text.children(self.children))
+                .child(
+                    div()
+                        .h_full()
+                        .flex()
+                        .flex_col()
+                        .child(increment_button)
+                        .child(decrement_button),
+                )
+                .into_any_element()
+        } else {
+            div()
+                .flex()
+                .items_center()
+                .size_full()
+                .child(decrement_button)
+                .child(text.children(self.children))
+                .child(increment_button)
+                .into_any_element()
+        };
+
         Input::new(("number-input", self.state.entity_id()))
             .flex()
             .items_center()
@@ -285,9 +319,7 @@ impl RenderOnce for NumberInput {
                     on_step(StepAction::Decrement, window, cx);
                 }
             })
-            .child(decrement_button)
-            .child(text.children(self.children))
-            .child(increment_button)
+            .child(content)
             .refine_style(&self.style)
             .render(window, cx)
     }

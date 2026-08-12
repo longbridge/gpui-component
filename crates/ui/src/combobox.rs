@@ -878,7 +878,9 @@ where
             .on_open_change(move |open, _, cx| {
                 open_state.update(cx, |state, cx| state.set_open(open, cx));
             })
-            .on_confirm(move |_, cx| {
+            // This combobox commits its pending selection when the popup
+            // closes, so it listens for dismissal rather than Confirm.
+            .on_dismiss(move |_, cx| {
                 confirm_state.update(cx, |state, cx| {
                     cx.emit(ComboboxEvent::Confirm(state.selected_values()));
                 });

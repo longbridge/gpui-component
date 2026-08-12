@@ -89,15 +89,15 @@ impl Toggle {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        if self.pressed {
-            style.refine(&self.semantic_styles.pressed);
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                self.pressed.then_some(&self.semantic_styles.pressed),
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
@@ -342,14 +342,14 @@ mod tests {
         );
         assert_eq!(
             styled(
-                Toggle::new("instance-override")
+                Toggle::new("state-over-instance")
                     .pressed(true)
                     .disabled(true)
                     .opacity(0.9),
             )
             .resolved_style()
             .opacity,
-            Some(0.9)
+            Some(0.5)
         );
     }
 

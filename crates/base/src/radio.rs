@@ -30,6 +30,9 @@ pub struct Radio {
     accessibility_label: Option<SharedString>,
     tab_index: isize,
     tab_stop: bool,
+    provided_focus_handle: Option<FocusHandle>,
+    position_in_set: Option<usize>,
+    size_of_set: Option<usize>,
 }
 
 /// Semantic root styles supported by [`Radio`].
@@ -68,7 +71,21 @@ impl Radio {
             accessibility_label: None,
             tab_index: 0,
             tab_stop: true,
+            provided_focus_handle: None,
+            position_in_set: None,
+            size_of_set: None,
         }
+    }
+
+    /// Updates the element identity used when the radio is rendered.
+    ///
+    /// A group that assigns positional ids after construction needs this so
+    /// each radio keeps a distinct element identity.
+    pub fn id(mut self, id: impl Into<ElementId>) -> Self {
+        let id = id.into();
+        self.base.interactivity().element_id = Some(id.clone());
+        self.id = id;
+        self
     }
 
     pub fn checked(mut self, checked: bool) -> Self {
@@ -88,15 +105,15 @@ impl Radio {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        if self.checked {
-            style.refine(&self.semantic_styles.checked);
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style.refine(&self.style);
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                self.checked.then_some(&self.semantic_styles.checked),
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
@@ -116,6 +133,23 @@ impl Radio {
         self
     }
 
+    /// Uses a caller-owned focus handle instead of creating keyed state.
+    ///
+    /// A styled radio needs this to draw its own focus ring from the same
+    /// handle the primitive tracks.
+    pub fn track_focus(mut self, focus_handle: &FocusHandle) -> Self {
+        self.provided_focus_handle = Some(focus_handle.clone());
+        self
+    }
+
+    /// Sets this radio's one-based position and its group's total size, so
+    /// assistive technology can announce "option 2 of 5".
+    pub fn set_position(mut self, position: usize, size: usize) -> Self {
+        self.position_in_set = Some(position);
+        self.size_of_set = Some(size);
+        self
+    }
+
     pub fn tab_index(mut self, tab_index: isize) -> Self {
         self.tab_index = tab_index;
         self
@@ -127,10 +161,12 @@ impl Radio {
     }
 
     fn focus_handle(&self, window: &mut Window, cx: &mut App) -> FocusHandle {
-        window
-            .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
-            .read(cx)
-            .clone()
+        self.provided_focus_handle.clone().unwrap_or_else(|| {
+            window
+                .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
+                .read(cx)
+                .clone()
+        })
     }
 }
 
@@ -169,9 +205,17 @@ impl RenderOnce for Radio {
             } else {
                 Toggled::False
             })
+            // A radio is both "toggled" and "selected"; different assistive
+            // technology reads one or the other, so state both rather than
+            // making callers choose.
+            .aria_selected(checked)
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
+            .when_some(self.position_in_set, |this, position| {
+                this.aria_position_in_set(position)
+            })
+            .when_some(self.size_of_set, |this, size| this.aria_size_of_set(size))
             .when(!disabled, |this| {
                 this.track_focus(
                     &focus_handle
@@ -246,14 +290,14 @@ mod tests {
         );
         assert_eq!(
             styled(
-                Radio::new("instance-override")
+                Radio::new("state-over-instance")
                     .checked(true)
                     .disabled(true)
                     .opacity(0.9),
             )
             .resolved_style()
             .opacity,
-            Some(0.9)
+            Some(0.5)
         );
     }
 

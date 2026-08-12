@@ -2993,6 +2993,7 @@ dependencies = [
  "chrono",
  "gpui",
  "gpui_macros",
+ "gpui_platform",
  "indoc",
  "instant",
  "lsp-types 0.97.0",
@@ -3009,7 +3010,22 @@ dependencies = [
  "smol",
  "tracing",
  "unicode-segmentation",
+ "web-time",
  "zed-sum-tree",
+]
+
+[[package]]
+name = "gpui-base-examples-wasm"
+version = "0.5.2"
+dependencies = [
+ "console_error_panic_hook",
+ "console_log",
+ "gpui",
+ "gpui-base",
+ "gpui_platform",
+ "log",
+ "tracing-wasm",
+ "wasm-bindgen",
 ]
 
 [[package]]

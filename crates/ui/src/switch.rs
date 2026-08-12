@@ -136,7 +136,7 @@ impl RenderOnce for Switch {
                 )
                 .when_some(on_click, |this, on_click| {
                     let toggle_state = toggle_state.clone();
-                    this.on_toggle(move |next, _, window, cx| {
+                    this.on_change(move |next, _, window, cx| {
                         _ = toggle_state.update(cx, |this, _| *this = checked);
                         on_click(&next, window, cx);
                     })

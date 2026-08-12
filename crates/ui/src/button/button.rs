@@ -616,6 +616,8 @@ impl RenderOnce for Button {
         }))
         .selected(self.selected)
         .disabled(disabled)
+        // Base layers semantic states over the builder chain, so the caller's
+        // own style is replayed inside each state to keep it the closest layer.
         .styles(|styles| {
             styles
                 .selected(|style| {
@@ -623,6 +625,7 @@ impl RenderOnce for Button {
                         .bg(selected_style.bg)
                         .border_color(selected_style.border)
                         .text_color(selected_style.fg)
+                        .refine_style(&instance_style)
                 })
                 .disabled(|style| {
                     style
@@ -630,6 +633,7 @@ impl RenderOnce for Button {
                         .text_color(disabled_style.fg)
                         .border_color(disabled_style.border)
                         .shadow_none()
+                        .refine_style(&instance_style)
                 })
         })
         .when_some(accessibility_label, |this, label| {

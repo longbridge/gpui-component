@@ -3,7 +3,8 @@ use std::rc::Rc;
 use gpui::{
     Anchor, AnyElement, App, Context, DismissEvent, ElementId, EventEmitter, FocusHandle,
     Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
-    Render, RenderOnce, Subscription, Window, div, prelude::FluentBuilder as _,
+    Render, RenderOnce, Role, StatefulInteractiveElement as _, Subscription, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::{GlobalState, Popup, Selectable, actions::Cancel};
@@ -279,6 +280,10 @@ impl RenderOnce for Popover {
 
         let content = div()
             .id("content")
+            // A popover surface is a non-modal dialog: it takes focus and is
+            // dismissed with Escape, which is what this role tells assistive
+            // technology to expect.
+            .role(Role::Dialog)
             .occlude()
             .tab_group()
             .track_focus(&focus_handle)

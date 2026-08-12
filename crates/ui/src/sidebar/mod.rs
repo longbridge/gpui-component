@@ -13,7 +13,7 @@ use gpui::{
 };
 use std::{rc::Rc, time::Duration};
 
-use crate::animation::{Transition, ease_in_out_cubic};
+use crate::animation::{EffectTransition, ease_in_out_cubic};
 
 mod footer;
 mod group;
@@ -537,7 +537,7 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
         let wrapper = sidebar_wrapper(format!("{}-anim", id), layout.align_child_to_end)
             .when(animation_state.render_child, |this| this.child(sidebar));
 
-        Transition::new(SIDEBAR_TRANSITION_DURATION)
+        EffectTransition::new(SIDEBAR_TRANSITION_DURATION)
             .ease(ease_in_out_cubic)
             .width(from_w, to_w)
             .apply(wrapper, sidebar_animation_id(&id, from_w, to_w))

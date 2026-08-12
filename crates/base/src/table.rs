@@ -1,6 +1,7 @@
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
     RenderOnce, Role, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder as _,
 };
 
 use crate::StyledExt as _;
@@ -57,7 +58,76 @@ macro_rules! table_part {
     };
 }
 
-table_part!(Table, Role::Table, "An unstyled semantic table root.");
+/// An unstyled semantic table root.
+#[derive(IntoElement)]
+pub struct Table {
+    base: Stateful<Div>,
+    style: StyleRefinement,
+    children: Vec<AnyElement>,
+    row_count: Option<usize>,
+    column_count: Option<usize>,
+}
+
+impl Table {
+    /// Create an unstyled semantic table root.
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        Self {
+            base: div().id(id),
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+            row_count: None,
+            column_count: None,
+        }
+    }
+
+    /// Sets the total number of rows, including rows outside the rendered
+    /// range. Assistive technology needs this to announce "row 5 of 200" for a
+    /// virtualized table whose rendered rows are only a window onto the data.
+    pub fn row_count(mut self, count: usize) -> Self {
+        self.row_count = Some(count);
+        self
+    }
+
+    /// Sets the total number of columns, including columns outside the
+    /// rendered range.
+    pub fn column_count(mut self, count: usize) -> Self {
+        self.column_count = Some(count);
+        self
+    }
+}
+
+impl Styled for Table {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl ParentElement for Table {
+    fn extend(&mut self, children: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(children);
+    }
+}
+
+impl InteractiveElement for Table {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for Table {}
+
+impl RenderOnce for Table {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        self.base
+            .role(Role::Table)
+            .when_some(self.row_count, |this, count| this.aria_row_count(count))
+            .when_some(self.column_count, |this, count| {
+                this.aria_column_count(count)
+            })
+            .children(self.children)
+            .refine_style(&self.style)
+    }
+}
 table_part!(
     TableHeader,
     Role::RowGroup,

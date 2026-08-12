@@ -125,15 +125,15 @@ impl Input {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        style.refine(&self.style);
-        if self.focused {
-            style.refine(&self.semantic_styles.focused);
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                self.focused.then_some(&self.semantic_styles.focused),
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 }
 

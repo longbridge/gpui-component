@@ -18,12 +18,22 @@ pub struct Gallery {
     active_group_index: Option<usize>,
     active_index: Option<usize>,
     collapsed: bool,
+    embedded: bool,
     search_input: Entity<InputState>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl Gallery {
     pub fn new(init_story: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self::new_with_mode(init_story, false, window, cx)
+    }
+
+    fn new_with_mode(
+        init_story: Option<&str>,
+        embedded: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
         let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
             InputEvent::Change => {
@@ -112,6 +122,7 @@ impl Gallery {
             active_group_index: Some(0),
             active_index: Some(0),
             collapsed: false,
+            embedded,
             _subscriptions,
         };
 
@@ -123,14 +134,32 @@ impl Gallery {
     }
 
     fn set_active_story(&mut self, name: &str, window: &mut Window, cx: &mut App) {
-        let name = name.to_string();
+        let name = name.trim().to_string();
+        let exact_index = self
+            .stories
+            .iter()
+            .flat_map(|(_, stories)| stories)
+            .filter(|story| {
+                story
+                    .read(cx)
+                    .name
+                    .to_lowercase()
+                    .contains(&name.to_lowercase())
+            })
+            .position(|story| story.read(cx).name.eq_ignore_ascii_case(&name));
         self.search_input.update(cx, |this, cx| {
             this.set_value(&name, window, cx);
-        })
+        });
+        self.active_group_index = Some(0);
+        self.active_index = Some(exact_index.unwrap_or(0));
     }
 
     pub fn view(init_story: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(init_story, window, cx))
+    }
+
+    pub fn embedded_view(story: &str, window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self::new_with_mode(Some(story), true, window, cx))
     }
 }
 
@@ -170,6 +199,14 @@ impl Render for Gallery {
 
         let current_story = story_name.clone();
         let total_components: usize = self.stories.iter().map(|(_, items)| items.len()).sum();
+
+        if self.embedded {
+            return div()
+                .id("embedded-story")
+                .size_full()
+                .when_some(active_story, |this, story| this.child(story.clone()))
+                .into_any_element();
+        }
 
         let body = h_resizable("gallery-container")
             .child(
@@ -335,5 +372,6 @@ impl Render for Gallery {
                             }),
                     ),
             )
+            .into_any_element()
     }
 }

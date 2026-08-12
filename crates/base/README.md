@@ -160,7 +160,21 @@ Button::new("menu-trigger")
     .child("Menu")
 ```
 
-Styles applied directly in the main builder chain have the highest priority. Semantic state styles express states such as checked, pressed, selected, indeterminate, and disabled.
+Semantic state styles express states such as checked, pressed, selected, indeterminate, and disabled. Every control resolves its final style in one fixed order:
+
+1. the style applied directly in the main builder chain,
+2. value states such as `checked`, `pressed`, `selected`, or `focused`,
+3. `disabled`, which is always resolved last.
+
+Semantic states therefore layer over the builder chain, the same way GPUI layers `hover`, `active`, and `focus_visible` on top of an element's base style. A state only overrides the fields it sets, so unrelated builder-chain styles are preserved. To keep a specific builder-chain style as the closest layer even while a state is active, replay it inside that state:
+
+```rust
+Button::new("save")
+    .bg(brand)
+    .styles(|styles| styles.disabled(|style| style.opacity(0.5).bg(brand)))
+```
+
+Base controls cannot suppress `hover` or `active` styles while disabled, because GPUI does not expose those refinements. Guard them at the call site with `when(!disabled, ..)`.
 
 ## Capability Overview
 
@@ -278,7 +292,7 @@ cargo fmt --check
 cargo clippy -p gpui-base -- --deny warnings
 ```
 
-`gpui-base` continues to evolve as part of GPUI Component's foundation-layer refactor. The current Rust API is defined by the source code, and migration progress is tracked in [`../../specs/BASE-TODO.md`](../../specs/BASE-TODO.md).
+`gpui-base` continues to evolve as part of GPUI Component's foundation-layer refactor. The current Rust API is defined by the source code, and migration progress is tracked in [`../../docs/BASE-TODO.md`](../../docs/BASE-TODO.md).
 
 ## Related Resources
 

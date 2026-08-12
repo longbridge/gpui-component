@@ -28,7 +28,7 @@ pub(crate) fn init(cx: &mut App) {
 }
 
 type OpenChangeHandler = Rc<dyn Fn(bool, &mut Window, &mut App)>;
-type ConfirmHandler = Rc<dyn Fn(&mut Window, &mut App)>;
+type ActionHandler = Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// An unstyled controlled combobox root.
 ///
@@ -44,7 +44,8 @@ pub struct Combobox {
     style: StyleRefinement,
     children: Vec<AnyElement>,
     on_open_change: Option<OpenChangeHandler>,
-    on_confirm: Option<ConfirmHandler>,
+    on_confirm: Option<ActionHandler>,
+    on_dismiss: Option<ActionHandler>,
 }
 
 impl Combobox {
@@ -59,6 +60,7 @@ impl Combobox {
             children: Vec::new(),
             on_open_change: None,
             on_confirm: None,
+            on_dismiss: None,
         }
     }
 
@@ -90,8 +92,19 @@ impl Combobox {
         self
     }
 
+    /// Handles the Confirm action while the combobox is open.
     pub fn on_confirm(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.on_confirm = Some(Rc::new(handler));
+        self
+    }
+
+    /// Handles a dismissal requested through the Cancel action.
+    ///
+    /// This runs before the controlled open state is asked to close, so a
+    /// combobox that commits its pending value on dismissal can still read
+    /// that value here.
+    pub fn on_dismiss(mut self, handler: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_dismiss = Some(Rc::new(handler));
         self
     }
 }
@@ -122,7 +135,10 @@ impl RenderOnce for Combobox {
                 this.on_open_change(move |open, window, cx| handler(open, window, cx))
             })
             .when_some(self.on_confirm, |this, handler| {
-                this.on_escape(move |window, cx| handler(window, cx))
+                this.on_confirm(move |window, cx| handler(window, cx))
+            })
+            .when_some(self.on_dismiss, |this, handler| {
+                this.on_dismiss(move |window, cx| handler(window, cx))
             })
             .children(self.children)
             .refine_style(&self.style)
@@ -166,6 +182,7 @@ mod tests {
         fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             let state = cx.entity();
             let confirm_events = self.events.clone();
+            let dismiss_events = self.events.clone();
             let open_events = self.events.clone();
 
             Combobox::new("combobox")
@@ -173,6 +190,7 @@ mod tests {
                 .focus_handle(&self.trigger_focus)
                 .content_focus_handle(&self.content_focus)
                 .on_confirm(move |_, _| confirm_events.lock().unwrap().push("confirm"))
+                .on_dismiss(move |_, _| dismiss_events.lock().unwrap().push("dismiss"))
                 .on_open_change(move |open, _, cx| {
                     open_events.lock().unwrap().push("close");
                     state.update(cx, |state, cx| {
@@ -196,16 +214,32 @@ mod tests {
     }
 
     #[gpui::test]
-    fn escape_confirms_then_closes_and_restores_trigger_focus(cx: &mut TestAppContext) {
+    fn escape_dismisses_then_closes_and_restores_trigger_focus(cx: &mut TestAppContext) {
         let (cx, state) = harness(cx);
         cx.simulate_keystrokes("escape");
 
         cx.update(|window, cx| {
             assert!(!state.read(cx).open);
             assert!(state.read(cx).trigger_focus.is_focused(window));
+            // Dismissal runs before the close request so a caller can still
+            // commit its pending value.
             assert_eq!(
                 state.read(cx).events.lock().unwrap().as_slice(),
-                &["confirm", "close"]
+                &["dismiss", "close"]
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn enter_confirms_without_dismissing_while_open(cx: &mut TestAppContext) {
+        let (cx, state) = harness(cx);
+        cx.simulate_keystrokes("enter");
+
+        cx.update(|_, cx| {
+            assert!(state.read(cx).open);
+            assert_eq!(
+                state.read(cx).events.lock().unwrap().as_slice(),
+                &["confirm"]
             );
         });
     }

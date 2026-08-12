@@ -26,6 +26,8 @@ pub struct Tab {
     children: SmallVec<[AnyElement; 2]>,
     on_click: Option<ClickHandler>,
     accessibility_label: Option<SharedString>,
+    position_in_set: Option<usize>,
+    size_of_set: Option<usize>,
 }
 
 impl Tab {
@@ -40,6 +42,8 @@ impl Tab {
             children: SmallVec::new(),
             on_click: None,
             accessibility_label: None,
+            position_in_set: None,
+            size_of_set: None,
         }
     }
 
@@ -64,6 +68,14 @@ impl Tab {
         self
     }
 
+    /// Sets this tab's one-based position and the tab list's total size, so
+    /// assistive technology can announce "tab 2 of 5".
+    pub fn set_position(mut self, position: usize, size: usize) -> Self {
+        self.position_in_set = Some(position);
+        self.size_of_set = Some(size);
+        self
+    }
+
     pub fn on_click(
         mut self,
         handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
@@ -78,15 +90,15 @@ impl Tab {
     }
 
     fn resolved_style(&self) -> StyleRefinement {
-        let mut style = StyleRefinement::default();
-        style.refine(&self.style);
-        if self.selected {
-            style.refine(&self.semantic_styles.selected);
-        }
-        if self.disabled {
-            style.refine(&self.semantic_styles.disabled);
-        }
-        style
+        crate::state_style::resolve_style(
+            &self.style,
+            [
+                self.selected.then_some(&self.semantic_styles.selected),
+                self.disabled.then_some(&self.semantic_styles.disabled),
+            ]
+            .into_iter()
+            .flatten(),
+        )
     }
 }
 
@@ -142,6 +154,10 @@ impl RenderOnce for Tab {
                 this.aria_label(label)
             })
             .aria_selected(self.selected)
+            .when_some(self.position_in_set, |this, position| {
+                this.aria_position_in_set(position)
+            })
+            .when_some(self.size_of_set, |this, size| this.aria_size_of_set(size))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .when_some(
                 (!disabled).then_some(self.on_click).flatten(),

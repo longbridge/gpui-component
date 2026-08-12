@@ -5,18 +5,18 @@ use crate::{
     checkbox::checkbox_check_icon, h_flex, text::Text, tooltip::ComponentTooltip, v_flex,
 };
 use gpui::{
-    AnyElement, App, Axis, Div, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    div, prelude::FluentBuilder, px, relative, rems,
+    AnyElement, App, Axis, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder, px, relative, rems,
 };
-use gpui_base::RadioGroup as BaseRadioGroup;
+use gpui_base::{Radio as BaseRadio, RadioGroup as BaseRadioGroup};
 
 /// A Radio element.
 ///
 /// This is not included the Radio group implementation, you can manage the group by yourself.
 #[derive(IntoElement)]
 pub struct Radio {
-    base: Div,
+    base: BaseRadio,
     style: StyleRefinement,
     id: ElementId,
     label: Option<Text>,
@@ -35,9 +35,10 @@ pub struct Radio {
 impl Radio {
     /// Create a new Radio element with the given id.
     pub fn new(id: impl Into<ElementId>) -> Self {
+        let id = id.into();
         Self {
-            id: id.into(),
-            base: div(),
+            base: BaseRadio::new(id.clone()),
+            id,
             style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
@@ -96,18 +97,6 @@ impl Radio {
         self.on_click = Some(Rc::new(handler));
         self
     }
-
-    fn handle_click(
-        on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
-        checked: bool,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        let new_checked = !checked;
-        if let Some(f) = on_click {
-            (f)(&new_checked, window, cx);
-        }
-    }
 }
 
 impl Sizable for Radio {
@@ -160,23 +149,19 @@ impl RenderOnce for Radio {
 
         self.base
             .id(self.id.clone())
-            .role(Role::RadioButton)
-            .aria_selected(self.checked)
+            .checked(self.checked)
+            .disabled(self.disabled)
+            .track_focus(&focus_handle)
+            .tab_stop(self.tab_stop)
+            .tab_index(self.tab_index)
             .when_some(
                 self.label.as_ref().map(|l| l.get_text(cx)),
-                |this, label| this.aria_label(label),
+                |this, label| this.accessibility_label(label),
             )
-            .when_some(self.position_in_set, |this, pos| {
-                this.aria_position_in_set(pos)
-            })
-            .when_some(self.size_of_set, |this, size| this.aria_size_of_set(size))
-            .when(!self.disabled, |this| {
-                this.track_focus(
-                    &focus_handle
-                        .tab_stop(self.tab_stop)
-                        .tab_index(self.tab_index),
-                )
-            })
+            .when_some(
+                self.position_in_set.zip(self.size_of_set),
+                |this, (position, size)| this.set_position(position, size),
+            )
             .h_flex()
             .gap_x_2()
             .text_color(cx.theme().foreground)
@@ -238,13 +223,10 @@ impl RenderOnce for Radio {
             .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
                 window.prevent_default()
             })
-            .when(!self.disabled, |this| {
-                this.on_click({
-                    let on_click = self.on_click.clone();
-                    move |_, window, cx| {
-                        window.prevent_default();
-                        Self::handle_click(&on_click, checked, window, cx);
-                    }
+            .when_some(self.on_click.clone(), |this, on_click| {
+                this.on_change(move |next, _, window, cx| {
+                    window.prevent_default();
+                    on_click(&next, window, cx);
                 })
             })
             .map(|this| self.tooltip.apply(this))
