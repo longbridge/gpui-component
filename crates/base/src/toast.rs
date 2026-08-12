@@ -274,6 +274,7 @@ impl<I: Clone + Eq, T> ToastManager<I, T> {
 /// A deep toast-stack element that owns measurement, overlap, and expansion motion.
 #[derive(IntoElement)]
 pub struct ToastStack {
+    id: ElementId,
     base: Stateful<Div>,
     style: StyleRefinement,
     state: ToastStackState,
@@ -286,8 +287,10 @@ pub struct ToastStack {
 impl ToastStack {
     /// Create a toast stack with Base UI-compatible motion.
     pub fn new(id: impl Into<ElementId>, state: ToastStackState) -> Self {
+        let id = id.into();
         Self {
-            base: div().id(id),
+            base: div().id(id.clone()),
+            id,
             style: StyleRefinement::default(),
             state,
             motion: ToastMotion::sonner(),
@@ -361,7 +364,17 @@ fn stack_geometry(
         .fold(px(0.), |sum, height| sum + height)
         + gap * count.saturating_sub(1) as f32;
     let front_height = heights.last().copied().unwrap_or(px(0.));
-    let collapsed_height = front_height + peek * count.saturating_sub(1) as f32;
+    let collapsed_height = heights
+        .iter()
+        .enumerate()
+        .map(|(index, height)| {
+            let rank = count - 1 - index;
+            *height + peek * rank as f32
+        })
+        .fold(
+            front_height + peek * count.saturating_sub(1) as f32,
+            Pixels::max,
+        );
     let offsets = heights
         .iter()
         .enumerate()
@@ -377,9 +390,9 @@ fn stack_geometry(
                 newer_height + gap * rank as f32
             };
             let collapsed = if anchored_bottom {
-                expanded_height - front_height - peek * rank as f32
+                collapsed_height - *height - peek * rank as f32
             } else {
-                front_height + peek * rank as f32 - *height
+                peek * rank as f32
             };
             (collapsed, expanded)
         })
@@ -427,9 +440,18 @@ impl RenderOnce for ToastStack {
             peek,
             anchored_bottom,
         );
-        // Keep the viewport at its expanded height so expansion never shifts its
-        // window-edge anchor; collapsed items occupy only the front-most slice.
-        let stack_height = expanded_height.max(collapsed_height);
+        let policy = || Transition::new(duration).ease(cubic_bezier(0.25, 0.1, 0.25, 1.));
+        let stack_height = transition(
+            (self.id.clone(), "height"),
+            if expanded {
+                expanded_height
+            } else {
+                collapsed_height
+            },
+            policy(),
+            window,
+            cx,
+        );
         let items = self
             .children
             .into_iter()
@@ -445,7 +467,6 @@ impl RenderOnce for ToastStack {
                 } else {
                     collapsed_offset
                 };
-                let policy = || Transition::new(duration).ease(cubic_bezier(0.25, 0.1, 0.25, 1.));
                 let offset = transition(
                     (item_id.clone(), "offset"),
                     target_offset,
@@ -715,17 +736,28 @@ mod tests {
         assert_eq!(expanded, px(204.));
         assert_eq!(
             top,
-            vec![(px(64.), px(164.)), (px(32.), px(92.)), (px(0.), px(0.))]
+            vec![(px(24.), px(164.)), (px(12.), px(92.)), (px(0.), px(0.))]
         );
 
         let (_, _, bottom) = stack_geometry(&heights, px(12.), px(12.), true);
         assert_eq!(
             bottom,
-            vec![
-                (px(100.), px(0.)),
-                (px(112.), px(52.)),
-                (px(124.), px(124.))
-            ]
+            vec![(px(40.), px(0.)), (px(32.), px(52.)), (px(24.), px(124.))]
+        );
+
+        let tall_behind = [px(180.), px(60.)];
+        let (collapsed, _, top) = stack_geometry(&tall_behind, px(14.), px(14.), false);
+        assert_eq!(collapsed, px(194.));
+        assert_eq!(top[0].0, px(14.));
+        assert!(top[0].0 + tall_behind[0] <= collapsed);
+        assert_eq!(top[0].0 - top[1].0, px(14.));
+
+        let (_, _, bottom) = stack_geometry(&tall_behind, px(14.), px(14.), true);
+        assert!(bottom[0].0 >= px(0.));
+        assert!(bottom[0].0 + tall_behind[0] <= collapsed);
+        assert_eq!(
+            (bottom[1].0 + tall_behind[1]) - (bottom[0].0 + tall_behind[0]),
+            px(14.)
         );
     }
 
@@ -861,17 +893,85 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
         let middle_y = cx.debug_bounds("first-toast").unwrap().origin.y;
         assert!(middle_y > initial_y);
-        assert!(middle_y < initial_y + px(54.));
+        assert!(middle_y < initial_y + px(14.));
 
         cx.executor().advance_clock(Duration::from_millis(200));
         cx.update(|window, cx| window.draw(cx).clear(cx));
         assert_eq!(
             cx.debug_bounds("first-toast").unwrap().origin.y,
-            initial_y + px(54.)
+            initial_y + px(14.)
         );
         assert!(
             cx.debug_bounds("first-toast").unwrap().size.width
                 < cx.debug_bounds("second-toast").unwrap().size.width
+        );
+    }
+
+    #[gpui::test]
+    fn bottom_stack_reflow_moves_up_without_an_opposite_direction_jump(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        struct Harness {
+            state: ToastStackState,
+            show_second: bool,
+        }
+        impl gpui::Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                div().relative().size(px(300.)).child(
+                    ToastStack::new("bottom-stack", self.state.clone())
+                        .placement(Anchor::BottomRight)
+                        .absolute()
+                        .bottom_0()
+                        .w(px(300.))
+                        .item(
+                            "bottom-first",
+                            div()
+                                .debug_selector(|| "bottom-first-toast".into())
+                                .h(px(40.)),
+                        )
+                        .when(self.show_second, |stack| {
+                            stack.item("bottom-second", div().h(px(80.)))
+                        }),
+                )
+            }
+        }
+
+        let (view, cx) = cx.add_window_view(|_, _| Harness {
+            state: ToastStackState::default(),
+            show_second: false,
+        });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+        });
+        cx.executor().advance_clock(ToastMotion::sonner().duration);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let initial_y = cx.debug_bounds("bottom-first-toast").unwrap().origin.y;
+
+        view.update(cx, |view, cx| {
+            view.show_second = true;
+            cx.notify();
+        });
+        cx.run_until_parked();
+        assert_eq!(
+            cx.debug_bounds("bottom-first-toast").unwrap().origin.y,
+            initial_y
+        );
+
+        cx.executor().advance_clock(Duration::from_millis(200));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let middle_y = cx.debug_bounds("bottom-first-toast").unwrap().origin.y;
+        assert!(middle_y < initial_y);
+        assert!(
+            middle_y >= initial_y - px(14.),
+            "middle={middle_y:?}, initial={initial_y:?}"
+        );
+
+        cx.executor().advance_clock(Duration::from_millis(200));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            cx.debug_bounds("bottom-first-toast").unwrap().origin.y,
+            initial_y - px(14.)
         );
     }
 }
