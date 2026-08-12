@@ -19,23 +19,7 @@ use crate::{Sizable, StyleSized};
 use gpui_base::Input as BaseInput;
 use gpui_base::input::NativeMenuItem as BaseNativeMenuItem;
 
-use super::{InputContentType, InputState};
-
-fn sync_native_text_content_type(
-    window: &mut Window,
-    content_type: Option<InputContentType>,
-    disabled: bool,
-) {
-    if disabled {
-        return;
-    }
-
-    #[cfg(all(target_os = "macos", not(test)))]
-    gpui_base::input::set_text_content_type(window, content_type);
-
-    #[cfg(any(not(target_os = "macos"), test))]
-    let _ = (window, content_type);
-}
+use super::{InputContentType, InputState, sync_native_content_type};
 
 pub(super) fn sync_focused_input_registry(
     focused: bool,
@@ -343,10 +327,10 @@ impl RenderOnce for Input {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
 
-        let base_size = match self.size {
-            Size::Small => gpui_base::input::InputSize::Small,
-            Size::Large => gpui_base::input::InputSize::Large,
-            _ => gpui_base::input::InputSize::Medium,
+        let cursor_height_ratio = match self.size {
+            Size::Small => 0.75,
+            Size::Large => 1.,
+            _ => 0.85,
         };
         self.state.update(cx, |state, cx| {
             state.ensure_highlighter_factory(crate::highlighter::input_highlighter_factory());
@@ -382,7 +366,7 @@ impl RenderOnce for Input {
                         .into_any_element()
                 })),
             });
-            state.configure_presentation(self.disabled, base_size, text_align);
+            state.configure_presentation(self.disabled, cursor_height_ratio, text_align);
             let custom = self.context_menu_builder.clone();
             state.set_context_menu_presenter(Some(Rc::new(move |menu, position, window, cx| {
                 let menu = if let Some(custom) = custom.as_ref() {
@@ -421,7 +405,7 @@ impl RenderOnce for Input {
         .then(|| presentation.value.clone());
         let focused = presentation.focus_handle.is_focused(window) && !presentation.disabled;
         if focused {
-            sync_native_text_content_type(window, content_type, presentation.disabled);
+            sync_native_content_type(window, content_type, presentation.disabled);
         }
 
         let gap_x = match self.size {

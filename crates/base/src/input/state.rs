@@ -21,8 +21,8 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DiagnosticSet, DisplayMap, InputEditorStyle, InputHighlighterFactory, InputSize, MASK_CHAR,
-    MaskPattern, NativeMenu, NumberStep, WrappingIndent,
+    DiagnosticSet, DisplayMap, InputEditorStyle, InputHighlighterFactory, MASK_CHAR, MaskPattern,
+    NativeMenu, NumberStep, WrappingIndent,
     blink_cursor::BlinkCursor,
     change::Change,
     decorations::DecorationCollections,
@@ -300,7 +300,7 @@ pub struct InputState {
     pub(super) last_bounds: Option<Bounds<Pixels>>,
     pub(super) last_selected_range: Option<Selection>,
     pub(super) selecting: bool,
-    pub(super) size: InputSize,
+    pub(super) cursor_height_ratio: f32,
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
@@ -464,11 +464,11 @@ impl InputState {
     pub fn configure_presentation(
         &mut self,
         disabled: bool,
-        size: InputSize,
+        cursor_height_ratio: f32,
         text_align: TextAlign,
     ) {
         self.disabled = disabled;
-        self.size = size;
+        self.cursor_height_ratio = cursor_height_ratio;
         if self.mode.is_single_line() {
             self.text_align = text_align;
         }
@@ -631,7 +631,7 @@ impl InputState {
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
             emit_events: true,
-            size: InputSize::default(),
+            cursor_height_ratio: 0.85,
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,

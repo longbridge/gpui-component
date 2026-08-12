@@ -65,15 +65,6 @@ pub use ropey::Rope;
 pub use search::{SearchMatcher, SearchSession};
 pub use state::*;
 
-/// Presentation scale used by the editor's geometry calculations.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum InputSize {
-    Small,
-    #[default]
-    Medium,
-    Large,
-}
-
 /// Semantic content type used by text inputs, password managers, and autofill.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputContentType {

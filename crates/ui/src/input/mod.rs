@@ -1,4 +1,5 @@
 mod clear_button;
+mod content_type;
 mod input;
 mod number_input;
 mod otp_input;
@@ -7,7 +8,7 @@ pub(crate) mod popovers;
 mod search;
 
 pub(crate) use clear_button::*;
-pub use gpui_base::InputContentType;
+pub use content_type::*;
 #[cfg(not(feature = "tree-sitter"))]
 pub struct Tree;
 pub use gpui_base::input::{
