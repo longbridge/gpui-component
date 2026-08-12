@@ -383,8 +383,8 @@ mod tests {
 
     use crate::theme::Theme;
     use gpui::{
-        AppContext as _, Context, Entity, Focusable as _, Modifiers, MouseButton, Render,
-        TestAppContext, VisualTestContext, point, px,
+        AppContext as _, Context, Entity, Modifiers, MouseButton, Render, TestAppContext,
+        VisualTestContext, point, px,
     };
 
     struct StepperHarness {
