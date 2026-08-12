@@ -112,7 +112,8 @@ impl Styled for Sheet {
 }
 
 impl RenderOnce for Sheet {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
+        let viewport = window.viewport_size();
         let request_close = self.request_close;
         let on_close = self.on_close;
         let escape_request = request_close.clone();
@@ -122,7 +123,10 @@ impl RenderOnce for Sheet {
             self.base
                 .id("sheet-host")
                 .absolute()
-                .inset_0()
+                .top_0()
+                .left_0()
+                .w(viewport.width)
+                .h(viewport.height)
                 .key_context(CONTEXT)
                 .track_focus(&self.focus)
                 .focus_trap("sheet", &self.focus)

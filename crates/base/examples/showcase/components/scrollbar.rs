@@ -24,6 +24,6 @@ impl BaseShowcase {
                     .child(format!("Activity {row}"))
                     .child(if row % 3 == 0 { "Completed" } else { "Pending" })
             })))
-            .child(Scrollbar::new(&self.example_scroll))
+            .child(Scrollbar::new(&self.example_scroll).mode(ScrollbarMode::Always))
     }
 }

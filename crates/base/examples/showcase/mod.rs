@@ -14,10 +14,10 @@ use gpui_base::{
     AlertDialogPopup, AlertDialogTitle, Avatar, AvatarFallback, Button, Calendar, CalendarItemKind,
     CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible, Combobox, DatePicker,
     Dialog, DialogBackdrop, DialogDescription, DialogPopup, DialogTitle, HoverCard, Input,
-    OtpState, Popup, Scrollbar, Select, Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack,
-    Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead, TableHeader,
-    TableRow, Tabs, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
-    TreeState, v_virtual_list,
+    OtpState, Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
+    SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
+    TableHeader, TableRow, Tabs, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree,
+    TreeItem, TreeState, v_virtual_list,
 };
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
