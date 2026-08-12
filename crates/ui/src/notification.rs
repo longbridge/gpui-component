@@ -18,6 +18,9 @@ use crate::{
     v_flex,
 };
 
+const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(500);
+const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
+
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NotificationType {
     #[default]
@@ -252,10 +255,10 @@ impl Notification {
         cx.notify();
 
         let on_close = self.on_close.clone();
-        // Dismiss the notification after 0.15s to show the animation.
+        // Keep the toast mounted until the Base UI-style exit transition completes.
         cx.spawn_in(window, async move |view, cx| {
             cx.background_executor()
-                .timer(Duration::from_secs_f32(0.15))
+                .timer(NOTIFICATION_TRANSITION_DURATION)
                 .await;
             _ = view.update_in(cx, |_, _, cx| {
                 cx.emit(DismissEvent);
@@ -370,8 +373,8 @@ impl Render for Notification {
             }))
             .with_animation(
                 ElementId::NamedInteger("slide-down".into(), closing as u64),
-                Animation::new(Duration::from_secs_f64(0.25))
-                    .with_easing(cubic_bezier(0.4, 0., 0.2, 1.)),
+                Animation::new(NOTIFICATION_TRANSITION_DURATION)
+                    .with_easing(cubic_bezier(0.22, 1., 0.36, 1.)),
                 move |this, delta| {
                     if closing {
                         let opacity = 1. - delta;
@@ -379,32 +382,25 @@ impl Render for Notification {
                             .shadow_none()
                             .opacity(opacity)
                             .when(opacity < 0.85, |this| this.shadow_none());
-                        match placement {
-                            Anchor::TopRight | Anchor::BottomRight => {
-                                let x_offset = px(0.) + delta * px(45.);
-                                that.left(px(0.) + x_offset)
+                        let y_offset = match placement {
+                            Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
+                                -delta * NOTIFICATION_TRANSITION_OFFSET
                             }
-                            Anchor::TopLeft | Anchor::BottomLeft => {
-                                let x_offset = px(0.) - delta * px(45.);
-                                that.left(px(0.) + x_offset)
+                            Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter => {
+                                delta * NOTIFICATION_TRANSITION_OFFSET
                             }
-                            Anchor::TopCenter => {
-                                let y_offset = px(0.) - delta * px(45.);
-                                that.top(px(0.) + y_offset)
-                            }
-                            Anchor::BottomCenter => {
-                                let y_offset = px(0.) + delta * px(45.);
-                                that.top(px(0.) + y_offset)
-                            }
-                            _ => that,
-                        }
+                            _ => px(0.),
+                        };
+                        that.top(y_offset)
                     } else {
                         let y_offset = match placement {
                             Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
-                                px(-45.) + delta * px(45.)
+                                -NOTIFICATION_TRANSITION_OFFSET
+                                    + delta * NOTIFICATION_TRANSITION_OFFSET
                             }
                             Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter => {
-                                px(45.) - delta * px(45.)
+                                NOTIFICATION_TRANSITION_OFFSET
+                                    - delta * NOTIFICATION_TRANSITION_OFFSET
                             }
                             _ => px(0.),
                         };
@@ -477,7 +473,7 @@ impl NotificationList {
         let entering_notification = notification.clone();
         cx.spawn_in(window, async move |_, cx| {
             cx.background_executor()
-                .timer(Duration::from_millis(250))
+                .timer(NOTIFICATION_TRANSITION_DURATION)
                 .await;
             _ = entering_notification.update_in(cx, |note, _, cx| {
                 note.lifecycle.finish_enter();
@@ -636,8 +632,38 @@ mod tests {
     /// so that closed notifications are removed from the list.
     fn flush_dismiss(cx: &mut VisualTestContext) {
         cx.background_executor
-            .advance_clock(Duration::from_millis(200));
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION + Duration::from_millis(50));
         cx.run_until_parked();
+    }
+
+    #[gpui::test]
+    fn closing_toast_stays_mounted_until_its_transition_finishes(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+        });
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("closing")
+                    .id::<FooKind>()
+                    .autohide(false),
+                window,
+                cx,
+            );
+            list.close(TypeId::of::<FooKind>(), window, cx);
+        });
+
+        cx.background_executor
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION - Duration::from_millis(1));
+        cx.run_until_parked();
+        assert_eq!(ids(&list, cx).len(), 1);
+
+        cx.background_executor
+            .advance_clock(Duration::from_millis(1));
+        cx.run_until_parked();
+        assert!(ids(&list, cx).is_empty());
     }
 
     #[gpui::test]
