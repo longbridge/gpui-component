@@ -93,11 +93,29 @@ TitleBar::new()
 
 ### Title Bar Options for Window
 
+Use `TitleBar::window_options()` as the base of the window options, it sets up
+everything the title bar needs, including letting the title bar own dragging and
+double clicking instead of the system.
+
 ```rust
-use gpui::{WindowOptions, TitlebarOptions};
+use gpui::WindowOptions;
+
+WindowOptions {
+    window_bounds: Some(window_bounds),
+    ..TitleBar::window_options()
+}
+```
+
+If you build the [`WindowOptions`] yourself, set both fields:
+
+```rust
+use gpui::WindowOptions;
 
 WindowOptions {
     titlebar: Some(TitleBar::title_bar_options()),
+    // Required on macOS, otherwise the system also handles title bar double
+    // clicks and delays title bar clicks to disambiguate double clicks.
+    app_owns_titlebar_drag: true,
     ..Default::default()
 }
 ```
@@ -138,14 +156,16 @@ WindowOptions {
 | `child(element)`      | Add child element to the title bar       |
 | `on_close_window(fn)` | Custom close window handler (Linux only) |
 | `title_bar_options()` | Get default titlebar options for window  |
+| `window_options()`    | Get default window options for the title bar |
 
 ### Window Configuration
 
-| Property                 | Description                                         |
-| ------------------------ | --------------------------------------------------- |
-| `appears_transparent`    | Make title bar transparent (default: true)          |
-| `traffic_light_position` | Position of macOS traffic lights                    |
-| `title`                  | Window title (optional when using custom title bar) |
+| Property                 | Description                                                    |
+| ------------------------ | -------------------------------------------------------------- |
+| `appears_transparent`    | Make title bar transparent (default: true)                     |
+| `traffic_light_position` | Position of macOS traffic lights                               |
+| `title`                  | Window title (optional when using custom title bar)            |
+| `app_owns_titlebar_drag` | Let the title bar own dragging and double clicking (macOS only) |
 
 ### Title Bar Element (Internal)
 

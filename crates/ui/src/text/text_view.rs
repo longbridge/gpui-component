@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, Bounds, Element, ElementId, Entity, GlobalElementId, Hitbox, HitboxBehavior,
-    InspectorElementId, InteractiveElement, IntoElement, LayoutId, ParentElement, Pixels,
-    SharedString, StyleRefinement, Styled, Window, div,
+    AnyElement, App, Bounds, ClickEvent, Element, ElementId, Entity, GlobalElementId, Hitbox,
+    HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
+    ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
 };
 
 use crate::StyledExt;
@@ -12,12 +12,35 @@ use crate::scroll::ScrollableElement;
 use crate::text::TextViewFormat;
 use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 use crate::text::node::CodeBlock;
-use crate::text::state::TextViewState;
+use crate::text::state::{SelectionFormat, TextViewState};
 use crate::{global_state::GlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+
+pub(crate) type LinkClickHandlerFn =
+    dyn Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync;
+
+pub(crate) fn handle_link_click(
+    handler: &Option<Arc<LinkClickHandlerFn>>,
+    url: SharedString,
+    event: ClickEvent,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    if let Some(handler) = handler {
+        handler(&url, &event, window, cx);
+    } else if match &event {
+        ClickEvent::Mouse(click) => {
+            matches!(click.up.button, MouseButton::Left | MouseButton::Middle)
+        }
+        ClickEvent::Keyboard(_) => true,
+        ClickEvent::Touch(click) => !click.long_press,
+    } {
+        cx.open_url(&url);
+    }
+}
 
 /// A text view that can render Markdown or HTML.
 ///
@@ -44,8 +67,10 @@ pub struct TextView {
     text_view_style: TextViewStyle,
     style: StyleRefinement,
     selectable: bool,
+    selection_format: SelectionFormat,
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -83,8 +108,10 @@ impl TextView {
             text_view_style: TextViewStyle::default(),
             style: StyleRefinement::default(),
             selectable: false,
+            selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -99,8 +126,10 @@ impl TextView {
             style: StyleRefinement::default(),
             state: None,
             selectable: false,
+            selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -115,8 +144,10 @@ impl TextView {
             style: StyleRefinement::default(),
             state: None,
             selectable: false,
+            selection_format: SelectionFormat::default(),
             scrollable: false,
             code_block_actions: None,
+            link_click_handler: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -130,6 +161,15 @@ impl TextView {
     /// Set the text view to be selectable, default is false.
     pub fn selectable(mut self, selectable: bool) -> Self {
         self.selectable = selectable;
+        self
+    }
+
+    /// Set the [`SelectionFormat`], default is [`SelectionFormat::Plain`].
+    ///
+    /// With [`SelectionFormat::Source`], selecting inside `**bold**` yields
+    /// `**bold**` (the Markdown source) rather than `bold`.
+    pub fn selection_format(mut self, selection_format: SelectionFormat) -> Self {
+        self.selection_format = selection_format;
         self
     }
 
@@ -162,6 +202,18 @@ impl TextView {
         self.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
             f(&code_block, window, cx).into_any_element()
         }));
+        self
+    }
+
+    /// Handle pointer events on rendered links.
+    ///
+    /// The handler receives the resolved URL and the original GPUI click event.
+    /// Without a handler, links open through App::open_url.
+    pub fn on_link_click<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync + 'static,
+    {
+        self.link_click_handler = Some(Arc::new(handler));
         self
     }
 
@@ -278,8 +330,10 @@ impl Element for TextView {
 
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
+            state.link_click_handler = self.link_click_handler.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
+            state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
             state.text_view_style = self.text_view_style.clone();
 
@@ -358,9 +412,9 @@ mod tests {
     use super::{TextView, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
-        AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, Modifiers,
-        MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render, Styled as _,
-        TestAppContext, VisualTestContext, Window, div, point, px,
+        AppContext as _, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement,
+        Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render,
+        SharedString, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -462,6 +516,23 @@ mod tests {
     }
 
     #[gpui::test]
+    fn inline_html_image_after_newline_does_not_panic(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, cx| {
+            TextViewTestRoot::new(
+                "Hi\n[<img src=\"https://example.com/image.svg\">](https://google.com/)",
+                cx,
+            )
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+    }
+
+    #[gpui::test]
     fn list_item_renders_fenced_code_block_at_document_width(cx: &mut TestAppContext) {
         struct ListItemBlockRoot;
 
@@ -535,6 +606,193 @@ mod tests {
     }
 
     #[gpui::test]
+    fn markdown_link_opens_url_without_handler(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) =
+            cx.add_window_view(|_, cx| TextViewTestRoot::new("[example](https://example.com)", cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+
+        assert_eq!(cx.opened_url(), Some("https://example.com".to_string()));
+    }
+
+    #[gpui::test]
+    fn right_click_does_not_open_url_without_handler(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) =
+            cx.add_window_view(|_, cx| TextViewTestRoot::new("[example](https://example.com)", cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
+    fn link_handler_receives_button_and_modifiers(cx: &mut TestAppContext) {
+        use std::sync::{Arc, Mutex};
+
+        struct LinkRoot {
+            text_view: Entity<TextViewState>,
+            clicks: Arc<Mutex<Vec<(SharedString, ClickEvent)>>>,
+        }
+
+        impl Render for LinkRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                let clicks = self.clicks.clone();
+                div()
+                    .w(px(240.))
+                    .child(
+                        TextView::new(&self.text_view).on_link_click(move |url, event, _, _| {
+                            clicks.lock().unwrap().push((url.clone(), event.clone()));
+                        }),
+                    )
+            }
+        }
+
+        cx.update(crate::init);
+        let clicks = Arc::new(Mutex::new(Vec::new()));
+        let captured = clicks.clone();
+        let (_, cx) = cx.add_window_view(move |_, cx| LinkRoot {
+            text_view: cx.new(|cx| TextViewState::markdown("[example](https://example.com)", cx)),
+            clicks,
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        let mut modifiers = Modifiers::default();
+        modifiers.control = true;
+        cx.simulate_click(point(px(10.), px(10.)), modifiers);
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Middle,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Middle,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Right,
+            Modifiers::default(),
+        );
+
+        let clicks = captured.lock().unwrap();
+        assert_eq!(clicks.len(), 3);
+        assert_eq!(clicks[0].0, "https://example.com");
+        assert!(!clicks[0].1.is_right_click() && !clicks[0].1.is_middle_click());
+        assert!(clicks[0].1.modifiers().control);
+        assert!(clicks[1].1.is_middle_click());
+        assert!(clicks[2].1.is_right_click());
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
+    fn linked_image_handler_receives_left_middle_and_right_clicks(cx: &mut TestAppContext) {
+        use std::sync::{Arc, Mutex};
+
+        struct LinkedImageRoot {
+            text_view: Entity<TextViewState>,
+            clicks: Arc<Mutex<Vec<(SharedString, ClickEvent)>>>,
+        }
+
+        impl Render for LinkedImageRoot {
+            fn render(
+                &mut self,
+                _window: &mut Window,
+                _cx: &mut Context<Self>,
+            ) -> impl IntoElement {
+                let clicks = self.clicks.clone();
+                div().w(px(160.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .on_link_click(move |url, event, _, _| {
+                            clicks.lock().unwrap().push((url.clone(), event.clone()));
+                        }),
+                )
+            }
+        }
+
+        cx.update(crate::init);
+        let clicks = Arc::new(Mutex::new(Vec::new()));
+        let captured = clicks.clone();
+        let (_, cx) = cx.add_window_view(move |window, cx| {
+            let content = cx.new(|cx| LinkedImageRoot {
+                text_view: cx.new(|cx| {
+                    TextViewState::markdown(
+                        r#"Before [<img src="https://example.com/image.svg" width="32" height="32">](https://example.com/image-link) after."#,
+                        cx,
+                    )
+                }),
+                clicks,
+            });
+            crate::Root::new(content, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let inline_bounds = cx.update(|window, cx| {
+            crate::Root::read(window, cx)
+                .selectable_text_inlines
+                .values()
+                .next()
+                .cloned()
+                .unwrap_or_default()
+        });
+        assert!(
+            inline_bounds.len() >= 2,
+            "linked image needs text bounds on both sides: {inline_bounds:?}"
+        );
+        assert!(
+            inline_bounds[1].left() - inline_bounds[0].right() >= px(24.),
+            "linked image did not reserve the expected click target: {inline_bounds:?}"
+        );
+        let position = point(
+            inline_bounds[0].right() + (inline_bounds[1].left() - inline_bounds[0].right()) * 0.5,
+            inline_bounds[0].top() + px(8.),
+        );
+        for button in [MouseButton::Left, MouseButton::Middle, MouseButton::Right] {
+            cx.simulate_mouse_down(position, button, Modifiers::default());
+            cx.simulate_mouse_up(position, button, Modifiers::default());
+        }
+
+        let clicks = captured.lock().unwrap();
+        assert_eq!(clicks.len(), 3);
+        assert!(
+            clicks
+                .iter()
+                .all(|(url, _)| url == "https://example.com/image-link")
+        );
+        assert!(!clicks[0].1.is_right_click() && !clicks[0].1.is_middle_click());
+        assert!(clicks[1].1.is_middle_click());
+        assert!(clicks[2].1.is_right_click());
+        assert_eq!(cx.opened_url(), None);
+    }
+
+    #[gpui::test]
     fn clipped_markdown_cannot_start_selection(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (view, cx) = cx
@@ -561,6 +819,108 @@ mod tests {
         assert!(
             selected_text.is_empty(),
             "unexpected selection: {selected_text:?}"
+        );
+    }
+
+    /// A tall selectable TextView clipped by a short `overflow_hidden` viewport,
+    /// with a large blank footer below so a drag can extend the selection band
+    /// past the bottom of the clip while still proxy-anchoring to the view.
+    struct ClippedTallTextViewTestRoot {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl ClippedTallTextViewTestRoot {
+        fn new(cx: &mut Context<Self>) -> Self {
+            // Four separate blocks; only the first (and maybe part of the
+            // second) fit inside the 40px clip. "charlie"/"delta" render well
+            // below it.
+            let text_view =
+                cx.new(|cx| TextViewState::markdown("alpha\n\nbravo\n\ncharlie\n\ndelta", cx));
+            Self { text_view }
+        }
+    }
+
+    impl Render for ClippedTallTextViewTestRoot {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .w(px(200.))
+                .child(
+                    div()
+                        .h(px(40.))
+                        .overflow_hidden()
+                        .child(TextView::new(&self.text_view).selectable(true)),
+                )
+                // A tall blank footer so a drag can reach a y below the clipped
+                // text; a press there proxy-anchors to the TextView above.
+                .child(div().h(px(160.)))
+        }
+    }
+
+    /// Regression for copying a selection taller than the visible viewport.
+    ///
+    /// The selection band runs from visible text at the top down to a point
+    /// far below the clip. Every glyph of the painted TextView is laid out even
+    /// though the lower ones are clipped away, so the copied text must include
+    /// the clipped-out "charlie"/"delta" — not just what is on screen. This
+    /// guards against re-adding a `content_mask` gate in
+    /// `Inline::layout_selections`.
+    #[gpui::test]
+    fn selection_band_beyond_clip_copies_offscreen_text(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(ClippedTallTextViewTestRoot::new);
+            crate::Root::new(content, window, cx)
+        });
+        let content = view.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<ClippedTallTextViewTestRoot>()
+                .unwrap()
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        // Anchor on visible text near the top, then drag to a point well below
+        // the 40px clip (into the blank footer) and to the far right so the
+        // last line is fully covered.
+        cx.simulate_mouse_down(
+            point(px(2.), px(8.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_move(
+            point(px(180.), px(150.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_up(
+            point(px(180.), px(150.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let selected_text =
+            content.read_with(cx, |root, cx| root.text_view.read(cx).selected_text());
+        assert!(
+            selected_text.contains("delta"),
+            "clipped-out text was not copied: {selected_text:?}"
+        );
+        assert!(
+            selected_text.contains("charlie"),
+            "clipped-out text was not copied: {selected_text:?}"
         );
     }
 

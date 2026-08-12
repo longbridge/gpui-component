@@ -111,6 +111,8 @@ Input::new(&state)
 
 所有多行输入都可以通过 `searchable(true)` 开启搜索能力，并支持 `Ctrl+F` 或 macOS 上的 `Cmd+F`。
 
+按 `Ctrl+H`（macOS 上为 `Cmd+Shift+F`）可以打开搜索栏并展开替换输入框，通过 `replaceable(false)` 可以关闭替换功能。
+
 ```rust
 let state = cx.new(|cx|
     InputState::new(window, cx)

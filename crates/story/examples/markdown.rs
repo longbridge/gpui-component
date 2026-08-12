@@ -21,7 +21,8 @@ use gpui_component::{
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
     text::{
-        MarkdownNode, MarkdownParseContext, MarkdownPlugin, TextViewStyle, markdown, markdown_ast,
+        MarkdownNode, MarkdownParseContext, MarkdownPlugin, SelectionFormat, TextViewStyle,
+        markdown, markdown_ast,
     },
     v_flex,
 };
@@ -1113,6 +1114,9 @@ pub struct Example {
     /// When `true`, tables wrap cell content to fit the width; when `false`
     /// (the default), tables keep cells on one line and scroll horizontally.
     table_wrap: bool,
+    /// Whether copying a selection yields the rendered text or its Markdown
+    /// source.
+    selection_format: SelectionFormat,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -1152,6 +1156,7 @@ impl Example {
             input_state,
             // Default to horizontal scrolling for tables.
             table_wrap: false,
+            selection_format: SelectionFormat::Plain,
             _subscriptions,
         }
     }
@@ -1275,32 +1280,58 @@ impl Render for Example {
                                             ))
                                             .plugin(UserCardPlugin::new())
                                             .plugin(MathPlugin::new())
+                                            .on_link_click(|url, event, _window, cx| {
+                                                println!(
+                                                    "Markdown link clicked: {url} ({event:?})"
+                                                );
+                                                if !event.is_right_click() {
+                                                    cx.open_url(url);
+                                                }
+                                            })
                                             // Tables scroll horizontally by default; the
                                             // status bar toggle switches to wrapping.
                                             .style(self.text_view_style())
                                             .flex_none()
                                             .p_5()
                                             .scrollable(true)
-                                            .selectable(true),
+                                            .selectable(true)
+                                            .selection_format(self.selection_format),
                                     ),
                                 ),
                         ),
                     )
                     .child(
-                        StatusBar::new().right(
-                            Button::new("table-wrap")
-                                .ghost()
-                                .xsmall()
-                                .label(if self.table_wrap {
-                                    "Table: Wrap"
-                                } else {
-                                    "Table: Scroll"
-                                })
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.table_wrap = !this.table_wrap;
-                                    cx.notify();
-                                })),
-                        ),
+                        StatusBar::new()
+                            .right(
+                                Button::new("selection-format")
+                                    .ghost()
+                                    .xsmall()
+                                    .label(match self.selection_format {
+                                        SelectionFormat::Plain => "Selection: Plain",
+                                        SelectionFormat::Source => "Selection: Source",
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.selection_format = match this.selection_format {
+                                            SelectionFormat::Plain => SelectionFormat::Source,
+                                            SelectionFormat::Source => SelectionFormat::Plain,
+                                        };
+                                        cx.notify();
+                                    })),
+                            )
+                            .right(
+                                Button::new("table-wrap")
+                                    .ghost()
+                                    .xsmall()
+                                    .label(if self.table_wrap {
+                                        "Table: Wrap"
+                                    } else {
+                                        "Table: Scroll"
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.table_wrap = !this.table_wrap;
+                                        cx.notify();
+                                    })),
+                            ),
                     ),
             )
     }

@@ -3,7 +3,7 @@ use std::rc::Rc;
 use crate::theme::ActiveTheme;
 use gpui::Corners;
 use gpui::Window;
-use gpui::{AnyElement, App, Context, Edges, Entity, EventEmitter, FocusHandle, Focusable};
+use gpui::{AnyElement, App, Context, Entity, EventEmitter, FocusHandle, Focusable, px};
 use gpui::{
     InteractiveElement, IntoElement, KeyBinding, ParentElement, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, actions,
@@ -12,11 +12,11 @@ use gpui::{
 
 use crate::{
     Disableable, IconName, Sizable, Size, StyledExt as _,
-    button::{Button, ButtonVariants as _},
+    button::{Button, ButtonCustomVariant, ButtonVariants as _},
     h_flex,
 };
 
-use super::{Input, InputState, MaskPattern};
+use super::{Input, InputState, MaskPattern, input::input_style};
 
 actions!(number_input, [Increment, Decrement]);
 
@@ -298,6 +298,25 @@ impl RenderOnce for NumberInput {
         }
 
         let numeric_value = self.state.read(cx).value().parse::<f64>().ok();
+        let focused = self.state.read(cx).focus_handle.is_focused(window) && !self.disabled;
+        let (bg, _) = input_style(self.disabled, cx);
+        let border_color = if self.disabled {
+            cx.theme().input.opacity(0.5)
+        } else {
+            cx.theme().input
+        };
+        // Transparent like a ghost button, but tinted to the frame on hover.
+        let button_variant = ButtonCustomVariant::new(cx)
+            .foreground(cx.theme().secondary_foreground)
+            .hover(cx.theme().input.opacity(0.4))
+            .active(cx.theme().input.opacity(0.6));
+        // The buttons sit inside the 1px frame, so their corners are a pixel
+        // tighter than the frame's, or they paint over its inner curve.
+        let button_radius = if self.appearance {
+            (cx.theme().radius - px(1.)).max(px(0.))
+        } else {
+            cx.theme().radius
+        };
 
         h_flex()
             .id(("number-input", self.state.entity_id()))
@@ -308,34 +327,31 @@ impl RenderOnce for NumberInput {
             .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
             .flex_1()
             .rounded(cx.theme().radius)
+            // The buttons are ghost, so the frame around the whole control is
+            // drawn here instead of by each of its parts.
+            .when(self.appearance, |this| {
+                this.bg(bg)
+                    .border_1()
+                    .border_color(border_color)
+                    .when(focused, |this| this.focused_border(cx))
+            })
             .refine_style(&self.style)
             .when(self.disabled, |this| this.opacity(0.5))
             .child(
                 Button::new("minus")
-                    .map(|this| {
-                        if self.appearance {
-                            this.outline()
-                        } else {
-                            this.ghost()
-                        }
-                    })
+                    .custom(button_variant)
+                    .rounded(button_radius)
                     .with_size(self.size)
                     .icon(IconName::Minus)
                     .compact()
                     .tab_stop(false)
                     .disabled(self.disabled)
-                    .border_color(cx.theme().input)
+                    // Only the outer corners are rounded, to follow the frame.
                     .border_corners(Corners {
                         top_left: true,
                         top_right: false,
                         bottom_right: false,
                         bottom_left: true,
-                    })
-                    .border_edges(Edges {
-                        top: self.appearance,
-                        right: false,
-                        bottom: self.appearance,
-                        left: self.appearance,
                     })
                     .on_click({
                         let state = self.state.clone();
@@ -346,7 +362,7 @@ impl RenderOnce for NumberInput {
             )
             .child(
                 Input::new(&self.state)
-                    .appearance(self.appearance)
+                    .appearance(false)
                     .with_size(self.size)
                     .disabled(self.disabled)
                     .gap_0()
@@ -357,30 +373,18 @@ impl RenderOnce for NumberInput {
             )
             .child(
                 Button::new("plus")
-                    .map(|this| {
-                        if self.appearance {
-                            this.outline()
-                        } else {
-                            this.ghost()
-                        }
-                    })
+                    .custom(button_variant)
+                    .rounded(button_radius)
                     .with_size(self.size)
                     .icon(IconName::Plus)
                     .compact()
                     .tab_stop(false)
                     .disabled(self.disabled)
-                    .border_color(cx.theme().input)
                     .border_corners(Corners {
                         top_left: false,
                         top_right: true,
                         bottom_right: true,
                         bottom_left: false,
-                    })
-                    .border_edges(Edges {
-                        top: self.appearance,
-                        right: self.appearance,
-                        bottom: self.appearance,
-                        left: false,
                     })
                     .on_click({
                         let state = self.state.clone();

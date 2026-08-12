@@ -21,7 +21,7 @@ pub use state::*;
 pub use tab_panel::*;
 pub use tiles::*;
 
-use crate::ElementExt;
+use crate::{ElementExt, Placement};
 
 pub(crate) fn init(cx: &mut App) {
     PanelRegistry::init(cx);
@@ -36,8 +36,27 @@ pub enum DockEvent {
     /// So it emits may be too frequently, you may want to debounce the event.
     LayoutChanged,
 
-    /// The drag item drop event.
-    DragDrop(AnyDrag),
+    /// A host-owned drag item ([`AnyDrag`]) was dropped inside the dock.
+    DragDrop { item: AnyDrag, target: DropTarget },
+}
+
+/// Where a host-owned drag landed, and how much the container can say about it.
+#[derive(Clone, Debug)]
+pub enum DropTarget {
+    /// Dropped on a [`Tiles`] canvas, where the landing position is just the
+    /// cursor position and the host can read it directly.
+    Canvas,
+
+    /// Dropped on a [`TabPanel`] in a split layout. A split layout has no free
+    /// coordinates, so the container reports the panel and the edge it resolved
+    /// from the cursor instead.
+    ///
+    /// `placement` is `None` for the centre zone, meaning merge into the tab
+    /// group rather than split.
+    Panel {
+        tab_panel: Entity<TabPanel>,
+        placement: Option<Placement>,
+    },
 }
 
 /// The main area of the dock.
@@ -373,6 +392,43 @@ impl DockItem {
         }
     }
 
+    /// Whether this dock item currently holds no visible panel.
+    ///
+    /// Walks the live panel entities, not `items`: [`Self::add_panel`] only
+    /// pushes into them, nothing ever removes, and splitting does not touch
+    /// them at all.
+    ///
+    /// A container is empty when every child is, so a fresh one is empty. A
+    /// leaf counts as empty while it is hidden, matching the render path, which
+    /// skips panels whose [`Panel::visible`] is `false`.
+    pub fn is_empty(&self, cx: &App) -> bool {
+        fn is_empty(panel: &Arc<dyn PanelView>, cx: &App) -> bool {
+            let view = panel.view();
+
+            if let Ok(stack) = view.clone().downcast::<StackPanel>() {
+                return stack
+                    .read(cx)
+                    .panels
+                    .iter()
+                    .all(|panel| is_empty(panel, cx));
+            }
+            if let Ok(tabs) = view.clone().downcast::<TabPanel>() {
+                return tabs.read(cx).panels.iter().all(|panel| is_empty(panel, cx));
+            }
+            if let Ok(tiles) = view.downcast::<Tiles>() {
+                return tiles
+                    .read(cx)
+                    .panels()
+                    .iter()
+                    .all(|item| is_empty(&item.panel, cx));
+            }
+
+            !panel.visible(cx)
+        }
+
+        is_empty(&self.view(), cx)
+    }
+
     /// Find existing panel in the dock item.
     pub fn find_panel(&self, panel: Arc<dyn PanelView>) -> Option<Arc<dyn PanelView>> {
         match self {
@@ -599,8 +655,10 @@ impl DockArea {
     ) {
         self._subscriptions
             .push(cx.subscribe(tile_panel, move |_, _, evt: &DragDrop, cx| {
-                let item = evt.0.clone();
-                cx.emit(DockEvent::DragDrop(item));
+                cx.emit(DockEvent::DragDrop {
+                    item: evt.0.clone(),
+                    target: DropTarget::Canvas,
+                });
             }));
     }
 
@@ -619,6 +677,14 @@ impl DockArea {
     /// Return the center dock item.
     pub fn center(&self) -> &DockItem {
         &self.center
+    }
+
+    /// Whether the center area currently holds no visible panel.
+    ///
+    /// See [`DockItem::is_empty`]. Ask a dock the same question with
+    /// [`Dock::panel`].
+    pub fn is_center_empty(&self, cx: &App) -> bool {
+        self.center.is_empty(cx)
     }
 
     /// Return the left dock item.

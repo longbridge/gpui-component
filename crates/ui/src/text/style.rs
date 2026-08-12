@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use gpui::{Pixels, Rems, StyleRefinement, px, rems};
+use gpui::{App, HighlightStyle, Pixels, Rems, StyleRefinement, px, rems};
 
-use crate::highlighter::HighlightTheme;
+use crate::{ActiveTheme as _, highlighter::HighlightTheme};
 
 /// TextViewStyle used to customize the style for [`TextView`].
 #[derive(Clone)]
@@ -35,6 +35,11 @@ pub struct TextViewStyle {
     /// on a single line — columns then never shrink and the table scrolls as
     /// soon as the content is wider than the frame.
     pub table_cell: StyleRefinement,
+    /// The highlight style for inline code.
+    ///
+    /// Default is [`HighlightStyle::default()`], the `background_color` will
+    /// fallback to `cx.theme().accent`, if it is `None`.
+    pub inline_code: HighlightStyle,
     pub is_dark: bool,
 }
 
@@ -56,6 +61,7 @@ impl Default for TextViewStyle {
             code_block: StyleRefinement::default(),
             table: StyleRefinement::default(),
             table_cell: StyleRefinement::default(),
+            inline_code: HighlightStyle::default(),
             is_dark: false,
         }
     }
@@ -82,6 +88,12 @@ impl TextViewStyle {
         self
     }
 
+    /// Set style for inline code spans.
+    pub fn inline_code(mut self, style: HighlightStyle) -> Self {
+        self.inline_code = style;
+        self
+    }
+
     /// Set extra style for the table container.
     ///
     /// Set `overflow_x: scroll` on the refinement for adaptive layout: cells
@@ -100,5 +112,15 @@ impl TextViewStyle {
     pub fn table_cell(mut self, style: StyleRefinement) -> Self {
         self.table_cell = style;
         self
+    }
+
+    /// Returns the [`HighlightStyle`] to use for inline code,
+    /// fallback `background_color` to `cx.theme().accent`, if it is `None`.
+    pub(crate) fn inline_code_highlight(&self, cx: &App) -> HighlightStyle {
+        let mut style = self.inline_code;
+        if style.background_color.is_none() {
+            style.background_color = Some(cx.theme().accent);
+        }
+        style
     }
 }

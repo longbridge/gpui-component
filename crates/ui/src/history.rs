@@ -1,5 +1,5 @@
-use std::fmt::Debug;
 use instant::{Duration, Instant};
+use std::fmt::Debug;
 
 /// A HistoryItem represents a single change in the history.
 /// It must implement Clone and PartialEq to be used in the History.

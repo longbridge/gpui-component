@@ -282,7 +282,11 @@ mod tests {
 
         // Visible range covering only line 0 (bytes 0..19).
         let styles = lsp.semantic_tokens_for_range(&text, &(0..19), &theme);
-        assert_eq!(styles.len(), 1, "only the line-0 token should be windowed in");
+        assert_eq!(
+            styles.len(),
+            1,
+            "only the line-0 token should be windowed in"
+        );
         assert_eq!(styles[0].0, 0..6, "keyword token maps to bytes 0..6");
         assert!(
             styles[0].1 != HighlightStyle::default(),

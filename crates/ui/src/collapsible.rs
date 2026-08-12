@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
 };
 
-use crate::{v_flex, StyledExt};
+use crate::{StyledExt, v_flex};
 
 enum CollapsibleChild {
     Element(AnyElement),

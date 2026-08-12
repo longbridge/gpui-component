@@ -1222,8 +1222,14 @@ fn compute_resized_bounds(
     };
 
     Bounds {
-        origin: Point { x: final_x, y: final_y },
-        size: Size { width: final_width, height: final_height },
+        origin: Point {
+            x: final_x,
+            y: final_y,
+        },
+        size: Size {
+            width: final_width,
+            height: final_height,
+        },
     }
 }
 
@@ -1319,14 +1325,11 @@ impl Render for Tiles {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{px, Bounds, Pixels, Point, Size};
+    use gpui::{Bounds, Pixels, Point, Size, px};
 
     fn b(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
         Bounds {
-            origin: Point {
-                x: px(x),
-                y: px(y),
-            },
+            origin: Point { x: px(x), y: px(y) },
             size: Size {
                 width: px(w),
                 height: px(h),
@@ -1337,7 +1340,10 @@ mod tests {
     #[test]
     fn test_snap_edge_within_threshold() {
         // 102 is 2px from 100 (< 8) -> snaps to 100.
-        assert_eq!(snap_edge(px(102.), &[px(100.), px(300.)], px(8.)), Some(px(100.)));
+        assert_eq!(
+            snap_edge(px(102.), &[px(100.), px(300.)], px(8.)),
+            Some(px(100.))
+        );
     }
 
     #[test]
@@ -1349,7 +1355,10 @@ mod tests {
     #[test]
     fn test_snap_edge_picks_nearest() {
         // 303 is 3px from 300 and 5px from 308 -> picks 300.
-        assert_eq!(snap_edge(px(303.), &[px(308.), px(300.)], px(8.)), Some(px(300.)));
+        assert_eq!(
+            snap_edge(px(303.), &[px(308.), px(300.)], px(8.)),
+            Some(px(300.))
+        );
     }
 
     #[test]
@@ -1363,7 +1372,8 @@ mod tests {
         // Dragging right edge to 197 should snap right edge to 200 -> width 200.
         let prev = b(0., 0., 196., 100.);
         let neighbor = b(200., 0., 100., 100.);
-        let out = compute_resized_bounds(prev, None, None, Some(px(197.)), None, &[neighbor], px(8.));
+        let out =
+            compute_resized_bounds(prev, None, None, Some(px(197.)), None, &[neighbor], px(8.));
         assert_eq!(out.origin.x, px(0.));
         assert_eq!(out.size.width, px(200.));
     }
@@ -1372,7 +1382,8 @@ mod tests {
     fn test_resize_bottom_edge_snaps_to_neighbor_top() {
         let prev = b(0., 0., 100., 196.);
         let neighbor = b(0., 200., 100., 100.);
-        let out = compute_resized_bounds(prev, None, None, None, Some(px(197.)), &[neighbor], px(8.));
+        let out =
+            compute_resized_bounds(prev, None, None, None, Some(px(197.)), &[neighbor], px(8.));
         assert_eq!(out.origin.y, px(0.));
         assert_eq!(out.size.height, px(200.));
     }
@@ -1383,7 +1394,15 @@ mod tests {
         // Drag left edge to 103 -> snaps to 100 -> width = 300 - 100 = 200.
         let prev = b(200., 0., 100., 100.);
         let neighbor = b(0., 0., 100., 100.);
-        let out = compute_resized_bounds(prev, Some(px(103.)), None, Some(px(197.)), None, &[neighbor], px(8.));
+        let out = compute_resized_bounds(
+            prev,
+            Some(px(103.)),
+            None,
+            Some(px(197.)),
+            None,
+            &[neighbor],
+            px(8.),
+        );
         assert_eq!(out.origin.x, px(100.));
         assert_eq!(out.size.width, px(200.));
     }
@@ -1395,8 +1414,13 @@ mod tests {
         let right_neighbor = b(100., 0., 200., 100.); // right edge = 300
         let bottom_neighbor = b(0., 100., 100., 150.); // bottom edge = 250
         let out = compute_resized_bounds(
-            prev, None, None, Some(px(298.)), Some(px(248.)),
-            &[right_neighbor, bottom_neighbor], px(8.),
+            prev,
+            None,
+            None,
+            Some(px(298.)),
+            Some(px(248.)),
+            &[right_neighbor, bottom_neighbor],
+            px(8.),
         );
         assert_eq!(out.size.width, px(300.));
         assert_eq!(out.size.height, px(250.));

@@ -81,7 +81,10 @@ pub struct TileMeta {
 impl Default for TileMeta {
     fn default() -> Self {
         Self {
-            bounds: Bounds { origin: point(px(10.), px(10.)), size: size(px(200.), px(200.)) },
+            bounds: Bounds {
+                origin: point(px(10.), px(10.)),
+                size: size(px(200.), px(200.)),
+            },
             z_index: 0,
         }
     }
@@ -110,7 +113,10 @@ pub enum PanelInfo {
 
 impl PanelInfo {
     pub fn stack(sizes: Vec<Pixels>, axis: Axis) -> Self {
-        Self::Stack { sizes, axis: if axis == Axis::Horizontal { 0 } else { 1 } }
+        Self::Stack {
+            sizes,
+            axis: if axis == Axis::Horizontal { 0 } else { 1 },
+        }
     }
 
     pub fn tabs(active_index: usize) -> Self {
@@ -127,9 +133,11 @@ impl PanelInfo {
 
     pub fn axis(&self) -> Option<Axis> {
         match self {
-            Self::Stack { axis, .. } => {
-                Some(if *axis == 0 { Axis::Horizontal } else { Axis::Vertical })
-            }
+            Self::Stack { axis, .. } => Some(if *axis == 0 {
+                Axis::Horizontal
+            } else {
+                Axis::Vertical
+            }),
             _ => None,
         }
     }
@@ -161,7 +169,10 @@ impl Default for PanelState {
 
 impl PanelState {
     pub fn new<P: Panel>(panel: &P) -> Self {
-        Self { panel_name: panel.panel_name().to_string(), ..Default::default() }
+        Self {
+            panel_name: panel.panel_name().to_string(),
+            ..Default::default()
+        }
     }
 
     pub fn add_child(&mut self, panel: PanelState) {
@@ -184,7 +195,11 @@ impl PanelState {
 
         match info {
             PanelInfo::Stack { sizes, axis } => {
-                let axis = if axis == 0 { Axis::Horizontal } else { Axis::Vertical };
+                let axis = if axis == 0 {
+                    Axis::Horizontal
+                } else {
+                    Axis::Vertical
+                };
                 let sizes = sizes.iter().map(|s| Some(*s)).collect_vec();
                 DockItem::split_with_sizes(axis, items, sizes, &dock_area, window, cx)
             }
@@ -236,7 +251,10 @@ mod tests {
         assert_eq!(state.center.children.len(), 2);
         assert_eq!(state.center.children[0].panel_name, "TabPanel");
         assert_eq!(state.center.children[1].children.len(), 1);
-        assert_eq!(state.center.children[1].children[0].panel_name, "StoryContainer");
+        assert_eq!(
+            state.center.children[1].children[0].panel_name,
+            "StoryContainer"
+        );
         assert_eq!(state.center.children[1].panel_name, "TabPanel");
 
         let left_dock = state.left_dock.unwrap();

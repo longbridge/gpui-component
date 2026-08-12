@@ -1,6 +1,6 @@
 use gpui::{
-    div, AnyElement, ClickEvent, ElementId, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    AnyElement, ClickEvent, ElementId, InteractiveElement, IntoElement, MouseButton, ParentElement,
+    RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, div,
 };
 
 use crate::{ActiveTheme as _, StyledExt};

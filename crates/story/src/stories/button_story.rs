@@ -90,7 +90,7 @@ impl Render for ButtonStory {
             .color(cx.theme().magenta)
             .foreground(cx.theme().magenta)
             .hover(cx.theme().magenta.opacity(0.1))
-            .active(cx.theme().magenta);
+            .active(cx.theme().magenta.opacity(0.2));
 
         v_flex()
             .on_action(

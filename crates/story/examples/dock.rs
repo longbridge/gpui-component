@@ -383,8 +383,6 @@ impl StoryWorkspace {
         cx.spawn(async move |cx| {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                #[cfg(not(target_os = "linux"))]
-                titlebar: Some(gpui_component::TitleBar::title_bar_options()),
                 window_min_size: Some(gpui::Size {
                     width: px(640.),
                     height: px(480.),
@@ -394,7 +392,7 @@ impl StoryWorkspace {
                 #[cfg(target_os = "linux")]
                 window_decorations: Some(gpui::WindowDecorations::Client),
                 kind: WindowKind::Normal,
-                ..Default::default()
+                ..gpui_component::TitleBar::window_options()
             };
 
             let window = cx.open_window(options, |window, cx| {
@@ -518,7 +516,9 @@ impl Render for StoryWorkspace {
             .child(
                 StatusBar::new()
                     .left(
-                        Button::new("toggle-left-dock").ghost().xsmall()
+                        Button::new("toggle-left-dock")
+                            .ghost()
+                            .xsmall()
                             .icon(IconName::PanelLeft)
                             .tooltip("Toggle Left Dock")
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -528,7 +528,9 @@ impl Render for StoryWorkspace {
                             })),
                     )
                     .left(
-                        Button::new("toggle-bottom-dock").ghost().xsmall()
+                        Button::new("toggle-bottom-dock")
+                            .ghost()
+                            .xsmall()
                             .icon(IconName::PanelBottom)
                             .tooltip("Toggle Bottom Dock")
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -538,7 +540,9 @@ impl Render for StoryWorkspace {
                             })),
                     )
                     .child(
-                        Button::new("toggle-right-dock").ghost().xsmall()
+                        Button::new("toggle-right-dock")
+                            .ghost()
+                            .xsmall()
                             .icon(IconName::PanelRight)
                             .tooltip("Toggle Right Dock")
                             .on_click(cx.listener(|this, _, window, cx| {
