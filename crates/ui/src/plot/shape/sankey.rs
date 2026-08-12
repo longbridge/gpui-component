@@ -290,8 +290,7 @@ impl Sankey {
 
         compute_node_links(&mut graph);
         compute_node_values(&mut graph);
-        compute_node_ranks(&mut graph, true)?;
-        compute_node_ranks(&mut graph, false)?;
+        compute_node_ranks(&mut graph)?;
         self.compute_node_layers(&mut graph);
 
         Ok(graph)
@@ -667,59 +666,53 @@ fn compute_node_values(graph: &mut SankeyGraph) {
     }
 }
 
-/// Assign longest-path ranks in topological order.
-///
-/// `forward` walks source links to their targets and writes `depth`;
-/// otherwise it walks target links to their sources and writes `height`.
-fn compute_node_ranks(graph: &mut SankeyGraph, forward: bool) -> Result<(), SankeyError> {
+/// Assign the longest-path `depth` (from any source) and `height` (to any
+/// sink) from a single topological ordering. A node left unordered means its
+/// incoming links never resolved, i.e. a cycle.
+fn compute_node_ranks(graph: &mut SankeyGraph) -> Result<(), SankeyError> {
     let n = graph.nodes.len();
-    let mut degree: Vec<usize> = graph
+    let mut incoming: Vec<usize> = graph
         .nodes
         .iter()
-        .map(|node| {
-            if forward {
-                node.target_links.len()
-            } else {
-                node.source_links.len()
-            }
-        })
+        .map(|node| node.target_links.len())
         .collect();
-    let mut ranks = vec![0; n];
-    let mut pending: Vec<usize> = (0..n).filter(|&index| degree[index] == 0).collect();
-    let mut visited = 0;
+    // Doubles as the traversal queue and, once drained, the topological order.
+    let mut order: Vec<usize> = (0..n).filter(|&index| incoming[index] == 0).collect();
 
-    while let Some(index) = pending.pop() {
+    // Ranks live in their own arrays rather than in the nodes: the traversal
+    // hops between them by index, and the node struct is an order of magnitude
+    // wider than a `usize`.
+    let mut depths = vec![0usize; n];
+    let mut visited = 0;
+    while visited < order.len() {
+        let index = order[visited];
         visited += 1;
-        let next_rank = ranks[index] + 1;
-        let node = &graph.nodes[index];
-        let links = if forward {
-            &node.source_links
-        } else {
-            &node.target_links
-        };
-        for &link in links {
-            let neighbor = if forward {
-                graph.links[link].target
-            } else {
-                graph.links[link].source
-            };
-            ranks[neighbor] = ranks[neighbor].max(next_rank);
-            degree[neighbor] -= 1;
-            if degree[neighbor] == 0 {
-                pending.push(neighbor);
+        let depth = depths[index] + 1;
+        for &link in &graph.nodes[index].source_links {
+            let target = graph.links[link].target;
+            depths[target] = depths[target].max(depth);
+            incoming[target] -= 1;
+            if incoming[target] == 0 {
+                order.push(target);
             }
         }
     }
-
-    if visited != n {
+    if order.len() != n {
         return Err(SankeyError::CircularLink);
     }
-    for (node, rank) in graph.nodes.iter_mut().zip(ranks) {
-        if forward {
-            node.depth = rank;
-        } else {
-            node.height = rank;
+
+    // Walking the order backwards means every target's height is already final
+    // when its sources are visited.
+    let mut heights = vec![0usize; n];
+    for &index in order.iter().rev() {
+        for &link in &graph.nodes[index].source_links {
+            heights[index] = heights[index].max(heights[graph.links[link].target] + 1);
         }
+    }
+
+    for (node, (depth, height)) in graph.nodes.iter_mut().zip(depths.into_iter().zip(heights)) {
+        node.depth = depth;
+        node.height = height;
     }
     Ok(())
 }
