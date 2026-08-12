@@ -44,9 +44,9 @@ impl Panel for StackPanel {
     fn dump(&self, cx: &App) -> PanelState {
         let sizes = self.state.read(cx).sizes().clone();
         let mut state = PanelState::new(self);
+        state.info = PanelInfo::stack(sizes, self.axis);
         for panel in &self.panels {
             state.add_child(panel.dump(cx));
-            state.info = PanelInfo::stack(sizes.clone(), self.axis);
         }
 
         state

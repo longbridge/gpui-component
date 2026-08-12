@@ -1711,6 +1711,23 @@ mod tests {
         std::mem::take(&mut *log.lock().unwrap())
     }
 
+    /// An empty StackPanel used to dump as `PanelInfo::Panel`, the `PanelState`
+    /// default, so restoring looked it up in `PanelRegistry` and failed.
+    #[gpui::test]
+    fn empty_center_round_trips_as_a_stack(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let center = cx.read(|cx| fixture.dock_area.read(cx).dump(cx).center);
+
+        assert_eq!(center.panel_name, "StackPanel");
+        assert!(
+            matches!(center.info, PanelInfo::Stack { .. }),
+            "got {:?}",
+            center.info
+        );
+    }
+
     #[gpui::test]
     fn fresh_center_is_empty(cx: &mut TestAppContext) {
         let fixture = setup(cx);
