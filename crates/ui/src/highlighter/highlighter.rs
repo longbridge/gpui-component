@@ -21,6 +21,7 @@ const LARGE_NODE_THRESHOLD: usize = 8 * 1024;
 const MAX_INJECTION_RANGES: usize = 4096;
 const MAX_INJECTION_BYTES: usize = 512 * 1024;
 const MAX_INJECTION_LANGUAGE_BYTES: usize = 64;
+const MAX_NON_COMBINED_INJECTION_LAYERS: usize = 512;
 const INJECTION_PARSE_TIMEOUT: Duration = Duration::from_millis(20);
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
@@ -712,6 +713,7 @@ impl SyntaxHighlighter {
         let mut resolved_languages: HashMap<SharedString, Option<(SharedString, Arc<Query>)>> =
             HashMap::new();
         let mut new_layers = Vec::new();
+        let mut non_combined_attempts = 0usize;
         while let Some(query_match) = matches.next() {
             let mut language_name: Option<SharedString> = None;
             let mut combined = false;
@@ -726,6 +728,11 @@ impl SyntaxHighlighter {
                     "injection.combined" => combined = true,
                     _ => {}
                 }
+            }
+
+            // Continue scanning so later combined ranges can still be collected.
+            if !combined && non_combined_attempts >= MAX_NON_COMBINED_INJECTION_LAYERS {
+                continue;
             }
 
             if language_name.is_none() {
@@ -782,6 +789,8 @@ impl SyntaxHighlighter {
                     continue;
                 }
 
+                // Failed and timed-out parses count toward the document-wide budget too.
+                non_combined_attempts += 1;
                 let old_tree = old_layer_trees
                     .get(&(language_name.clone(), ranges_cache_key(&ranges)))
                     .copied();
@@ -1493,6 +1502,37 @@ console.log(answer);
             "function_383",
             "function"
         ));
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_markdown_fenced_code_injection_layers_are_bounded() {
+        const FENCE_COUNT: usize = MAX_NON_COMBINED_INJECTION_LAYERS + 128;
+        let markdown = format!(
+            "paragraph *inline*\n\n{}",
+            (0..FENCE_COUNT)
+                .map(|i| format!("```rust\nfn function_{i}() {{}}\n```\n"))
+                .collect::<String>()
+        );
+        let rope = Rope::from_str(&markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+
+        assert!(highlighter.update(None, &rope, None));
+        assert_eq!(
+            highlighter
+                .injection_layers
+                .iter()
+                .filter(|layer| layer.language_name.as_ref() == "rust")
+                .count(),
+            MAX_NON_COMBINED_INJECTION_LAYERS
+        );
+        assert!(
+            highlighter
+                .injection_layers
+                .iter()
+                .any(|layer| layer.language_name.as_ref() == "markdown_inline"),
+            "the non-combined budget should not starve combined injection layers"
+        );
     }
 
     #[test]
