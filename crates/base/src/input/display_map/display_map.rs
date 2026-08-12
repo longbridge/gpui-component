@@ -207,8 +207,7 @@ impl DisplayMap {
             .offset_to_point(edit_byte_range.end.min(new_text.len()))
             .row;
 
-        let new_candidates =
-            super::folding::extract_fold_ranges_in_range(tree, edit_byte_range, new_text);
+        let new_candidates = tree.fold_ranges_for_edit(edit_byte_range, new_text);
         self.fold_map
             .merge_candidates_for_edit(new_start_line, new_end_line, new_candidates);
     }
