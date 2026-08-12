@@ -107,7 +107,7 @@ impl Popover {
     fn trigger_bounds(&self, cx: &App) -> Option<Bounds<Pixels>> {
         let editor = self.editor.upgrade()?;
         let editor = editor.read(cx);
-        let Some(last_layout) = editor.last_layout() else {
+        let Some((_, line_height)) = editor.cursor_layout() else {
             return None;
         };
 
@@ -127,7 +127,7 @@ impl Popover {
 
         Some(Bounds::from_corners(
             last_bounds.origin + start_pos,
-            last_bounds.origin + end_pos + point(px(0.), last_layout.line_height),
+            last_bounds.origin + end_pos + point(px(0.), line_height),
         ))
     }
 }

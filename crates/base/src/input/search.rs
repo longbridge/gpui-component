@@ -41,16 +41,16 @@ impl Default for SearchSession {
 }
 
 impl SearchSession {
-    pub fn open(&mut self, replace_mode: bool, replaceable: bool) {
+    pub(crate) fn open(&mut self, replace_mode: bool, replaceable: bool) {
         self.open = true;
         self.replace_mode = replace_mode && replaceable;
     }
 
-    pub fn close(&mut self) {
+    pub(crate) fn close(&mut self) {
         self.open = false;
     }
 
-    pub fn update_query(&mut self, query: impl Into<String>, case_insensitive: bool) {
+    pub(crate) fn update_query(&mut self, query: impl Into<String>, case_insensitive: bool) {
         self.query = query.into();
         self.case_insensitive = case_insensitive;
         self.matcher.update_query(&self.query, case_insensitive);
@@ -264,12 +264,12 @@ impl SearchMatcher {
         }
     }
 
-    pub fn peek(&self) -> Option<Range<usize>> {
+    fn peek(&self) -> Option<Range<usize>> {
         self.next_index()
             .and_then(|ix| self.matched_ranges.get(ix).cloned())
     }
 
-    pub fn has_next_without_wrap(&self) -> bool {
+    fn has_next_without_wrap(&self) -> bool {
         self.current_match_ix < self.matched_ranges.len().saturating_sub(1)
     }
 
@@ -283,11 +283,11 @@ impl SearchMatcher {
     }
 
     /// Preserve the current logical match while a replacement mutates text.
-    pub fn begin_replacement(&mut self) {
+    fn begin_replacement(&mut self) {
         self.replacing = true;
     }
 
-    pub fn set_current_match_index(&mut self, index: usize) {
+    fn set_current_match_index(&mut self, index: usize) {
         self.current_match_ix = index.min(self.matched_ranges.len().saturating_sub(1));
     }
 
@@ -361,5 +361,53 @@ mod tests {
         matcher.begin_replacement();
         matcher.update(&Rope::from("foo FOO bar"));
         assert_eq!(matcher.current_match_index(), 1);
+    }
+
+    #[test]
+    fn next_wraps_to_start() {
+        let mut matcher = SearchMatcher::new();
+        matcher.update(&Rope::from(".....aaaaa.....aaaaa.....aaaaa"));
+        matcher.update_query("aaaaa", false);
+        matcher.set_current_match_index(2);
+        assert_eq!(matcher.next(), Some(5..10));
+    }
+
+    #[test]
+    fn replacement_keeps_current_match_index_on_next_match() {
+        let mut matcher = SearchMatcher::new();
+        matcher.update(&Rope::from("foo foo foo"));
+        matcher.update_query("foo", true);
+        assert_eq!(matcher.label(), "1/3");
+
+        assert!(matcher.has_next_without_wrap());
+        matcher.begin_replacement();
+        matcher.update(&Rope::from("bar foo foo"));
+        assert_eq!(matcher.current_match_index(), 0);
+        assert_eq!(matcher.matched_ranges()[0], 4..7);
+        assert_eq!(matcher.label(), "1/2");
+
+        matcher.set_current_match_index(1);
+        assert!(!matcher.has_next_without_wrap());
+        matcher.set_current_match_index(0);
+        matcher.begin_replacement();
+        matcher.update(&Rope::from("bar foo bar"));
+        assert_eq!(matcher.current_match_index(), 0);
+        assert_eq!(matcher.matched_ranges()[0], 4..7);
+        assert_eq!(matcher.label(), "1/1");
+    }
+
+    #[test]
+    fn update_matches_clamps_current_match_index_while_replacing() {
+        let mut matcher = SearchMatcher::new();
+        matcher.update(&Rope::from("foo foo foo"));
+        matcher.update_query("foo", true);
+        matcher.set_current_match_index(2);
+        matcher.begin_replacement();
+
+        matcher.update(&Rope::from("foo xoo foo"));
+
+        assert_eq!(matcher.len(), 2);
+        assert_eq!(matcher.current_match_index(), 1);
+        assert_eq!(matcher.label(), "2/2");
     }
 }

@@ -539,15 +539,6 @@ mod tests {
     }
 
     #[test]
-    fn test_next_ix_wraps_to_start() {
-        let mut matcher = SearchMatcher::new();
-        matcher.update(&Rope::from(".....aaaaa.....aaaaa.....aaaaa"));
-        matcher.update_query("aaaaa", false);
-        matcher.set_current_match_index(2);
-        assert_eq!(matcher.next(), Some(5..10));
-    }
-
-    #[test]
     fn test_prev_scroll_direction_returns_up_without_wrap() {
         assert!(matches!(
             SearchPanel::prev_scroll_direction(2, 1),
@@ -563,47 +554,5 @@ mod tests {
     #[test]
     fn test_prev_scroll_direction_returns_none_for_single_match() {
         assert!(SearchPanel::prev_scroll_direction(0, 0).is_none());
-    }
-
-    /// Replacing a match should move to the next match, not skip over it.
-    #[test]
-    fn test_replace_keeps_current_match_index_on_next_match() {
-        let mut matcher = SearchMatcher::new();
-        matcher.update(&Rope::from("foo foo foo"));
-        matcher.update_query("foo", true);
-        assert_eq!(matcher.label(), "1/3");
-
-        // Replace the 1st match, the remaining matches shift left by one.
-        assert!(matcher.has_next_without_wrap());
-        matcher.begin_replacement();
-        matcher.update(&Rope::from("bar foo foo"));
-        assert_eq!(matcher.current_match_index(), 0);
-        assert_eq!(matcher.matched_ranges()[0], 4..7);
-        assert_eq!(matcher.label(), "1/2");
-
-        // Replace the 2nd match (the last one), it should wrap to the first.
-        matcher.set_current_match_index(1);
-        assert!(!matcher.has_next_without_wrap());
-        matcher.set_current_match_index(0);
-        matcher.begin_replacement();
-        matcher.update(&Rope::from("bar foo bar"));
-        assert_eq!(matcher.current_match_index(), 0);
-        assert_eq!(matcher.matched_ranges()[0], 4..7);
-        assert_eq!(matcher.label(), "1/1");
-    }
-
-    #[test]
-    fn test_update_matches_clamps_current_match_index_while_replacing() {
-        let mut matcher = SearchMatcher::new();
-        matcher.update(&Rope::from("foo foo foo"));
-        matcher.update_query("foo", true);
-        matcher.set_current_match_index(2);
-        matcher.begin_replacement();
-
-        matcher.update(&Rope::from("foo xoo foo"));
-
-        assert_eq!(matcher.len(), 2);
-        assert_eq!(matcher.current_match_index(), 1);
-        assert_eq!(matcher.label(), "2/2");
     }
 }

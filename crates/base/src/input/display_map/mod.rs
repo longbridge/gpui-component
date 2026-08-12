@@ -15,10 +15,10 @@ mod wrap_map;
 
 // Re-export public API
 pub use self::display_map::{DisplayMap, WrappingIndent};
-pub use self::text_wrapper::{LineLayout, WrapDisplayPoint};
+pub(crate) use self::text_wrapper::LineLayout;
 
 // Re-export FoldRange and extract_fold_ranges
-pub use folding::{FoldCandidateProvider, FoldRange};
+pub use folding::FoldRange;
 
 /// Position in the buffer (logical text).
 ///

@@ -5,26 +5,26 @@ use gpui::{
 };
 use std::rc::Rc;
 
-use crate::{StyledExt as _, Theme};
+use crate::{StyledExt as _, theme::ActiveTheme as _};
 
 /// Character used by masked editor modes.
 pub(crate) const MASK_CHAR: char = '•';
 
-pub mod blink_cursor;
+pub(crate) mod blink_cursor;
 mod change;
 mod cursor;
 mod decorations;
 mod diagnostics;
-pub mod display_map;
+mod display_map;
 mod editing_indent;
-pub mod element;
+mod element;
 mod highlighting;
 mod indent;
 mod layout;
 mod lsp;
 mod mask_pattern;
-pub mod mode;
-pub mod movement;
+mod mode;
+mod movement;
 #[cfg(target_os = "macos")]
 mod native;
 mod rope_ext;
@@ -37,22 +37,18 @@ pub(crate) fn init(cx: &mut App) {
 }
 
 pub use crate::number_input::NumberInputEvent;
-pub use change::Change;
 pub use cursor::Selection;
 pub use decorations::{TextDecoration, TextDecorationCollection};
 pub use diagnostics::{
     Diagnostic, DiagnosticEntry, DiagnosticRelatedInformation, DiagnosticSet, DiagnosticSeverity,
     DiagnosticSummary, DiagnosticTag, RelatedInformation,
 };
-pub use display_map::{
-    BufferPoint, DisplayMap, DisplayPoint, FoldCandidateProvider, FoldRange, WrappingIndent,
-};
+pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange, WrappingIndent};
 pub use highlighting::{
     HighlightStyleResolver, InputEditorStyle, InputHighlighter, InputHighlighterFactory,
-    NoHighlightStyles, SharedHighlightStyleResolver,
+    SharedHighlightStyleResolver,
 };
 pub use indent::TabSize;
-pub use layout::{LastLayout, WhitespaceIndicators};
 pub use lsp::{
     CodeActionItem, CodeActionProvider, CodeActionSession, CompletionMenuOptions,
     CompletionProvider, CompletionSession, DefinitionProvider, DocumentColorProvider,
@@ -61,14 +57,13 @@ pub use lsp::{
 };
 pub(super) use lsp::{HoverDefinition, InlineCompletion};
 pub use lsp_types::Position;
-pub use mask_pattern::{MaskPattern, MaskToken, normalize_number_input};
+pub use mask_pattern::MaskPattern;
 #[cfg(target_os = "macos")]
 #[doc(hidden)]
 pub use native::set_text_content_type;
 pub use rope_ext::{InputEdit, Point, RopeExt, RopeLines};
 pub use ropey::Rope;
 pub use search::{SearchMatcher, SearchSession};
-pub use selection::TextSelector;
 pub use state::*;
 
 /// Presentation scale used by the editor's geometry calculations.
@@ -351,7 +346,7 @@ impl StatefulInteractiveElement for Input {}
 
 impl RenderOnce for Input {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = Theme::global(cx).tokens;
+        let tokens = cx.theme().tokens;
 
         self.base
             .when(self.appearance, |this| {

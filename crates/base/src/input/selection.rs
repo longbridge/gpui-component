@@ -6,16 +6,16 @@ use sum_tree::Bias;
 use super::RopeExt as _;
 
 /// Stateless text-selection algorithms shared by input frontends.
-pub struct TextSelector;
+pub(super) struct TextSelector;
 
 impl TextSelector {
-    pub fn line_range(text: &Rope, offset: usize) -> Range<usize> {
+    pub(super) fn line_range(text: &Rope, offset: usize) -> Range<usize> {
         let offset = text.clip_offset(offset, Bias::Left);
         let row = text.offset_to_point(offset).row;
         text.line_start_offset(row)..text.line_end_offset(row)
     }
 
-    pub fn word_range(text: &Rope, offset: usize) -> Option<Range<usize>> {
+    pub(super) fn word_range(text: &Rope, offset: usize) -> Option<Range<usize>> {
         let offset = text.clip_offset(offset, Bias::Left);
         let character = text.char_at(offset)?;
         let end = offset + character.len_utf8();

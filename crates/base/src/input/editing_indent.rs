@@ -1,7 +1,7 @@
 use crate::input::TabSize;
 use crate::input::{
-    Indent, IndentInline, InputState, LastLayout, Outdent, OutdentInline, RopeExt,
-    element::TextElement, mode::InputMode,
+    Indent, IndentInline, InputState, Outdent, OutdentInline, RopeExt, element::TextElement,
+    layout::LastLayout, mode::InputMode,
 };
 use gpui::{
     Bounds, Context, EntityInputHandler as _, Hsla, Path, PathBuilder, Pixels, SharedString,

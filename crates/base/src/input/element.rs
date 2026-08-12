@@ -15,17 +15,22 @@ use smallvec::SmallVec;
 use std::{ops::Range, rc::Rc};
 
 use crate::{
-    Scrollbar, Theme,
+    Scrollbar,
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
+    theme::ActiveTheme as _,
 };
 
-use super::{InputState, LastLayout, TextDecoration, WhitespaceIndicators, mode::InputMode};
+use super::{
+    InputState, TextDecoration,
+    layout::{LastLayout, WhitespaceIndicators},
+    mode::InputMode,
+};
 
 fn diagnostic_highlight_style(
     severity: crate::input::DiagnosticSeverity,
     cx: &App,
 ) -> HighlightStyle {
-    let colors = Theme::global(cx).tokens.colors;
+    let colors = cx.theme().tokens.colors;
     let color = match severity {
         crate::input::DiagnosticSeverity::Error => colors.destructive,
         crate::input::DiagnosticSeverity::Warning => colors.accent_foreground,

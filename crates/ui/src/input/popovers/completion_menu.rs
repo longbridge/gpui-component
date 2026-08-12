@@ -341,18 +341,16 @@ impl CompletionMenu {
     fn origin(&self, cx: &App) -> Option<Point<Pixels>> {
         let editor = self.editor.upgrade()?;
         let editor = editor.read(cx);
-        let Some(last_layout) = editor.last_layout() else {
+        let Some((cursor_bounds, line_height)) = editor.cursor_layout() else {
             return None;
         };
-        let Some(cursor_origin) = last_layout.cursor_bounds.map(|b| b.origin) else {
-            return None;
-        };
+        let cursor_origin = cursor_bounds.origin;
 
         let scroll_origin = editor.scroll_offset();
 
         Some(
             scroll_origin + cursor_origin - editor.input_bounds().origin
-                + Point::new(-px(4.), last_layout.line_height + px(4.)),
+                + Point::new(-px(4.), line_height + px(4.)),
         )
     }
 }

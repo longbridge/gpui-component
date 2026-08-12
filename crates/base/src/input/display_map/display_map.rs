@@ -198,7 +198,7 @@ impl DisplayMap {
     /// and merges them with existing (already adjusted) candidates.
     pub fn update_fold_candidates_for_edit(
         &mut self,
-        tree: &(impl super::FoldCandidateProvider + ?Sized),
+        extract_fold_ranges: impl FnOnce(Range<usize>, &Rope) -> Vec<FoldRange>,
         edit_byte_range: Range<usize>,
         new_text: &Rope,
     ) {
@@ -207,7 +207,7 @@ impl DisplayMap {
             .offset_to_point(edit_byte_range.end.min(new_text.len()))
             .row;
 
-        let new_candidates = tree.fold_ranges_for_edit(edit_byte_range, new_text);
+        let new_candidates = extract_fold_ranges(edit_byte_range, new_text);
         self.fold_map
             .merge_candidates_for_edit(new_start_line, new_end_line, new_candidates);
     }

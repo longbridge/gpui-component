@@ -21,20 +21,21 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    Change, DiagnosticSet, DisplayMap, InputEditorStyle, InputHighlighterFactory, InputSize,
-    MASK_CHAR, MaskPattern, NativeMenu, NumberStep, WrappingIndent,
+    DiagnosticSet, DisplayMap, InputEditorStyle, InputHighlighterFactory, InputSize, MASK_CHAR,
+    MaskPattern, NativeMenu, NumberStep, WrappingIndent,
     blink_cursor::BlinkCursor,
+    change::Change,
     decorations::DecorationCollections,
     element::{EditorScrollbar, EditorScrollbarSnapshot, TextElement},
+    mask_pattern::normalize_number_input,
     mode::InputMode,
-    normalize_number_input,
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
-    HoverDefinition, InlineCompletion, LastLayout, Lsp, Position, RopeExt as _, Selection,
-    element::RIGHT_MARGIN,
+    HoverDefinition, InlineCompletion, Lsp, Position, RopeExt as _, Selection,
+    element::RIGHT_MARGIN, layout::LastLayout,
 };
 use crate::{AutoScroll, History, StepAction};
 
@@ -419,8 +420,10 @@ pub struct InputPresentation {
 impl EventEmitter<InputEvent> for InputState {}
 
 impl InputState {
-    pub fn last_layout(&self) -> Option<&LastLayout> {
-        self.last_layout.as_ref()
+    #[doc(hidden)]
+    pub fn cursor_layout(&self) -> Option<(Bounds<Pixels>, Pixels)> {
+        let layout = self.last_layout.as_ref()?;
+        Some((layout.cursor_bounds?, layout.line_height))
     }
 
     pub fn input_bounds(&self) -> Bounds<Pixels> {
@@ -517,8 +520,8 @@ impl InputState {
     }
 
     /// Select the word at the given UTF-8 offset.
-    pub(crate) fn select_word(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(range) = super::TextSelector::word_range(&self.text, offset) else {
+    pub(super) fn select_word(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(range) = super::selection::TextSelector::word_range(&self.text, offset) else {
             return;
         };
         self.selected_range = (range.start..range.end).into();
@@ -527,8 +530,8 @@ impl InputState {
     }
 
     /// Select the line at the given UTF-8 offset.
-    pub(crate) fn select_line(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
-        let range = super::TextSelector::line_range(&self.text, offset);
+    pub(super) fn select_line(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+        let range = super::selection::TextSelector::line_range(&self.text, offset);
         self.selected_range = (range.start..range.end).into();
         self.selected_word_range = None;
         cx.notify();
@@ -2221,8 +2224,8 @@ impl InputState {
         self.history.set_ignoring(true);
         if let Some(changes) = self.history.undo() {
             for change in changes {
-                let range_utf16 = self.range_to_utf16(&change.new_range().into());
-                self.replace_text_in_range_silent(Some(range_utf16), change.old_text(), window, cx);
+                let range_utf16 = self.range_to_utf16(&change.new_range.into());
+                self.replace_text_in_range_silent(Some(range_utf16), &change.old_text, window, cx);
             }
         }
         self.history.set_ignoring(false);
@@ -2232,8 +2235,8 @@ impl InputState {
         self.history.set_ignoring(true);
         if let Some(changes) = self.history.redo() {
             for change in changes {
-                let range_utf16 = self.range_to_utf16(&change.old_range().into());
-                self.replace_text_in_range_silent(Some(range_utf16), change.new_text(), window, cx);
+                let range_utf16 = self.range_to_utf16(&change.old_range.into());
+                self.replace_text_in_range_silent(Some(range_utf16), &change.new_text, window, cx);
             }
         }
         self.history.set_ignoring(false);
@@ -2823,7 +2826,7 @@ impl InputState {
         // The new byte range in the updated text after the edit
         let new_end = edit_range.start + new_text.len();
         self.display_map.update_fold_candidates_for_edit(
-            highlighter.as_ref(),
+            |range, text| highlighter.fold_ranges_for_edit(range, text),
             edit_range.start..new_end,
             &self.text,
         );
