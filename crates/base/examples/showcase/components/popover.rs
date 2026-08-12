@@ -9,14 +9,14 @@ impl BaseShowcase {
             .trigger(
                 Button::new("popover-trigger")
                     .h_7()
+                    .line_height(px(28.))
                     .px_3()
-                    .py_0()
                     .flex()
                     .items_center()
                     .justify_center()
                     .bg(rgb(0x171717))
                     .text_color(rgb(0xffffff))
-                    .child("Open popover"),
+                    .child("Open Popover"),
             )
             .content(|_, _, cx| {
                 let state = cx.entity().downgrade();
