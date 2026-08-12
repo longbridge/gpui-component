@@ -1,5 +1,4 @@
-use gpui::{App, Global, Hsla};
-use std::sync::Arc;
+use gpui::{App, Global};
 
 use crate::{ScrollbarMode, ScrollbarStyles, SemanticThemeTokens};
 
@@ -9,33 +8,6 @@ pub struct Theme {
     pub tokens: SemanticThemeTokens,
     pub scrollbar: ScrollbarTheme,
     pub resizable: ResizableTheme,
-    pub input_editor: InputEditorTheme,
-}
-
-/// Presentation tokens consumed by the Base text editor renderer.
-#[derive(Clone)]
-pub struct InputEditorTheme {
-    pub foreground: Hsla,
-    pub muted_foreground: Hsla,
-    pub background: Hsla,
-    pub border: Hsla,
-    pub selection: Hsla,
-    pub caret: Hsla,
-    pub highlight_theme: Arc<crate::highlighter::HighlightTheme>,
-}
-
-impl Default for InputEditorTheme {
-    fn default() -> Self {
-        Self {
-            foreground: Hsla::default(),
-            muted_foreground: Hsla::default(),
-            background: Hsla::default(),
-            border: Hsla::default(),
-            selection: Hsla::default(),
-            caret: Hsla::default(),
-            highlight_theme: crate::highlighter::HighlightTheme::default_light(),
-        }
-    }
 }
 
 impl Global for Theme {}

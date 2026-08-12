@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, App, ElementId, Entity, EventEmitter, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement,
-    Styled, Window, actions, prelude::FluentBuilder as _,
+    AnyElement, App, Entity, EventEmitter, InteractiveElement as _, IntoElement, KeyBinding,
+    ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled,
+    Window, actions, prelude::FluentBuilder as _,
 };
 
 use crate::input::InputState;
 pub use crate::input::NumberStep;
-use crate::{Input, StyledExt as _};
+use crate::{Button, Input, StyledExt as _};
 
 actions!(number_input, [Increment, Decrement]);
 
@@ -33,31 +33,84 @@ pub enum NumberInputEvent {
 impl EventEmitter<NumberInputEvent> for InputState {}
 
 type StepHandler = Rc<dyn Fn(StepAction, &mut Window, &mut App)>;
+type ButtonDecorator = Box<dyn FnOnce(Button) -> Button>;
+type TextDecorator = Box<dyn FnOnce(NumberInputText) -> NumberInputText>;
 
 /// An unstyled spinbutton root composed from the foundational [`Input`] frame.
 #[derive(IntoElement)]
 pub struct NumberInput {
-    id: ElementId,
     style: StyleRefinement,
     children: Vec<AnyElement>,
     appearance: bool,
     disabled: bool,
     focused: bool,
-    value: Option<f64>,
+    state: Entity<InputState>,
     on_step: Option<StepHandler>,
+    decrement_button: Option<ButtonDecorator>,
+    increment_button: Option<ButtonDecorator>,
+    text: Option<TextDecorator>,
+}
+
+/// The built-in text region of a [`NumberInput`].
+///
+/// Applications provide the editor itself as a child and can style this region
+/// without having to recreate the number input's fixed three-part structure.
+#[derive(IntoElement)]
+pub struct NumberInputText {
+    style: StyleRefinement,
+    children: Vec<AnyElement>,
+}
+
+impl NumberInputText {
+    pub fn new() -> Self {
+        Self {
+            style: StyleRefinement::default(),
+            children: Vec::new(),
+        }
+    }
+}
+
+impl Default for NumberInputText {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Styled for NumberInputText {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl ParentElement for NumberInputText {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements);
+    }
+}
+
+impl RenderOnce for NumberInputText {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        gpui::div()
+            .min_w_0()
+            .flex_1()
+            .children(self.children)
+            .refine_style(&self.style)
+    }
 }
 
 impl NumberInput {
-    pub fn new(id: impl Into<ElementId>) -> Self {
+    pub fn new(state: &Entity<InputState>) -> Self {
         Self {
-            id: id.into(),
             style: StyleRefinement::default(),
             children: Vec::new(),
             appearance: true,
             disabled: false,
             focused: false,
-            value: None,
+            state: state.clone(),
             on_step: None,
+            decrement_button: None,
+            increment_button: None,
+            text: None,
         }
     }
 
@@ -76,11 +129,6 @@ impl NumberInput {
         self
     }
 
-    pub fn value(mut self, value: Option<f64>) -> Self {
-        self.value = value;
-        self
-    }
-
     pub fn on_step(
         mut self,
         handler: impl Fn(StepAction, &mut Window, &mut App) + 'static,
@@ -88,18 +136,25 @@ impl NumberInput {
         self.on_step = Some(Rc::new(handler));
         self
     }
-}
 
-impl NumberInput {
-    /// Bind a number input directly to an editor state, including focus and step behavior.
-    pub fn bind_state(mut self, state: &Entity<InputState>) -> Self {
-        let state = state.clone();
-        self.on_step = Some(Rc::new(move |action, window, cx| {
-            state.update(cx, |state, cx| {
-                state.focus(window, cx);
-                state.on_number_input_step(action, window, cx);
-            });
-        }));
+    /// Decorate the built-in decrement button with application-owned content and styles.
+    pub fn decrement_button(mut self, decorate: impl FnOnce(Button) -> Button + 'static) -> Self {
+        self.decrement_button = Some(Box::new(decorate));
+        self
+    }
+
+    /// Decorate the built-in increment button with application-owned content and styles.
+    pub fn increment_button(mut self, decorate: impl FnOnce(Button) -> Button + 'static) -> Self {
+        self.increment_button = Some(Box::new(decorate));
+        self
+    }
+
+    /// Decorate the built-in text region with an editor, adornments, and styles.
+    pub fn input(
+        mut self,
+        decorate: impl FnOnce(NumberInputText) -> NumberInputText + 'static,
+    ) -> Self {
+        self.text = Some(Box::new(decorate));
         self
     }
 }
@@ -119,32 +174,80 @@ impl ParentElement for NumberInput {
 impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let disabled = self.disabled;
-        let on_step = self.on_step;
+        let on_step = self.on_step.unwrap_or_else(|| {
+            let state = self.state.clone();
+            Rc::new(move |action, window, cx| {
+                state.update(cx, |state, cx| {
+                    state.focus(window, cx);
+                    state.on_number_input_step(action, window, cx);
+                });
+            })
+        });
+        self.state.update(cx, |state, _| state.ensure_number_mask());
+        let value = self.state.read(cx).value().parse::<f64>().ok();
+        let decrement_button = self.decrement_button.map_or_else(
+            || Button::new("decrement"),
+            |decorate| decorate(Button::new("decrement")),
+        );
+        let increment_button = self.increment_button.map_or_else(
+            || Button::new("increment"),
+            |decorate| decorate(Button::new("increment")),
+        );
+        let text = self.text.map_or_else(NumberInputText::new, |decorate| {
+            decorate(NumberInputText::new())
+        });
 
-        Input::new(self.id)
+        let decrement_button = decrement_button
+            .flex_none()
+            .accessibility_label("Decrement")
+            .tab_stop(false)
+            .disabled(disabled)
+            .on_click({
+                let on_step = on_step.clone();
+                move |_, window, cx| {
+                    on_step(StepAction::Decrement, window, cx);
+                }
+            });
+        let increment_button = increment_button
+            .flex_none()
+            .accessibility_label("Increment")
+            .tab_stop(false)
+            .disabled(disabled)
+            .on_click({
+                let on_step = on_step.clone();
+                move |_, window, cx| {
+                    on_step(StepAction::Increment, window, cx);
+                }
+            });
+
+        Input::new(("number-input", self.state.entity_id()))
+            .flex()
+            .items_center()
             .appearance(self.appearance)
             .focused(self.focused && !disabled)
             .role(Role::SpinButton)
-            .when_some(self.value, |this, value| this.aria_numeric_value(value))
+            .when_some(value, |this, value| this.aria_numeric_value(value))
             .key_context(CONTEXT)
             .on_action({
                 let on_step = on_step.clone();
                 move |_: &Increment, window, cx| {
                     if disabled {
                         cx.propagate();
-                    } else if let Some(handler) = on_step.as_ref() {
-                        handler(StepAction::Increment, window, cx);
+                    } else {
+                        on_step(StepAction::Increment, window, cx);
                     }
                 }
             })
             .on_action(move |_: &Decrement, window, cx| {
                 if disabled {
                     cx.propagate();
-                } else if let Some(handler) = on_step.as_ref() {
-                    handler(StepAction::Decrement, window, cx);
+                } else {
+                    on_step(StepAction::Decrement, window, cx);
                 }
             })
-            .children(self.children)
+            .child(decrement_button)
+            .child(text.children(self.children))
+            .child(increment_button)
             .refine_style(&self.style)
             .render(window, cx)
     }

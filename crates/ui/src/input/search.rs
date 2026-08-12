@@ -21,7 +21,8 @@ const CONTEXT: &'static str = "SearchPanel";
 
 actions!(input, [Tab]);
 
-pub use gpui_base::input::SearchMatcher;
+#[cfg(test)]
+use gpui_base::input::SearchMatcher;
 
 #[derive(Clone, Copy)]
 #[cfg(test)]
@@ -34,21 +35,15 @@ pub(super) struct SearchPanel {
     editor: WeakEntity<InputState>,
     search_input: Entity<InputState>,
     replace_input: Entity<InputState>,
-    case_insensitive: bool,
-    replace_mode: bool,
-    matcher: SearchMatcher,
+    session: gpui_base::input::SearchSession,
     input_width: Pixels,
 
-    open: bool,
     _subscriptions: Vec<Subscription>,
 }
 
 impl SearchPanel {
     pub(super) fn sync_session(&mut self, session: &gpui_base::input::SearchSession) {
-        self.open = session.open;
-        self.replace_mode = session.replace_mode;
-        self.case_insensitive = session.case_insensitive;
-        self.matcher = session.matcher.clone();
+        self.session = session.clone();
     }
 
     #[cfg(test)]
@@ -97,10 +92,7 @@ impl SearchPanel {
                 editor: editor.downgrade(),
                 search_input,
                 replace_input,
-                case_insensitive: true,
-                replace_mode: false,
-                matcher: SearchMatcher::new(),
-                open: true,
+                session: gpui_base::input::SearchSession::default(),
                 input_width: Pixels::ZERO,
                 _subscriptions,
             }
@@ -116,8 +108,8 @@ impl SearchPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open = true;
-        self.replace_mode = replace_mode;
+        self.session.open = true;
+        self.session.replace_mode = replace_mode;
         if focus {
             self.search_input
                 .read(cx)
@@ -149,14 +141,14 @@ impl SearchPanel {
         let query = self.search_input.read(cx).value();
         let editor = self.editor.clone();
         let _ = editor.update(cx, |state, cx| {
-            state.set_search_query(query.clone(), self.case_insensitive, cx);
+            state.set_search_query(query.clone(), self.session.case_insensitive, cx);
         });
-        if let Ok(matcher) = editor.read_with(cx, |state, _| state.search_session().matcher.clone())
-        {
-            self.matcher = matcher;
+        if let Ok(session) = editor.read_with(cx, |state, _| state.search_session().clone()) {
+            self.session = session;
         }
         if let Some(visible_range_offset) = visible_range_offset {
-            self.matcher
+            self.session
+                .matcher
                 .update_cursor_by_offset(visible_range_offset.start);
         }
         cx.notify();
@@ -178,7 +170,7 @@ impl SearchPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.open = false;
+        self.session.open = false;
         let _ = self.editor.update(cx, |state, cx| state.close_search(cx));
         if focus_editor {
             if let Some(editor) = self.editor.upgrade() {
@@ -218,7 +210,7 @@ impl SearchPanel {
     ///
     /// There are only 2 inputs, so the forward and the backward are the same.
     fn cycle_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.replace_mode || !self.replaceable(cx) {
+        if !self.session.replace_mode || !self.replaceable(cx) {
             return;
         }
 
@@ -241,8 +233,8 @@ impl SearchPanel {
             return;
         }
 
-        self.replace_mode = !self.replace_mode;
-        let focus_handle = if self.replace_mode {
+        self.session.replace_mode = !self.session.replace_mode;
+        let focus_handle = if self.session.replace_mode {
             self.replace_input.read(cx).focus_handle(cx)
         } else {
             self.search_input.read(cx).focus_handle(cx)
@@ -265,7 +257,7 @@ impl SearchPanel {
 
     fn replace_next(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.replaceable(cx) {
-            self.replace_mode = false;
+            self.session.replace_mode = false;
             cx.notify();
             return;
         }
@@ -278,7 +270,7 @@ impl SearchPanel {
 
     fn replace_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.replaceable(cx) {
-            self.replace_mode = false;
+            self.session.replace_mode = false;
             cx.notify();
             return;
         }
@@ -298,14 +290,14 @@ impl Focusable for SearchPanel {
 
 impl Render for SearchPanel {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if !self.open {
+        if !self.session.open {
             return Empty.into_any_element();
         }
 
-        let has_matches = self.matcher.len() > 0;
+        let has_matches = !self.session.matcher.is_empty();
         let allow_replace = self.replaceable(cx);
         if !allow_replace {
-            self.replace_mode = false;
+            self.session.replace_mode = false;
         }
 
         v_flex()
@@ -342,14 +334,15 @@ impl Render for SearchPanel {
                                     .focus_bordered(false)
                                     .suffix(
                                         Button::new("case-insensitive")
-                                            .selected(!self.case_insensitive)
-                                            .toggled(!self.case_insensitive)
+                                            .selected(!self.session.case_insensitive)
+                                            .toggled(!self.session.case_insensitive)
                                             .xsmall()
                                             .compact()
                                             .text()
                                             .icon(IconName::CaseSensitive)
                                             .on_click(cx.listener(|this, _, _, cx| {
-                                                this.case_insensitive = !this.case_insensitive;
+                                                this.session.case_insensitive =
+                                                    !this.session.case_insensitive;
                                                 this.update_search_query(None, cx);
                                                 cx.notify();
                                             })),
@@ -371,8 +364,8 @@ impl Render for SearchPanel {
                                 .xsmall()
                                 .ghost()
                                 .icon(IconName::Replace)
-                                .selected(self.replace_mode)
-                                .toggled(self.replace_mode)
+                                .selected(self.session.replace_mode)
+                                .toggled(self.session.replace_mode)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.toggle_replace_mode(window, cx);
                                 })),
@@ -399,7 +392,7 @@ impl Render for SearchPanel {
                             })),
                     )
                     .child(
-                        Label::new(self.matcher.label())
+                        Label::new(self.session.matcher.label())
                             .when(!has_matches, |this| {
                                 this.text_color(cx.theme().muted_foreground)
                             })
@@ -417,7 +410,7 @@ impl Render for SearchPanel {
                             })),
                     ),
             )
-            .when(self.replace_mode && allow_replace, |this| {
+            .when(self.session.replace_mode && allow_replace, |this| {
                 this.child(
                     h_flex()
                         .w_full()

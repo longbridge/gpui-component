@@ -5,8 +5,10 @@ use gpui::{
 };
 use std::rc::Rc;
 
-use super::{InputEvent, InputState, blink_cursor::BlinkCursor};
-use crate::StyledExt as _;
+use crate::{
+    StyledExt as _,
+    input::{InputEvent, InputState, blink_cursor::BlinkCursor},
+};
 
 /// Stateful input and focus behavior for a fixed-length numeric one-time code.
 pub struct OtpState {

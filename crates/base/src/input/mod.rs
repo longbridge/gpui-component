@@ -14,9 +14,11 @@ pub mod blink_cursor;
 mod change;
 mod cursor;
 mod decorations;
+mod diagnostics;
 pub mod display_map;
 mod editing_indent;
 pub mod element;
+mod highlighting;
 mod indent;
 mod layout;
 mod lsp;
@@ -25,7 +27,6 @@ pub mod mode;
 pub mod movement;
 #[cfg(target_os = "macos")]
 mod native;
-mod otp;
 mod rope_ext;
 mod search;
 mod selection;
@@ -39,9 +40,15 @@ pub use crate::number_input::NumberInputEvent;
 pub use change::Change;
 pub use cursor::Selection;
 pub use decorations::{TextDecoration, TextDecorationCollection};
-#[cfg(not(feature = "tree-sitter"))]
-pub use display_map::Tree;
+pub use diagnostics::{
+    Diagnostic, DiagnosticEntry, DiagnosticRelatedInformation, DiagnosticSet, DiagnosticSeverity,
+    DiagnosticSummary, DiagnosticTag, RelatedInformation,
+};
 pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange, WrappingIndent};
+pub use highlighting::{
+    HighlightStyleResolver, InputEditorStyle, InputHighlighter, InputHighlighterFactory,
+    NoHighlightStyles, SharedHighlightStyleResolver,
+};
 pub use indent::TabSize;
 pub use layout::{LastLayout, WhitespaceIndicators};
 pub use lsp::{
@@ -56,7 +63,6 @@ pub use mask_pattern::{MaskPattern, MaskToken, normalize_number_input};
 #[cfg(target_os = "macos")]
 #[doc(hidden)]
 pub use native::set_text_content_type;
-pub use otp::{OtpInput, OtpState};
 pub use rope_ext::{InputEdit, Point, RopeExt, RopeLines};
 pub use ropey::Rope;
 pub use search::{SearchMatcher, SearchSession};

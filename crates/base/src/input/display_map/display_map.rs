@@ -196,18 +196,17 @@ impl DisplayMap {
     ///
     /// Extracts new fold candidates only within the edited byte range
     /// and merges them with existing (already adjusted) candidates.
-    pub fn update_fold_candidates_for_edit(
+    pub fn merge_fold_candidates_for_edit(
         &mut self,
-        tree: &super::folding::Tree,
         edit_byte_range: Range<usize>,
         new_text: &Rope,
+        new_candidates: Vec<FoldRange>,
     ) {
         let new_start_line = new_text.offset_to_point(edit_byte_range.start).row;
         let new_end_line = new_text
             .offset_to_point(edit_byte_range.end.min(new_text.len()))
             .row;
 
-        let new_candidates = super::folding::extract_fold_ranges_in_range(tree, edit_byte_range);
         self.fold_map
             .merge_candidates_for_edit(new_start_line, new_end_line, new_candidates);
     }

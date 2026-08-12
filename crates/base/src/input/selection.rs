@@ -87,3 +87,40 @@ fn word_range_from_chars(
     }
     start..end
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selects_words_unicode_whitespace_and_punctuation() {
+        let text = Rope::from("abcde 中文🎉 test\nhello[()]\ntest_connector ____\nrök grande île");
+        let source = text.to_string();
+        for expected in [
+            "abcde",
+            " ",
+            "中",
+            "🎉",
+            "test",
+            "[",
+            "]",
+            "test_connector",
+            "____",
+            "rök",
+            "île",
+        ] {
+            let offset = source.find(expected).unwrap();
+            let range = TextSelector::word_range(&text, offset).unwrap();
+            assert_eq!(text.slice(range).to_string(), expected, "offset {offset}");
+        }
+    }
+
+    #[test]
+    fn selects_complete_lines() {
+        let text = Rope::from("first line\nsecond line\nthird");
+        for (offset, expected) in [(0, "first line"), (14, "second line"), (24, "third")] {
+            let range = TextSelector::line_range(&text, offset);
+            assert_eq!(text.slice(range).to_string(), expected);
+        }
+    }
+}

@@ -1066,10 +1066,7 @@ impl Theme {
         if let Some(style) = &config.highlight {
             let highlight_theme = Arc::new(HighlightTheme {
                 name: config.name.to_string(),
-                appearance: match config.mode {
-                    ThemeMode::Light => crate::highlighter::HighlightThemeMode::Light,
-                    ThemeMode::Dark => crate::highlighter::HighlightThemeMode::Dark,
-                },
+                appearance: config.mode,
                 style: style.clone(),
             });
             self.highlight_theme = highlight_theme.clone();

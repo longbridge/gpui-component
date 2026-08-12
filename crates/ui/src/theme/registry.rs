@@ -1,7 +1,4 @@
-use crate::{
-    Theme, ThemeColor, ThemeConfig, ThemeMode, ThemeSet,
-    highlighter::{HighlightTheme, HighlightThemeMode},
-};
+use crate::{Theme, ThemeColor, ThemeConfig, ThemeMode, ThemeSet, highlighter::HighlightTheme};
 #[allow(unused)]
 use anyhow::Result;
 use gpui::{App, Global, SharedString};
@@ -28,10 +25,7 @@ pub(crate) static DEFAULT_THEME_COLORS: LazyLock<
 
         let highlight_theme = HighlightTheme {
             name: theme.name.to_string(),
-            appearance: match theme.mode {
-                ThemeMode::Light => HighlightThemeMode::Light,
-                ThemeMode::Dark => HighlightThemeMode::Dark,
-            },
+            appearance: theme.mode,
             style: theme.highlight.unwrap_or_default(),
         };
 

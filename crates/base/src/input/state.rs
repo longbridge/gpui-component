@@ -21,7 +21,8 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    Change, DisplayMap, InputSize, MASK_CHAR, MaskPattern, NativeMenu, NumberStep, WrappingIndent,
+    Change, DiagnosticSet, DisplayMap, InputEditorStyle, InputHighlighterFactory, InputSize,
+    MASK_CHAR, MaskPattern, NativeMenu, NumberStep, WrappingIndent,
     blink_cursor::BlinkCursor,
     decorations::DecorationCollections,
     element::{EditorScrollbar, EditorScrollbarSnapshot, TextElement},
@@ -29,9 +30,6 @@ use super::{
     normalize_number_input,
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
-use crate::highlighter::DiagnosticSet;
-#[cfg(feature = "tree-sitter")]
-use crate::highlighter::LanguageRegistry;
 use crate::input::blink_cursor::CURSOR_WIDTH;
 use crate::input::movement::MoveDirection;
 use crate::input::{
@@ -333,6 +331,7 @@ pub struct InputState {
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) text_align: TextAlign,
     pub(super) decorations: DecorationCollections,
+    pub(super) editor_style: InputEditorStyle,
 
     /// The mask pattern for formatting the input text
     pub(crate) mask_pattern: MaskPattern,
@@ -343,7 +342,7 @@ pub struct InputState {
     pub(super) placeholder: SharedString,
 
     /// Diagnostic currently requested by pointer hover; applications render it.
-    pub(super) diagnostic_overlay: Option<Rc<crate::highlighter::DiagnosticEntry>>,
+    pub(super) diagnostic_overlay: Option<Rc<crate::input::DiagnosticEntry>>,
 
     /// An optional context menu builder to allow a custom right-click context menu on the input.
     ///
@@ -440,7 +439,7 @@ impl InputState {
         self.select_all(&SelectAll, window, cx);
     }
 
-    pub fn diagnostic_overlay(&self) -> Option<Rc<crate::highlighter::DiagnosticEntry>> {
+    pub fn diagnostic_overlay(&self) -> Option<Rc<crate::input::DiagnosticEntry>> {
         self.diagnostic_overlay.clone()
     }
 
@@ -614,6 +613,7 @@ impl InputState {
             mask_pattern_set: false,
             text_align: TextAlign::Left,
             decorations: DecorationCollections::default(),
+            editor_style: InputEditorStyle::default(),
             lsp: Lsp::default(),
             diagnostic_overlay: None,
             context_menu_builder: None,
@@ -784,12 +784,10 @@ impl InputState {
             InputMode::CodeEditor {
                 language,
                 highlighter,
-                parse_task,
                 ..
             } => {
                 *language = new_language.into();
                 *highlighter.borrow_mut() = None;
-                parse_task.borrow_mut().take();
             }
             _ => {}
         }
@@ -798,15 +796,41 @@ impl InputState {
 
     fn reset_highlighter(&mut self, cx: &mut Context<Self>) {
         match &mut self.mode {
-            InputMode::CodeEditor {
-                highlighter,
-                parse_task,
-                ..
-            } => {
+            InputMode::CodeEditor { highlighter, .. } => {
                 *highlighter.borrow_mut() = None;
-                parse_task.borrow_mut().take();
             }
             _ => {}
+        }
+        cx.notify();
+    }
+
+    /// Install the parser/highlighter adapter used by code-editor mode.
+    pub fn set_highlighter_factory(
+        &mut self,
+        factory: InputHighlighterFactory,
+        cx: &mut Context<Self>,
+    ) {
+        self.mode.set_highlighter_factory(factory);
+        self._pending_update = true;
+        cx.notify();
+    }
+
+    /// Install a default adapter without replacing an application-provided one.
+    pub fn ensure_highlighter_factory(&mut self, factory: InputHighlighterFactory) {
+        self.mode.ensure_highlighter_factory(factory);
+    }
+
+    pub fn set_editor_style(&mut self, style: InputEditorStyle) {
+        self.editor_style = style;
+    }
+
+    pub fn apply_highlighter_fold_candidates(
+        &mut self,
+        candidates: Vec<crate::input::FoldRange>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.mode.is_folding() {
+            self.display_map.set_fold_candidates(candidates);
         }
         cx.notify();
     }
@@ -2776,11 +2800,7 @@ impl InputState {
             return;
         };
 
-        let Some(tree) = highlighter.tree() else {
-            return;
-        };
-
-        let fold_ranges = crate::input::display_map::extract_fold_ranges(tree);
+        let fold_ranges = highlighter.fold_ranges(&self.text);
         self.display_map.set_fold_candidates(fold_ranges);
     }
 
@@ -2800,158 +2820,14 @@ impl InputState {
             return;
         };
 
-        let Some(tree) = highlighter.tree() else {
-            return;
-        };
-
         // The new byte range in the updated text after the edit
         let new_end = edit_range.start + new_text.len();
-        self.display_map.update_fold_candidates_for_edit(
-            tree,
+        let fold_ranges = highlighter.fold_ranges_for_edit(edit_range.start..new_end, &self.text);
+        self.display_map.merge_fold_candidates_for_edit(
             edit_range.start..new_end,
             &self.text,
+            fold_ranges,
         );
-    }
-
-    /// Spawn a background parse after the synchronous parse timed out.
-    ///
-    /// Dropping the returned `Task` (stored in `parse_task`) cancels the
-    /// parse, which naturally debounces rapid edits.
-    #[cfg(feature = "tree-sitter")]
-    fn dispatch_background_parse(
-        pending: super::mode::PendingBackgroundParse,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicBool, Ordering};
-        use std::time::Duration;
-
-        const PARSE_DEBOUNCE: Duration = Duration::from_millis(150);
-
-        let highlighter_rc = pending.highlighter;
-        let parse_task_rc = pending.parse_task;
-        let language = pending.language;
-        let text = pending.text;
-        let is_folding = pending.is_folding;
-
-        let old_tree = highlighter_rc
-            .borrow()
-            .as_ref()
-            .and_then(|h| h.tree().cloned());
-
-        // Extract injection parse data on the main thread before spawning, so that
-        // compute_injection_layers can also run on the background thread.
-        let injection_data = highlighter_rc
-            .borrow()
-            .as_ref()
-            .and_then(|h| h.injection_parse_data());
-
-        let cancel = Arc::new(AtomicBool::new(false));
-
-        let text_for_apply = text.clone();
-        let task = cx.spawn_in(window, async move |entity, cx| {
-            struct CancelOnDrop(Arc<AtomicBool>);
-            impl Drop for CancelOnDrop {
-                fn drop(&mut self) {
-                    self.0.store(true, Ordering::Relaxed);
-                }
-            }
-            let _cancel_guard = CancelOnDrop(cancel.clone());
-
-            // Debounce
-            cx.background_executor().timer(PARSE_DEBOUNCE).await;
-
-            let parse_cancel = cancel.clone();
-            let result = cx
-                .background_executor()
-                .spawn(async move {
-                    let Some(config) = LanguageRegistry::singleton().language(&language) else {
-                        return None;
-                    };
-                    let Some(grammar) = config.language.as_ref() else {
-                        return None;
-                    };
-
-                    let mut parser = tree_sitter::Parser::new();
-                    if parser.set_language(grammar).is_err() {
-                        return None;
-                    }
-
-                    let mut progress = |_: &tree_sitter::ParseState| -> std::ops::ControlFlow<()> {
-                        if parse_cancel.load(Ordering::Relaxed) {
-                            std::ops::ControlFlow::Break(())
-                        } else {
-                            std::ops::ControlFlow::Continue(())
-                        }
-                    };
-                    let options = tree_sitter::ParseOptions::new().progress_callback(&mut progress);
-
-                    let new_tree = parser.parse_with_options(
-                        &mut |offset, _| {
-                            if offset >= text.len() {
-                                ""
-                            } else {
-                                let (chunk, chunk_byte_ix) = text.chunk(offset);
-                                &chunk[offset - chunk_byte_ix..]
-                            }
-                        },
-                        old_tree.as_ref(),
-                        Some(options),
-                    )?;
-
-                    // Disrcard the partial result on cancel
-                    if parse_cancel.load(Ordering::Relaxed) {
-                        return None;
-                    }
-
-                    // Compute injection layers in the background to avoid blocking the
-                    // main thread with combined-injection parsing (e.g. PHP, HTML+JS/CSS).
-                    let injection_layers = if let Some(data) = injection_data {
-                        crate::highlighter::SyntaxHighlighter::compute_injection_layers(
-                            data, &new_tree, &text,
-                        )
-                    } else {
-                        Default::default()
-                    };
-
-                    // Walk the syntax tree to extract fold ranges off the main thread.
-                    let fold_ranges = if is_folding {
-                        crate::input::display_map::extract_fold_ranges(&new_tree)
-                    } else {
-                        Vec::new()
-                    };
-
-                    Some((new_tree, injection_layers, fold_ranges))
-                })
-                .await;
-
-            if let Some((new_tree, injection_layers, fold_ranges)) = result {
-                if let Some(h) = highlighter_rc.borrow_mut().as_mut() {
-                    h.apply_background_tree(new_tree, &text_for_apply, injection_layers);
-                }
-
-                // Trigger re-render so the new highlights are displayed and
-                // apply the fold candidates extracted in the background.
-                _ = entity.update(cx, |state, cx| {
-                    if is_folding {
-                        state.display_map.set_fold_candidates(fold_ranges);
-                    }
-                    cx.notify();
-                });
-            }
-        });
-
-        parse_task_rc.borrow_mut().replace(task);
-    }
-
-    #[cfg(not(feature = "tree-sitter"))]
-    fn dispatch_background_parse(
-        _pending: super::mode::PendingBackgroundParse,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) {
-        // No-op
     }
 }
 
@@ -3083,12 +2959,8 @@ impl EntityInputHandler for InputState {
         self.display_map
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
 
-        let bg = self
-            .mode
-            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
-        if let Some(bg) = bg {
-            Self::dispatch_background_parse(bg, window, cx);
-        }
+        self.mode
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, window, cx);
 
         self.update_fold_candidates_incremental(&range, new_text);
         self.lsp.update(&self.text, window, cx);
@@ -3158,12 +3030,8 @@ impl EntityInputHandler for InputState {
         self.display_map
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
 
-        let bg = self
-            .mode
-            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
-        if let Some(bg) = bg {
-            Self::dispatch_background_parse(bg, window, cx);
-        }
+        self.mode
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, window, cx);
 
         self.update_fold_candidates_incremental(&range, new_text);
         self.lsp.update(&self.text, window, cx);
@@ -3279,12 +3147,8 @@ impl Render for InputState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
         if self._pending_update {
-            let bg = self
-                .mode
-                .update_highlighter(&(0..0), &self.text, &self.text, "", false, cx);
-            if let Some(bg) = bg {
-                Self::dispatch_background_parse(bg, window, cx);
-            }
+            self.mode
+                .update_highlighter(&(0..0), &self.text, &self.text, "", false, window, cx);
 
             self.update_fold_candidates();
             self.lsp.update(&self.text, window, cx);
@@ -3473,124 +3337,6 @@ mod tests {
             })
         });
         assert_eq!(calls.get(), 2);
-    }
-
-    #[gpui::test]
-    fn test_highlighting_preserved_after_fold(cx: &mut TestAppContext) {
-        use crate::highlighter::HighlightTheme;
-        use crate::input::display_map::FoldRange;
-
-        let input_view = InputView::new(cx);
-        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
-        let input = input_view.input;
-
-        // SQL text: fold the SELECT..WHERE block, verify comments keep highlighting.
-        // Lines 0-9: SELECT block (fold range 0..9 hides lines 1-8)
-        // Line 10+: comments that must keep highlighting
-        let text = "\
-SELECT *
-FROM users
-WHERE id = 1
-AND name = 'test'
-AND active = true
-AND role = 'admin'
-AND age > 18
-AND status = 'ok'
-AND country = 'US'
-ORDER BY id
-
--- Comment 1
--- Comment 2
--- Comment 3";
-
-        cx.update(|window, cx| {
-            input.update(cx, |state, cx| {
-                state.set_value(text, window, cx);
-            });
-        });
-        cx.run_until_parked();
-
-        // Grab styles for "-- Comment 1" (line 11) before folding
-        let theme = HighlightTheme::default_dark();
-        let comment_line = 11;
-        let comment_start = cx.update(|_, cx| {
-            input.read_with(cx, |state, _| state.text.line_start_offset(comment_line))
-        });
-        let styles_before: Vec<(Range<usize>, gpui::HighlightStyle)> = cx.update(|_, cx| {
-            input.read_with(cx, |state, _| {
-                let mode = &state.mode;
-                if let crate::input::mode::InputMode::CodeEditor { highlighter, .. } = mode {
-                    let h = highlighter.borrow();
-                    if let Some(h) = h.as_ref() {
-                        let line_end = state.text.line_end_offset(comment_line);
-                        return h.styles(&(comment_start..line_end), &theme);
-                    }
-                }
-                vec![]
-            })
-        });
-
-        // Fold at line 0 with range 0..9 (hides lines 1-8)
-        cx.update(|_, cx| {
-            input.update(cx, |state, _cx| {
-                state
-                    .display_map
-                    .set_fold_candidates(vec![FoldRange::new(0, 9)]);
-                state.display_map.set_folded(0, true);
-            });
-        });
-        cx.run_until_parked();
-
-        // Verify fold is active and lines 1-8 are hidden
-        cx.update(|_, cx| {
-            input.read_with(cx, |state, _| {
-                assert!(state.display_map.is_folded_at(0));
-                for line in 1..=8 {
-                    assert!(
-                        state.display_map.is_buffer_line_hidden(line),
-                        "Line {} should be hidden",
-                        line
-                    );
-                }
-                assert!(
-                    !state.display_map.is_buffer_line_hidden(9),
-                    "Line 9 (ORDER BY) should be visible"
-                );
-            });
-        });
-
-        // Get styles for the same comment line after folding
-        let styles_after: Vec<(Range<usize>, gpui::HighlightStyle)> = cx.update(|_, cx| {
-            input.read_with(cx, |state, _| {
-                let mode = &state.mode;
-                if let crate::input::mode::InputMode::CodeEditor { highlighter, .. } = mode {
-                    let h = highlighter.borrow();
-                    if let Some(h) = h.as_ref() {
-                        let line_end = state.text.line_end_offset(comment_line);
-                        return h.styles(&(comment_start..line_end), &theme);
-                    }
-                }
-                vec![]
-            })
-        });
-
-        let colored_before: Vec<_> = styles_before
-            .iter()
-            .filter(|(_, s)| s.color.is_some())
-            .cloned()
-            .collect();
-        let colored_after: Vec<_> = styles_after
-            .iter()
-            .filter(|(_, s)| s.color.is_some())
-            .cloned()
-            .collect();
-
-        assert_eq!(
-            colored_before, colored_after,
-            "Comment highlighting must be identical before and after folding.\n\
-             Before: {:?}\nAfter: {:?}",
-            colored_before, colored_after
-        );
     }
 
     /// Regression test: `scroll_to` at end-of-buffer must produce a deferred

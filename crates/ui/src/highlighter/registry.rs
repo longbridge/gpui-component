@@ -8,15 +8,10 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use crate::highlighter::{Language, languages};
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HighlightThemeMode {
-    #[default]
-    Light,
-    Dark,
-}
+use crate::{
+    ActiveTheme, DEFAULT_THEME_COLORS, ThemeMode,
+    highlighter::{Language, languages},
+};
 
 pub(super) const HIGHLIGHT_NAMES: [&str; 41] = [
     "attribute",
@@ -350,13 +345,13 @@ pub struct StatusColors {
 
 impl StatusColors {
     #[inline]
-    pub fn error(&self, _cx: &App) -> Hsla {
-        self.error.unwrap_or_else(gpui::red)
+    pub fn error(&self, cx: &App) -> Hsla {
+        self.error.unwrap_or(cx.theme().red)
     }
 
     #[inline]
     pub fn error_background(&self, cx: &App) -> Hsla {
-        let bg = gpui::transparent_black();
+        let bg = cx.theme().background;
         self.error_background
             .unwrap_or(bg.blend(self.error(cx).alpha(0.2)))
     }
@@ -367,13 +362,13 @@ impl StatusColors {
     }
 
     #[inline]
-    pub fn warning(&self, _cx: &App) -> Hsla {
-        self.warning.unwrap_or_else(gpui::yellow)
+    pub fn warning(&self, cx: &App) -> Hsla {
+        self.warning.unwrap_or(cx.theme().yellow)
     }
 
     #[inline]
     pub fn warning_background(&self, cx: &App) -> Hsla {
-        let bg = gpui::transparent_black();
+        let bg = cx.theme().background;
         self.warning_background
             .unwrap_or(bg.blend(self.warning(cx).alpha(0.2)))
     }
@@ -384,13 +379,13 @@ impl StatusColors {
     }
 
     #[inline]
-    pub fn info(&self, _cx: &App) -> Hsla {
-        self.info.unwrap_or_else(gpui::blue)
+    pub fn info(&self, cx: &App) -> Hsla {
+        self.info.unwrap_or(cx.theme().blue)
     }
 
     #[inline]
     pub fn info_background(&self, cx: &App) -> Hsla {
-        let bg = gpui::transparent_black();
+        let bg = cx.theme().background;
         self.info_background
             .unwrap_or(bg.blend(self.info(cx).alpha(0.2)))
     }
@@ -401,13 +396,13 @@ impl StatusColors {
     }
 
     #[inline]
-    pub fn success(&self, _cx: &App) -> Hsla {
-        self.success.unwrap_or_else(gpui::green)
+    pub fn success(&self, cx: &App) -> Hsla {
+        self.success.unwrap_or(cx.theme().green)
     }
 
     #[inline]
     pub fn success_background(&self, cx: &App) -> Hsla {
-        let bg = gpui::transparent_black();
+        let bg = cx.theme().background;
         self.success_background
             .unwrap_or(bg.blend(self.success(cx).alpha(0.2)))
     }
@@ -418,13 +413,13 @@ impl StatusColors {
     }
 
     #[inline]
-    pub fn hint(&self, _cx: &App) -> Hsla {
-        self.hint.unwrap_or_else(gpui::blue)
+    pub fn hint(&self, cx: &App) -> Hsla {
+        self.hint.unwrap_or(cx.theme().cyan)
     }
 
     #[inline]
     pub fn hint_background(&self, cx: &App) -> Hsla {
-        let bg = gpui::transparent_black();
+        let bg = cx.theme().background;
         self.hint_background
             .unwrap_or(bg.blend(self.hint(cx).alpha(0.2)))
     }
@@ -468,7 +463,7 @@ pub struct HighlightThemeStyle {
 pub struct HighlightTheme {
     pub name: String,
     #[serde(default)]
-    pub appearance: HighlightThemeMode,
+    pub appearance: ThemeMode,
     pub style: HighlightThemeStyle,
 }
 
@@ -482,19 +477,17 @@ impl Deref for HighlightTheme {
 
 impl HighlightTheme {
     pub fn default_dark() -> Arc<Self> {
-        Arc::new(Self {
-            name: "Base Dark".into(),
-            appearance: HighlightThemeMode::Dark,
-            style: HighlightThemeStyle::default(),
-        })
+        DEFAULT_THEME_COLORS[&ThemeMode::Dark].1.clone()
     }
 
     pub fn default_light() -> Arc<Self> {
-        Arc::new(Self {
-            name: "Base Light".into(),
-            appearance: HighlightThemeMode::Light,
-            style: HighlightThemeStyle::default(),
-        })
+        DEFAULT_THEME_COLORS[&ThemeMode::Light].1.clone()
+    }
+}
+
+impl gpui_base::input::HighlightStyleResolver for HighlightTheme {
+    fn style(&self, name: &str) -> Option<HighlightStyle> {
+        self.style.syntax.style(name)
     }
 }
 

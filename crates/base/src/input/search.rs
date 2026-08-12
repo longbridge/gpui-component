@@ -107,14 +107,20 @@ impl InputState {
     }
 
     pub fn next_search_match(&mut self, cx: &mut Context<Self>) -> Option<Range<usize>> {
+        let previous = self.search_session.matcher.current_match_index();
         let range = self.search_session.matcher.next()?;
-        self.scroll_to(range.end, Some(MoveDirection::Down), cx);
+        let direction = (self.search_session.matcher.current_match_index() > previous)
+            .then_some(MoveDirection::Down);
+        self.scroll_to(range.end, direction, cx);
         Some(range)
     }
 
     pub fn previous_search_match(&mut self, cx: &mut Context<Self>) -> Option<Range<usize>> {
+        let previous = self.search_session.matcher.current_match_index();
         let range = self.search_session.matcher.next_back()?;
-        self.scroll_to(range.start, Some(MoveDirection::Up), cx);
+        let direction = (self.search_session.matcher.current_match_index() < previous)
+            .then_some(MoveDirection::Up);
+        self.scroll_to(range.start, direction, cx);
         Some(range)
     }
 

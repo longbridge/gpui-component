@@ -25,7 +25,7 @@ struct InputOverlayHost {
     code_actions: Entity<CodeActionMenu>,
     hover: Option<Entity<HoverPopover>>,
     diagnostic: Option<Entity<DiagnosticPopover>>,
-    search_signature: (bool, bool),
+    search_signature: (bool, bool, String, Option<usize>),
     completion_signature: String,
     code_action_signature: String,
     hover_signature: String,
@@ -43,7 +43,7 @@ impl InputOverlayHost {
             code_actions,
             hover: None,
             diagnostic: None,
-            search_signature: (false, false),
+            search_signature: (false, false, String::new(), None),
             completion_signature: String::new(),
             code_action_signature: String::new(),
             hover_signature: String::new(),
@@ -94,7 +94,12 @@ impl InputOverlayHost {
         self.search
             .update(cx, |panel, _| panel.sync_session(&search_session));
 
-        let search_signature = (search_open, replace_mode);
+        let search_signature = (
+            search_open,
+            replace_mode,
+            search_session.query.clone(),
+            search_session.anchor_offset,
+        );
         if search_signature != self.search_signature {
             self.search_signature = search_signature;
             self.search.update(cx, |panel, cx| {
@@ -259,8 +264,8 @@ fn install_action_handler(state: &Entity<InputState>, cx: &mut App) {
 mod tests {
     use super::*;
     use gpui::{AppContext as _, Render, SharedString, div};
-    use gpui_base::highlighter::DiagnosticEntry;
     use gpui_base::input::CodeActionItem;
+    use gpui_base::input::DiagnosticEntry;
     use lsp_types::{CodeAction, CompletionItem, Hover, HoverContents, MarkedString};
 
     struct OverlayProbe {

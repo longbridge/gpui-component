@@ -12,7 +12,7 @@ use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
 use super::{InputState, RopeExt as _};
-use crate::highlighter::HighlightTheme;
+use crate::input::HighlightStyleResolver;
 
 const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(300);
 
@@ -363,7 +363,7 @@ impl Lsp {
         &self,
         text: &Rope,
         visible: &Range<usize>,
-        theme: &HighlightTheme,
+        theme: &dyn HighlightStyleResolver,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
         self.semantic_tokens
             .iter()
@@ -444,7 +444,7 @@ impl InputState {
 
     pub fn present_diagnostic(
         &mut self,
-        diagnostic: crate::highlighter::DiagnosticEntry,
+        diagnostic: crate::input::DiagnosticEntry,
         cx: &mut Context<Self>,
     ) {
         self.diagnostic_overlay = Some(Rc::new(diagnostic));

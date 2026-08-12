@@ -1155,8 +1155,11 @@ impl CodeBlock {
                 new_end_position: code_rope.offset_to_point(code.len()),
             };
 
+            #[cfg(feature = "tree-sitter")]
+            highlighter.update_input(Some(edit), &code_rope, None);
+            #[cfg(not(feature = "tree-sitter"))]
             highlighter.update(Some(edit), &code_rope, None);
-            highlighter.styles(&(0..code.len()), highlight_theme)
+            highlighter.styles(&(0..code.len()), highlight_theme.as_ref())
         });
         *styles = Some(CachedCodeBlockStyles {
             highlight_theme: highlight_theme.clone(),

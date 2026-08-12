@@ -1,24 +1,13 @@
 use std::rc::Rc;
-use std::time::Duration;
 use std::{cell::RefCell, ops::Range};
 
-use gpui::{App, SharedString, Task};
+use gpui::{Context, SharedString, Window};
 use ropey::Rope;
 
 use super::DisplayMap;
-use crate::highlighter::DiagnosticSet;
-use crate::highlighter::LanguageRegistry;
-use crate::highlighter::SyntaxHighlighter;
-use crate::input::{InputEdit, RopeExt as _, TabSize};
-
-#[allow(dead_code)]
-pub(super) struct PendingBackgroundParse {
-    pub highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
-    pub parse_task: Rc<RefCell<Option<Task<()>>>>,
-    pub language: SharedString,
-    pub text: Rope,
-    pub is_folding: bool,
-}
+use crate::input::{
+    DiagnosticSet, InputEdit, InputHighlighter, InputHighlighterFactory, RopeExt as _, TabSize,
+};
 
 #[derive(Clone)]
 pub(crate) enum InputMode {
@@ -44,9 +33,9 @@ pub(crate) enum InputMode {
         language: SharedString,
         indent_guides: bool,
         folding: bool,
-        highlighter: Rc<RefCell<Option<SyntaxHighlighter>>>,
+        highlighter: Rc<RefCell<Option<Box<dyn InputHighlighter>>>>,
+        highlighter_factory: Option<InputHighlighterFactory>,
         diagnostics: DiagnosticSet,
-        parse_task: Rc<RefCell<Option<Task<()>>>>,
     },
 }
 
@@ -75,11 +64,11 @@ impl InputMode {
             tab: TabSize::default(),
             language: language.into(),
             highlighter: Rc::new(RefCell::new(None)),
+            highlighter_factory: None,
             line_number: true,
             indent_guides: true,
             folding: true,
             diagnostics: DiagnosticSet::new(&Rope::new()),
-            parse_task: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -220,9 +209,6 @@ impl InputMode {
 
     /// Update the syntax highlighter with new text.
     ///
-    /// Returns `Some(PendingBackgroundParse)` when the synchronous parse
-    /// timed out and the caller should dispatch a background parse.
-    /// Returns `None` when parsing completed (or no highlighter is active).
     pub(super) fn update_highlighter(
         &mut self,
         selected_range: &Range<usize>,
@@ -230,67 +216,37 @@ impl InputMode {
         new_text: &Rope,
         change_text: &str,
         force: bool,
-        cx: &mut App,
-    ) -> Option<PendingBackgroundParse> {
+        window: &mut Window,
+        cx: &mut Context<crate::input::InputState>,
+    ) {
         match &self {
             InputMode::CodeEditor {
                 language,
                 highlighter,
-                parse_task,
+                highlighter_factory,
                 folding,
                 ..
             } => {
                 if !force && highlighter.borrow().is_some() {
-                    return None;
+                    return;
                 }
 
                 let mut highlighter_ref = highlighter.borrow_mut();
                 if highlighter_ref.is_none() {
-                    // Do not create a highlighter if the language has no grammar.
-                    let has_grammar = LanguageRegistry::singleton()
-                        .language(language)
-                        .is_some_and(|config| config.has_grammar());
-                    if !has_grammar {
-                        return None;
-                    }
-
-                    let new_highlighter = SyntaxHighlighter::new(language);
-                    highlighter_ref.replace(new_highlighter);
+                    let Some(factory) = highlighter_factory else {
+                        return;
+                    };
+                    *highlighter_ref = factory(language);
                 }
 
                 let Some(h) = highlighter_ref.as_mut() else {
-                    return None;
+                    return;
                 };
 
                 let edit = replacement_input_edit(old_text, new_text, selected_range, change_text);
-
-                const SYNC_PARSE_TIMEOUT: Duration = Duration::from_millis(2);
-                // Skip parsing in the foreground above this threshold
-                const SYNC_PARSE_MAX_BYTES: usize = 256 * 1024;
-                let completed = if new_text.len() > SYNC_PARSE_MAX_BYTES {
-                    h.edit_tree(Some(edit), new_text);
-                    false
-                } else {
-                    h.update(Some(edit), new_text, Some(SYNC_PARSE_TIMEOUT))
-                };
-                if completed {
-                    // Sync parse succeeded, cancel any pending background parse.
-                    parse_task.borrow_mut().take();
-                    None
-                } else {
-                    // Timed out. Return the data needed for background parsing.
-                    let pending = PendingBackgroundParse {
-                        language: h.language().clone(),
-                        text: new_text.clone(),
-                        highlighter: highlighter.clone(),
-                        parse_task: parse_task.clone(),
-                        is_folding: *folding,
-                    };
-                    drop(highlighter_ref);
-                    Some(pending)
-                }
+                h.update(Some(edit), new_text, *folding, window, cx);
             }
-            _ => None,
+            _ => {}
         }
     }
 
@@ -310,10 +266,34 @@ impl InputMode {
     }
 
     /// Get a reference to the highlighter (if available)
-    pub(super) fn highlighter(&self) -> Option<&Rc<RefCell<Option<SyntaxHighlighter>>>> {
+    pub(super) fn highlighter(&self) -> Option<&Rc<RefCell<Option<Box<dyn InputHighlighter>>>>> {
         match self {
             InputMode::CodeEditor { highlighter, .. } => Some(highlighter),
             _ => None,
+        }
+    }
+
+    pub(super) fn set_highlighter_factory(&mut self, factory: InputHighlighterFactory) {
+        if let InputMode::CodeEditor {
+            highlighter_factory,
+            highlighter,
+            ..
+        } = self
+        {
+            *highlighter_factory = Some(factory);
+            *highlighter.borrow_mut() = None;
+        }
+    }
+
+    pub(super) fn ensure_highlighter_factory(&mut self, factory: InputHighlighterFactory) {
+        if let InputMode::CodeEditor {
+            highlighter_factory,
+            ..
+        } = self
+        {
+            if highlighter_factory.is_none() {
+                *highlighter_factory = Some(factory);
+            }
         }
     }
 }
@@ -347,10 +327,7 @@ mod tests {
     use ropey::Rope;
 
     use super::replacement_input_edit;
-    use crate::{
-        highlighter::DiagnosticSet,
-        input::{Point, TabSize, mode::InputMode},
-    };
+    use crate::input::{DiagnosticSet, Point, TabSize, mode::InputMode};
 
     #[test]
     fn test_replacement_input_edit_backspace_at_end_uses_old_range() {
@@ -364,41 +341,6 @@ mod tests {
         assert_eq!(edit.start_position, Point::new(0, 1));
         assert_eq!(edit.old_end_position, Point::new(0, 2));
         assert_eq!(edit.new_end_position, Point::new(0, 1));
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter")]
-    fn test_replacement_input_edit_shifts_tree_sitter_included_ranges() {
-        let old_source = "[1,2]";
-        let new_source = "[1,2";
-        let old_text = Rope::from_str(old_source);
-        let text = Rope::from_str(new_source);
-        let edit = replacement_input_edit(&old_text, &text, &(4..5), "");
-
-        let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&tree_sitter_json::LANGUAGE.into())
-            .expect("JSON parser should load");
-        parser
-            .set_included_ranges(&[tree_sitter::Range {
-                start_byte: 0,
-                end_byte: old_source.len(),
-                start_point: Point::new(0, 0),
-                end_point: Point::new(0, old_source.len()),
-            }])
-            .expect("included range should be valid");
-
-        let mut tree = parser
-            .parse(old_source, None)
-            .expect("old JSON should parse");
-        tree.edit(&edit);
-        let included_range = tree
-            .included_ranges()
-            .pop()
-            .expect("tree should keep the included range");
-
-        assert_eq!(included_range.end_byte, new_source.len());
-        assert_eq!(included_range.end_point, Point::new(0, new_source.len()));
     }
 
     #[test]
@@ -422,8 +364,8 @@ mod tests {
             tab: Default::default(),
             language: "rust".into(),
             highlighter: Default::default(),
+            highlighter_factory: None,
             diagnostics: DiagnosticSet::new(&Rope::new()),
-            parse_task: Default::default(),
         };
         assert_eq!(mode.is_code_editor(), true);
         assert_eq!(mode.is_multi_line(), false);

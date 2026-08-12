@@ -209,15 +209,6 @@ impl Theme {
                 handle: theme.border,
                 active_handle: theme.drag_border,
             },
-            input_editor: gpui_base::InputEditorTheme {
-                foreground: theme.foreground,
-                muted_foreground: theme.muted_foreground,
-                background: theme.editor_background(),
-                border: theme.border,
-                selection: theme.selection,
-                caret: theme.caret,
-                highlight_theme: theme.highlight_theme.clone(),
-            },
         };
         cx.set_global(base_theme);
 

@@ -215,14 +215,57 @@ fn base_input_frames_accept_application_owned_content() {
         .bordered(true)
         .focused(false)
         .child(gpui::div());
-    let _ = gpui_base::NumberInput::new("number")
-        .value(Some(42.))
-        .on_step(|_, _, _| {})
-        .child(gpui::div());
+    fn build_number(state: &gpui::Entity<gpui_base::input::InputState>) {
+        let _ = gpui_base::NumberInput::new(state)
+            .on_step(|_, _, _| {})
+            .decrement_button(|button| button.child("-"))
+            .increment_button(|button| button.child("+"))
+            .input(|input| input.child(gpui::div()))
+            .child(gpui::div());
+    }
+    let _ = build_number;
+    let _ = gpui_base::NumberInputText::new().child(gpui::div());
 
     fn accepts_base(_: gpui_base::InputContentType) {}
     accepts_base(gpui_component::input::InputContentType::EmailAddress);
     let _: gpui_base::StepAction = gpui_component::input::StepAction::Increment;
+}
+
+#[test]
+fn base_input_accepts_application_owned_highlighters() {
+    struct CustomHighlighter;
+
+    impl gpui_base::input::InputHighlighter for CustomHighlighter {
+        fn language(&self) -> gpui::SharedString {
+            "custom".into()
+        }
+
+        fn update(
+            &mut self,
+            _: Option<gpui_base::input::InputEdit>,
+            _: &gpui_base::input::Rope,
+            _: bool,
+            _: &mut gpui::Window,
+            _: &mut gpui::Context<gpui_base::input::InputState>,
+        ) {
+        }
+
+        fn styles(
+            &self,
+            _: &std::ops::Range<usize>,
+            _: &dyn gpui_base::input::HighlightStyleResolver,
+        ) -> Vec<(std::ops::Range<usize>, gpui::HighlightStyle)> {
+            Vec::new()
+        }
+
+        fn fold_ranges(&self, _: &gpui_base::input::Rope) -> Vec<gpui_base::input::FoldRange> {
+            Vec::new()
+        }
+    }
+
+    let factory: gpui_base::input::InputHighlighterFactory =
+        std::rc::Rc::new(|_| Some(Box::new(CustomHighlighter)));
+    let _ = factory;
 }
 
 #[test]

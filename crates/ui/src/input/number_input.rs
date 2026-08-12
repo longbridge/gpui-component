@@ -1,16 +1,14 @@
 use crate::theme::ActiveTheme;
-use gpui::Corners;
-use gpui::Window;
-use gpui::{AnyElement, App, Entity, FocusHandle, Focusable, px};
+use gpui::{
+    AnyElement, App, Entity, FocusHandle, Focusable, InteractiveElement as _,
+    StatefulInteractiveElement as _, Window, px,
+};
 use gpui::{
     IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled, TextAlign,
     prelude::FluentBuilder as _,
 };
 
-use crate::{
-    Disableable, IconName, Sizable, Size, StyledExt as _,
-    button::{Button, ButtonCustomVariant, ButtonVariants as _},
-};
+use crate::{Disableable, Icon, IconName, Sizable, Size, StyledExt as _};
 
 use super::{Input, InputState, input::input_style};
 use gpui_base::NumberInput as BaseNumberInput;
@@ -67,20 +65,6 @@ impl NumberInput {
         self.appearance = appearance;
         self
     }
-
-    fn on_increment(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
-        state.update(cx, |state, cx| {
-            state.focus(window, cx);
-            state.on_number_input_step(StepAction::Increment, window, cx);
-        })
-    }
-
-    fn on_decrement(state: &Entity<InputState>, window: &mut Window, cx: &mut App) {
-        state.update(cx, |state, cx| {
-            state.focus(window, cx);
-            state.on_number_input_step(StepAction::Decrement, window, cx);
-        })
-    }
 }
 
 impl Disableable for NumberInput {
@@ -111,22 +95,13 @@ impl Styled for NumberInput {
 
 impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        // Default to use `MaskPattern::Number` to limit the input to a valid
-        // number (optional leading sign, digits and a single dot), and to
-        // normalize full-width number characters, e.g. `12。5` -> `12.5`.
-        //
-        // Only when the user has not set a `mask_pattern` explicitly, so that
-        // `set_mask_pattern(MaskPattern::None)` can be used to opt out.
-        self.state.update(cx, |state, _| state.ensure_number_mask());
-
-        let numeric_value = self.state.read(cx).value().parse::<f64>().ok();
         let focused = self.state.read(cx).focus_handle(cx).is_focused(window) && !self.disabled;
         let (bg, _) = input_style(self.disabled, cx);
         // Transparent like a ghost button, but tinted to the frame on hover.
-        let button_variant = ButtonCustomVariant::new(cx)
-            .foreground(cx.theme().secondary_foreground)
-            .hover(cx.theme().input.opacity(0.4))
-            .active(cx.theme().input.opacity(0.6));
+        let button_foreground = cx.theme().secondary_foreground;
+        let button_hover = cx.theme().input.opacity(0.4);
+        let button_active = cx.theme().input.opacity(0.6);
+        let button_size = self.size;
         // The buttons sit inside the 1px frame, so their corners are a pixel
         // tighter than the frame's, or they paint over its inner curve.
         let button_radius = if self.appearance {
@@ -135,14 +110,10 @@ impl RenderOnce for NumberInput {
             cx.theme().radius
         };
 
-        let step_state = self.state.clone();
-
-        BaseNumberInput::new(("number-input", self.state.entity_id()))
-            .value(numeric_value)
+        BaseNumberInput::new(&self.state)
             .appearance(self.appearance)
             .disabled(self.disabled)
             .focused(focused)
-            .bind_state(&step_state)
             .flex_1()
             .rounded(cx.theme().radius)
             // The buttons are ghost, so the frame around the whole control is
@@ -152,63 +123,52 @@ impl RenderOnce for NumberInput {
             })
             .refine_style(&self.style)
             .when(self.disabled, |this| this.opacity(0.5))
-            .child(
-                Button::new("minus")
-                    .custom(button_variant)
-                    .rounded(button_radius)
-                    .with_size(self.size)
-                    .icon(IconName::Minus)
-                    .compact()
-                    .tab_stop(false)
-                    .disabled(self.disabled)
+            .decrement_button(move |this| {
+                this.flex()
+                    .items_center()
+                    .justify_center()
+                    .text_color(button_foreground)
+                    .hover(move |this| this.bg(button_hover))
+                    .active(move |this| this.bg(button_active))
+                    .map(|this| match button_size {
+                        Size::XSmall | Size::Small => this.h_6().min_w_6(),
+                        Size::Medium | Size::Large => this.h_8().min_w_8(),
+                        Size::Size(size) => this.h(size).min_w(size),
+                    })
                     // Only the outer corners are rounded, to follow the frame.
-                    .border_corners(Corners {
-                        top_left: true,
-                        top_right: false,
-                        bottom_right: false,
-                        bottom_left: true,
+                    .rounded_tl(button_radius)
+                    .rounded_bl(button_radius)
+                    .child(Icon::new(IconName::Minus).with_size(button_size))
+            })
+            .input(move |this| {
+                this.child(
+                    Input::new(&self.state)
+                        .appearance(false)
+                        .with_size(button_size)
+                        .disabled(self.disabled)
+                        .gap_0()
+                        .rounded_none()
+                        .text_align(TextAlign::Center)
+                        .when_some(self.prefix, |this, prefix| this.prefix(prefix))
+                        .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
+                )
+            })
+            .increment_button(move |this| {
+                this.flex()
+                    .items_center()
+                    .justify_center()
+                    .text_color(button_foreground)
+                    .hover(move |this| this.bg(button_hover))
+                    .active(move |this| this.bg(button_active))
+                    .map(|this| match button_size {
+                        Size::XSmall | Size::Small => this.h_6().min_w_6(),
+                        Size::Medium | Size::Large => this.h_8().min_w_8(),
+                        Size::Size(size) => this.h(size).min_w(size),
                     })
-                    .on_click({
-                        let state = self.state.clone();
-                        move |_, window, cx| {
-                            Self::on_decrement(&state, window, cx);
-                        }
-                    }),
-            )
-            .child(
-                Input::new(&self.state)
-                    .appearance(false)
-                    .with_size(self.size)
-                    .disabled(self.disabled)
-                    .gap_0()
-                    .rounded_none()
-                    .text_align(TextAlign::Center)
-                    .when_some(self.prefix, |this, prefix| this.prefix(prefix))
-                    .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
-            )
-            .child(
-                Button::new("plus")
-                    .custom(button_variant)
-                    .rounded(button_radius)
-                    .with_size(self.size)
-                    .icon(IconName::Plus)
-                    .compact()
-                    .tab_stop(false)
-                    .disabled(self.disabled)
-                    .border_corners(Corners {
-                        top_left: false,
-                        top_right: true,
-                        bottom_right: true,
-                        bottom_left: false,
-                    })
-                    .on_click({
-                        let state = self.state.clone();
-                        move |_, window, cx| {
-                            Self::on_increment(&state, window, cx);
-                        }
-                    }),
-            )
-            .render(window, cx)
+                    .rounded_tr(button_radius)
+                    .rounded_br(button_radius)
+                    .child(Icon::new(IconName::Plus).with_size(button_size))
+            })
     }
 }
 

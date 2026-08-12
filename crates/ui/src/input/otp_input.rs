@@ -3,8 +3,8 @@ use gpui::{
     ParentElement as _, RenderOnce, Styled as _, Window, div, prelude::FluentBuilder, px,
 };
 
-use super::input::input_style;
-use crate::{ActiveTheme, Disableable, Icon, IconName, Root, Sizable, Size, h_flex, v_flex};
+use super::input::{input_style, sync_focused_input_registry};
+use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use gpui_base::OtpInput as BaseOtpInput;
 pub use gpui_base::OtpState;
 
@@ -63,14 +63,7 @@ impl RenderOnce for OtpInput {
         self.state.update(cx, |state, cx| {
             let compat_input = compat_input.clone();
             state.set_focus_host(Some(std::rc::Rc::new(move |focused, _, window, cx| {
-                Root::try_update(window, cx, |root, _, cx| {
-                    if focused {
-                        root.focused_input = Some(compat_input.clone());
-                    } else if root.focused_input.as_ref() == Some(&compat_input) {
-                        root.focused_input = None;
-                    }
-                    cx.notify();
-                });
+                sync_focused_input_registry(focused, compat_input.clone(), window, cx);
             })));
             state.sync_focus_host(window, cx);
         });

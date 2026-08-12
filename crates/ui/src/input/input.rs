@@ -19,7 +19,39 @@ use crate::{Sizable, StyleSized};
 use gpui_base::Input as BaseInput;
 use gpui_base::input::NativeMenuItem as BaseNativeMenuItem;
 
-use super::{InputContentType, InputState, content_type::sync_native_content_type};
+use super::{InputContentType, InputState};
+
+fn sync_native_text_content_type(
+    window: &mut Window,
+    content_type: Option<InputContentType>,
+    disabled: bool,
+) {
+    if disabled {
+        return;
+    }
+
+    #[cfg(all(target_os = "macos", not(test)))]
+    gpui_base::input::set_text_content_type(window, content_type);
+
+    #[cfg(any(not(target_os = "macos"), test))]
+    let _ = (window, content_type);
+}
+
+pub(super) fn sync_focused_input_registry(
+    focused: bool,
+    state: Entity<InputState>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    Root::try_update(window, cx, |root, _, cx| {
+        if focused {
+            root.focused_input = Some(state.clone());
+        } else if root.focused_input.as_ref() == Some(&state) {
+            root.focused_input = None;
+        }
+        cx.notify();
+    });
+}
 
 /// Returns `(background, foreground)` colors for input-like components.
 pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
@@ -317,6 +349,19 @@ impl RenderOnce for Input {
             _ => gpui_base::input::InputSize::Medium,
         };
         self.state.update(cx, |state, cx| {
+            state.ensure_highlighter_factory(crate::highlighter::input_highlighter_factory());
+            state.set_editor_style(gpui_base::input::InputEditorStyle {
+                foreground: cx.theme().foreground,
+                muted_foreground: cx.theme().muted_foreground,
+                background: cx.theme().editor_background(),
+                border: cx.theme().border,
+                selection: cx.theme().selection,
+                caret: cx.theme().caret,
+                highlight_styles: cx.theme().highlight_theme.clone(),
+                editor_invisible: cx.theme().highlight_theme.style.editor_invisible,
+                editor_active_line: cx.theme().highlight_theme.style.editor_active_line,
+                editor_gutter_background: cx.theme().highlight_theme.style.editor_gutter_background,
+            });
             state.configure_presentation(self.disabled, base_size, text_align);
             let custom = self.context_menu_builder.clone();
             state.set_context_menu_presenter(Some(Rc::new(move |menu, position, window, cx| {
@@ -337,14 +382,7 @@ impl RenderOnce for Input {
                 menu.show(position, window, cx);
             })));
             state.set_focus_host(Some(Rc::new(|focused, state, window, cx| {
-                Root::try_update(window, cx, |root, _, cx| {
-                    if focused {
-                        root.focused_input = Some(state);
-                    } else if root.focused_input.as_ref() == Some(&state) {
-                        root.focused_input = None;
-                    }
-                    cx.notify();
-                });
+                sync_focused_input_registry(focused, state, window, cx);
             })));
             state.sync_focus_host(window, cx);
         });
@@ -363,7 +401,7 @@ impl RenderOnce for Input {
         .then(|| presentation.value.clone());
         let focused = presentation.focus_handle.is_focused(window) && !presentation.disabled;
         if focused {
-            sync_native_content_type(window, content_type, presentation.disabled);
+            sync_native_text_content_type(window, content_type, presentation.disabled);
         }
 
         let gap_x = match self.size {
