@@ -350,8 +350,9 @@ pub struct InputState {
     /// If set, this overrides the built-in context menu (and ignores [`Self::enable_context_menu`]).
     pub(super) context_menu_builder:
         Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
-    pub(super) context_menu_presenter:
-        Option<Rc<dyn Fn(NativeMenu, Point<Pixels>, &mut Window, &mut App)>>,
+    pub(super) context_menu_presenter: Option<
+        Rc<dyn Fn(NativeMenu, InputContextMenuCapabilities, Point<Pixels>, &mut Window, &mut App)>,
+    >,
     pending_context_menu: Option<(Point<Pixels>, usize)>,
     focus_host: Option<Rc<dyn Fn(bool, Entity<InputState>, &mut Window, &mut App)>>,
 
@@ -507,7 +508,17 @@ impl InputState {
 
     pub fn set_context_menu_presenter(
         &mut self,
-        presenter: Option<Rc<dyn Fn(NativeMenu, Point<Pixels>, &mut Window, &mut App)>>,
+        presenter: Option<
+            Rc<
+                dyn Fn(
+                    NativeMenu,
+                    InputContextMenuCapabilities,
+                    Point<Pixels>,
+                    &mut Window,
+                    &mut App,
+                ),
+            >,
+        >,
     ) {
         self.context_menu_presenter = presenter;
     }
@@ -1838,8 +1849,11 @@ impl InputState {
                 builder(NativeMenu::new(), window, cx)
             });
 
-        if let Some(presenter) = self.context_menu_presenter.as_ref() {
-            presenter(menu, position, window, cx);
+        if let Some(presenter) = self.context_menu_presenter.clone() {
+            let capabilities = self.context_menu_capabilities();
+            cx.defer_in(window, move |_, window, cx| {
+                presenter(menu, capabilities, position, window, cx);
+            });
         }
     }
 
@@ -3243,7 +3257,7 @@ mod tests {
             input.update(cx, |state, cx| {
                 let calls2 = calls.clone();
                 let items2 = items.clone();
-                state.set_context_menu_presenter(Some(Rc::new(move |menu, _, _, _| {
+                state.set_context_menu_presenter(Some(Rc::new(move |menu, _, _, _, _| {
                     calls2.set(calls2.get() + 1);
                     items2.set(menu.items.len());
                 })));

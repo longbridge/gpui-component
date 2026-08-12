@@ -422,51 +422,51 @@ impl RenderOnce for Input {
             });
             state.configure_presentation(self.disabled, cursor_height_ratio, text_align);
             let custom = self.context_menu_builder.clone();
-            let input_state = self.state.clone();
-            state.set_context_menu_presenter(Some(Rc::new(move |_, position, window, cx| {
-                let menu = if let Some(custom) = custom.as_ref() {
-                    custom(NativeMenu::new(), window, cx)
-                } else {
-                    let capabilities = input_state.read(cx).context_menu_capabilities();
-                    let enabled = !capabilities.disabled;
-                    let mut menu = NativeMenu::new();
-                    if capabilities.code_editor {
-                        menu = menu
-                            .menu_with_disabled(
-                                t!("Input.Go to Definition"),
-                                !(enabled && capabilities.go_to_definition),
-                                Box::new(gpui_base::input::GoToDefinition),
-                            )
-                            .menu_with_disabled(
-                                t!("Input.Show Code Actions"),
-                                !(enabled && capabilities.code_actions),
-                                Box::new(gpui_base::input::ToggleCodeActions),
-                            )
-                            .separator();
-                    }
-                    menu.menu_with_disabled(
-                        t!("Input.Cut"),
-                        !(enabled && capabilities.selection),
-                        Box::new(gpui_base::input::Cut),
-                    )
-                    .menu_with_disabled(
-                        t!("Input.Copy"),
-                        !capabilities.selection,
-                        Box::new(gpui_base::input::Copy),
-                    )
-                    .menu_with_disabled(
-                        t!("Input.Paste"),
-                        !(enabled && cx.read_from_clipboard().is_some()),
-                        Box::new(gpui_base::input::Paste),
-                    )
-                    .separator()
-                    .menu(
-                        t!("Input.Select All"),
-                        Box::new(gpui_base::input::SelectAll),
-                    )
-                };
-                menu.show(position, window, cx);
-            })));
+            state.set_context_menu_presenter(Some(Rc::new(
+                move |_, capabilities, position, window, cx| {
+                    let menu = if let Some(custom) = custom.as_ref() {
+                        custom(NativeMenu::new(), window, cx)
+                    } else {
+                        let enabled = !capabilities.disabled;
+                        let mut menu = NativeMenu::new();
+                        if capabilities.code_editor {
+                            menu = menu
+                                .menu_with_disabled(
+                                    t!("Input.Go to Definition"),
+                                    !(enabled && capabilities.go_to_definition),
+                                    Box::new(gpui_base::input::GoToDefinition),
+                                )
+                                .menu_with_disabled(
+                                    t!("Input.Show Code Actions"),
+                                    !(enabled && capabilities.code_actions),
+                                    Box::new(gpui_base::input::ToggleCodeActions),
+                                )
+                                .separator();
+                        }
+                        menu.menu_with_disabled(
+                            t!("Input.Cut"),
+                            !(enabled && capabilities.selection),
+                            Box::new(gpui_base::input::Cut),
+                        )
+                        .menu_with_disabled(
+                            t!("Input.Copy"),
+                            !capabilities.selection,
+                            Box::new(gpui_base::input::Copy),
+                        )
+                        .menu_with_disabled(
+                            t!("Input.Paste"),
+                            !(enabled && cx.read_from_clipboard().is_some()),
+                            Box::new(gpui_base::input::Paste),
+                        )
+                        .separator()
+                        .menu(
+                            t!("Input.Select All"),
+                            Box::new(gpui_base::input::SelectAll),
+                        )
+                    };
+                    menu.show(position, window, cx);
+                },
+            )));
             state.set_focus_host(Some(Rc::new(|focused, state, window, cx| {
                 sync_focused_input_registry(focused, state, window, cx);
             })));

@@ -4,8 +4,6 @@
 //! colors, sizing, and motion belong to applications or the
 //! `gpui-component` façade.
 
-rust_i18n::i18n!("locales", fallback = "en");
-
 mod accordion;
 pub mod actions;
 mod alert_dialog;

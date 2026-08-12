@@ -242,6 +242,16 @@ List:
     zh-TW: 搜尋...
     it: Ricerca...
 Input:
+  Decrement:
+    en: Decrement
+    zh-CN: 减少
+    zh-HK: 減少
+    zh-TW: 減少
+  Increment:
+    en: Increment
+    zh-CN: 增加
+    zh-HK: 增加
+    zh-TW: 增加
   Replace:
     en: Replace
     zh-CN: 替换

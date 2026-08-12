@@ -26,7 +26,6 @@ instant.workspace = true
 lsp-types.workspace = true
 ropey.workspace = true
 regex = "1"
-rust-i18n.workspace = true
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

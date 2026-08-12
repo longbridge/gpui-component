@@ -5,7 +5,6 @@ use gpui::{
     ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled,
     Window, actions, prelude::FluentBuilder as _,
 };
-use rust_i18n::t;
 
 use crate::input::InputState;
 use crate::{Button, Input, StyledExt as _};
@@ -243,7 +242,6 @@ impl RenderOnce for NumberInput {
 
         let decrement_button = decrement_button
             .flex_none()
-            .accessibility_label(t!("Input.Decrement"))
             .tab_stop(false)
             .disabled(disabled)
             .on_click({
@@ -254,7 +252,6 @@ impl RenderOnce for NumberInput {
             });
         let increment_button = increment_button
             .flex_none()
-            .accessibility_label(t!("Input.Increment"))
             .tab_stop(false)
             .disabled(disabled)
             .on_click({
