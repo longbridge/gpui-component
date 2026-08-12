@@ -1,9 +1,9 @@
 mod components;
 
 use gpui::{
-    App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement,
+    App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement, KeyBinding,
     ParentElement as _, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Window,
-    WindowOptions, div, prelude::FluentBuilder as _, px, rgb, size,
+    WindowBounds, WindowOptions, actions, div, prelude::FluentBuilder as _, px, rgb, size,
 };
 use gpui_base::input::InputEditorStyle;
 use gpui_base::input::InputState;
@@ -22,6 +22,8 @@ use gpui_base::{
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
 use std::rc::Rc;
+
+actions!(base_showcase, [Quit]);
 
 pub const COMPONENTS: &[&str] = &[
     "accordion",
@@ -64,6 +66,7 @@ pub const COMPONENTS: &[&str] = &[
 
 pub struct BaseShowcase {
     component: String,
+    navigation_enabled: bool,
     checkbox_checked: bool,
     radio_selected: usize,
     switch_checked: bool,
@@ -157,6 +160,7 @@ impl BaseShowcase {
         cx.observe(&slider, |_, _, cx| cx.notify()).detach();
 
         Self {
+            navigation_enabled: component == "overview",
             component,
             checkbox_checked: true,
             radio_selected: 0,
@@ -206,6 +210,56 @@ impl BaseShowcase {
             example_scroll: ScrollHandle::new(),
         }
     }
+
+    fn overview(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let entity = cx.entity().downgrade();
+        div()
+            .w(px(720.))
+            .max_w_full()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child("GPUI Base"),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(rgb(0x737373))
+                            .child("Choose a component to open its interactive example."),
+                    ),
+            )
+            .child(div().w_full().grid().grid_cols(3).gap_1().children(
+                COMPONENTS.iter().enumerate().map(|(ix, name)| {
+                    let entity = entity.clone();
+                    Button::new(("overview-item", ix))
+                        .h_9()
+                        .px_3()
+                        .flex()
+                        .items_center()
+                        .justify_start()
+                        .border_1()
+                        .border_color(rgb(0xd4d4d4))
+                        .bg(rgb(0xffffff))
+                        .text_xs()
+                        .child(*name)
+                        .on_click(move |_, _, cx| {
+                            _ = entity.update(cx, |this, cx| {
+                                this.component = (*name).to_owned();
+                                cx.notify();
+                            });
+                        })
+                }),
+            ))
+    }
 }
 
 impl Render for BaseShowcase {
@@ -247,20 +301,10 @@ impl Render for BaseShowcase {
             "tooltip" => self.tooltip(cx).into_any_element(),
             "tree" => self.tree().into_any_element(),
             "virtual-list" => self.virtual_list(cx).into_any_element(),
-            _ => div()
-                .flex()
-                .flex_wrap()
-                .gap_3()
-                .children(COMPONENTS.iter().map(|name| {
-                    div()
-                        .px_3()
-                        .py_2()
-                        .border_1()
-                        .border_color(rgb(0xd4d4d4))
-                        .child(*name)
-                }))
-                .into_any_element(),
+            _ => self.overview(cx).into_any_element(),
         };
+        let show_back = self.navigation_enabled && self.component != "overview";
+        let entity = cx.entity().downgrade();
         div()
             .size_full()
             .flex()
@@ -269,6 +313,35 @@ impl Render for BaseShowcase {
             .text_color(rgb(0x171717))
             .text_xs()
             .font_family("Inter Variable")
+            .when(show_back, |this| {
+                this.child(
+                    div()
+                        .h_10()
+                        .flex_none()
+                        .px_3()
+                        .flex()
+                        .items_center()
+                        .border_b_1()
+                        .border_color(rgb(0xe5e5e5))
+                        .child(
+                            Button::new("back-to-overview")
+                                .h_7()
+                                .px_2()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .border_1()
+                                .border_color(rgb(0x171717))
+                                .child("All components")
+                                .on_click(move |_, _, cx| {
+                                    _ = entity.update(cx, |this, cx| {
+                                        this.component = "overview".to_owned();
+                                        cx.notify();
+                                    });
+                                }),
+                        ),
+                )
+            })
             .child(
                 div()
                     .id("showcase-scroll")
@@ -294,13 +367,29 @@ pub fn run(app: Application, component: impl Into<String>) {
     let component = component.into();
     app.run(move |cx: &mut App| {
         gpui_base::init(cx);
+        #[cfg(not(target_family = "wasm"))]
+        {
+            cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
+            cx.on_action(|_: &Quit, cx| cx.quit());
+            cx.on_window_closed(|cx, _| {
+                if cx.windows().is_empty() {
+                    cx.quit();
+                }
+            })
+            .detach();
+        }
         #[cfg(target_family = "wasm")]
         cx.text_system()
             .add_fonts(vec![Cow::Borrowed(
                 include_bytes!("../../../story-web/fonts/Inter-Regular.ttf").as_slice(),
             )])
             .expect("failed to load gpui-base example font");
-        cx.open_window(WindowOptions::default(), move |window, cx| {
+        let options = WindowOptions {
+            #[cfg(not(target_family = "wasm"))]
+            window_bounds: Some(WindowBounds::centered(size(px(840.), px(640.)), cx)),
+            ..WindowOptions::default()
+        };
+        cx.open_window(options, move |window, cx| {
             cx.new(|cx| BaseShowcase::new(component, window, cx))
         })
         .expect("failed to open gpui-base example window");
