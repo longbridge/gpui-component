@@ -18,7 +18,7 @@ pub use self::display_map::{DisplayMap, WrappingIndent};
 pub use self::text_wrapper::{LineLayout, WrapDisplayPoint};
 
 // Re-export FoldRange and extract_fold_ranges
-pub use folding::FoldRange;
+pub use folding::{FoldCandidateProvider, FoldRange};
 
 /// Position in the buffer (logical text).
 ///

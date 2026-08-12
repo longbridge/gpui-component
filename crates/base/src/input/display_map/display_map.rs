@@ -198,7 +198,7 @@ impl DisplayMap {
     /// and merges them with existing (already adjusted) candidates.
     pub fn update_fold_candidates_for_edit(
         &mut self,
-        tree: &dyn crate::input::InputHighlighter,
+        tree: &(impl super::FoldCandidateProvider + ?Sized),
         edit_byte_range: Range<usize>,
         new_text: &Rope,
     ) {

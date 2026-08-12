@@ -3,7 +3,7 @@ use std::{ops::Range, rc::Rc, sync::Arc};
 use gpui::{Context, HighlightStyle, Hsla, SharedString, Window};
 use ropey::Rope;
 
-use super::{FoldRange, InputEdit, InputState};
+use super::{FoldCandidateProvider, InputEdit, InputState};
 
 /// Resolves semantic highlight names into renderable GPUI styles.
 ///
@@ -26,7 +26,7 @@ impl HighlightStyleResolver for NoHighlightStyles {
 ///
 /// Implementations own parsing, incremental state, and language-specific
 /// behavior. Base only asks for styled ranges and fold candidates.
-pub trait InputHighlighter {
+pub trait InputHighlighter: FoldCandidateProvider {
     fn language(&self) -> SharedString;
 
     fn update(
@@ -43,13 +43,6 @@ pub trait InputHighlighter {
         range: &Range<usize>,
         resolver: &dyn HighlightStyleResolver,
     ) -> Vec<(Range<usize>, HighlightStyle)>;
-
-    fn fold_ranges(&self, text: &Rope) -> Vec<FoldRange>;
-
-    fn fold_ranges_for_edit(&self, range: Range<usize>, text: &Rope) -> Vec<FoldRange> {
-        let _ = range;
-        self.fold_ranges(text)
-    }
 }
 
 pub type InputHighlighterFactory = Rc<dyn Fn(&str) -> Option<Box<dyn InputHighlighter>>>;

@@ -44,7 +44,9 @@ pub use diagnostics::{
     Diagnostic, DiagnosticEntry, DiagnosticRelatedInformation, DiagnosticSet, DiagnosticSeverity,
     DiagnosticSummary, DiagnosticTag, RelatedInformation,
 };
-pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange, WrappingIndent};
+pub use display_map::{
+    BufferPoint, DisplayMap, DisplayPoint, FoldCandidateProvider, FoldRange, WrappingIndent,
+};
 pub use highlighting::{
     HighlightStyleResolver, InputEditorStyle, InputHighlighter, InputHighlighterFactory,
     NoHighlightStyles, SharedHighlightStyleResolver,
