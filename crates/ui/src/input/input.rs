@@ -482,7 +482,6 @@ impl RenderOnce for Input {
             .input_py(self.size)
             .input_h(self.size)
             .input_text_size(self.size)
-            .when(!self.disabled, |this| this.cursor_text())
             .items_center()
             .when(presentation.multi_line, |this| {
                 this.h_auto()

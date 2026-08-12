@@ -3234,6 +3234,7 @@ impl Render for InputState {
             )
             .on_mouse_move(window.listener_for(&entity, InputState::on_mouse_move))
             .on_scroll_wheel(window.listener_for(&entity, InputState::on_scroll_wheel))
+            .when(!self.disabled, |this| this.cursor_text())
             .flex_1()
             .when(self.mode.is_multi_line(), |this| this.h_full())
             .flex_grow_1()

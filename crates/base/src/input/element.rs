@@ -53,6 +53,8 @@ pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(10.);
 const FOLD_ICON_WIDTH: Pixels = px(14.);
 const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
 const MAX_HIGHLIGHT_LINE_LENGTH: usize = 10_000;
+const FOLD_CHEVRON_RIGHT_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
+const FOLD_CHEVRON_DOWN_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
 
 fn compose_decorations(
     mut styles: Vec<(Range<usize>, HighlightStyle)>,
@@ -1189,12 +1191,27 @@ impl TextElement {
                 .as_ref()
                 .map(|render| render(ix, info.is_folded))
                 .unwrap_or_else(|| {
-                    gpui::div()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(if info.is_folded { "›" } else { "⌄" })
-                        .into_any_element()
+                    let (path, svg) = if info.is_folded {
+                        ("input-fold-chevron-right", FOLD_CHEVRON_RIGHT_SVG)
+                    } else {
+                        ("input-fold-chevron-down", FOLD_CHEVRON_DOWN_SVG)
+                    };
+                    gpui::canvas(
+                        |_, _, _| {},
+                        move |bounds, _, window, cx| {
+                            let color = window.text_style().color;
+                            let _ = window.paint_svg(
+                                bounds,
+                                path.into(),
+                                Some(svg),
+                                gpui::TransformationMatrix::default(),
+                                color,
+                                cx,
+                            );
+                        },
+                    )
+                    .size(FOLD_ICON_WIDTH)
+                    .into_any_element()
                 });
             let mut icon = gpui::div()
                 .id(("fold", ix))
@@ -2104,7 +2121,10 @@ impl Element for TextElement {
 
         // Paint selections
         if window.is_window_active() {
-            let secondary_selection = editor_style.selection.opacity(0.35);
+            let secondary_selection = Hsla {
+                s: 0.1,
+                ..editor_style.selection
+            };
             for (path, is_active) in prepaint.search_match_paths.iter() {
                 window.paint_path(path.clone(), secondary_selection);
 
