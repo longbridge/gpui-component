@@ -121,9 +121,19 @@ mod tests {
 
     #[test]
     fn test_word_range() {
-        let rope = Rope::from(
-            "test text:\nabcde 中文🎉 test\nhello[()]\ntest_connector ____\nRope\nrök\ngrande île\n",
-        );
+        use indoc::indoc;
+
+        let rope = Rope::from(indoc! {
+            r#"
+            test text:
+            abcde 中文🎉 test
+            hello[()]
+            test_connector ____
+            Rope
+            rök
+            grande île
+            "#
+        });
 
         let tests = vec![
             (0, 0, Some("test")),
