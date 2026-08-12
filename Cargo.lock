@@ -3109,15 +3109,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-component-cli"
-version = "0.5.2"
-dependencies = [
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "gpui-component-macros"
 version = "0.5.1"
 dependencies = [
