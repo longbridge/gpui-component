@@ -1184,10 +1184,25 @@ impl TextElement {
             );
 
             // Create and prepaint icon
+            let child = self
+                .state
+                .read(cx)
+                .editor_style
+                .fold_icon_renderer
+                .as_ref()
+                .map(|render| render(ix, info.is_folded))
+                .unwrap_or_else(|| {
+                    gpui::div()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(if info.is_folded { "›" } else { "⌄" })
+                        .into_any_element()
+                });
             let mut icon = gpui::div()
                 .id(("fold", ix))
                 .size(FOLD_ICON_WIDTH)
-                .child(if info.is_folded { "›" } else { "⌄" })
+                .child(child)
                 .on_mouse_down(MouseButton::Left, {
                     let state = self.state.clone();
                     let buffer_line = info.buffer_line;

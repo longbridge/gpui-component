@@ -361,6 +361,20 @@ impl RenderOnce for Input {
                 editor_invisible: cx.theme().highlight_theme.style.editor_invisible,
                 editor_active_line: cx.theme().highlight_theme.style.editor_active_line,
                 editor_gutter_background: cx.theme().highlight_theme.style.editor_gutter_background,
+                fold_icon_renderer: Some(Rc::new(|ix, is_folded| {
+                    Button::new(("fold-icon", ix))
+                        .ghost()
+                        .icon(if is_folded {
+                            IconName::ChevronRight
+                        } else {
+                            IconName::ChevronDown
+                        })
+                        .xsmall()
+                        .rounded_xs()
+                        .size(px(14.))
+                        .selected(is_folded)
+                        .into_any_element()
+                })),
             });
             state.configure_presentation(self.disabled, base_size, text_align);
             let custom = self.context_menu_builder.clone();

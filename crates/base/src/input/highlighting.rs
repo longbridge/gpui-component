@@ -1,6 +1,6 @@
 use std::{ops::Range, rc::Rc, sync::Arc};
 
-use gpui::{Context, HighlightStyle, Hsla, SharedString, Window};
+use gpui::{AnyElement, Context, HighlightStyle, Hsla, SharedString, Window};
 use ropey::Rope;
 
 use super::{FoldRange, InputEdit, InputState};
@@ -54,6 +54,7 @@ pub trait InputHighlighter {
 
 pub type InputHighlighterFactory = Rc<dyn Fn(&str) -> Option<Box<dyn InputHighlighter>>>;
 pub type SharedHighlightStyleResolver = Arc<dyn HighlightStyleResolver>;
+pub type FoldIconRenderer = Rc<dyn Fn(usize, bool) -> AnyElement>;
 
 /// Application-owned colors and highlight resolver consumed by editor painting.
 #[derive(Clone)]
@@ -68,6 +69,7 @@ pub struct InputEditorStyle {
     pub editor_invisible: Option<Hsla>,
     pub editor_active_line: Option<Hsla>,
     pub editor_gutter_background: Option<Hsla>,
+    pub fold_icon_renderer: Option<FoldIconRenderer>,
 }
 
 impl Default for InputEditorStyle {
@@ -83,6 +85,7 @@ impl Default for InputEditorStyle {
             editor_invisible: None,
             editor_active_line: None,
             editor_gutter_background: None,
+            fold_icon_renderer: None,
         }
     }
 }
