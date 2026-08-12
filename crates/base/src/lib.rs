@@ -132,7 +132,7 @@ pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use styled::styled_ext_reflection_methods;
-pub use styled::{FocusableExt, StyledExt, box_shadow, h_flex, v_flex};
+pub use styled::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
 pub use switch::{
     Switch, SwitchStyles, SwitchThumb, SwitchThumbStyles, SwitchTrack, SwitchTrackStyles,
 };

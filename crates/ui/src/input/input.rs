@@ -14,7 +14,7 @@ use crate::native_menu::NativeMenu;
 use crate::spinner::Spinner;
 use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
-use crate::{Selectable, StyledExt, h_flex};
+use crate::{RoleOverride, Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 use gpui_base::Input as BaseInput;
 use gpui_base::input::NativeMenuItem as BaseNativeMenuItem;
@@ -83,7 +83,7 @@ pub struct Input {
     tab_index: isize,
     selected: bool,
     content_type: Option<InputContentType>,
-    role: Option<Role>,
+    role: RoleOverride,
     accessibility_id: Option<SharedString>,
     aria_label: Option<SharedString>,
 
@@ -130,7 +130,7 @@ impl Input {
             tab_index: 0,
             selected: false,
             content_type: None,
-            role: None,
+            role: RoleOverride::default(),
             accessibility_id: None,
             aria_label: None,
             context_menu_builder: None,
@@ -212,8 +212,8 @@ impl Input {
     /// Override the accessible role for the input.
     ///
     /// If unset, the role is inferred from multi-line mode and content type.
-    pub fn role(mut self, role: Role) -> Self {
-        self.role = Some(role);
+    pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
+        self.role = role.into();
         self
     }
 
@@ -264,17 +264,15 @@ impl Input {
     fn accessibility_role(
         is_multi_line: bool,
         content_type: Option<InputContentType>,
-        role: Option<Role>,
-    ) -> Role {
-        if let Some(role) = role {
-            return role;
-        }
-
-        if is_multi_line {
-            return Role::MultilineTextInput;
-        }
-
-        content_type.map_or(Role::TextInput, InputContentType::accessibility_role)
+        role: RoleOverride,
+    ) -> Option<Role> {
+        role.resolve(|| {
+            if is_multi_line {
+                Role::MultilineTextInput
+            } else {
+                content_type.map_or(Role::TextInput, InputContentType::accessibility_role)
+            }
+        })
     }
 
     fn exposes_accessibility_value(masked: bool, content_type: Option<InputContentType>) -> bool {
@@ -631,15 +629,22 @@ mod tests {
         ];
 
         for (content_type, role) in cases {
-            assert_eq!(Input::accessibility_role(false, content_type, None), role);
+            assert_eq!(
+                Input::accessibility_role(false, content_type, RoleOverride::Implicit),
+                Some(role)
+            );
         }
     }
 
     #[test]
     fn multiline_inputs_keep_multiline_accessibility_role() {
         assert_eq!(
-            Input::accessibility_role(true, Some(InputContentType::Password), None),
-            Role::MultilineTextInput
+            Input::accessibility_role(
+                true,
+                Some(InputContentType::Password),
+                RoleOverride::Implicit
+            ),
+            Some(Role::MultilineTextInput)
         );
     }
 
@@ -649,18 +654,43 @@ mod tests {
             Input::accessibility_role(
                 false,
                 Some(InputContentType::Password),
-                Some(Role::TextInput)
+                Role::TextInput.into()
             ),
-            Role::TextInput
+            Some(Role::TextInput)
         );
         assert_eq!(
             Input::accessibility_role(
                 true,
                 Some(InputContentType::Password),
-                Some(Role::TextInput)
+                Role::TextInput.into()
             ),
-            Role::TextInput
+            Some(Role::TextInput)
         );
+    }
+
+    #[test]
+    fn presentational_role_emits_no_accessibility_node() {
+        assert_eq!(
+            Input::accessibility_role(
+                false,
+                Some(InputContentType::Password),
+                RoleOverride::Presentational
+            ),
+            None
+        );
+        assert_eq!(
+            Input::accessibility_role(true, None, RoleOverride::Presentational),
+            None
+        );
+    }
+
+    #[test]
+    fn role_option_converts_to_the_matching_override() {
+        assert_eq!(
+            RoleOverride::from(Some(Role::Button)),
+            RoleOverride::Role(Role::Button)
+        );
+        assert_eq!(RoleOverride::from(None), RoleOverride::Presentational);
     }
 
     #[gpui::test]

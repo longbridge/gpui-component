@@ -283,6 +283,7 @@ pub struct Input {
     bordered: bool,
     focus_bordered: bool,
     focused: bool,
+    role: crate::RoleOverride,
 }
 
 impl Input {
@@ -295,7 +296,12 @@ impl Input {
             bordered: true,
             focus_bordered: true,
             focused: false,
+            role: crate::RoleOverride::Implicit,
         }
+    }
+    pub fn role(mut self, role: impl Into<crate::RoleOverride>) -> Self {
+        self.role = role.into();
+        self
     }
 
     pub fn appearance(mut self, appearance: bool) -> Self {
@@ -349,6 +355,9 @@ impl RenderOnce for Input {
         let tokens = cx.theme().tokens;
 
         self.base
+            .when_some(self.role.resolve(|| Role::TextInput), |this, role| {
+                this.role(role)
+            })
             .when(self.appearance, |this| {
                 this.rounded(tokens.radius.md).when(self.bordered, |this| {
                     this.border_1()

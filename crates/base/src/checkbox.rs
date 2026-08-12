@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{StateStyle, StyledExt as _};
+use crate::{RoleOverride, StateStyle, StyledExt as _};
 
 type ChangeHandler = Rc<dyn Fn(CheckboxState, &mut Window, &mut App)>;
 
@@ -56,6 +56,7 @@ pub struct Checkbox {
     tab_index: isize,
     tab_stop: bool,
     provided_focus_handle: Option<FocusHandle>,
+    role: RoleOverride,
 }
 
 impl Checkbox {
@@ -75,7 +76,12 @@ impl Checkbox {
             tab_index: 0,
             tab_stop: true,
             provided_focus_handle: None,
+            role: RoleOverride::Implicit,
         }
+    }
+    pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
+        self.role = role.into();
+        self
     }
 
     /// Sets the controlled semantic state.
@@ -358,7 +364,9 @@ impl RenderOnce for Checkbox {
         let on_change = self.on_change;
 
         self.base
-            .role(Role::CheckBox)
+            .when_some(self.role.resolve(|| Role::CheckBox), |this, role| {
+                this.role(role)
+            })
             .aria_toggled(self.state.toggled())
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)

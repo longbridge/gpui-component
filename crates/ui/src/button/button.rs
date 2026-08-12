@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use crate::{
-    ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, Selectable, Sizable, Size,
-    StyleSized, StyledExt,
+    ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, RoleOverride, Selectable,
+    Sizable, Size, StyleSized, StyledExt,
     button::ButtonIcon,
     h_flex,
     select::Caret,
@@ -191,6 +191,7 @@ pub struct Button {
     disabled: bool,
     pub(crate) selected: bool,
     toggled: Option<bool>,
+    role: RoleOverride,
     variant: ButtonVariant,
     rounded: ButtonRounded,
     outline: bool,
@@ -232,6 +233,7 @@ impl Button {
             disabled: false,
             selected: false,
             toggled: None,
+            role: RoleOverride::default(),
             variant: ButtonVariant::default(),
             rounded: ButtonRounded::Medium,
             border_corners: Corners {
@@ -254,6 +256,11 @@ impl Button {
             tab_index: 0,
             tab_stop: true,
         }
+    }
+
+    pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
+        self.role = role.into();
+        self
     }
 
     /// Set the outline style of the Button.
@@ -600,11 +607,13 @@ impl RenderOnce for Button {
                 this.when(has_content, |this| this.justify_between())
                     .child(Caret::new(self.size).text_color(normal_style.fg.opacity(0.75)))
             });
-        root.role(if self.variant.is_link() {
-            Role::Link
-        } else {
-            Role::Button
-        })
+        root.role(self.role.resolve(|| {
+            if self.variant.is_link() {
+                Role::Link
+            } else {
+                Role::Button
+            }
+        }))
         .selected(self.selected)
         .disabled(disabled)
         .styles(|styles| {

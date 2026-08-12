@@ -1,7 +1,35 @@
 use gpui::{
     App, BoxShadow, Corners, DefiniteLength, Div, Edges, FocusHandle, Hsla, ParentElement, Pixels,
-    Refineable as _, StyleRefinement, Styled, Window, div, hsla, point, px,
+    Refineable as _, Role, StyleRefinement, Styled, Window, div, hsla, point, px,
 };
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RoleOverride {
+    #[default]
+    Implicit,
+    Presentational,
+    Role(Role),
+}
+
+impl RoleOverride {
+    pub fn resolve(self, default: impl FnOnce() -> Role) -> Option<Role> {
+        match self {
+            Self::Implicit => Some(default()),
+            Self::Presentational => None,
+            Self::Role(role) => Some(role),
+        }
+    }
+}
+impl From<Role> for RoleOverride {
+    fn from(role: Role) -> Self {
+        Self::Role(role)
+    }
+}
+impl From<Option<Role>> for RoleOverride {
+    fn from(role: Option<Role>) -> Self {
+        role.map_or(Self::Presentational, Self::Role)
+    }
+}
 
 use crate::theme::ActiveTheme as _;
 

@@ -8,7 +8,7 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::{Selectable, StateStyle, StyledExt as _};
+use crate::{RoleOverride, Selectable, StateStyle, StyledExt as _};
 
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
@@ -27,7 +27,7 @@ pub struct Button {
     children: SmallVec<[AnyElement; 2]>,
     on_click: Option<ClickHandler>,
     accessibility_label: Option<SharedString>,
-    role: Role,
+    role: RoleOverride,
     provided_focus_handle: Option<FocusHandle>,
     tab_index: isize,
     tab_stop: bool,
@@ -46,7 +46,7 @@ impl Button {
             children: SmallVec::new(),
             on_click: None,
             accessibility_label: None,
-            role: Role::Button,
+            role: RoleOverride::Implicit,
             provided_focus_handle: None,
             tab_index: 0,
             tab_stop: true,
@@ -83,8 +83,8 @@ impl Button {
     }
 
     /// Overrides the accessibility role. The default is [`Role::Button`].
-    pub fn role(mut self, role: Role) -> Self {
-        self.role = role;
+    pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
+        self.role = role.into();
         self
     }
 
@@ -198,7 +198,9 @@ impl RenderOnce for Button {
         let on_click = self.on_click;
 
         self.base
-            .role(self.role)
+            .when_some(self.role.resolve(|| Role::Button), |this, role| {
+                this.role(role)
+            })
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
