@@ -3,7 +3,7 @@ use gpui::{App, Context, Hsla, SharedString, Task, Window};
 use ropey::Rope;
 use std::rc::Rc;
 
-use crate::input::InputState;
+use crate::input::{InputState, RopeExt};
 
 mod code_actions;
 mod completions;
@@ -107,5 +107,23 @@ impl Lsp {
         self._hover_task = Task::ready(Ok(()));
         self._document_color_task = Task::ready(());
         self._semantic_tokens_task = Task::ready(());
+    }
+}
+
+impl InputState {
+    /// Apply a list of [`lsp_types::TextEdit`] to mutate the text.
+    pub fn apply_lsp_edits(
+        &mut self,
+        text_edits: &Vec<lsp_types::TextEdit>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        for edit in text_edits {
+            let start = self.text.position_to_offset(&edit.range.start);
+            let end = self.text.position_to_offset(&edit.range.end);
+
+            let range_utf16 = self.range_to_utf16(&(start..end));
+            self.replace_text_in_range_silent(Some(range_utf16), &edit.new_text, window, cx);
+        }
     }
 }

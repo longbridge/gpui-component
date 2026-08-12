@@ -1,7 +1,6 @@
 use super::*;
 use std::ops::Range;
 
-use crate::input::RopeExt as _;
 use lsp_types::{CompletionItem, Hover};
 
 #[derive(Clone, Debug, Default)]
