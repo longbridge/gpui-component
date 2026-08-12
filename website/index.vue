@@ -208,18 +208,32 @@
                             :class="`cap__preview--${cap.icon}`"
                             aria-hidden="true"
                         >
-                            <template v-if="cap.icon === 'table'">
+                            <template v-if="cap.icon === 'perf'">
+                                <svg
+                                    viewBox="0 0 240 60"
+                                    preserveAspectRatio="none"
+                                >
+                                    <polyline
+                                        class="cap__spark"
+                                        points="0,14 20,10 40,15 60,11 80,9 100,14 120,10 140,13 160,9 180,14 200,10 220,13 240,9"
+                                    />
+                                    <line
+                                        class="cap__baseline"
+                                        x1="0"
+                                        y1="42"
+                                        x2="240"
+                                        y2="42"
+                                    />
+                                </svg>
+                            </template>
+                            <template v-else-if="cap.icon === 'table'">
                                 <i v-for="n in 5" :key="n"><b /><b /><b /></i>
                             </template>
-                            <template v-else-if="cap.icon === 'dock'">
-                                <b /><b /><b />
-                            </template>
-                            <template v-else-if="cap.icon === 'chart'">
-                                <u
-                                    v-for="h in [38, 62, 46, 88, 58, 74, 96]"
-                                    :key="h"
-                                    :style="{ height: `${h}%` }"
-                                />
+                            <template v-else-if="cap.icon === 'list'">
+                                <i v-for="w in [86, 68, 92, 74, 60]" :key="w">
+                                    <b :style="{ width: `${w}%` }" />
+                                </i>
+                                <span class="cap__scroll" />
                             </template>
                             <template v-else-if="cap.icon === 'editor'">
                                 <i
@@ -233,11 +247,11 @@
                                     />
                                 </i>
                             </template>
-                            <template v-else-if="cap.icon === 'theme'">
-                                <em v-for="t in 6" :key="t" />
+                            <template v-else-if="cap.icon === 'dock'">
+                                <b /><b /><b />
                             </template>
                             <template v-else>
-                                <span />
+                                <em v-for="t in 6" :key="t" />
                             </template>
                         </div>
                     </article>
@@ -1342,6 +1356,7 @@ html[lang^="zh"] .section-kicker {
 /* Each capability ends in a small preview pane, framed like a control surface
    so the six cards share one rhythm. These are diagrams, not product mocks. */
 .cap__preview {
+    position: relative;
     display: flex;
     align-items: stretch;
     gap: 0.32rem;
@@ -1354,9 +1369,10 @@ html[lang^="zh"] .section-kicker {
     background: var(--sidebar);
 }
 
-/* Every variant lays out inside the same padding box with the same gap, so the
+/* Every variant lays out inside the same padding box with the same gap, so all
    six panes line up with each other. */
 .cap__preview--table,
+.cap__preview--list,
 .cap__preview--editor {
     flex-direction: column;
     justify-content: center;
@@ -1386,13 +1402,28 @@ html[lang^="zh"] .section-kicker {
         flex: 0.55;
     }
 
-    /* Header row, then a selected row. */
+    /* A header row, then a selected row. */
     i:first-child b {
         background: color-mix(in srgb, var(--foreground) 40%, transparent);
     }
     i:nth-child(3) b:first-child {
         background: var(--data-2);
     }
+}
+
+.cap__preview--list i:nth-child(2) b {
+    background: var(--data-2);
+}
+
+/* The scrollbar is what makes a virtualized list legible as one. */
+.cap__scroll {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 0.18rem;
+    height: 42%;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--foreground) 26%, transparent);
 }
 
 .cap__preview--editor {
@@ -1406,6 +1437,28 @@ html[lang^="zh"] .section-kicker {
     i:nth-child(3) b:last-child {
         background: color-mix(in srgb, var(--success) 60%, transparent);
     }
+}
+
+/* A frame-time trace that stays flat — the point is the absence of spikes. */
+.cap__preview--perf svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.cap__spark {
+    fill: none;
+    stroke: var(--data-2);
+    stroke-linejoin: round;
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+}
+
+.cap__baseline {
+    stroke: var(--border);
+    stroke-dasharray: 3 3;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
 }
 
 .cap__preview--dock {
@@ -1425,23 +1478,6 @@ html[lang^="zh"] .section-kicker {
     }
     b:last-child {
         flex: 0.8;
-    }
-}
-
-.cap__preview--chart {
-    align-items: flex-end;
-
-    u {
-        flex: 1;
-        border-radius: 0.18rem 0.18rem 0 0;
-        background: var(--input);
-    }
-
-    u:nth-child(4) {
-        background: var(--data-2);
-    }
-    u:last-child {
-        background: var(--data-1);
     }
 }
 
@@ -1469,21 +1505,6 @@ html[lang^="zh"] .section-kicker {
     }
     em:nth-child(6) {
         background: var(--data-2);
-    }
-}
-
-.cap__preview--a11y {
-    align-items: center;
-    justify-content: center;
-
-    span {
-        width: 6rem;
-        height: 1.9rem;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-control);
-        background: var(--background);
-        outline: 2px solid var(--data-2);
-        outline-offset: 3px;
     }
 }
 
