@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use gpui::{
-    AnyElement, App, Entity, EntityId, Global, IntoElement, ParentElement as _, Styled as _,
-    WeakEntity, Window, deferred, div, px,
-};
+use gpui::{AnyElement, App, Entity, EntityId, Global, IntoElement, WeakEntity, Window};
 use ropey::Rope;
 
 use super::{
@@ -32,6 +29,24 @@ struct InputOverlayHost {
     diagnostic_signature: String,
 }
 
+#[derive(Default)]
+pub(super) struct InputOverlays {
+    pub search: Option<AnyElement>,
+    pub floating: Vec<AnyElement>,
+}
+
+impl InputOverlays {
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        usize::from(self.search.is_some()) + self.floating.len()
+    }
+
+    #[cfg(test)]
+    fn is_empty(&self) -> bool {
+        self.search.is_none() && self.floating.is_empty()
+    }
+}
+
 impl InputOverlayHost {
     fn new(state: Entity<InputState>, window: &mut Window, cx: &mut App) -> Self {
         let search = SearchPanel::new(state.clone(), window, cx);
@@ -56,7 +71,7 @@ impl InputOverlayHost {
         state: &Entity<InputState>,
         window: &mut Window,
         cx: &mut App,
-    ) -> Vec<AnyElement> {
+    ) -> InputOverlays {
         let (
             search_open,
             replace_mode,
@@ -163,34 +178,21 @@ impl InputOverlayHost {
                 .map(|entry| DiagnosticPopover::new(entry, state.clone(), cx));
         }
 
-        let mut overlays = Vec::with_capacity(5);
-        if search_open {
-            overlays.push(
-                deferred(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .right_0()
-                        .w(px(600.))
-                        .max_w_full()
-                        .child(self.search.clone()),
-                )
-                .into_any_element(),
-            );
-        }
+        let search = search_open.then(|| self.search.clone().into_any_element());
+        let mut floating = Vec::with_capacity(4);
         if completion_open {
-            overlays.push(self.completion.clone().into_any_element());
+            floating.push(self.completion.clone().into_any_element());
         }
         if code_action_open {
-            overlays.push(self.code_actions.clone().into_any_element());
+            floating.push(self.code_actions.clone().into_any_element());
         }
         if let Some(hover) = self.hover.as_ref() {
-            overlays.push(hover.clone().into_any_element());
+            floating.push(hover.clone().into_any_element());
         }
         if let Some(diagnostic) = self.diagnostic.as_ref() {
-            overlays.push(diagnostic.clone().into_any_element());
+            floating.push(diagnostic.clone().into_any_element());
         }
-        overlays
+        InputOverlays { search, floating }
     }
 }
 
@@ -198,7 +200,7 @@ pub(super) fn render_overlays(
     state: &Entity<InputState>,
     window: &mut Window,
     cx: &mut App,
-) -> Vec<AnyElement> {
+) -> InputOverlays {
     install_action_handler(state, cx);
     let has_overlay = {
         let state = state.read(cx);
@@ -216,7 +218,7 @@ pub(super) fn render_overlays(
                 .hosts
                 .retain(|_, (owner, _)| owner.upgrade().is_some());
         }
-        return Vec::new();
+        return InputOverlays::default();
     }
 
     if !cx.has_global::<InputOverlayRegistry>() {
@@ -290,6 +292,7 @@ mod tests {
                 InputState::new(window, cx)
                     .multi_line(true)
                     .searchable(true)
+                    .replaceable(true)
             }),
         });
         let state = probe.read_with(cx, |probe, _| probe.state.clone());
@@ -301,6 +304,7 @@ mod tests {
                 state.set_selected_range(4..7, cx);
                 state.open_search(true, cx);
                 assert_eq!(state.search_session().query, "bar");
+                assert!(state.search_session().replace_mode);
                 state.present_completion_items(
                     0,
                     "f",
@@ -332,7 +336,10 @@ mod tests {
             });
 
             let mut host = InputOverlayHost::new(state.clone(), window, cx);
-            assert_eq!(host.sync(&state, window, cx).len(), 5);
+            let overlays = host.sync(&state, window, cx);
+            assert!(overlays.search.is_some());
+            assert_eq!(overlays.floating.len(), 4);
+            assert_eq!(overlays.len(), 5);
             assert_eq!(render_overlays(&state, window, cx).len(), 5);
             assert!(
                 cx.global::<InputOverlayRegistry>()

@@ -300,6 +300,7 @@ impl Input {
         paddings: EdgesRefinement<DefiniteLength>,
         input_state: &Entity<InputState>,
         state: &InputState,
+        search_panel: Option<AnyElement>,
         window: &Window,
     ) -> impl IntoElement {
         let base_size = window.text_style().font_size;
@@ -328,6 +329,7 @@ impl Input {
 
         v_flex()
             .size_full()
+            .children(search_panel)
             .child(div().relative().flex_1().child(input_state.clone()))
     }
 }
@@ -505,7 +507,13 @@ impl RenderOnce for Input {
             }))
             .when(presentation.multi_line, |mut this| {
                 let paddings = this.style().padding.clone();
-                this.child(Self::render_editor(paddings, &self.state, &state, window))
+                this.child(Self::render_editor(
+                    paddings,
+                    &self.state,
+                    &state,
+                    overlays.search,
+                    window,
+                ))
             })
             .when(!presentation.multi_line, |this| {
                 this.child(self.state.clone())
@@ -538,7 +546,7 @@ impl RenderOnce for Input {
                 )
             })
             .relative()
-            .children(overlays)
+            .children(overlays.floating)
             .render(window, cx)
     }
 }

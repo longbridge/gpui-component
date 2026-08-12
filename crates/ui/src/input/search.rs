@@ -234,6 +234,10 @@ impl SearchPanel {
         }
 
         self.session.replace_mode = !self.session.replace_mode;
+        let replace_mode = self.session.replace_mode;
+        let _ = self.editor.update(cx, |state, cx| {
+            state.set_search_replace_mode(replace_mode, cx);
+        });
         let focus_handle = if self.session.replace_mode {
             self.replace_input.read(cx).focus_handle(cx)
         } else {

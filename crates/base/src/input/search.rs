@@ -86,6 +86,12 @@ impl InputState {
         &self.search_session
     }
 
+    #[doc(hidden)]
+    pub fn set_search_replace_mode(&mut self, replace_mode: bool, cx: &mut Context<Self>) {
+        self.search_session.replace_mode = replace_mode && self.replaceable;
+        cx.notify();
+    }
+
     pub fn is_replaceable(&self) -> bool {
         self.replaceable
     }
