@@ -196,7 +196,7 @@ impl DisplayMap {
     ///
     /// Extracts new fold candidates only within the edited byte range
     /// and merges them with existing (already adjusted) candidates.
-    pub fn merge_fold_candidates_for_edit(
+    pub fn update_fold_candidates_for_edit(
         &mut self,
         edit_byte_range: Range<usize>,
         new_text: &Rope,
