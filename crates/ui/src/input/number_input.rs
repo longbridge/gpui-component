@@ -11,7 +11,7 @@ use gpui::{
 };
 
 use crate::{
-    Disableable, IconName, Sizable, Size, StyledExt as _,
+    Disableable, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
     button::{Button, ButtonCustomVariant, ButtonVariants as _},
     h_flex,
 };
@@ -326,6 +326,10 @@ impl RenderOnce for NumberInput {
             .on_action(window.listener_for(&self.state, InputState::on_action_increment))
             .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
             .flex_1()
+            // The frame is drawn here, so the fixed input height must be held
+            // here too: on the children it would add up with the 1px border
+            // and grow the control past a plain `Input` of the same size.
+            .input_h(self.size)
             .rounded(cx.theme().radius)
             // The buttons are ghost, so the frame around the whole control is
             // drawn here instead of by each of its parts.
@@ -342,6 +346,7 @@ impl RenderOnce for NumberInput {
                     .custom(button_variant)
                     .rounded(button_radius)
                     .with_size(self.size)
+                    .h_full()
                     .icon(IconName::Minus)
                     .compact()
                     .tab_stop(false)
@@ -364,6 +369,7 @@ impl RenderOnce for NumberInput {
                 Input::new(&self.state)
                     .appearance(false)
                     .with_size(self.size)
+                    .h_full()
                     .disabled(self.disabled)
                     .gap_0()
                     .rounded_none()
@@ -376,6 +382,7 @@ impl RenderOnce for NumberInput {
                     .custom(button_variant)
                     .rounded(button_radius)
                     .with_size(self.size)
+                    .h_full()
                     .icon(IconName::Plus)
                     .compact()
                     .tab_stop(false)
