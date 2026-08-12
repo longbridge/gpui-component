@@ -210,11 +210,7 @@ fn base_combobox_accepts_application_owned_content() {
 
 #[test]
 fn base_input_frames_accept_application_owned_content() {
-    let _ = gpui_base::Input::new("input")
-        .appearance(true)
-        .bordered(true)
-        .focused(false)
-        .child(gpui::div());
+    let _ = gpui_base::Input::new("input").child(gpui::div());
     fn build_number(state: &gpui::Entity<gpui_base::input::InputState>) {
         let _ = gpui_base::NumberInput::new(state)
             .on_step(|_, _, _| {})

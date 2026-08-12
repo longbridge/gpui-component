@@ -503,10 +503,16 @@ impl RenderOnce for Input {
 
         let state = self.state.read(cx);
         BaseInput::new(("input", self.state.entity_id()))
-            .appearance(self.appearance)
-            .bordered(self.bordered)
-            .focus_bordered(self.focus_bordered)
             .focused(focused)
+            .disabled(disabled)
+            .styles(|styles| {
+                styles.focused(|style| {
+                    style.when(
+                        self.appearance && self.bordered && self.focus_bordered,
+                        |style| style.focused_border(cx),
+                    )
+                })
+            })
             .role(accessibility_role)
             .when_some(self.accessibility_id, |this, id| this.accessibility_id(id))
             .when_some(aria_label, |this, label| this.aria_label(label))
@@ -534,8 +540,8 @@ impl RenderOnce for Input {
             .when(self.appearance, |this| {
                 this.bg(bg)
                     .rounded(cx.theme().radius)
-                    .when(self.bordered && focused && self.focus_bordered, |this| {
-                        this.focused_border(cx)
+                    .when(self.bordered, |this| {
+                        this.border_1().border_color(cx.theme().input)
                     })
             })
             .items_center()

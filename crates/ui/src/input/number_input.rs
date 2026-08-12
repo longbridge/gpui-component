@@ -111,9 +111,7 @@ impl RenderOnce for NumberInput {
         };
 
         BaseNumberInput::new(&self.state)
-            .appearance(self.appearance)
             .disabled(self.disabled)
-            .focused(focused)
             .flex_1()
             .rounded(cx.theme().radius)
             // The buttons are ghost, so the frame around the whole control is

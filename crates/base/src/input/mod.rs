@@ -1,8 +1,8 @@
-use crate::{StyledExt as _, theme::ActiveTheme as _};
+use crate::{StateStyle, StyledExt as _};
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
-    div, prelude::FluentBuilder as _,
+    Refineable as _, RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement,
+    Styled, Window, div, prelude::FluentBuilder as _,
 };
 
 /// Character used by masked editor modes.
@@ -62,19 +62,16 @@ pub use state::*;
 
 /// The foundational input frame.
 ///
-/// It intentionally owns only input semantics, interaction forwarding, normal
-/// children, and the minimal semantic border/radius requested of Base inputs.
-/// Applications remain responsible for layout, padding, typography, background,
-/// adornments, editor rendering, and richer focus presentation.
+/// It intentionally owns only input semantics, interaction forwarding, and
+/// normal children. Applications remain responsible for all presentation.
 #[derive(IntoElement)]
 pub struct Input {
     base: gpui::Stateful<Div>,
     style: StyleRefinement,
+    semantic_styles: InputStyles,
     children: Vec<AnyElement>,
-    appearance: bool,
-    bordered: bool,
-    focus_bordered: bool,
     focused: bool,
+    disabled: bool,
     role: crate::RoleOverride,
 }
 
@@ -83,11 +80,10 @@ impl Input {
         Self {
             base: div().id(id),
             style: StyleRefinement::default(),
+            semantic_styles: InputStyles::default(),
             children: Vec::new(),
-            appearance: true,
-            bordered: true,
-            focus_bordered: true,
             focused: false,
+            disabled: false,
             role: crate::RoleOverride::Implicit,
         }
     }
@@ -96,28 +92,55 @@ impl Input {
         self
     }
 
-    pub fn appearance(mut self, appearance: bool) -> Self {
-        self.appearance = appearance;
-        self
-    }
-
-    pub fn bordered(mut self, bordered: bool) -> Self {
-        self.bordered = bordered;
-        self
-    }
-
-    pub fn focus_bordered(mut self, focus_bordered: bool) -> Self {
-        self.focus_bordered = focus_bordered;
-        self
-    }
-
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
         self
     }
 
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn styles(mut self, build: impl FnOnce(InputStyles) -> InputStyles) -> Self {
+        self.semantic_styles = build(self.semantic_styles);
+        self
+    }
+
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
         self.base = self.base.aria_label(label.into());
+        self
+    }
+
+    fn resolved_style(&self) -> StyleRefinement {
+        let mut style = StyleRefinement::default();
+        style.refine(&self.style);
+        if self.focused {
+            style.refine(&self.semantic_styles.focused);
+        }
+        if self.disabled {
+            style.refine(&self.semantic_styles.disabled);
+        }
+        style
+    }
+}
+
+#[derive(Default)]
+pub struct InputStyles {
+    focused: StyleRefinement,
+    disabled: StyleRefinement,
+}
+
+impl InputStyles {
+    pub fn focused(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.focused
+            .refine(&build(StateStyle::default()).into_refinement());
+        self
+    }
+
+    pub fn disabled(mut self, build: impl FnOnce(StateStyle) -> StateStyle) -> Self {
+        self.disabled
+            .refine(&build(StateStyle::default()).into_refinement());
         self
     }
 }
@@ -143,24 +166,14 @@ impl InteractiveElement for Input {
 impl StatefulInteractiveElement for Input {}
 
 impl RenderOnce for Input {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let tokens = cx.theme().tokens;
-
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let style = self.resolved_style();
         self.base
             .when_some(self.role.resolve(|| Role::TextInput), |this, role| {
                 this.role(role)
             })
-            .when(self.appearance, |this| {
-                this.rounded(tokens.radius.md).when(self.bordered, |this| {
-                    this.border_1()
-                        .border_color(tokens.colors.input)
-                        .when(self.focused && self.focus_bordered, |this| {
-                            this.border_color(tokens.colors.ring)
-                        })
-                })
-            })
             .children(self.children)
-            .refine_style(&self.style)
+            .refine_style(&style)
     }
 }
 
@@ -171,11 +184,34 @@ mod tests {
     #[test]
     fn frame_accepts_application_owned_content_and_style() {
         let _ = Input::new("input")
-            .appearance(true)
-            .bordered(true)
-            .focus_bordered(true)
-            .focused(false)
+            .focused(true)
+            .disabled(false)
+            .styles(|styles| {
+                styles
+                    .focused(|style| style.border_1())
+                    .disabled(|style| style.opacity(0.5))
+            })
             .child("value")
             .opacity(0.8);
+    }
+
+    #[test]
+    fn semantic_state_styles_override_the_normal_style() {
+        let focused = Input::new("focused")
+            .focused(true)
+            .border_color(gpui::red())
+            .styles(|styles| styles.focused(|style| style.border_color(gpui::blue())));
+        assert_eq!(focused.resolved_style().border_color, Some(gpui::blue()));
+
+        let disabled = Input::new("disabled")
+            .focused(true)
+            .disabled(true)
+            .opacity(1.)
+            .styles(|styles| {
+                styles
+                    .focused(|style| style.opacity(0.8))
+                    .disabled(|style| style.opacity(0.5))
+            });
+        assert_eq!(disabled.resolved_style().opacity, Some(0.5));
     }
 }

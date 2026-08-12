@@ -72,9 +72,7 @@ type ButtonDecorator = Box<dyn FnOnce(Button) -> Button>;
 pub struct NumberInput {
     style: StyleRefinement,
     children: Vec<AnyElement>,
-    appearance: bool,
     disabled: bool,
-    focused: bool,
     state: Entity<InputState>,
     on_step: Option<StepHandler>,
     decrement_button: Option<ButtonDecorator>,
@@ -134,9 +132,7 @@ impl NumberInput {
         Self {
             style: StyleRefinement::default(),
             children: Vec::new(),
-            appearance: true,
             disabled: false,
-            focused: false,
             state: state.clone(),
             on_step: None,
             decrement_button: None,
@@ -145,18 +141,8 @@ impl NumberInput {
         }
     }
 
-    pub fn appearance(mut self, appearance: bool) -> Self {
-        self.appearance = appearance;
-        self
-    }
-
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
-        self
-    }
-
-    pub fn focused(mut self, focused: bool) -> Self {
-        self.focused = focused;
         self
     }
 
@@ -249,8 +235,7 @@ impl RenderOnce for NumberInput {
         Input::new(("number-input", self.state.entity_id()))
             .flex()
             .items_center()
-            .appearance(self.appearance)
-            .focused(self.focused && !disabled)
+            .disabled(disabled)
             .role(Role::SpinButton)
             .when_some(value, |this, value| this.aria_numeric_value(value))
             .key_context(CONTEXT)
