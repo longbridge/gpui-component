@@ -836,9 +836,20 @@ trap, and keyboard behavior; Registry owns trigger/content structure and style.
   - [x] Base owns committed versus preview color state, controlled open state,
         active panel selection, hex preview/commit validation, palette selection
         dismissal, and slider-style color updates that preserve the open state.
-        The UI façade retains its Input/Slider entities, palette/theme data,
-        popup composition, layout, styling, event emission, and public API.
-  - [x] Base state tests and the integrated Base/UI library suites pass.
+        `ColorPickerState` is an entity that also owns the hex `InputState`, the
+        four component `SliderState`s, their synchronization, and the
+        `ColorPickerEvent::Change` emission.
+  - [x] Base owns the unstyled `ColorPicker` controlled root — trigger role,
+        expanded state, accessible name, focus, Confirm toggle, and Cancel
+        dismissal — plus the `ColorSwatch` part, which carries radio semantics,
+        the hex accessible name, and hover/activation forwarding. The UI façade
+        composes both and retains palette/theme data, popup composition, tab
+        bar, layout, styling, and its public API.
+  - [x] Base runtime tests cover hex parsing across all four widths, preview
+        versus commit separation, palette dismissal, and the keyboard toggle and
+        dismissal path; the integrated Base/UI library suites pass.
+  - [x] The Base showcase composes `ColorPicker`, `ColorSwatch`, and
+        `ColorPickerState` rather than reimplementing a palette.
 
 ### M6 — Data and Application Infrastructure
 

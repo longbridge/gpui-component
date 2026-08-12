@@ -245,13 +245,7 @@ fn render_scrollbar<H: ScrollbarHandle + Clone>(
         return div();
     }
 
-    div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .right_0()
-        .bottom_0()
-        .child(Scrollbar::new(scroll_handle).id(id).axis(axis))
+    div().child(Scrollbar::new(scroll_handle).id(id).axis(axis))
 }
 
 #[cfg(test)]

@@ -1,10 +1,12 @@
 mod components;
 
 use gpui::{
-    App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement, KeyBinding,
+    App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, Window,
-    WindowBounds, WindowOptions, actions, div, prelude::FluentBuilder as _, px, rgb, size,
+    WindowOptions, actions, div, prelude::FluentBuilder as _, px, rgb, size,
 };
+#[cfg(not(target_family = "wasm"))]
+use gpui::{KeyBinding, WindowBounds};
 use gpui_base::input::InputEditorStyle;
 use gpui_base::input::InputState;
 use gpui_base::slider::SliderState;
@@ -12,12 +14,13 @@ use gpui_base::{
     Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger, AlertDialog,
     AlertDialogAction, AlertDialogBackdrop, AlertDialogCancel, AlertDialogDescription,
     AlertDialogPopup, AlertDialogTitle, Avatar, AvatarFallback, Button, Calendar, CalendarItemKind,
-    CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible, Combobox, DatePicker,
-    Dialog, DialogBackdrop, DialogDescription, DialogPopup, DialogTitle, HoverCard, Input,
-    OtpState, Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
-    SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
-    TableHeader, TableRow, Tabs, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree,
-    TreeItem, TreeState, v_virtual_list,
+    CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible, ColorPicker,
+    ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop, DialogDescription,
+    DialogPopup, DialogTitle, HoverCard, Input, OtpState, Popup, Scrollbar, ScrollbarMode, Select,
+    Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch, SwitchThumb, SwitchTrack,
+    Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, Toast,
+    ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem, TreeState,
+    VirtualListScrollHandle, v_virtual_list,
 };
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
@@ -84,7 +87,7 @@ pub struct BaseShowcase {
     combobox_open: bool,
     combobox_query: gpui::Entity<InputState>,
     combobox_selection: String,
-    color_index: usize,
+    color_picker: gpui::Entity<ColorPickerState>,
     date_open: bool,
     dialog_open: bool,
     popup_open: bool,
@@ -98,6 +101,7 @@ pub struct BaseShowcase {
     date_focus: gpui::FocusHandle,
     scroll: ScrollHandle,
     example_scroll: ScrollHandle,
+    virtual_scroll: VirtualListScrollHandle,
 }
 
 impl BaseShowcase {
@@ -159,6 +163,10 @@ impl BaseShowcase {
         let slider = cx.new(|_| SliderState::new().min(0.).max(100.).default_value(64.));
         cx.observe(&slider, |_, _, cx| cx.notify()).detach();
 
+        let color_picker =
+            cx.new(|cx| ColorPickerState::new(window, cx).default_value(rgb(0x2563eb)));
+        cx.observe(&color_picker, |_, _, cx| cx.notify()).detach();
+
         Self {
             navigation_enabled: component == "overview",
             component,
@@ -179,7 +187,7 @@ impl BaseShowcase {
             combobox_open: false,
             combobox_query,
             combobox_selection: "Select framework".into(),
-            color_index: 3,
+            color_picker,
             date_open: false,
             dialog_open: false,
             popup_open: false,
@@ -208,6 +216,7 @@ impl BaseShowcase {
             date_focus: cx.focus_handle(),
             scroll: ScrollHandle::new(),
             example_scroll: ScrollHandle::new(),
+            virtual_scroll: VirtualListScrollHandle::new(),
         }
     }
 
@@ -272,7 +281,7 @@ impl Render for BaseShowcase {
             "calendar" => self.calendar().into_any_element(),
             "checkbox" => self.checkbox(cx).into_any_element(),
             "collapsible" => self.collapsible(cx).into_any_element(),
-            "color-picker" => self.color_picker(cx).into_any_element(),
+            "color-picker" => self.color_picker(window, cx).into_any_element(),
             "combobox" => self.combobox(window, cx).into_any_element(),
             "date-picker" => self.date_picker(cx).into_any_element(),
             "dialog" => self.dialog(cx).into_any_element(),

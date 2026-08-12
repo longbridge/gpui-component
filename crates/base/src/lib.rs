@@ -80,7 +80,7 @@ pub use checkbox::{
     Checkbox, CheckboxIndicator, CheckboxIndicatorStyles, CheckboxState, CheckboxStyles,
 };
 pub use collapsible::Collapsible;
-pub use color_picker::ColorPickerState;
+pub use color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState, ColorSwatch, HslaSliders};
 pub use combobox::Combobox;
 pub use component_traits::{Disableable, Selectable};
 pub use date_picker::DatePicker;
@@ -172,6 +172,7 @@ pub fn init(cx: &mut App) {
     popover::init(cx);
     sheet::init(cx);
     combobox::init(cx);
+    color_picker::init(cx);
     select::init(cx);
     number_input::init(cx);
     input::init(cx);

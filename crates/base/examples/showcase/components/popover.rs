@@ -1,4 +1,6 @@
-use gpui::{InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div, px, rgb};
+use gpui::{
+    InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, div, relative, rgb,
+};
 use gpui_base::{Button, Popover};
 
 use super::super::BaseShowcase;
@@ -9,13 +11,13 @@ impl BaseShowcase {
             .trigger(
                 Button::new("popover-trigger")
                     .h_7()
-                    .line_height(px(28.))
+                    .line_height(relative(1.))
                     .px_3()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .bg(rgb(0x171717))
-                    .text_color(rgb(0xffffff))
+                    .bg(gpui::black())
+                    .text_color(gpui::white())
                     .child("Open Popover"),
             )
             .content(|_, _, cx| {
@@ -41,14 +43,14 @@ impl BaseShowcase {
                     .child(
                         div().mt_1().flex().justify_end().child(
                             Button::new("popover-done")
-                                .h(px(26.))
+                                .h_7()
+                                .line_height(relative(1.))
                                 .px_3()
-                                .py_0()
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .border_1()
-                                .border_color(rgb(0x171717))
+                                .bg(gpui::black())
+                                .text_color(gpui::white())
                                 .on_click(move |_, window, cx| {
                                     _ = state.update(cx, |state, cx| state.dismiss(window, cx));
                                 })

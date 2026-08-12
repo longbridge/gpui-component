@@ -227,6 +227,7 @@ impl ParentElement for NumberInput {
 impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let disabled = self.disabled;
+        let controls_right = self.controls_right;
         let on_step = self.on_step.unwrap_or_else(|| {
             let state = self.state.clone();
             Rc::new(move |action, window, cx| {
@@ -248,9 +249,13 @@ impl RenderOnce for NumberInput {
         );
         let text = NumberInputText::new().children(self.input);
 
+        // Stepping is driven from the focused editor, so the buttons never take
+        // focus themselves; otherwise every press would pull the focus ring off
+        // the frame and hand it straight back.
         let decrement_button = decrement_button
-            .flex_none()
-            .tab_stop(false)
+            .when(controls_right, |this| this.flex_1().min_h_0())
+            .when(!controls_right, |this| this.flex_none())
+            .focusable(false)
             .disabled(disabled)
             .on_click({
                 let on_step = on_step.clone();
@@ -259,8 +264,9 @@ impl RenderOnce for NumberInput {
                 }
             });
         let increment_button = increment_button
-            .flex_none()
-            .tab_stop(false)
+            .when(controls_right, |this| this.flex_1().min_h_0())
+            .when(!controls_right, |this| this.flex_none())
+            .focusable(false)
             .disabled(disabled)
             .on_click({
                 let on_step = on_step.clone();
@@ -269,7 +275,7 @@ impl RenderOnce for NumberInput {
                 }
             });
 
-        let content = if self.controls_right {
+        let content = if controls_right {
             div()
                 .flex()
                 .items_center()

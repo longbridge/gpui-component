@@ -1,5 +1,6 @@
 use gpui::{
-    Context, IntoElement, ParentElement as _, Styled as _, div, prelude::FluentBuilder as _, rgb,
+    Context, IntoElement, ParentElement as _, Styled as _, div, prelude::FluentBuilder as _,
+    relative, rgb,
 };
 use gpui_base::{Button, Popup};
 
@@ -13,10 +14,13 @@ impl BaseShowcase {
             "example-popup",
             Button::new("popup-trigger")
                 .h_7()
+                .line_height(relative(1.))
                 .px_3()
-                .py_0()
-                .border_1()
-                .border_color(rgb(0x171717))
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(gpui::black())
+                .text_color(gpui::white())
                 .on_click(move |_, _, cx| {
                     _ = entity.update(cx, |this, cx| {
                         this.popup_open = !this.popup_open;

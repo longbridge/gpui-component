@@ -98,6 +98,11 @@ impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let focused = self.state.read(cx).focus_handle(cx).is_focused(window) && !self.disabled;
         let (bg, _) = input_style(self.disabled, cx);
+        let border_color = if self.disabled {
+            cx.theme().input.opacity(0.5)
+        } else {
+            cx.theme().input
+        };
         // Transparent like a ghost button, but tinted to the frame on hover.
         let button_foreground = cx.theme().secondary_foreground;
         let button_hover = cx.theme().input.opacity(0.4);
@@ -118,7 +123,10 @@ impl RenderOnce for NumberInput {
             // The buttons are ghost, so the frame around the whole control is
             // drawn here instead of by each of its parts.
             .when(self.appearance, |this| {
-                this.bg(bg).when(focused, |this| this.focused_border(cx))
+                this.bg(bg)
+                    .border_1()
+                    .border_color(border_color)
+                    .when(focused, |this| this.focused_border(cx))
             })
             .refine_style(&self.style)
             .when(self.disabled, |this| this.opacity(0.5))

@@ -1,3 +1,5 @@
+use gpui::relative;
+
 use super::*;
 
 impl BaseShowcase {
@@ -12,15 +14,14 @@ impl BaseShowcase {
         div()
             .child(
                 Button::new("open-alert-dialog")
-                    .px_3()
                     .h_7()
+                    .line_height(relative(1.))
+                    .px_3()
                     .flex()
                     .items_center()
-                    .text_xs()
-                    .border_1()
-                    .border_color(rgb(0x171717))
-                    .bg(rgb(0x171717))
-                    .text_color(rgb(0xffffff))
+                    .justify_center()
+                    .bg(gpui::black())
+                    .text_color(gpui::white())
                     .on_click(move |_, _, cx| {
                         _ = open_entity.update(cx, |this, cx| {
                             this.alert_dialog_open = true;

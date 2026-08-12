@@ -52,6 +52,8 @@ impl ScrollbarMode {
 
 /// A trait for scroll handles that can get and set offset.
 pub trait ScrollbarHandle: 'static {
+    /// Bounds of the viewport the scrollbar overlays.
+    fn viewport_bounds(&self) -> Bounds<Pixels>;
     /// Get the current offset of the scroll handle.
     fn offset(&self) -> Point<Pixels>;
     /// Set the offset of the scroll handle.
@@ -65,6 +67,10 @@ pub trait ScrollbarHandle: 'static {
 }
 
 impl ScrollbarHandle for ScrollHandle {
+    fn viewport_bounds(&self) -> Bounds<Pixels> {
+        self.bounds()
+    }
+
     fn offset(&self) -> Point<Pixels> {
         self.offset()
     }
@@ -79,6 +85,10 @@ impl ScrollbarHandle for ScrollHandle {
 }
 
 impl ScrollbarHandle for UniformListScrollHandle {
+    fn viewport_bounds(&self) -> Bounds<Pixels> {
+        self.0.borrow().base_handle.bounds()
+    }
+
     fn offset(&self) -> Point<Pixels> {
         self.0.borrow().base_handle.offset()
     }
@@ -94,6 +104,10 @@ impl ScrollbarHandle for UniformListScrollHandle {
 }
 
 impl ScrollbarHandle for ListState {
+    fn viewport_bounds(&self) -> Bounds<Pixels> {
+        ListState::viewport_bounds(self)
+    }
+
     fn offset(&self) -> Point<Pixels> {
         self.scroll_px_offset_for_scrollbar()
     }
@@ -432,6 +446,8 @@ pub struct Scrollbar {
     mode: Option<ScrollbarMode>,
     scroll_handle: Rc<dyn ScrollbarHandle>,
     scroll_size: Option<Size<Pixels>>,
+    viewport_bounds: Option<Bounds<Pixels>>,
+    use_layout_bounds: bool,
     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
     ///
     /// This is used to limit the update rate of the scrollbar when it is
@@ -454,6 +470,8 @@ impl Scrollbar {
             scroll_handle: Rc::new(scroll_handle.clone()),
             max_fps: 120,
             scroll_size: None,
+            viewport_bounds: None,
+            use_layout_bounds: false,
             styles: ScrollbarStyles::default(),
         }
     }
@@ -492,6 +510,37 @@ impl Scrollbar {
     pub fn scroll_size(mut self, scroll_size: Size<Pixels>) -> Self {
         self.scroll_size = Some(scroll_size);
         self
+    }
+
+    /// Override the viewport bounds that this scrollbar overlays.
+    ///
+    /// Most scroll containers should rely on the bounds reported by their
+    /// scroll handle. Custom-painted viewports, such as the text editor, can
+    /// use this when their visible bounds differ from the handle's layout
+    /// bounds.
+    pub fn viewport_bounds(mut self, bounds: Bounds<Pixels>) -> Self {
+        self.viewport_bounds = Some(bounds);
+        self
+    }
+
+    /// Use the scrollbar element's layout bounds as its viewport.
+    ///
+    /// This is useful for composite widgets whose scrollbar viewport excludes
+    /// fixed headers or columns and is therefore defined by a positioned
+    /// overlay container rather than by the underlying scroll handle.
+    pub fn viewport_from_layout(mut self) -> Self {
+        self.use_layout_bounds = true;
+        self
+    }
+
+    fn resolved_viewport_bounds(&self, layout_bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+        self.viewport_bounds.unwrap_or_else(|| {
+            if self.use_layout_bounds {
+                layout_bounds
+            } else {
+                self.scroll_handle.viewport_bounds()
+            }
+        })
     }
 
     /// Set scrollbar axis.
@@ -810,6 +859,7 @@ impl Element for Scrollbar {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
+        let bounds = self.resolved_viewport_bounds(bounds);
         let hitbox = window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window.insert_hitbox(bounds, HitboxBehavior::Normal)
         });
@@ -1299,6 +1349,10 @@ mod tests {
     }
 
     impl ScrollbarHandle for TestHandle {
+        fn viewport_bounds(&self) -> Bounds<Pixels> {
+            Bounds::new(Point::default(), size(px(100.), px(100.)))
+        }
+
         fn offset(&self) -> Point<Pixels> {
             self.offset.get()
         }
@@ -1347,6 +1401,27 @@ mod tests {
         });
         cx.update(|window, cx| window.draw(cx).clear(cx));
         (cx, handle)
+    }
+
+    #[test]
+    fn explicit_viewport_bounds_override_handle_bounds() {
+        let expected = Bounds::new(point(px(12.), px(24.)), size(px(240.), px(96.)));
+        let scrollbar = Scrollbar::vertical(&TestHandle::new(size(px(240.), px(480.))))
+            .viewport_bounds(expected);
+
+        assert_eq!(
+            scrollbar.resolved_viewport_bounds(Bounds::default()),
+            expected
+        );
+    }
+
+    #[test]
+    fn layout_viewport_uses_current_element_bounds() {
+        let expected = Bounds::new(point(px(20.), px(30.)), size(px(180.), px(12.)));
+        let scrollbar =
+            Scrollbar::horizontal(&TestHandle::new(size(px(600.), px(12.)))).viewport_from_layout();
+
+        assert_eq!(scrollbar.resolved_viewport_bounds(expected), expected);
     }
 
     #[test]

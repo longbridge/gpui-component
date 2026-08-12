@@ -3,8 +3,8 @@ use std::{rc::Rc, time::Duration};
 use gpui::{
     Animation, AnimationExt as _, AnyElement, App, ClickEvent, DefiniteLength, DismissEvent, Edges,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    RenderOnce, StyleRefinement, Styled, Window, WindowControlArea, anchored, div, point,
-    prelude::FluentBuilder as _, px,
+    RenderOnce, StyleRefinement, Styled, Window, anchored, div, point, prelude::FluentBuilder as _,
+    px,
 };
 use gpui_base::{Sheet as BaseSheet, actions::Cancel};
 use schemars::JsonSchema;
@@ -160,10 +160,7 @@ impl RenderOnce for Sheet {
             .occlude()
             .w(size.width)
             .h(size.height)
-            .bg(overlay_color(self.overlay, cx))
-            .when(self.overlay, |this| {
-                this.window_control_area(WindowControlArea::Drag)
-            });
+            .bg(overlay_color(self.overlay, cx));
 
         let surface = v_flex()
             .id("sheet")
@@ -252,7 +249,6 @@ impl RenderOnce for Sheet {
                     .w(size.width)
                     .h(size.height)
                     .focus_handle(self.focus_handle)
-                    .dismiss_before_y(top)
                     .overlay_interactive(self.overlay)
                     .overlay_closable(self.overlay && self.overlay_closable)
                     .request_close(|window, cx| window.close_sheet(cx))

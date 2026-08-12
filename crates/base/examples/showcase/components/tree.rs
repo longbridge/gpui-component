@@ -28,7 +28,7 @@ impl BaseShowcase {
                         ImageFormat::Svg,
                         bytes.to_vec(),
                     )))
-                    .size_4()
+                    .size_3()
                     .flex_none()
                 });
                 div()
@@ -44,7 +44,7 @@ impl BaseShowcase {
                     })
                     .child(
                         div()
-                            .size_4()
+                            .size_3()
                             .flex_none()
                             .flex()
                             .items_center()

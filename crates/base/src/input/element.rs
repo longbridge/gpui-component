@@ -232,6 +232,7 @@ impl Element for EditorScrollbar {
         } else {
             Scrollbar::vertical(&scroll_handle)
         }
+        .viewport_bounds(snapshot.layout.bounds)
         .scroll_size(snapshot.layout.scroll_size)
         .into_any_element();
 
@@ -270,6 +271,20 @@ fn clamp_auto_grow_vertical_scroll_offset(
         scroll_top.clamp((input_height - scroll_height).min(px(0.)), px(0.))
     } else {
         scroll_top
+    }
+}
+
+fn editor_gutter_bounds(
+    input_bounds: Bounds<Pixels>,
+    line_number_width: Pixels,
+    ghost_lines_height: Pixels,
+) -> Bounds<Pixels> {
+    Bounds {
+        origin: input_bounds.origin,
+        size: size(
+            line_number_width,
+            input_bounds.size.height + ghost_lines_height,
+        ),
     }
 }
 
@@ -2233,18 +2248,21 @@ impl Element for TextElement {
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             offset_y += invisible_top_padding;
 
-            if let Some(gutter_bg) = editor_style.editor_gutter_background {
-                window.paint_quad(fill(
-                    Bounds {
-                        origin: input_bounds.origin,
-                        size: size(
-                            prepaint.last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN,
-                            input_bounds.size.height + prepaint.ghost_lines_height,
-                        ),
-                    },
-                    gutter_bg,
-                ));
-            }
+            // The gutter is a fixed overlay above horizontally scrolling text.
+            // Always give it an opaque editor background when the theme does not
+            // provide a dedicated gutter color, and cover the complete gutter so
+            // text cannot show through its right-side spacing/fold-icon area.
+            let gutter_bg = editor_style
+                .editor_gutter_background
+                .unwrap_or(editor_background);
+            window.paint_quad(fill(
+                editor_gutter_bounds(
+                    input_bounds,
+                    prepaint.last_layout.line_number_width,
+                    prepaint.ghost_lines_height,
+                ),
+                gutter_bg,
+            ));
 
             // Each item is the normal lines.
             for (lines, &buffer_line) in line_numbers
@@ -2570,6 +2588,16 @@ mod tests {
             Bounds::new(point(px(10.), px(18.)), size(px(303.), px(87.)))
         );
         assert_eq!(layout_without_gutter.scroll_size, size(px(513.), px(120.)));
+    }
+
+    #[test]
+    fn test_editor_gutter_covers_the_complete_fixed_column() {
+        let input_bounds = Bounds::new(point(px(10.), px(20.)), size(px(300.), px(80.)));
+
+        assert_eq!(
+            editor_gutter_bounds(input_bounds, px(48.), px(16.)),
+            Bounds::new(point(px(10.), px(20.)), size(px(48.), px(96.)))
+        );
     }
 
     #[test]

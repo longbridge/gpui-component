@@ -2,8 +2,8 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, deferred, div,
-    prelude::FluentBuilder as _,
+    MouseButton, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, anchored, div,
+    point, prelude::FluentBuilder as _, px,
 };
 
 use crate::{FocusTrapElement as _, StyledExt as _, actions::Cancel};
@@ -119,7 +119,7 @@ impl RenderOnce for Sheet {
         let escape_request = request_close.clone();
         let escape_notify = on_close.clone();
 
-        deferred(
+        anchored().position(point(px(0.), px(0.))).child(
             self.base
                 .id("sheet-host")
                 .absolute()
@@ -140,9 +140,10 @@ impl RenderOnce for Sheet {
                     let dismiss_before_y = self.dismiss_before_y;
                     let overlay_interactive = self.overlay_interactive;
                     let overlay_closable = self.overlay_closable;
-                    this.child(
-                        div()
-                            .on_any_mouse_down(move |event, window, cx| {
+                    this.child(overlay).child(div().absolute().inset_0().when(
+                        overlay_interactive,
+                        |this| {
+                            this.on_any_mouse_down(move |event, window, cx| {
                                 if !overlay_interactive {
                                     return;
                                 }
@@ -154,13 +155,12 @@ impl RenderOnce for Sheet {
                                     close(&request_close, &on_close, window, cx);
                                 }
                             })
-                            .child(overlay),
-                    )
+                        },
+                    ))
                 })
                 .children(self.surface)
                 .refine_style(&self.style),
         )
-        .with_priority(10)
     }
 }
 
@@ -186,7 +186,16 @@ mod tests {
                 .overlay_closable(self.closable)
                 .request_close(move |_, _| requested.borrow_mut().push("request"))
                 .on_close(move |_, _, _| closed.borrow_mut().push("closed"))
-                .overlay(div().size(px(200.)))
+                .overlay(div().absolute().inset_0().occlude())
+                .surface(
+                    div()
+                        .absolute()
+                        .right_0()
+                        .top_0()
+                        .h_full()
+                        .w(px(80.))
+                        .occlude(),
+                )
                 .when_some(self.cutoff, |this, cutoff| this.dismiss_before_y(cutoff))
         }
     }

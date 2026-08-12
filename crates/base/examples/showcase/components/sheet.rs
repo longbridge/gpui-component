@@ -1,3 +1,5 @@
+use gpui::relative;
+
 use super::*;
 
 impl BaseShowcase {
@@ -90,7 +92,8 @@ impl BaseShowcase {
                                 .child(
                                     div().mt_3().flex().justify_end().child(
                                         Button::new("close-sheet")
-                                            .h_6()
+                                            .h_7()
+                                            .line_height(relative(1.))
                                             .px_3()
                                             .flex()
                                             .items_center()

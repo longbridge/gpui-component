@@ -31,6 +31,7 @@ pub struct Button {
     provided_focus_handle: Option<FocusHandle>,
     tab_index: isize,
     tab_stop: bool,
+    focusable: bool,
 }
 
 impl Button {
@@ -50,6 +51,7 @@ impl Button {
             provided_focus_handle: None,
             tab_index: 0,
             tab_stop: true,
+            focusable: true,
         }
     }
 
@@ -112,6 +114,18 @@ impl Button {
     /// Sets whether the button participates in keyboard focus traversal.
     pub fn tab_stop(mut self, tab_stop: bool) -> Self {
         self.tab_stop = tab_stop;
+        self
+    }
+
+    /// Sets whether pressing the button moves focus onto it. The default is `true`.
+    ///
+    /// A non-focusable button leaves focus wherever it already is, which keeps a
+    /// composed control from flickering its focus ring on every press. It also
+    /// gives up Enter and Space activation, so only use it for a button that a
+    /// focused sibling already exposes to the keyboard, such as a number input's
+    /// step buttons.
+    pub fn focusable(mut self, focusable: bool) -> Self {
+        self.focusable = focusable;
         self
     }
 
@@ -204,7 +218,7 @@ impl RenderOnce for Button {
             .when_some(self.accessibility_label, |this, label| {
                 this.aria_label(label)
             })
-            .when(!disabled, |this| {
+            .when(!disabled && self.focusable, |this| {
                 this.track_focus(
                     &focus_handle
                         .tab_index(self.tab_index)

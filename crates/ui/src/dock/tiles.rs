@@ -1304,19 +1304,11 @@ impl Render for Tiles {
                 }),
             )
             .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .right_0()
-                    .bottom_0()
-                    .child(
-                        Scrollbar::new(&self.scroll_handle)
-                            .scroll_size(scroll_size)
-                            .when_some(self.scrollbar_mode, |this, scrollbar_mode| {
-                                this.mode(scrollbar_mode)
-                            }),
-                    ),
+                Scrollbar::new(&self.scroll_handle)
+                    .scroll_size(scroll_size)
+                    .when_some(self.scrollbar_mode, |this, scrollbar_mode| {
+                        this.mode(scrollbar_mode)
+                    }),
             )
             .size_full()
     }

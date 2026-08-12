@@ -1,3 +1,5 @@
+use gpui::relative;
+
 use super::*;
 
 impl BaseShowcase {
@@ -10,6 +12,7 @@ impl BaseShowcase {
                 Button::new("primary-button")
                     .px_3()
                     .h_7()
+                    .line_height(relative(1.))
                     .flex()
                     .items_center()
                     .text_xs()
@@ -24,6 +27,7 @@ impl BaseShowcase {
                 Button::new("secondary-button")
                     .px_3()
                     .h_7()
+                    .line_height(relative(1.))
                     .flex()
                     .items_center()
                     .text_xs()

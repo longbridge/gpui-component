@@ -1,4 +1,7 @@
-use gpui::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div, px, rgb};
+use gpui::{
+    AnyElement, Context, InteractiveElement, IntoElement, ParentElement as _, Styled as _, div, px,
+    relative, rgb,
+};
 use gpui_base::{Button, NumberInput};
 
 use super::super::BaseShowcase;
@@ -11,12 +14,13 @@ impl BaseShowcase {
             this.w(px(24.))
                 .flex_1()
                 .min_h_0()
-                .p_0()
+                .line_height(relative(1.))
                 .flex()
                 .items_center()
                 .justify_center()
                 .bg(gpui::black())
                 .text_color(gpui::white())
+                .hover(|this| this.bg(gpui::black().opacity(0.8)))
                 .child(icon)
         }
 
