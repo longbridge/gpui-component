@@ -5,7 +5,7 @@
 use anyhow::Result;
 use gpui::TextAlign;
 use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
@@ -328,7 +328,6 @@ pub struct InputState {
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
-    pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) decorations: DecorationCollections,
     pub(super) editor_style: InputEditorStyle,
@@ -344,20 +343,13 @@ pub struct InputState {
     /// Diagnostic currently requested by pointer hover; applications render it.
     pub(super) diagnostic_popover: Option<Rc<crate::input::DiagnosticEntry>>,
 
-    /// An optional context menu builder to allow a custom right-click context menu on the input.
-    ///
-    /// If set, this overrides the built-in context menu (and ignores [`Self::enable_context_menu`]).
-    pub(super) context_menu_builder:
-        Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
-    pub(super) context_menu_presenter: Option<
+    context_menu_handler: Option<
         Rc<dyn Fn(NativeMenu, InputContextMenuCapabilities, Point<Pixels>, &mut Window, &mut App)>,
     >,
     pending_context_menu: Option<(Point<Pixels>, usize)>,
-    focus_host: Option<Rc<dyn Fn(bool, Entity<InputState>, &mut Window, &mut App)>>,
 
     /// Whether the context menu that shows on right-click is enabled.
     ///
-    /// This value is ignored if a context menu builder is defined in [`Self::context_menu_builder`].
     pub(super) enable_context_menu: bool,
 
     /// A flag to indicate if we are currently inserting a completion item.
@@ -476,50 +468,13 @@ impl InputState {
         self.set_masked(!self.masked, window, cx);
     }
 
-    pub fn set_editor_scrollbar_paddings(&self, paddings: Edges<Pixels>) {
-        self.editor_scrollbar_paddings.set(paddings);
-        self.editor_scrollbar_snapshot.set(None);
-    }
-
-    pub fn set_context_menu_builder(
+    pub fn on_context_menu(
         &mut self,
-        builder: Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
-    ) {
-        self.context_menu_builder = builder;
-    }
-
-    pub fn set_context_menu_presenter(
-        &mut self,
-        presenter: Option<
-            Rc<
-                dyn Fn(
-                    NativeMenu,
-                    InputContextMenuCapabilities,
-                    Point<Pixels>,
-                    &mut Window,
-                    &mut App,
-                ),
-            >,
+        handler: Rc<
+            dyn Fn(NativeMenu, InputContextMenuCapabilities, Point<Pixels>, &mut Window, &mut App),
         >,
     ) {
-        self.context_menu_presenter = presenter;
-    }
-
-    pub fn set_focus_host(
-        &mut self,
-        host: Option<Rc<dyn Fn(bool, Entity<InputState>, &mut Window, &mut App)>>,
-    ) {
-        self.focus_host = host;
-    }
-    pub fn sync_focus_host(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(host) = self.focus_host.clone() {
-            host(
-                self.focus_handle.is_focused(window),
-                cx.entity(),
-                window,
-                cx,
-            );
-        }
+        self.context_menu_handler = Some(handler);
     }
 
     /// Create a Input state with default [`InputMode::SingleLine`] mode.
@@ -588,12 +543,6 @@ impl InputState {
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
             scroll_size: gpui::size(px(0.), px(0.)),
-            editor_scrollbar_paddings: Cell::new(Edges {
-                top: px(0.),
-                right: px(0.),
-                bottom: px(0.),
-                left: px(0.),
-            }),
             editor_scrollbar_snapshot: Cell::new(None),
             deferred_scroll_offset: None,
             preferred_column: None,
@@ -604,10 +553,8 @@ impl InputState {
             editor_style: InputEditorStyle::default(),
             lsp: Lsp::default(),
             diagnostic_popover: None,
-            context_menu_builder: None,
-            context_menu_presenter: None,
+            context_menu_handler: None,
             pending_context_menu: None,
-            focus_host: None,
             enable_context_menu: true,
             completion_inserting: false,
             context_menu_content: super::lsp::ContextMenuContent::default(),
@@ -1371,9 +1318,6 @@ impl InputState {
     /// Focus the input field.
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_handle.focus(window, cx);
-        if let Some(host) = self.focus_host.clone() {
-            host(true, cx.entity(), window, cx);
-        }
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });
@@ -1836,17 +1780,10 @@ impl InputState {
             self.handle_hover_definition(offset, window, cx);
         }
 
-        let menu = self
-            .context_menu_builder
-            .clone()
-            .map_or_else(NativeMenu::new, |builder| {
-                builder(NativeMenu::new(), window, cx)
-            });
-
-        if let Some(presenter) = self.context_menu_presenter.clone() {
+        if let Some(handler) = self.context_menu_handler.clone() {
             let capabilities = self.context_menu_capabilities();
             cx.defer_in(window, move |_, window, cx| {
-                presenter(menu, capabilities, position, window, cx);
+                handler(NativeMenu::new(), capabilities, position, window, cx);
             });
         }
     }
@@ -1893,7 +1830,7 @@ impl InputState {
 
         // Show Mouse context menu
         if event.button == MouseButton::Right {
-            if self.enable_context_menu || self.context_menu_builder.is_some() {
+            if self.enable_context_menu {
                 if !self.selected_range.contains(offset) {
                     self.move_to(offset, None, cx);
                 }
@@ -2444,14 +2381,11 @@ impl InputState {
             && window.is_window_active()
     }
 
-    fn on_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.start(cx);
         });
         cx.emit(InputEvent::Focus);
-        if let Some(host) = self.focus_host.clone() {
-            host(true, cx.entity(), window, cx);
-        }
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -2469,9 +2403,6 @@ impl InputState {
             cursor.stop(cx);
         });
         self.clamp_number_value(window, cx);
-        if let Some(host) = self.focus_host.clone() {
-            host(false, cx.entity(), window, cx);
-        }
         cx.emit(InputEvent::Blur);
         cx.notify();
     }
@@ -2549,21 +2480,7 @@ impl InputState {
         self.select_to(offset, cx);
 
         if !self.mode.is_single_line() {
-            // Expand input_bounds by the CSS padding so the bounds reflect the full
-            // visible element. Without this, mouse positions in the padding area
-            // (visually inside the input) would appear outside bounds and trigger max speed.
-            let pad = self.editor_scrollbar_paddings.get();
-            let scroll_bounds = gpui::Bounds::new(
-                point(
-                    self.input_bounds.origin.x - pad.left,
-                    self.input_bounds.origin.y - pad.top,
-                ),
-                gpui::size(
-                    self.input_bounds.size.width + pad.left + pad.right,
-                    self.input_bounds.size.height + pad.top + pad.bottom,
-                ),
-            );
-            let delta = AutoScroll::compute_delta(event.position.y, scroll_bounds);
+            let delta = AutoScroll::compute_delta(event.position.y, self.input_bounds);
             // Input's ScrollHandle uses negative-y-is-down; negate the positive-towards-bottom delta.
             let scroll_delta = delta.map(|d| -d);
             self.auto_scroll.set(scroll_delta, cx, |delta, state, cx| {
@@ -3243,7 +3160,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn context_menu_presenter_handles_builtin_custom_and_disabled(cx: &mut TestAppContext) {
+    fn context_menu_handler_is_deferred_and_respects_disabled(cx: &mut TestAppContext) {
         use std::{cell::Cell, rc::Rc};
         cx.update(crate::init);
         let input_view = InputView::new(cx);
@@ -3256,10 +3173,10 @@ mod tests {
             input.update(cx, |state, cx| {
                 let calls2 = calls.clone();
                 let items2 = items.clone();
-                state.set_context_menu_presenter(Some(Rc::new(move |menu, _, _, _, _| {
+                state.on_context_menu(Rc::new(move |menu, _, _, _, _| {
                     calls2.set(calls2.get() + 1);
                     items2.set(menu.items.len());
-                })));
+                }));
                 state.handle_right_click_menu(point(px(0.), px(0.)), 0, window, cx);
             })
         });
@@ -3268,22 +3185,11 @@ mod tests {
 
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {
-                state.set_context_menu_builder(Some(Rc::new(|menu, _, _| {
-                    menu.menu("Custom", Box::new(SelectAll))
-                })));
-                state.handle_right_click_menu(point(px(0.), px(0.)), 0, window, cx);
-            })
-        });
-        assert_eq!(calls.get(), 2);
-        assert_eq!(items.get(), 1);
-
-        cx.update(|window, cx| {
-            input.update(cx, |state, cx| {
                 state.disabled = true;
                 state.handle_right_click_menu(point(px(0.), px(0.)), 0, window, cx);
             })
         });
-        assert_eq!(calls.get(), 2);
+        assert_eq!(calls.get(), 1);
     }
 
     /// Regression test: `scroll_to` at end-of-buffer must produce a deferred

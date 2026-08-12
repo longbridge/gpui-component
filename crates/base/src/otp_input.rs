@@ -1,13 +1,11 @@
+use crate::{
+    StyledExt as _,
+    input::{InputEvent, InputState, blink_cursor::BlinkCursor},
+};
 use gpui::{
     AnyElement, App, AppContext as _, Context, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render, RenderOnce,
     SharedString, StyleRefinement, Styled, Subscription, Window, div, prelude::FluentBuilder as _,
-};
-use std::rc::Rc;
-
-use crate::{
-    StyledExt as _,
-    input::{InputEvent, InputState, blink_cursor::BlinkCursor},
 };
 
 /// Stateful input and focus behavior for a fixed-length numeric one-time code.
@@ -18,7 +16,6 @@ pub struct OtpState {
     masked: bool,
     length: usize,
     compat_input_state: Entity<InputState>,
-    focus_host: Option<Rc<dyn Fn(bool, Entity<OtpState>, &mut Window, &mut App)>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -44,7 +41,6 @@ impl OtpState {
             masked: false,
             length,
             compat_input_state,
-            focus_host: None,
             _subscriptions: subscriptions,
         }
     }
@@ -85,23 +81,6 @@ impl OtpState {
     pub fn compat_input_state(&self) -> Entity<InputState> {
         self.compat_input_state.clone()
     }
-    pub fn set_focus_host(
-        &mut self,
-        host: Option<Rc<dyn Fn(bool, Entity<OtpState>, &mut Window, &mut App)>>,
-    ) {
-        self.focus_host = host;
-    }
-    pub fn sync_focus_host(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(host) = self.focus_host.clone() {
-            host(
-                self.focus_handle.is_focused(window),
-                cx.entity(),
-                window,
-                cx,
-            );
-        }
-    }
-
     pub fn masked(mut self, masked: bool) -> Self {
         self.masked = masked;
         self
@@ -112,9 +91,6 @@ impl OtpState {
     }
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
         self.focus_handle.focus(window, cx);
-        if let Some(host) = self.focus_host.clone() {
-            host(true, cx.entity(), window, cx);
-        }
     }
 
     fn to_digit_char(value: char) -> Option<char> {
@@ -166,19 +142,13 @@ impl OtpState {
         cx.notify();
     }
 
-    fn on_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| cursor.start(cx));
         cx.emit(InputEvent::Focus);
-        if let Some(host) = self.focus_host.clone() {
-            host(true, cx.entity(), window, cx);
-        }
     }
-    fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_blur(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| cursor.stop(cx));
         cx.emit(InputEvent::Blur);
-        if let Some(host) = self.focus_host.clone() {
-            host(false, cx.entity(), window, cx);
-        }
     }
 }
 

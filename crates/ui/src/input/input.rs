@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AccessibleAction, AnyElement, App, DefiniteLength, Edges, EdgesRefinement, Entity, Hsla,
+    AccessibleAction, AnyElement, App, DefiniteLength, Entity, Focusable, Hsla,
     InteractiveElement as _, IntoElement, ParentElement as _, Rems, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
@@ -333,36 +333,10 @@ impl Input {
 
     /// This method must after the refine_style.
     fn render_editor(
-        paddings: EdgesRefinement<DefiniteLength>,
         input_state: &Entity<InputState>,
-        state: &InputState,
         search_panel: Option<AnyElement>,
-        window: &Window,
+        _: &Window,
     ) -> impl IntoElement {
-        let base_size = window.text_style().font_size;
-        let rem_size = window.rem_size();
-
-        let paddings = Edges {
-            left: paddings
-                .left
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(px(0.)),
-            right: paddings
-                .right
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(px(0.)),
-            top: paddings
-                .top
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(px(0.)),
-            bottom: paddings
-                .bottom
-                .map(|v| v.to_pixels(base_size, rem_size))
-                .unwrap_or(px(0.)),
-        };
-
-        state.set_editor_scrollbar_paddings(paddings);
-
         v_flex()
             .size_full()
             .children(search_panel)
@@ -380,6 +354,12 @@ impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
+        sync_focused_input_registry(
+            self.state.read(cx).focus_handle(cx).is_focused(window),
+            self.state.clone(),
+            window,
+            cx,
+        );
 
         self.state.update(cx, |state, cx| {
             state.ensure_highlighter_factory(crate::highlighter::input_highlighter_factory());
@@ -418,55 +398,49 @@ impl RenderOnce for Input {
             state.set_disabled(self.disabled, cx);
             state.set_text_align(text_align, cx);
             let custom = self.context_menu_builder.clone();
-            state.set_context_menu_presenter(Some(Rc::new(
-                move |_, capabilities, position, window, cx| {
-                    let menu = if let Some(custom) = custom.as_ref() {
-                        custom(NativeMenu::new(), window, cx)
-                    } else {
-                        let enabled = !capabilities.disabled;
-                        let mut menu = NativeMenu::new();
-                        if capabilities.code_editor {
-                            menu = menu
-                                .menu_with_disabled(
-                                    t!("Input.Go to Definition"),
-                                    !(enabled && capabilities.go_to_definition),
-                                    Box::new(gpui_base::input::GoToDefinition),
-                                )
-                                .menu_with_disabled(
-                                    t!("Input.Show Code Actions"),
-                                    !(enabled && capabilities.code_actions),
-                                    Box::new(gpui_base::input::ToggleCodeActions),
-                                )
-                                .separator();
-                        }
-                        menu.menu_with_disabled(
-                            t!("Input.Cut"),
-                            !(enabled && capabilities.selection),
-                            Box::new(gpui_base::input::Cut),
-                        )
-                        .menu_with_disabled(
-                            t!("Input.Copy"),
-                            !capabilities.selection,
-                            Box::new(gpui_base::input::Copy),
-                        )
-                        .menu_with_disabled(
-                            t!("Input.Paste"),
-                            !(enabled && cx.read_from_clipboard().is_some()),
-                            Box::new(gpui_base::input::Paste),
-                        )
-                        .separator()
-                        .menu(
-                            t!("Input.Select All"),
-                            Box::new(gpui_base::input::SelectAll),
-                        )
-                    };
-                    menu.show(position, window, cx);
-                },
-            )));
-            state.set_focus_host(Some(Rc::new(|focused, state, window, cx| {
-                sync_focused_input_registry(focused, state, window, cx);
-            })));
-            state.sync_focus_host(window, cx);
+            state.on_context_menu(Rc::new(move |_, capabilities, position, window, cx| {
+                let menu = if let Some(custom) = custom.as_ref() {
+                    custom(NativeMenu::new(), window, cx)
+                } else {
+                    let enabled = !capabilities.disabled;
+                    let mut menu = NativeMenu::new();
+                    if capabilities.code_editor {
+                        menu = menu
+                            .menu_with_disabled(
+                                t!("Input.Go to Definition"),
+                                !(enabled && capabilities.go_to_definition),
+                                Box::new(gpui_base::input::GoToDefinition),
+                            )
+                            .menu_with_disabled(
+                                t!("Input.Show Code Actions"),
+                                !(enabled && capabilities.code_actions),
+                                Box::new(gpui_base::input::ToggleCodeActions),
+                            )
+                            .separator();
+                    }
+                    menu.menu_with_disabled(
+                        t!("Input.Cut"),
+                        !(enabled && capabilities.selection),
+                        Box::new(gpui_base::input::Cut),
+                    )
+                    .menu_with_disabled(
+                        t!("Input.Copy"),
+                        !capabilities.selection,
+                        Box::new(gpui_base::input::Copy),
+                    )
+                    .menu_with_disabled(
+                        t!("Input.Paste"),
+                        !(enabled && cx.read_from_clipboard().is_some()),
+                        Box::new(gpui_base::input::Paste),
+                    )
+                    .separator()
+                    .menu(
+                        t!("Input.Select All"),
+                        Box::new(gpui_base::input::SelectAll),
+                    )
+                };
+                menu.show(position, window, cx);
+            }));
         });
         let overlays = super::overlay::render_overlays(&self.state, window, cx);
 
@@ -525,7 +499,6 @@ impl RenderOnce for Input {
             None => placeholder.clone(),
         };
 
-        let state = self.state.read(cx);
         BaseInput::new(("input", self.state.entity_id()))
             .focused(focused)
             .disabled(disabled)
@@ -576,15 +549,8 @@ impl RenderOnce for Input {
                     .when(presentation.disabled, |this| this.opacity(0.5))
                     .child(p)
             }))
-            .when(presentation.multi_line, |mut this| {
-                let paddings = this.style().padding.clone();
-                this.child(Self::render_editor(
-                    paddings,
-                    &self.state,
-                    &state,
-                    overlays.search,
-                    window,
-                ))
+            .when(presentation.multi_line, |this| {
+                this.child(Self::render_editor(&self.state, overlays.search, window))
             })
             .when(!presentation.multi_line, |this| {
                 this.child(self.state.clone())

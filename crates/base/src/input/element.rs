@@ -123,7 +123,7 @@ impl EditorScrollbarSnapshot {
                 input_bounds,
                 last_layout.line_number_width,
                 scroll_size,
-                state.editor_scrollbar_paddings.get(),
+                Edges::default(),
             ),
             cursor_scroll_offset,
             soft_wrap: state.soft_wrap,
