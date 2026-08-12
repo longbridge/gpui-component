@@ -1,187 +1,700 @@
 <template>
-    <div class="banner">
-        <h1>GPUI Component</h1>
-        <div class="banner-description">
-            {{ bannerPrefix }}
-            <a href="https://gpui.rs" target="_blank">GPUI</a><span v-if="!isZh">.</span>
-            {{ bannerSuffix }}
-        </div>
-        <div class="actions">
-            <a :href="gettingStartedHref" class="btn-primary">{{ getStartedText }}</a>
-            <a :href="componentsHref"><Blocks /> {{ componentsText }}</a>
-        </div>
-        <div class="version">
-            {{ versionLabel }}
-            <a href="https://crates.io/crates/gpui-component" target="_blank">{{
-                VERSION
-            }}</a>
-        </div>
-    </div>
-    <div class="features">
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-green-500 dark:bg-green-700">
-                    <Blocks />
-                </div>
-                <div>{{ features.componentCount.title }}</div>
-            </h3>
-            <div>
-                {{ features.componentCount.description }}
+    <header class="home-nav">
+        <div class="home-nav__inner">
+            <a :href="homeHref" class="home-brand">
+                <img :src="isDark ? darkLogoHref : logoHref" alt="" />
+                <span>GPUI Component</span>
+            </a>
+            <span class="home-nav__rule" aria-hidden="true"></span>
+            <nav aria-label="Primary navigation">
+                <a :href="docsHref">{{ copy.docsNav }}</a>
+                <a :href="componentsHref">{{ copy.componentsNav }}</a>
+                <a :href="baseHref">GPUI Base</a>
+            </nav>
+            <div class="home-nav__actions">
+                <a :href="searchHref" class="home-nav__search">
+                    <Search />
+                    <span>{{ copy.searchShort }}</span>
+                    <kbd>⌘K</kbd>
+                </a>
+                <a
+                    href="https://github.com/longbridge/gpui-component"
+                    target="_blank"
+                    class="home-nav__github"
+                    :title="`${stars} stars on GitHub`"
+                >
+                    <Github /> <span>{{ starLabel }}</span>
+                </a>
+                <span
+                    class="home-nav__rule home-nav__rule--tight"
+                    aria-hidden="true"
+                ></span>
+                <a
+                    :href="languageHref"
+                    class="home-nav__icon home-nav__icon--text"
+                >
+                    {{ isZh ? "EN" : "中" }}
+                </a>
+                <button
+                    class="home-nav__icon"
+                    :aria-label="copy.themeNav"
+                    @click="isDark = !isDark"
+                >
+                    <Sun v-if="isDark" />
+                    <Moon v-else />
+                </button>
             </div>
         </div>
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-blue-500 dark:bg-blue-700">
-                    <Zap />
-                </div>
-                <div>{{ features.performance.title }}</div>
-            </h3>
-            <div>
-                {{ features.performance.description }}
-            </div>
-        </div>
+    </header>
 
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-red-500 dark:bg-red-700">
-                    <Palette />
+    <main class="home">
+        <section class="hero">
+            <div class="hero__grid" aria-hidden="true"></div>
+            <div class="hero__inner">
+                <div class="hero__copy">
+                    <a href="https://gpui.rs" target="_blank" class="eyebrow">
+                        <span class="eyebrow__pulse" aria-hidden="true"></span>
+                        {{ copy.eyebrow }}
+                        <ArrowRight />
+                    </a>
+                    <h1>{{ copy.title }}</h1>
+                    <p class="hero__lead">{{ copy.lead }}</p>
+                    <div class="hero__actions">
+                        <a :href="gettingStartedHref" class="btn btn--primary">
+                            {{ copy.startComponent }} <ArrowRight />
+                        </a>
+                        <a :href="componentsHref" class="btn">{{
+                            copy.componentsAction
+                        }}</a>
+                    </div>
+                    <ul class="hero__signals">
+                        <li>
+                            <Star />
+                            <strong>{{ starLabel }}</strong>
+                            {{ copy.signalStars }}
+                        </li>
+                        <li><Scale /> {{ copy.signalLicense }}</li>
+                        <li><Monitor /> {{ copy.signalPlatforms }}</li>
+                    </ul>
+                    <div class="hero__install">
+                        <span class="hero__install-label">Cargo.toml</span>
+                        <code>{{ installCommand }}</code>
+                        <button
+                            type="button"
+                            :aria-label="copy.copyLabel"
+                            :data-copied="copied || null"
+                            @click="copyInstall"
+                        >
+                            <Check v-if="copied" />
+                            <Copy v-else />
+                        </button>
+                    </div>
                 </div>
-                <div>{{ features.theme.title }}</div>
-            </h3>
-            <div>
-                {{ features.theme.description }}
-            </div>
-        </div>
 
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-yellow-500 dark:bg-yellow-700">
-                    <Layout />
-                </div>
-                <div>{{ features.layout.title }}</div>
-            </h3>
-            <div>
-                {{ features.layout.description }}
-            </div>
-        </div>
+                <!-- Real code from the Quick Start guide: it paints instantly,
+                     states plainly that this is a Rust library, and cannot be
+                     mistaken for a product the project does not ship. -->
+                <div class="hero__code mac-window">
+                    <div class="mac-window__bar">
+                        <span class="mac-window__lights" aria-hidden="true"
+                            ><i /><i /><i
+                        /></span>
+                        <span class="mac-window__title">main.rs</span>
+                    </div>
+                    <pre><code><span class="c-kw">use</span> gpui_component::{<span class="c-mod">button</span>::*, *};
 
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-pink-500 dark:bg-pink-700">
-                    <BarChart3 />
+<span class="c-kw">impl</span> <span class="c-type">Render</span> <span class="c-kw">for</span> <span class="c-type">HelloWorld</span> {
+    <span class="c-kw">fn</span> <span class="c-fn">render</span>(&<span class="c-kw">mut</span> self, _: &<span class="c-kw">mut</span> <span class="c-type">Window</span>, cx: &<span class="c-kw">mut</span> <span class="c-type">Context</span>&lt;Self&gt;)
+        -&gt; <span class="c-kw">impl</span> <span class="c-type">IntoElement</span>
+    {
+        <span class="c-fn">div</span>()
+            .<span class="c-fn">v_flex</span>()
+            .<span class="c-fn">gap_2</span>()
+            .<span class="c-fn">items_center</span>()
+            .<span class="c-fn">child</span>(<span class="c-str">"Hello, World!"</span>)
+            .<span class="c-fn">child</span>(
+                <span class="c-type">Button</span>::<span class="c-fn">new</span>(<span class="c-str">"ok"</span>)
+                    .<span class="c-fn">primary</span>()
+                    .<span class="c-fn">label</span>(<span class="c-str">"Let's Go!"</span>)
+                    .<span class="c-fn">on_click</span>(cx.<span class="c-fn">listener</span>(Self::go)),
+            )
+    }
+}</code></pre>
                 </div>
-                <div>{{ features.chart.title }}</div>
-            </h3>
-            <div>
-                {{ features.chart.description }}
             </div>
-        </div>
+        </section>
 
-        <div class="feature-card">
-            <h3>
-                <div class="icon bg-cyan-500 dark:bg-cyan-700">
-                    <SquareCode />
+        <section ref="liveSection" class="band">
+            <div class="band__inner">
+                <header class="section-head showcase__head">
+                    <div>
+                        <span class="section-kicker">{{
+                            copy.liveKicker
+                        }}</span>
+                        <h2>{{ copy.liveTitle }}</h2>
+                        <p>{{ copy.liveDescription }}</p>
+                    </div>
+                    <div class="segmented" role="tablist">
+                        <button
+                            v-for="demo in demos"
+                            :key="demo.story"
+                            type="button"
+                            role="tab"
+                            :aria-selected="demo.story === activeStory"
+                            :class="{ 'is-active': demo.story === activeStory }"
+                            @click="activeStory = demo.story"
+                        >
+                            {{ demo.label }}
+                        </button>
+                    </div>
+                </header>
+
+                <div class="showcase__frame mac-window">
+                    <div class="mac-window__bar">
+                        <span class="mac-window__lights" aria-hidden="true"
+                            ><i /><i /><i
+                        /></span>
+                        <span class="mac-window__title"
+                            >{{ activeStory }} — gpui-component</span
+                        >
+                        <span class="live__badge">
+                            {{ copy.liveBadge }}
+                        </span>
+                    </div>
+                    <iframe
+                        v-if="liveSrc"
+                        :key="liveSrc"
+                        :src="liveSrc"
+                        :title="copy.liveTitle"
+                        loading="lazy"
+                    />
+                    <div
+                        v-else
+                        class="showcase__placeholder"
+                        aria-hidden="true"
+                    >
+                        <span class="live__dot"></span>
+                    </div>
                 </div>
-                <div>{{ features.editor.title }}</div>
-            </h3>
-            <div>
-                {{ features.editor.description }}
             </div>
+        </section>
+
+        <section class="band">
+            <div class="band__inner">
+                <header class="section-head">
+                    <span class="section-kicker">{{ copy.capsKicker }}</span>
+                    <h2>{{ copy.capsTitle }}</h2>
+                    <p>{{ copy.capsDescription }}</p>
+                </header>
+
+                <div class="caps__grid">
+                    <article
+                        v-for="cap in copy.caps"
+                        :key="cap.title"
+                        class="cap"
+                    >
+                        <div class="cap__head">
+                            <component :is="capIcons[cap.icon]" />
+                            <h3>{{ cap.title }}</h3>
+                        </div>
+                        <p>{{ cap.description }}</p>
+                        <ul class="cap__api">
+                            <li v-for="api in cap.apis" :key="api">
+                                {{ api }}
+                            </li>
+                        </ul>
+                        <div
+                            class="cap__preview"
+                            :class="`cap__preview--${cap.icon}`"
+                            aria-hidden="true"
+                        >
+                            <template v-if="cap.icon === 'table'">
+                                <i v-for="n in 5" :key="n"><b /><b /><b /></i>
+                            </template>
+                            <template v-else-if="cap.icon === 'dock'">
+                                <b /><b /><b />
+                            </template>
+                            <template v-else-if="cap.icon === 'chart'">
+                                <u
+                                    v-for="h in [38, 62, 46, 88, 58, 74, 96]"
+                                    :key="h"
+                                    :style="{ height: `${h}%` }"
+                                />
+                            </template>
+                            <template v-else-if="cap.icon === 'editor'">
+                                <i
+                                    v-for="line in editorLines"
+                                    :key="line.join()"
+                                >
+                                    <b
+                                        v-for="(w, i) in line"
+                                        :key="i"
+                                        :style="{ width: `${w}rem` }"
+                                    />
+                                </i>
+                            </template>
+                            <template v-else-if="cap.icon === 'theme'">
+                                <em v-for="t in 6" :key="t" />
+                            </template>
+                            <template v-else>
+                                <span />
+                            </template>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="band">
+            <div class="band__inner">
+                <header class="section-head">
+                    <span class="section-kicker">{{ copy.chooseKicker }}</span>
+                    <h2>{{ copy.chooseTitle }}</h2>
+                    <p>{{ copy.chooseDescription }}</p>
+                </header>
+
+                <div class="paths__grid">
+                    <article class="path path--primary">
+                        <div class="path__meta">
+                            <Blocks />
+                            <span>gpui-component</span>
+                        </div>
+                        <h3>{{ copy.shipTitle }}</h3>
+                        <p>{{ copy.shipDescription }}</p>
+                        <pre><code><span class="c-type">Button</span>::new(<span class="c-str">"save"</span>)
+    .<span class="c-fn">label</span>(<span class="c-str">"Save changes"</span>)
+    .<span class="c-fn">on_click</span>(cx.<span class="c-fn">listener</span>(Self::save))</code></pre>
+                        <ul>
+                            <li v-for="item in copy.shipPoints" :key="item">
+                                <Check />{{ item }}
+                            </li>
+                        </ul>
+                        <a :href="gettingStartedHref" class="path__link">
+                            {{ copy.startComponent }} <ArrowRight />
+                        </a>
+                    </article>
+
+                    <article class="path">
+                        <div class="path__meta">
+                            <Layers3 />
+                            <span>gpui-base</span>
+                        </div>
+                        <h3>{{ copy.ownTitle }}</h3>
+                        <p>{{ copy.ownDescription }}</p>
+                        <pre><code><span class="c-type">Button</span>::new(<span class="c-str">"save"</span>)
+    .<span class="c-fn">on_click</span>(cx.<span class="c-fn">listener</span>(Self::save))
+    <span class="c-cmt">// presentation is entirely yours</span>
+    .<span class="c-fn">rounded_md</span>()
+    .<span class="c-fn">child</span>(<span class="c-str">"Save changes"</span>)</code></pre>
+                        <ul>
+                            <li v-for="item in copy.ownPoints" :key="item">
+                                <Check />{{ item }}
+                            </li>
+                        </ul>
+                        <a :href="baseHref" class="path__link"
+                            >{{ copy.startBase }} <ArrowRight
+                        /></a>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="band band--principle">
+            <div class="principle__grid" aria-hidden="true"></div>
+            <div class="band__inner principle">
+                <span class="section-kicker">{{ copy.principleKicker }}</span>
+                <blockquote>
+                    <span>{{ copy.principleLead }}</span>
+                    <span class="principle__accent">{{
+                        copy.principleTail
+                    }}</span>
+                </blockquote>
+                <p>{{ copy.principleDetail }}</p>
+                <a :href="baseHref" class="btn btn--primary"
+                    >{{ copy.baseAction }} <ArrowRight
+                /></a>
+            </div>
+        </section>
+    </main>
+
+    <footer class="home-footer">
+        <div class="home-footer__brand">
+            <strong>GPUI Component</strong>
+            <p>
+                {{ copy.footerPrefix }}
+                <a href="https://longbridge.com" target="_blank">Longbridge</a>.
+            </p>
         </div>
-    </div>
+        <nav :aria-label="copy.footerNav">
+            <a href="https://gpui.rs" target="_blank">GPUI</a>
+            <a :href="contributorsHref">{{ copy.contributors }}</a>
+            <a :href="skillsHref" target="_blank">Skills</a>
+            <a :href="llmsHref" target="_blank">llms-full.txt</a>
+            <a
+                href="https://github.com/longbridge/gpui-component/issues"
+                target="_blank"
+                >{{ copy.reportBug }}</a
+            >
+            <a
+                href="https://github.com/longbridge/gpui-component/discussions"
+                target="_blank"
+                >{{ copy.discussion }}</a
+            >
+        </nav>
+        <p class="home-footer__credits">
+            {{ copy.iconCredits }}
+            <a href="https://lucide.dev" target="_blank">Lucide</a>
+            {{ copy.and }}
+            <a href="https://isocons.app" target="_blank">Isocons</a>.
+        </p>
+    </footer>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useData, withBase } from "vitepress";
 import {
+    ArrowRight,
     Blocks,
-    Zap,
+    Check,
+    Copy,
+    Github,
+    Gauge,
+    Layers3,
+    LayoutDashboard,
+    List,
+    Monitor,
+    Moon,
     Palette,
-    Layout,
-    BarChart3,
+    Scale,
+    Search,
     SquareCode,
+    Star,
+    Sun,
+    Table2,
 } from "lucide-vue-next";
+import { data as repo } from "./data/repo.data";
 
-const { localeIndex } = useData();
+const { isDark, localeIndex } = useData();
 const isZh = computed(() => localeIndex.value === "zh-CN");
 const localePrefix = computed(() => (isZh.value ? "/zh-CN" : ""));
-const gettingStartedHref = computed(
-    () => withBase(`${localePrefix.value}/docs/getting-started`),
+
+const stars = repo.stargazers_count ?? 0;
+const starLabel = stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : `${stars}`;
+
+const gettingStartedHref = computed(() =>
+    withBase(`${localePrefix.value}/docs/getting-started`),
 );
 const componentsHref = computed(() =>
     withBase(`${localePrefix.value}/docs/components`),
 );
-const bannerPrefix = computed(() =>
+const baseHref = computed(() => withBase("/base/"));
+const docsHref = computed(() => withBase(`${localePrefix.value}/docs/`));
+const searchHref = computed(() =>
+    withBase(`${localePrefix.value}/docs/components`),
+);
+const homeHref = computed(() => withBase(`${localePrefix.value}/`));
+const logoHref = computed(() => withBase("/logo.svg"));
+const darkLogoHref = computed(() => withBase("/logo-dark.svg"));
+const languageHref = computed(() => withBase(isZh.value ? "/" : "/zh-CN/"));
+const contributorsHref = computed(() =>
+    withBase(`${localePrefix.value}/contributors`),
+);
+const skillsHref = computed(() => withBase(`${localePrefix.value}/skills`));
+const llmsHref = computed(() => withBase("/llms-full.txt"));
+
+// Token widths (rem) per line — an indent pattern that reads as code without
+// pretending to be a specific snippet.
+const editorLines = [
+    [0.5, 1.6, 0.9],
+    [1.1, 2.2],
+    [1.1, 1.4, 0.7],
+    [0.5, 1.2],
+];
+
+const capIcons = {
+    perf: Gauge,
+    table: Table2,
+    list: List,
+    editor: SquareCode,
+    dock: LayoutDashboard,
+    theme: Palette,
+};
+
+// The crate is not published yet, so the real dependency is a git one — the
+// hero must not suggest a `cargo add` that would fail.
+const installCommand =
+    'gpui-component = { git = "https://github.com/longbridge/gpui-component" }';
+
+const copied = ref(false);
+let copyTimer;
+const copyInstall = async () => {
+    try {
+        await navigator.clipboard.writeText(installCommand);
+        copied.value = true;
+        clearTimeout(copyTimer);
+        copyTimer = setTimeout(() => (copied.value = false), 1600);
+    } catch {
+        // Clipboard access can be denied; the command stays selectable as text.
+    }
+};
+
+// The gallery is a full WASM build, so it only loads once the section is close
+// to the viewport — the hero must never pay for it.
+const demos = computed(() =>
     isZh.value
-        ? "基于 Rust + "
-        : "Rust GUI components for building fantastic cross-platform desktop application by using ",
+        ? [
+              { story: "DataTable", label: "数据表格" },
+              { story: "Chart", label: "图表" },
+              { story: "List", label: "列表" },
+              { story: "Sidebar", label: "侧边栏" },
+          ]
+        : [
+              { story: "DataTable", label: "Data table" },
+              { story: "Chart", label: "Charts" },
+              { story: "List", label: "List" },
+              { story: "Sidebar", label: "Sidebar" },
+          ],
 );
-const bannerSuffix = computed(() =>
-    isZh.value ? " 构建卓越的桌面应用程序" : "",
+const activeStory = ref("DataTable");
+const galleryVisible = ref(false);
+const liveSection = ref();
+const liveSrc = computed(() =>
+    galleryVisible.value
+        ? withBase(`/gallery/?story=${encodeURIComponent(activeStory.value)}`)
+        : undefined,
 );
-const getStartedText = computed(() => (isZh.value ? "开始使用" : "Get Started"));
-const componentsText = computed(() => (isZh.value ? "组件" : "Components"));
-const versionLabel = computed(() => (isZh.value ? "版本：" : "Version:"));
-const features = computed(() =>
+
+let observer;
+onMounted(() => {
+    if (!liveSection.value) return;
+    if (!("IntersectionObserver" in window)) {
+        galleryVisible.value = true;
+        return;
+    }
+    observer = new IntersectionObserver(
+        (entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                galleryVisible.value = true;
+                observer?.disconnect();
+            }
+        },
+        { rootMargin: "400px" },
+    );
+    observer.observe(liveSection.value);
+});
+onBeforeUnmount(() => {
+    observer?.disconnect();
+    clearTimeout(copyTimer);
+});
+
+const copy = computed(() =>
     isZh.value
         ? {
-              componentCount: {
-                  title: "60+ 组件",
-                  description: "覆盖丰富桌面场景的跨平台组件库，可直接用于构建复杂应用。",
-              },
-              performance: {
-                  title: "高性能",
-                  description: "内置虚拟列表与虚拟表格，面对大数据量渲染依然保持流畅。",
-              },
-              theme: {
-                  title: "可主题化",
-                  description: "内建主题系统与 20+ 主题，并原生支持明暗模式切换。",
-              },
-              layout: {
-                  title: "灵活布局",
-                  description: "支持 Dock、可调整面板和自由布局，适合复杂桌面应用结构。",
-              },
-              chart: {
-                  title: "数据可视化",
-                  description: "内置折线、柱状、面积、饼图等图表组件，便于快速展示数据。",
-              },
-              editor: {
-                  title: "代码编辑器",
-                  description: "高性能编辑器内置 LSP 与语法高亮，底层基于 Tree-sitter 和 Rope。",
-              },
+              docsNav: "文档",
+              componentsNav: "组件",
+              searchNav: "搜索文档",
+              searchShort: "搜索",
+              themeNav: "切换主题",
+              copyLabel: "复制安装命令",
+              eyebrow: "基于 GPUI —— Zed 背后的渲染引擎",
+              title: "用 Rust 构建原生桌面应用。",
+              lead: "面向 GPUI（Zed 编辑器背后的 GPU 加速渲染引擎）的 UI 组件库。数据表格、Dock 布局、图表与代码编辑器一应俱全；一份 Rust 源码，同时交付 macOS、Windows 与 Linux。",
+              componentsAction: "浏览组件",
+              baseAction: "探索 gpui-base",
+              signalStars: "GitHub stars",
+              signalLicense: "Apache-2.0 许可",
+              signalPlatforms: "macOS / Windows / Linux",
+              liveKicker: "真实运行",
+              liveTitle: "不是截图，是真的在跑。",
+              liveDescription:
+                  "下面这些组件由同一份 Rust 源码编译为 WebAssembly，就在你的浏览器里渲染。桌面端跑的是原生构建。",
+              liveBadge: "WASM 实时",
+              capsKicker: "核心能力",
+              capsTitle: "为信息密集型软件而生。",
+              capsDescription:
+                  "复杂桌面应用真正需要的部分，都已在库内解决，无需自行拼装。",
+              caps: [
+                  {
+                      icon: "perf",
+                      title: "120 FPS 渲染",
+                      description:
+                          "每一帧都由 GPU 绘制，高密度界面依然稳定流畅，不掉帧。",
+                      apis: ["RenderOnce", "GPU"],
+                  },
+                  {
+                      icon: "table",
+                      title: "复杂数据表格",
+                      description:
+                          "虚拟滚动、列固定、列宽调整、排序与单元格选择，可承载数十万行。",
+                      apis: ["Table", "DataTable"],
+                  },
+                  {
+                      icon: "list",
+                      title: "高性能虚拟列表",
+                      description: "只渲染可见区域，超长列表滚动依然保持流畅。",
+                      apis: ["VirtualList", "List"],
+                  },
+                  {
+                      icon: "editor",
+                      title: "完整代码编辑器",
+                      description:
+                          "Rope 存储，20 万行仍保持稳定性能；内置 Tree-sitter 高亮与 LSP 诊断、补全、悬浮提示。",
+                      apis: ["Rope", "Tree-Sitter", "LSP", "Highlighter"],
+                  },
+                  {
+                      icon: "dock",
+                      title: "Dock 自由布局",
+                      description:
+                          "面板停靠、拖拽重排、缩放与 Tiles 自由布局，并可序列化保存。",
+                      apis: ["DockArea", "Tiles", "TabPanel"],
+                  },
+                  {
+                      icon: "theme",
+                      title: "多主题支持",
+                      description:
+                          "基于语义化 token 的明暗与多主题切换，而非无尽的样式字段。",
+                      apis: ["Theme", "ThemeColor", "ActiveTheme"],
+                  },
+              ],
+              chooseKicker: "两条路径",
+              chooseTitle: "从适合产品的层开始。",
+              chooseDescription:
+                  "使用完整组件库快速交付，或只采用底层行为来构建自己的系统。",
+              shipTitle: "交付完整应用",
+              shipDescription:
+                  "主题、复杂数据组件、Dock、图表与编辑器均已就绪。",
+              shipPoints: [
+                  "60+ 个成品组件",
+                  "内置明暗主题",
+                  "开箱即用的交互细节",
+              ],
+              startComponent: "开始使用",
+              ownTitle: "构建设计系统",
+              ownDescription:
+                  "复用焦点、选择、浮层与虚拟化行为，视觉完全由你决定。",
+              ownPoints: [
+                  "零样式原语",
+                  "完整可访问性行为",
+                  "视觉表达 100% 自主",
+              ],
+              startBase: "阅读 gpui-base 文档",
+              principleKicker: "设计原则",
+              principleLead: "行为属于基础层。",
+              principleTail: "视觉属于应用。",
+              principleDetail:
+                  "gpui-base 处理困难的交互机制：焦点、浮层定位、虚拟化与无障碍；你的产品决定它们最终呈现的样子。",
+              footerPrefix: "基于 Apache-2.0 许可证开源，由",
+              footerNav: "页脚导航",
+              contributors: "贡献者",
+              reportBug: "报告问题",
+              discussion: "讨论",
+              iconCredits: "图标资源来自",
+              and: "与",
           }
         : {
-              componentCount: {
-                  title: "60+ Components",
-                  description:
-                      "Comprehensive library of cross-platform desktop UI components for building feature-rich applications.",
-              },
-              performance: {
-                  title: "High Performance",
-                  description:
-                      "Virtualized Table and List components for smooth rendering of large datasets with minimal memory footprint.",
-              },
-              theme: {
-                  title: "Themeable",
-                  description:
-                      "Built-in theme system with with 20+ themes, and dark mode out of the box.",
-              },
-              layout: {
-                  title: "Flexible Layouts",
-                  description:
-                      "Dock layout for panel arrangements, resizable panels, and freeform layouts for any application structure.",
-              },
-              chart: {
-                  title: "Data Visualization",
-                  description:
-                      "Built-in chart components for visualizing data with Line, Bar, Area, and Pie charts.",
-              },
-              editor: {
-                  title: "Code Editor",
-                  description:
-                      "High-performance code editor with LSP support, syntax highlighting, powered by Tree-sitter and Rope.",
-              },
+              docsNav: "Docs",
+              componentsNav: "Components",
+              searchNav: "Search documentation",
+              searchShort: "Search",
+              themeNav: "Toggle color theme",
+              copyLabel: "Copy install command",
+              eyebrow: "Built on GPUI — the renderer behind Zed",
+              title: "Build native desktop apps in Rust.",
+              lead: "A UI library for GPUI, the GPU-accelerated renderer behind the Zed editor. Data tables, docking, charts and a code editor included — one Rust source, shipping to macOS, Windows and Linux.",
+              componentsAction: "Browse components",
+              baseAction: "Explore gpui-base",
+              signalStars: "stars on GitHub",
+              signalLicense: "Apache-2.0",
+              signalPlatforms: "macOS, Windows, Linux",
+              liveKicker: "Running now",
+              liveTitle: "Not screenshots. Actually running.",
+              liveDescription:
+                  "These components are compiled from the same Rust source to WebAssembly and rendered in your browser right now. On desktop they run as a native build.",
+              liveBadge: "Live WASM",
+              capsKicker: "Capabilities",
+              capsTitle: "Built for information-dense software.",
+              capsDescription:
+                  "The parts that real desktop applications need are already solved inside the library.",
+              caps: [
+                  {
+                      icon: "perf",
+                      title: "120 FPS rendering",
+                      description:
+                          "Every frame is drawn by the GPU, so dense interfaces stay smooth instead of dropping frames.",
+                      apis: ["RenderOnce", "GPU"],
+                  },
+                  {
+                      icon: "table",
+                      title: "Complex data tables",
+                      description:
+                          "Virtual scrolling, fixed and resizable columns, sorting and cell selection across hundreds of thousands of rows.",
+                      apis: ["Table", "DataTable"],
+                  },
+                  {
+                      icon: "list",
+                      title: "Virtualized lists",
+                      description:
+                          "Only the visible range is rendered, so very long lists keep scrolling smoothly.",
+                      apis: ["VirtualList", "List"],
+                  },
+                  {
+                      icon: "editor",
+                      title: "A real code editor",
+                      description:
+                          "Rope-backed text that stays stable at 200K lines, with Tree-sitter highlighting and LSP diagnostics, completion and hover.",
+                      apis: ["Rope", "Tree-Sitter", "LSP", "Highlighter"],
+                  },
+                  {
+                      icon: "dock",
+                      title: "Freeform dock layout",
+                      description:
+                          "Dockable panels with drag-to-rearrange, zooming and freeform tiles — all serializable.",
+                      apis: ["DockArea", "Tiles", "TabPanel"],
+                  },
+                  {
+                      icon: "theme",
+                      title: "Multi-theme support",
+                      description:
+                          "Light, dark and custom themes driven by semantic tokens instead of endless style fields.",
+                      apis: ["Theme", "ThemeColor", "ActiveTheme"],
+                  },
+              ],
+              chooseKicker: "Two paths",
+              chooseTitle: "Start at the layer your product needs.",
+              chooseDescription:
+                  "Ship with the complete component library, or adopt only the behavior layer and build your own system.",
+              shipTitle: "Ship the complete application",
+              shipDescription:
+                  "Themes, data-heavy controls, docking, charts and an editor are ready to use.",
+              shipPoints: [
+                  "60+ finished components",
+                  "Light and dark themes included",
+                  "Interaction details already handled",
+              ],
+              startComponent: "Get started",
+              ownTitle: "Create the design system",
+              ownDescription:
+                  "Reuse focus, selection, overlay and virtualization behavior while owning every pixel.",
+              ownPoints: [
+                  "Zero-style primitives",
+                  "Full accessibility behavior",
+                  "100% visual ownership",
+              ],
+              startBase: "Read the gpui-base docs",
+              principleKicker: "Principle",
+              principleLead: "Behavior belongs to the foundation.",
+              principleTail: "Presentation belongs to the application.",
+              principleDetail:
+                  "gpui-base handles the difficult interaction mechanics — focus, overlay positioning, virtualization and accessibility. Your product decides how they should look and feel.",
+              footerPrefix:
+                  "Open source under the Apache-2.0 License, developed by",
+              footerNav: "Footer navigation",
+              contributors: "Contributors",
+              reportBug: "Report Bug",
+              discussion: "Discussion",
+              iconCredits: "Icon resources by",
+              and: "and",
           },
 );
 </script>
@@ -189,59 +702,1133 @@ const features = computed(() =>
 <style lang="scss">
 @reference "./.vitepress/theme/style.css";
 
-.banner {
-    @apply flex flex-col gap-2 lg:gap-4 -mt-20  py-12 xl:py-30 text-center border border-b-0 border-(--border);
+/* ---------------------------------------------------------------- shell */
 
-    background: url("/home.svg") no-repeat;
-    background-position: bottom -90px right -90px;
+.home {
+    --page: 1280px;
+    --gutter: 1.5rem;
+    --section-gap: clamp(3.5rem, 6vw, 5.5rem);
+    color: var(--foreground);
+}
 
-    h1 {
-        @apply mt-20 text-3xl xl:text-5xl font-bold mb-2 text-(--primary);
+/* Every band shares one container and one vertical rhythm, with a full-bleed
+   hairline between them — without this the sections run together. */
+.home > section {
+    position: relative;
+    border-top: 1px solid var(--border);
+}
+
+.home > section:first-child {
+    border-top: 0;
+}
+
+.band__inner {
+    position: relative;
+    width: min(100% - 3rem, var(--page));
+    margin-inline: auto;
+    padding-block: var(--section-gap);
+}
+
+.band--principle {
+    overflow: hidden;
+    background: var(--sidebar);
+}
+
+.home-nav {
+    position: sticky;
+    z-index: 50;
+    top: 0;
+    height: 3.5rem;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--background) 80%, transparent);
+    backdrop-filter: blur(18px) saturate(160%);
+}
+
+/* A toolbar, not a marketing header: the brand and the sections sit together
+   on the left, controls collect on the right. */
+.home-nav__inner {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    width: min(100% - 3rem, var(--page, 1280px));
+    height: 100%;
+    margin-inline: auto;
+}
+
+.home-nav__rule--tight {
+    margin-inline: 0.15rem;
+}
+
+.home-brand {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.55rem;
+    color: var(--foreground) !important;
+    font-size: 0.875rem;
+    font-weight: 620;
+    letter-spacing: -0.022em;
+    text-decoration: none !important;
+
+    img {
+        width: 1.35rem;
+        height: 1.4rem;
     }
-    .banner-description {
-        @apply text-lg xl:text-2xl text-(--muted-foreground);
+}
+
+.home-nav nav {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+}
+
+.home-nav nav a {
+    padding: 0.4rem 0.6rem;
+    border-radius: var(--radius-control);
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition:
+        color 140ms ease,
+        background 140ms ease;
+
+    &:hover {
+        background: var(--secondary);
+        color: var(--foreground);
     }
-    .actions {
-        @apply gap-4 flex justify-center text-sm;
-        a {
-            @apply flex items-center h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5 no-underline
-            bg-(--secondary) hover:bg-(--secondary)/70 text-(--secondary-foreground);
+}
 
-            &.btn-primary {
-                @apply bg-(--primary) hover:bg-(--primary)/90 text-(--primary-foreground);
-            }
+.home-nav__actions {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    gap: 0.3rem;
+}
 
-            .lucide {
-                @apply w-4 h-4;
-            }
+/* The search control reads as a real input, which is what it becomes on the
+   docs pages. */
+.home-nav__search {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    height: 2rem;
+    min-width: 11rem;
+    padding: 0 0.35rem 0 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--background);
+    color: var(--muted-foreground) !important;
+    font-size: 0.8125rem;
+    text-decoration: none !important;
+    transition: border-color 140ms ease;
+
+    &:hover {
+        border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
+    }
+    svg {
+        width: 0.9rem;
+        height: 0.9rem;
+    }
+    span {
+        margin-right: auto;
+    }
+
+    kbd {
+        padding: 0.1rem 0.3rem;
+        border: 1px solid var(--border);
+        border-radius: 0.25rem;
+        background: var(--secondary);
+        color: var(--muted-foreground);
+        font: 0.68rem/1.4 var(--vp-font-family-mono);
+    }
+}
+
+.home-nav__github,
+.home-nav__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2rem;
+    border-radius: var(--radius-control);
+    color: var(--foreground) !important;
+    text-decoration: none !important;
+    transition: background 140ms ease;
+
+    &:hover {
+        background: var(--secondary);
+    }
+    svg {
+        width: 0.95rem;
+        height: 0.95rem;
+    }
+}
+
+.home-nav__github {
+    gap: 0.4rem;
+    padding: 0 0.55rem;
+    font-size: 0.8125rem;
+    font-weight: 560;
+    font-variant-numeric: tabular-nums;
+}
+
+.home-nav__icon {
+    width: 2rem;
+    cursor: pointer;
+}
+.home-nav__icon--text {
+    font-size: 0.78rem;
+    font-weight: 560;
+}
+
+/* ------------------------------------------------------------- primitives */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 2.6rem;
+    padding: 0 1.05rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--background);
+    color: var(--foreground) !important;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none !important;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent);
+    transition:
+        background 150ms ease,
+        border-color 150ms ease,
+        transform 150ms ease,
+        box-shadow 150ms ease;
+
+    svg {
+        width: 1rem;
+        height: 1rem;
+    }
+    &:hover {
+        background: var(--secondary);
+    }
+    &:active {
+        transform: translateY(1px);
+    }
+}
+
+.btn--primary {
+    border-color: var(--brand);
+    background: var(--brand);
+    color: var(--brand-contrast) !important;
+    box-shadow:
+        0 1px 2px color-mix(in srgb, var(--brand) 30%, transparent),
+        0 8px 24px color-mix(in srgb, var(--brand) 22%, transparent);
+
+    &:hover {
+        border-color: var(--brand-hover);
+        background: var(--brand-hover);
+    }
+}
+
+.section-head {
+    max-width: 44rem;
+    margin-bottom: 2.75rem;
+
+    h2 {
+        margin: 0.85rem 0 0;
+        font-size: clamp(2rem, 3.6vw, 3rem);
+        font-weight: 660;
+        letter-spacing: -0.045em;
+        line-height: 1.04;
+    }
+
+    p {
+        max-width: 38rem;
+        margin: 1rem 0 0;
+        color: var(--muted-foreground);
+        font-size: 1rem;
+        line-height: 1.7;
+    }
+}
+
+.section-kicker {
+    display: inline-flex;
+    align-items: center;
+    color: var(--muted-foreground);
+    font: 600 0.68rem/1 var(--vp-font-family-mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+/* Wide tracking is a Latin small-caps device; on CJK it just pulls the
+   characters apart. */
+html[lang^="zh"] .section-kicker {
+    letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------------ hero */
+
+.hero {
+    overflow: hidden;
+}
+
+/* A hairline blueprint grid, faded out toward the edges. No colour wash — the
+   accent stays reserved for signals, so the surface reads as instrumentation
+   rather than decoration. */
+.hero__grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(115% 85% at 30% 0%, black 15%, transparent 74%);
+    pointer-events: none;
+}
+
+.hero__inner {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    align-items: center;
+    gap: clamp(2rem, 4vw, 3.5rem);
+    width: min(100% - 3rem, var(--page));
+    margin-inline: auto;
+    padding-block: clamp(2.75rem, 5vw, 4.25rem);
+}
+
+.eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.38rem 0.7rem 0.38rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--background);
+    color: var(--foreground) !important;
+    font-size: 0.72rem;
+    font-weight: 560;
+    text-decoration: none !important;
+    transition: border-color 150ms ease;
+
+    svg {
+        width: 0.82rem;
+        height: 0.82rem;
+        color: var(--muted-foreground);
+    }
+    &:hover {
+        border-color: var(--brand-line);
+    }
+}
+
+.eyebrow__pulse {
+    position: relative;
+    width: 0.4rem;
+    height: 0.4rem;
+    margin: 0 6px;
+    border-radius: 50%;
+    background: var(--success);
+
+    &::after {
+        position: absolute;
+        inset: -0.15rem;
+        border: 1px solid var(--success);
+        border-radius: 50%;
+        opacity: 0.5;
+        content: "";
+    }
+}
+
+.hero {
+    margin-bottom: 2.5rem;
+}
+
+.hero h1 {
+    max-width: 18ch;
+    margin: 1.25rem 0;
+    font-size: clamp(2.2rem, 4.3vw, 3.6rem);
+    font-weight: 660;
+    letter-spacing: -0.042em;
+    line-height: 0.98;
+}
+
+.hero__lead {
+    max-width: 32rem;
+    margin: 1.25rem 0;
+    color: var(--muted-foreground);
+    font-size: 1.03rem;
+    line-height: 1.7;
+}
+
+.hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.hero__install {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: 100%;
+    margin-top: 1.35rem;
+    padding: 0.4rem 0.4rem 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--sidebar);
+
+    code {
+        overflow-x: auto;
+        color: var(--foreground);
+        font: 0.73rem/1.6 var(--vp-font-family-mono);
+        mask-image: linear-gradient(
+            to right,
+            black calc(100% - 1.25rem),
+            transparent
+        );
+        scrollbar-width: none;
+        white-space: nowrap;
+    }
+
+    button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.7rem;
+        height: 1.7rem;
+        border-radius: 0.3rem;
+        color: var(--muted-foreground);
+        cursor: pointer;
+        transition:
+            background 140ms ease,
+            color 140ms ease;
+
+        svg {
+            width: 0.85rem;
+            height: 0.85rem;
         }
-    }
-    .version {
-        @apply text-sm text-(--muted-foreground) pb-10;
-        a {
-            @apply text-(--muted-foreground) no-underline hover:underline;
+        &:hover {
+            background: var(--secondary);
+            color: var(--foreground);
+        }
+        &[data-copied] {
+            color: var(--foreground);
         }
     }
 }
 
-.features {
-    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mb-12 border-b border-r  border-(--border);
+.hero__code {
+    min-width: 0;
+
+    pre {
+        margin: 0;
+        padding: 1.05rem 1.25rem 1.25rem;
+        overflow-x: auto;
+        background: var(--sidebar);
+        font: 0.75rem/1.68 var(--vp-font-family-mono);
+        scrollbar-width: thin;
+        tab-size: 4;
+    }
+
+    code {
+        color: var(--foreground);
+    }
 }
 
-.feature-card {
-    @apply flex flex-col text-sm gap-2 py-3.5 px-5 border border-b-0 border-(--border);
-    @apply border-r-0 last:border-r-0 md:last:border-b-0 lg:last:border-b-0;
+.c-kw {
+    color: var(--data-3);
+}
+.c-mod {
+    color: var(--muted-foreground);
+}
+
+.hero__install-label {
+    flex-shrink: 0;
+    padding-right: 0.6rem;
+    border-right: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font: 0.66rem/1.6 var(--vp-font-family-mono);
+    letter-spacing: 0.04em;
+}
+
+/* Concrete, verifiable facts — the fastest way for a first-time visitor to
+   judge whether this project is real. */
+.hero__signals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin: 1.5rem 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--muted-foreground);
+    font-size: 0.8rem;
+
+    li {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    strong {
+        color: var(--foreground);
+        font-weight: 620;
+        font-variant-numeric: tabular-nums;
+    }
+    svg {
+        width: 0.9rem;
+        height: 0.9rem;
+        opacity: 0.75;
+    }
+}
+
+/* -------------------------------------------------------------- showcase */
+
+/* The live window belongs to the hero, so its caption is a single thin line:
+   what you are looking at, and what to look at instead. */
+.showcase__head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 2rem;
+    max-width: none;
+
+    /* The heading keeps a readable measure; the control stays at the edge. */
+    > div {
+        max-width: 44rem;
+    }
+
+    p {
+        margin-bottom: 0.15rem;
+    }
+}
+
+/* tab_bar.segmented.background / tab.active.background — the library's own
+   segmented control, which is how gpui-component switches between views. */
+.segmented {
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: 0.1rem;
+    padding: 0.18rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius-control) + 0.18rem);
+    background: var(--secondary);
+
+    button {
+        padding: 0.35rem 0.7rem;
+        border: 1px solid transparent;
+        border-radius: var(--radius-control);
+        color: var(--muted-foreground);
+        font-size: 0.8rem;
+        font-weight: 520;
+        white-space: nowrap;
+        cursor: pointer;
+        transition:
+            background 140ms ease,
+            color 140ms ease;
+
+        &:hover {
+            color: var(--foreground);
+        }
+
+        &.is-active {
+            border-color: var(--border);
+            background: var(--background);
+            box-shadow: 0 1px 2px
+                color-mix(in srgb, var(--foreground) 8%, transparent);
+            color: var(--foreground);
+            font-weight: 560;
+        }
+    }
+}
+
+.live__badge {
+    margin-left: auto;
+    color: var(--muted-foreground);
+    font: 0.66rem/1 var(--vp-font-family-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.live__dot {
+    flex-shrink: 0;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
+}
+
+.showcase__frame iframe,
+.showcase__placeholder {
+    display: block;
+    width: 100%;
+    height: min(600px, calc(100dvh - 11rem));
+    border: 0;
+    @apply bg-white dark:bg-[#0a0a0a];
+}
+
+.showcase__placeholder {
+    display: grid;
+    place-items: center;
+}
+
+/* ------------------------------------------------------------------ caps */
+
+.caps__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-surface);
+    background: var(--border);
+    overflow: hidden;
+}
+
+.cap {
+    display: flex;
+    flex-direction: column;
+    padding: 1.75rem;
+    background: var(--background);
+    transition: background 160ms ease;
+
+    &:hover {
+        background: var(--sidebar);
+    }
+}
+
+.cap__head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+
+    svg {
+        width: 1.05rem;
+        height: 1.05rem;
+        color: var(--brand);
+    }
 
     h3 {
-        @apply m-0 p-0 text-lg text-(--primary) flex gap-3 items-center;
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 620;
+        letter-spacing: -0.015em;
+    }
+}
 
-        .icon {
-            @apply flex h-9 w-9 items-center justify-center rounded-md text-white;
+.cap p {
+    margin: 0.7rem 0 auto;
+    color: var(--muted-foreground);
+    font-size: 0.875rem;
+    line-height: 1.65;
+}
 
-            .lucide {
-                @apply w-5 h-5;
-            }
+.cap__api {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin: 1.25rem 0 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+        padding: 0.18rem 0.42rem;
+        border: 1px solid var(--border);
+        border-radius: 0.3rem;
+        background: var(--secondary);
+        color: var(--muted-foreground);
+        font: 0.7rem/1.5 var(--vp-font-family-mono);
+    }
+}
+
+/* Each capability ends in a small preview pane, framed like a control surface
+   so the six cards share one rhythm. These are diagrams, not product mocks. */
+.cap__preview {
+    display: flex;
+    align-items: stretch;
+    gap: 0.32rem;
+    height: 5.5rem;
+    margin-top: 1.1rem;
+    padding: 0.75rem;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--sidebar);
+}
+
+/* Every variant lays out inside the same padding box with the same gap, so the
+   six panes line up with each other. */
+.cap__preview--table,
+.cap__preview--editor {
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.42rem;
+
+    i {
+        display: flex;
+        align-items: center;
+        gap: 0.32rem;
+    }
+
+    b {
+        height: 0.3rem;
+        border-radius: 999px;
+        background: var(--input);
+    }
+}
+
+.cap__preview--table {
+    b:first-child {
+        flex: 1.6;
+    }
+    b:nth-child(2) {
+        flex: 1;
+    }
+    b:last-child {
+        flex: 0.55;
+    }
+
+    /* Header row, then a selected row. */
+    i:first-child b {
+        background: color-mix(in srgb, var(--foreground) 40%, transparent);
+    }
+    i:nth-child(3) b:first-child {
+        background: var(--data-2);
+    }
+}
+
+.cap__preview--editor {
+    i:nth-child(2),
+    i:nth-child(3) {
+        padding-left: 0.75rem;
+    }
+    i:nth-child(1) b:nth-child(2) {
+        background: var(--data-2);
+    }
+    i:nth-child(3) b:last-child {
+        background: color-mix(in srgb, var(--success) 60%, transparent);
+    }
+}
+
+.cap__preview--dock {
+    b {
+        border: 1px solid var(--border);
+        border-radius: 0.3rem;
+        background: var(--background);
+    }
+
+    b:first-child {
+        flex: 0.55;
+    }
+    b:nth-child(2) {
+        flex: 1.3;
+        border-color: color-mix(in srgb, var(--data-2) 45%, var(--border));
+        background: color-mix(in srgb, var(--data-2) 10%, transparent);
+    }
+    b:last-child {
+        flex: 0.8;
+    }
+}
+
+.cap__preview--chart {
+    align-items: flex-end;
+
+    u {
+        flex: 1;
+        border-radius: 0.18rem 0.18rem 0 0;
+        background: var(--input);
+    }
+
+    u:nth-child(4) {
+        background: var(--data-2);
+    }
+    u:last-child {
+        background: var(--data-1);
+    }
+}
+
+.cap__preview--theme {
+    em {
+        flex: 1;
+        border: 1px solid var(--border);
+        border-radius: 0.3rem;
+    }
+
+    em:nth-child(1) {
+        background: #0a0a0a;
+    }
+    em:nth-child(2) {
+        background: #404040;
+    }
+    em:nth-child(3) {
+        background: #a3a3a3;
+    }
+    em:nth-child(4) {
+        background: #f5f5f5;
+    }
+    em:nth-child(5) {
+        background: var(--background);
+    }
+    em:nth-child(6) {
+        background: var(--data-2);
+    }
+}
+
+.cap__preview--a11y {
+    align-items: center;
+    justify-content: center;
+
+    span {
+        width: 6rem;
+        height: 1.9rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-control);
+        background: var(--background);
+        outline: 2px solid var(--data-2);
+        outline-offset: 3px;
+    }
+}
+
+/* ----------------------------------------------------------------- paths */
+
+.paths__grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+}
+
+.path {
+    display: flex;
+    flex-direction: column;
+    padding: clamp(1.75rem, 3vw, 2.5rem);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-surface);
+    background: var(--background);
+    transition:
+        border-color 180ms ease,
+        box-shadow 180ms ease;
+
+    &:hover {
+        border-color: color-mix(in srgb, var(--foreground) 20%, var(--border));
+        box-shadow: 0 20px 50px -24px
+            color-mix(in srgb, var(--foreground) 20%, transparent);
+    }
+
+    h3 {
+        margin: 1rem 0 0;
+        font-size: 1.35rem;
+        font-weight: 640;
+        letter-spacing: -0.03em;
+    }
+    p {
+        margin: 0.65rem 0 0;
+        color: var(--muted-foreground);
+        font-size: 0.92rem;
+        line-height: 1.65;
+    }
+
+    pre {
+        margin: 1.5rem 0 0;
+        padding: 1rem 1.1rem;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-card);
+        background: var(--sidebar);
+        font: 0.78rem/1.75 var(--vp-font-family-mono);
+    }
+
+    ul {
+        margin: 1.25rem 0 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    li {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.3rem 0;
+        color: var(--muted-foreground);
+        font-size: 0.84rem;
+
+        svg {
+            width: 0.85rem;
+            height: 0.85rem;
+            flex-shrink: 0;
+            color: var(--brand);
         }
+    }
+}
+
+.path__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted-foreground);
+    font: 0.72rem/1 var(--vp-font-family-mono);
+
+    svg {
+        width: 1rem;
+        height: 1rem;
+        color: var(--brand);
+    }
+}
+
+.path__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: auto;
+    padding-top: 1.5rem;
+    color: var(--brand) !important;
+    font-size: 0.84rem;
+    font-weight: 620;
+    text-decoration: none !important;
+
+    svg {
+        width: 0.95rem;
+        height: 0.95rem;
+        transition: transform 160ms ease;
+    }
+    &:hover svg {
+        transform: translateX(3px);
+    }
+}
+
+.c-type {
+    color: var(--data-3);
+}
+.c-fn {
+    color: var(--foreground);
+    font-weight: 560;
+}
+.c-str {
+    color: var(--success);
+}
+.c-cmt {
+    color: var(--muted-foreground);
+}
+
+/* ------------------------------------------------------------- principle */
+
+.principle {
+    blockquote {
+        max-width: 34rem;
+        margin: 1.1rem 0 0;
+        border: 0;
+        padding: 0;
+        font-size: clamp(1.6rem, 3vw, 2.4rem);
+        font-weight: 640;
+        letter-spacing: -0.04em;
+        line-height: 1.12;
+
+        span {
+            display: block;
+        }
+    }
+
+    p {
+        max-width: 40rem;
+        margin: 1.35rem 0 0;
+        color: var(--muted-foreground);
+        line-height: 1.7;
+    }
+
+    .btn {
+        margin-top: 2rem;
+    }
+}
+
+.principle__accent {
+    color: var(--brand);
+}
+
+.principle__grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(90% 90% at 100% 50%, black, transparent 68%);
+    pointer-events: none;
+}
+
+.principle > *:not(.principle__grid) {
+    position: relative;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.home-footer {
+    display: grid;
+    grid-template-columns: minmax(16rem, 1fr) minmax(22rem, auto);
+    gap: 2rem 4rem;
+    width: min(100% - 3rem, var(--page, 1280px));
+    margin: clamp(4.5rem, 8vw, 7rem) auto 0;
+    padding: 2.5rem 0;
+    border-top: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+
+    strong {
+        color: var(--foreground);
+        font-size: 0.82rem;
+    }
+    &__brand p {
+        max-width: 32rem;
+        margin: 0.55rem 0 0;
+        line-height: 1.6;
+    }
+
+    nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-content: start;
+        gap: 0.5rem 1.25rem;
+    }
+    a {
+        color: var(--muted-foreground);
+        text-decoration: none;
+    }
+    a:hover {
+        color: var(--brand);
+    }
+    &__credits {
+        grid-column: 1 / -1;
+        margin: 0;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
+    }
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 1080px) {
+    /* Below this the code window would be too narrow to read, and the hero is
+       already complete without it. */
+    .hero__inner {
+        grid-template-columns: 1fr;
+    }
+
+    .hero__code {
+        display: none;
+    }
+
+    .caps__grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 860px) {
+    .showcase__head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1.25rem;
+    }
+    .segmented {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .paths__grid {
+        grid-template-columns: 1fr;
+    }
+    .showcase__frame iframe,
+    .showcase__placeholder {
+        height: 480px;
+    }
+}
+
+@media (max-width: 640px) {
+    .home-nav__inner {
+        grid-template-columns: 1fr auto;
+        width: calc(100% - 2rem);
+    }
+    .home-nav nav {
+        display: none;
+    }
+    .home-nav__search span,
+    .home-nav__github span {
+        display: none;
+    }
+    .home-nav__search,
+    .home-nav__github {
+        width: 2rem;
+        padding: 0;
+    }
+
+    .hero__inner,
+    .band__inner,
+    .home-footer {
+        width: calc(100% - 2rem);
+    }
+
+    .caps__grid {
+        grid-template-columns: 1fr;
+    }
+    .home-footer {
+        grid-template-columns: 1fr;
+    }
+    .home-footer nav {
+        justify-content: flex-start;
+    }
+    .showcase__frame iframe,
+    .showcase__placeholder {
+        height: 420px;
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .hero__inner > * {
+        animation: rise 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .hero__inner > :nth-child(2) {
+        animation-delay: 70ms;
+    }
+    .hero__inner > :nth-child(3) {
+        animation-delay: 140ms;
+    }
+    .hero__inner > :nth-child(4) {
+        animation-delay: 210ms;
+    }
+    .hero__inner > :nth-child(5) {
+        animation-delay: 280ms;
+    }
+    .eyebrow__pulse::after {
+        animation: ping 2.4s ease-out infinite;
+    }
+}
+
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(0.85rem);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes ping {
+    0% {
+        opacity: 0.55;
+        transform: scale(0.8);
+    }
+    70%,
+    100% {
+        opacity: 0;
+        transform: scale(1.7);
+    }
+}
+
+@keyframes breathe {
+    0%,
+    100% {
+        box-shadow: 0 0 0 3px
+            color-mix(in srgb, var(--success) 20%, transparent);
+    }
+    50% {
+        box-shadow: 0 0 0 5px color-mix(in srgb, var(--success) 8%, transparent);
     }
 }
 </style>

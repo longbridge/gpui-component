@@ -2,6 +2,7 @@
 import { h } from "vue";
 import type { Theme } from "vitepress";
 import DefaultTheme from "vitepress/theme";
+import "@fontsource-variable/jetbrains-mono";
 import "./style.css";
 import GitHubStar from "./components/GitHubStar.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";

@@ -49,6 +49,12 @@ const titleCase = (value: string) =>
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
         .join("");
 
+const storyName = computed(() =>
+    component.value
+        ? (storyNames[component.value] ?? titleCase(component.value))
+        : undefined,
+);
+
 const src = computed(() => {
     if (!component.value) return undefined;
     if (kind.value === "base") {
@@ -57,9 +63,16 @@ const src = computed(() => {
         );
     }
 
-    const story = storyNames[component.value] ?? titleCase(component.value);
-    return withBase(`/gallery/?story=${encodeURIComponent(story)}`);
+    return withBase(`/gallery/?story=${encodeURIComponent(storyName.value)}`);
 });
+
+// The frame is presented as a real desktop window, so it carries a window
+// title the way a native app would.
+const windowTitle = computed(() =>
+    storyName.value
+        ? `${storyName.value} — ${kind.value === "base" ? "gpui-base" : "gpui-component"}`
+        : "",
+);
 
 const target = shallowRef<HTMLElement>();
 
@@ -98,14 +111,21 @@ onBeforeUnmount(() => target.value?.remove());
             :class="`component-example--${kind}`"
         >
             <div class="component-example__label">
-                <span>Example</span><span>Rust & WASM</span>
+                <span>Example</span>
+                <span class="component-example__live">Rust &amp; WASM</span>
             </div>
-            <iframe
-                :key="src"
-                :src="src"
-                :title="`${component} interactive example`"
-                allow="cross-origin-isolated"
-            />
+            <div class="mac-window">
+                <div class="mac-window__bar">
+                    <span class="mac-window__lights" aria-hidden="true"><i /><i /><i /></span>
+                    <span class="mac-window__title">{{ windowTitle }}</span>
+                </div>
+                <iframe
+                    :key="src"
+                    :src="src"
+                    :title="`${component} interactive example`"
+                    allow="cross-origin-isolated"
+                />
+            </div>
         </section>
     </Teleport>
 </template>

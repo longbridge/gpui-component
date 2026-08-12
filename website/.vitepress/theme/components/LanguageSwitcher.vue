@@ -101,7 +101,7 @@ function normalizeLink(link: string, addPath: boolean, path: string, addExt: boo
 
 .link {
   display: block;
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 6px 12px;
   font-size: 14px;
   color: var(--vp-c-text-1);

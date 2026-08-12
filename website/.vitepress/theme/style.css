@@ -7,38 +7,72 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --radius: 0.875rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --radius-control: 0.375rem;
+  --radius-card: 0.625rem;
+  --radius-surface: 0.875rem;
+  --radius: var(--radius-control);
+
+  /* Every colour below is taken from the library's own default theme
+     (crates/ui/src/theme/default-theme.json, "Default Light") so the site and
+     the components it documents are literally the same palette.
+
+     primary.background / .hover / .foreground */
+  --brand: #171717;
+  --brand-hover: #262626;
+  --brand-contrast: #fafafa;
+  --brand-subtle: #f5f5f5;
+  --brand-line: color-mix(in srgb, var(--foreground) 24%, transparent);
+
+  /* chart_1 … chart_5 — the only saturated colours in the system, reserved
+     for data the way the theme reserves them. */
+  --data-1: #93c5fd;
+  --data-2: #3b82f6;
+  --data-3: #2563eb;
+  --data-4: #1d4ed8;
+  --data-5: #1e40af;
+
+  /* selection.background — text selection cannot use the brand colour: brand
+     is near-black, so black text on it would be unreadable. */
+  --selection: #55a0fc;
+
+  /* success.background — used for "running" indicators, where the brand's
+     near-black would not read as a live signal. */
+  --success: #22c55e;
+
+  /* Hairline grid used behind the hero and section dividers. */
+  --grid-line: color-mix(in srgb, var(--foreground) 7%, transparent);
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
+  --destructive: #ef4444;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #0a0a0a;
+  --titlebar: #f8f8f8;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #fafafa;
+  --sidebar-foreground: #171717;
+  --sidebar-primary: #171717;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #e5e5e5;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #e5e5e5;
+  --sidebar-ring: #0a0a0a;
 
   --vp-c-bg: var(--background);
   --vp-c-bg-alt: var(--secondary);
@@ -46,7 +80,10 @@
   --vp-c-bg-soft: var(--secondary);
 
   --vp-c-text-1: var(--foreground);
-  --vp-c-brand-1: var(--primary);
+  --vp-c-text-2: var(--muted-foreground);
+  --vp-c-brand-1: var(--brand);
+  --vp-c-brand-2: var(--brand-hover);
+  --vp-c-brand-3: var(--brand-line);
   --vp-c-default-1: var(--secondary);
   --vp-c-default-2: var(--muted);
 
@@ -58,77 +95,230 @@
   --vp-input-switch-bg-color: var(--secondary);
   --vp-input-border-color: var(--input);
   --vp-c-divider: var(--border);
+  --vp-font-family-base:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
+    "Segoe UI", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+  --vp-font-family-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono Variable", Menlo, "Cascadia Mono",
+    "Segoe UI Mono", monospace;
+  --vp-nav-height: 56px;
+  --vp-sidebar-width: 280px;
+  --vp-layout-max-width: 1520px;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.269 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #171717;
+  --card-foreground: #fafafa;
+  --popover: #171717;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #171717;
+  --secondary: #262626;
+  --secondary-foreground: #fafafa;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --accent: #262626;
+  --accent-foreground: #fafafa;
+  --destructive: #f87171;
+  --border: #262626;
+  --input: #2f2f2f;
+  --ring: #d4d4d4;
+  --titlebar: #171717;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.439 0 0);
+  --sidebar: #0f0f0f;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #fafafa;
+  --sidebar-primary-foreground: #171717;
+  --sidebar-accent: #262626;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #262626;
+  --sidebar-ring: #d4d4d4;
+
+  --brand: #fafafa;
+  --brand-hover: #f5f5f5;
+  --brand-contrast: #171717;
+  --brand-subtle: #262626;
+  --brand-line: color-mix(in srgb, var(--foreground) 26%, transparent);
+
+  --data-1: #93c5fd;
+  --data-2: #3b82f6;
+  --data-3: #60a5fa;
+  --data-4: #1d4ed8;
+  --data-5: #1e40af;
+
+  --grid-line: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+html {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--background);
+  font-size: 15px;
+  letter-spacing: -0.003em;
+}
+
+/* Optical tightening is calibrated for Latin. CJK glyphs are already on a
+   fixed em grid, so negative tracking makes them collide. */
+html[lang^="zh"] body,
+html[lang^="ja"] body {
+  letter-spacing: normal;
+}
+
+html[lang^="zh"] :is(h1, h2, h3, h4),
+html[lang^="ja"] :is(h1, h2, h3, h4) {
+  letter-spacing: -0.015em;
+}
+
+/* Numerals must not reflow when they change — versions, star counts, tables. */
+:is(table, kbd, .vp-doc th, .vp-doc td) {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--selection) 38%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
 }
 
 #app {
   .VPMenu {
-    @apply p-1 rounded-md bg-(--popover);
+    @apply p-1 bg-(--popover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: 0 16px 48px
+      color-mix(in srgb, var(--foreground) 10%, transparent);
 
     .link {
-      @apply text-sm py-1;
+      @apply text-sm py-1.5;
+      border-radius: var(--radius-control);
     }
   }
 
   .DocSearch-Button {
-    @apply rounded-full py-0 px-2 h-8 lg:w-56 xl:w-64;
+    @apply py-0 px-2.5 h-8 lg:w-48 xl:w-56;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: transparent;
 
     .DocSearch-Button-Keys {
-      @apply rounded-full p-1;
+      @apply p-1;
+      border-radius: 0.25rem;
     }
   }
 
+  /* The docs navbar is the same toolbar as the landing page: brand and
+     sections grouped left, controls right, one hairline underneath. */
   .VPNav {
-    @apply bg-(--background) border-b border-(--border);
+    @apply border-b border-(--border);
+    background: color-mix(in srgb, var(--background) 80%, transparent);
+    backdrop-filter: blur(18px) saturate(160%);
 
     .divider {
       @apply hidden;
     }
   }
 
+  .VPNavBar {
+    border-bottom: 0;
+  }
+
+  .VPNavBar .container {
+    max-width: none;
+  }
+
+  .VPNavBarTitle .title {
+    gap: 0.55rem;
+    font-size: 0.875rem;
+    font-weight: 620;
+    letter-spacing: -0.022em;
+  }
+
+  .VPNavBarTitle .logo {
+    width: 1.35rem;
+    height: 1.4rem;
+  }
+
+  .VPNavBarMenuLink,
+  .VPNavBarMenuGroup .text {
+    padding: 0 0.6rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .VPNavBarMenuLink.active,
+  .VPNavBarMenuLink:hover,
+  .VPNavBarMenuGroup:hover .text {
+    color: var(--vp-c-brand-1);
+  }
+
   .VPSwitch {
     @apply border-(--secondary) bg-(--secondary) hover:border-(--border);
+    border-radius: var(--radius-control);
   }
 
   .VPFooter {
-    @apply border-dashed;
+    border-top: 1px solid var(--border);
+    background: var(--sidebar);
   }
 
   .VPSidebar {
     @apply border-r border-(--border) bg-(--background);
+    background: var(--sidebar);
+    scrollbar-width: thin;
+  }
+
+  .VPSidebarItem .text {
+    border-radius: var(--radius);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  .VPSidebarItem.level-0 > .item > .text {
+    color: var(--muted-foreground);
+    font: 620 0.68rem/1 var(--vp-font-family-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* A hover surface makes a long component list scannable. */
+  .VPSidebarItem.level-1 .link:hover .text,
+  .VPSidebarItem.level-2 .link:hover .text {
+    color: var(--foreground);
+  }
+
+  .VPSidebarItem.is-active > .item .link > .text {
+    color: var(--foreground);
+    font-weight: 650;
+  }
+
+  .VPSidebarItem.is-active > .item .indicator {
+    background: var(--vp-c-brand-1);
+  }
+
+  .VPDocAsideOutline .outline-title {
+    color: var(--foreground);
+    font: 650 0.7rem/1 var(--vp-font-family-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .VPDocAsideOutline .outline-link {
+    font-size: 0.76rem;
+    line-height: 1.45;
   }
 
   .VPNavBarTitle {
@@ -141,35 +331,153 @@
     @apply border-0 pt-0;
 
     .pager-link {
-      @apply border-dashed;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-card);
+      transition:
+        border-color 160ms ease,
+        transform 160ms ease;
+    }
+
+    .pager-link:hover {
+      border-color: var(--vp-c-brand-1);
+      transform: translateY(-1px);
     }
   }
 }
 
 .VPContent.has-sidebar {
   .VPDoc {
-    @apply pt-10;
+    @apply pt-12;
   }
 }
 
 .vp-doc {
+  color: var(--vp-c-text-1);
+
+  > h1:first-child {
+    margin-bottom: 0.85rem;
+    font-size: clamp(2rem, 3.6vw, 2.7rem);
+    font-weight: 660;
+    letter-spacing: -0.038em;
+    line-height: 1.05;
+  }
+
+  > h1:first-child + p {
+    max-width: 46rem;
+    color: var(--vp-c-text-2);
+    font-size: 1.05rem;
+    line-height: 1.7;
+  }
+
   h2 {
-    @apply border-t-0 mt-10 pt-0 pb-3 border-b border-dashed border-(--border);
+    @apply border-t-0 mt-14 pt-0 pb-3 border-b border-(--border);
+    font-size: 1.35rem;
+    font-weight: 640;
+    letter-spacing: -0.022em;
 
     .header-anchor {
       @apply top-0;
     }
   }
+
+  h3 {
+    margin-top: 2.25rem;
+    font-size: 1.02rem;
+    font-weight: 640;
+    letter-spacing: -0.012em;
+  }
+
+  p,
+  li {
+    line-height: 1.75;
+  }
+
+  /* The brand colour is near-black, so links are distinguished by a rule
+     rather than by hue. */
+  a {
+    font-weight: 520;
+    text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
+    transition: text-decoration-color 140ms ease;
+  }
+
+  a:hover {
+    text-decoration-color: currentColor;
+  }
+
+  table {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+  }
+
+  tr {
+    border-top: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* table.head.background from the default theme. */
+  thead tr {
+    background: var(--sidebar);
+  }
+
+  th {
+    color: var(--vp-c-text-2);
+    font: 620 0.7rem/1.4 var(--vp-font-family-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  th,
+  td {
+    padding: 0.7rem 0.75rem;
+    border: 0;
+  }
+
+  th:first-child,
+  td:first-child {
+    padding-left: 0.9rem;
+  }
+
+  blockquote {
+    margin: 1.5rem 0;
+    padding: 0.25rem 0 0.25rem 1.25rem;
+    border-left: 2px solid var(--vp-c-brand-1);
+    color: var(--vp-c-text-2);
+  }
+
+  :not(pre) > code {
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    background: var(--secondary);
+    font-size: 0.84em;
+  }
+
+  div[class*="language-"] {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+  }
+
   [class*="language-"] pre {
-    @apply rounded-md py-5 text-base font-mono;
+    @apply py-5 text-sm font-mono;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
 
     .dark & {
-      background-color: #131313 !important;
+      background-color: #0f0f0f !important;
     }
   }
 
   [class*="language-"] pre code {
     @apply px-5;
+  }
+
+  [class*="language-"] > span.lang {
+    display: none;
   }
 
   [class*="language-"] > button.copy {
@@ -180,7 +488,7 @@
     /*rtl:ignore*/
     z-index: 3;
     border: 1px solid var(--vp-code-copy-code-border-color);
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     background-color: var(--vp-code-copy-code-bg);
     opacity: 0;
     cursor: pointer;
@@ -220,20 +528,175 @@
   display: none !important;
 }
 
+/* Custom containers were transparent and unlabelled, so a tip read as body
+   text. They now get a surface and a rule on the leading edge. */
+.vp-doc .custom-block {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--foreground);
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
+  background: var(--sidebar);
+  font-size: 0.9rem;
+}
+
+.vp-doc .custom-block .custom-block-title {
+  margin-bottom: 0.4rem;
+  color: var(--foreground);
+  font: 620 0.68rem/1 var(--vp-font-family-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.vp-doc .custom-block p {
+  margin: 0.5rem 0 0;
+  line-height: 1.7;
+}
+
+.vp-doc .custom-block.warning {
+  border-left-color: #f59e0b;
+}
+
+.vp-doc .custom-block.danger {
+  border-left-color: var(--destructive);
+}
+
+.vp-doc .custom-block.info,
+.vp-doc .custom-block.tip {
+  border-left-color: var(--data-3);
+}
+
+/* Keyboard hints in prose should look like keys. */
+.vp-doc kbd {
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 0.3rem;
+  background: var(--secondary);
+  font: 0.78em/1.5 var(--vp-font-family-mono);
+}
+
+/* ---------------------------------------------------------------------------
+   macOS window chrome
+   ---------------------------------------------------------------------------
+   Everything on this site that shows the library running is framed as a real
+   desktop window: a hairline outer stroke, an inner highlight, layered soft
+   shadows and genuine traffic lights. It is the closest visual analogue to
+   what the library actually produces, and it reads as a native app rather
+   than a generic screenshot card. */
+
+.mac-window {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: var(--background);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--foreground) 26%, transparent),
+    0 1px 1px color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 10px 24px -8px color-mix(in srgb, var(--foreground) 16%, transparent),
+    0 40px 72px -28px color-mix(in srgb, var(--foreground) 26%, transparent);
+}
+
+/* The inner highlight is what makes a macOS window look lit from above. */
+.mac-window::after {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 55%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.dark .mac-window::after {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 9%, transparent);
+}
+
+.mac-window__bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 2.35rem;
+  padding: 0 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--sidebar) 55%, var(--background)),
+    var(--sidebar)
+  );
+}
+
+.mac-window__lights {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+.mac-window__lights i {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 12%);
+}
+
+.mac-window__lights i:nth-child(2) {
+  background: #febc2e;
+}
+
+.mac-window__lights i:nth-child(3) {
+  background: #28c840;
+}
+
+/* Centred in the bar, as macOS does, and independent of the traffic lights. */
+.mac-window__title {
+  position: absolute;
+  left: 50%;
+  max-width: min(60%, 28rem);
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+/* ------------------------------------------------------------------- docs */
+
 .component-example {
   @apply mb-8;
 }
 
 .component-example__label {
-  @apply mb-1.5 text-(--vp-c-text-2) text-xs flex items-center justify-between;
+  @apply mb-2 text-(--vp-c-text-2) flex items-center justify-between;
+  font: 0.68rem/1 var(--vp-font-family-mono);
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.component-example__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.component-example__live::before {
+  width: 0.2rem;
+  height: 0.2rem;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 20%, transparent);
+  content: "";
 }
 
 .component-example iframe {
   display: block;
   width: 100%;
-  height: 720px;
-  border: 1px solid var(--vp-c-divider);
-  @apply shadow-xs rounded-md;
+  height: 680px;
+  border: 0;
 }
 
 /* The frame's own background shows through until wasm paints its first frame,

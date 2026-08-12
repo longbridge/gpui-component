@@ -1,6 +1,8 @@
 {
   "name": "gpui-component-website",
   "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
     "@tailwindcss/postcss": "^4.1.15",
     "@tailwindcss/vite": "^4.1.15",
     "lucide-react": "^0.546.0",
