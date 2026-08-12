@@ -7,8 +7,8 @@ use gpui::{
     Styled, Subscription, Window, div, prelude::FluentBuilder, px,
 };
 use gpui_base::{
-    Toast as BaseToast, ToastLifecycle, ToastStore, ToastTransitionStatus, ToastViewport,
-    ToastViewportState,
+    Toast as BaseToast, ToastLifecycle, ToastStack, ToastStackState, ToastStore,
+    ToastTransitionStatus,
 };
 
 use crate::{
@@ -445,7 +445,7 @@ impl Default for NotificationSettings {
 pub struct NotificationList {
     /// Notifications that will be auto hidden.
     pub(crate) notifications: ToastStore<NotificationId, Entity<Notification>>,
-    viewport_state: ToastViewportState,
+    stack_state: ToastStackState,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
 
@@ -453,7 +453,7 @@ impl NotificationList {
     pub fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
         Self {
             notifications: ToastStore::default(),
-            viewport_state: ToastViewportState::new(),
+            stack_state: ToastStackState::default(),
             _subscriptions: HashMap::new(),
         }
     }
@@ -567,12 +567,11 @@ impl Render for NotificationList {
         let placement = cx.theme().notification.placement;
         let margins = &cx.theme().notification.margins;
 
-        ToastViewport::new("notification-list")
+        ToastStack::new("notification-list", self.stack_state.clone())
             .v_flex()
             .max_h(size.height)
             .pt(margins.top)
             .pb(margins.bottom)
-            .gap_3()
             .when(
                 matches!(placement, Anchor::TopRight),
                 |this| this.pr(margins.right), // ignore left
@@ -592,10 +591,6 @@ impl Render for NotificationList {
             .when(matches!(placement, Anchor::BottomCenter), |this| {
                 this.flex_col_reverse()
             })
-            .on_hover(cx.listener(|view, hovered, _, cx| {
-                view.viewport_state.set_expanded(*hovered);
-                cx.notify()
-            }))
             .children(items)
     }
 }

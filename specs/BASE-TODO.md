@@ -479,6 +479,9 @@ checking the component milestone:
   viewport edge. Exit removal uses the same duration, so an ending toast remains
   mounted for its complete animation instead of disappearing after the previous
   mismatched 150ms timeout.
+- 2026-08-12: Base `ToastStack` now hides variable-height measurement, collapsed
+  overlap, hover expansion, and layout interpolation behind one stack interface.
+  Notification supplies only its rendered items; it no longer owns stack geometry.
 
 ## Crate Foundation
 

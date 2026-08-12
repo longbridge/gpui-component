@@ -1,11 +1,162 @@
-use std::collections::VecDeque;
+use std::{cell::RefCell, collections::VecDeque, rc::Rc, time::Duration};
 
 use gpui::{
-    AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
-    RenderOnce, Role, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    Animation, AnimationExt as _, AnyElement, App, Div, ElementId, InteractiveElement,
+    Interactivity, IntoElement, ParentElement, Pixels, RenderOnce, Role, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, px,
 };
 
-use crate::StyledExt as _;
+use crate::{ElementExt as _, StyledExt as _, animation::cubic_bezier};
+
+/// Motion tokens used by an unstyled toast stack.
+#[derive(Clone, Copy, Debug)]
+pub struct ToastMotion {
+    /// Duration of stack expansion and collapse.
+    pub duration: Duration,
+    /// Visible distance between collapsed toast layers.
+    pub collapsed_peek: Pixels,
+    /// Distance between expanded toast items.
+    pub expanded_gap: Pixels,
+}
+
+impl ToastMotion {
+    /// Create motion matching the Base UI Toast example.
+    pub fn base_ui() -> Self {
+        Self {
+            duration: Duration::from_millis(500),
+            collapsed_peek: px(12.),
+            expanded_gap: px(12.),
+        }
+    }
+}
+
+impl Default for ToastMotion {
+    fn default() -> Self {
+        Self::base_ui()
+    }
+}
+
+/// Persistent private layout state used by [`ToastStack`].
+#[derive(Clone, Debug, Default)]
+pub struct ToastStackState {
+    heights: Rc<RefCell<Vec<Pixels>>>,
+    expanded: Rc<std::cell::Cell<bool>>,
+}
+
+/// A deep toast-stack element that owns measurement, overlap, and expansion motion.
+#[derive(IntoElement)]
+pub struct ToastStack {
+    base: Stateful<Div>,
+    style: StyleRefinement,
+    state: ToastStackState,
+    motion: ToastMotion,
+    children: Vec<AnyElement>,
+}
+
+impl ToastStack {
+    /// Create a toast stack with Base UI-compatible motion.
+    pub fn new(id: impl Into<ElementId>, state: ToastStackState) -> Self {
+        Self {
+            base: div().id(id),
+            style: StyleRefinement::default(),
+            state,
+            motion: ToastMotion::base_ui(),
+            children: Vec::new(),
+        }
+    }
+
+    /// Set the stack motion tokens.
+    pub fn motion(mut self, motion: ToastMotion) -> Self {
+        self.motion = motion;
+        self
+    }
+}
+
+impl Styled for ToastStack {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl ParentElement for ToastStack {
+    fn extend(&mut self, children: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(children);
+    }
+}
+
+impl InteractiveElement for ToastStack {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for ToastStack {}
+
+impl RenderOnce for ToastStack {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let expanded = self.state.expanded.get();
+        let heights = self.state.heights.borrow().clone();
+        let measured = self.state.heights.clone();
+        let duration = self.motion.duration;
+        let peek = self.motion.collapsed_peek;
+        let gap = self.motion.expanded_gap;
+        let items = self
+            .children
+            .into_iter()
+            .enumerate()
+            .map(move |(index, child)| {
+                let previous_height = index
+                    .checked_sub(1)
+                    .and_then(|ix| heights.get(ix).copied())
+                    .unwrap_or(px(0.));
+                let collapsed_margin = if index == 0 {
+                    px(0.)
+                } else {
+                    peek - previous_height
+                };
+                let measured = measured.clone();
+                div()
+                    .id(("base-toast-stack-item", index))
+                    .relative()
+                    .with_animation(
+                        ElementId::NamedInteger(
+                            "base-toast-stack-layout".into(),
+                            ((index as u64) << 1) | u64::from(expanded),
+                        ),
+                        Animation::new(duration).with_easing(cubic_bezier(0.22, 1., 0.36, 1.)),
+                        move |this, delta| {
+                            let margin = if expanded {
+                                collapsed_margin + (gap - collapsed_margin) * delta
+                            } else {
+                                gap + (collapsed_margin - gap) * delta
+                            };
+                            this.mt(margin)
+                        },
+                    )
+                    .on_prepaint(move |bounds, _, cx| {
+                        let mut heights = measured.borrow_mut();
+                        if heights.len() <= index {
+                            heights.resize(index + 1, px(0.));
+                        }
+                        if heights[index] != bounds.size.height {
+                            heights[index] = bounds.size.height;
+                            cx.refresh_windows();
+                        }
+                    })
+                    .child(child)
+            });
+
+        let expanded_state = self.state.expanded.clone();
+        self.base
+            .on_hover(move |hovered, _, cx| {
+                if expanded_state.replace(*hovered) != *hovered {
+                    cx.refresh_windows();
+                }
+            })
+            .children(items)
+            .refine_style(&self.style)
+    }
+}
 
 /// The lifecycle phase exposed by a toast root to application-owned presentation.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
