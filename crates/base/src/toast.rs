@@ -7,8 +7,9 @@ use std::{
 
 use gpui::{
     Anchor, AnyElement, App, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,
-    IntoElement, ParentElement, Pixels, RenderOnce, Role, Stateful, StatefulInteractiveElement,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
+    IntoElement, MouseMoveEvent, ParentElement, Pixels, RenderOnce, Role, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, canvas, div,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::{
@@ -28,8 +29,6 @@ pub struct ToastMotion {
     pub collapsed_peek: Pixels,
     /// Distance between expanded toast items.
     pub expanded_gap: Pixels,
-    /// Horizontal inset added per collapsed layer to approximate Sonner's 5% scale.
-    pub collapsed_inset: Pixels,
 }
 
 impl ToastMotion {
@@ -40,7 +39,6 @@ impl ToastMotion {
             exit_duration: Duration::from_millis(200),
             collapsed_peek: px(14.),
             expanded_gap: px(14.),
-            collapsed_inset: px(10.),
         }
     }
 }
@@ -408,7 +406,6 @@ impl RenderOnce for ToastStack {
         let duration = self.motion.duration;
         let peek = self.motion.collapsed_peek;
         let gap = self.motion.expanded_gap;
-        let collapsed_inset = self.motion.collapsed_inset;
         let count = self.children.len();
         let anchored_bottom = matches!(
             self.placement,
@@ -430,7 +427,6 @@ impl RenderOnce for ToastStack {
             .map(move |(index, (item_id, child))| {
                 let (collapsed_offset, expanded_offset) =
                     offsets.get(index).copied().unwrap_or((px(0.), px(0.)));
-                let rank = count.saturating_sub(1 + index);
                 let measured = measured.clone();
                 let measured_id = item_id.clone();
                 let target_offset = if expanded {
@@ -438,22 +434,10 @@ impl RenderOnce for ToastStack {
                 } else {
                     collapsed_offset
                 };
-                let target_inset = if expanded {
-                    px(0.)
-                } else {
-                    collapsed_inset * rank as f32
-                };
                 let policy = || Transition::new(duration).ease(cubic_bezier(0.25, 0.1, 0.25, 1.));
                 let offset = transition(
                     (item_id.clone(), "offset"),
                     target_offset,
-                    policy(),
-                    window,
-                    cx,
-                );
-                let inset = transition(
-                    (item_id.clone(), "inset"),
-                    target_inset,
                     policy(),
                     window,
                     cx,
@@ -465,8 +449,6 @@ impl RenderOnce for ToastStack {
                     .left_0()
                     .right_0()
                     .top(offset)
-                    .left(inset)
-                    .right(inset)
                     .on_prepaint(move |bounds, _, cx| {
                         let mut heights = measured.borrow_mut();
                         if heights.get(&measured_id).copied() != Some(bounds.size.height) {
@@ -482,11 +464,22 @@ impl RenderOnce for ToastStack {
             .relative()
             .h(stack_height)
             .when_some(self.focus_handle, |this, handle| this.track_focus(&handle))
-            .on_hover(move |hovered, _, cx| {
-                if hovered_state.replace(*hovered) != *hovered {
-                    cx.refresh_windows();
-                }
-            })
+            .child(
+                canvas(
+                    |_, _, _| {},
+                    move |bounds, _, window, _| {
+                        let hovered_state = hovered_state.clone();
+                        window.on_mouse_event(move |event: &MouseMoveEvent, _, _, cx| {
+                            let hovered = bounds.contains(&event.position);
+                            if hovered_state.replace(hovered) != hovered {
+                                cx.refresh_windows();
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .size_full(),
+            )
             .children(items)
             .refine_style(&self.style)
     }
@@ -757,6 +750,14 @@ mod tests {
         cx.update(|window, cx| window.draw(cx).clear(cx));
         view.read_with(cx, |view, _| assert!(!view.state.is_expanded()));
 
+        cx.simulate_mouse_move(point(px(10.), px(10.)), None, gpui::Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        view.read_with(cx, |view, _| assert!(view.state.is_expanded()));
+
+        cx.simulate_mouse_move(point(px(400.), px(400.)), None, gpui::Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        view.read_with(cx, |view, _| assert!(!view.state.is_expanded()));
+
         let focus = view.read_with(cx, |view, _| view.focus.clone());
         cx.update(|window, cx| {
             focus.focus(window, cx);
@@ -780,7 +781,10 @@ mod tests {
                         div().debug_selector(|| "first-toast".into()).h(px(40.)),
                     )
                     .when(self.show_second, |stack| {
-                        stack.item("second", div().h(px(80.)))
+                        stack.item(
+                            "second",
+                            div().debug_selector(|| "second-toast".into()).h(px(80.)),
+                        )
                     })
             }
         }
@@ -814,6 +818,10 @@ mod tests {
         assert_eq!(
             cx.debug_bounds("first-toast").unwrap().origin.y,
             initial_y + px(54.)
+        );
+        assert_eq!(
+            cx.debug_bounds("first-toast").unwrap().size.width,
+            cx.debug_bounds("second-toast").unwrap().size.width
         );
     }
 }

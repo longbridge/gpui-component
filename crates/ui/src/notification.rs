@@ -626,7 +626,6 @@ impl Render for NotificationList {
             .collect::<Vec<_>>();
 
         let placement = cx.theme().notification.placement;
-        let margins = &cx.theme().notification.margins;
         let stack = items.into_iter().fold(
             ToastStack::new("notification-list", self.stack_state.clone()),
             |stack, (id, item)| stack.item(format!("{id:?}"), item),
@@ -638,23 +637,6 @@ impl Render for NotificationList {
             .v_flex()
             .w_112()
             .max_h(size.height)
-            .pt(margins.top)
-            .pb(margins.bottom)
-            .when(
-                matches!(placement, Anchor::TopRight),
-                |this| this.pr(margins.right), // ignore left
-            )
-            .when(
-                matches!(placement, Anchor::TopLeft),
-                |this| this.pl(margins.left), // ignore right
-            )
-            .when(matches!(placement, Anchor::BottomLeft), |this| {
-                this.pl(margins.left)
-            })
-            .when(
-                matches!(placement, Anchor::BottomRight),
-                |this| this.pr(margins.right), // ignore left
-            )
     }
 }
 

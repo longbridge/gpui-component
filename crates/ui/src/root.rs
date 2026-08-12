@@ -180,6 +180,7 @@ impl Root {
         };
 
         let placement = cx.theme().notification.placement;
+        let margins = &cx.theme().notification.margins;
 
         Some(
             div()
@@ -206,7 +207,28 @@ impl Root {
                 .when_some(mr, |this, offset| this.mr(offset))
                 .when_some(mb, |this, offset| this.mb(offset))
                 .when_some(ml, |this, offset| this.ml(offset))
-                .child(root.read(cx).notification.clone()),
+                .child(
+                    div()
+                        .when(matches!(placement, Anchor::TopRight), |this| {
+                            this.mt(margins.top).mr(margins.right)
+                        })
+                        .when(matches!(placement, Anchor::TopLeft), |this| {
+                            this.mt(margins.top).ml(margins.left)
+                        })
+                        .when(matches!(placement, Anchor::TopCenter), |this| {
+                            this.mt(margins.top)
+                        })
+                        .when(matches!(placement, Anchor::BottomRight), |this| {
+                            this.mb(margins.bottom).mr(margins.right)
+                        })
+                        .when(matches!(placement, Anchor::BottomLeft), |this| {
+                            this.mb(margins.bottom).ml(margins.left)
+                        })
+                        .when(matches!(placement, Anchor::BottomCenter), |this| {
+                            this.mb(margins.bottom)
+                        })
+                        .child(root.read(cx).notification.clone()),
+                ),
         )
     }
 

@@ -481,7 +481,7 @@ checking the component milestone:
   shallow Store/Lifecycle/Viewport interfaces were removed. Dock remains UI-owned.
 - 2026-08-12: Notification motion follows shadcn's Sonner implementation: 400ms
   CSS-ease entry/reflow, 200ms exit/unmount, 14px stack gap, stable keyed height
-  measurement, and a 5%-style inset per collapsed layer. It moves along the
+  measurement, and equal-width collapsed layers. It moves along the
   configured viewport edge and remains mounted for its complete exit animation.
 - 2026-08-12: Base `ToastStack` now hides variable-height measurement, collapsed
   overlap, hover expansion, and layout interpolation behind one stack interface.
@@ -499,6 +499,12 @@ checking the component milestone:
   integration test, 365 UI library tests, all UI compatibility/integration tests,
   strict clippy with only the repository's pre-existing `too_many_arguments` lint
   excluded, Story build, formatting, and diff checks.
+- 2026-08-12: Toast hover tracking is registered from paint through the window's
+  `MouseMoveEvent` stream instead of element-local `on_hover`, so leaving and
+  re-entering an animating stack reliably expands it again. Notification edge
+  margins now live on a nested Root positioning layer rather than ToastStack
+  padding, preserving the configured window-border gap without changing measured
+  card width or hover geometry.
 
 ## Crate Foundation
 
