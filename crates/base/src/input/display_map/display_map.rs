@@ -16,8 +16,8 @@ use super::text_wrapper::{LineItem, WrapDisplayPoint};
 use super::wrap_map::WrapMap;
 use super::{BufferPoint, DisplayPoint};
 use crate::input::Point as TreeSitterPoint;
-use crate::input::RopeExt as _;
 use crate::input::display_map::WrapPoint;
+use crate::input::rope_ext::RopeExt as _;
 
 /// DisplayMap is the main interface for Editor/Input coordinate mapping.
 ///
@@ -275,19 +275,19 @@ impl DisplayMap {
 
     /// Convert byte offset to wrap display point (with soft wrap info).
     #[inline]
-    pub fn offset_to_wrap_display_point(&self, offset: usize) -> WrapDisplayPoint {
+    pub(crate) fn offset_to_wrap_display_point(&self, offset: usize) -> WrapDisplayPoint {
         self.wrap_map.wrapper().offset_to_display_point(offset)
     }
 
     /// Convert wrap display point to byte offset.
     #[inline]
-    pub fn wrap_display_point_to_offset(&self, point: WrapDisplayPoint) -> usize {
+    pub(crate) fn wrap_display_point_to_offset(&self, point: WrapDisplayPoint) -> usize {
         self.wrap_map.wrapper().display_point_to_offset(point)
     }
 
     /// Convert wrap display point to TreeSitterPoint (buffer line/col).
     #[inline]
-    pub fn wrap_display_point_to_point(&self, point: WrapDisplayPoint) -> TreeSitterPoint {
+    pub(crate) fn wrap_display_point_to_point(&self, point: WrapDisplayPoint) -> TreeSitterPoint {
         self.wrap_map.wrapper().display_point_to_point(point)
     }
 
@@ -312,7 +312,7 @@ impl DisplayMap {
 
     /// Get the longest row index (by byte length).
     #[inline]
-    pub fn longest_row(&self) -> usize {
+    pub(crate) fn longest_row(&self) -> usize {
         self.wrap_map.wrapper().longest_row()
     }
 
@@ -320,7 +320,7 @@ impl DisplayMap {
 
     /// Get the line item by buffer row index.
     #[inline]
-    pub fn line(&self, row: usize) -> Option<&LineItem> {
+    pub(crate) fn line(&self, row: usize) -> Option<&LineItem> {
         self.wrap_map.line(row)
     }
 
