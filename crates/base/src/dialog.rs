@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use gpui::{
     AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
@@ -15,6 +18,71 @@ type Decision = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App) -> bool>;
 type Closed = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 type CloseRequest = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 type OpenRequest = Rc<dyn Fn(&mut Window, &mut App)>;
+type OpenChange = Rc<dyn Fn(bool, DialogChangeReason, &mut Window, &mut App)>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DialogChangeReason {
+    TriggerPress,
+    BackdropPress,
+    Cancel,
+    Confirm,
+    Imperative,
+}
+
+#[derive(Clone)]
+pub struct DialogHandle {
+    open: Rc<Cell<bool>>,
+    on_open_change: Rc<RefCell<Option<OpenChange>>>,
+}
+
+impl DialogHandle {
+    pub fn new(open: bool) -> Self {
+        Self {
+            open: Rc::new(Cell::new(open)),
+            on_open_change: Rc::new(RefCell::new(None)),
+        }
+    }
+    pub fn is_open(&self) -> bool {
+        self.open.get()
+    }
+    pub fn open(&self, window: &mut Window, cx: &mut App) {
+        self.set_open(true, DialogChangeReason::Imperative, window, cx);
+    }
+    pub fn close(&self, window: &mut Window, cx: &mut App) {
+        self.set_open(false, DialogChangeReason::Imperative, window, cx);
+    }
+    pub(crate) fn set_open(
+        &self,
+        open: bool,
+        reason: DialogChangeReason,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        if self.open.replace(open) == open {
+            return;
+        }
+        let callback = self.on_open_change.borrow().clone();
+        if let Some(callback) = callback {
+            callback(open, reason, window, cx);
+        }
+        window.refresh();
+    }
+}
+
+fn request_open_change(
+    handle: &Option<DialogHandle>,
+    callback: &Option<OpenChange>,
+    open: bool,
+    reason: DialogChangeReason,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    if let Some(handle) = handle {
+        handle.set_open(open, reason, window, cx);
+    } else if let Some(callback) = callback {
+        callback(open, reason, window, cx);
+    }
+}
 
 pub fn init(cx: &mut App) {
     cx.bind_keys([
@@ -67,6 +135,9 @@ pub struct Dialog {
     on_cancel: Decision,
     on_close: Closed,
     request_close: CloseRequest,
+    handle: Option<DialogHandle>,
+    open: bool,
+    on_open_change: Option<OpenChange>,
 }
 
 /// Unstyled trigger that owns pointer activation for opening a dialog.
@@ -74,6 +145,7 @@ pub struct Dialog {
 pub struct DialogTrigger {
     trigger: AnyElement,
     open: OpenRequest,
+    handle: Option<DialogHandle>,
 }
 
 impl DialogTrigger {
@@ -81,7 +153,12 @@ impl DialogTrigger {
         Self {
             trigger: trigger.into_any_element(),
             open: Rc::new(|_, _| {}),
+            handle: None,
         }
+    }
+    pub fn handle(mut self, handle: DialogHandle) -> Self {
+        self.handle = Some(handle);
+        self
     }
 
     pub fn on_open(mut self, open: impl Fn(&mut Window, &mut App) + 'static) -> Self {
@@ -94,6 +171,9 @@ impl RenderOnce for DialogTrigger {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div()
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                if let Some(handle) = self.handle.as_ref() {
+                    handle.set_open(true, DialogChangeReason::TriggerPress, window, cx);
+                }
                 (self.open)(window, cx);
                 cx.stop_propagation();
             })
@@ -302,7 +382,32 @@ impl Dialog {
             on_cancel: Rc::new(|_, _, _| true),
             on_close: Rc::new(|_, _, _| {}),
             request_close: Rc::new(|_, _, _| {}),
+            handle: None,
+            open: true,
+            on_open_change: None,
         }
+    }
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
+    pub fn handle(mut self, handle: DialogHandle) -> Self {
+        if let Some(callback) = self.on_open_change.as_ref() {
+            *handle.on_open_change.borrow_mut() = Some(callback.clone());
+        }
+        self.handle = Some(handle);
+        self
+    }
+    pub fn on_open_change(
+        mut self,
+        handler: impl Fn(bool, DialogChangeReason, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        let handler: OpenChange = Rc::new(handler);
+        if let Some(handle) = self.handle.as_ref() {
+            *handle.on_open_change.borrow_mut() = Some(handler.clone());
+        }
+        self.on_open_change = Some(handler);
+        self
     }
 
     pub fn backdrop(mut self, element: impl IntoElement) -> Self {
@@ -363,12 +468,25 @@ impl ParentElement for Dialog {
 
 impl RenderOnce for Dialog {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let open = self
+            .handle
+            .as_ref()
+            .map_or(self.open, DialogHandle::is_open);
+        if !open {
+            return div().into_any_element();
+        }
         let request_close = self.request_close;
         let cancel = self.on_cancel.clone();
         let confirm = self.on_ok.clone();
         let closed = self.on_close.clone();
         let overlay_closable = self.overlay_closable && self.topmost;
         let dismiss_below_y = self.dismiss_below_y;
+        let escape_handle = self.handle.clone();
+        let confirm_handle = self.handle.clone();
+        let backdrop_handle = self.handle.clone();
+        let escape_change = self.on_open_change.clone();
+        let confirm_change = self.on_open_change.clone();
+        let backdrop_change = self.on_open_change.clone();
 
         div()
             .id(("dialog-host", self.layer))
@@ -383,6 +501,14 @@ impl RenderOnce for Dialog {
                 this.on_action(move |_: &Cancel, window, cx| {
                     let event = ClickEvent::default();
                     if cancel(&event, window, cx) {
+                        request_open_change(
+                            &escape_handle,
+                            &escape_change,
+                            false,
+                            DialogChangeReason::Cancel,
+                            window,
+                            cx,
+                        );
                         request_cancel(false, window, cx);
                         closed_cancel(&event, window, cx);
                     }
@@ -390,6 +516,14 @@ impl RenderOnce for Dialog {
                 .on_action(move |_: &Confirm, window, cx| {
                     let event = ClickEvent::default();
                     if confirm(&event, window, cx) {
+                        request_open_change(
+                            &confirm_handle,
+                            &confirm_change,
+                            false,
+                            DialogChangeReason::Confirm,
+                            window,
+                            cx,
+                        );
                         request_confirm(true, window, cx);
                         closed(&event, window, cx);
                     }
@@ -412,8 +546,16 @@ impl RenderOnce for Dialog {
                                 && overlay_closable
                                 && cancel(&event, window, cx)
                             {
-                                closed(&event, window, cx);
+                                request_open_change(
+                                    &backdrop_handle,
+                                    &backdrop_change,
+                                    false,
+                                    DialogChangeReason::BackdropPress,
+                                    window,
+                                    cx,
+                                );
                                 request_close(false, window, cx);
+                                closed(&event, window, cx);
                             }
                         })
                         .child(backdrop),
@@ -422,5 +564,44 @@ impl RenderOnce for Dialog {
             .children(self.popup)
             .children(self.children)
             .refine_style(&self.style)
+            .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{Context, Render, point};
+    use std::{cell::RefCell, rc::Rc};
+
+    struct TriggerHarness {
+        handle: DialogHandle,
+    }
+    impl Render for TriggerHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            DialogTrigger::new(div().size(px(100.))).handle(self.handle.clone())
+        }
+    }
+
+    #[gpui::test]
+    fn trigger_opens_shared_handle_and_reports_reason(cx: &mut gpui::TestAppContext) {
+        let handle = DialogHandle::new(false);
+        let changes = Rc::new(RefCell::new(Vec::new()));
+        *handle.on_open_change.borrow_mut() = Some({
+            let changes = changes.clone();
+            Rc::new(move |open, reason, _, _| changes.borrow_mut().push((open, reason)))
+        });
+        let (_, cx) = cx.add_window_view({
+            let handle = handle.clone();
+            move |_, _| TriggerHarness { handle }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        cx.simulate_click(point(px(20.), px(20.)), Default::default());
+
+        assert!(handle.is_open());
+        assert_eq!(
+            &*changes.borrow(),
+            &[(true, DialogChangeReason::TriggerPress)]
+        );
     }
 }

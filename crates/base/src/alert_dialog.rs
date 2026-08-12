@@ -5,8 +5,8 @@ use gpui::{
 };
 use smallvec::SmallVec;
 
-use crate::Dialog;
 use crate::StyledExt as _;
+use crate::{Dialog, DialogChangeReason, DialogHandle};
 
 macro_rules! alert_part {
     ($name:ident, $id:literal) => {
@@ -58,16 +58,22 @@ alert_part!(AlertDialogDescription, "alert-dialog-description");
 pub struct AlertDialogTrigger {
     trigger: gpui::AnyElement,
     open: std::rc::Rc<dyn Fn(&mut Window, &mut App)>,
+    handle: Option<DialogHandle>,
 }
 impl AlertDialogTrigger {
     pub fn new(trigger: impl IntoElement) -> Self {
         Self {
             trigger: trigger.into_any_element(),
             open: std::rc::Rc::new(|_, _| {}),
+            handle: None,
         }
     }
     pub fn on_open(mut self, open: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.open = std::rc::Rc::new(open);
+        self
+    }
+    pub fn handle(mut self, handle: DialogHandle) -> Self {
+        self.handle = Some(handle);
         self
     }
 }
@@ -75,6 +81,9 @@ impl RenderOnce for AlertDialogTrigger {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         div()
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                if let Some(handle) = self.handle.as_ref() {
+                    handle.set_open(true, DialogChangeReason::TriggerPress, window, cx);
+                }
                 (self.open)(window, cx);
                 cx.stop_propagation();
             })
@@ -184,6 +193,21 @@ impl AlertDialog {
                 .role(Role::AlertDialog)
                 .close_on_backdrop_press(false),
         )
+    }
+    pub fn open(mut self, open: bool) -> Self {
+        self.0 = self.0.open(open);
+        self
+    }
+    pub fn handle(mut self, handle: DialogHandle) -> Self {
+        self.0 = self.0.handle(handle);
+        self
+    }
+    pub fn on_open_change(
+        mut self,
+        handler: impl Fn(bool, DialogChangeReason, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.0 = self.0.on_open_change(handler);
+        self
     }
     pub fn backdrop(mut self, element: impl IntoElement) -> Self {
         self.0 = self.0.backdrop(element);

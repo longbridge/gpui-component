@@ -61,13 +61,17 @@ fn base_sheet_accepts_application_owned_overlay_and_surface() {
 #[test]
 fn base_dialog_owns_modal_actions_and_alert_defaults() {
     fn dialog(cx: &mut gpui::App) {
+        let handle = gpui_base::DialogHandle::new(true);
         let _ = gpui_base::Dialog::new(cx)
+            .handle(handle.clone())
+            .on_open_change(|_, _, _, _| {})
             .backdrop(gpui_base::DialogBackdrop::new())
             .popup(gpui_base::DialogPopup::new())
             .on_ok(|_, _, _| true)
             .on_cancel(|_, _, _| true)
             .on_close(|_, _, _| {});
         let _ = gpui_base::AlertDialog::new(cx)
+            .handle(handle)
             .backdrop(gpui_base::AlertDialogBackdrop::new())
             .popup(gpui_base::AlertDialogPopup::new());
     }

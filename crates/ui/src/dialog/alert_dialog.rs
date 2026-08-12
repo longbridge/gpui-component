@@ -330,7 +330,7 @@ impl AlertDialog {
         let mut button_props = self.button_props.clone();
         button_props.on_close = self.base.button_props.on_close.clone();
 
-        gpui_base::DialogTrigger::new(trigger)
+        gpui_base::AlertDialogTrigger::new(trigger)
             .on_open(move |window, cx| {
                 let content_builder = content_builder.clone();
                 let style = style.clone();

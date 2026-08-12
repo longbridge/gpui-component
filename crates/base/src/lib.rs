@@ -82,7 +82,8 @@ pub use combobox::Combobox;
 pub use component_traits::{Disableable, Selectable};
 pub use date_picker::DatePicker;
 pub use dialog::{
-    Dialog, DialogBackdrop, DialogClose, DialogDescription, DialogPopup, DialogTitle, DialogTrigger,
+    Dialog, DialogBackdrop, DialogChangeReason, DialogClose, DialogDescription, DialogHandle,
+    DialogPopup, DialogTitle, DialogTrigger,
 };
 pub use element_ext::ElementExt;
 pub use event::InteractiveElementExt;
