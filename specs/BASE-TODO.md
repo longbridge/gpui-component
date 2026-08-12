@@ -849,6 +849,11 @@ seams suitable for application-owned wrappers.
 - [ ] Table — Base owns the unstyled semantic part tree, roles, children, styles,
       interaction forwarding, and row/column accessibility indices. UI retains
       all layout, size propagation, colors, borders, spacing, and typography.
+  - [x] Base runtime coverage verifies row/column accessibility metadata plus
+        child, caller-style, and pointer forwarding; the façade render chain is
+        otherwise identical to the pre-migration implementation. Existing local
+        `ix + 1` index behavior and the presentation-only Footer/Caption boundary
+        remain unchanged for legacy compatibility.
   - [ ] Complete final legacy visual/accessibility comparison before checking.
 - [ ] Data Table
 - [ ] Editor

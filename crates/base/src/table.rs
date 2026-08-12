@@ -226,10 +226,11 @@ impl RenderOnce for TableCaption {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Element as _, accesskit};
+    use gpui::{Context, Element as _, Modifiers, Render, TestAppContext, accesskit, point, px};
+    use std::{cell::Cell, rc::Rc};
 
     #[gpui::test]
-    fn row_and_cell_project_table_accessibility_indices(cx: &mut gpui::TestAppContext) {
+    fn row_and_cells_project_accessibility_indices(cx: &mut TestAppContext) {
         let window = cx.add_empty_window();
         window.update(|window, cx| {
             let mut row = accesskit::Node::new(Role::Row);
@@ -239,6 +240,13 @@ mod tests {
                 .write_a11y_info(&mut row);
             assert_eq!(row.row_index(), Some(3));
 
+            let mut head = accesskit::Node::new(Role::GenericContainer);
+            TableHead::new("head", 2)
+                .render(window, cx)
+                .into_element()
+                .write_a11y_info(&mut head);
+            assert_eq!(head.column_index(), Some(2));
+
             let mut cell = accesskit::Node::new(Role::Cell);
             TableCell::new("cell", 4)
                 .render(window, cx)
@@ -246,5 +254,49 @@ mod tests {
                 .write_a11y_info(&mut cell);
             assert_eq!(cell.column_index(), Some(4));
         });
+    }
+
+    struct TableHarness {
+        clicks: Rc<Cell<usize>>,
+    }
+
+    impl Render for TableHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let clicks = self.clicks.clone();
+            Table::new("table")
+                .debug_selector(|| "base-table".into())
+                .w(px(120.))
+                .h(px(60.))
+                .on_click(move |_, _, _| clicks.set(clicks.get() + 1))
+                .child(
+                    TableBody::new("body").child(
+                        TableRow::new("row", 1)
+                            .child(TableCell::new("cell", 1).child(
+                                div().debug_selector(|| "table-child".into()).size(px(20.)),
+                            )),
+                    ),
+                )
+        }
+    }
+
+    #[gpui::test]
+    fn table_forwards_children_instance_style_and_pointer_interaction(cx: &mut TestAppContext) {
+        let clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let clicks = clicks.clone();
+            move |_, _| TableHarness { clicks }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let table = cx.debug_bounds("base-table").expect("table is rendered");
+        assert_eq!(table.size.width, px(120.));
+        assert_eq!(table.size.height, px(60.));
+        let child = cx.debug_bounds("table-child").expect("child is rendered");
+        assert_eq!(child.size.width, px(20.));
+        assert_eq!(child.size.height, px(20.));
+
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        cx.simulate_click(point(px(100.), px(50.)), Modifiers::default());
+        assert_eq!(clicks.get(), 2);
     }
 }
