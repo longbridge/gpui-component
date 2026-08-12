@@ -1,4 +1,8 @@
 use super::*;
+use std::ops::Range;
+
+use crate::input::RopeExt as _;
+use lsp_types::{CompletionItem, Hover};
 
 #[derive(Clone, Debug, Default)]
 pub struct CompletionSession {
@@ -113,6 +117,39 @@ impl InputState {
             self.code_action_session.open = false;
             cx.notify();
         }
+    }
+
+    pub fn insert_completion(
+        &mut self,
+        item: &CompletionItem,
+        fallback_range: Range<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let mut range = fallback_range;
+        let mut new_text = item.label.clone();
+        if let Some(edit) = item.text_edit.as_ref() {
+            match edit {
+                lsp_types::CompletionTextEdit::Edit(edit) => {
+                    new_text.clone_from(&edit.new_text);
+                    range = self.text.position_to_offset(&edit.range.start)
+                        ..self.text.position_to_offset(&edit.range.end);
+                }
+                lsp_types::CompletionTextEdit::InsertAndReplace(edit) => {
+                    new_text.clone_from(&edit.new_text);
+                    range = self.text.position_to_offset(&edit.replace.start)
+                        ..self.text.position_to_offset(&edit.replace.end);
+                }
+            }
+        } else if let Some(insert_text) = item.insert_text.as_ref() {
+            new_text.clone_from(insert_text);
+            range = range.end..range.end;
+        }
+        self.completion_inserting = true;
+        let range = self.range_to_utf16(&range);
+        self.replace_text_in_range_silent(Some(range), &new_text, window, cx);
+        self.completion_inserting = false;
+        self.focus(window, cx);
     }
 
     pub fn completion_session(&self) -> &CompletionSession {

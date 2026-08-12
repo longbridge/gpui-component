@@ -381,35 +381,6 @@ impl TextElement {
         self
     }
 
-    pub(crate) fn layout_hover_definition(
-        &self,
-        cx: &App,
-    ) -> Option<(Range<usize>, HighlightStyle)> {
-        let editor = self.state.read(cx);
-        if !editor.mode.is_code_editor() || editor.hover_definition.is_empty() {
-            return None;
-        }
-        let mut style: HighlightStyle = editor.editor_style.highlight_styles.style("link_text")?;
-        style.underline = Some(UnderlineStyle {
-            thickness: px(1.),
-            ..Default::default()
-        });
-        Some((editor.hover_definition.symbol_range.clone(), style))
-    }
-
-    pub(crate) fn layout_hover_definition_hitbox(
-        &self,
-        editor: &InputState,
-        window: &mut Window,
-        _cx: &App,
-    ) -> Option<Hitbox> {
-        if !editor.mode.is_code_editor() || editor.hover_definition.is_empty() {
-            return None;
-        }
-        let bounds = editor.range_to_bounds(&editor.hover_definition.symbol_range)?;
-        Some(window.insert_hitbox(bounds, HitboxBehavior::Normal))
-    }
-
     fn paint_mouse_listeners(&mut self, window: &mut Window, _: &mut App) {
         window.on_mouse_event({
             let state = self.state.clone();

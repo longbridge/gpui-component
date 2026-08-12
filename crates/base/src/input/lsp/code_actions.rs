@@ -1,8 +1,19 @@
-use super::*;
+use anyhow::Result;
+use gpui::{App, Context, Entity, SharedString, Task, Window};
+use lsp_types::CodeAction;
+use std::ops::Range;
+
+use crate::input::{InputState, ToggleCodeActions};
 
 pub trait CodeActionProvider {
+    /// The id for this CodeAction.
     fn id(&self) -> SharedString;
 
+    /// Fetches code actions for the specified range.
+    ///
+    /// textDocument/codeAction
+    ///
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_codeAction
     fn code_actions(
         &self,
         state: Entity<InputState>,
@@ -11,6 +22,7 @@ pub trait CodeActionProvider {
         cx: &mut App,
     ) -> Task<Result<Vec<CodeAction>>>;
 
+    /// Performs the specified code action.
     fn perform_code_action(
         &self,
         state: Entity<InputState>,
@@ -30,40 +42,63 @@ pub struct CodeActionItem {
 impl InputState {
     pub(crate) fn on_action_toggle_code_actions(
         &mut self,
-        _: &crate::input::ToggleCodeActions,
+        _: &ToggleCodeActions,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.handle_code_action_trigger(window, cx)
+    }
+
+    /// Show code actions for the cursor.
+    pub(crate) fn handle_code_action_trigger(
+        &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let providers = self.lsp.code_action_providers.clone();
         let range = self.selected_range.start..self.selected_range.end;
+
         let state = cx.entity();
         self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
-            let mut tasks = Vec::new();
-            let _ = cx.update(|window, cx| {
-                tasks.extend(providers.iter().map(|provider| {
-                    (
-                        provider.id(),
-                        provider.code_actions(state.clone(), range.clone(), window, cx),
-                    )
-                }));
+            let mut provider_responses = vec![];
+            _ = cx.update(|window, cx| {
+                for provider in providers {
+                    let task = provider.code_actions(state.clone(), range.clone(), window, cx);
+                    provider_responses.push((provider.id(), task));
+                }
             });
-            let mut items = Vec::new();
-            for (provider_id, task) in tasks {
-                if let Ok(actions) = task.await {
-                    items.extend(actions.into_iter().map(|action| CodeActionItem {
+
+            let mut code_actions: Vec<CodeActionItem> = vec![];
+            for (provider_id, provider_responses) in provider_responses {
+                if let Some(responses) = provider_responses.await.ok() {
+                    code_actions.extend(responses.into_iter().map(|action| CodeActionItem {
                         provider_id: provider_id.clone(),
                         action,
-                    }));
+                    }))
                 }
             }
-            editor.update_in(cx, |editor, window, cx| {
-                if !editor.focus_handle.is_focused(window) {
-                    return;
-                }
-                editor.code_action_session.items = items;
-                editor.code_action_session.open = !editor.code_action_session.items.is_empty();
-                cx.notify();
-            })?;
+
+            if code_actions.is_empty() {
+                editor.update(cx, |editor, cx| {
+                    editor.code_action_session.open = false;
+                    editor.code_action_session.items.clear();
+                    cx.notify();
+                })?;
+                return Ok(());
+            }
+            editor
+                .update_in(cx, |editor, window, cx| {
+                    if !editor.focus_handle.is_focused(window) {
+                        return;
+                    }
+
+                    editor.code_action_session.items = code_actions;
+                    editor.code_action_session.open = !editor.code_action_session.items.is_empty();
+
+                    cx.notify();
+                })
+                .ok();
+
             Ok(())
         });
     }
@@ -74,16 +109,17 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(provider) = self
-            .lsp
-            .code_action_providers
+        let providers = self.lsp.code_action_providers.clone();
+        let Some(provider) = providers
             .iter()
             .find(|provider| provider.id() == item.provider_id)
-            .cloned()
         else {
             return;
         };
-        let task = provider.perform_code_action(cx.entity(), item.action.clone(), true, window, cx);
+
+        let state = cx.entity();
+        let task = provider.perform_code_action(state, item.action.clone(), true, window, cx);
+
         cx.spawn_in(window, async move |_, _| {
             let _ = task.await;
         })

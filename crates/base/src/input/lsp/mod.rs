@@ -1,18 +1,9 @@
 use anyhow::Result;
-use gpui::{
-    App, Context, Entity, EntityInputHandler, HighlightStyle, Hsla, MouseDownEvent, MouseMoveEvent,
-    Pixels, SharedString, Task, Window, px,
-};
-use lsp_types::{
-    CodeAction, ColorInformation, CompletionContext, CompletionItem, CompletionResponse, Hover,
-    InlineCompletionContext, InlineCompletionItem, InlineCompletionResponse,
-    InlineCompletionTriggerKind, SemanticTokens, SemanticTokensLegend, request::Completion,
-};
+use gpui::{App, Context, Hsla, SharedString, Task, Window};
 use ropey::Rope;
-use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
+use std::rc::Rc;
 
-use super::{InputState, RopeExt as _};
-use crate::input::HighlightStyleResolver;
+use crate::input::InputState;
 
 mod code_actions;
 mod completions;
@@ -30,19 +21,47 @@ pub use hover::*;
 pub use overlay::*;
 pub use semantic_tokens::*;
 
+/// Host hook to show a document when following an LSP location
+/// (Go to Definition), modeled after the `window/showDocument` request.
+///
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
+///
+/// Called before the built-in behavior. Return `true` if the host has shown
+/// the document (e.g. opened a docs window for a virtual/external URI);
+/// return `false` to fall through to the default handling (`external` URIs
+/// open in the browser, anything else jumps within the current document).
 pub type ShowDocumentHandler =
     Rc<dyn Fn(&lsp_types::ShowDocumentParams, &mut Window, &mut App) -> bool>;
 
+/// LSP ServerCapabilities
+///
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#serverCapabilities
 pub struct Lsp {
+    /// The completion provider.
     pub completion_provider: Option<Rc<dyn CompletionProvider>>,
+    /// The code action providers.
     pub code_action_providers: Vec<Rc<dyn CodeActionProvider>>,
+    /// The hover provider.
     pub hover_provider: Option<Rc<dyn HoverProvider>>,
+    /// The definition provider.
     pub definition_provider: Option<Rc<dyn DefinitionProvider>>,
+    /// The document color provider.
     pub document_color_provider: Option<Rc<dyn DocumentColorProvider>>,
+    /// The range semantic tokens provider.
     pub semantic_tokens_provider: Option<Rc<dyn DocumentRangeSemanticTokensProvider>>,
+    /// Optional host hook to show documents for Go to Definition locations,
+    /// following the `window/showDocument` request (see [`ShowDocumentHandler`]).
+    ///
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#window_showDocument
     pub show_document: Option<ShowDocumentHandler>,
+
+    /// Display options for the completion popover.
     pub completion_menu: CompletionMenuOptions,
+
     pub(crate) document_colors: Vec<(lsp_types::Range, Hsla)>,
+    /// Cached semantic tokens as absolute position ranges + theme token-type
+    /// names. Color is resolved from the name at paint time so theme switches
+    /// take effect without a refetch.
     pub(crate) semantic_tokens: Vec<(lsp_types::Range, SharedString)>,
     pub(crate) _hover_task: Task<Result<()>>,
     pub(crate) _document_color_task: Task<()>,
@@ -53,15 +72,15 @@ impl Default for Lsp {
     fn default() -> Self {
         Self {
             completion_provider: None,
-            code_action_providers: Vec::new(),
+            code_action_providers: vec![],
             hover_provider: None,
             definition_provider: None,
             document_color_provider: None,
+            completion_menu: CompletionMenuOptions::default(),
             semantic_tokens_provider: None,
             show_document: None,
-            completion_menu: CompletionMenuOptions::default(),
-            document_colors: Vec::new(),
-            semantic_tokens: Vec::new(),
+            document_colors: vec![],
+            semantic_tokens: vec![],
             _hover_task: Task::ready(Ok(())),
             _document_color_task: Task::ready(()),
             _semantic_tokens_task: Task::ready(()),
@@ -70,6 +89,7 @@ impl Default for Lsp {
 }
 
 impl Lsp {
+    /// Update the LSP when the text changes.
     pub(crate) fn update(
         &mut self,
         text: &Rope,
@@ -79,6 +99,8 @@ impl Lsp {
         self.update_document_colors(text, window, cx);
         self.update_semantic_tokens(text, window, cx);
     }
+
+    /// Reset all LSP states.
     pub(crate) fn reset(&mut self) {
         self.document_colors.clear();
         self.semantic_tokens.clear();

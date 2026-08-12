@@ -1,56 +1,79 @@
-use super::*;
+use anyhow::Result;
+use gpui::{App, Context, MouseMoveEvent, Task, Window};
+use instant::Duration;
+use ropey::Rope;
 
+use crate::input::{HoverSession, InputState, RopeExt};
+
+/// Hover provider
+///
+/// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover
 pub trait HoverProvider {
+    /// textDocument/hover
+    ///
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_hover
     fn hover(
         &self,
-        text: &Rope,
-        offset: usize,
-        window: &mut Window,
-        cx: &mut App,
+        _text: &Rope,
+        _offset: usize,
+        _window: &mut Window,
+        _cx: &mut App,
     ) -> Task<Result<Option<lsp_types::Hover>>>;
 }
 
 impl InputState {
-    pub(crate) fn handle_hover_popover(
+    /// Handle hover trigger LSP request.
+    pub(super) fn handle_hover_popover(
         &mut self,
         offset: usize,
         window: &mut Window,
-        cx: &mut Context<Self>,
+        cx: &mut Context<InputState>,
     ) {
         if self.selecting {
             return;
         }
+
         let Some(provider) = self.lsp.hover_provider.clone() else {
             return;
         };
-        if self
-            .hover_session
-            .as_ref()
-            .is_some_and(|session| session.symbol_range.contains(&offset))
-        {
-            return;
+
+        if let Some(hover_session) = self.hover_session.as_ref() {
+            if hover_session.symbol_range.contains(&offset) {
+                return;
+            }
         }
+
+        // Currently not implemented.
         let task = provider.hover(&self.text, offset, window, cx);
-        let fallback = self.text.word_range(offset).unwrap_or(offset..offset);
+        let mut symbol_range = self.text.word_range(offset).unwrap_or(offset..offset);
         let editor = cx.entity();
+        let should_delay = self.hover_session.is_none();
         self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
-            let hover = task.await?;
-            editor.update(cx, |editor, cx| {
-                editor.hover_session = hover.map(|hover| {
-                    let symbol_range = hover
-                        .range
-                        .map(|range| {
-                            editor.text.position_to_offset(&range.start)
-                                ..editor.text.position_to_offset(&range.end)
-                        })
-                        .unwrap_or(fallback);
-                    HoverSession {
+            if should_delay {
+                cx.background_executor()
+                    .timer(Duration::from_millis(150))
+                    .await;
+            }
+
+            let result = task.await?;
+
+            _ = editor.update(cx, |editor, _cx| match result {
+                Some(hover) => {
+                    if let Some(range) = hover.range {
+                        let start = editor.text.position_to_offset(&range.start);
+                        let end = editor.text.position_to_offset(&range.end);
+                        symbol_range = start..end;
+                    }
+                    editor.hover_session = Some(HoverSession {
                         symbol_range,
                         hover,
-                    }
-                });
-                cx.notify();
+                    });
+                }
+                None => {
+                    editor.hover_session = None;
+                }
             });
+
             Ok(())
         });
     }
