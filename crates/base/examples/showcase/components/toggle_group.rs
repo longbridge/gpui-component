@@ -18,6 +18,7 @@ impl BaseShowcase {
                     .items_center()
                     .justify_center()
                     .border_1()
+                    .border_l_0()
                     .border_color(rgb(0x171717))
                     .when(italic, |this| {
                         this.bg(rgb(0x171717)).text_color(rgb(0xffffff))
@@ -46,6 +47,7 @@ impl BaseShowcase {
                     .items_center()
                     .justify_center()
                     .border_1()
+                    .border_l_0()
                     .border_color(rgb(0x171717))
                     .when(underline, |this| {
                         this.bg(rgb(0x171717)).text_color(rgb(0xffffff))
