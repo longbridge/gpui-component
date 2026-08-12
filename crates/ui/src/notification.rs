@@ -21,6 +21,7 @@ use crate::{
 const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(400);
 const NOTIFICATION_EXIT_DURATION: Duration = Duration::from_millis(200);
 const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
+const DEFAULT_NOTIFICATION_WIDTH: Pixels = px(356.);
 struct DismissRequest;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -635,7 +636,7 @@ impl Render for NotificationList {
             .placement(placement)
             .focus_handle(self.focus_handle.clone())
             .v_flex()
-            .w_112()
+            .w(DEFAULT_NOTIFICATION_WIDTH)
             .max_h(size.height)
     }
 }
