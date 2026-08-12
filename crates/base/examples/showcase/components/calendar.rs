@@ -3,7 +3,8 @@ use super::*;
 impl BaseShowcase {
     pub(in super::super) fn calendar(&self) -> impl IntoElement {
         Calendar::new("example-calendar", &self.calendar)
-            .w(px(248.))
+            // 7 × 32px cells + 12px padding on each side + 1px borders.
+            .w(px(250.))
             .p_3()
             .border_1()
             .border_color(rgb(0xd4d4d4))

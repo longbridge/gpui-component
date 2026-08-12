@@ -14,7 +14,7 @@ impl BaseShowcase {
                 });
             })
             .relative()
-            .w(px(220.))
+            .w(px(250.))
             .text_size(px(12.))
             .child(
                 Button::new("date-trigger")
