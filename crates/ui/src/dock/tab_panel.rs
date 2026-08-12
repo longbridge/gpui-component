@@ -1504,7 +1504,10 @@ mod tests {
     use gpui::{TestAppContext, VisualTestContext, WindowHandle};
 
     use super::*;
-    use crate::{Root, Theme, dock::DockItem};
+    use crate::{
+        Root, Theme,
+        dock::{DockItem, TileMeta},
+    };
 
     #[test]
     fn drop_placeholder_bounds_cover_each_target_placement() {
@@ -1605,11 +1608,16 @@ mod tests {
         name: &'static str,
         focus_handle: FocusHandle,
         log: Log,
+        visible: bool,
     }
 
     impl Panel for TestPanel {
         fn panel_name(&self) -> &'static str {
             "TestPanel"
+        }
+
+        fn visible(&self, _: &App) -> bool {
+            self.visible
         }
 
         fn set_active(&mut self, active: bool, _: &mut Window, _: &mut Context<Self>) {
@@ -1662,6 +1670,7 @@ mod tests {
             name,
             focus_handle: cx.focus_handle(),
             log,
+            visible: true,
         })
     }
 
@@ -1780,6 +1789,80 @@ mod tests {
         cx.run_until_parked();
 
         assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    /// Rendering skips invisible panels, so a centre holding only hidden ones
+    /// draws nothing and counts as empty.
+    #[gpui::test]
+    fn center_holding_only_hidden_panels_is_empty(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (item, tab_panel, panels) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.update(|window, cx| {
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(item, window, cx))
+        });
+        cx.run_until_parked();
+        assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+
+        cx.update(|_, cx| {
+            for panel in &panels {
+                panel.update(cx, |panel, _| panel.visible = false);
+            }
+        });
+        cx.run_until_parked();
+
+        assert_eq!(
+            cx.read(|cx| tab_panel.read(cx).panels.len()),
+            2,
+            "hiding a panel does not remove it from the tab group"
+        );
+        assert!(cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    /// A `TabPanel` inside `Tiles` has no parent `StackPanel` to remove itself
+    /// from, so emptying it leaves the tile behind and the walk has to recurse.
+    #[gpui::test]
+    fn center_holding_only_empty_tiles_is_empty(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (tabs, tab_panel, panels) = build_tabs(&fixture, &["A"], None, &mut cx);
+        let weak_dock_area = fixture.dock_area.downgrade();
+        cx.update(|window, cx| {
+            let tiles = DockItem::tiles(
+                vec![tabs],
+                vec![TileMeta::default()],
+                &weak_dock_area,
+                window,
+                cx,
+            );
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(tiles, window, cx))
+        });
+        cx.run_until_parked();
+        assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+
+        for panel in panels {
+            cx.update(|window, cx| {
+                tab_panel.update(cx, |tab_panel, cx| {
+                    tab_panel.remove_panel(Arc::new(panel.clone()), window, cx)
+                })
+            });
+        }
+        cx.run_until_parked();
+
+        let tiles = cx.read(|cx| {
+            let DockItem::Tiles { view, .. } = fixture.dock_area.read(cx).center() else {
+                unreachable!("the centre is a Tiles item");
+            };
+            view.read(cx).panels().len()
+        });
+        assert_eq!(tiles, 1, "the emptied TabPanel is still listed as a tile");
+        assert!(cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
     }
 
     #[gpui::test]

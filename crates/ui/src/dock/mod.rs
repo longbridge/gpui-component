@@ -392,6 +392,43 @@ impl DockItem {
         }
     }
 
+    /// Whether this dock item currently holds no visible panel.
+    ///
+    /// Walks the live panel entities, not `items`: [`Self::add_panel`] only
+    /// pushes into them, nothing ever removes, and splitting does not touch
+    /// them at all.
+    ///
+    /// A container is empty when every child is, so a fresh one is empty. A
+    /// leaf counts as empty while it is hidden, matching the render path, which
+    /// skips panels whose [`Panel::visible`] is `false`.
+    pub fn is_empty(&self, cx: &App) -> bool {
+        fn is_empty(panel: &Arc<dyn PanelView>, cx: &App) -> bool {
+            let view = panel.view();
+
+            if let Ok(stack) = view.clone().downcast::<StackPanel>() {
+                return stack
+                    .read(cx)
+                    .panels
+                    .iter()
+                    .all(|panel| is_empty(panel, cx));
+            }
+            if let Ok(tabs) = view.clone().downcast::<TabPanel>() {
+                return tabs.read(cx).panels.iter().all(|panel| is_empty(panel, cx));
+            }
+            if let Ok(tiles) = view.downcast::<Tiles>() {
+                return tiles
+                    .read(cx)
+                    .panels()
+                    .iter()
+                    .all(|item| is_empty(&item.panel, cx));
+            }
+
+            !panel.visible(cx)
+        }
+
+        is_empty(&self.view(), cx)
+    }
+
     /// Find existing panel in the dock item.
     pub fn find_panel(&self, panel: Arc<dyn PanelView>) -> Option<Arc<dyn PanelView>> {
         match self {
@@ -642,32 +679,12 @@ impl DockArea {
         &self.center
     }
 
-    /// Whether the center area currently holds no panel.
+    /// Whether the center area currently holds no visible panel.
     ///
-    /// Walks the live panel entities; the [`DockItem`] tree is only rebuilt by
-    /// [`Self::load`] and [`Self::set_center`], so it goes stale.
+    /// See [`DockItem::is_empty`]. Ask a dock the same question with
+    /// [`Dock::panel`].
     pub fn is_center_empty(&self, cx: &App) -> bool {
-        fn is_empty(panel: &Arc<dyn PanelView>, cx: &App) -> bool {
-            let view = panel.view();
-
-            if let Ok(stack) = view.clone().downcast::<StackPanel>() {
-                return stack
-                    .read(cx)
-                    .panels
-                    .iter()
-                    .all(|panel| is_empty(panel, cx));
-            }
-            if let Ok(tabs) = view.clone().downcast::<TabPanel>() {
-                return tabs.read(cx).panels.is_empty();
-            }
-            if let Ok(tiles) = view.downcast::<Tiles>() {
-                return tiles.read(cx).panels().is_empty();
-            }
-
-            false
-        }
-
-        is_empty(&self.center.view(), cx)
+        self.center.is_empty(cx)
     }
 
     /// Return the left dock item.
