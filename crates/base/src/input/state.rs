@@ -2822,11 +2822,10 @@ impl InputState {
 
         // The new byte range in the updated text after the edit
         let new_end = edit_range.start + new_text.len();
-        let fold_ranges = highlighter.fold_ranges_for_edit(edit_range.start..new_end, &self.text);
         self.display_map.update_fold_candidates_for_edit(
+            highlighter.as_ref(),
             edit_range.start..new_end,
             &self.text,
-            fold_ranges,
         );
     }
 }
