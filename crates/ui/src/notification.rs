@@ -321,7 +321,7 @@ impl Render for Notification {
             .group("")
             .occlude()
             .relative()
-            .w_112()
+            .w_full()
             .border_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().tokens.popover)
