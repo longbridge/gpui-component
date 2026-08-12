@@ -1,30 +1,67 @@
 use std::ops::Range;
 
+use gpui::{Context, Window};
 use ropey::Rope;
 use sum_tree::Bias;
 
-use super::RopeExt as _;
+use super::{InputState, RopeExt as _};
 
-/// Stateless text-selection algorithms shared by input frontends.
-pub(super) struct TextSelector;
+impl InputState {
+    /// Select the word at the given offset on double-click.
+    ///
+    /// The offset is the UTF-8 offset.
+    pub(super) fn select_word(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(range) = TextSelector::word_range(&self.text, offset) else {
+            return;
+        };
 
-impl TextSelector {
-    pub(super) fn line_range(text: &Rope, offset: usize) -> Range<usize> {
-        let offset = text.clip_offset(offset, Bias::Left);
-        let row = text.offset_to_point(offset).row;
-        text.line_start_offset(row)..text.line_end_offset(row)
+        self.selected_range = (range.start..range.end).into();
+        self.selected_word_range = Some(self.selected_range);
+        cx.notify()
     }
 
-    pub(super) fn word_range(text: &Rope, offset: usize) -> Option<Range<usize>> {
+    /// Select the line at the given offset on triple-click.
+    ///
+    /// The offset is the UTF-8 offset.
+    pub(super) fn select_line(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
+        let range = TextSelector::line_range(&self.text, offset);
+        self.selected_range = (range.start..range.end).into();
+        self.selected_word_range = None;
+        cx.notify()
+    }
+}
+
+struct TextSelector;
+impl TextSelector {
+    /// Select a line in the given text at the specified offset.
+    ///
+    /// The offset is the UTF-8 offset.
+    ///
+    /// Returns the start and end offsets of the selected line.
+    pub fn line_range(text: &Rope, offset: usize) -> Range<usize> {
         let offset = text.clip_offset(offset, Bias::Left);
-        let character = text.char_at(offset)?;
-        let end = offset + character.len_utf8();
-        Some(word_range_from_chars(
-            offset,
-            character,
-            text.chars_at(offset).reversed().take(128),
-            text.chars_at(end).take(128),
-        ))
+        let row = text.offset_to_point(offset).row;
+        let start = text.line_start_offset(row);
+        let end = text.line_end_offset(row);
+
+        start..end
+    }
+
+    /// Select a word in the given text at the specified offset.
+    ///
+    /// The offset is the UTF-8 offset.
+    ///
+    /// Returns the start and end offsets of the selected word.
+    pub fn word_range(text: &Rope, offset: usize) -> Option<Range<usize>> {
+        let offset = text.clip_offset(offset, Bias::Left);
+        let Some(char) = text.char_at(offset) else {
+            return None;
+        };
+
+        let end = offset + char.len_utf8();
+        let prev_chars = text.chars_at(offset).reversed().take(128);
+        let next_chars = text.chars_at(end).take(128);
+        Some(word_range_from_chars(offset, char, prev_chars, next_chars))
     }
 }
 
@@ -53,15 +90,6 @@ impl From<char> for CharType {
     }
 }
 
-impl CharType {
-    fn connects(self, c: char) -> bool {
-        matches!(
-            (self, Self::from(c)),
-            (Self::Word, Self::Word) | (Self::Whitespace, Self::Whitespace)
-        )
-    }
-}
-
 fn word_range_from_chars(
     offset: usize,
     c: char,
@@ -69,58 +97,84 @@ fn word_range_from_chars(
     next: impl Iterator<Item = char>,
 ) -> Range<usize> {
     let kind = CharType::from(c);
-    let mut start = offset;
-    let mut end = offset + c.len_utf8();
-    for c in prev.take(128) {
-        if kind.connects(c) {
-            start -= c.len_utf8();
-        } else {
-            break;
-        }
-    }
-    for c in next.take(128) {
-        if kind.connects(c) {
-            end += c.len_utf8();
-        } else {
-            break;
-        }
-    }
+    let connects = |next| {
+        matches!(
+            (kind, CharType::from(next)),
+            (CharType::Word, CharType::Word) | (CharType::Whitespace, CharType::Whitespace)
+        )
+    };
+    let start = prev
+        .take(128)
+        .take_while(|c| connects(*c))
+        .fold(offset, |offset, c| offset - c.len_utf8());
+    let end = next
+        .take(128)
+        .take_while(|c| connects(*c))
+        .fold(offset + c.len_utf8(), |offset, c| offset + c.len_utf8());
     start..end
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ropey::Rope;
 
     #[test]
-    fn selects_words_unicode_whitespace_and_punctuation() {
-        let text = Rope::from("abcde 中文🎉 test\nhello[()]\ntest_connector ____\nrök grande île");
-        let source = text.to_string();
-        for expected in [
-            "abcde",
-            " ",
-            "中",
-            "🎉",
-            "test",
-            "[",
-            "]",
-            "test_connector",
-            "____",
-            "rök",
-            "île",
-        ] {
-            let offset = source.find(expected).unwrap();
-            let range = TextSelector::word_range(&text, offset).unwrap();
-            assert_eq!(text.slice(range).to_string(), expected, "offset {offset}");
+    fn test_word_range() {
+        let rope = Rope::from(
+            "test text:\nabcde 中文🎉 test\nhello[()]\ntest_connector ____\nRope\nrök\ngrande île\n",
+        );
+
+        let tests = vec![
+            (0, 0, Some("test")),
+            (0, 4, Some(" ")),
+            (1, 0, Some("abcde")),
+            (1, 4, Some("abcde")),
+            (1, 5, Some(" ")),
+            (1, 6, Some("中")),
+            (1, 9, Some("文")),
+            (1, 13, Some("🎉")),
+            (1, 20, Some("test")),
+            (2, 5, Some("[")),
+            (2, 6, Some("(")),
+            (2, 7, Some(")")),
+            (2, 8, Some("]")),
+            (3, 5, Some("test_connector")),
+            (3, 14, Some(" ")),
+            (3, 16, Some("____")),
+            (4, 0, Some("Rope")),
+            (5, 0, Some("rök")),
+            (6, 8, Some("île")),
+        ];
+
+        for (line, column, expected) in tests {
+            let line_start_offset = rope.line_start_offset(line);
+            let offset = line_start_offset + column;
+            let range = TextSelector::word_range(&rope, offset);
+
+            let actual = range.map(|r| rope.slice(r).to_string());
+            let expect = expected.map(|s| s.to_string());
+            assert_eq!(actual, expect, "line {}, column {}", line, column);
         }
     }
 
     #[test]
-    fn selects_complete_lines() {
-        let text = Rope::from("first line\nsecond line\nthird");
-        for (offset, expected) in [(0, "first line"), (14, "second line"), (24, "third")] {
-            let range = TextSelector::line_range(&text, offset);
-            assert_eq!(text.slice(range).to_string(), expected);
+    fn test_line_range() {
+        let rope = Rope::from("first line\nsecond line\nthird");
+        let tests = vec![
+            (0, 0, "first line"),
+            (0, 5, "first line"),
+            (1, 3, "second line"),
+            (2, 1, "third"),
+        ];
+
+        for (line, column, expected) in tests {
+            let line_start_offset = rope.line_start_offset(line);
+            let offset = line_start_offset + column;
+            let range = TextSelector::line_range(&rope, offset);
+
+            let actual = rope.slice(range).to_string();
+            assert_eq!(actual, expected, "line {}, column {}", line, column);
         }
     }
 }

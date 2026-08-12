@@ -519,24 +519,6 @@ impl InputState {
         }
     }
 
-    /// Select the word at the given UTF-8 offset.
-    pub(super) fn select_word(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(range) = super::selection::TextSelector::word_range(&self.text, offset) else {
-            return;
-        };
-        self.selected_range = (range.start..range.end).into();
-        self.selected_word_range = Some(self.selected_range);
-        cx.notify();
-    }
-
-    /// Select the line at the given UTF-8 offset.
-    pub(super) fn select_line(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
-        let range = super::selection::TextSelector::line_range(&self.text, offset);
-        self.selected_range = (range.start..range.end).into();
-        self.selected_word_range = None;
-        cx.notify();
-    }
-
     /// Create a Input state with default [`InputMode::SingleLine`] mode.
     ///
     /// See also: [`Self::multi_line`], [`Self::auto_grow`] to set other mode.

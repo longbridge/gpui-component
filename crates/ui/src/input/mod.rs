@@ -8,6 +8,7 @@ mod otp_input;
 mod overlay;
 pub(crate) mod popovers;
 mod search;
+mod selection;
 
 pub(crate) use clear_button::*;
 pub use content_type::*;
