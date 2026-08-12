@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::VecDeque, rc::Rc, time::Duration};
 
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Div, ElementId, InteractiveElement,
+    Anchor, Animation, AnimationExt as _, AnyElement, App, Div, ElementId, InteractiveElement,
     Interactivity, IntoElement, ParentElement, Pixels, RenderOnce, Role, Stateful,
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div, px,
 };
@@ -50,6 +50,7 @@ pub struct ToastStack {
     style: StyleRefinement,
     state: ToastStackState,
     motion: ToastMotion,
+    placement: Anchor,
     children: Vec<AnyElement>,
 }
 
@@ -61,6 +62,7 @@ impl ToastStack {
             style: StyleRefinement::default(),
             state,
             motion: ToastMotion::base_ui(),
+            placement: Anchor::TopRight,
             children: Vec::new(),
         }
     }
@@ -68,6 +70,12 @@ impl ToastStack {
     /// Set the stack motion tokens.
     pub fn motion(mut self, motion: ToastMotion) -> Self {
         self.motion = motion;
+        self
+    }
+
+    /// Set the viewport edge used to anchor stack geometry.
+    pub fn placement(mut self, placement: Anchor) -> Self {
+        self.placement = placement;
         self
     }
 }
@@ -92,6 +100,45 @@ impl InteractiveElement for ToastStack {
 
 impl StatefulInteractiveElement for ToastStack {}
 
+fn stack_geometry(
+    heights: &[Pixels],
+    gap: Pixels,
+    peek: Pixels,
+    anchored_bottom: bool,
+) -> (Pixels, Pixels, Vec<(Pixels, Pixels)>) {
+    let count = heights.len();
+    let expanded_height = heights
+        .iter()
+        .copied()
+        .fold(px(0.), |sum, height| sum + height)
+        + gap * count.saturating_sub(1) as f32;
+    let front_height = heights.last().copied().unwrap_or(px(0.));
+    let collapsed_height = front_height + peek * count.saturating_sub(1) as f32;
+    let offsets = heights
+        .iter()
+        .enumerate()
+        .map(|(index, height)| {
+            let rank = count - 1 - index;
+            let newer_height = heights[(index + 1)..]
+                .iter()
+                .copied()
+                .fold(px(0.), |sum, height| sum + height);
+            let expanded = if anchored_bottom {
+                expanded_height - newer_height - gap * rank as f32 - *height
+            } else {
+                newer_height + gap * rank as f32
+            };
+            let collapsed = if anchored_bottom {
+                collapsed_height - front_height - peek * rank as f32
+            } else {
+                front_height + peek * rank as f32 - *height
+            };
+            (collapsed, expanded)
+        })
+        .collect();
+    (collapsed_height, expanded_height, offsets)
+}
+
 impl RenderOnce for ToastStack {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let expanded = self.state.expanded.get();
@@ -100,24 +147,36 @@ impl RenderOnce for ToastStack {
         let duration = self.motion.duration;
         let peek = self.motion.collapsed_peek;
         let gap = self.motion.expanded_gap;
+        let count = self.children.len();
+        let anchored_bottom = matches!(
+            self.placement,
+            Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight
+        );
+        let (collapsed_height, expanded_height, offsets) = stack_geometry(
+            &heights[..count.min(heights.len())],
+            gap,
+            peek,
+            anchored_bottom,
+        );
+        let stack_height = if expanded {
+            expanded_height
+        } else {
+            collapsed_height
+        };
         let items = self
             .children
             .into_iter()
             .enumerate()
             .map(move |(index, child)| {
-                let previous_height = index
-                    .checked_sub(1)
-                    .and_then(|ix| heights.get(ix).copied())
-                    .unwrap_or(px(0.));
-                let collapsed_margin = if index == 0 {
-                    px(0.)
-                } else {
-                    peek - previous_height
-                };
+                let (collapsed_offset, expanded_offset) =
+                    offsets.get(index).copied().unwrap_or((px(0.), px(0.)));
                 let measured = measured.clone();
                 div()
                     .id(("base-toast-stack-item", index))
-                    .relative()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .w_full()
                     .with_animation(
                         ElementId::NamedInteger(
                             "base-toast-stack-layout".into(),
@@ -125,12 +184,12 @@ impl RenderOnce for ToastStack {
                         ),
                         Animation::new(duration).with_easing(cubic_bezier(0.22, 1., 0.36, 1.)),
                         move |this, delta| {
-                            let margin = if expanded {
-                                collapsed_margin + (gap - collapsed_margin) * delta
+                            let offset = if expanded {
+                                collapsed_offset + (expanded_offset - collapsed_offset) * delta
                             } else {
-                                gap + (collapsed_margin - gap) * delta
+                                expanded_offset + (collapsed_offset - expanded_offset) * delta
                             };
-                            this.mt(margin)
+                            this.top(offset)
                         },
                     )
                     .on_prepaint(move |bounds, _, cx| {
@@ -148,6 +207,8 @@ impl RenderOnce for ToastStack {
 
         let expanded_state = self.state.expanded.clone();
         self.base
+            .relative()
+            .h(stack_height)
             .on_hover(move |hovered, _, cx| {
                 if expanded_state.replace(*hovered) != *hovered {
                     cx.refresh_windows();
@@ -445,6 +506,24 @@ mod tests {
         assert_eq!(
             store.visible_values(2).copied().collect::<Vec<_>>(),
             vec![2, 3]
+        );
+    }
+
+    #[test]
+    fn stack_geometry_anchors_newest_item_and_supports_variable_heights() {
+        let heights = [px(40.), px(60.), px(80.)];
+        let (collapsed, expanded, top) = stack_geometry(&heights, px(12.), px(12.), false);
+        assert_eq!(collapsed, px(104.));
+        assert_eq!(expanded, px(204.));
+        assert_eq!(
+            top,
+            vec![(px(64.), px(164.)), (px(32.), px(92.)), (px(0.), px(0.))]
+        );
+
+        let (_, _, bottom) = stack_geometry(&heights, px(12.), px(12.), true);
+        assert_eq!(
+            bottom,
+            vec![(px(0.), px(0.)), (px(12.), px(52.)), (px(24.), px(124.))]
         );
     }
 

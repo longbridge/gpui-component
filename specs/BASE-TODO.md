@@ -482,6 +482,10 @@ checking the component milestone:
 - 2026-08-12: Base `ToastStack` now hides variable-height measurement, collapsed
   overlap, hover expansion, and layout interpolation behind one stack interface.
   Notification supplies only its rendered items; it no longer owns stack geometry.
+- 2026-08-12: Toast stack geometry now uses measured absolute coordinates rather
+  than feedback-prone negative flex margins. Top and bottom placements anchor the
+  newest toast independently, variable-height cards retain a 12px visible peek,
+  and expanded coordinates are computed from cumulative measured heights.
 
 ## Crate Foundation
 

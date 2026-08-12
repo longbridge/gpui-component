@@ -568,6 +568,7 @@ impl Render for NotificationList {
         let margins = &cx.theme().notification.margins;
 
         ToastStack::new("notification-list", self.stack_state.clone())
+            .placement(placement)
             .v_flex()
             .max_h(size.height)
             .pt(margins.top)
