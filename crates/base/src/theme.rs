@@ -25,6 +25,18 @@ impl Theme {
     }
 }
 
+/// Access to the active base theme through an application context.
+pub(crate) trait ActiveTheme {
+    fn theme(&self) -> Theme;
+}
+
+impl ActiveTheme for App {
+    #[inline(always)]
+    fn theme(&self) -> Theme {
+        Theme::global(self)
+    }
+}
+
 /// Global defaults used by [`crate::Scrollbar`].
 #[derive(Clone, Default)]
 pub struct ScrollbarTheme {

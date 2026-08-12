@@ -3,7 +3,7 @@ use gpui::{
     Refineable as _, StyleRefinement, Styled, Window, div, hsla, point, px,
 };
 
-use crate::Theme;
+use crate::theme::ActiveTheme as _;
 
 pub fn h_flex() -> Div {
     div().h_flex()
@@ -125,8 +125,7 @@ pub trait StyledExt: Styled + Sized {
     }
 
     fn focused_border(self, cx: &App) -> Self {
-        self.border_1()
-            .border_color(Theme::global(cx).tokens.colors.ring)
+        self.border_1().border_color(cx.theme().tokens.colors.ring)
     }
 
     font_weight!(font_thin, THIN);
@@ -140,7 +139,7 @@ pub trait StyledExt: Styled + Sized {
     font_weight!(font_black, BLACK);
 
     fn popover_style(self, cx: &App) -> Self {
-        let tokens = Theme::global(cx).tokens;
+        let tokens = cx.theme().tokens;
         self.bg(tokens.colors.surface)
             .text_color(tokens.colors.surface_foreground)
             .border_1()
@@ -228,7 +227,7 @@ impl<T: ParentElement + Styled + Sized> FocusableExt<T> for T {
         inner_style.corner_radii.bottom_left = Some(radius.bottom_left.into());
         inner_style.corner_radii.bottom_right = Some(radius.bottom_right.into());
         let inset = RING_BORDER_WIDTH + margins;
-        let ring = Theme::global(cx).tokens.colors.ring;
+        let ring = cx.theme().tokens.colors.ring;
         self.child(
             div()
                 .flex_none()

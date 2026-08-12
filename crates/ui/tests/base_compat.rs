@@ -220,7 +220,7 @@ fn base_input_frames_accept_application_owned_content() {
             .on_step(|_, _, _| {})
             .decrement_button(|button| button.child("-"))
             .increment_button(|button| button.child("+"))
-            .input(|input| input.child(gpui::div()))
+            .input(gpui::div())
             .child(gpui::div());
     }
     let _ = build_number;

@@ -6,7 +6,7 @@ use gpui::{
     StatefulInteractiveElement, Styled as _, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{AxisExt as _, Side, Theme};
+use crate::{AxisExt as _, Side, theme::ActiveTheme as _};
 
 pub(crate) const HANDLE_PADDING: Pixels = px(4.);
 pub(crate) const HANDLE_SIZE: Pixels = px(1.);
@@ -107,11 +107,10 @@ impl<T: 'static, E: 'static + Render> Element for ResizeHandle<T, E> {
         window.with_element_state(id.unwrap(), |state, window| {
             let state = state.unwrap_or(ResizeHandleState::default());
 
-            let theme = Theme::global(cx);
             let bg_color = if state.is_active() {
-                theme.resizable.active_handle
+                cx.theme().resizable.active_handle
             } else {
-                theme.resizable.handle
+                cx.theme().resizable.handle
             };
 
             let mut el = div()

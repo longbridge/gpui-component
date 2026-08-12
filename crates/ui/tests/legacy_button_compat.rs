@@ -1,13 +1,12 @@
 use gpui::{Axis, InteractiveElement as _, ParentElement as _, Styled as _, blue, green, px, red};
 use gpui_component::{
-    Disableable as _, Selectable as _, Sizable as _, Size,
-    Icon, IconName,
-    input::Enter,
+    Disableable as _, Icon, IconName, Selectable as _, Sizable as _, Size,
     button::{
         Button, ButtonCustomVariant, ButtonGroup, ButtonRounded, ButtonVariant,
         ButtonVariants as _, DropdownButton, Toggle, ToggleGroup, ToggleVariant,
         ToggleVariants as _,
     },
+    input::Enter,
 };
 
 #[test]

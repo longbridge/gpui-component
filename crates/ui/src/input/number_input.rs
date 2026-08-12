@@ -140,19 +140,17 @@ impl RenderOnce for NumberInput {
                     .rounded_bl(button_radius)
                     .child(Icon::new(IconName::Minus).with_size(button_size))
             })
-            .input(move |this| {
-                this.child(
-                    Input::new(&self.state)
-                        .appearance(false)
-                        .with_size(button_size)
-                        .disabled(self.disabled)
-                        .gap_0()
-                        .rounded_none()
-                        .text_align(TextAlign::Center)
-                        .when_some(self.prefix, |this, prefix| this.prefix(prefix))
-                        .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
-                )
-            })
+            .input(
+                Input::new(&self.state)
+                    .appearance(false)
+                    .with_size(button_size)
+                    .disabled(self.disabled)
+                    .gap_0()
+                    .rounded_none()
+                    .text_align(TextAlign::Center)
+                    .when_some(self.prefix, |this, prefix| this.prefix(prefix))
+                    .when_some(self.suffix, |this, suffix| this.suffix(suffix)),
+            )
             .increment_button(move |this| {
                 this.flex()
                     .items_center()

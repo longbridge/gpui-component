@@ -34,7 +34,6 @@ impl EventEmitter<NumberInputEvent> for InputState {}
 
 type StepHandler = Rc<dyn Fn(StepAction, &mut Window, &mut App)>;
 type ButtonDecorator = Box<dyn FnOnce(Button) -> Button>;
-type TextDecorator = Box<dyn FnOnce(NumberInputText) -> NumberInputText>;
 
 /// An unstyled spinbutton root composed from the foundational [`Input`] frame.
 #[derive(IntoElement)]
@@ -48,7 +47,7 @@ pub struct NumberInput {
     on_step: Option<StepHandler>,
     decrement_button: Option<ButtonDecorator>,
     increment_button: Option<ButtonDecorator>,
-    text: Option<TextDecorator>,
+    input: Option<AnyElement>,
 }
 
 /// The built-in text region of a [`NumberInput`].
@@ -110,7 +109,7 @@ impl NumberInput {
             on_step: None,
             decrement_button: None,
             increment_button: None,
-            text: None,
+            input: None,
         }
     }
 
@@ -150,11 +149,8 @@ impl NumberInput {
     }
 
     /// Decorate the built-in text region with an editor, adornments, and styles.
-    pub fn input(
-        mut self,
-        decorate: impl FnOnce(NumberInputText) -> NumberInputText + 'static,
-    ) -> Self {
-        self.text = Some(Box::new(decorate));
+    pub fn input(mut self, input: impl IntoElement) -> Self {
+        self.input = Some(input.into_any_element());
         self
     }
 }
@@ -193,9 +189,7 @@ impl RenderOnce for NumberInput {
             || Button::new("increment"),
             |decorate| decorate(Button::new("increment")),
         );
-        let text = self.text.map_or_else(NumberInputText::new, |decorate| {
-            decorate(NumberInputText::new())
-        });
+        let text = NumberInputText::new().children(self.input);
 
         let decrement_button = decrement_button
             .flex_none()
