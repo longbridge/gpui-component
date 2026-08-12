@@ -10,9 +10,9 @@ use ropey::RopeSlice;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TabSize {
-    /// Default is 2.
+    /// Default is 2
     pub tab_size: usize,
-    /// Use `\t` for indentation instead of spaces.
+    /// Set true to use `\t` as tab indent, default is false
     pub hard_tabs: bool,
 }
 
@@ -34,6 +34,7 @@ impl TabSize {
         }
     }
 
+    /// Count the indent size of the line in spaces.
     pub fn indent_count(&self, line: &RopeSlice) -> usize {
         let mut count = 0;
         for ch in line.chars() {
