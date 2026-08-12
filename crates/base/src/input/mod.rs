@@ -22,9 +22,7 @@ mod lsp;
 mod mask_pattern;
 mod mode;
 mod movement;
-#[cfg(target_os = "macos")]
 mod native;
-mod native_menu;
 mod rope_ext;
 mod search;
 mod selection;
@@ -56,133 +54,11 @@ pub use lsp::{
 pub(super) use lsp::{HoverDefinition, InlineCompletion};
 pub use lsp_types::Position;
 pub use mask_pattern::MaskPattern;
-#[cfg(target_os = "macos")]
-#[doc(hidden)]
-pub use native::set_text_content_type;
-pub use native_menu::{NativeMenu, NativeMenuItem};
+pub use native::{NativeMenu, NativeMenuItem};
 pub use rope_ext::{InputEdit, Point, RopeExt, RopeLines};
 pub use ropey::Rope;
 pub use search::{SearchMatcher, SearchSession};
 pub use state::*;
-
-/// Semantic content type used by text inputs, password managers, and autofill.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InputContentType {
-    Name,
-    NamePrefix,
-    GivenName,
-    MiddleName,
-    FamilyName,
-    NameSuffix,
-    Nickname,
-    JobTitle,
-    OrganizationName,
-    Location,
-    FullStreetAddress,
-    StreetAddressLine1,
-    StreetAddressLine2,
-    AddressCity,
-    AddressState,
-    AddressCityAndState,
-    Sublocality,
-    CountryName,
-    PostalCode,
-    TelephoneNumber,
-    EmailAddress,
-    Url,
-    CreditCardNumber,
-    CreditCardName,
-    CreditCardGivenName,
-    CreditCardMiddleName,
-    CreditCardFamilyName,
-    CreditCardSecurityCode,
-    CreditCardExpiration,
-    CreditCardExpirationMonth,
-    CreditCardExpirationYear,
-    CreditCardType,
-    Username,
-    Password,
-    NewPassword,
-    OneTimeCode,
-    ShipmentTrackingNumber,
-    FlightNumber,
-    DateTime,
-    Birthdate,
-    BirthdateDay,
-    BirthdateMonth,
-    BirthdateYear,
-    CellularEid,
-    CellularImei,
-}
-
-impl InputContentType {
-    pub fn accessibility_role(self) -> Role {
-        match self {
-            Self::TelephoneNumber => Role::PhoneNumberInput,
-            Self::EmailAddress => Role::EmailInput,
-            Self::Url => Role::UrlInput,
-            Self::Password | Self::NewPassword => Role::PasswordInput,
-            Self::DateTime => Role::DateTimeInput,
-            Self::Birthdate => Role::DateInput,
-            _ => Role::TextInput,
-        }
-    }
-
-    pub fn exposes_accessibility_value(self) -> bool {
-        !matches!(self, Self::Password | Self::NewPassword)
-    }
-
-    #[cfg(target_os = "macos")]
-    #[doc(hidden)]
-    pub const fn ns_text_content_type(self) -> Option<&'static str> {
-        match self {
-            Self::Name => Some("name"),
-            Self::NamePrefix => Some("honorific-prefix"),
-            Self::GivenName => Some("given-name"),
-            Self::MiddleName => Some("additional-name"),
-            Self::FamilyName => Some("family-name"),
-            Self::NameSuffix => Some("honorific-suffix"),
-            Self::Nickname => Some("nickname"),
-            Self::JobTitle => Some("organization-title"),
-            Self::OrganizationName => Some("organization"),
-            Self::Location => Some("location"),
-            Self::FullStreetAddress => Some("street-address"),
-            Self::StreetAddressLine1 => Some("address-line1"),
-            Self::StreetAddressLine2 => Some("address-line2"),
-            Self::AddressCity => Some("address-level2"),
-            Self::AddressState => Some("address-level1"),
-            Self::AddressCityAndState => Some("address-level1+2"),
-            Self::Sublocality => Some("address-level3"),
-            Self::CountryName => Some("country-name"),
-            Self::PostalCode => Some("postal-code"),
-            Self::TelephoneNumber => Some("tel"),
-            Self::EmailAddress => Some("email"),
-            Self::Url => Some("url"),
-            Self::CreditCardNumber => Some("cc-number"),
-            Self::CreditCardName => Some("cc-name"),
-            Self::CreditCardGivenName => Some("cc-given-name"),
-            Self::CreditCardMiddleName => Some("cc-additional-name"),
-            Self::CreditCardFamilyName => Some("cc-family-name"),
-            Self::CreditCardSecurityCode => Some("cc-csc"),
-            Self::CreditCardExpiration => Some("cc-exp"),
-            Self::CreditCardExpirationMonth => Some("cc-exp-month"),
-            Self::CreditCardExpirationYear => Some("cc-exp-year"),
-            Self::CreditCardType => Some("cc-type"),
-            Self::Username => Some("username"),
-            Self::Password => Some("password"),
-            Self::NewPassword => Some("new-password"),
-            Self::OneTimeCode => Some("one-time-code"),
-            Self::ShipmentTrackingNumber => Some("shipment-tracking-number"),
-            Self::FlightNumber => Some("flight-number"),
-            Self::DateTime => Some("date-time"),
-            Self::Birthdate => Some("bday"),
-            Self::BirthdateDay => Some("bday-day"),
-            Self::BirthdateMonth => Some("bday-month"),
-            Self::BirthdateYear => Some("bday-year"),
-            Self::CellularEid | Self::CellularImei => None,
-        }
-    }
-}
 
 /// The foundational input frame.
 ///
@@ -291,16 +167,6 @@ impl RenderOnce for Input {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn content_types_project_accessibility_without_exposing_password_values() {
-        assert_eq!(
-            InputContentType::EmailAddress.accessibility_role(),
-            Role::EmailInput
-        );
-        assert!(!InputContentType::Password.exposes_accessibility_value());
-        assert!(InputContentType::Username.exposes_accessibility_value());
-    }
 
     #[test]
     fn frame_accepts_application_owned_content_and_style() {

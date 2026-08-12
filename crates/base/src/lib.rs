@@ -95,7 +95,7 @@ pub use global_state::GlobalState;
 pub use history::{History, HistoryItem};
 pub use hover_card::{HoverCard, HoverCardState};
 pub use index_path::IndexPath;
-pub use input::{Input, InputContentType};
+pub use input::Input;
 pub use link::{Link, LinkStyles};
 pub use list_settings::ListSettings;
 #[cfg(all(target_os = "macos", not(test)))]

@@ -252,15 +252,69 @@ impl Input {
     ) -> Option<Role> {
         role.resolve(|| {
             if is_multi_line {
-                Role::MultilineTextInput
-            } else {
-                content_type.map_or(Role::TextInput, InputContentType::accessibility_role)
+                return Role::MultilineTextInput;
+            }
+
+            match content_type {
+                None => Role::TextInput,
+                Some(InputContentType::TelephoneNumber) => Role::PhoneNumberInput,
+                Some(InputContentType::EmailAddress) => Role::EmailInput,
+                Some(InputContentType::Url) => Role::UrlInput,
+                Some(InputContentType::Password | InputContentType::NewPassword) => {
+                    Role::PasswordInput
+                }
+                Some(InputContentType::DateTime) => Role::DateTimeInput,
+                Some(InputContentType::Birthdate) => Role::DateInput,
+                Some(
+                    InputContentType::Name
+                    | InputContentType::NamePrefix
+                    | InputContentType::GivenName
+                    | InputContentType::MiddleName
+                    | InputContentType::FamilyName
+                    | InputContentType::NameSuffix
+                    | InputContentType::Nickname
+                    | InputContentType::JobTitle
+                    | InputContentType::OrganizationName
+                    | InputContentType::Location
+                    | InputContentType::FullStreetAddress
+                    | InputContentType::StreetAddressLine1
+                    | InputContentType::StreetAddressLine2
+                    | InputContentType::AddressCity
+                    | InputContentType::AddressState
+                    | InputContentType::AddressCityAndState
+                    | InputContentType::Sublocality
+                    | InputContentType::CountryName
+                    | InputContentType::PostalCode
+                    | InputContentType::CreditCardNumber
+                    | InputContentType::CreditCardName
+                    | InputContentType::CreditCardGivenName
+                    | InputContentType::CreditCardMiddleName
+                    | InputContentType::CreditCardFamilyName
+                    | InputContentType::CreditCardSecurityCode
+                    | InputContentType::CreditCardExpiration
+                    | InputContentType::CreditCardExpirationMonth
+                    | InputContentType::CreditCardExpirationYear
+                    | InputContentType::CreditCardType
+                    | InputContentType::Username
+                    | InputContentType::OneTimeCode
+                    | InputContentType::ShipmentTrackingNumber
+                    | InputContentType::FlightNumber
+                    | InputContentType::BirthdateDay
+                    | InputContentType::BirthdateMonth
+                    | InputContentType::BirthdateYear
+                    | InputContentType::CellularEid
+                    | InputContentType::CellularImei,
+                ) => Role::TextInput,
             }
         })
     }
 
     fn exposes_accessibility_value(masked: bool, content_type: Option<InputContentType>) -> bool {
-        !masked && content_type.is_none_or(InputContentType::exposes_accessibility_value)
+        !masked
+            && !matches!(
+                content_type,
+                Some(InputContentType::Password | InputContentType::NewPassword)
+            )
     }
 
     fn handle_accessibility_set_value(

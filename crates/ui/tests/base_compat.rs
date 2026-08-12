@@ -226,8 +226,6 @@ fn base_input_frames_accept_application_owned_content() {
     let _ = build_number;
     let _ = gpui_base::NumberInputText::new().child(gpui::div());
 
-    fn accepts_base(_: gpui_base::InputContentType) {}
-    accepts_base(gpui_component::input::InputContentType::EmailAddress);
     let _: gpui_base::StepAction = gpui_component::input::StepAction::Increment;
 }
 
