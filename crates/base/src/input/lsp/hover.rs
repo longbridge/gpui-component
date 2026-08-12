@@ -57,21 +57,24 @@ impl InputState {
 
             let result = task.await?;
 
-            _ = editor.update(cx, |editor, _cx| match result {
-                Some(hover) => {
-                    if let Some(range) = hover.range {
-                        let start = editor.text.position_to_offset(&range.start);
-                        let end = editor.text.position_to_offset(&range.end);
-                        symbol_range = start..end;
+            _ = editor.update(cx, |editor, cx| {
+                match result {
+                    Some(hover) => {
+                        if let Some(range) = hover.range {
+                            let start = editor.text.position_to_offset(&range.start);
+                            let end = editor.text.position_to_offset(&range.end);
+                            symbol_range = start..end;
+                        }
+                        editor.hover_popover = Some(HoverPopoverState {
+                            symbol_range,
+                            hover,
+                        });
                     }
-                    editor.hover_popover = Some(HoverPopoverState {
-                        symbol_range,
-                        hover,
-                    });
+                    None => {
+                        editor.hover_popover = None;
+                    }
                 }
-                None => {
-                    editor.hover_popover = None;
-                }
+                cx.notify();
             });
 
             Ok(())

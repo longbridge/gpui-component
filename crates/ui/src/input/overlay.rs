@@ -165,8 +165,8 @@ impl InputOverlayHost {
         let hover_signature = format!("{hover:?}");
         if hover_signature != self.hover_signature {
             self.hover_signature = hover_signature;
-            self.hover = hover.map(|session| {
-                HoverPopover::new(state.clone(), session.symbol_range, &session.hover, cx)
+            self.hover = hover.map(|popover| {
+                HoverPopover::new(state.clone(), popover.symbol_range, &popover.hover, cx)
             });
         }
 
