@@ -187,6 +187,20 @@ fn base_progress_accepts_application_owned_indicator_content() {
 }
 
 #[test]
+fn base_table_and_toast_accept_application_owned_composition() {
+    let row = gpui_base::TableRow::new("row", 1)
+        .child(gpui_base::TableHead::new("head", 1).child("Name"))
+        .child(gpui_base::TableCell::new("cell", 1).child("Ada"));
+    let _ = gpui_base::Table::new("table")
+        .child(gpui_base::TableHeader::new("header").child(row))
+        .child(gpui_base::TableBody::new("body"))
+        .child(gpui_base::TableCaption::new("caption").child("People"));
+
+    let _ = gpui_base::ToastViewport::new("toasts")
+        .child(gpui_base::Toast::new("toast").child("Saved"));
+}
+
+#[test]
 fn legacy_tree_models_are_base_types() {
     fn accepts_base(_: gpui_base::TreeItem) {}
     accepts_base(gpui_component::tree::TreeItem::new("id", "Label"));

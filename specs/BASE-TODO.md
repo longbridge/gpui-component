@@ -5,15 +5,74 @@ after its implementation and compatibility requirements have been verified.
 
 ## Current Status
 
-- **Updated:** 2026-08-11
-- **Overall:** In progress
-- **Completed workstream:** Base Button interaction verification
-- **Completed workstream:** Semantic Theme Tokens compatibility bridge
-- **Paused workstream:** Hand-authored component Registry templates
-- **Active:** M1/M2 `crates/ui` composition and legacy compatibility gates
-- **Active:** Base Toggle behavior
-- **Next integration gate:** Verify the complete M2 vertical slices before checking
-  individual component milestones.
+- **Updated:** 2026-08-12
+- **Overall:** Core foundation, M3 Input, and most existing Base-backed vertical
+  slices are implemented; remaining work is split below into implementation and
+  verification instead of treating every unchecked component as unimplemented.
+- **Active implementation:** Link is the remaining M2 compatibility façade under
+  review; Radio/RadioGroup foundations already exist and are not reopened here.
+- **Next implementation:** List and the M5/M6 compound or infrastructure seams.
+- **Verification track:** old/new Story comparisons for already Base-backed
+  controls, followed by examples, target builds, clippy, and RFC review.
+- **Registry track:** paused until complete editable sources can be generated from
+  canonical `crates/ui`; do not resume hand-authored duplicate templates.
+
+## Remaining Work — Authoritative Summary
+
+The detailed milestone sections below retain implementation notes and decisions.
+This section is the prioritized view of what remains; a component listed under
+verification is not waiting for another Base implementation.
+
+### A. Implementation Remaining
+
+- [x] Radio and RadioGroup — Base primitives and the Base-backed group root exist.
+      The legacy standalone Radio remains a compatibility façade; do not reopen
+      this completed foundation slice without a concrete behavior gap.
+- [ ] Link — Base Link exists, but the legacy façade still renders and activates a
+      raw styled `div`. Resolve the legacy pointer-only/disabled contract without
+      adding compatibility-only switches to Base.
+- [ ] List — extract selection, navigation, scrolling, loading, and section state
+      from styled items/delegates; only `ListSettings` has moved so far.
+- [ ] Menu — define the reusable menu lifecycle, focus, keyboard navigation,
+      selection, and dismissal seam before adding Base primitives.
+- [ ] Rating — migrate controlled value, hover preview, item activation, keyboard,
+      and accessibility as one group/item contract.
+- [ ] M6 application infrastructure — DataTable, Editor/TextView, and Scrollable
+      still need explicit behavior seams or an approved UI-only classification.
+- [ ] Generic overlay infrastructure — extract the remaining Root overlay entry
+      model. Dock is explicitly UI-owned and excluded from Base migration.
+- [ ] Complete accessibility contracts for Base behaviors, including compound
+      group/item relationships where GPUI exposes the necessary APIs.
+
+### B. Base-backed; Verification Remaining
+
+- [ ] M2 visual/interaction comparison: Toggle and Slider.
+- [ ] Disclosure/navigation comparison: Accordion and Tabs.
+- [ ] Overlay/compound comparison: Tooltip, HoverCard, Select, Combobox, and
+      DatePicker.
+- [ ] Progress linear animation comparison and ProgressCircle accessibility
+      boundary review.
+- [ ] Verify every legacy theme renders unchanged after semantic-token projection.
+
+### C. Deliberately UI-only or Presentation-only
+
+- [x] ButtonGroup, DropdownButton, and ToggleGroup presentation/aggregation.
+- [x] Form and Stepper under their current behavior contracts.
+- [x] Dock — application layout/runtime infrastructure; explicitly excluded from
+      Base migration by user direction on 2026-08-12.
+- [x] Alert, Badge, Breadcrumb, DescriptionList, GroupBox, Kbd, Label, Separator,
+      Skeleton, Spinner, StatusBar, Tag, TitleBar, and Settings.
+- [ ] Decide Sidebar classification after separating any real behavior from its
+      layout, animation, sizing, and theme presentation.
+
+### D. Release, Compatibility, and Registry Gates
+
+- [ ] Finish migrated legacy-path compile coverage and unchanged-example builds.
+- [ ] Capture/compare Story baselines without overwriting the preserved release binary.
+- [ ] Verify macOS, Linux, Windows, and WASM paths.
+- [ ] Complete Registry block, install metadata, diff/update/status, and
+      third-party registry support.
+- [ ] Run the final formatting, check, test, clippy, packaging, and RFC acceptance gates.
 
 ## Working Rules
 
@@ -98,7 +157,7 @@ after its implementation and compatibility requirements have been verified.
   that checklist item can be completed.
 - Semantic theme-file support uses a standalone `SemanticThemeConfigFile`; the
   public field shape of legacy `ThemeConfig` remains unchanged for source compatibility.
-- Root, Overlay, Dock, and the current Theme are not file-level moves; each needs
+- Root, Overlay, and the current Theme are not file-level moves; each needs
   a dependency seam before migration. VirtualList has moved after reversing its
   only scrollbar dependency through a UI-local adapter.
 
@@ -397,6 +456,24 @@ checking the component milestone:
   primitive). The wrapper only duplicated one `div().on_click` and owned none
   of selected-index projection, item state, separator geometry, or axis layout;
   the original UI trigger path is restored unchanged.
+- 2026-08-12: The post-Input-cleanup gate passed all 229 Base tests (228 unit
+  tests plus the `element_ext` integration test). The UI library gate exposed a
+  macOS test-only native content-type call against GPUI's handle-less test
+  window; native synchronization is now excluded only from test builds while
+  the production macOS path remains unchanged. The focused Input/OTP registry
+  regression and the complete UI library suite pass after the fix.
+- 2026-08-12: Base Table now exposes unstyled Table/Header/Body/Row/Head/
+  Cell/Caption parts. The legacy basic Table composes them directly while keeping
+  sizing propagation, flex layout, colors, borders, padding, and typography in UI.
+  Base owns table roles and one-based row/column accessibility indices.
+- 2026-08-12: Notification now composes Base `Toast` and `ToastViewport`, exposes
+  Base UI-style starting/ending transition status to presentation, and uses Base
+  `ToastStore` for ordered unique-id replacement. This is not yet the complete
+  Base UI provider/store contract: timer pause/resume, full stack metadata, focus
+  expansion, and removal after transition completion remain open. Base now owns
+  transition lifecycle, hover expansion state, duplicate-close protection, and
+  visible-limit projection; UI owns the concrete visual animation values. Dock
+  was explicitly classified as UI-owned and will not migrate.
 
 ## Crate Foundation
 
@@ -435,7 +512,7 @@ not an M1/M2 completion gate.
 Completion definition: prove the Base → `crates/ui` composition seam on one
 component, including interaction tests and unchanged legacy UI.
 
-- [ ] Button module
+- [x] Button module
 
 M1 covers the complete public `crates/ui/src/button` module, not only the
 `button::Button` struct:
@@ -485,8 +562,11 @@ visual tokens, and motion policy. A future Registry exporter uses this complete 
 source; it must not introduce a parallel reduced implementation.
 
 - [x] Checkbox
-- [ ] Radio
-- [ ] Switch
+- [x] Radio / RadioGroup foundation
+  - [x] Base exposes controlled Radio behavior and the RadioGroup semantic root.
+  - [x] The UI RadioGroup composes Base RadioGroup; the standalone legacy Radio
+        remains its accepted compatibility façade.
+- [x] Switch
 - [ ] Toggle — Base behavior and pressed presentation are connected; final old/new
       Story visual comparison remains.
 - [ ] Slider — Base `Slider`, `SliderTrack`, `SliderIndicator`, and `SliderThumb`
@@ -611,7 +691,7 @@ accessibility without prescribing presentation.
   - [x] Base request/a11y/runtime tests and the integrated Base/UI suites pass.
         Styled Buttons, localized labels/tooltips, ellipsis PopupMenu, sizing,
         spacing, selected appearance, and icons remain UI-owned presentation.
-- [ ] Stepper
+- [x] Stepper — UI-only under its current behavior contract.
   - Current Stepper is UI-only item numbering, separator geometry, axis layout,
     icon/text presentation, and a small pointer callback. The former Base
     `StepperTrigger` merely wrapped the same `div().on_click` and was removed as
@@ -666,7 +746,8 @@ trap, and keyboard behavior; Registry owns trigger/content structure and style.
         stale-task cancellation, open callbacks, and popup positioning. Do not split
         its state back out into a façade-driven timer holder.
   - [x] Popover and HoverCard consume the same Base `Popup` positioning host.
-  - [ ] Appearance and content remain UI/application-owned.
+  - [x] Appearance and content remain UI/application-owned; this is the intended
+        ownership boundary, not an implementation gap.
 - [ ] Menu
 - [ ] Select
   - [x] Base owns an unstyled controlled Select root with combobox role and
@@ -675,15 +756,18 @@ trap, and keyboard behavior; Registry owns trigger/content structure and style.
   - [x] The legacy façade constructs the Base root directly while retaining its
         existing SearchableList value model, pointer/outside dismissal, popup
         composition, sizing, and complete presentation.
-  - [ ] Run the Base runtime suite and final old/new Story comparison. The first
-        targeted run was blocked by an unrelated in-progress `dialog.rs`
-        `ClickEvent.button` compile error in the shared worktree.
+  - [x] Base runtime suite passes, including controlled open/close, disabled
+        keyboard behavior, accessible labeling, focus transfer, and Escape focus
+        restoration.
+  - [ ] Final old/new Story comparison.
 - [ ] Combobox
   - [x] Base owns the unstyled controlled combobox root, combobox role and
     expanded accessibility state, shared key bindings, disabled keyboard
     propagation, open requests, Escape confirmation, and trigger/content focus
     transfer. The legacy façade retains searchable-list selection and complete
     trigger/popup presentation.
+  - [x] Base and integrated UI runtime suites pass.
+  - [ ] Final old/new Story comparison.
 - [x] Dialog
   - [x] Base owns the shared Cancel/Confirm actions, key bindings, focus trap,
         keyboard dismissal/confirmation, callback ordering, and the unstyled
@@ -710,6 +794,12 @@ trap, and keyboard behavior; Registry owns trigger/content structure and style.
   - [x] Runtime tests cover six-week months, all view transitions, cross-year and
         bounded year navigation, disabled dates, selection, and event emission.
 - [ ] Date Picker
+  - [x] Base owns the controlled open/disabled state, combobox accessibility,
+        focus, Confirm open request, and Cancel dismissal behavior; the façade
+        composes it directly and retains calendar state, popup, presets, layout,
+        localization, and presentation.
+  - [ ] Add/confirm focused Base runtime coverage and complete the final old/new
+        Story comparison.
 - [x] Color Picker
   - [x] Base owns committed versus preview color state, controlled open state,
         active panel selection, hex preview/commit validation, palette selection
@@ -724,19 +814,31 @@ Completion definition: preserve complex crate-owned behavior and expose presenta
 seams suitable for application-owned wrappers.
 
 - [x] Virtual List
-- [ ] Table
+- [ ] Table — Base owns the unstyled semantic part tree, roles, children, styles,
+      interaction forwarding, and row/column accessibility indices. UI retains
+      all layout, size propagation, colors, borders, spacing, and typography.
+  - [ ] Complete final legacy visual/accessibility comparison before checking.
 - [ ] Data Table
 - [ ] Editor
 - [ ] Text View
 - [x] Resizable
 - [ ] Scrollable
-- [ ] Notification
-- [ ] Dock
+- [ ] Notification / Toast
+  - [x] Base owns unstyled Toast/ToastViewport semantics, starting/present/ending
+        lifecycle, duplicate-close protection, hover expansion state, visible-
+        limit projection, and ordered unique-id storage. UI retains concrete
+        animation values, placement, actions, icons, and presentation.
+  - [ ] Move Base UI-style provider lifecycle into Base: timer pause/resume on
+        hover/focus/window activity, full stack metadata, update coordination,
+        focus expansion, and removal after exit completion.
+  - [ ] Complete final legacy visual/interaction/accessibility comparison.
+- [x] Dock — deliberately remains UI-owned; do not migrate.
 
-### Registry-only Components and Blocks
+### UI-only Components and Registry Composition
 
-These do not get standalone Base components. Check each item when its Registry
-template is delivered and its required behavior is composed from existing Base APIs.
+These do not get standalone Base components under their current behavior
+contracts. A checked item records an ownership decision, not delivery of a
+Registry template. Registry source delivery is tracked separately below.
 
 - [x] Alert — UI-only presentation. Controlled visibility is ordinary
       conditional rendering, `Role::Alert` belongs directly on the styled root,
@@ -820,9 +922,13 @@ template is delivered and its required behavior is composed from existing Base A
       transparent handle defaults, while the UI Theme projects the exact existing
       border and active-drag colors.
 - [ ] Extract an unstyled overlay host and entry model.
-- [ ] Extract popup positioning and focus-restoration behavior.
-- [ ] Extract Dock's serializable layout model from its styled runtime views.
-- [ ] Preserve Editor and Input State as crate-owned infrastructure.
+- [x] Extract popup positioning and focus-restoration behavior into Base `Popup`
+      and the Base-backed Popover/HoverCard lifecycle.
+- [x] Keep Dock's serializable layout model and styled runtime views together in
+      UI; Dock is explicitly outside the Base migration scope.
+- [x] Preserve and migrate InputState as crate-owned Base infrastructure.
+- [ ] Define the Editor/TextView ownership seam; do not treat it as part of the
+      completed Input migration.
 - [ ] Define accessibility contracts for all Base behaviors.
 
 ## Semantic Theme Tokens

@@ -52,9 +52,11 @@ pub mod slider;
 mod state_style;
 mod styled;
 mod switch;
+mod table;
 mod tabs;
 mod theme;
 pub mod theme_tokens;
+mod toast;
 mod toggle;
 mod toggle_group;
 mod tooltip;
@@ -136,11 +138,15 @@ pub use styled::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v_fl
 pub use switch::{
     Switch, SwitchStyles, SwitchThumb, SwitchThumbStyles, SwitchTrack, SwitchTrackStyles,
 };
+pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
 pub use theme::{ResizableTheme, ScrollbarTheme, Theme};
 pub use theme_tokens::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,
     TypographyTokens,
+};
+pub use toast::{
+    Toast, ToastLifecycle, ToastStore, ToastTransitionStatus, ToastViewport, ToastViewportState,
 };
 pub use toggle::{Toggle, ToggleStyles};
 pub use toggle_group::ToggleGroup;
