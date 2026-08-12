@@ -326,9 +326,6 @@ impl RenderOnce for NumberInput {
             .on_action(window.listener_for(&self.state, InputState::on_action_increment))
             .on_action(window.listener_for(&self.state, InputState::on_action_decrement))
             .flex_1()
-            // The frame is drawn here, so the fixed input height must be held
-            // here too: on the children it would add up with the 1px border
-            // and grow the control past a plain `Input` of the same size.
             .input_h(self.size)
             .rounded(cx.theme().radius)
             // The buttons are ghost, so the frame around the whole control is
