@@ -89,6 +89,12 @@ verification is not waiting for another Base implementation.
   they do not install layout, positioning, color, sizing, gap, radius, border,
   shadow, variant, or animation defaults. `crates/ui` remains the canonical
   complete presentation source during migration.
+- Named infrastructure exception — Toast stack motion (approved 2026-08-12):
+  `ToastStack` may own measured absolute stack geometry and an overridable Sonner
+  motion preset because GPUI has no browser layout/transition engine to supply
+  that behavior implicitly. Base still installs no card color, border, radius,
+  shadow, typography, icon, action, or content presentation; callers may replace
+  all motion tokens through `ToastStack::motion`.
 - Base control and part taxonomy follows `../base-ui` unless an existing GPUI or
   gpui-component API must be preserved. Use shadcn as a presentation and
   composition reference, not as authority for Radix-specific primitive names.
@@ -469,21 +475,30 @@ checking the component milestone:
 - 2026-08-12: Notification now composes Base `Toast`, `ToastStack`, and
   `ToastManager`. Base owns unique-id replacement, starting/present/ending
   lifecycle, auto-hide timers paused by hover/focus/window inactivity, limits,
-  measured stack geometry, and removal after the exit duration. UI owns concrete
-  animation values, placement, actions, icons, and presentation. The earlier
+  measured stack geometry, and removal after the exit duration. Base supplies an
+  overridable Sonner motion preset; UI owns placement, actions, icons, and card
+  presentation. The earlier
   shallow Store/Lifecycle/Viewport interfaces were removed. Dock remains UI-owned.
-- 2026-08-12: Notification enter/exit motion now follows the Base UI Toast demo's
-  500ms `cubic-bezier(0.22, 1, 0.36, 1)` transition and moves along the configured
-  viewport edge. Exit removal uses the same duration, so an ending toast remains
-  mounted for its complete animation instead of disappearing after the previous
-  mismatched 150ms timeout.
+- 2026-08-12: Notification motion follows shadcn's Sonner implementation: 400ms
+  CSS-ease entry/reflow, 200ms exit/unmount, 14px stack gap, stable keyed height
+  measurement, and a 5%-style inset per collapsed layer. It moves along the
+  configured viewport edge and remains mounted for its complete exit animation.
 - 2026-08-12: Base `ToastStack` now hides variable-height measurement, collapsed
   overlap, hover expansion, and layout interpolation behind one stack interface.
   Notification supplies only its rendered items; it no longer owns stack geometry.
 - 2026-08-12: Toast stack geometry now uses measured absolute coordinates rather
   than feedback-prone negative flex margins. Top and bottom placements anchor the
-  newest toast independently, variable-height cards retain a 12px visible peek,
+  newest toast independently, variable-height cards retain a 14px visible peek,
   and expanded coordinates are computed from cumulative measured heights.
+- 2026-08-12: Toast final validation uses per-entry lifecycle clocks and keyed
+  value transitions, so idle reuse, insertion/removal reflow, hover reversal, and
+  variable-height measurement cannot inherit stale time or geometry. Runtime
+  coverage includes unique replacement, limits, pause/resume for focus and inactive
+  windows, entry/exit phases, first-frame visibility, hover/focus expansion, and
+  continuous keyed reflow. Final gates pass: 239 Base unit tests plus the Base
+  integration test, 365 UI library tests, all UI compatibility/integration tests,
+  strict clippy with only the repository's pre-existing `too_many_arguments` lint
+  excluded, Story build, formatting, and diff checks.
 
 ## Crate Foundation
 
@@ -837,8 +852,8 @@ seams suitable for application-owned wrappers.
   - [x] Base owns Toast semantics, ordered unique-id storage, transition lifecycle,
         duplicate-close protection, auto-hide pause/resume for hover/focus/window
         activity, visible limits, variable-height stack geometry, expansion, and
-        removal after the exit duration. UI retains concrete motion values,
-        placement, actions, icons, and presentation.
+        removal after the exit duration. Base supplies overridable Sonner motion
+        tokens; UI retains placement, actions, icons, and card presentation.
   - [ ] Complete final legacy visual/interaction/accessibility comparison.
 - [x] Dock — deliberately remains UI-owned; do not migrate.
 

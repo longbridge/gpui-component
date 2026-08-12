@@ -6,39 +6,48 @@ use std::{
 };
 
 use gpui::{
-    Anchor, Animation, AnimationExt as _, AnyElement, App, Div, ElementId, FocusHandle,
-    InteractiveElement, Interactivity, IntoElement, ParentElement, Pixels, RenderOnce, Role,
-    Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
-    prelude::FluentBuilder as _, px,
+    Anchor, AnyElement, App, Div, ElementId, FocusHandle, InteractiveElement, Interactivity,
+    IntoElement, ParentElement, Pixels, RenderOnce, Role, Stateful, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
 };
 
-use crate::{ElementExt as _, StyledExt as _, animation::cubic_bezier};
+use crate::{
+    ElementExt as _, StyledExt as _,
+    animation::cubic_bezier,
+    motion::{Transition, transition},
+};
 
 /// Motion tokens used by an unstyled toast stack.
 #[derive(Clone, Copy, Debug)]
 pub struct ToastMotion {
     /// Duration of stack expansion and collapse.
     pub duration: Duration,
+    /// Duration before an ending toast is unmounted.
+    pub exit_duration: Duration,
     /// Visible distance between collapsed toast layers.
     pub collapsed_peek: Pixels,
     /// Distance between expanded toast items.
     pub expanded_gap: Pixels,
+    /// Horizontal inset added per collapsed layer to approximate Sonner's 5% scale.
+    pub collapsed_inset: Pixels,
 }
 
 impl ToastMotion {
-    /// Create motion matching the Base UI Toast example.
-    pub fn base_ui() -> Self {
+    /// Create motion matching the shadcn/Sonner toaster.
+    pub fn sonner() -> Self {
         Self {
-            duration: Duration::from_millis(500),
-            collapsed_peek: px(12.),
-            expanded_gap: px(12.),
+            duration: Duration::from_millis(400),
+            exit_duration: Duration::from_millis(200),
+            collapsed_peek: px(14.),
+            expanded_gap: px(14.),
+            collapsed_inset: px(10.),
         }
     }
 }
 
 impl Default for ToastMotion {
     fn default() -> Self {
-        Self::base_ui()
+        Self::sonner()
     }
 }
 
@@ -71,11 +80,16 @@ struct ManagedToast<I, T> {
     status: ToastTransitionStatus,
     timeout_remaining: Option<Duration>,
     transition_elapsed: Duration,
+    last_advance: Instant,
 }
 
 /// Changes produced when a toast manager advances its lifecycle clock.
 #[derive(Debug)]
 pub struct ToastAdvance<I, T> {
+    /// Whether a mounted toast changed phase or membership.
+    pub changed: bool,
+    /// Toast ids whose entry transition completed.
+    pub presented: Vec<I>,
     /// Toast ids that entered their ending transition.
     pub ending: Vec<I>,
     /// Toast values removed after their ending transition completed.
@@ -86,8 +100,8 @@ pub struct ToastAdvance<I, T> {
 #[derive(Debug)]
 pub struct ToastManager<I, T> {
     entries: VecDeque<ManagedToast<I, T>>,
-    last_advance: Option<Instant>,
     transition_duration: Duration,
+    exit_duration: Duration,
 }
 
 impl<I, T> ToastManager<I, T> {
@@ -95,8 +109,8 @@ impl<I, T> ToastManager<I, T> {
     pub fn new(motion: ToastMotion) -> Self {
         Self {
             entries: VecDeque::new(),
-            last_advance: None,
             transition_duration: motion.duration,
+            exit_duration: motion.exit_duration,
         }
     }
 
@@ -152,9 +166,6 @@ impl<I, T> ToastManager<I, T> {
 impl<I: Clone + Eq, T> ToastManager<I, T> {
     /// Add a newest toast, replacing an existing toast with the same id.
     pub fn push(&mut self, id: I, value: T, options: ToastOptions, now: Instant) -> Option<T> {
-        if self.entries.is_empty() {
-            self.last_advance = Some(now);
-        }
         let replaced = self
             .entries
             .iter()
@@ -167,23 +178,13 @@ impl<I: Clone + Eq, T> ToastManager<I, T> {
             status: ToastTransitionStatus::Starting,
             timeout_remaining: options.timeout,
             transition_elapsed: Duration::ZERO,
+            last_advance: now,
         });
-        self.last_advance.get_or_insert(now);
         replaced
     }
 
     /// Begin a toast's exit transition, returning whether its state changed.
     pub fn dismiss(&mut self, id: &I, now: Instant) -> bool {
-        let delta = self
-            .last_advance
-            .replace(now)
-            .map(|last| now.saturating_duration_since(last))
-            .unwrap_or_default();
-        for entry in &mut self.entries {
-            if entry.status == ToastTransitionStatus::Ending {
-                entry.transition_elapsed += delta;
-            }
-        }
         let Some(entry) = self.entries.iter_mut().find(|entry| &entry.id == id) else {
             return false;
         };
@@ -192,26 +193,18 @@ impl<I: Clone + Eq, T> ToastManager<I, T> {
         }
         entry.status = ToastTransitionStatus::Ending;
         entry.transition_elapsed = Duration::ZERO;
+        entry.last_advance = now;
         true
     }
 
     /// Begin the exit transition for every active toast.
     pub fn dismiss_all(&mut self, now: Instant) -> Vec<I> {
-        let delta = self
-            .last_advance
-            .replace(now)
-            .map(|last| now.saturating_duration_since(last))
-            .unwrap_or_default();
-        for entry in &mut self.entries {
-            if entry.status == ToastTransitionStatus::Ending {
-                entry.transition_elapsed += delta;
-            }
-        }
         let mut changed = Vec::new();
         for entry in &mut self.entries {
             if entry.status != ToastTransitionStatus::Ending {
                 entry.status = ToastTransitionStatus::Ending;
                 entry.transition_elapsed = Duration::ZERO;
+                entry.last_advance = now;
                 changed.push(entry.id.clone());
             }
         }
@@ -220,19 +213,20 @@ impl<I: Clone + Eq, T> ToastManager<I, T> {
 
     /// Advance lifecycle time; active timers pause while `paused` is true.
     pub fn advance(&mut self, now: Instant, paused: bool) -> ToastAdvance<I, T> {
-        let delta = self
-            .last_advance
-            .replace(now)
-            .map(|last| now.saturating_duration_since(last))
-            .unwrap_or_default();
         let mut ending = Vec::new();
+        let mut presented = Vec::new();
+        let mut changed = false;
         for entry in &mut self.entries {
+            let delta = now.saturating_duration_since(entry.last_advance);
+            entry.last_advance = now;
             match entry.status {
                 ToastTransitionStatus::Starting => {
                     entry.transition_elapsed += delta;
                     if entry.transition_elapsed >= self.transition_duration {
                         entry.status = ToastTransitionStatus::Present;
                         entry.transition_elapsed = Duration::ZERO;
+                        presented.push(entry.id.clone());
+                        changed = true;
                     }
                 }
                 ToastTransitionStatus::Present if !paused => {
@@ -242,6 +236,7 @@ impl<I: Clone + Eq, T> ToastManager<I, T> {
                             entry.status = ToastTransitionStatus::Ending;
                             entry.transition_elapsed = Duration::ZERO;
                             ending.push(entry.id.clone());
+                            changed = true;
                         }
                     }
                 }
@@ -253,18 +248,21 @@ impl<I: Clone + Eq, T> ToastManager<I, T> {
         let mut index = 0;
         while index < self.entries.len() {
             if self.entries[index].status == ToastTransitionStatus::Ending
-                && self.entries[index].transition_elapsed >= self.transition_duration
+                && self.entries[index].transition_elapsed >= self.exit_duration
             {
                 let entry = self.entries.remove(index).expect("toast index is valid");
                 removed.push((entry.id, entry.value));
+                changed = true;
             } else {
                 index += 1;
             }
         }
-        if self.entries.is_empty() {
-            self.last_advance = None;
+        ToastAdvance {
+            changed,
+            presented,
+            ending,
+            removed,
         }
-        ToastAdvance { ending, removed }
     }
 }
 
@@ -287,7 +285,7 @@ impl ToastStack {
             base: div().id(id),
             style: StyleRefinement::default(),
             state,
-            motion: ToastMotion::base_ui(),
+            motion: ToastMotion::sonner(),
             placement: Anchor::TopRight,
             focus_handle: None,
             children: Vec::new(),
@@ -374,7 +372,7 @@ fn stack_geometry(
                 newer_height + gap * rank as f32
             };
             let collapsed = if anchored_bottom {
-                collapsed_height - front_height - peek * rank as f32
+                expanded_height - front_height - peek * rank as f32
             } else {
                 front_height + peek * rank as f32 - *height
             };
@@ -392,12 +390,16 @@ impl RenderOnce for ToastStack {
             .is_some_and(|handle| handle.contains_focused(window, cx));
         self.state.focused.set(focused);
         let expanded = self.state.is_expanded();
-        let measured_by_id = self.state.heights.borrow().clone();
         let keys = self
             .children
             .iter()
             .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
+        self.state
+            .heights
+            .borrow_mut()
+            .retain(|id, _| keys.contains(id));
+        let measured_by_id = self.state.heights.borrow().clone();
         let heights = keys
             .iter()
             .map(|id| measured_by_id.get(id).copied().unwrap_or(px(0.)))
@@ -406,6 +408,7 @@ impl RenderOnce for ToastStack {
         let duration = self.motion.duration;
         let peek = self.motion.collapsed_peek;
         let gap = self.motion.expanded_gap;
+        let collapsed_inset = self.motion.collapsed_inset;
         let count = self.children.len();
         let anchored_bottom = matches!(
             self.placement,
@@ -417,11 +420,9 @@ impl RenderOnce for ToastStack {
             peek,
             anchored_bottom,
         );
-        let stack_height = if expanded {
-            expanded_height
-        } else {
-            collapsed_height
-        };
+        // Keep the viewport at its expanded height so expansion never shifts its
+        // window-edge anchor; collapsed items occupy only the front-most slice.
+        let stack_height = expanded_height.max(collapsed_height);
         let items = self
             .children
             .into_iter()
@@ -429,29 +430,43 @@ impl RenderOnce for ToastStack {
             .map(move |(index, (item_id, child))| {
                 let (collapsed_offset, expanded_offset) =
                     offsets.get(index).copied().unwrap_or((px(0.), px(0.)));
+                let rank = count.saturating_sub(1 + index);
                 let measured = measured.clone();
                 let measured_id = item_id.clone();
+                let target_offset = if expanded {
+                    expanded_offset
+                } else {
+                    collapsed_offset
+                };
+                let target_inset = if expanded {
+                    px(0.)
+                } else {
+                    collapsed_inset * rank as f32
+                };
+                let policy = || Transition::new(duration).ease(cubic_bezier(0.25, 0.1, 0.25, 1.));
+                let offset = transition(
+                    (item_id.clone(), "offset"),
+                    target_offset,
+                    policy(),
+                    window,
+                    cx,
+                );
+                let inset = transition(
+                    (item_id.clone(), "inset"),
+                    target_inset,
+                    policy(),
+                    window,
+                    cx,
+                );
                 div()
                     .id(item_id.clone())
                     .absolute()
                     .top_0()
                     .left_0()
-                    .w_full()
-                    .with_animation(
-                        ElementId::NamedInteger(
-                            format!("base-toast-stack-layout-{item_id:?}").into(),
-                            u64::from(expanded),
-                        ),
-                        Animation::new(duration).with_easing(cubic_bezier(0.22, 1., 0.36, 1.)),
-                        move |this, delta| {
-                            let offset = if expanded {
-                                collapsed_offset + (expanded_offset - collapsed_offset) * delta
-                            } else {
-                                expanded_offset + (collapsed_offset - expanded_offset) * delta
-                            };
-                            this.top(offset)
-                        },
-                    )
+                    .right_0()
+                    .top(offset)
+                    .left(inset)
+                    .right(inset)
                     .on_prepaint(move |bounds, _, cx| {
                         let mut heights = measured.borrow_mut();
                         if heights.get(&measured_id).copied() != Some(bounds.size.height) {
@@ -553,11 +568,11 @@ impl RenderOnce for Toast {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{Element as _, accesskit};
+    use gpui::{Element as _, accesskit, point};
 
     #[test]
     fn manager_pauses_timeout_and_removes_only_after_exit() {
-        let motion = ToastMotion::base_ui();
+        let motion = ToastMotion::sonner();
         let start = Instant::now();
         let mut manager = ToastManager::new(motion);
         manager.push(
@@ -577,14 +592,17 @@ mod tests {
         let ending = manager.advance(start + motion.duration + Duration::from_secs(9), false);
         assert_eq!(ending.ending, vec!["a"]);
         assert!(ending.removed.is_empty());
-        let removed = manager.advance(start + motion.duration * 2 + Duration::from_secs(9), false);
+        let removed = manager.advance(
+            start + motion.duration + motion.exit_duration + Duration::from_secs(9),
+            false,
+        );
         assert_eq!(removed.removed, vec![("a", 1)]);
     }
 
     #[test]
     fn manager_limit_keeps_ending_toasts_mounted() {
         let now = Instant::now();
-        let mut manager = ToastManager::new(ToastMotion::base_ui());
+        let mut manager = ToastManager::new(ToastMotion::sonner());
         for id in ["a", "b", "c"] {
             manager.push(id, id, ToastOptions::default(), now);
         }
@@ -596,19 +614,53 @@ mod tests {
     }
 
     #[test]
+    fn manager_replaces_duplicate_ids_as_the_newest_toast() {
+        let now = Instant::now();
+        let mut manager = ToastManager::new(ToastMotion::sonner());
+        manager.push("a", 1, ToastOptions::default(), now);
+        manager.push("b", 2, ToastOptions::default(), now);
+        assert_eq!(manager.push("a", 3, ToastOptions::default(), now), Some(1));
+        assert_eq!(
+            manager
+                .iter()
+                .map(|(id, value, _)| (*id, *value))
+                .collect::<Vec<_>>(),
+            vec![("b", 2), ("a", 3)]
+        );
+    }
+
+    #[test]
     fn manager_resets_clock_when_reused_after_becoming_empty() {
-        let motion = ToastMotion::base_ui();
+        let motion = ToastMotion::sonner();
         let start = Instant::now();
         let mut manager = ToastManager::new(motion);
         manager.push("old", 1, ToastOptions::default(), start);
         manager.dismiss(&"old", start);
-        manager.advance(start + motion.duration, false);
+        manager.advance(start + motion.exit_duration, false);
         let later = start + Duration::from_secs(60);
         manager.push("new", 2, ToastOptions::default(), later);
         manager.advance(later + Duration::from_millis(50), false);
         assert_eq!(
             manager.iter().next().unwrap().2,
             ToastTransitionStatus::Starting
+        );
+    }
+
+    #[test]
+    fn newly_pushed_toast_does_not_inherit_existing_entry_clock() {
+        let motion = ToastMotion::sonner();
+        let start = Instant::now();
+        let mut manager = ToastManager::new(motion);
+        manager.push("old", 1, ToastOptions::default(), start);
+        let later = start + Duration::from_secs(60);
+        manager.push("new", 2, ToastOptions::default(), later);
+        manager.advance(later + Duration::from_millis(50), false);
+        assert_eq!(
+            manager
+                .iter()
+                .find(|(id, _, _)| **id == "new")
+                .map(|(_, _, status)| status),
+            Some(ToastTransitionStatus::Starting)
         );
     }
 
@@ -626,7 +678,11 @@ mod tests {
         let (_, _, bottom) = stack_geometry(&heights, px(12.), px(12.), true);
         assert_eq!(
             bottom,
-            vec![(px(0.), px(0.)), (px(12.), px(52.)), (px(24.), px(124.))]
+            vec![
+                (px(100.), px(0.)),
+                (px(112.), px(52.)),
+                (px(124.), px(124.))
+            ]
         );
     }
 
@@ -641,5 +697,123 @@ mod tests {
                 .write_a11y_info(&mut node);
             assert_eq!(node.role(), Role::Alert);
         });
+    }
+
+    #[gpui::test]
+    fn stack_bootstraps_measurement_without_zero_height_clipping(cx: &mut gpui::TestAppContext) {
+        struct Harness {
+            state: ToastStackState,
+        }
+        impl gpui::Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                ToastStack::new("stack", self.state.clone())
+                    .w(px(300.))
+                    .item("first", div().h(px(80.)).child("Visible"))
+            }
+        }
+
+        let (view, cx) = cx.add_window_view(|_, _| Harness {
+            state: ToastStackState::default(),
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        view.read_with(cx, |view, _| {
+            assert_eq!(
+                view.state
+                    .heights
+                    .borrow()
+                    .get(&ElementId::from("first"))
+                    .copied(),
+                Some(px(80.))
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn stack_expands_for_hover_and_focus(cx: &mut gpui::TestAppContext) {
+        struct Harness {
+            state: ToastStackState,
+            focus: FocusHandle,
+        }
+        impl gpui::Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                ToastStack::new("stack", self.state.clone())
+                    .focus_handle(self.focus.clone())
+                    .w(px(300.))
+                    .item("first", div().h(px(80.)))
+            }
+        }
+
+        let (view, cx) = cx.add_window_view(|_, cx| Harness {
+            state: ToastStackState::default(),
+            focus: cx.focus_handle().tab_stop(true),
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_mouse_move(point(px(10.), px(10.)), None, gpui::Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        view.read_with(cx, |view, _| assert!(view.state.is_expanded()));
+
+        cx.simulate_mouse_move(point(px(400.), px(400.)), None, gpui::Modifiers::default());
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        view.read_with(cx, |view, _| assert!(!view.state.is_expanded()));
+
+        let focus = view.read_with(cx, |view, _| view.focus.clone());
+        cx.update(|window, cx| {
+            focus.focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+        view.read_with(cx, |view, _| assert!(view.state.is_expanded()));
+    }
+
+    #[gpui::test]
+    fn keyed_stack_reflow_moves_from_the_current_visual_position(cx: &mut gpui::TestAppContext) {
+        struct Harness {
+            state: ToastStackState,
+            show_second: bool,
+        }
+        impl gpui::Render for Harness {
+            fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
+                ToastStack::new("stack", self.state.clone())
+                    .w(px(300.))
+                    .item(
+                        "first",
+                        div().debug_selector(|| "first-toast".into()).h(px(40.)),
+                    )
+                    .when(self.show_second, |stack| {
+                        stack.item("second", div().h(px(80.)))
+                    })
+            }
+        }
+
+        let (view, cx) = cx.add_window_view(|_, _| Harness {
+            state: ToastStackState::default(),
+            show_second: false,
+        });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.draw(cx).clear(cx);
+        });
+        let initial_y = cx.debug_bounds("first-toast").unwrap().origin.y;
+
+        view.update(cx, |view, cx| {
+            view.show_second = true;
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let first_reflow_y = cx.debug_bounds("first-toast").unwrap().origin.y;
+        assert_eq!(first_reflow_y, initial_y);
+
+        cx.executor().advance_clock(Duration::from_millis(200));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let middle_y = cx.debug_bounds("first-toast").unwrap().origin.y;
+        assert!(middle_y > initial_y);
+        assert!(middle_y < initial_y + px(54.));
+
+        cx.executor().advance_clock(Duration::from_millis(200));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            cx.debug_bounds("first-toast").unwrap().origin.y,
+            initial_y + px(54.)
+        );
     }
 }

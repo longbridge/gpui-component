@@ -18,7 +18,8 @@ use crate::{
     v_flex,
 };
 
-const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(500);
+const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(400);
+const NOTIFICATION_EXIT_DURATION: Duration = Duration::from_millis(200);
 const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
 struct DismissRequest;
 
@@ -261,6 +262,13 @@ impl Notification {
         }
     }
 
+    fn complete_enter(&mut self, cx: &mut Context<Self>) {
+        if self.transition_status == ToastTransitionStatus::Starting {
+            self.transition_status = ToastTransitionStatus::Present;
+            cx.notify();
+        }
+    }
+
     fn complete_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         cx.emit(DismissEvent);
         if let Some(on_close) = self.on_close.clone() {
@@ -371,15 +379,16 @@ impl Render for Notification {
             }))
             .with_animation(
                 ElementId::NamedInteger("slide-down".into(), closing as u64),
-                Animation::new(NOTIFICATION_TRANSITION_DURATION)
-                    .with_easing(cubic_bezier(0.22, 1., 0.36, 1.)),
+                Animation::new(if closing {
+                    NOTIFICATION_EXIT_DURATION
+                } else {
+                    NOTIFICATION_TRANSITION_DURATION
+                })
+                .with_easing(cubic_bezier(0.25, 0.1, 0.25, 1.)),
                 move |this, delta| {
                     if closing {
                         let opacity = 1. - delta;
-                        let that = this
-                            .shadow_none()
-                            .opacity(opacity)
-                            .when(opacity < 0.85, |this| this.shadow_none());
+                        let that = this.opacity(opacity);
                         let y_offset = match placement {
                             Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
                                 -delta * NOTIFICATION_TRANSITION_OFFSET
@@ -466,7 +475,7 @@ impl NotificationList {
         })
         .detach();
         Self {
-            notifications: ToastManager::new(ToastMotion::base_ui()),
+            notifications: ToastManager::new(ToastMotion::sonner()),
             stack_state: ToastStackState::default(),
             focus_handle: cx.focus_handle().tab_stop(true),
             _subscriptions: HashMap::new(),
@@ -516,6 +525,11 @@ impl NotificationList {
             cx.background_executor().now(),
             self.stack_state.is_expanded() || !window.is_window_active(),
         );
+        for id in changes.presented {
+            if let Some(note) = self.notifications.get(&id) {
+                note.update(cx, |note, cx| note.complete_enter(cx));
+            }
+        }
         for id in changes.ending {
             if let Some(note) = self.notifications.get(&id) {
                 note.update(cx, |note, cx| note.begin_close(cx));
@@ -525,7 +539,9 @@ impl NotificationList {
             self._subscriptions.remove(&id);
             note.update(cx, |note, cx| note.complete_close(window, cx));
         }
-        cx.notify();
+        if changes.changed {
+            cx.notify();
+        }
     }
 
     pub(crate) fn close(
@@ -653,11 +669,14 @@ mod tests {
 
     struct TestRoot {
         list: Entity<NotificationList>,
+        other_focus: FocusHandle,
     }
 
     impl Render for TestRoot {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            self.list.clone()
+            div()
+                .child(self.list.clone())
+                .child(div().track_focus(&self.other_focus))
         }
     }
 
@@ -674,7 +693,7 @@ mod tests {
     /// so that closed notifications are removed from the list.
     fn flush_dismiss(cx: &mut VisualTestContext) {
         cx.background_executor
-            .advance_clock(NOTIFICATION_TRANSITION_DURATION + Duration::from_millis(50));
+            .advance_clock(NOTIFICATION_EXIT_DURATION + Duration::from_millis(50));
         cx.run_until_parked();
     }
 
@@ -683,7 +702,9 @@ mod tests {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
+        cx.update(|window, _| window.activate_window());
         let list = root.read_with(cx, |root, _| root.list.clone());
 
         list.update_in(cx, |list, window, cx| {
@@ -698,7 +719,7 @@ mod tests {
         });
 
         cx.background_executor
-            .advance_clock(NOTIFICATION_TRANSITION_DURATION - Duration::from_millis(1));
+            .advance_clock(NOTIFICATION_EXIT_DURATION - Duration::from_millis(1));
         cx.run_until_parked();
         assert_eq!(ids(&list, cx).len(), 1);
 
@@ -709,10 +730,74 @@ mod tests {
     }
 
     #[gpui::test]
+    fn focus_and_inactive_window_pause_autohide_and_present_phase_is_projected(
+        cx: &mut TestAppContext,
+    ) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        let list = root.read_with(cx, |root, _| root.list.clone());
+        list.update_in(cx, |list, window, cx| {
+            list.push(Notification::info("paused").id::<FooKind>(), window, cx);
+        });
+
+        cx.background_executor
+            .advance_clock(NOTIFICATION_TRANSITION_DURATION);
+        cx.run_until_parked();
+        let note = list.read_with(cx, |list, _| {
+            list.notifications
+                .get(&NotificationId::from(TypeId::of::<FooKind>()))
+                .unwrap()
+                .clone()
+        });
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Present
+        );
+
+        cx.background_executor.advance_clock(Duration::from_secs(5));
+        cx.run_until_parked();
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Present
+        );
+
+        let list_focus = list.read_with(cx, |list, _| list.focus_handle.clone());
+        cx.update(|window, cx| {
+            window.activate_window();
+            list_focus.focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+        cx.background_executor.advance_clock(Duration::from_secs(5));
+        cx.run_until_parked();
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Present
+        );
+
+        let other_focus = root.read_with(cx, |root, _| root.other_focus.clone());
+        cx.update(|window, cx| {
+            other_focus.focus(window, cx);
+            window.draw(cx).clear(cx);
+        });
+        assert!(!list.read_with(cx, |list, _| list.stack_state.is_expanded()));
+        cx.background_executor
+            .advance_clock(Duration::from_secs(5) + Duration::from_millis(50));
+        cx.run_until_parked();
+        assert_eq!(
+            note.read_with(cx, |note, _| note.transition_status),
+            ToastTransitionStatus::Ending
+        );
+    }
+
+    #[gpui::test]
     fn close_by_type_removes_id_and_all_id1_of_same_type(cx: &mut TestAppContext) {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
         let list = root.read_with(cx, |r, _| r.list.clone());
 
@@ -759,6 +844,7 @@ mod tests {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
         let list = root.read_with(cx, |r, _| r.list.clone());
 
@@ -806,6 +892,7 @@ mod tests {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
         let list = root.read_with(cx, |r, _| r.list.clone());
 
@@ -830,6 +917,7 @@ mod tests {
         cx.update(|cx| cx.set_global(Theme::default()));
         let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
             list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
         });
         let list = root.read_with(cx, |r, _| r.list.clone());
 
