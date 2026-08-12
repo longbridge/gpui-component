@@ -10,7 +10,9 @@ impl BaseShowcase {
         let selected = self.selected_tab.min(3);
         let labels = ["GPUI", "React", "SwiftUI", "Vue"];
         let entity = cx.entity().downgrade();
+        let trigger_entity = entity.clone();
         let trigger = div()
+            .id("select-trigger")
             .h(px(30.))
             .px_2()
             .text_size(px(13.))
@@ -19,6 +21,12 @@ impl BaseShowcase {
             .justify_between()
             .border_1()
             .border_color(rgb(0x171717))
+            .on_click(move |_, _, cx| {
+                _ = trigger_entity.update(cx, |this, cx| {
+                    this.checked = !this.checked;
+                    cx.notify();
+                });
+            })
             .child(labels[selected])
             .child(if open { "⌃" } else { "⌄" });
         let options = div()

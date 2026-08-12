@@ -28,10 +28,11 @@ impl BaseShowcase {
                         }
                     })
                     .flex()
-                    .items_center()
+                    .items_start()
                     .gap_2()
                     .child(
                         div()
+                            .mt(px(2.))
                             .flex()
                             .items_center()
                             .justify_center()
@@ -55,10 +56,16 @@ impl BaseShowcase {
                 Radio::new("pickup-radio")
                     .disabled(true)
                     .flex()
-                    .items_center()
+                    .items_start()
                     .gap_2()
                     .opacity(0.45)
-                    .child(div().size(px(14.)).border_1().border_color(rgb(0x171717)))
+                    .child(
+                        div()
+                            .mt(px(2.))
+                            .size(px(14.))
+                            .border_1()
+                            .border_color(rgb(0x171717)),
+                    )
                     .child(
                         div()
                             .child("Local pickup")

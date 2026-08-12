@@ -7,7 +7,7 @@ impl BaseShowcase {
         div()
             .w(px(280.))
             .h(px(158.))
-            .text_size(px(13.))
+            .text_size(px(12.))
             .relative()
             .flex()
             .items_center()
@@ -16,6 +16,9 @@ impl BaseShowcase {
                 Button::new("show-toast")
                     .h(px(30.))
                     .px_2()
+                    .flex()
+                    .items_center()
+                    .justify_center()
                     .border_1()
                     .border_color(rgb(0x171717))
                     .bg(rgb(0xffffff))
@@ -51,15 +54,23 @@ impl BaseShowcase {
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .child("Changes saved"),
                                 )
-                                .child(Button::new("dismiss-toast").px_1().child("×").on_click({
-                                    let entity = entity.clone();
-                                    move |_, _, cx| {
-                                        _ = entity.update(cx, |this, cx| {
-                                            this.checked = true;
-                                            cx.notify();
-                                        });
-                                    }
-                                })),
+                                .child(
+                                    Button::new("dismiss-toast")
+                                        .size(px(24.))
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .child("×")
+                                        .on_click({
+                                            let entity = entity.clone();
+                                            move |_, _, cx| {
+                                                _ = entity.update(cx, |this, cx| {
+                                                    this.checked = true;
+                                                    cx.notify();
+                                                });
+                                            }
+                                        }),
+                                ),
                         )
                         .child(
                             div()

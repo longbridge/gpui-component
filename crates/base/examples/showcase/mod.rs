@@ -143,6 +143,9 @@ impl BaseShowcase {
             otp.update(cx, |state, cx| state.focus(window, cx));
         }
 
+        let slider = cx.new(|_| SliderState::new().min(0.).max(100.).default_value(64.));
+        cx.observe(&slider, |_, _, cx| cx.notify()).detach();
+
         Self {
             component,
             checked: true,
@@ -158,17 +161,24 @@ impl BaseShowcase {
             dialog_open: false,
             popup_open: false,
             page: 3,
-            slider: cx.new(|_| SliderState::new().min(0.).max(100.).default_value(64.)),
+            slider,
             input,
             multiline_input,
             otp,
             calendar: cx.new(|cx| CalendarState::new(window, cx)),
             tree: cx.new(|cx| {
                 TreeState::new(cx).items(vec![
-                    TreeItem::new("src", "src").children(vec![
+                    TreeItem::new("src", "src").expanded(true).children(vec![
+                        TreeItem::new("components", "components")
+                            .expanded(true)
+                            .children(vec![
+                                TreeItem::new("button", "button.rs"),
+                                TreeItem::new("tree-file", "tree.rs"),
+                            ]),
                         TreeItem::new("lib", "lib.rs"),
-                        TreeItem::new("app", "app.rs"),
                     ]),
+                    TreeItem::new("examples", "examples")
+                        .children(vec![TreeItem::new("showcase", "showcase.rs")]),
                     TreeItem::new("cargo", "Cargo.toml"),
                 ])
             }),
@@ -205,7 +215,7 @@ impl Render for BaseShowcase {
             "radio-group" => self.radio_group(cx).into_any_element(),
             "resizable" => self.resizable().into_any_element(),
             "scrollbar" => self.scrollbar().into_any_element(),
-            "slider" => self.slider().into_any_element(),
+            "slider" => self.slider(cx).into_any_element(),
             "select" => self.select(false, cx).into_any_element(),
             "sheet" => self.sheet(cx).into_any_element(),
             "switch" => self.switch(cx).into_any_element(),
@@ -214,7 +224,7 @@ impl Render for BaseShowcase {
             "toast" => self.toast(cx).into_any_element(),
             "toggle" => self.toggle(cx).into_any_element(),
             "toggle-group" => self.toggle_group(cx).into_any_element(),
-            "tooltip" => self.tooltip().into_any_element(),
+            "tooltip" => self.tooltip(cx).into_any_element(),
             "tree" => self.tree().into_any_element(),
             "virtual-list" => self.virtual_list(cx).into_any_element(),
             _ => div()
@@ -232,6 +242,7 @@ impl Render for BaseShowcase {
                 }))
                 .into_any_element(),
         };
+        let fills_stage = self.component == "sheet";
 
         div()
             .size_full()
@@ -239,6 +250,7 @@ impl Render for BaseShowcase {
             .flex_col()
             .bg(rgb(0xffffff))
             .text_color(rgb(0x171717))
+            .text_size(px(12.))
             .font_family("Inter Variable")
             .child(
                 div()
@@ -256,7 +268,12 @@ impl Render for BaseShowcase {
                             .items_center()
                             .p_4()
                             .child(div().flex_1().min_h_0())
-                            .child(div().flex_none().child(content))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .when(fills_stage, |this| this.size_full())
+                                    .child(content),
+                            )
                             .child(div().flex_1().min_h_0()),
                     ),
             )

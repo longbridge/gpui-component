@@ -27,6 +27,11 @@ impl BaseShowcase {
                                     .child(
                                         div()
                                             .size(px(18.))
+                                            .flex_none()
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .line_height(px(18.))
                                             .border_1()
                                             .border_color(rgb(0xa3a3a3))
                                             .child(format!("{}", (ix % 9) + 1)),

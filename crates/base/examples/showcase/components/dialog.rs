@@ -13,6 +13,9 @@ impl BaseShowcase {
                     .h(px(28.))
                     .px_3()
                     .py_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
                     .border_1()
                     .border_color(rgb(0x171717))
                     .on_click(move |_, _, cx| {

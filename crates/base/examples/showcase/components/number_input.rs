@@ -27,7 +27,8 @@ impl BaseShowcase {
                     .decrement_button(|button| {
                         button
                             .w(px(24.))
-                            .h(px(14.))
+                            .flex_1()
+                            .h_full()
                             .p_0()
                             .flex()
                             .items_center()
@@ -40,7 +41,8 @@ impl BaseShowcase {
                     .increment_button(|button| {
                         button
                             .w(px(24.))
-                            .h(px(14.))
+                            .flex_1()
+                            .min_h_0()
                             .p_0()
                             .flex()
                             .items_center()
