@@ -1,3 +1,4 @@
+use chrono::Weekday;
 use gpui::{
     App, ElementId, Entity, InteractiveElement, IntoElement, RenderOnce, SharedString,
     StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px, relative,
@@ -36,6 +37,7 @@ pub struct Calendar {
     state: Entity<CalendarState>,
     style: StyleRefinement,
     number_of_months: usize,
+    first_day_of_week: Weekday,
 }
 
 impl Calendar {
@@ -46,10 +48,16 @@ impl Calendar {
             state: state.clone(),
             style: StyleRefinement::default(),
             number_of_months: 1,
+            first_day_of_week: Weekday::Sun,
         }
     }
     pub fn number_of_months(mut self, count: usize) -> Self {
         self.number_of_months = count;
+        self
+    }
+    /// Set the first day of the week for the calendar.
+    pub fn first_day_of_week(mut self, day: Weekday) -> Self {
+        self.first_day_of_week = day;
         self
     }
 }
@@ -70,6 +78,7 @@ impl RenderOnce for Calendar {
         let size = self.size;
         BaseCalendar::new(self.id, &self.state)
             .number_of_months(self.number_of_months)
+            .first_day_of_week(self.first_day_of_week)
             .label(|kind, value| match kind {
                 CalendarItemKind::Previous => "‹".into(),
                 CalendarItemKind::Next => "›".into(),

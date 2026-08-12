@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Weekday};
 use gpui::{
     App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
     Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
@@ -78,6 +78,8 @@ pub struct DatePickerState {
     number_of_months: usize,
     disabled_matcher: Option<Rc<Matcher>>,
     _subscriptions: Vec<Subscription>,
+    /// The first day of the week. Defaults to Sunday.
+    first_day_of_week: Weekday,
 }
 
 impl Focusable for DatePickerState {
@@ -131,6 +133,7 @@ impl DatePickerState {
             number_of_months: 1,
             disabled_matcher: None,
             _subscriptions,
+            first_day_of_week: Weekday::Sun,
         }
     }
 
@@ -143,6 +146,12 @@ impl DatePickerState {
     /// Set the number of months calendar view to display, default is 1.
     pub fn number_of_months(mut self, number_of_months: usize) -> Self {
         self.number_of_months = number_of_months;
+        self
+    }
+
+    /// Set the first day of the week.
+    pub fn first_day_of_week(mut self, day: Weekday) -> Self {
+        self.first_day_of_week = day;
         self
     }
 
@@ -501,6 +510,7 @@ impl RenderOnce for DatePicker {
                                         .child(
                                             Calendar::new(&state.calendar)
                                                 .number_of_months(self.number_of_months)
+                                                .first_day_of_week(state.first_day_of_week)
                                                 .border_0()
                                                 .rounded_none()
                                                 .p_0()

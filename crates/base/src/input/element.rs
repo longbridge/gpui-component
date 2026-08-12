@@ -922,12 +922,9 @@ impl TextElement {
         window: &mut Window,
     ) -> (Pixels, usize) {
         let total_lines = text.lines_len();
-        let line_number_len = match total_lines {
-            0..=9999 => 5,
-            10000..=99999 => 6,
-            100000..=999999 => 7,
-            _ => 8,
-        };
+        // One extra column beyond the widest line number, so right-aligned
+        // numbers keep a gap from the left edge.
+        let line_number_len = total_lines.max(1).ilog10() as usize + 2;
 
         let mut line_number_width = if state.mode.line_number() {
             let empty_line_number = window.text_system().shape_line(

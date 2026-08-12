@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{h_flex, styled::StyledExt as _, v_flex};
-use chrono::{Datelike, Local, NaiveDate};
+use chrono::{Datelike, Local, NaiveDate, Weekday};
 use gpui::{
     AnyElement, App, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
     InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString,
@@ -301,7 +301,13 @@ impl CalendarState {
     /// months and is the preferred rendering API.
     pub fn month_days(&self) -> Vec<Vec<Vec<NaiveDate>>> {
         (0..self.number_of_months)
-            .map(|n| days_in_month(self.current_year, self.current_month as u32 + n as u32))
+            .map(|n| {
+                days_in_month(
+                    self.current_year,
+                    self.current_month as u32 + n as u32,
+                    Weekday::Sun,
+                )
+            })
             .collect()
     }
     pub fn has_prev_year_page(&self) -> bool {
@@ -461,6 +467,7 @@ pub struct Calendar {
     id: ElementId,
     state: Entity<CalendarState>,
     number_of_months: usize,
+    first_day_of_week: Weekday,
     style: StyleRefinement,
     item: ItemRenderer,
     label: Labeler,
@@ -472,6 +479,7 @@ impl Calendar {
             id: id.into(),
             state: state.clone(),
             number_of_months: 1,
+            first_day_of_week: Weekday::Sun,
             style: StyleRefinement::default(),
             item: Rc::new(|item, _, _, _| item.into_any_element()),
             label: Rc::new(|kind, value| match kind {
@@ -484,6 +492,10 @@ impl Calendar {
     }
     pub fn number_of_months(mut self, count: usize) -> Self {
         self.number_of_months = count.max(1);
+        self
+    }
+    pub fn first_day_of_week(mut self, day: Weekday) -> Self {
+        self.first_day_of_week = day;
         self
     }
     pub fn item(
@@ -636,7 +648,9 @@ impl RenderOnce for Calendar {
             h_flex().flex_wrap()
         };
         if view.is_day() {
-            for (offset, weeks) in self.state.read(cx).month_days().iter().enumerate() {
+            for offset in 0..count {
+                let (year, month_number) = self.state.read(cx).offset_year_month(offset);
+                let weeks = days_in_month(year, month_number, self.first_day_of_week);
                 let mut month = h_flex().flex_wrap();
                 for weekday in 0..7 {
                     let st = CalendarItemState {
@@ -650,7 +664,7 @@ impl RenderOnce for Calendar {
                     month = month.child(self.render_item(
                         format!("weekday-{offset}-{weekday}"),
                         st,
-                        weekday,
+                        (weekday + self.first_day_of_week.num_days_from_sunday() as i32) % 7,
                         window,
                         cx,
                     ));
@@ -739,7 +753,7 @@ impl RenderOnce for Calendar {
     }
 }
 
-fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
+fn days_in_month(year: i32, month: u32, first_day: Weekday) -> Vec<Vec<NaiveDate>> {
     let total = year as i64 * 12 + month as i64 - 1;
     let year = total.div_euclid(12) as i32;
     let month = total.rem_euclid(12) as u32 + 1;
@@ -749,7 +763,9 @@ fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
     } else {
         NaiveDate::from_ymd_opt(year, month + 1, 1).unwrap()
     };
-    let start = first - chrono::Duration::days(first.weekday().num_days_from_sunday() as i64);
+    let offset =
+        (first.weekday().num_days_from_sunday() + 7 - first_day.num_days_from_sunday()) % 7;
+    let start = first - chrono::Duration::days(offset as i64);
     let count = ((next - start).num_days() as usize).div_ceil(7) * 7;
     (0..count)
         .map(|n| start + chrono::Duration::days(n as i64))
