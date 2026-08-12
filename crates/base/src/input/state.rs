@@ -21,8 +21,8 @@ use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DiagnosticSet, DisplayMap, InputEditorStyle, InputHighlighterFactory, MASK_CHAR, MaskPattern,
-    NativeMenu, NumberStep, WrappingIndent,
+    DiagnosticSet, DisplayMap, InputContextMenuCapabilities, InputEditorStyle,
+    InputHighlighterFactory, MASK_CHAR, MaskPattern, NativeMenu, NumberStep, WrappingIndent,
     blink_cursor::BlinkCursor,
     change::Change,
     decorations::DecorationCollections,
@@ -301,7 +301,7 @@ pub struct InputState {
     pub(super) last_selected_range: Option<Selection>,
     pub(super) selecting: bool,
     pub(super) cursor_height_ratio: f32,
-    pub(super) disabled: bool,
+    pub(crate) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
     pub(super) submit_on_enter: bool,
@@ -318,11 +318,11 @@ pub struct InputState {
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     /// The step strategy for [`super::NumberInput`] to increment/decrement.
     /// See [`Self::step`] and [`Self::step_by`].
-    pub(super) number_step: Option<NumberStep>,
+    pub(crate) number_step: Option<NumberStep>,
     /// The minimum value for [`super::NumberInput`]. See [`Self::min`].
-    pub(super) number_min: Option<f64>,
+    pub(crate) number_min: Option<f64>,
     /// The maximum value for [`super::NumberInput`]. See [`Self::max`].
-    pub(super) number_max: Option<f64>,
+    pub(crate) number_max: Option<f64>,
     pub(crate) scroll_handle: ScrollHandle,
     /// The deferred scroll offset to apply on next layout.
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
@@ -458,6 +458,16 @@ impl InputState {
             placeholder: self.placeholder.clone(),
             value: self.text.to_string(),
             mask_placeholder: self.mask_pattern.placeholder(),
+        }
+    }
+
+    pub fn context_menu_capabilities(&self) -> InputContextMenuCapabilities {
+        InputContextMenuCapabilities {
+            disabled: self.disabled,
+            code_editor: self.mode.is_code_editor(),
+            selection: !self.selected_range.is_empty(),
+            go_to_definition: self.lsp.definition_provider.is_some(),
+            code_actions: !self.lsp.code_action_providers.is_empty(),
         }
     }
 
@@ -1291,35 +1301,6 @@ impl InputState {
         self.number_max = max;
     }
 
-    /// Apply a number-input step or emit a step event when stepping is caller-controlled.
-    pub fn on_number_input_step(
-        &mut self,
-        action: StepAction,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.disabled {
-            return;
-        }
-        if let Some(step) = self.number_step.clone() {
-            let value = self.unmask_value();
-            let current = value.trim().parse::<f64>().unwrap_or(0.);
-            let step = step.value(current, action, cx);
-            if let Some(new_value) =
-                crate::step_value(&value, action, step, self.number_min, self.number_max)
-            {
-                if self.is_valid_input(&new_value, cx) {
-                    let range = self.range_to_utf16(&(0..self.text.len()));
-                    self.replace_text_in_range_silent(Some(range), &new_value, window, cx);
-                    return;
-                }
-            } else {
-                return;
-            }
-        }
-        cx.emit(crate::NumberInputEvent::Step(action));
-    }
-
     /// Set true to show spinner at the input right.
     ///
     /// Only for [`InputMode::SingleLine`] mode.
@@ -1846,47 +1827,16 @@ impl InputState {
             self.move_to(offset, None, cx);
         }
 
-        // A custom builder fully replaces the built-in context menu.
-        let menu = if let Some(builder) = self.context_menu_builder.clone() {
-            builder(NativeMenu::new(), window, cx)
-        } else {
-            let is_code_editor = self.mode.is_code_editor();
-            if is_code_editor {
-                self.handle_hover_definition(offset, window, cx);
-            }
+        if self.mode.is_code_editor() {
+            self.handle_hover_definition(offset, window, cx);
+        }
 
-            let is_enable = !self.disabled;
-            let has_goto_definition = is_enable && self.lsp.definition_provider.is_some();
-            let has_code_action = is_enable && !self.lsp.code_action_providers.is_empty();
-            let is_selected = !self.selected_range.is_empty();
-            let has_paste = is_enable && cx.read_from_clipboard().is_some();
-
-            let mut menu = NativeMenu::new();
-            if is_code_editor {
-                menu = menu
-                    .menu_with_disabled(
-                        "Go to Definition",
-                        !has_goto_definition,
-                        Box::new(crate::input::GoToDefinition),
-                    )
-                    .menu_with_disabled(
-                        "Show Code Actions",
-                        !has_code_action,
-                        Box::new(crate::input::ToggleCodeActions),
-                    )
-                    .separator();
-            }
-
-            menu.menu_with_disabled(
-                "Cut",
-                !(is_enable && is_selected),
-                Box::new(crate::input::Cut),
-            )
-            .menu_with_disabled("Copy", !is_selected, Box::new(crate::input::Copy))
-            .menu_with_disabled("Paste", !has_paste, Box::new(crate::input::Paste))
-            .separator()
-            .menu("Select All", Box::new(crate::input::SelectAll))
-        };
+        let menu = self
+            .context_menu_builder
+            .clone()
+            .map_or_else(NativeMenu::new, |builder| {
+                builder(NativeMenu::new(), window, cx)
+            });
 
         if let Some(presenter) = self.context_menu_presenter.as_ref() {
             presenter(menu, position, window, cx);
@@ -2414,7 +2364,7 @@ impl InputState {
     }
 
     #[inline]
-    pub(super) fn range_to_utf16(&self, range: &Range<usize>) -> Range<usize> {
+    pub(crate) fn range_to_utf16(&self, range: &Range<usize>) -> Range<usize> {
         self.offset_to_utf16(range.start)..self.offset_to_utf16(range.end)
     }
 
@@ -2633,7 +2583,7 @@ impl InputState {
         }
     }
 
-    pub(super) fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
+    pub(crate) fn is_valid_input(&self, new_text: &str, cx: &mut Context<Self>) -> bool {
         if new_text.is_empty() {
             return true;
         }
@@ -3301,7 +3251,7 @@ mod tests {
             })
         });
         assert_eq!(calls.get(), 1);
-        assert!(items.get() >= 4);
+        assert_eq!(items.get(), 0);
 
         cx.update(|window, cx| {
             input.update(cx, |state, cx| {

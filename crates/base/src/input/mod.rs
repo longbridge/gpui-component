@@ -63,6 +63,15 @@ pub use ropey::Rope;
 pub use search::{SearchMatcher, SearchSession};
 pub use state::*;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InputContextMenuCapabilities {
+    pub disabled: bool,
+    pub code_editor: bool,
+    pub selection: bool,
+    pub go_to_definition: bool,
+    pub code_actions: bool,
+}
+
 /// The foundational input frame.
 ///
 /// It intentionally owns only input semantics, interaction forwarding, and

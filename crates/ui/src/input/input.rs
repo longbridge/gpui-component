@@ -17,7 +17,7 @@ use crate::{IconName, Size};
 use crate::{RoleOverride, Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
 use gpui_base::Input as BaseInput;
-use gpui_base::input::NativeMenuItem as BaseNativeMenuItem;
+use rust_i18n::t;
 
 use super::{InputContentType, InputState, sync_native_content_type};
 
@@ -422,20 +422,48 @@ impl RenderOnce for Input {
             });
             state.configure_presentation(self.disabled, cursor_height_ratio, text_align);
             let custom = self.context_menu_builder.clone();
-            state.set_context_menu_presenter(Some(Rc::new(move |menu, position, window, cx| {
+            let input_state = self.state.clone();
+            state.set_context_menu_presenter(Some(Rc::new(move |_, position, window, cx| {
                 let menu = if let Some(custom) = custom.as_ref() {
                     custom(NativeMenu::new(), window, cx)
                 } else {
-                    menu.items
-                        .into_iter()
-                        .fold(NativeMenu::new(), |menu, item| match item {
-                            BaseNativeMenuItem::Separator => menu.separator(),
-                            BaseNativeMenuItem::Action {
-                                label,
-                                disabled,
-                                action,
-                            } => menu.menu_with_disabled(label, disabled, action),
-                        })
+                    let capabilities = input_state.read(cx).context_menu_capabilities();
+                    let enabled = !capabilities.disabled;
+                    let mut menu = NativeMenu::new();
+                    if capabilities.code_editor {
+                        menu = menu
+                            .menu_with_disabled(
+                                t!("Input.Go to Definition"),
+                                !(enabled && capabilities.go_to_definition),
+                                Box::new(gpui_base::input::GoToDefinition),
+                            )
+                            .menu_with_disabled(
+                                t!("Input.Show Code Actions"),
+                                !(enabled && capabilities.code_actions),
+                                Box::new(gpui_base::input::ToggleCodeActions),
+                            )
+                            .separator();
+                    }
+                    menu.menu_with_disabled(
+                        t!("Input.Cut"),
+                        !(enabled && capabilities.selection),
+                        Box::new(gpui_base::input::Cut),
+                    )
+                    .menu_with_disabled(
+                        t!("Input.Copy"),
+                        !capabilities.selection,
+                        Box::new(gpui_base::input::Copy),
+                    )
+                    .menu_with_disabled(
+                        t!("Input.Paste"),
+                        !(enabled && cx.read_from_clipboard().is_some()),
+                        Box::new(gpui_base::input::Paste),
+                    )
+                    .separator()
+                    .menu(
+                        t!("Input.Select All"),
+                        Box::new(gpui_base::input::SelectAll),
+                    )
                 };
                 menu.show(position, window, cx);
             })));

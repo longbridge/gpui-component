@@ -5,6 +5,7 @@ use gpui::{
     ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled,
     Window, actions, prelude::FluentBuilder as _,
 };
+use rust_i18n::t;
 
 use crate::input::InputState;
 use crate::{Button, Input, StyledExt as _};
@@ -63,6 +64,37 @@ pub enum NumberInputEvent {
     Step(StepAction),
 }
 impl EventEmitter<NumberInputEvent> for InputState {}
+
+impl InputState {
+    /// Apply a number-input step or emit a step event when stepping is caller-controlled.
+    fn apply_number_step(
+        &mut self,
+        action: StepAction,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.disabled {
+            return;
+        }
+        if let Some(step) = self.number_step.clone() {
+            let value = self.unmask_value();
+            let current = value.trim().parse::<f64>().unwrap_or(0.);
+            let step = step.value(current, action, cx);
+            if let Some(new_value) =
+                step_value(&value, action, step, self.number_min, self.number_max)
+            {
+                if self.is_valid_input(&new_value, cx) {
+                    let range = self.range_to_utf16(&(0..self.value().len()));
+                    self.replace_text_in_range_silent(Some(range), &new_value, window, cx);
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+        cx.emit(NumberInputEvent::Step(action));
+    }
+}
 
 type StepHandler = Rc<dyn Fn(StepAction, &mut Window, &mut App)>;
 type ButtonDecorator = Box<dyn FnOnce(Button) -> Button>;
@@ -193,7 +225,7 @@ impl RenderOnce for NumberInput {
             Rc::new(move |action, window, cx| {
                 state.update(cx, |state, cx| {
                     state.focus(window, cx);
-                    state.on_number_input_step(action, window, cx);
+                    state.apply_number_step(action, window, cx);
                 });
             })
         });
@@ -211,7 +243,7 @@ impl RenderOnce for NumberInput {
 
         let decrement_button = decrement_button
             .flex_none()
-            .accessibility_label("Decrement")
+            .accessibility_label(t!("Input.Decrement"))
             .tab_stop(false)
             .disabled(disabled)
             .on_click({
@@ -222,7 +254,7 @@ impl RenderOnce for NumberInput {
             });
         let increment_button = increment_button
             .flex_none()
-            .accessibility_label("Increment")
+            .accessibility_label(t!("Input.Increment"))
             .tab_stop(false)
             .disabled(disabled)
             .on_click({
