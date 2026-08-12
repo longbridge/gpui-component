@@ -5,18 +5,13 @@ on:
     types:
       - completed
   workflow_dispatch:
-  # Deploys the in-progress base branch so its website changes can be reviewed
-  # live. This replaces the published site until the next release deploys main.
-  push:
-    branches:
-      - base
 permissions:
   contents: read
   pages: write
   id-token: write
 
 # Pages accepts one deployment at a time; queue rather than cancel so a release
-# deploy is never dropped in favour of a branch preview.
+# deploy is never dropped in favour of a manually dispatched one.
 concurrency:
   group: pages
   cancel-in-progress: false

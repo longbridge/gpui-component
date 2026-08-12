@@ -8,7 +8,7 @@ use gpui::{
     prelude::FluentBuilder as _,
 };
 
-use crate::{Disableable, Icon, IconName, Sizable, Size, StyledExt as _};
+use crate::{Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _};
 
 use super::{Input, InputState, input::input_style};
 use gpui_base::NumberInput as BaseNumberInput;
@@ -119,6 +119,7 @@ impl RenderOnce for NumberInput {
         BaseNumberInput::new(&self.state)
             .disabled(self.disabled)
             .flex_1()
+            .input_h(self.size)
             .rounded(cx.theme().radius)
             // The buttons are ghost, so the frame around the whole control is
             // drawn here instead of by each of its parts.
@@ -138,10 +139,13 @@ impl RenderOnce for NumberInput {
                     .text_color(button_foreground)
                     .hover(move |this| this.bg(button_hover))
                     .active(move |this| this.bg(button_active))
+                    // The frame owns the control height, so the buttons fill it
+                    // rather than setting their own and outgrowing the border.
+                    .h_full()
                     .map(|this| match button_size {
-                        Size::XSmall | Size::Small => this.h_6().min_w_6(),
-                        Size::Medium | Size::Large => this.h_8().min_w_8(),
-                        Size::Size(size) => this.h(size).min_w(size),
+                        Size::XSmall | Size::Small => this.min_w_6(),
+                        Size::Medium | Size::Large => this.min_w_8(),
+                        Size::Size(size) => this.min_w(size),
                     })
                     // Only the outer corners are rounded, to follow the frame.
                     .rounded_tl(button_radius)
@@ -152,6 +156,7 @@ impl RenderOnce for NumberInput {
                 Input::new(&self.state)
                     .appearance(false)
                     .with_size(button_size)
+                    .h_full()
                     .disabled(self.disabled)
                     .gap_0()
                     .rounded_none()
@@ -167,10 +172,11 @@ impl RenderOnce for NumberInput {
                     .text_color(button_foreground)
                     .hover(move |this| this.bg(button_hover))
                     .active(move |this| this.bg(button_active))
+                    .h_full()
                     .map(|this| match button_size {
-                        Size::XSmall | Size::Small => this.h_6().min_w_6(),
-                        Size::Medium | Size::Large => this.h_8().min_w_8(),
-                        Size::Size(size) => this.h(size).min_w(size),
+                        Size::XSmall | Size::Small => this.min_w_6(),
+                        Size::Medium | Size::Large => this.min_w_8(),
+                        Size::Size(size) => this.min_w(size),
                     })
                     .rounded_tr(button_radius)
                     .rounded_br(button_radius)

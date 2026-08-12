@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use gpui::Focusable;
 use gpui::{
     AnyElement, App, Entity, EventEmitter, InteractiveElement as _, IntoElement, KeyBinding,
     ParentElement, RenderOnce, Role, StatefulInteractiveElement as _, StyleRefinement, Styled,
@@ -302,6 +303,7 @@ impl RenderOnce for NumberInput {
         };
 
         Input::new(("number-input", self.state.entity_id()))
+            .track_focus(&self.state.focus_handle(cx))
             .flex()
             .items_center()
             .disabled(disabled)
@@ -378,6 +380,94 @@ pub fn step_value(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use crate::theme::Theme;
+    use gpui::{
+        AppContext as _, Context, Entity, Focusable as _, Modifiers, MouseButton, Render,
+        TestAppContext, VisualTestContext, point, px,
+    };
+
+    struct StepperHarness {
+        state: Entity<InputState>,
+    }
+
+    impl Render for StepperHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            NumberInput::new(&self.state)
+                .w(px(120.))
+                .h(px(20.))
+                .decrement_button(|button| button.w(px(20.)).h_full())
+                .input(div().size_full())
+                .increment_button(|button| button.w(px(20.)).h_full())
+        }
+    }
+
+    /// Pressing a step button must not move focus off the editor, not even for
+    /// the press itself: the frame draws a focus ring, so a focus round-trip
+    /// makes it flicker on every click.
+    #[gpui::test]
+    fn pressing_a_step_button_never_takes_focus_off_the_editor(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+
+        let mut created: Option<Entity<InputState>> = None;
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                cx.set_global(Theme::default());
+                let state = cx.new(|cx| InputState::new(window, cx).step(1.));
+                created = Some(state.clone());
+                cx.new(|_| StepperHarness { state })
+            })
+            .unwrap()
+        });
+        let state = created.unwrap();
+        let cx = &mut VisualTestContext::from_window(window.into(), cx);
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| state.focus(window, cx));
+            window.draw(cx).clear(cx);
+        });
+        cx.update(|window, cx| {
+            assert!(
+                state.read(cx).focus_handle(cx).is_focused(window),
+                "the editor should start focused"
+            );
+        });
+
+        // The decrement button sits at the left edge of the control.
+        cx.simulate_mouse_move(
+            point(px(10.), px(10.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_event(gpui::MouseDownEvent {
+            button: MouseButton::Left,
+            position: point(px(10.), px(10.)),
+            modifiers: Modifiers::default(),
+            click_count: 1,
+            first_mouse: false,
+        });
+
+        cx.update(|window, cx| {
+            assert!(
+                state.read(cx).focus_handle(cx).is_focused(window),
+                "pressing the step button pulled focus off the editor"
+            );
+        });
+
+        cx.simulate_event(gpui::MouseUpEvent {
+            button: MouseButton::Left,
+            position: point(px(10.), px(10.)),
+            modifiers: Modifiers::default(),
+            click_count: 1,
+        });
+
+        cx.update(|window, cx| {
+            assert!(
+                state.read(cx).focus_handle(cx).is_focused(window),
+                "releasing the step button left focus off the editor"
+            );
+        });
+    }
 
     #[test]
     fn stepping_preserves_precision_and_directional_bounds() {
