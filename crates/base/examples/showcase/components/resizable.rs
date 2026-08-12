@@ -6,9 +6,9 @@ use super::super::BaseShowcase;
 impl BaseShowcase {
     pub(in super::super) fn resizable(&self) -> impl IntoElement {
         div()
-            .w(px(300.))
-            .h(px(160.))
-            .text_size(px(13.))
+            .w_72()
+            .h_40()
+            .text_xs()
             .border_1()
             .border_color(rgb(0x171717))
             .child(
@@ -31,10 +31,7 @@ impl BaseShowcase {
                                     .flex_col()
                                     .gap_1()
                                     .child(
-                                        div()
-                                            .text_size(px(12.))
-                                            .text_color(rgb(0x737373))
-                                            .child("PROJECT"),
+                                        div().text_xs().text_color(rgb(0x737373)).child("PROJECT"),
                                     )
                                     .children(["Overview", "Components", "Settings"].map(
                                         |label| {

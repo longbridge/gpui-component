@@ -11,9 +11,9 @@ impl BaseShowcase {
                 range
                     .map(|ix| {
                         div()
-                            .h(px(28.))
+                            .h_7()
                             .px_2()
-                            .text_size(px(12.))
+                            .text_xs()
                             .flex()
                             .items_center()
                             .border_b_1()
@@ -43,8 +43,8 @@ impl BaseShowcase {
                     .collect()
             },
         )
-        .w(px(280.))
-        .h(px(196.))
+        .w_72()
+        .h_48()
         .border_1()
         .border_color(rgb(0x171717))
     }

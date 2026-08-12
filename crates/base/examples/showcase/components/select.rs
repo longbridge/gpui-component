@@ -6,16 +6,16 @@ impl BaseShowcase {
         combobox: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let open = !self.checked;
-        let selected = self.selected_tab.min(3);
+        let open = self.select_open;
+        let selected = self.select_index.min(3);
         let labels = ["GPUI", "React", "SwiftUI", "Vue"];
         let entity = cx.entity().downgrade();
         let trigger_entity = entity.clone();
         let trigger = div()
             .id("select-trigger")
-            .h(px(30.))
+            .h_7()
             .px_2()
-            .text_size(px(13.))
+            .text_xs()
             .flex()
             .items_center()
             .justify_between()
@@ -23,7 +23,7 @@ impl BaseShowcase {
             .border_color(rgb(0x171717))
             .on_click(move |_, _, cx| {
                 _ = trigger_entity.update(cx, |this, cx| {
-                    this.checked = !this.checked;
+                    this.select_open = !open;
                     cx.notify();
                 });
             })
@@ -48,35 +48,37 @@ impl BaseShowcase {
                     .when(ix == selected, |this| this.child("✓"))
                     .on_click(move |_, _, cx| {
                         _ = entity.update(cx, |this, cx| {
-                            this.selected_tab = ix;
-                            this.checked = true;
+                            this.select_index = ix;
+                            this.select_open = false;
                             cx.notify();
                         });
                     })
             }));
         if combobox {
-            Combobox::new("example-combobox")
+            let root = Combobox::new("example-combobox")
                 .open(open)
-                .w(px(220.))
-                .child(trigger)
-                .when(open, |this| this.child(options))
+                .w_56()
+                .child(trigger);
+            Popup::new("example-combobox-options", root)
+                .when(open, |this| this.content(options))
                 .into_any_element()
         } else {
-            Select::new("example-select")
+            let root = Select::new("example-select")
                 .open(open)
                 .on_open_change({
                     let entity = entity.clone();
                     move |next, _, cx| {
                         _ = entity.update(cx, |this, cx| {
-                            this.checked = !next;
+                            this.select_open = next;
                             cx.notify();
                         });
                     }
                 })
                 .accessibility_label("Framework")
-                .w(px(220.))
-                .child(trigger)
-                .when(open, |this| this.child(options))
+                .w_56()
+                .child(trigger);
+            Popup::new("example-select-options", root)
+                .when(open, |this| this.content(options))
                 .into_any_element()
         }
     }

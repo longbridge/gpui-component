@@ -4,8 +4,8 @@ impl BaseShowcase {
     pub(in super::super) fn tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let selected = self.selected_tab;
         div()
-            .w(px(300.))
-            .text_size(px(13.))
+            .w_72()
+            .text_xs()
             .border_1()
             .border_color(rgb(0xd4d4d4))
             .child(
@@ -24,7 +24,7 @@ impl BaseShowcase {
                                 Tab::new(index)
                                     .selected(self.selected_tab == index)
                                     .px_2()
-                                    .h(px(30.))
+                                    .h_7()
                                     .flex()
                                     .items_center()
                                     .border_b_2()
@@ -47,7 +47,7 @@ impl BaseShowcase {
                     ),
             )
             .child(
-                div().min_h(px(76.)).p_3().child(match selected {
+                div().min_h_20().p_3().child(match selected {
                     0 => div().child("Workspace overview").child(
                         div()
                             .mt_1()

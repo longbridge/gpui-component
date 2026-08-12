@@ -11,24 +11,28 @@ impl BaseShowcase {
         let query = self.combobox_query.read(cx).value().to_lowercase();
         let selected = self.combobox_selection.clone();
         let entity = cx.entity().downgrade();
-        let toggle_entity = entity.clone();
         let query_state = self.combobox_query.clone();
+        let open_query_state = self.combobox_query.clone();
+        let trigger_entity = cx.entity().downgrade();
         let trigger_query_state = self.combobox_query.clone();
 
-        Combobox::new("example-combobox")
+        let combobox = Combobox::new("example-combobox")
             .open(open)
-            .on_open_change(move |open, _, cx| {
+            .on_open_change(move |open, window, cx| {
                 _ = entity.update(cx, |this, cx| {
                     this.combobox_open = open;
                     cx.notify();
                 });
+                if open {
+                    open_query_state.update(cx, |state, cx| state.focus(window, cx));
+                }
             })
-            .w(px(220.))
+            .w_56()
             .child(
                 div()
                     .id("combobox-trigger")
                     .w_full()
-                    .h(px(30.))
+                    .h_7()
                     .px_2()
                     .flex()
                     .items_center()
@@ -38,68 +42,62 @@ impl BaseShowcase {
                     .text_xs()
                     .bg(rgb(0xffffff))
                     .on_click(move |_, window, cx| {
-                        let mut opening = false;
-                        _ = toggle_entity.update(cx, |this, cx| {
-                            this.combobox_open = !this.combobox_open;
-                            opening = this.combobox_open;
+                        _ = trigger_entity.update(cx, |this, cx| {
+                            this.combobox_open = !open;
                             cx.notify();
                         });
-                        if opening {
+                        if !open {
                             trigger_query_state.update(cx, |state, cx| state.focus(window, cx));
                         }
                     })
                     .child(selected)
                     .child(div().text_color(rgb(0x737373)).child("⌄")),
+            );
+        let popup = div()
+            .w_56()
+            .p_1()
+            .border_1()
+            .border_color(rgb(0xd4d4d4))
+            .bg(rgb(0xffffff))
+            .child(
+                Input::new("combobox-search")
+                    .w_full()
+                    .h_7()
+                    .px_2()
+                    .border_1()
+                    .border_color(rgb(0xe5e5e5))
+                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        query_state.update(cx, |state, cx| state.focus(window, cx));
+                    })
+                    .child(self.combobox_query.clone()),
             )
-            .when(open, |combo| {
-                combo.child(
-                    div()
-                        .mt_1()
-                        .p_1()
-                        .border_1()
-                        .border_color(rgb(0xd4d4d4))
-                        .bg(rgb(0xffffff))
-                        .child(
-                            Input::new("combobox-search")
-                                .w_full()
-                                .h(px(30.))
+            .child(
+                div().mt_1().children(
+                    ["GPUI", "React", "SwiftUI", "Vue"]
+                        .into_iter()
+                        .filter(|label| query.is_empty() || label.to_lowercase().contains(&query))
+                        .map(|label| {
+                            let entity = cx.entity().downgrade();
+                            div()
+                                .id(format!("combobox-{label}"))
                                 .px_2()
-                                .border_1()
-                                .border_color(rgb(0xe5e5e5))
-                                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                    query_state.update(cx, |state, cx| state.focus(window, cx));
+                                .h_7()
+                                .flex()
+                                .items_center()
+                                .text_xs()
+                                .hover(|s| s.bg(rgb(0xf5f5f5)))
+                                .on_click(move |_, _, cx| {
+                                    _ = entity.update(cx, |this, cx| {
+                                        this.combobox_selection = label.into();
+                                        this.combobox_open = false;
+                                        cx.notify();
+                                    });
                                 })
-                                .child(self.combobox_query.clone()),
-                        )
-                        .child(
-                            div().mt_1().children(
-                                ["GPUI", "React", "SwiftUI", "Vue"]
-                                    .into_iter()
-                                    .filter(|label| {
-                                        query.is_empty() || label.to_lowercase().contains(&query)
-                                    })
-                                    .map(|label| {
-                                        let entity = cx.entity().downgrade();
-                                        div()
-                                            .id(format!("combobox-{label}"))
-                                            .px_2()
-                                            .h(px(28.))
-                                            .flex()
-                                            .items_center()
-                                            .text_xs()
-                                            .hover(|s| s.bg(rgb(0xf5f5f5)))
-                                            .on_click(move |_, _, cx| {
-                                                _ = entity.update(cx, |this, cx| {
-                                                    this.combobox_selection = label.into();
-                                                    this.combobox_open = false;
-                                                    cx.notify();
-                                                });
-                                            })
-                                            .child(label)
-                                    }),
-                            ),
-                        ),
-                )
-            })
+                                .child(label)
+                        }),
+                ),
+            );
+
+        Popup::new("example-combobox-popup", combobox).when(open, |this| this.content(popup))
     }
 }

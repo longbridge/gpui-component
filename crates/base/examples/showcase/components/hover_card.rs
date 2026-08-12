@@ -8,7 +8,7 @@ impl BaseShowcase {
                     .id("hover-trigger")
                     .px_3()
                     .py_1()
-                    .text_size(px(12.))
+                    .text_xs()
                     .text_color(rgb(0x171717))
                     .underline()
                     .child("Hover over gpui-base"),
@@ -18,7 +18,7 @@ impl BaseShowcase {
                     .id("hover-content")
                     .w(px(210.))
                     .p_2()
-                    .text_size(px(12.))
+                    .text_xs()
                     .bg(rgb(0xffffff))
                     .border_1()
                     .border_color(rgb(0xd4d4d4))
@@ -29,7 +29,7 @@ impl BaseShowcase {
                             .gap_2()
                             .child(
                                 div()
-                                    .size(px(28.))
+                                    .size_7()
                                     .flex()
                                     .items_center()
                                     .justify_center()

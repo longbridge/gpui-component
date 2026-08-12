@@ -3,8 +3,8 @@ use super::*;
 impl BaseShowcase {
     pub(in super::super) fn table(&self) -> impl IntoElement {
         Table::new("example-table")
-            .w(px(300.))
-            .text_size(px(12.))
+            .w_72()
+            .text_xs()
             .border_1()
             .border_color(rgb(0xe5e7eb))
             .overflow_hidden()

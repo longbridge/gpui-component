@@ -19,7 +19,7 @@ impl BaseShowcase {
                     .fallback(
                         AvatarFallback::new()
                             .flex()
-                            .size(px(32.))
+                            .size_8()
                             .items_center()
                             .justify_center()
                             .bg(rgb(background))

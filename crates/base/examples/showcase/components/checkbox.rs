@@ -6,7 +6,7 @@ const CHECK_SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 
 impl BaseShowcase {
     pub(in super::super) fn checkbox(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let checked = self.checked;
+        let checked = self.checkbox_checked;
         let entity = cx.entity().downgrade();
         Checkbox::new("example-checkbox")
             .checked(checked)
@@ -15,7 +15,7 @@ impl BaseShowcase {
             .gap_2()
             .on_change(move |state, _, _, cx| {
                 _ = entity.update(cx, |this, cx| {
-                    this.checked = state == CheckboxState::Checked;
+                    this.checkbox_checked = state == CheckboxState::Checked;
                     cx.notify();
                 });
             })
@@ -25,7 +25,7 @@ impl BaseShowcase {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .size(px(16.))
+                    .size_4()
                     .border_1()
                     .border_color(rgb(0x171717))
                     .when(checked, |this| {

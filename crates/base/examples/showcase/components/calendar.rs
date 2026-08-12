@@ -11,28 +11,28 @@ impl BaseShowcase {
             .item(|item, state, _, _| {
                 match state.kind {
                     CalendarItemKind::Previous | CalendarItemKind::Next => item
-                        .size(px(28.))
+                        .size_7()
                         .flex()
                         .items_center()
                         .justify_center()
                         .hover(|s| s.bg(rgb(0xf5f5f5))),
                     CalendarItemKind::MonthToggle | CalendarItemKind::YearToggle => item
                         .px_1()
-                        .h(px(28.))
+                        .h_7()
                         .flex()
                         .items_center()
                         .justify_center()
                         .text_xs()
                         .hover(|s| s.bg(rgb(0xf5f5f5))),
                     CalendarItemKind::Weekday => item
-                        .size(px(32.))
+                        .size_8()
                         .flex()
                         .items_center()
                         .justify_center()
                         .text_xs()
                         .text_color(rgb(0x737373)),
                     CalendarItemKind::Day => item
-                        .size(px(32.))
+                        .size_8()
                         .flex()
                         .items_center()
                         .justify_center()
@@ -49,7 +49,7 @@ impl BaseShowcase {
                         }),
                     CalendarItemKind::Month | CalendarItemKind::Year => item
                         .w(px(74.))
-                        .h(px(30.))
+                        .h_7()
                         .flex()
                         .items_center()
                         .justify_center()

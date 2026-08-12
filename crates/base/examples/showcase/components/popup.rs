@@ -1,6 +1,5 @@
 use gpui::{
-    Context, IntoElement, ParentElement as _, Styled as _, div, prelude::FluentBuilder as _, px,
-    rgb,
+    Context, IntoElement, ParentElement as _, Styled as _, div, prelude::FluentBuilder as _, rgb,
 };
 use gpui_base::{Button, Popup};
 
@@ -13,7 +12,7 @@ impl BaseShowcase {
         Popup::new(
             "example-popup",
             Button::new("popup-trigger")
-                .h(px(28.))
+                .h_7()
                 .px_3()
                 .py_0()
                 .border_1()
@@ -29,9 +28,9 @@ impl BaseShowcase {
         .when(open, |this| {
             this.content(
                 div()
-                    .w(px(240.))
+                    .w_64()
                     .p_2()
-                    .text_size(px(12.))
+                    .text_xs()
                     .bg(rgb(0xffffff))
                     .border_1()
                     .border_color(rgb(0x171717))

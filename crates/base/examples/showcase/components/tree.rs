@@ -4,17 +4,17 @@ use gpui::StyleRefinement;
 impl BaseShowcase {
     pub(in super::super) fn tree(&self) -> impl IntoElement {
         Tree::new(&self.tree)
-            .w(px(260.))
-            .h(px(188.))
+            .w_64()
+            .h_48()
             .list_style(StyleRefinement::default().flex_grow_1().size_full())
             .relative()
-            .text_size(px(13.))
+            .text_xs()
             .border_1()
             .border_color(rgb(0xd4d4d4))
             .py_1()
             .item(|_, entry, state, _, _| {
                 div()
-                    .h(px(28.))
+                    .h_7()
                     .mx_1()
                     .px_2()
                     .flex()

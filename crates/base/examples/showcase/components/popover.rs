@@ -8,7 +8,7 @@ impl BaseShowcase {
         Popover::new("example-popover")
             .trigger(
                 Button::new("popover-trigger")
-                    .h(px(28.))
+                    .h_7()
                     .px_3()
                     .py_0()
                     .flex()
@@ -22,12 +22,12 @@ impl BaseShowcase {
                 let state = cx.entity().downgrade();
                 div()
                     .id("popover-content")
-                    .w(px(240.))
+                    .w_64()
                     .p_2()
                     .flex()
                     .flex_col()
                     .gap_2()
-                    .text_size(px(12.))
+                    .text_xs()
                     .bg(rgb(0xffffff))
                     .border_1()
                     .border_color(rgb(0xd4d4d4))

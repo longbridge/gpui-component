@@ -9,7 +9,7 @@ impl BaseShowcase {
             .child(
                 Button::new("primary-button")
                     .px_3()
-                    .h(px(30.))
+                    .h_7()
                     .flex()
                     .items_center()
                     .text_xs()
@@ -23,7 +23,7 @@ impl BaseShowcase {
             .child(
                 Button::new("secondary-button")
                     .px_3()
-                    .h(px(30.))
+                    .h_7()
                     .flex()
                     .items_center()
                     .text_xs()

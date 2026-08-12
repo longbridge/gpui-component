@@ -2,13 +2,13 @@ use super::*;
 
 impl BaseShowcase {
     pub(in super::super) fn sheet(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let open = !self.checked;
+        let open = self.sheet_open;
         let entity = cx.entity().downgrade();
         let open_sheet = entity.clone();
         let trigger = Button::new("open-sheet")
-            .h(px(30.))
+            .h_7()
             .px_2()
-            .text_size(px(13.))
+            .text_xs()
             .flex()
             .items_center()
             .justify_center()
@@ -18,16 +18,15 @@ impl BaseShowcase {
             .child("Open settings")
             .on_click(move |_, _, cx| {
                 _ = open_sheet.update(cx, |this, cx| {
-                    this.checked = false;
+                    this.sheet_open = true;
                     cx.notify();
                 });
             });
 
         div()
-            .relative()
             .size_full()
-            .min_h(px(260.))
-            .text_size(px(13.))
+            .min_h_64()
+            .text_xs()
             .flex()
             .items_center()
             .justify_center()
@@ -35,13 +34,11 @@ impl BaseShowcase {
             .when(open, |this| {
                 this.child(
                     Sheet::new(cx)
-                        .absolute()
-                        .inset_0()
                         .request_close({
                             let entity = entity.clone();
                             move |_, cx| {
                                 _ = entity.update(cx, |this, cx| {
-                                    this.checked = true;
+                                    this.sheet_open = false;
                                     cx.notify();
                                 });
                             }
@@ -56,7 +53,7 @@ impl BaseShowcase {
                                 .w(px(210.))
                                 .p_3()
                                 .bg(rgb(0xffffff))
-                                .border_l_1()
+                                .border_1()
                                 .border_color(rgb(0x171717))
                                 .child(
                                     div()
@@ -67,7 +64,7 @@ impl BaseShowcase {
                                     div().mt_4().child("Workspace name").child(
                                         div()
                                             .mt_1()
-                                            .h(px(30.))
+                                            .h_7()
                                             .px_2()
                                             .flex()
                                             .items_center()
@@ -93,19 +90,19 @@ impl BaseShowcase {
                                 .child(
                                     div().mt_3().flex().justify_end().child(
                                         Button::new("close-sheet")
-                                            .h(px(28.))
+                                            .h_6()
                                             .px_3()
                                             .flex()
                                             .items_center()
                                             .justify_center()
-                                            .border_1()
-                                            .border_color(rgb(0x171717))
+                                            .bg(gpui::black())
+                                            .text_color(gpui::white())
                                             .child("Done")
                                             .on_click({
                                                 let entity = entity.clone();
                                                 move |_, _, cx| {
                                                     _ = entity.update(cx, |this, cx| {
-                                                        this.checked = true;
+                                                        this.sheet_open = false;
                                                         cx.notify();
                                                     });
                                                 }

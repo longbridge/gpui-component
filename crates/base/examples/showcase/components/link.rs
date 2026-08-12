@@ -1,4 +1,4 @@
-use gpui::{IntoElement, ParentElement as _, Styled as _, div, px, rgb};
+use gpui::{IntoElement, ParentElement as _, Styled as _, div, rgb};
 use gpui_base::Link;
 
 use super::super::BaseShowcase;
@@ -6,17 +6,17 @@ use super::super::BaseShowcase;
 impl BaseShowcase {
     pub(in super::super) fn link(&self) -> impl IntoElement {
         div()
-            .w(px(220.))
+            .w_56()
             .flex()
             .flex_col()
             .gap_2()
-            .text_size(px(12.))
+            .text_xs()
             .child("Navigation is application-owned")
             .child(
                 Link::new("example-link")
                     .href("/base/components/link")
                     .open_with(|href, _, _, cx| cx.open_url(href))
-                    .h(px(28.))
+                    .h_7()
                     .px_3()
                     .py_0()
                     .flex()
@@ -29,7 +29,7 @@ impl BaseShowcase {
                 Link::new("disabled-link")
                     .href("/disabled")
                     .disabled(true)
-                    .h(px(28.))
+                    .h_7()
                     .px_3()
                     .py_0()
                     .flex()

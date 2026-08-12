@@ -2,19 +2,19 @@ use super::*;
 
 impl BaseShowcase {
     pub(in super::super) fn toast(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let visible = !self.checked;
+        let visible = self.toast_visible;
         let entity = cx.entity().downgrade();
         div()
-            .w(px(280.))
+            .w_72()
             .h(px(158.))
-            .text_size(px(12.))
+            .text_xs()
             .relative()
             .flex()
             .items_center()
             .justify_center()
             .child(
                 Button::new("show-toast")
-                    .h(px(30.))
+                    .h_7()
                     .px_2()
                     .flex()
                     .items_center()
@@ -27,7 +27,7 @@ impl BaseShowcase {
                         let show_entity = entity.clone();
                         move |_, _, cx| {
                             _ = show_entity.update(cx, |this, cx| {
-                                this.checked = false;
+                                this.toast_visible = true;
                                 cx.notify();
                             });
                         }
@@ -40,7 +40,7 @@ impl BaseShowcase {
                         .absolute()
                         .right_0()
                         .bottom_0()
-                        .w(px(260.))
+                        .w_64()
                         .p_2()
                         .border_1()
                         .border_color(rgb(0x171717))
@@ -56,7 +56,7 @@ impl BaseShowcase {
                                 )
                                 .child(
                                     Button::new("dismiss-toast")
-                                        .size(px(24.))
+                                        .size_6()
                                         .flex()
                                         .items_center()
                                         .justify_center()
@@ -65,7 +65,7 @@ impl BaseShowcase {
                                             let entity = entity.clone();
                                             move |_, _, cx| {
                                                 _ = entity.update(cx, |this, cx| {
-                                                    this.checked = true;
+                                                    this.toast_visible = false;
                                                     cx.notify();
                                                 });
                                             }

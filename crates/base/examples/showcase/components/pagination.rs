@@ -20,13 +20,13 @@ impl BaseShowcase {
             .flex()
             .items_center()
             .gap_2()
-            .text_size(px(12.))
+            .text_xs()
             .children(items.into_iter().map(move |item| {
                 match item {
                     PaginationItem::Page(page) => {
                         let state = state.clone();
                         Button::new(("page", page))
-                            .size(px(28.))
+                            .size_7()
                             .p_0()
                             .flex()
                             .items_center()
@@ -42,7 +42,7 @@ impl BaseShowcase {
                     }
                     PaginationItem::Ellipsis(_) => div()
                         .w(px(20.))
-                        .h(px(28.))
+                        .h_7()
                         .flex()
                         .items_center()
                         .justify_center()

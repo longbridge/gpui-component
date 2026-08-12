@@ -2,18 +2,18 @@ use super::*;
 
 impl BaseShowcase {
     pub(in super::super) fn toggle(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let pressed = self.checked;
+        let pressed = self.toggle_pressed;
         let entity = cx.entity().downgrade();
         Toggle::new("example-toggle")
             .pressed(pressed)
             .on_change(move |next, _, _, cx| {
                 _ = entity.update(cx, |this, cx| {
-                    this.checked = next;
+                    this.toggle_pressed = next;
                     cx.notify();
                 });
             })
-            .size(px(30.))
-            .text_size(px(13.))
+            .size_7()
+            .text_xs()
             .flex()
             .items_center()
             .justify_center()

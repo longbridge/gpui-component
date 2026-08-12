@@ -6,7 +6,7 @@ use std::{
 use gpui::{
     AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
     MouseButton, ParentElement, Pixels, RenderOnce, Role, StatefulInteractiveElement as _,
-    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px,
+    StyleRefinement, Styled, Window, deferred, div, prelude::FluentBuilder as _, px,
 };
 use smallvec::SmallVec;
 
@@ -488,83 +488,92 @@ impl RenderOnce for Dialog {
         let confirm_change = self.on_open_change.clone();
         let backdrop_change = self.on_open_change.clone();
 
-        div()
-            .id(("dialog-host", self.layer))
-            .role(self.role)
-            .track_focus(&self.focus)
-            .focus_trap(format!("dialog-{}", self.layer), &self.focus)
-            .when(self.keyboard, |this| this.key_context(CONTEXT))
-            .map(|this| {
-                let request_cancel = request_close.clone();
-                let request_confirm = request_close.clone();
-                let closed_cancel = closed.clone();
-                this.on_action(move |_: &Cancel, window, cx| {
-                    let event = ClickEvent::default();
-                    if cancel(&event, window, cx) {
-                        request_open_change(
-                            &escape_handle,
-                            &escape_change,
-                            false,
-                            DialogChangeReason::Cancel,
-                            window,
-                            cx,
-                        );
-                        request_cancel(false, window, cx);
-                        closed_cancel(&event, window, cx);
-                    }
+        deferred(
+            div()
+                .id(("dialog-host", self.layer))
+                .absolute()
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .role(self.role)
+                .track_focus(&self.focus)
+                .focus_trap(format!("dialog-{}", self.layer), &self.focus)
+                .when(self.keyboard, |this| this.key_context(CONTEXT))
+                .map(|this| {
+                    let request_cancel = request_close.clone();
+                    let request_confirm = request_close.clone();
+                    let closed_cancel = closed.clone();
+                    this.on_action(move |_: &Cancel, window, cx| {
+                        let event = ClickEvent::default();
+                        if cancel(&event, window, cx) {
+                            request_open_change(
+                                &escape_handle,
+                                &escape_change,
+                                false,
+                                DialogChangeReason::Cancel,
+                                window,
+                                cx,
+                            );
+                            request_cancel(false, window, cx);
+                            closed_cancel(&event, window, cx);
+                        }
+                    })
+                    .on_action(move |_: &Confirm, window, cx| {
+                        let event = ClickEvent::default();
+                        if confirm(&event, window, cx) {
+                            request_open_change(
+                                &confirm_handle,
+                                &confirm_change,
+                                false,
+                                DialogChangeReason::Confirm,
+                                window,
+                                cx,
+                            );
+                            request_confirm(true, window, cx);
+                            closed(&event, window, cx);
+                        }
+                    })
                 })
-                .on_action(move |_: &Confirm, window, cx| {
-                    let event = ClickEvent::default();
-                    if confirm(&event, window, cx) {
-                        request_open_change(
-                            &confirm_handle,
-                            &confirm_change,
-                            false,
-                            DialogChangeReason::Confirm,
-                            window,
-                            cx,
-                        );
-                        request_confirm(true, window, cx);
-                        closed(&event, window, cx);
-                    }
+                .when_some(self.backdrop, |this, backdrop| {
+                    let cancel = self.on_cancel.clone();
+                    let closed = self.on_close.clone();
+                    let request_close = request_close.clone();
+                    this.child(
+                        div()
+                            .on_any_mouse_down(move |event, window, cx| {
+                                if event.position.y < dismiss_below_y {
+                                    return;
+                                }
+                                let button = event.button;
+                                cx.stop_propagation();
+                                let event = ClickEvent::default();
+                                if button == MouseButton::Left
+                                    && overlay_closable
+                                    && cancel(&event, window, cx)
+                                {
+                                    request_open_change(
+                                        &backdrop_handle,
+                                        &backdrop_change,
+                                        false,
+                                        DialogChangeReason::BackdropPress,
+                                        window,
+                                        cx,
+                                    );
+                                    request_close(false, window, cx);
+                                    closed(&event, window, cx);
+                                }
+                            })
+                            .child(backdrop),
+                    )
                 })
-            })
-            .when_some(self.backdrop, |this, backdrop| {
-                let cancel = self.on_cancel.clone();
-                let closed = self.on_close.clone();
-                let request_close = request_close.clone();
-                this.child(
-                    div()
-                        .on_any_mouse_down(move |event, window, cx| {
-                            if event.position.y < dismiss_below_y {
-                                return;
-                            }
-                            let button = event.button;
-                            cx.stop_propagation();
-                            let event = ClickEvent::default();
-                            if button == MouseButton::Left
-                                && overlay_closable
-                                && cancel(&event, window, cx)
-                            {
-                                request_open_change(
-                                    &backdrop_handle,
-                                    &backdrop_change,
-                                    false,
-                                    DialogChangeReason::BackdropPress,
-                                    window,
-                                    cx,
-                                );
-                                request_close(false, window, cx);
-                                closed(&event, window, cx);
-                            }
-                        })
-                        .child(backdrop),
-                )
-            })
-            .children(self.popup)
-            .children(self.children)
-            .refine_style(&self.style)
-            .into_any_element()
+                .children(self.popup)
+                .children(self.children)
+                .refine_style(&self.style)
+                .into_any_element(),
+        )
+        .with_priority(10 + self.layer)
+        .into_any_element()
     }
 }
 

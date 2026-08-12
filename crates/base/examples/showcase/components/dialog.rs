@@ -10,7 +10,7 @@ impl BaseShowcase {
         div()
             .child(
                 Button::new("open-dialog")
-                    .h(px(28.))
+                    .h_7()
                     .px_3()
                     .py_0()
                     .flex()
@@ -44,9 +44,9 @@ impl BaseShowcase {
                     )
                     .popup(
                         DialogPopup::new()
-                            .w(px(280.))
+                            .w_72()
                             .p_3()
-                            .text_size(px(12.))
+                            .text_xs()
                             .bg(rgb(0xffffff))
                             .border_1()
                             .border_color(rgb(0xd4d4d4))
@@ -66,7 +66,7 @@ impl BaseShowcase {
                                 Input::new("dialog-name")
                                     .mt_2()
                                     .w_full()
-                                    .h(px(30.))
+                                    .h_7()
                                     .px_2()
                                     .border_1()
                                     .border_color(rgb(0xd4d4d4))
@@ -87,7 +87,7 @@ impl BaseShowcase {
                                     .child(
                                         gpui_base::DialogClose::new().child(
                                             Button::new("dialog-cancel")
-                                                .h(px(28.))
+                                                .h_7()
                                                 .px_3()
                                                 .py_0()
                                                 .border_1()
@@ -97,7 +97,7 @@ impl BaseShowcase {
                                     )
                                     .child(
                                         Button::new("dialog-save")
-                                            .h(px(28.))
+                                            .h_7()
                                             .px_3()
                                             .py_0()
                                             .bg(rgb(0x171717))

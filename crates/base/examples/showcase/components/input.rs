@@ -6,12 +6,12 @@ impl BaseShowcase {
         let input_state = self.input.clone();
         let multiline_state = self.multiline_input.clone();
         div()
-            .w(px(220.))
+            .w_56()
             .flex()
             .flex_col()
             .items_start()
             .gap_2()
-            .text_size(px(12.))
+            .text_xs()
             .child(
                 div()
                     .w_full()
@@ -23,7 +23,7 @@ impl BaseShowcase {
                     .child(
                         Input::new("example-input")
                             .w_full()
-                            .h(px(28.))
+                            .h_7()
                             .px_2()
                             .flex()
                             .items_center()
@@ -49,10 +49,13 @@ impl BaseShowcase {
                     .child(
                         Input::new("example-multiline-input")
                             .w_full()
-                            .h(px(68.))
+                            .h_16()
                             .px_2()
                             .py_2()
-                            .overflow_y_scroll()
+                            // InputState owns the multiline scroll position. Making this
+                            // frame scrollable as well gives wheel events two competing
+                            // coordinate spaces and breaks caret hit-testing after a scroll.
+                            .overflow_hidden()
                             .border_1()
                             .border_color(rgb(0xd4d4d4))
                             .styles(|styles| {
@@ -61,7 +64,7 @@ impl BaseShowcase {
                             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                 multiline_state.update(cx, |state, cx| state.focus(window, cx));
                             })
-                            .child(self.multiline_input.clone()),
+                            .child(div().size_full().child(self.multiline_input.clone())),
                     ),
             )
     }

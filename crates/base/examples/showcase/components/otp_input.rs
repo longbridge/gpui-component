@@ -1,4 +1,4 @@
-use gpui::{Context, IntoElement, ParentElement as _, Styled as _, div, px, rgb};
+use gpui::{Context, IntoElement, ParentElement as _, Styled as _, div, rgb};
 use gpui_base::OtpInput;
 
 use super::super::BaseShowcase;
@@ -9,11 +9,11 @@ impl BaseShowcase {
         let active = value.len().min(5);
 
         div()
-            .w(px(220.))
+            .w_56()
             .flex()
             .flex_col()
             .gap_1()
-            .text_size(px(12.))
+            .text_xs()
             .child(div().text_xs().child("Verification code"))
             .child(
                 div().child(
@@ -22,7 +22,7 @@ impl BaseShowcase {
                         .gap_1()
                         .children((0..6).map(|ix| {
                             div()
-                                .size(px(30.))
+                                .size_7()
                                 .flex()
                                 .items_center()
                                 .justify_center()

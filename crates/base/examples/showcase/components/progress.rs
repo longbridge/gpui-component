@@ -6,11 +6,11 @@ use super::super::BaseShowcase;
 impl BaseShowcase {
     pub(in super::super) fn progress(&self) -> impl IntoElement {
         div()
-            .w(px(260.))
+            .w_64()
             .flex()
             .flex_col()
             .gap_2()
-            .text_size(px(12.))
+            .text_xs()
             .child(
                 div()
                     .flex()

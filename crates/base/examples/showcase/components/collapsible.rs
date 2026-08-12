@@ -6,7 +6,7 @@ impl BaseShowcase {
         let entity = cx.entity().downgrade();
         Collapsible::new()
             .open(open)
-            .w(px(240.))
+            .w_64()
             .child(
                 div()
                     .flex()
@@ -15,7 +15,7 @@ impl BaseShowcase {
                     .child(div().text_xs().child("@gpui/base · 3 repositories"))
                     .child(
                         Button::new("collapsible-trigger")
-                            .size(px(28.))
+                            .size_7()
                             .border_1()
                             .border_color(rgb(0xd4d4d4))
                             .flex()
@@ -34,7 +34,7 @@ impl BaseShowcase {
                 div()
                     .mt_2()
                     .px_2()
-                    .h(px(30.))
+                    .h_7()
                     .flex()
                     .items_center()
                     .border_1()
@@ -46,7 +46,7 @@ impl BaseShowcase {
                 ["gpui-base", "gpui-storybook"].into_iter().map(|name| {
                     div()
                         .px_2()
-                        .h(px(30.))
+                        .h_7()
                         .flex()
                         .items_center()
                         .border_1()

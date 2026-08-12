@@ -1,13 +1,13 @@
 use super::*;
+use gpui::relative;
 
 impl BaseShowcase {
     pub(in super::super) fn slider(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let percentage = self.slider.read(cx).percentage().end;
-        let track_width = 220.;
         let thumb_size = 14.;
         div()
-            .w(px(220.))
-            .text_size(px(13.))
+            .w_56()
+            .text_xs()
             .child(
                 div()
                     .mb_2()
@@ -17,7 +17,7 @@ impl BaseShowcase {
                     .child("Drag to adjust"),
             )
             .child(
-                Slider::new(&self.slider).w_full().h(px(28.)).child(
+                Slider::new(&self.slider).w_full().h_7().child(
                     SliderTrack::new(&self.slider)
                         .relative()
                         .w_full()
@@ -34,14 +34,17 @@ impl BaseShowcase {
                         .child(
                             SliderIndicator::new(&self.slider)
                                 .absolute()
-                                .inset_0()
+                                .top(px(13.))
+                                .left_0()
+                                .w_full()
+                                .h(px(2.))
                                 .child(
                                     div()
                                         .absolute()
-                                        .top(px(13.))
+                                        .top_0()
+                                        .bottom_0()
                                         .left_0()
-                                        .w(px(track_width * percentage))
-                                        .h(px(2.))
+                                        .right(relative(1. - percentage))
                                         .bg(rgb(0x171717)),
                                 ),
                         )
@@ -49,8 +52,8 @@ impl BaseShowcase {
                             SliderThumb::new(&self.slider)
                                 .absolute()
                                 .top(px(7.))
-                                .left(px((track_width * percentage - thumb_size / 2.)
-                                    .clamp(0., track_width - thumb_size)))
+                                .left(relative(percentage))
+                                .ml(px(-thumb_size / 2.))
                                 .size(px(thumb_size))
                                 .bg(rgb(0xffffff))
                                 .border_1()

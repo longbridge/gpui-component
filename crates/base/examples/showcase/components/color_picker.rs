@@ -12,7 +12,7 @@ impl BaseShowcase {
         let selected = self.color_index;
         let entity = cx.entity().downgrade();
         div()
-            .w(px(220.))
+            .w_56()
             .child(
                 div()
                     .flex()
@@ -20,7 +20,7 @@ impl BaseShowcase {
                     .gap_2()
                     .child(
                         div()
-                            .size(px(30.))
+                            .size_7()
                             .bg(rgb(colors[selected].0))
                             .border_1()
                             .border_color(rgb(0x171717)),
@@ -36,7 +36,7 @@ impl BaseShowcase {
                         let entity = entity.clone();
                         div()
                             .id(format!("color-{index}"))
-                            .size(px(28.))
+                            .size_7()
                             .bg(rgb(color))
                             .border_1()
                             .border_color(rgb(if index == selected {

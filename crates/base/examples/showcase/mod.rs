@@ -14,10 +14,10 @@ use gpui_base::{
     AlertDialogPopup, AlertDialogTitle, Avatar, AvatarFallback, Button, Calendar, CalendarItemKind,
     CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible, Combobox, DatePicker,
     Dialog, DialogBackdrop, DialogDescription, DialogPopup, DialogTitle, HoverCard, Input,
-    OtpState, Scrollbar, Select, Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch,
-    SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-    Tabs, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem, TreeState,
-    v_virtual_list,
+    OtpState, Popup, Scrollbar, Select, Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack,
+    Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead, TableHeader,
+    TableRow, Tabs, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
+    TreeState, v_virtual_list,
 };
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
@@ -64,8 +64,17 @@ pub const COMPONENTS: &[&str] = &[
 
 pub struct BaseShowcase {
     component: String,
-    checked: bool,
+    checkbox_checked: bool,
+    radio_selected: usize,
+    switch_checked: bool,
+    toggle_pressed: bool,
+    toggle_group_selection: u8,
     selected_tab: usize,
+    select_open: bool,
+    select_index: usize,
+    sheet_open: bool,
+    toast_visible: bool,
+    tooltip_visible: bool,
     accordion_items: [bool; 3],
     alert_dialog_open: bool,
     collapsible_open: bool,
@@ -85,6 +94,7 @@ pub struct BaseShowcase {
     tree: gpui::Entity<TreeState>,
     date_focus: gpui::FocusHandle,
     scroll: ScrollHandle,
+    example_scroll: ScrollHandle,
 }
 
 impl BaseShowcase {
@@ -148,8 +158,17 @@ impl BaseShowcase {
 
         Self {
             component,
-            checked: true,
+            checkbox_checked: true,
+            radio_selected: 0,
+            switch_checked: true,
+            toggle_pressed: true,
+            toggle_group_selection: 0,
             selected_tab: 0,
+            select_open: false,
+            select_index: 0,
+            sheet_open: false,
+            toast_visible: false,
+            tooltip_visible: false,
             accordion_items: [true, false, false],
             alert_dialog_open: false,
             collapsible_open: false,
@@ -184,6 +203,7 @@ impl BaseShowcase {
             }),
             date_focus: cx.focus_handle(),
             scroll: ScrollHandle::new(),
+            example_scroll: ScrollHandle::new(),
         }
     }
 }
@@ -235,22 +255,19 @@ impl Render for BaseShowcase {
                     div()
                         .px_3()
                         .py_2()
-                        .rounded(px(7.))
                         .border_1()
                         .border_color(rgb(0xd4d4d4))
                         .child(*name)
                 }))
                 .into_any_element(),
         };
-        let fills_stage = self.component == "sheet";
-
         div()
             .size_full()
             .flex()
             .flex_col()
             .bg(rgb(0xffffff))
             .text_color(rgb(0x171717))
-            .text_size(px(12.))
+            .text_xs()
             .font_family("Inter Variable")
             .child(
                 div()
@@ -264,17 +281,10 @@ impl Render for BaseShowcase {
                             .min_h_full()
                             .w_full()
                             .flex()
-                            .flex_col()
                             .items_center()
+                            .justify_center()
                             .p_4()
-                            .child(div().flex_1().min_h_0())
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .when(fills_stage, |this| this.size_full())
-                                    .child(content),
-                            )
-                            .child(div().flex_1().min_h_0()),
+                            .child(div().flex_none().child(content)),
                     ),
             )
     }

@@ -2,11 +2,11 @@ use super::*;
 
 impl BaseShowcase {
     pub(in super::super) fn switch(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let checked = self.checked;
+        let checked = self.switch_checked;
         let entity = cx.entity().downgrade();
         div()
-            .w(px(260.))
-            .text_size(px(13.))
+            .w_64()
+            .text_xs()
             .flex()
             .items_center()
             .justify_between()
@@ -14,7 +14,7 @@ impl BaseShowcase {
                 div().child("Automatic updates").child(
                     div()
                         .mt_1()
-                        .text_size(px(12.))
+                        .text_xs()
                         .text_color(rgb(0x737373))
                         .child("Install stable releases automatically."),
                 ),
@@ -24,7 +24,7 @@ impl BaseShowcase {
                     .checked(checked)
                     .on_change(move |next, _, _, cx| {
                         _ = entity.update(cx, |this, cx| {
-                            this.checked = next;
+                            this.switch_checked = next;
                             cx.notify();
                         });
                     })
@@ -41,7 +41,7 @@ impl BaseShowcase {
                             })
                             .child(
                                 SwitchThumb::new(checked)
-                                    .size(px(16.))
+                                    .size_4()
                                     .bg(rgb(0xffffff))
                                     .ml(if checked { px(16.) } else { px(0.) }),
                             ),

@@ -42,7 +42,7 @@ impl BaseShowcase {
                                     .flex()
                                     .items_center()
                                     .justify_between()
-                                    .h(px(30.))
+                                    .h_7()
                                     .border_b_1()
                                     .border_color(rgb(0xd4d4d4))
                                     .text_xs()

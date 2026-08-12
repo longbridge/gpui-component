@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, ClickEvent, FocusHandle, InteractiveElement as _, IntoElement, KeyBinding,
-    MouseButton, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, div,
+    MouseButton, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, deferred, div,
     prelude::FluentBuilder as _,
 };
 
@@ -118,40 +118,45 @@ impl RenderOnce for Sheet {
         let escape_request = request_close.clone();
         let escape_notify = on_close.clone();
 
-        self.base
-            .id("sheet-host")
-            .key_context(CONTEXT)
-            .track_focus(&self.focus)
-            .focus_trap("sheet", &self.focus)
-            .on_action(move |_: &Cancel, window, cx| {
-                cx.propagate();
-                close(&escape_request, &escape_notify, window, cx);
-            })
-            .when_some(self.overlay, |this, overlay| {
-                let request_close = request_close.clone();
-                let on_close = on_close.clone();
-                let dismiss_before_y = self.dismiss_before_y;
-                let overlay_interactive = self.overlay_interactive;
-                let overlay_closable = self.overlay_closable;
-                this.child(
-                    div()
-                        .on_any_mouse_down(move |event, window, cx| {
-                            if !overlay_interactive {
-                                return;
-                            }
-                            if dismiss_before_y.is_some_and(|top| event.position.y < top) {
-                                return;
-                            }
-                            cx.stop_propagation();
-                            if overlay_closable && event.button == MouseButton::Left {
-                                close(&request_close, &on_close, window, cx);
-                            }
-                        })
-                        .child(overlay),
-                )
-            })
-            .children(self.surface)
-            .refine_style(&self.style)
+        deferred(
+            self.base
+                .id("sheet-host")
+                .absolute()
+                .inset_0()
+                .key_context(CONTEXT)
+                .track_focus(&self.focus)
+                .focus_trap("sheet", &self.focus)
+                .on_action(move |_: &Cancel, window, cx| {
+                    cx.propagate();
+                    close(&escape_request, &escape_notify, window, cx);
+                })
+                .when_some(self.overlay, |this, overlay| {
+                    let request_close = request_close.clone();
+                    let on_close = on_close.clone();
+                    let dismiss_before_y = self.dismiss_before_y;
+                    let overlay_interactive = self.overlay_interactive;
+                    let overlay_closable = self.overlay_closable;
+                    this.child(
+                        div()
+                            .on_any_mouse_down(move |event, window, cx| {
+                                if !overlay_interactive {
+                                    return;
+                                }
+                                if dismiss_before_y.is_some_and(|top| event.position.y < top) {
+                                    return;
+                                }
+                                cx.stop_propagation();
+                                if overlay_closable && event.button == MouseButton::Left {
+                                    close(&request_close, &on_close, window, cx);
+                                }
+                            })
+                            .child(overlay),
+                    )
+                })
+                .children(self.surface)
+                .refine_style(&self.style),
+        )
+        .with_priority(10)
     }
 }
 

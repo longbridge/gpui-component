@@ -13,7 +13,7 @@ impl BaseShowcase {
             .child(
                 Button::new("open-alert-dialog")
                     .px_3()
-                    .h(px(30.))
+                    .h_7()
                     .flex()
                     .items_center()
                     .text_xs()
@@ -54,14 +54,12 @@ impl BaseShowcase {
                     )
                     .popup(
                         AlertDialogPopup::new()
-                            .absolute()
-                            .inset_0()
                             .flex()
                             .items_center()
                             .justify_center()
                             .child(
                                 div()
-                                    .w(px(280.))
+                                    .w_72()
                                     .p_3()
                                     .bg(rgb(0xffffff))
                                     .border_1()
@@ -88,7 +86,7 @@ impl BaseShowcase {
                                             .child(AlertDialogCancel::new().child(
                                                 Button::new("cancel-delete")
                                                     .px_3()
-                                                    .h(px(30.))
+                                                    .h_7()
                                                     .flex()
                                                     .items_center()
                                                     .text_xs()
@@ -105,7 +103,7 @@ impl BaseShowcase {
                                             .child(AlertDialogAction::new().child(
                                                 Button::new("confirm-delete")
                                                     .px_3()
-                                                    .h(px(30.))
+                                                    .h_7()
                                                     .flex()
                                                     .items_center()
                                                     .text_xs()
