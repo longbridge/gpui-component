@@ -7,7 +7,6 @@ use gpui::{
 };
 
 use crate::input::InputState;
-pub use crate::input::NumberStep;
 use crate::{Button, Input, StyledExt as _};
 
 actions!(number_input, [Increment, Decrement]);
@@ -25,6 +24,39 @@ pub(crate) fn init(cx: &mut App) {
 pub enum StepAction {
     Decrement,
     Increment,
+}
+
+/// Strategy used by numeric editors when stepping their value.
+#[derive(Clone)]
+pub enum NumberStep {
+    Fixed(f64),
+    ByValue(Rc<dyn Fn(f64, StepAction, &mut gpui::Context<InputState>) -> f64>),
+}
+
+impl NumberStep {
+    pub fn by_value(
+        f: impl Fn(f64, StepAction, &mut gpui::Context<InputState>) -> f64 + 'static,
+    ) -> Self {
+        Self::ByValue(Rc::new(f))
+    }
+
+    pub(crate) fn value(
+        &self,
+        current: f64,
+        action: StepAction,
+        cx: &mut gpui::Context<InputState>,
+    ) -> f64 {
+        match self {
+            Self::Fixed(step) => *step,
+            Self::ByValue(f) => f(current, action, cx),
+        }
+    }
+}
+
+impl From<f64> for NumberStep {
+    fn from(step: f64) -> Self {
+        Self::Fixed(step)
+    }
 }
 
 pub enum NumberInputEvent {

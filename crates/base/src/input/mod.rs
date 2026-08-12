@@ -1,11 +1,9 @@
+use crate::{StyledExt as _, theme::ActiveTheme as _};
 use gpui::{
     AnyElement, App, Div, ElementId, InteractiveElement, Interactivity, IntoElement, ParentElement,
     RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Window,
     div, prelude::FluentBuilder as _,
 };
-use std::rc::Rc;
-
-use crate::{StyledExt as _, theme::ActiveTheme as _};
 
 /// Character used by masked editor modes.
 pub(crate) const MASK_CHAR: char = '•';
@@ -26,6 +24,7 @@ mod mode;
 mod movement;
 #[cfg(target_os = "macos")]
 mod native;
+mod native_menu;
 mod rope_ext;
 mod search;
 mod selection;
@@ -35,7 +34,7 @@ pub(crate) fn init(cx: &mut App) {
     state::init(cx);
 }
 
-pub use crate::number_input::NumberInputEvent;
+pub use crate::number_input::{NumberInputEvent, NumberStep};
 pub use cursor::Selection;
 pub use decorations::{TextDecoration, TextDecorationCollection};
 pub use diagnostics::{
@@ -60,6 +59,7 @@ pub use mask_pattern::MaskPattern;
 #[cfg(target_os = "macos")]
 #[doc(hidden)]
 pub use native::set_text_content_type;
+pub use native_menu::{NativeMenu, NativeMenuItem};
 pub use rope_ext::{InputEdit, Point, RopeExt, RopeLines};
 pub use ropey::Rope;
 pub use search::{SearchMatcher, SearchSession};
@@ -72,80 +72,6 @@ pub enum InputSize {
     #[default]
     Medium,
     Large,
-}
-
-/// Strategy used by numeric editors when stepping their value.
-#[derive(Clone)]
-pub enum NumberStep {
-    Fixed(f64),
-    ByValue(Rc<dyn Fn(f64, crate::StepAction, &mut gpui::Context<InputState>) -> f64>),
-}
-
-impl NumberStep {
-    pub fn by_value(
-        f: impl Fn(f64, crate::StepAction, &mut gpui::Context<InputState>) -> f64 + 'static,
-    ) -> Self {
-        Self::ByValue(Rc::new(f))
-    }
-
-    pub(crate) fn value(
-        &self,
-        current: f64,
-        action: crate::StepAction,
-        cx: &mut gpui::Context<InputState>,
-    ) -> f64 {
-        match self {
-            Self::Fixed(step) => *step,
-            Self::ByValue(f) => f(current, action, cx),
-        }
-    }
-}
-
-impl From<f64> for NumberStep {
-    fn from(step: f64) -> Self {
-        Self::Fixed(step)
-    }
-}
-
-/// Presentation-independent context-menu model produced by the editor.
-#[derive(Default)]
-pub struct NativeMenu {
-    pub items: Vec<NativeMenuItem>,
-}
-
-pub enum NativeMenuItem {
-    Separator,
-    Action {
-        label: SharedString,
-        disabled: bool,
-        action: Box<dyn gpui::Action>,
-    },
-}
-
-impl NativeMenu {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn menu(self, label: impl Into<SharedString>, action: Box<dyn gpui::Action>) -> Self {
-        self.menu_with_disabled(label, false, action)
-    }
-    pub fn menu_with_disabled(
-        mut self,
-        label: impl Into<SharedString>,
-        disabled: bool,
-        action: Box<dyn gpui::Action>,
-    ) -> Self {
-        self.items.push(NativeMenuItem::Action {
-            label: label.into(),
-            disabled,
-            action,
-        });
-        self
-    }
-    pub fn separator(mut self) -> Self {
-        self.items.push(NativeMenuItem::Separator);
-        self
-    }
 }
 
 /// Semantic content type used by text inputs, password managers, and autofill.
