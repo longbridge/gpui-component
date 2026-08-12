@@ -44,8 +44,25 @@ impl InputState {
         direction: Option<MoveDirection>,
         cx: &mut Context<Self>,
     ) {
+      self.move_to_with_affinity(offset, direction, false, cx);
+    }
+
+    /// Like [`Self::move_to`], but also sets the caret's line-end affinity in the same call.
+    ///
+    /// Used by mouse click placement: when a click resolves to the wrap boundary of a non-final
+    /// wrapped sub-line, passing `line_end_affinity: true` renders the caret at the end of that
+    /// visual line instead of the start of the next one. Folding this into `move_to` itself (rather
+    /// than setting the field after a separate `move_to` call) means a caller can't move the cursor
+    /// and forget to apply the affinity.
+    pub(crate) fn move_to_with_affinity(
+        &mut self,
+        offset: usize,
+        direction: Option<MoveDirection>,
+        line_end_affinity: bool,
+        cx: &mut Context<Self>,
+    ) {
         let offset = offset.clamp(0, self.text.len());
-        self.cursor_line_end_affinity = false;
+        self.cursor_line_end_affinity = line_end_affinity;
         self.selected_range = (offset..offset).into();
         self.scroll_to(offset, direction, cx);
         self.pause_blink_cursor(cx);
@@ -108,7 +125,7 @@ impl InputState {
 
             // If in visible range, prefer to use position to get column.
             if let Some(line) = last_layout.line(next_point.row) {
-                if let Some(x) = line.closest_index_for_position(
+                if let Some(x) = line.closest_row_index_for_position(
                     Point {
                         x: preferred_x,
                         y: next_display_point.local_row * last_layout.line_height,
@@ -235,8 +252,7 @@ impl InputState {
     pub(super) fn end(&mut self, _: &MoveEnd, _: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         let offset = self.end_of_line();
-        self.move_to(offset, Some(MoveDirection::Down), cx);
-        self.cursor_line_end_affinity = true;
+        self.move_to_with_affinity(offset, Some(MoveDirection::Down), true, cx);
     }
 
     pub(super) fn move_to_start(
