@@ -481,7 +481,8 @@ checking the component milestone:
   shallow Store/Lifecycle/Viewport interfaces were removed. Dock remains UI-owned.
 - 2026-08-12: Notification motion follows shadcn's Sonner implementation: 400ms
   CSS-ease entry/reflow, 200ms exit/unmount, 14px stack gap, stable keyed height
-  measurement, and equal-width collapsed layers. It moves along the
+  measurement, and ReUI/Sonner's three visible collapsed layers at 100%, 95%,
+  and 90% width. Older layers fade out until expansion. It moves along the
   configured viewport edge and remains mounted for its complete exit animation.
 - 2026-08-12: Base `ToastStack` now hides variable-height measurement, collapsed
   overlap, hover expansion, and layout interpolation behind one stack interface.

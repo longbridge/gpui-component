@@ -29,6 +29,10 @@ pub struct ToastMotion {
     pub collapsed_peek: Pixels,
     /// Distance between expanded toast items.
     pub expanded_gap: Pixels,
+    /// Fractional width reduction for each collapsed layer.
+    pub collapsed_scale_step: f32,
+    /// Number of layers visible while the stack is collapsed.
+    pub collapsed_visible: usize,
 }
 
 impl ToastMotion {
@@ -39,6 +43,8 @@ impl ToastMotion {
             exit_duration: Duration::from_millis(200),
             collapsed_peek: px(14.),
             expanded_gap: px(14.),
+            collapsed_scale_step: 0.05,
+            collapsed_visible: 3,
         }
     }
 }
@@ -53,6 +59,7 @@ impl Default for ToastMotion {
 #[derive(Clone, Debug, Default)]
 pub struct ToastStackState {
     heights: Rc<RefCell<std::collections::HashMap<ElementId, Pixels>>>,
+    width: Rc<std::cell::Cell<Pixels>>,
     hovered: Rc<std::cell::Cell<bool>>,
     focused: Rc<std::cell::Cell<bool>>,
 }
@@ -406,6 +413,9 @@ impl RenderOnce for ToastStack {
         let duration = self.motion.duration;
         let peek = self.motion.collapsed_peek;
         let gap = self.motion.expanded_gap;
+        let scale_step = self.motion.collapsed_scale_step;
+        let collapsed_visible = self.motion.collapsed_visible.max(1);
+        let stack_width = self.state.width.get();
         let count = self.children.len();
         let anchored_bottom = matches!(
             self.placement,
@@ -429,6 +439,7 @@ impl RenderOnce for ToastStack {
                     offsets.get(index).copied().unwrap_or((px(0.), px(0.)));
                 let measured = measured.clone();
                 let measured_id = item_id.clone();
+                let rank = count.saturating_sub(1 + index);
                 let target_offset = if expanded {
                     expanded_offset
                 } else {
@@ -442,6 +453,29 @@ impl RenderOnce for ToastStack {
                     window,
                     cx,
                 );
+                let target_inset = if expanded {
+                    px(0.)
+                } else {
+                    stack_width * (scale_step * rank.min(collapsed_visible - 1) as f32 / 2.)
+                };
+                let inset = transition(
+                    (item_id.clone(), "inset"),
+                    target_inset,
+                    policy(),
+                    window,
+                    cx,
+                );
+                let opacity = transition(
+                    (item_id.clone(), "visibility"),
+                    if expanded || rank < collapsed_visible {
+                        1.
+                    } else {
+                        0.
+                    },
+                    policy(),
+                    window,
+                    cx,
+                );
                 div()
                     .id(item_id.clone())
                     .absolute()
@@ -449,6 +483,12 @@ impl RenderOnce for ToastStack {
                     .left_0()
                     .right_0()
                     .top(offset)
+                    .left(inset)
+                    .right(inset)
+                    .opacity(opacity)
+                    .when(!expanded && rank >= collapsed_visible, |this| {
+                        this.invisible()
+                    })
                     .on_prepaint(move |bounds, _, cx| {
                         let mut heights = measured.borrow_mut();
                         if heights.get(&measured_id).copied() != Some(bounds.size.height) {
@@ -460,6 +500,7 @@ impl RenderOnce for ToastStack {
             });
 
         let hovered_state = self.state.hovered.clone();
+        let measured_width = self.state.width.clone();
         self.base
             .relative()
             .h(stack_height)
@@ -467,7 +508,16 @@ impl RenderOnce for ToastStack {
             .child(
                 canvas(
                     |_, _, _| {},
-                    move |bounds, _, window, _| {
+                    move |mut bounds, _, window, cx| {
+                        if measured_width.replace(bounds.size.width) != bounds.size.width {
+                            cx.refresh_windows();
+                        }
+                        if !expanded {
+                            if anchored_bottom {
+                                bounds.origin.y += stack_height - collapsed_height;
+                            }
+                            bounds.size.height = collapsed_height;
+                        }
                         let hovered_state = hovered_state.clone();
                         window.on_mouse_event(move |event: &MouseMoveEvent, _, _, cx| {
                             let hovered = bounds.contains(&event.position);
@@ -819,9 +869,9 @@ mod tests {
             cx.debug_bounds("first-toast").unwrap().origin.y,
             initial_y + px(54.)
         );
-        assert_eq!(
-            cx.debug_bounds("first-toast").unwrap().size.width,
-            cx.debug_bounds("second-toast").unwrap().size.width
+        assert!(
+            cx.debug_bounds("first-toast").unwrap().size.width
+                < cx.debug_bounds("second-toast").unwrap().size.width
         );
     }
 }
