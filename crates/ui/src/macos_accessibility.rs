@@ -40,6 +40,11 @@ extern "C" fn hit_test_forwarder(this: &NSWindow, _cmd: Sel, point: NSPoint) -> 
 }
 
 fn ns_view(window: &Window) -> Option<&NSView> {
+    // gpui's `TestWindow` panics here instead of returning the `Err` that the
+    // `.ok()?` below is written for. See the `test-support` feature.
+    if cfg!(feature = "test-support") {
+        return None;
+    }
     let handle = HasWindowHandle::window_handle(window).ok()?;
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
         return None;

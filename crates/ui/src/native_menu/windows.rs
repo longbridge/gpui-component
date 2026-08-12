@@ -393,6 +393,11 @@ unsafe fn stream_from_bytes(bytes: &[u8]) -> Option<windows::Win32::System::Com:
 
 /// Extract the Win32 `HWND` (as an `isize`) from the window's raw handle.
 fn hwnd_ptr(window: &Window) -> Option<isize> {
+    // gpui's `TestWindow` panics here instead of returning the `Err` that the
+    // `.ok()?` below is written for. See the `test-support` feature.
+    if cfg!(feature = "test-support") {
+        return None;
+    }
     let handle = HasWindowHandle::window_handle(window).ok()?;
     let RawWindowHandle::Win32(handle) = handle.as_raw() else {
         return None;

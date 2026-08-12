@@ -15,6 +15,15 @@ edition.workspace = true
 doctest = false
 
 [features]
+# Skip the platform integrations that need a real OS window.
+#
+# Every `ns_view` helper below is already written as `window_handle(window).ok()?`, so a
+# window without a native handle is an expected case. gpui's `TestWindow` answers that
+# call with `unimplemented!()` rather than `Err`, so the `.ok()?` never runs and any
+# downstream test that builds a `Root` or focuses an `Input` panics on macOS. `not(test)`
+# cannot help: it is not set when this crate is compiled as a dependency of someone
+# else's test binary. Named after gpui's own feature of the same purpose.
+test-support = []
 decimal = ["dep:rust_decimal"]
 inspector = ["gpui_macros/inspector", "gpui/inspector"]
 tree-sitter = ["dep:tree-sitter", "dep:tree-sitter-json"]
