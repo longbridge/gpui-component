@@ -252,10 +252,12 @@ impl Render for BaseShowcase {
                             .min_h_full()
                             .w_full()
                             .flex()
+                            .flex_col()
                             .items_center()
-                            .justify_center()
                             .p_4()
-                            .child(content),
+                            .child(div().flex_1().min_h_0())
+                            .child(div().flex_none().child(content))
+                            .child(div().flex_1().min_h_0()),
                     ),
             )
     }
