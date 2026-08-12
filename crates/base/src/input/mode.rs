@@ -9,6 +9,14 @@ use crate::input::{
     DiagnosticSet, InputEdit, InputHighlighter, InputHighlighterFactory, RopeExt as _, TabSize,
 };
 
+pub(super) struct HighlighterUpdate<'a> {
+    pub(super) selected_range: &'a Range<usize>,
+    pub(super) old_text: &'a Rope,
+    pub(super) new_text: &'a Rope,
+    pub(super) change_text: &'a str,
+    pub(super) force: bool,
+}
+
 #[derive(Clone)]
 pub(crate) enum InputMode {
     /// A plain text input mode.
@@ -211,11 +219,7 @@ impl InputMode {
     ///
     pub(super) fn update_highlighter(
         &mut self,
-        selected_range: &Range<usize>,
-        old_text: &Rope,
-        new_text: &Rope,
-        change_text: &str,
-        force: bool,
+        update: HighlighterUpdate<'_>,
         window: &mut Window,
         cx: &mut Context<crate::input::InputState>,
     ) {
@@ -227,7 +231,7 @@ impl InputMode {
                 folding,
                 ..
             } => {
-                if !force && highlighter.borrow().is_some() {
+                if !update.force && highlighter.borrow().is_some() {
                     return;
                 }
 
@@ -243,8 +247,13 @@ impl InputMode {
                     return;
                 };
 
-                let edit = replacement_input_edit(old_text, new_text, selected_range, change_text);
-                h.update(Some(edit), new_text, *folding, window, cx);
+                let edit = replacement_input_edit(
+                    update.old_text,
+                    update.new_text,
+                    update.selected_range,
+                    update.change_text,
+                );
+                h.update(Some(edit), update.new_text, *folding, window, cx);
             }
             _ => {}
         }

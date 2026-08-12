@@ -20,6 +20,54 @@
 - **编辑器**：高性能代码编辑器（支持最多 200K 行稳定性能），集成 LSP（诊断、补全、悬停提示等）。
 - **语法高亮**：基于 Tree Sitter 的 Editor 和 Markdown 组件的语法高亮。
 
+## 生态架构
+
+### 两个层次，一个生态
+
+根据你希望掌控多少界面源码，选择合适的层次。
+
+| **GPUI Component**       | **gpui-base**              |
+| ------------------------ | -------------------------- |
+| 完整且带样式的组件       | 无预设样式的行为与基础设施 |
+| 开箱即用，并支持主题定制 | 完全掌控结构与视觉设计     |
+| 适合直接构建应用         | 适合构建设计系统           |
+
+```text
+                             APPLICATION
+                                  │
+                ┌─────────────────┴─────────────────┐
+                │                                   │
+                ▼                                   ▼
+       ┌──────────────────┐               ┌──────────────────┐
+       │  gpui-component  │               │ Your Design      │
+       │    Styled UI     │               │ System           │
+       └────────┬─────────┘               └────────┬─────────┘
+                │                                  │
+                └────────────────┬─────────────────┘
+                                 ▼
+                       ┌──────────────────┐
+                       │    gpui-base     │
+                       │ Behavior · State │
+                       │ Infrastructure   │
+                       └────────┬─────────┘
+                                ▼
+                              GPUI
+```
+
+> **行为属于基础层，呈现属于应用。**
+
+如果希望使用精致、开箱即用的控件，请选择 **GPUI Component**。如果应用需要拥有组件源码、布局、样式和动效，同时复用复杂且可靠的交互行为，请直接构建于 **gpui-base**。
+
+这种分层方式与 [shadcn](https://ui.shadcn.com) 生态的灵活性来源一致：
+
+| GPUI Component 生态                  | Web 生态                       |
+| ------------------------------------ | ------------------------------ |
+| [GPUI](https://gpui.rs)              | HTML + Tailwind CSS            |
+| [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com) |
+| GPUI Component                       | shadcn 的完整样式组件层        |
+
+[深入了解架构 →](docs/ARCHITECTURE.md)
+
 ## Showcase
 
 https://longbridge.github.io/gpui-component/gallery/
@@ -36,7 +84,7 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["fo
 gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 ```
 
-### Examples
+### 基础示例
 
 ```rs
 use gpui::*;
@@ -79,7 +127,7 @@ fn main() {
 }
 ```
 
-### Assets
+### 图标
 
 GPUI Component 提供了 `Icon` 元素，但默认不包含 SVG 文件。
 
@@ -87,7 +135,7 @@ GPUI Component 提供了 `Icon` 元素，但默认不包含 SVG 文件。
 
 ## Development
 
-### Story
+### 桌面 Gallery（Story）
 
 `story` crate 是一个展示所有可用组件的画廊应用程序，通过以下命令运行：
 
@@ -126,7 +174,7 @@ cargo run -p system_monitor
 cargo run -p window_title
 ```
 
-### Web with WASM
+### Web Gallery（WASM）
 
 你也可以通过 WASM 在浏览器中运行 Gallery：
 

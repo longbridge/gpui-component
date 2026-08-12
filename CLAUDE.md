@@ -73,9 +73,10 @@ samply record cargo run
 
 ### Architecture Refactoring Constraints
 
-The architecture draft and RFC are documented in `docs/PHASE1.md` and
-`docs/RFC.md`. Migration status is tracked in `docs/BASE-TODO.md`. Preserve these constraints
-when designing or implementing this architecture:
+The implemented foundation architecture is documented in
+`docs/ARCHITECTURE.md`, with styling and motion rules in
+`docs/STYLING-AND-MOTION.md`. Preserve these constraints when designing or
+implementing this architecture:
 
 - Keep `gpui-component` as the ecosystem and product brand.
 - Name the foundation crate `gpui-base`.
@@ -86,17 +87,10 @@ when designing or implementing this architecture:
   virtual lists, dock infrastructure, and semantic design tokens.
 - Theme APIs must expose semantic tokens (colors, spacing, radius, typography, and
   shadows), not an ever-growing set of component-specific styling fields.
-- Distribute the official styled components and blocks as registry source copied
-  into the application's `src/ui/` directory, where the application can modify
-  and maintain them.
+- Keep source distribution or registry tooling above the `gpui-base` seam; no
+  registry or CLI crate is currently part of the workspace.
 - Preserve 100% backward compatibility for existing consumers, including current
-  imports such as `use gpui_component::button::Button;`, while migration proceeds in
-  phases.
-- Prefer the new registry workflow for new applications, using
-  `gpui-component init` and `gpui-component add <component>`.
-- Execute migration incrementally: extract foundations first, establish the
-  registry with simple components, migrate complex components, add blocks, then
-  add selectable design styles.
+  imports such as `use gpui_component::button::Button;`.
 
 ### Component Initialization
 

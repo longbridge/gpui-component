@@ -201,9 +201,17 @@ impl Theme {
                     .track(|style| style.bg(theme.scrollbar))
                     .track_hover(|style| style.bg(theme.scrollbar))
                     .track_active(|style| style.bg(theme.scrollbar).border_color(theme.border))
-                    .thumb(|style| style.bg(theme.tokens.scrollbar_thumb))
-                    .thumb_hover(|style| style.bg(theme.tokens.scrollbar_thumb_hover))
-                    .thumb_active(|style| style.bg(theme.tokens.scrollbar_thumb_hover)),
+                    .thumb(|style| style.bg(theme.tokens.scrollbar_thumb).radius(theme.radius))
+                    .thumb_hover(|style| {
+                        style
+                            .bg(theme.tokens.scrollbar_thumb_hover)
+                            .radius(theme.radius)
+                    })
+                    .thumb_active(|style| {
+                        style
+                            .bg(theme.tokens.scrollbar_thumb_hover)
+                            .radius(theme.radius)
+                    }),
             },
             resizable: gpui_base::ResizableTheme {
                 handle: theme.border,

@@ -28,7 +28,7 @@ pub fn measure(name: impl Into<SharedString>, f: impl FnOnce()) {
 /// An elapsed-time measurement emitted through `tracing` when ended.
 pub struct Measure {
     name: SharedString,
-    start: std::time::Instant,
+    start: instant::Instant,
 }
 
 impl Measure {
@@ -36,7 +36,7 @@ impl Measure {
     pub fn new(name: impl Into<SharedString>) -> Self {
         Self {
             name: name.into(),
-            start: std::time::Instant::now(),
+            start: instant::Instant::now(),
         }
     }
 

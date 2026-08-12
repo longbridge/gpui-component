@@ -1,7 +1,6 @@
 use std::{
     cmp::Ordering,
     ops::{Deref, Range},
-    usize,
 };
 
 use gpui::SharedString;

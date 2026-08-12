@@ -13,7 +13,10 @@ use super::{Tab, TabVariant};
 use crate::animation::{Lerp, ease_in_out_cubic};
 use crate::button::{Button, ButtonVariants as _};
 use crate::menu::{DropdownMenu as _, PopupMenuItem};
-use crate::{ActiveTheme, ElementExt, Icon, Selectable, Sizable, Size, StyledExt, h_flex};
+use crate::{
+    ActiveTheme, ElementExt, Icon, InteractiveElementExt as _, Selectable, Sizable, Size,
+    StyledExt, h_flex,
+};
 
 struct TabIndicatorBounds {
     container: Bounds<Pixels>,
@@ -482,7 +485,7 @@ impl RenderOnce for TabBar {
                         .relative()
                         .gap(gap)
                         .overflow_x_scroll()
-                        .restrict_scroll_to_axis()
+                        .lock_scroll_axis()
                         .when_some(self.scroll_handle, |this, scroll_handle| {
                             this.track_scroll(&scroll_handle)
                         })

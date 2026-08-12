@@ -5,20 +5,33 @@ on:
     types:
       - completed
   workflow_dispatch:
+  # Deploys the in-progress base branch so its website changes can be reviewed
+  # live. This replaces the published site until the next release deploys main.
+  push:
+    branches:
+      - base
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# Pages accepts one deployment at a time; queue rather than cancel so a release
+# deploy is never dropped in favour of a branch preview.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          # `workflow_run` reports the commit that triggered the release; the
+          # other events carry no such sha and check out their own ref.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - uses: oven-sh/setup-bun@v1
         with:

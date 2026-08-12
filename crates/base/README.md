@@ -292,7 +292,11 @@ cargo fmt --check
 cargo clippy -p gpui-base -- --deny warnings
 ```
 
-`gpui-base` continues to evolve as part of GPUI Component's foundation-layer refactor. The current Rust API is defined by the source code, and migration progress is tracked in [`../../docs/BASE-TODO.md`](../../docs/BASE-TODO.md).
+The current Rust interface is defined by the source code and generated API
+documentation. See [`../../docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)
+for the source-derived module architecture and
+[`../../docs/STYLING-AND-MOTION.md`](../../docs/STYLING-AND-MOTION.md) for the
+style and motion contracts.
 
 ## Related Resources
 

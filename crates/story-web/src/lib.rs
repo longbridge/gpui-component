@@ -2,7 +2,10 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 
 use gpui::{prelude::*, *};
-use gpui_component::{Root, theme::Theme};
+use gpui_component::{
+    Root,
+    theme::{Theme, ThemeMode},
+};
 use gpui_component_assets::Assets;
 use gpui_component_story::{Gallery, StoryRoot};
 use wasm_bindgen::prelude::*;
@@ -11,8 +14,42 @@ thread_local! {
     static APPLICATION: RefCell<Option<ApplicationHandle>> = const { RefCell::new(None) };
 }
 
+/// Applies a theme mode and restores the bundled web fonts.
+///
+/// `Theme::change` reapplies the theme config, which can carry its own font
+/// family; the host system fonts are unavailable in wasm, so the bundled ones
+/// are put back afterwards.
+fn apply_theme(mode: ThemeMode, cx: &mut App) {
+    Theme::change(mode, None, cx);
+    let theme = cx.global_mut::<Theme>();
+    theme.font_family = "Inter Variable".into();
+    theme.mono_font_family = "JetBrains Mono".into();
+}
+
+/// Switches the gallery between light and dark after it is running.
+///
+/// The embedding documentation page calls this when its own appearance
+/// changes, so the gallery never sits in a dark page wearing a light theme.
+#[cfg(target_family = "wasm")]
 #[wasm_bindgen]
-pub fn run(story: Option<String>) -> Result<(), JsValue> {
+pub fn set_theme(dark: bool) {
+    let mode = if dark {
+        ThemeMode::Dark
+    } else {
+        ThemeMode::Light
+    };
+    APPLICATION.with(|application| {
+        if let Some(handle) = application.borrow().as_ref() {
+            handle.update(|cx| {
+                apply_theme(mode, cx);
+                cx.refresh_windows();
+            });
+        }
+    });
+}
+
+#[wasm_bindgen]
+pub fn run(story: Option<String>, dark: Option<bool>) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
     // Initialize logging to browser console
@@ -31,7 +68,7 @@ pub fn run(story: Option<String>) -> Result<(), JsValue> {
     let app = app.with_assets(Assets::new(
         "https://longbridge.github.io/gpui-component/gallery/",
     ));
-    let launch = |cx: &mut App| {
+    let launch = move |cx: &mut App| {
         gpui_component_story::init(cx);
 
         // Load a compact, offline font stack for WASM, where host system fonts
@@ -47,8 +84,15 @@ pub fn run(story: Option<String>) -> Result<(), JsValue> {
             .add_fonts(vec![ui_font, cjk_font, emoji_font, jetbrains_mono])
             .expect("Failed to load fonts");
 
-        cx.global_mut::<Theme>().font_family = "Inter Variable".into();
-        cx.global_mut::<Theme>().mono_font_family = "JetBrains Mono".into();
+        // Apply the embedding page's appearance before the first frame, so an
+        // embedded gallery never flashes a light theme inside a dark page.
+        apply_theme(
+            match dark {
+                Some(true) => ThemeMode::Dark,
+                _ => ThemeMode::Light,
+            },
+            cx,
+        );
 
         cx.open_window(WindowOptions::default(), move |window, cx| {
             let embedded = story.is_some();

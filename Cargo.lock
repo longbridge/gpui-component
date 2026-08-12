@@ -3032,7 +3032,6 @@ dependencies = [
 name = "gpui-component"
 version = "0.5.2"
 dependencies = [
- "aho-corasick",
  "anyhow",
  "chrono",
  "core-text",
@@ -3059,7 +3058,6 @@ dependencies = [
  "once_cell",
  "paste",
  "raw-window-handle",
- "regex",
  "resvg 0.45.1",
  "ropey",
  "rust-i18n",
@@ -3106,7 +3104,6 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-yaml",
  "tree-sitter-zig",
- "unicode-segmentation",
  "uuid",
  "windows 0.58.0",
  "zed-sum-tree",

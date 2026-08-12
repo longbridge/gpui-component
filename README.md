@@ -22,34 +22,54 @@ UI components for building fantastic desktop applications using [GPUI](https://g
 
 ## Ecosystem Architecture
 
-```text
-                         GPUI Component
-                       (project and brand)
+### Two layers. One ecosystem.
 
-       ┌──────────────────────┐    ┌────────────────────────┐
-       │ crates/ui            │    │ Registry               │
-       │ Default styled UI    │    │ Editable UI source     │
-       └──────────┬───────────┘    └───────────┬────────────┘
-                  │                            │
-                  └──────────────┬─────────────┘
+Choose the layer that matches how much of the interface you want to own.
+
+| **GPUI Component**               | **gpui-base**                                 |
+| -------------------------------- | --------------------------------------------- |
+| Complete, styled components      | Unstyled behavior and infrastructure          |
+| Productive defaults with theming | Full control over structure and visual design |
+| Best for building applications   | Best for building design systems              |
+
+```text
+                             APPLICATION
+                                  │
+                ┌─────────────────┴─────────────────┐
+                │                                   │
+                ▼                                   ▼
+       ┌──────────────────┐               ┌──────────────────┐
+       │  gpui-component  │               │ Your Design      │
+       │    Styled UI     │               │ System           │
+       └────────┬─────────┘               └────────┬─────────┘
+                │                                  │
+                └────────────────┬─────────────────┘
                                  ▼
                        ┌──────────────────┐
-                       │ gpui-base        │
-                       │ Behavior and     │
-                       │ infrastructure   │
+                       │    gpui-base     │
+                       │ Behavior · State │
+                       │ Infrastructure   │
                        └────────┬─────────┘
                                 ▼
                               GPUI
 ```
 
-GPUI Component brings the [shadcn](https://ui.shadcn.com) approach to GPUI applications. The main concepts correspond as follows:
+> **Behavior belongs to the foundation. Presentation belongs to the application.**
 
-| GPUI ecosystem                       | shadcn ecosystem               |
-| ------------------------------------ | ------------------------------ |
-| [GPUI](https://gpui.rs)              | HTML + Tailwind CSS            |
-| [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com) |
-| GPUI Component                       | shadcn                         |
-| `crates/ui` in GPUI Component        | shadcn's default UI            |
+Use **GPUI Component** when you want polished controls ready to ship. Build on
+**gpui-base** when your application should own its component source, layout,
+styling, and motion while reusing difficult interaction behavior.
+
+The layering follows the same separation that makes the
+[shadcn](https://ui.shadcn.com) ecosystem flexible:
+
+| GPUI Component ecosystem             | Web ecosystem                   |
+| ------------------------------------ | ------------------------------- |
+| [GPUI](https://gpui.rs)              | HTML + Tailwind CSS             |
+| [`gpui-base`](crates/base/README.md) | [Base UI](https://base-ui.com)  |
+| GPUI Component                       | shadcn's styled component layer |
+
+[Explore the architecture →](docs/ARCHITECTURE.md)
 
 ## Showcase
 

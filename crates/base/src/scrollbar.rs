@@ -18,15 +18,21 @@ const WIDTH: Pixels = px(4. * 2. + 8.);
 const MIN_THUMB_SIZE: Pixels = px(48.);
 
 const THUMB_WIDTH: Pixels = px(6.);
-const THUMB_RADIUS: Pixels = px(6. / 2.);
+const THUMB_RADIUS: Pixels = Pixels::ZERO;
 const THUMB_INSET: Pixels = px(4.);
 
 const THUMB_ACTIVE_WIDTH: Pixels = px(8.);
-const THUMB_ACTIVE_RADIUS: Pixels = px(8. / 2.);
+const THUMB_ACTIVE_RADIUS: Pixels = Pixels::ZERO;
 const THUMB_ACTIVE_INSET: Pixels = px(4.);
 
 const FADE_OUT_DURATION: f32 = 3.0;
 const FADE_OUT_DELAY: f32 = 2.0;
+
+fn clamp_thumb_radius(radius: Pixels, bounds: Bounds<Pixels>) -> Pixels {
+    radius
+        .min(bounds.size.width / 2.)
+        .min(bounds.size.height / 2.)
+}
 
 /// Scrollbar show mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash, Default, JsonSchema)]
@@ -1102,6 +1108,7 @@ impl Element for Scrollbar {
                     if theme.tokens.radius.md.is_zero() {
                         radius = px(0.);
                     }
+                    radius = clamp_thumb_radius(radius, state.thumb_fill_bounds);
                     let bounds = state.bounds;
                     let thumb_bounds = state.thumb_bounds;
                     let scroll_area_size = state.scroll_size;
@@ -1328,6 +1335,19 @@ mod tests {
         Context, Modifiers, MouseButton, ParentElement as _, Render, Styled as _, TestAppContext,
         VisualTestContext, div,
     };
+
+    #[test]
+    fn thumb_radius_is_limited_by_its_actual_bounds() {
+        let vertical_thumb = Bounds::new(Point::default(), size(px(8.), px(80.)));
+        let horizontal_thumb = Bounds::new(Point::default(), size(px(80.), px(6.)));
+
+        assert_eq!(clamp_thumb_radius(px(6.), vertical_thumb), px(4.));
+        assert_eq!(clamp_thumb_radius(px(6.), horizontal_thumb), px(3.));
+        assert_eq!(
+            clamp_thumb_radius(Pixels::ZERO, vertical_thumb),
+            Pixels::ZERO
+        );
+    }
 
     #[derive(Clone)]
     struct TestHandle {

@@ -233,12 +233,25 @@
   width: 100%;
   height: 720px;
   border: 1px solid var(--vp-c-divider);
-  background: white;
-  @apply shadow-xs rounded-md bg-white dark:bg-black;
+  @apply shadow-xs rounded-md;
 }
 
+/* The frame's own background shows through until wasm paints its first frame,
+   so it has to match what the example is about to render; otherwise every page
+   change flashes the wrong colour. */
+
+/* The gallery follows the docs theme, and `neutral-950` is its dark
+   background. */
+.component-example--component iframe {
+  @apply bg-white dark:bg-[#0a0a0a];
+}
+
+/* The base showcase is a deliberately unstyled demo with hard-coded light
+   colours, so its frame stays light in dark mode too. */
 .component-example--base iframe {
   height: 420px;
+  color-scheme: light;
+  @apply bg-white;
 }
 
 @media (max-width: 640px) {

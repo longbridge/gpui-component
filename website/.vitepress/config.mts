@@ -122,8 +122,6 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
 }
 
 function createNav(prefix = "", locale: "en" | "zh" = "en") {
-  const homeText = locale === "zh" ? "首页" : "Home";
-  const gettingStartedText = locale === "zh" ? "开始使用" : "Getting Started";
   const componentsText = locale === "zh" ? "组件" : "Components";
   const resourcesText = locale === "zh" ? "资源" : "Resources";
   const contributorsText = locale === "zh" ? "贡献者" : "Contributors";
@@ -132,12 +130,10 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
   const discussionText = locale === "zh" ? "讨论" : "Discussion";
 
   return [
-    { text: homeText, link: `${prefix}/` || "/" },
-    { text: gettingStartedText, link: `${prefix}/docs/getting-started` || "/docs/getting-started" },
-    { text: componentsText, link: `${prefix}/docs/components` || "/docs/components" },
-    ...(locale === "en"
-      ? [{ text: "GPUI Base", link: "/base/" }]
-      : []),
+    { text: componentsText, link: `${prefix}/docs/components` },
+    // The gpui-base docs are English-only, so both locales point at the same
+    // pages; the section keeps its full "GPUI Base" name in the sidebar.
+    { text: "Base", link: "/base/" },
     {
       text: resourcesText,
       items: [

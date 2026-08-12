@@ -2822,8 +2822,17 @@ impl EntityInputHandler for InputState {
         self.display_map
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
 
-        self.mode
-            .update_highlighter(&range, &old_text, &self.text, &new_text, true, window, cx);
+        self.mode.update_highlighter(
+            super::mode::HighlighterUpdate {
+                selected_range: &range,
+                old_text: &old_text,
+                new_text: &self.text,
+                change_text: &new_text,
+                force: true,
+            },
+            window,
+            cx,
+        );
 
         self.update_fold_candidates_incremental(&range, new_text);
         self.lsp.update(&self.text, window, cx);
@@ -2893,8 +2902,17 @@ impl EntityInputHandler for InputState {
         self.display_map
             .on_text_changed(&self.text, &range, &Rope::from(new_text), cx);
 
-        self.mode
-            .update_highlighter(&range, &old_text, &self.text, &new_text, true, window, cx);
+        self.mode.update_highlighter(
+            super::mode::HighlighterUpdate {
+                selected_range: &range,
+                old_text: &old_text,
+                new_text: &self.text,
+                change_text: &new_text,
+                force: true,
+            },
+            window,
+            cx,
+        );
 
         self.update_fold_candidates_incremental(&range, new_text);
         self.lsp.update(&self.text, window, cx);
@@ -3010,8 +3028,17 @@ impl Render for InputState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
         if self._pending_update {
-            self.mode
-                .update_highlighter(&(0..0), &self.text, &self.text, "", false, window, cx);
+            self.mode.update_highlighter(
+                super::mode::HighlighterUpdate {
+                    selected_range: &(0..0),
+                    old_text: &self.text,
+                    new_text: &self.text,
+                    change_text: "",
+                    force: false,
+                },
+                window,
+                cx,
+            );
 
             self.update_fold_candidates();
             self.lsp.update(&self.text, window, cx);
