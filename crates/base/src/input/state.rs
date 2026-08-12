@@ -300,8 +300,8 @@ pub struct InputState {
     pub(super) last_bounds: Option<Bounds<Pixels>>,
     pub(super) last_selected_range: Option<Selection>,
     pub(super) selecting: bool,
-    pub(super) cursor_height_ratio: f32,
     pub(crate) disabled: bool,
+    pub(crate) text_align: TextAlign,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
     pub(super) submit_on_enter: bool,
@@ -330,7 +330,6 @@ pub struct InputState {
     pub(crate) scroll_size: gpui::Size<Pixels>,
     pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
-    pub(super) text_align: TextAlign,
     pub(super) decorations: DecorationCollections,
     pub(super) editor_style: InputEditorStyle,
 
@@ -472,17 +471,13 @@ impl InputState {
         }
     }
 
-    pub fn configure_presentation(
-        &mut self,
-        disabled: bool,
-        cursor_height_ratio: f32,
-        text_align: TextAlign,
-    ) {
-        self.disabled = disabled;
-        self.cursor_height_ratio = cursor_height_ratio;
-        if self.mode.is_single_line() {
-            self.text_align = text_align;
+    pub fn set_text_align(&mut self, text_align: TextAlign, cx: &mut Context<Self>) {
+        if !self.mode.is_single_line() || self.text_align == text_align {
+            return;
         }
+
+        self.text_align = text_align;
+        cx.notify();
     }
 
     pub fn toggle_masked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -584,6 +579,7 @@ impl InputState {
             input_bounds: Bounds::default(),
             selecting: false,
             disabled: false,
+            text_align: TextAlign::Left,
             masked: false,
             clean_on_escape: false,
             submit_on_enter: false,
@@ -617,7 +613,6 @@ impl InputState {
             placeholder: SharedString::default(),
             mask_pattern: MaskPattern::default(),
             mask_pattern_set: false,
-            text_align: TextAlign::Left,
             decorations: DecorationCollections::default(),
             editor_style: InputEditorStyle::default(),
             lsp: Lsp::default(),
@@ -634,7 +629,6 @@ impl InputState {
             hover_definition: HoverDefinition::default(),
             silent_replace_text: false,
             emit_events: true,
-            cursor_height_ratio: 0.85,
             _subscriptions,
             _context_menu_task: Task::ready(Ok(())),
             _pending_update: false,
@@ -1022,11 +1016,20 @@ impl InputState {
 
     /// Set with disabled mode.
     ///
-    /// See also: [`Self::set_disabled`], [`Self::is_disabled`].
+    /// See also: [`Self::set_disabled`].
     #[allow(unused)]
     pub(crate) fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+
+    pub fn set_disabled(&mut self, disabled: bool, cx: &mut Context<Self>) {
+        if self.disabled == disabled {
+            return;
+        }
+
+        self.disabled = disabled;
+        cx.notify();
     }
 
     /// Set with password masked state.

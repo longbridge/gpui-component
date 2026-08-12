@@ -551,7 +551,7 @@ impl TextElement {
             }
 
             // cursor bounds
-            let cursor_height = state.cursor_height_ratio * line_height;
+            let cursor_height = 0.85 * line_height;
 
             // Match the caret to the deferred scroll target (applied below) that
             // the text paints at; otherwise the caret follows the cursor-scroll

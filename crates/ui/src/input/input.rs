@@ -381,11 +381,6 @@ impl RenderOnce for Input {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
 
-        let cursor_height_ratio = match self.size {
-            Size::Small => 0.75,
-            Size::Large => 1.,
-            _ => 0.85,
-        };
         self.state.update(cx, |state, cx| {
             state.ensure_highlighter_factory(crate::highlighter::input_highlighter_factory());
             state.set_editor_style(gpui_base::input::InputEditorStyle {
@@ -420,7 +415,8 @@ impl RenderOnce for Input {
                         .into_any_element()
                 })),
             });
-            state.configure_presentation(self.disabled, cursor_height_ratio, text_align);
+            state.set_disabled(self.disabled, cx);
+            state.set_text_align(text_align, cx);
             let custom = self.context_menu_builder.clone();
             state.set_context_menu_presenter(Some(Rc::new(
                 move |_, capabilities, position, window, cx| {
