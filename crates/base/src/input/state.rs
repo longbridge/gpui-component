@@ -434,14 +434,6 @@ impl InputState {
         self.last_bounds
     }
 
-    pub fn position_for_offset(&self, offset: usize) -> Option<Point<Pixels>> {
-        self.line_and_position_for_offset(offset).2
-    }
-
-    pub fn select_all_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.select_all(&SelectAll, window, cx);
-    }
-
     pub fn diagnostic_popover(&self) -> Option<Rc<crate::input::DiagnosticEntry>> {
         self.diagnostic_popover.clone()
     }
@@ -482,11 +474,6 @@ impl InputState {
 
     pub fn toggle_masked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.set_masked(!self.masked, window, cx);
-    }
-
-    pub fn clear_and_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.clean(window, cx);
-        self.focus(window, cx);
     }
 
     pub fn set_editor_scrollbar_paddings(&self, paddings: Edges<Pixels>) {
@@ -1434,9 +1421,13 @@ impl InputState {
         self.select_to(self.next_boundary(offset), cx);
     }
 
-    pub(super) fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
-        self.selected_range = (0..self.text.len()).into();
-        cx.notify();
+    pub(super) fn on_action_select_all(
+        &mut self,
+        _: &SelectAll,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.select_all(window, cx);
     }
 
     pub(super) fn select_to_start(
@@ -2235,6 +2226,11 @@ impl InputState {
     /// in the underlying rope's byte units.
     pub fn selected_range(&self) -> std::ops::Range<usize> {
         self.selected_range.into()
+    }
+
+    pub fn select_all(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        self.selected_range = (0..self.text.len()).into();
+        cx.notify();
     }
 
     /// Set the selected range using UTF-8 byte offsets.
@@ -3147,7 +3143,7 @@ impl Render for InputState {
                     .on_action(window.listener_for(&entity, InputState::page_down))
                     .on_action(window.listener_for(&entity, InputState::on_action_go_to_definition))
             })
-            .on_action(window.listener_for(&entity, InputState::select_all))
+            .on_action(window.listener_for(&entity, InputState::on_action_select_all))
             .on_action(window.listener_for(&entity, InputState::select_to_start_of_line))
             .on_action(window.listener_for(&entity, InputState::select_to_end_of_line))
             .on_action(window.listener_for(&entity, InputState::select_to_previous_word))

@@ -608,7 +608,8 @@ impl RenderOnce for Input {
                                 let state = self.state.clone();
                                 move |_, window, cx| {
                                     state.update(cx, |state, cx| {
-                                        state.clear_and_focus(window, cx);
+                                        state.clean(window, cx);
+                                        state.focus(window, cx);
                                     })
                                 }
                             }))

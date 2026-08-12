@@ -121,7 +121,7 @@ impl SearchPanel {
             if selected_text.len() > 0 {
                 this.set_value(selected_text.to_string(), window, cx);
             }
-            this.select_all_text(window, cx);
+            this.select_all(window, cx);
         });
 
         // The `set_value` does not emit `InputEvent::Change`, so update the query
