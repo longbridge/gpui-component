@@ -2993,6 +2993,7 @@ dependencies = [
  "chrono",
  "gpui",
  "gpui_macros",
+ "indoc",
  "instant",
  "lsp-types 0.97.0",
  "objc2 0.6.4",

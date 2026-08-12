@@ -48,7 +48,7 @@ objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSString"] }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
-indoc.workspace = true
+indoc = "2"
 
 [lints]
 workspace = true
