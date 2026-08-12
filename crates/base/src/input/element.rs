@@ -17,7 +17,6 @@ use std::{ops::Range, rc::Rc};
 use crate::{
     Scrollbar,
     input::{RopeExt as _, blink_cursor::CURSOR_WIDTH, display_map::LineLayout},
-    theme::ActiveTheme as _,
 };
 
 use super::{
@@ -28,14 +27,13 @@ use super::{
 
 fn diagnostic_highlight_style(
     severity: crate::input::DiagnosticSeverity,
-    cx: &App,
+    colors: crate::input::DiagnosticColors,
 ) -> HighlightStyle {
-    let colors = cx.theme().tokens.colors;
     let color = match severity {
-        crate::input::DiagnosticSeverity::Error => colors.destructive,
-        crate::input::DiagnosticSeverity::Warning => colors.accent_foreground,
-        crate::input::DiagnosticSeverity::Info => colors.primary,
-        crate::input::DiagnosticSeverity::Hint => colors.muted_foreground,
+        crate::input::DiagnosticSeverity::Error => colors.error,
+        crate::input::DiagnosticSeverity::Warning => colors.warning,
+        crate::input::DiagnosticSeverity::Info => colors.info,
+        crate::input::DiagnosticSeverity::Hint => colors.hint,
     };
     HighlightStyle {
         underline: Some(UnderlineStyle {
@@ -1487,7 +1485,7 @@ impl TextElement {
             .map(|entry| {
                 (
                     entry.range.clone(),
-                    diagnostic_highlight_style(entry.severity, cx),
+                    diagnostic_highlight_style(entry.severity, state.editor_style.diagnostics),
                 )
             })
             .collect();

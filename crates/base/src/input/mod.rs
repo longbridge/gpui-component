@@ -44,7 +44,7 @@ pub use diagnostics::{
 };
 pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange, WrappingIndent};
 pub use highlighting::{
-    FoldIconRenderer, HighlightStyleResolver, InputEditorStyle, InputHighlighter,
+    DiagnosticColors, FoldIconRenderer, HighlightStyleResolver, InputEditorStyle, InputHighlighter,
     InputHighlighterFactory, SharedHighlightStyleResolver,
 };
 pub use indent::TabSize;

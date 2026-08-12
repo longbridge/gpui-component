@@ -56,6 +56,14 @@ pub type InputHighlighterFactory = Rc<dyn Fn(&str) -> Option<Box<dyn InputHighli
 pub type SharedHighlightStyleResolver = Arc<dyn HighlightStyleResolver>;
 pub type FoldIconRenderer = Rc<dyn Fn(usize, bool) -> AnyElement>;
 
+#[derive(Clone, Copy, Default)]
+pub struct DiagnosticColors {
+    pub error: Hsla,
+    pub warning: Hsla,
+    pub info: Hsla,
+    pub hint: Hsla,
+}
+
 /// Application-owned colors and highlight resolver consumed by editor painting.
 #[derive(Clone)]
 pub struct InputEditorStyle {
@@ -65,6 +73,7 @@ pub struct InputEditorStyle {
     pub border: Hsla,
     pub selection: Hsla,
     pub caret: Hsla,
+    pub diagnostics: DiagnosticColors,
     pub highlight_styles: SharedHighlightStyleResolver,
     pub editor_invisible: Option<Hsla>,
     pub editor_active_line: Option<Hsla>,
@@ -81,6 +90,7 @@ impl Default for InputEditorStyle {
             border: Hsla::default(),
             selection: Hsla::default(),
             caret: Hsla::default(),
+            diagnostics: DiagnosticColors::default(),
             highlight_styles: Arc::new(NoHighlightStyles),
             editor_invisible: None,
             editor_active_line: None,
