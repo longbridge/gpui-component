@@ -2,14 +2,12 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     App, AppContext as _, Context, Entity, HighlightStyle, IntoElement, Render, SharedString,
-    Styled, Window, rgba,
+    Styled, Window,
 };
 
 use gpui_component::{ActiveTheme, input::*};
 use syntect::{
-    easy::HighlightLines,
-    highlighting::{Color, Theme, ThemeSet},
-    parsing::SyntaxSet,
+    parsing::{ParseState, ScopeStack, SyntaxSet},
     util::LinesWithEndings,
 };
 
@@ -25,7 +23,7 @@ impl super::Story for EditorStory {
     }
 
     fn description() -> &'static str {
-        "Code editor with syntax highlighting by tree-sitter."
+        "Code editor with theme-aware syntax highlighting and folding."
     }
 
     fn closable() -> bool {
@@ -45,6 +43,7 @@ impl EditorStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let editor_state = cx.new(|cx| {
             EditorState::new("rust", window, cx)
+                .folding(true)
                 .tab_size(TabSize {
                     tab_size: 4,
                     ..Default::default()
@@ -69,8 +68,7 @@ impl EditorStory {
 struct SyntectHighlighter {
     language: SharedString,
     syntax_set: SyntaxSet,
-    theme: Theme,
-    styles: Vec<(Range<usize>, HighlightStyle)>,
+    highlights: Vec<(Range<usize>, &'static str)>,
 }
 
 impl SyntectHighlighter {
@@ -79,13 +77,10 @@ impl SyntectHighlighter {
         syntax_set
             .find_syntax_by_token(language)
             .or_else(|| syntax_set.find_syntax_by_extension(language))?;
-        let theme = ThemeSet::load_defaults().themes.remove("InspiredGitHub")?;
-
         Some(Self {
             language: language.to_owned().into(),
             syntax_set,
-            theme,
-            styles: Vec::new(),
+            highlights: Vec::new(),
         })
     }
 }
@@ -112,50 +107,132 @@ impl InputHighlighter for SyntectHighlighter {
                     .find_syntax_by_extension(self.language.as_ref())
             })
             .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
-        let mut highlighter = HighlightLines::new(syntax, &self.theme);
+        let mut parser = ParseState::new(syntax);
+        let mut scopes = ScopeStack::new();
         let mut offset = 0;
-        self.styles.clear();
+        self.highlights.clear();
 
         for line in LinesWithEndings::from(&text) {
-            if let Ok(regions) = highlighter.highlight_line(line, &self.syntax_set) {
-                for (style, token) in regions {
-                    let end = offset + token.len();
-                    self.styles
-                        .push((offset..end, color_style(style.foreground)));
-                    offset = end;
+            if let Ok(operations) = parser.parse_line(line, &self.syntax_set) {
+                let mut cursor = 0;
+                for (index, operation) in operations {
+                    push_highlight(
+                        &mut self.highlights,
+                        offset + cursor..offset + index,
+                        &scopes,
+                    );
+                    let _ = scopes.apply(&operation);
+                    cursor = index;
                 }
-            } else {
-                offset += line.len();
+                push_highlight(
+                    &mut self.highlights,
+                    offset + cursor..offset + line.len(),
+                    &scopes,
+                );
             }
+            offset += line.len();
         }
     }
 
     fn styles(
         &self,
         range: &Range<usize>,
-        _resolver: &dyn HighlightStyleResolver,
+        resolver: &dyn HighlightStyleResolver,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
-        self.styles
+        self.highlights
             .iter()
-            .filter_map(|(token_range, style)| {
+            .filter_map(|(token_range, name)| {
                 let start = token_range.start.max(range.start);
                 let end = token_range.end.min(range.end);
-                (start < end).then(|| (start..end, *style))
+                (start < end)
+                    .then(|| resolver.style(name).map(|style| (start..end, style)))
+                    .flatten()
             })
             .collect()
     }
 
-    fn fold_ranges(&self, _text: &Rope) -> Vec<FoldRange> {
-        Vec::new()
+    fn fold_ranges(&self, text: &Rope) -> Vec<FoldRange> {
+        brace_fold_ranges(&text.to_string())
     }
 }
 
-fn color_style(color: Color) -> HighlightStyle {
-    let packed = u32::from_be_bytes([color.r, color.g, color.b, color.a]);
-    HighlightStyle {
-        color: Some(rgba(packed).into()),
-        ..Default::default()
+fn push_highlight(
+    highlights: &mut Vec<(Range<usize>, &'static str)>,
+    range: Range<usize>,
+    scopes: &ScopeStack,
+) {
+    if !range.is_empty() {
+        if let Some(name) = semantic_name(scopes) {
+            highlights.push((range, name));
+        }
     }
+}
+
+fn semantic_name(scopes: &ScopeStack) -> Option<&'static str> {
+    for scope in scopes.scopes.iter().rev() {
+        let scope = scope.build_string();
+        if scope.starts_with("comment") {
+            return Some("comment");
+        } else if scope.starts_with("constant.character.escape") {
+            return Some("string.escape");
+        } else if scope.starts_with("string") {
+            return Some("string");
+        } else if scope.starts_with("constant.numeric") {
+            return Some("number");
+        } else if scope.starts_with("constant.language.boolean") {
+            return Some("boolean");
+        } else if scope.starts_with("keyword.operator") {
+            return Some("operator");
+        } else if scope.starts_with("keyword") || scope.starts_with("storage") {
+            return Some("keyword");
+        } else if scope.starts_with("entity.name.function") || scope.starts_with("support.function")
+        {
+            return Some("function");
+        } else if scope.starts_with("entity.name.type")
+            || scope.starts_with("entity.name.class")
+            || scope.starts_with("support.type")
+        {
+            return Some("type");
+        } else if scope.starts_with("variable") {
+            return Some("variable");
+        } else if scope.starts_with("constant") {
+            return Some("constant");
+        } else if scope.starts_with("punctuation") {
+            return Some("punctuation");
+        }
+    }
+    None
+}
+
+fn brace_fold_ranges(text: &str) -> Vec<FoldRange> {
+    let mut starts = Vec::new();
+    let mut ranges = Vec::new();
+    for (line_number, line) in text.lines().enumerate() {
+        let mut chars = line.chars().peekable();
+        let mut quoted = false;
+        let mut escaped = false;
+        while let Some(character) = chars.next() {
+            if !quoted && character == '/' && chars.peek() == Some(&'/') {
+                break;
+            }
+            if character == '"' && !escaped {
+                quoted = !quoted;
+            } else if !quoted && character == '{' {
+                starts.push(line_number);
+            } else if !quoted && character == '}' {
+                if let Some(start_line) = starts.pop() {
+                    if start_line < line_number {
+                        ranges.push(FoldRange::new(start_line, line_number));
+                    }
+                }
+            }
+            escaped = quoted && character == '\\' && !escaped;
+            if character != '\\' {
+                escaped = false;
+            }
+        }
+    }
+    ranges
 }
 
 impl Render for EditorStory {

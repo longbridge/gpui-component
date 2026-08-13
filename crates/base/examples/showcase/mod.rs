@@ -25,8 +25,8 @@ use gpui_base::{
 };
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
-use std::rc::Rc;
-use syntect_highlighter::SyntectHighlighter;
+use std::{rc::Rc, sync::Arc};
+use syntect_highlighter::{ShowcaseHighlightStyles, SyntectHighlighter};
 
 actions!(base_showcase, [Quit]);
 
@@ -201,6 +201,7 @@ impl BaseShowcase {
                 muted_foreground: rgb(0x737373).into(),
                 selection: gpui::hsla(0.6, 0.8, 0.7, 0.45),
                 caret: rgb(0x171717).into(),
+                highlight_styles: Arc::new(ShowcaseHighlightStyles),
                 ..InputEditorStyle::default()
             });
         });

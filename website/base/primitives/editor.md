@@ -66,9 +66,12 @@ ordinary text fields.
 The runnable showcase demonstrates this seam with `syntect`. It selects the
 WASM-compatible `fancy-regex` backend rather than the native Oniguruma backend,
 so the same Rust highlighting adapter runs in the desktop example and the Base
-WASM example. The adapter is intentionally simple and reparses the short sample
-after each edit; production integrations can keep incremental parser state in
-their `InputHighlighter` implementation.
+WASM example. Syntect only identifies syntax scopes: the adapter maps those to
+semantic names and resolves their styles through `HighlightStyleResolver`, so
+the application theme remains the source of colors and font styles. The adapter
+is intentionally simple and reparses the short sample after each edit;
+production integrations can keep incremental parser state in their
+`InputHighlighter` implementation.
 
 ## Presentation
 

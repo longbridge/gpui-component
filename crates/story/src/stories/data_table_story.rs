@@ -1323,9 +1323,11 @@ impl Render for DataTableStory {
                 ),
             )
             .child(
-                DataTable::new(&self.table)
-                    .with_size(self.size)
-                    .stripe(self.stripe),
+                div().flex_1().min_h_0().child(
+                    DataTable::new(&self.table)
+                        .with_size(self.size)
+                        .stripe(self.stripe),
+                ),
             )
     }
 }
