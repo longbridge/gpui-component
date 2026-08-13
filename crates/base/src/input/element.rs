@@ -2260,15 +2260,13 @@ impl Element for TextElement {
             let gutter_bg = editor_style
                 .editor_gutter_background
                 .unwrap_or(editor_background);
-            window.paint_quad(fill(
-                editor_gutter_bounds(
-                    input_bounds,
-                    prepaint.last_layout.line_number_width,
-                    prepaint.ghost_lines_height,
-                    editor_paddings,
-                ),
-                gutter_bg,
-            ));
+            let gutter_bounds = editor_gutter_bounds(
+                input_bounds,
+                prepaint.last_layout.line_number_width,
+                prepaint.ghost_lines_height,
+                editor_paddings,
+            );
+            window.paint_quad(fill(gutter_bounds, gutter_bg));
 
             // Each item is the normal lines.
             for (lines, &buffer_line) in line_numbers
@@ -2284,12 +2282,8 @@ impl Element for TextElement {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
                             Bounds::new(
-                                p,
-                                size(
-                                    prepaint.last_layout.line_number_width
-                                        - LINE_NUMBER_RIGHT_MARGIN,
-                                    height,
-                                ),
+                                point(gutter_bounds.origin.x, p.y),
+                                size(gutter_bounds.size.width, height),
                             ),
                             bg_color,
                         ));
