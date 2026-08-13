@@ -198,6 +198,9 @@ Text input system based on Rope data structure:
 - When creating a PR, inspect previous PR titles in the repository and match
   that style. Do not blindly use conventional prefixes like `fix:` or `feat:`
   unless the existing PR title style uses them.
+- When a PR changes the public API of `crates/ui`, add a `## Breaking Changes`
+  section with `diff` blocks showing the old and new usage. See PR #2691 and
+  `.claude/skills/gpui-component-dev/references/pr-description.md`.
 
 ## Icon System
 
