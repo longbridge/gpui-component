@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="website/public/logo.svg" width="112" alt="GPUI Component logo" />
+</p>
+
 # GPUI Component
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)

@@ -13,12 +13,14 @@ const route = useRoute();
 const { frontmatter } = useData();
 
 const component = computed(() => {
-    const match = route.path.match(/\/(?:docs|base)\/components\/([^/]+)$/);
+    const match = route.path.match(
+        /\/(?:docs\/components|base\/primitives)\/([^/]+)$/,
+    );
     return match?.[1] === "index" ? undefined : match?.[1];
 });
 
 const kind = computed(() =>
-    route.path.includes("/base/components/") ? "base" : "component",
+    route.path.includes("/base/primitives/") ? "base" : "component",
 );
 
 const storyNames: Record<string, string> = {

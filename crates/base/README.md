@@ -191,6 +191,21 @@ Base controls cannot suppress `hover` or `active` styles while disabled, because
 | `Table` and semantic table parts         | Table, row-group, row, column-header, cell roles, and accessibility indices without layout or styling  |
 | `Toast` / `ToastStack` / `ToastManager`  | Alert semantics, lifecycle, timers, limits, measured stack geometry, and interaction-aware motion       |
 
+### Text Editing
+
+Text editing is split into purpose-specific controls instead of exposing the
+complete editor interface on every text field:
+
+| Control | State | Use |
+| --- | --- | --- |
+| [`Input`](../../website/base/primitives/input.md) | `InputState` | Single-line values, masking, validation, and number stepping |
+| [`Textarea`](../../website/base/primitives/textarea.md) | `TextareaState` | Ordinary multi-line text, fixed rows, wrapping, and auto-grow |
+| [`Editor`](../../website/base/primitives/editor.md) | `EditorState` | Source code, highlighting, gutter, folding, decorations, diagnostics, and LSP integration |
+
+All three share the internal `InputBaseState` editing engine. Applications
+should construct the purpose-specific state rather than configuring modes on
+the shared engine.
+
 The base layer never opens a URL by itself. This allows the same `Link` to target internal routing, an embedded web view, or the system browser.
 
 ### Focus and Interaction

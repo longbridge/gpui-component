@@ -90,8 +90,8 @@ pub use global_state::GlobalState;
 pub use gpui_base::animation;
 pub(crate) use gpui_base::measurement_enabled as measure_enable;
 pub use gpui_base::{
-    AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Measure, Placement, Side,
-    measure, measure_if,
+    AxisExt, Edges, FocusTrapElement, InteractiveElementExt, LengthExt, Measure, OngoingScrollExt,
+    Placement, Side, measure, measure_if,
 };
 #[doc(hidden)]
 pub(crate) use gpui_base::{PANEL_MIN_SIZE, resize_handle};
