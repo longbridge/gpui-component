@@ -16,9 +16,9 @@ use gpui_base::{
     AlertDialogPopup, AlertDialogTitle, Avatar, AvatarFallback, Button, Calendar, CalendarItemKind,
     CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible, ColorPicker,
     ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop, DialogDescription,
-    DialogPopup, DialogTitle, HoverCard, Input, OtpState, Popup, Scrollbar, ScrollbarMode, Select,
-    Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch, SwitchThumb, SwitchTrack,
-    Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, Toast,
+    DialogPopup, DialogTitle, HoverCard, InputBase, OtpState, Popup, Scrollbar, ScrollbarMode,
+    Select, Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch, SwitchThumb,
+    SwitchTrack, Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, Toast,
     ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem, TreeState,
     VirtualListScrollHandle, v_virtual_list,
 };

@@ -271,7 +271,7 @@ pub(crate) fn init(cx: &mut App) {
 }
 
 /// InputState to keep editing state of the [`super::Input`].
-pub struct InputState {
+pub struct InputBaseState {
     pub(super) focus_handle: FocusHandle,
     pub(super) mode: InputMode,
     pub(super) text: Rope,
@@ -393,6 +393,14 @@ pub struct InputState {
 
     pub(super) auto_scroll: AutoScroll,
 }
+
+/// Compatibility name for the shared editing engine.
+///
+/// New code should use one of the purpose-specific state types exposed by the
+/// input facade. This alias remains while existing component consumers are
+/// migrated.
+#[doc(hidden)]
+pub type InputState = InputBaseState;
 
 /// Read-only styling data exposed to presentation facades.
 #[derive(Clone)]
@@ -575,12 +583,14 @@ impl InputState {
     /// Set Input to use multi line mode.
     ///
     /// Default rows is 2.
+    #[doc(hidden)]
     pub fn multi_line(mut self, multi_line: bool) -> Self {
         self.mode = self.mode.multi_line(multi_line);
         self
     }
 
     /// Set Input to use [`InputMode::AutoGrow`] mode with min, max rows limit.
+    #[doc(hidden)]
     pub fn auto_grow(mut self, min_rows: usize, max_rows: usize) -> Self {
         self.mode = InputMode::auto_grow(min_rows, max_rows);
         self
@@ -607,6 +617,7 @@ impl InputState {
     /// - Auto Indent
     /// - Line Number
     /// - Large Text support, up to 50K lines.
+    #[doc(hidden)]
     pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
         let language: SharedString = language.into();
         self.mode = InputMode::code_editor(language);
@@ -624,13 +635,21 @@ impl InputState {
     }
 
     /// Set this input is searchable, default is false (Default true for Code Editor).
+    #[doc(hidden)]
     pub fn searchable(mut self, searchable: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.searchable = searchable;
         self
     }
 
+    pub(crate) fn set_searchable(&mut self, searchable: bool, cx: &mut Context<Self>) {
+        debug_assert!(self.mode.is_multi_line());
+        self.searchable = searchable;
+        cx.notify();
+    }
+
     /// Set whether search UI allows replacement, default is true.
+    #[doc(hidden)]
     pub fn replaceable(mut self, allow: bool) -> Self {
         self.replaceable = allow;
         self
@@ -645,6 +664,7 @@ impl InputState {
     /// Set enable/disable code folding, only for [`InputMode::CodeEditor`] mode.
     ///
     /// Default: true
+    #[doc(hidden)]
     pub fn folding(mut self, folding: bool) -> Self {
         debug_assert!(self.mode.is_code_editor());
         if let InputMode::CodeEditor { folding: f, .. } = &mut self.mode {
@@ -668,6 +688,7 @@ impl InputState {
     }
 
     /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
+    #[doc(hidden)]
     pub fn line_number(mut self, line_number: bool) -> Self {
         debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
@@ -690,6 +711,7 @@ impl InputState {
     /// This is only used when `multi_line` is set to true.
     ///
     /// default: 2
+    #[doc(hidden)]
     pub fn rows(mut self, rows: usize) -> Self {
         match &mut self.mode {
             InputMode::PlainText { rows: r, .. } | InputMode::CodeEditor { rows: r, .. } => {
@@ -705,6 +727,32 @@ impl InputState {
             }
         }
         self
+    }
+
+    pub(crate) fn set_rows(&mut self, rows: usize, cx: &mut Context<Self>) {
+        match &mut self.mode {
+            InputMode::PlainText { rows: value, .. }
+            | InputMode::CodeEditor { rows: value, .. } => *value = rows,
+            InputMode::AutoGrow {
+                rows: value,
+                max_rows,
+                ..
+            } => {
+                *value = rows;
+                *max_rows = rows;
+            }
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn set_auto_grow(
+        &mut self,
+        min_rows: usize,
+        max_rows: usize,
+        cx: &mut Context<Self>,
+    ) {
+        self.mode = InputMode::auto_grow(min_rows, max_rows.max(min_rows));
+        cx.notify();
     }
 
     /// Set highlighter language for for [`InputMode::CodeEditor`] mode.
@@ -994,12 +1042,19 @@ impl InputState {
     /// while `Shift+Enter` inserts a newline.
     ///
     /// Default is `false` (both `Enter` and `Shift+Enter` insert a newline).
+    #[doc(hidden)]
     pub fn submit_on_enter(mut self, submit: bool) -> Self {
         self.submit_on_enter = submit;
         self
     }
 
+    pub(crate) fn set_submit_on_enter(&mut self, submit: bool, cx: &mut Context<Self>) {
+        self.submit_on_enter = submit;
+        cx.notify();
+    }
+
     /// Set the soft wrap mode for multi-line input, default is true.
+    #[doc(hidden)]
     pub fn soft_wrap(mut self, wrap: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.soft_wrap = wrap;
@@ -1007,12 +1062,14 @@ impl InputState {
     }
 
     /// Set whether to show whitespace characters.
+    #[doc(hidden)]
     pub fn show_whitespaces(mut self, show: bool) -> Self {
         self.show_whitespaces = show;
         self
     }
 
     /// Set how soft-wrapped continuation lines are indented, default is [`WrappingIndent::Same`]
+    #[doc(hidden)]
     pub fn wrapping_indent(mut self, wrapping_indent: WrappingIndent) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.wrapping_indent = wrapping_indent;

@@ -5,7 +5,7 @@ use gpui_component::{ActiveTheme, input::*};
 const EXAMPLE_CODE: &str = include_str!("./editor_story.rs");
 
 pub struct EditorStory {
-    editor_state: Entity<InputState>,
+    editor_state: Entity<EditorState>,
 }
 
 impl super::Story for EditorStory {
@@ -33,9 +33,7 @@ impl EditorStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let editor_state = cx.new(|cx| {
-            InputState::new(window, cx)
-                .code_editor("rust")
-                .multi_line(true)
+            EditorState::new("rust", window, cx)
                 .tab_size(TabSize {
                     tab_size: 4,
                     ..Default::default()
@@ -49,7 +47,7 @@ impl EditorStory {
 
 impl Render for EditorStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        Input::new(&self.editor_state)
+        Editor::new(&self.editor_state)
             .font_family(cx.theme().mono_font_family.clone())
             .text_size(cx.theme().mono_font_size)
             .size_full()

@@ -10,6 +10,7 @@ pub(crate) const MASK_CHAR: char = '•';
 
 pub(crate) mod blink_cursor;
 mod change;
+mod controls;
 mod cursor;
 mod decorations;
 mod diagnostics;
@@ -27,12 +28,14 @@ mod rope_ext;
 mod search;
 mod selection;
 mod state;
+mod state_facades;
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);
 }
 
 pub use crate::number_input::{NumberInputEvent, NumberStep};
+pub use controls::{Editor, Input, Textarea};
 pub use cursor::Selection;
 pub use decorations::{TextDecoration, TextDecorationCollection};
 pub use diagnostics::{
@@ -62,6 +65,7 @@ pub use rope_ext::{InputEdit, Point, RopeExt, RopeLines};
 pub use ropey::Rope;
 pub use search::{SearchMatcher, SearchSession};
 pub use state::*;
+pub use state_facades::{EditorState, TextareaState};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InputContextMenuCapabilities {
@@ -77,7 +81,7 @@ pub struct InputContextMenuCapabilities {
 /// It intentionally owns only input semantics, interaction forwarding, and
 /// normal children. Applications remain responsible for all presentation.
 #[derive(IntoElement)]
-pub struct Input {
+pub struct InputBase {
     base: gpui::Stateful<Div>,
     style: StyleRefinement,
     semantic_styles: InputStyles,
@@ -87,7 +91,7 @@ pub struct Input {
     role: crate::RoleOverride,
 }
 
-impl Input {
+impl InputBase {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             base: div().id(id),
@@ -157,27 +161,27 @@ impl InputStyles {
     }
 }
 
-impl Styled for Input {
+impl Styled for InputBase {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl ParentElement for Input {
+impl ParentElement for InputBase {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
         self.children.extend(elements);
     }
 }
 
-impl InteractiveElement for Input {
+impl InteractiveElement for InputBase {
     fn interactivity(&mut self) -> &mut Interactivity {
         self.base.interactivity()
     }
 }
 
-impl StatefulInteractiveElement for Input {}
+impl StatefulInteractiveElement for InputBase {}
 
-impl RenderOnce for Input {
+impl RenderOnce for InputBase {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let style = self.resolved_style();
         self.base
@@ -195,7 +199,7 @@ mod tests {
 
     #[test]
     fn frame_accepts_application_owned_content_and_style() {
-        let _ = Input::new("input")
+        let _ = InputBase::new("input")
             .focused(true)
             .disabled(false)
             .styles(|styles| {
@@ -209,13 +213,13 @@ mod tests {
 
     #[test]
     fn semantic_state_styles_override_the_normal_style() {
-        let focused = Input::new("focused")
+        let focused = InputBase::new("focused")
             .focused(true)
             .border_color(gpui::red())
             .styles(|styles| styles.focused(|style| style.border_color(gpui::blue())));
         assert_eq!(focused.resolved_style().border_color, Some(gpui::blue()));
 
-        let disabled = Input::new("disabled")
+        let disabled = InputBase::new("disabled")
             .focused(true)
             .disabled(true)
             .opacity(1.)

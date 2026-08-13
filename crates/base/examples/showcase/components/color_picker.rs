@@ -95,7 +95,7 @@ impl BaseShowcase {
             .bg(rgb(0xffffff))
             .child(swatches)
             .child(
-                Input::new("color-hex-input")
+                InputBase::new("color-hex-input")
                     .w_full()
                     .h_7()
                     .px_2()

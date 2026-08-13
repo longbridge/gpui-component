@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use crate::input::InputState;
-use crate::{Button, Input, StyledExt as _};
+use crate::{Button, InputBase, StyledExt as _};
 
 actions!(number_input, [Increment, Decrement]);
 
@@ -99,7 +99,7 @@ impl InputState {
 type StepHandler = Rc<dyn Fn(StepAction, &mut Window, &mut App)>;
 type ButtonDecorator = Box<dyn FnOnce(Button) -> Button>;
 
-/// An unstyled spinbutton root composed from the foundational [`Input`] frame.
+/// An unstyled spinbutton root composed from the foundational [`InputBase`] frame.
 #[derive(IntoElement)]
 pub struct NumberInput {
     style: StyleRefinement,
@@ -302,7 +302,7 @@ impl RenderOnce for NumberInput {
                 .into_any_element()
         };
 
-        Input::new(("number-input", self.state.entity_id()))
+        InputBase::new(("number-input", self.state.entity_id()))
             .track_focus(&self.state.focus_handle(cx))
             .flex()
             .items_center()

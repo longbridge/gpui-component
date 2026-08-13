@@ -21,7 +21,7 @@ impl BaseShowcase {
                     .gap_1()
                     .child(div().h(px(16.)).flex().items_center().child("Project name"))
                     .child(
-                        Input::new("example-input")
+                        InputBase::new("example-input")
                             .w_full()
                             .h_7()
                             .px_2()
@@ -47,7 +47,7 @@ impl BaseShowcase {
                     .gap_1()
                     .child(div().h(px(16.)).flex().items_center().child("Notes"))
                     .child(
-                        Input::new("example-multiline-input")
+                        InputBase::new("example-multiline-input")
                             .w_full()
                             .h_16()
                             .px_2()

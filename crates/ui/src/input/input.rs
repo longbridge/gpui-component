@@ -16,7 +16,7 @@ use crate::{ActiveTheme, Colorize, v_flex};
 use crate::{IconName, Size};
 use crate::{RoleOverride, Selectable, StyledExt, h_flex};
 use crate::{Sizable, StyleSized};
-use gpui_base::Input as BaseInput;
+use gpui_base::InputBase as BaseInput;
 use rust_i18n::t;
 
 use super::{InputContentType, InputState, sync_native_content_type};

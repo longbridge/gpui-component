@@ -75,7 +75,7 @@ impl BaseShowcase {
                                     )
                                     .child(div().mt_3().text_sm().child("Display name"))
                                     .child(
-                                        Input::new("dialog-name")
+                                        InputBase::new("dialog-name")
                                             .mt_2()
                                             .w_full()
                                             .h_7()
