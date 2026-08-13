@@ -286,7 +286,7 @@ impl StyleMethods {
         static STYLE_METHODS: OnceLock<StyleMethods> = OnceLock::new();
         STYLE_METHODS.get_or_init(|| {
             let table: Vec<_> = [
-                crate::styled_ext_reflection::methods::<StyleRefinement>(),
+                gpui_base::styled_ext_reflection_methods::<StyleRefinement>(),
                 gpui::styled_reflection::methods::<StyleRefinement>(),
             ]
             .into_iter()

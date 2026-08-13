@@ -20,10 +20,6 @@ pub(super) fn avatar_size(size: Size) -> Pixels {
 
 /// Extension for add `avatar_size` method to `IntoElement` to apply avatar size to element.
 pub(super) trait AvatarSized: IntoElement + Styled {
-    fn avatar_size(self, size: Size) -> Self {
-        self.size(avatar_size(size))
-    }
-
     fn avatar_text_size(self, size: Size) -> Self {
         match size {
             Size::Large => self.text_3xl().font_semibold(),

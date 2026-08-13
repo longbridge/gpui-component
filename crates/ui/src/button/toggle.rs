@@ -1,15 +1,14 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui::{
-    AnyElement, App, Corners, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement, Styled, Toggled,
-    Window, div, prelude::FluentBuilder as _,
+    AnyElement, App, Axis, Corners, Edges, ElementId, InteractiveElement, IntoElement,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement, Styled,
+    Window, prelude::FluentBuilder as _,
 };
+use gpui_base::{Toggle as BaseToggle, ToggleGroup as BaseToggleGroup};
 use smallvec::{SmallVec, smallvec};
 
-use crate::{
-    ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt, h_flex, tooltip::ComponentTooltip,
-};
+use crate::{ActiveTheme, Disableable, Icon, Sizable, Size, StyledExt, tooltip::ComponentTooltip};
 
 #[derive(Default, Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToggleVariant {
@@ -153,15 +152,20 @@ impl RenderOnce for Toggle {
         let disabled = self.disabled;
         let hoverable = !disabled && !checked;
         let rounding = cx.theme().radius;
+        let pressed_background = cx.theme().tokens.accent;
+        let pressed_foreground = cx.theme().accent_foreground;
+        let instance_style = self.style.clone();
 
-        div()
-            .id(self.id)
-            .role(Role::Button)
-            .aria_toggled(if checked { Toggled::True } else { Toggled::False })
+        BaseToggle::new(self.id)
+            .pressed(checked)
+            .disabled(disabled)
             .when_some(
                 self.tooltip.text.as_ref().map(|(text, _)| text.clone()),
-                |this, label| this.aria_label(label),
+                |this, label| this.accessibility_label(label),
             )
+            .when_some(self.on_click, |this, on_click| {
+                this.on_change(move |next, _, window, cx| on_click(&next, window, cx))
+            })
             .flex()
             .flex_row()
             .items_center()
@@ -198,17 +202,16 @@ impl RenderOnce for Toggle {
                         .text_color(cx.theme().accent_foreground)
                 })
             })
-            .when(checked, |this| {
-                this.bg(cx.theme().tokens.accent)
-                    .text_color(cx.theme().accent_foreground)
+            .styles(|styles| {
+                styles.pressed(|style| {
+                    style
+                        .bg(pressed_background)
+                        .text_color(pressed_foreground)
+                        .refine_style(&instance_style)
+                })
             })
             .refine_style(&self.style)
             .children(self.children)
-            .when(!disabled, |this| {
-                this.when_some(self.on_click, |this, on_click| {
-                    this.on_click(move |_, window, cx| on_click(&!checked, window, cx))
-                })
-            })
             .map(|this| self.tooltip.apply(this))
     }
 }
@@ -310,85 +313,270 @@ impl RenderOnce for ToggleGroup {
             .iter()
             .map(|item| item.checked)
             .collect::<Vec<bool>>();
-        let state = Rc::new(Cell::new(None));
+        let clicked_index = Rc::new(Cell::new(None));
 
-        h_flex()
-            .id(self.id)
-            .role(Role::Toolbar)
-            .when(!self.segmented, |this| this.gap_2())
-            .refine_style(&self.style)
-            .children(self.items.into_iter().enumerate().map({
-                |(ix, item)| {
-                    let state = state.clone();
-                    let item = if !self.segmented || items_len == 1 {
-                        item
-                    } else if ix == 0 {
-                        item.border_corners(Corners {
-                            top_left: true,
-                            top_right: false,
-                            bottom_left: true,
-                            bottom_right: false,
-                        })
-                        .border_edges(Edges {
-                            left: true,
-                            top: true,
-                            right: true,
-                            bottom: true,
-                        })
-                    } else if ix == items_len - 1 {
-                        item.border_corners(Corners {
-                            top_left: false,
-                            top_right: true,
-                            bottom_left: false,
-                            bottom_right: true,
-                        })
-                        .border_edges(Edges {
-                            left: false,
-                            top: true,
-                            right: true,
-                            bottom: true,
-                        })
-                    } else {
-                        item.border_corners(Corners {
-                            top_left: false,
-                            top_right: false,
-                            bottom_left: false,
-                            bottom_right: false,
-                        })
-                        .border_edges(Edges {
-                            left: false,
-                            top: true,
-                            right: true,
-                            bottom: true,
-                        })
-                    };
+        BaseToggleGroup::new(self.id)
+            .axis(Axis::Horizontal)
+            .child(
+                crate::h_flex()
+                    .items_center()
+                    .when(!self.segmented, |this| this.gap_2())
+                    .refine_style(&self.style)
+                    .children(self.items.into_iter().enumerate().map({
+                        {
+                            let clicked_index = clicked_index.clone();
+                            move |(ix, item)| {
+                                let item = if !self.segmented || items_len == 1 {
+                                    item
+                                } else if ix == 0 {
+                                    item.border_corners(Corners {
+                                        top_left: true,
+                                        top_right: false,
+                                        bottom_left: true,
+                                        bottom_right: false,
+                                    })
+                                    .border_edges(Edges {
+                                        left: true,
+                                        top: true,
+                                        right: true,
+                                        bottom: true,
+                                    })
+                                } else if ix == items_len - 1 {
+                                    item.border_corners(Corners {
+                                        top_left: false,
+                                        top_right: true,
+                                        bottom_left: false,
+                                        bottom_right: true,
+                                    })
+                                    .border_edges(Edges {
+                                        left: false,
+                                        top: true,
+                                        right: true,
+                                        bottom: true,
+                                    })
+                                } else {
+                                    item.border_corners(Corners {
+                                        top_left: false,
+                                        top_right: false,
+                                        bottom_left: false,
+                                        bottom_right: false,
+                                    })
+                                    .border_edges(Edges {
+                                        left: false,
+                                        top: true,
+                                        right: true,
+                                        bottom: true,
+                                    })
+                                };
 
-                    item.disabled(disabled)
-                        .with_size(self.size)
-                        .with_variant(self.variant)
-                        .on_click(move |_, _, _| {
-                            state.set(Some(ix));
-                        })
-                }
-            }))
-            .when(!disabled, |this| {
-                this.when_some(self.on_click, |this, on_click| {
-                    this.on_click(move |_, window, cx| {
-                        if let Some(ix) = state.get() {
-                            let mut checks = checks.clone();
-                            checks[ix] = !checks[ix];
-                            on_click(&checks, window, cx);
+                                let effective_disabled = disabled || item.disabled;
+                                let clicked_index = clicked_index.clone();
+                                item.disabled(effective_disabled)
+                                    .with_size(self.size)
+                                    .with_variant(self.variant)
+                                    .on_click(move |_, _, cx| {
+                                        clicked_index.set(Some(ix));
+                                        cx.propagate();
+                                    })
+                            }
                         }
+                    })),
+            )
+            .when_some(
+                (!disabled).then_some(self.on_click).flatten(),
+                |this, on_click| {
+                    this.on_click(move |_, window, cx| {
+                        let Some(ix) = clicked_index.take() else {
+                            return;
+                        };
+                        let mut next = checks.clone();
+                        next[ix] = !next[ix];
+                        on_click(&next, window, cx);
                     })
-                })
-            })
+                },
+            )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::IconName;
+    use crate::{IconName, h_flex};
+    use gpui::{
+        Context, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render,
+        StatefulInteractiveElement, TestAppContext, VisualTestContext, point, px,
+    };
+    use std::cell::{Cell, RefCell};
+
+    struct ToggleHarness {
+        disabled: bool,
+        changes: Rc<RefCell<Vec<bool>>>,
+        parent_clicks: Rc<Cell<usize>>,
+    }
+
+    impl Render for ToggleHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let changes = self.changes.clone();
+            let parent_clicks = self.parent_clicks.clone();
+            h_flex()
+                .id("toggle-parent")
+                .tab_group()
+                .size(px(100.))
+                .on_click(move |_, _, _| parent_clicks.set(parent_clicks.get() + 1))
+                .child(
+                    Toggle::new("toggle")
+                        .label("Bold")
+                        .disabled(self.disabled)
+                        .size_full()
+                        .on_click(move |next, _, _| changes.borrow_mut().push(*next)),
+                )
+        }
+    }
+
+    fn harness(
+        cx: &mut TestAppContext,
+        disabled: bool,
+    ) -> (
+        &mut VisualTestContext,
+        Rc<RefCell<Vec<bool>>>,
+        Rc<Cell<usize>>,
+    ) {
+        cx.update(crate::init);
+        let changes = Rc::new(RefCell::new(Vec::new()));
+        let parent_clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let changes = changes.clone();
+            let parent_clicks = parent_clicks.clone();
+            move |_, _| ToggleHarness {
+                disabled,
+                changes,
+                parent_clicks,
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, changes, parent_clicks)
+    }
+
+    fn activate_key(cx: &mut VisualTestContext, key: &str) {
+        let keystroke = Keystroke::parse(key).unwrap();
+        cx.simulate_event(KeyDownEvent {
+            keystroke: keystroke.clone(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        cx.simulate_event(KeyUpEvent { keystroke });
+    }
+
+    #[gpui::test]
+    fn canonical_pointer_activation_fires_once_and_focuses(cx: &mut TestAppContext) {
+        let (cx, changes, _) = harness(cx, false);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        assert_eq!(changes.borrow().as_slice(), &[true]);
+        cx.update(|window, cx| assert!(window.focused(cx).is_some()));
+    }
+
+    #[gpui::test]
+    fn canonical_toggle_supports_tab_enter_and_space(cx: &mut TestAppContext) {
+        let (cx, changes, _) = harness(cx, false);
+        cx.update(|window, cx| window.focus_next(cx));
+        cx.update(|window, cx| assert!(window.focused(cx).is_some()));
+        activate_key(cx, "enter");
+        activate_key(cx, "space");
+        assert_eq!(changes.borrow().as_slice(), &[true, true]);
+    }
+
+    #[gpui::test]
+    fn canonical_disabled_toggle_is_inert_and_blocks_parent(cx: &mut TestAppContext) {
+        let (cx, changes, parent_clicks) = harness(cx, true);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        assert!(changes.borrow().is_empty());
+        assert_eq!(parent_clicks.get(), 0);
+    }
+
+    struct ToggleGroupHarness {
+        install_group_callback: bool,
+        child_clicks: Rc<Cell<usize>>,
+        group_changes: Rc<RefCell<Vec<Vec<bool>>>>,
+    }
+
+    impl Render for ToggleGroupHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let child_clicks = self.child_clicks.clone();
+            let mut group = ToggleGroup::new("toggle-group")
+                .w(px(120.))
+                .child(
+                    Toggle::new("one")
+                        .label("One")
+                        .checked(true)
+                        .on_click(move |_, _, _| child_clicks.set(child_clicks.get() + 1)),
+                )
+                .child(Toggle::new("two").label("Two"));
+            if self.install_group_callback {
+                let changes = self.group_changes.clone();
+                group = group.on_click(move |next, _, _| changes.borrow_mut().push(next.clone()));
+            }
+            group
+        }
+    }
+
+    fn toggle_group_harness(
+        cx: &mut TestAppContext,
+        install_group_callback: bool,
+    ) -> (
+        &mut VisualTestContext,
+        Rc<Cell<usize>>,
+        Rc<RefCell<Vec<Vec<bool>>>>,
+    ) {
+        cx.update(crate::init);
+        let child_clicks = Rc::new(Cell::new(0));
+        let group_changes = Rc::new(RefCell::new(Vec::new()));
+        let (_, cx) = cx.add_window_view({
+            let child_clicks = child_clicks.clone();
+            let group_changes = group_changes.clone();
+            move |_, _| ToggleGroupHarness {
+                install_group_callback,
+                child_clicks,
+                group_changes,
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, child_clicks, group_changes)
+    }
+
+    #[gpui::test]
+    fn legacy_toggle_group_overrides_child_callback_even_without_group_callback(
+        cx: &mut TestAppContext,
+    ) {
+        let (cx, child_clicks, changes) = toggle_group_harness(cx, false);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        assert_eq!(child_clicks.get(), 0);
+        assert!(changes.borrow().is_empty());
+    }
+
+    #[gpui::test]
+    fn legacy_toggle_group_pointer_flips_only_the_clicked_rendered_value(cx: &mut TestAppContext) {
+        let (cx, child_clicks, changes) = toggle_group_harness(cx, true);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+        assert_eq!(child_clicks.get(), 0);
+        assert_eq!(changes.borrow().as_slice(), &[vec![false, false]]);
+    }
+
+    #[gpui::test]
+    fn legacy_toggle_group_keyboard_click_does_not_reach_the_group_callback(
+        cx: &mut TestAppContext,
+    ) {
+        let (cx, child_clicks, changes) = toggle_group_harness(cx, true);
+        cx.update(|window, cx| window.focus_next(cx));
+        activate_key(cx, "enter");
+        assert_eq!(child_clicks.get(), 0);
+        assert!(changes.borrow().is_empty());
+    }
+
+    #[test]
+    fn instance_style_remains_the_final_visual_override() {
+        let toggle = Toggle::new("styled").checked(true).opacity(0.37);
+        assert_eq!(toggle.style.opacity, Some(0.37));
+    }
 
     #[gpui::test]
     fn test_toggle_builder(_cx: &mut gpui::TestAppContext) {

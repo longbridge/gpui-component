@@ -13,8 +13,7 @@ fn main() {
     // `RustEmbed` (see `src/native_assets.rs`), which finds the files
     // relative to our own `CARGO_MANIFEST_DIR`. So this build script does
     // not need to copy or move anything — it only advertises the location.
-    let manifest_dir =
-        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set by cargo");
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set by cargo");
     let icons_dir = Path::new(&manifest_dir).join("assets/icons");
 
     // Sanity-check that the directory we're advertising actually exists.

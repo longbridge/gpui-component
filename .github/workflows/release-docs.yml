@@ -10,22 +10,37 @@ permissions:
   pages: write
   id-token: write
 
+# Pages accepts one deployment at a time; queue rather than cancel so a release
+# deploy is never dropped in favour of a manually dispatched one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          # `workflow_run` reports the commit that triggered the release; the
+          # other events carry no such sha and check out their own ref.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: 1.3.6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+
+      - name: Setup nightly Rust for GPUI Base WASM
+        run: |
+          rustup toolchain install nightly --profile minimal
+          rustup target add wasm32-unknown-unknown --toolchain nightly
 
       - name: Install wasm-bindgen-cli
         # Keep the CLI version in sync with the `wasm-bindgen` crate in Cargo.lock
@@ -47,17 +62,24 @@ jobs:
         run: |
           make build-prod
 
-      - name: Build Docs
-        working-directory: docs
+      - name: Build GPUI Base examples (WASM)
+        working-directory: crates/base/examples/wasm
+        run: |
+          make build
+
+      - name: Build Website
+        working-directory: website
         run: |
           bun install
           bun run build
           cp .vitepress/dist/index.html .vitepress/dist/404.html
 
-      - name: Copy Story Web to Docs
+      - name: Copy WASM apps to Website
         run: |
-          mkdir -p docs/.vitepress/dist/gallery
-          cp -r crates/story-web/www/dist/* docs/.vitepress/dist/gallery/
+          mkdir -p website/.vitepress/dist/gallery
+          cp -r crates/story-web/www/dist/* website/.vitepress/dist/gallery/
+          mkdir -p website/.vitepress/dist/examples/base
+          cp -r crates/base/examples/wasm/www/dist/* website/.vitepress/dist/examples/base/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -65,7 +87,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "docs/.vitepress/dist"
+          path: "website/.vitepress/dist"
 
       - name: Deploy to GitHub Pages
         id: deployment

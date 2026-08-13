@@ -617,9 +617,8 @@ fn main() {
         });
 
         let window_options = WindowOptions {
-            titlebar: Some(TitleBar::title_bar_options()),
             window_bounds: Some(WindowBounds::centered(size(px(680.), px(600.)), cx)),
-            ..Default::default()
+            ..TitleBar::window_options()
         };
 
         cx.spawn(async move |cx| {

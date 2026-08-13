@@ -1,10 +1,17 @@
+use std::ops::RangeInclusive;
+
 use gpui::{
     App, Bounds, Context, Element, ElementId, Entity, EntityId, GlobalElementId, Hitbox,
     InspectorElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, Pixels, Point, ScrollWheelEvent, Style, WeakEntity, Window,
 };
 
-use crate::{Root, global_state::GlobalState, scroll::AutoScroll, text::TextViewState};
+use crate::{
+    Root,
+    global_state::{GlobalState, UiGlobalState},
+    scroll::AutoScroll,
+    text::TextViewState,
+};
 
 /// The modal layer a selectable [`TextView`](crate::text::TextView) belongs to.
 ///
@@ -113,7 +120,7 @@ impl<E: Element> Element for SelectionScopeMarker<E> {
         // so bracketing the child paint is sufficient. Paint is depth-first and
         // single-threaded, so the bracket is exact even if the dialog layer is
         // later wrapped in a deferred draw.
-        GlobalState::global_mut(cx).push_selection_scope(self.scope);
+        UiGlobalState::global_mut(cx).push_selection_scope(self.scope);
         self.element.paint(
             id,
             inspector_id,
@@ -123,7 +130,7 @@ impl<E: Element> Element for SelectionScopeMarker<E> {
             window,
             cx,
         );
-        GlobalState::global_mut(cx).pop_selection_scope();
+        UiGlobalState::global_mut(cx).pop_selection_scope();
     }
 }
 
@@ -164,6 +171,11 @@ pub(crate) struct SelectionEndpoint {
     /// True when the endpoint hit an Inline text run, not just blank space in
     /// the parent TextView bounds.
     pub(crate) inside_text: bool,
+    /// The top-level block `point` falls in, for a scrollable (virtualized)
+    /// view. Resolved once, while the block is on screen, because the block
+    /// stops reporting its selection as soon as it scrolls out of view (see
+    /// [`ParsedDocument::selected_text`](crate::text::document::ParsedDocument)).
+    pub(crate) block_ix: Option<usize>,
 }
 
 impl SelectionEndpoint {
@@ -215,6 +227,20 @@ impl WindowTextSelection {
     /// correct. When the two endpoints anchor to different views, all
     /// registered views participate and the per-character geometric test (in
     /// `Inline`) decides what is actually selected.
+    /// The top-level blocks the selection spans inside `view`, when both of its
+    /// endpoints are anchored there. Only a scrollable view records these (see
+    /// [`SelectionEndpoint::block_ix`]).
+    pub(crate) fn block_range(&self, view: EntityId) -> Option<RangeInclusive<usize>> {
+        let anchor = self.anchor.as_ref()?;
+        let cursor = self.cursor.as_ref()?;
+        if anchor.view_id() != Some(view) || cursor.view_id() != Some(view) {
+            return None;
+        }
+
+        let (anchor, cursor) = (anchor.block_ix?, cursor.block_ix?);
+        Some(anchor.min(cursor)..=anchor.max(cursor))
+    }
+
     pub(crate) fn single_view(&self) -> Option<EntityId> {
         let anchor = self.anchor.as_ref()?.view_id()?;
         let cursor = self.cursor.as_ref()?.view_id()?;
@@ -244,7 +270,7 @@ impl Root {
         let hitbox = hitbox.clone();
         // Capture the modal scope this view is painting under (set by the
         // `SelectionScopeMarker` wrapping a Dialog/Sheet content subtree).
-        let scope = GlobalState::global(cx).current_selection_scope();
+        let scope = UiGlobalState::global(cx).current_selection_scope();
         root.update(cx, |root, _| {
             // Prune dead views on each registration. This is O(N) per call (O(N²)
             // per frame across N selectable views), acceptable for typical view
@@ -318,7 +344,7 @@ impl Root {
             if !state.has_view_selection() && !in_window_selection {
                 continue;
             }
-            let text = state.selected_text();
+            let text = state.selected_text_in(self.text_selection.block_range(*id));
             if text.trim().is_empty() {
                 continue;
             }
@@ -574,11 +600,13 @@ impl Root {
                 .selectable_text_inlines
                 .get(&state.entity_id)
                 .is_some_and(|bounds| bounds.iter().any(|bounds| bounds.contains(&position)));
+            let point = position - state.bounds().origin - state.scroll_offset();
             return SelectionEndpoint {
-                point: position - state.bounds().origin - state.scroll_offset(),
+                point,
                 view: Some(view),
                 inside: true,
                 inside_text,
+                block_ix: state.block_ix_at(point.y),
             };
         }
 
@@ -618,11 +646,13 @@ impl Root {
                 match entity {
                     Some(entity) => {
                         let state = entity.read(cx);
+                        let point = position - state.bounds().origin - state.scroll_offset();
                         SelectionEndpoint {
-                            point: position - state.bounds().origin - state.scroll_offset(),
+                            point,
                             view: Some(view),
                             inside: false,
                             inside_text: false,
+                            block_ix: state.block_ix_at(point.y),
                         }
                     }
                     None => SelectionEndpoint {
@@ -630,6 +660,7 @@ impl Root {
                         point: position,
                         inside: false,
                         inside_text: false,
+                        block_ix: None,
                     },
                 }
             }
@@ -638,6 +669,7 @@ impl Root {
                 point: position,
                 inside: false,
                 inside_text: false,
+                block_ix: None,
             },
         }
     }
@@ -791,14 +823,14 @@ impl Element for TextSelectionController {
                 // Reset the suppression flag at the start of every press, then
                 // clear the previous selection (browser behavior), even when an
                 // interactive component consumes the event in the bubble phase.
-                GlobalState::global_mut(cx).suppress_text_selection = false;
+                GlobalState::reset_text_selection_suppression(cx);
                 Root::update(window, cx, |root, _, cx| root.clear_text_selection(cx));
             } else if event.click_count == 1 {
                 // Reaching bubble phase means no component stopped propagation.
                 // Components that own their own press (Button, Input, etc.) set
                 // `suppress_text_selection` in their bubble handler; if set, the
                 // press is theirs and must not start a window selection.
-                if GlobalState::global(cx).suppress_text_selection {
+                if GlobalState::is_text_selection_suppressed(cx) {
                     return;
                 }
                 Root::update(window, cx, |root, window, cx| {
@@ -944,6 +976,307 @@ mod tests {
             let _ = window.draw(cx);
         });
         (chat, cx)
+    }
+
+    /// A `scrollable(true)` TextView virtualizes its blocks, so a block only
+    /// learns its selection once it has been painted. Pressing at the top,
+    /// scrolling with the wheel and releasing at the bottom leaves every block
+    /// in between unpainted — copying used to drop all of them.
+    struct ScrollableTextViewTest {
+        text_view: Entity<TextViewState>,
+    }
+
+    /// Same as [`ScrollableTextViewTest`], but copying yields source.
+    struct SourceTextViewTest {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl Render for SourceTextViewTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                div().h(px(60.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .scrollable(true)
+                        .selection_format(crate::text::SelectionFormat::Source),
+                ),
+            )
+        }
+    }
+
+    impl Render for ScrollableTextViewTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                div().h(px(60.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .scrollable(true),
+                ),
+            )
+        }
+    }
+
+    /// [`Paragraph::render`] stores one `InlineState` per run of children
+    /// between inline images, so selection offsets belong to a run, not to a
+    /// single child. Mapping them against every child made the text before an
+    /// image show up again as if it were the text after it.
+    struct InlineImageSourceTestView {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl Render for InlineImageSourceTestView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().pt(px(10.)).child(
+                div().h(px(80.)).child(
+                    TextView::new(&self.text_view)
+                        .selectable(true)
+                        .selection_format(crate::text::SelectionFormat::Source),
+                ),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn selection_spans_blocks_scrolled_past(cx: &mut TestAppContext) {
+        use gpui::{ScrollDelta, ScrollWheelEvent};
+
+        const BLOCKS: usize = 20;
+
+        cx.update(crate::init);
+        let source = (0..BLOCKS)
+            .map(|ix| format!("Paragraph{ix}"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| ScrollableTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        // Press inside the first block, then wheel-scroll to the end. The
+        // blocks scrolled past are never painted while the drag is active.
+        cx.simulate_mouse_down(
+            point(px(0.), px(1.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        for _ in 0..BLOCKS {
+            cx.simulate_event(ScrollWheelEvent {
+                position: point(px(10.), px(30.)),
+                delta: ScrollDelta::Pixels(point(px(0.), px(-40.))),
+                ..Default::default()
+            });
+            cx.update(|window, cx| {
+                let _ = window.draw(cx);
+            });
+        }
+
+        // Release over the last visible block.
+        cx.simulate_mouse_move(
+            point(px(150.), px(58.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_up(
+            point(px(150.), px(58.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = window_selected_text(cx);
+        let missing = (0..BLOCKS)
+            .filter(|ix| !text.contains(&format!("Paragraph{ix}")))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "blocks scrolled past were dropped: {missing:?} in {text:?}"
+        );
+    }
+
+    /// Source mode has the same gap to bridge as plain text: a block the
+    /// selection spans but that scrolled past without painting reports no
+    /// selection of its own, and must still be copied — with its markup.
+    #[gpui::test]
+    fn source_selection_spans_blocks_scrolled_past(cx: &mut TestAppContext) {
+        use gpui::{ScrollDelta, ScrollWheelEvent};
+
+        const BLOCKS: usize = 20;
+
+        cx.update(crate::init);
+        let source = (0..BLOCKS)
+            .map(|ix| format!("**Paragraph{ix}**"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| SourceTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        cx.simulate_mouse_down(
+            point(px(0.), px(1.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        // Jump the whole document in one go, so the blocks in between never
+        // paint at all and cannot leave a stale selection behind.
+        cx.simulate_event(ScrollWheelEvent {
+            position: point(px(10.), px(30.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-40.) * BLOCKS as f32)),
+            ..Default::default()
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        cx.simulate_mouse_move(
+            point(px(150.), px(58.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_up(
+            point(px(150.), px(58.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = window_selected_text(cx);
+        let missing = (0..BLOCKS)
+            .filter(|ix| !text.contains(&format!("**Paragraph{ix}**")))
+            .collect::<Vec<_>>();
+        assert!(
+            missing.is_empty(),
+            "blocks scrolled past were dropped or lost their markup: {missing:?} in {text:?}"
+        );
+    }
+
+    /// A multi-click selection has to come back as source too. The click stores
+    /// the plain word it selected as a shortcut, which has lost its markup.
+    #[gpui::test]
+    fn source_multi_click_selection_keeps_its_markup(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| SourceTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown("**Hello** world", cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let position = point(px(10.), px(10.));
+        cx.simulate_event(MouseDownEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+            first_mouse: false,
+        });
+        cx.simulate_event(MouseUpEvent {
+            position,
+            modifiers: Modifiers::default(),
+            button: MouseButton::Left,
+            click_count: 2,
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = window_selected_text(cx);
+        assert_eq!(text.trim(), "**Hello**", "got: {text:?}");
+    }
+
+    #[gpui::test]
+    fn selection_inside_one_block_leaves_the_rest(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let source = (0..20)
+            .map(|ix| format!("Paragraph{ix}"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| ScrollableTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        // Stay inside the first block. The blocks below are on screen and
+        // simply not selected, so none of them may be filled in.
+        drag(cx, point(px(2.), px(4.)), point(px(40.), px(4.)));
+
+        let text = window_selected_text(cx);
+        assert!(!text.trim().is_empty(), "nothing selected");
+        assert!(
+            !text.contains("Paragraph1"),
+            "unselected block was filled in: {text:?}"
+        );
+    }
+
+    #[gpui::test]
+    fn source_format_maps_offsets_per_rendered_run(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| InlineImageSourceTestView {
+                text_view: cx.new(|cx| {
+                    TextViewState::markdown(
+                        "Build **status** ![img](https://example.com/i.svg) after text",
+                        cx,
+                    )
+                }),
+            });
+            Root::new(view, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        drag(cx, point(px(0.), px(11.)), point(px(600.), px(80.)));
+
+        let text = window_selected_text(cx);
+        assert_eq!(
+            text.trim(),
+            "Build **status** ![img](https://example.com/i.svg) after text"
+        );
     }
 
     fn drag(

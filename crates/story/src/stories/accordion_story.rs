@@ -1,21 +1,70 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, prelude::FluentBuilder as _,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement,
+    ParentElement as _, Render, StyleRefinement, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    IconName, Selectable, Sizable, Size,
-    accordion::Accordion,
+    ActiveTheme as _, Icon, IconName, Selectable, Sizable, Size, StyledExt as _,
+    accordion::{Accordion, AccordionItem},
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
     h_flex,
     switch::Switch,
+    tag::Tag,
     v_flex,
 };
 
 use crate::section;
 
+/// A settings row: the icon sits in a rounded square, and the content lines up
+/// with the title rather than with the icon.
+fn settings_item(
+    item: AccordionItem,
+    icon: IconName,
+    title: &'static str,
+    tag: Option<Tag>,
+    body: &'static str,
+    icon_bg: Hsla,
+    muted: Hsla,
+) -> AccordionItem {
+    item.title(
+        h_flex()
+            .gap_2()
+            .items_center()
+            .child(
+                h_flex()
+                    .flex_none()
+                    .size(px(32.))
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(8.))
+                    .bg(icon_bg)
+                    .child(Icon::new(icon).small().text_color(muted)),
+            )
+            .child(div().font_semibold().child(title))
+            .children(tag.map(|tag| tag.small())),
+    )
+    .title_style({
+        let mut style = StyleRefinement::default();
+        style.padding.top = Some(px(8.).into());
+        style.padding.bottom = Some(px(8.).into());
+        style
+    })
+    .content_style({
+        let mut style = StyleRefinement::default();
+        style.text.color = Some(muted);
+        // Past the icon square, so the text starts under the title.
+        style.padding.left = Some(px(52.).into());
+        style.padding.top = Some(px(0.).into());
+        style.padding.bottom = Some(px(12.).into());
+        style
+    })
+    .child(body)
+}
+
 pub struct AccordionStory {
     open_ixs: Vec<usize>,
+    styled_open_ixs: Vec<usize>,
     size: Size,
     bordered: bool,
     disabled: bool,
@@ -46,7 +95,8 @@ impl AccordionStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             bordered: false,
-            open_ixs: vec![0, 1, 2],
+            open_ixs: vec![0],
+            styled_open_ixs: vec![0],
             size: Size::default(),
             disabled: false,
             multiple: true,
@@ -74,6 +124,9 @@ impl Focusable for AccordionStory {
 
 impl Render for AccordionStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let icon_bg = cx.theme().secondary.opacity(0.5);
+        let muted_fg = cx.theme().muted_foreground;
+
         v_flex()
             .gap_5()
             .child(
@@ -159,50 +212,123 @@ impl Render for AccordionStory {
                     ),
             )
             .child(
-                section("Normal").max_w_md().child(
-                    Accordion::new("test")
-                        .bordered(self.bordered)
-                        .with_size(self.size)
-                        .disabled(self.disabled)
-                        .multiple(self.multiple)
-                        .item(|this| {
-                            this.open(self.open_ixs.contains(&0))
-                                .when(self.show_icon, |this| this.icon(IconName::Info))
-                                .title("Is it accessible?")
-                                .child("Yes. It adheres to the WAI-ARIA design pattern.")
-                        })
-                        .item(|this| {
-                            this.open(self.open_ixs.contains(&1))
-                            .when(self.show_icon, |this| this.icon(IconName::Inbox))
-                            .title("Is it styled with complex elements?")
-                            .child(
-                                v_flex()
-                                    .gap_4()
+                section("Normal").child(
+                    div().w(px(480.)).child(
+                        Accordion::new("test")
+                            .bordered(self.bordered)
+                            .with_size(self.size)
+                            .disabled(self.disabled)
+                            .multiple(self.multiple)
+                            .item(|this| {
+                                this.open(self.open_ixs.contains(&0))
+                                    .when(self.show_icon, |this| this.icon(IconName::Info))
+                                    .title("Is it accessible?")
                                     .child(
-                                        "We can put any view here, like a v_flex with a text view",
+                                        "Yes. Each item is a button with an aria-expanded state, \
+                                    so screen readers announce whether the section is open, \
+                                    and the whole group can be reached with the keyboard.",
                                     )
+                            })
+                            .item(|this| {
+                                this.open(self.open_ixs.contains(&1))
+                                    .when(self.show_icon, |this| this.icon(IconName::Inbox))
+                                    .title("Can it hold any content?")
                                     .child(
-                                        h_flex()
-                                            .gap_4()
-                                            .child(Switch::new("switch1").label("Switch"))
+                                        v_flex()
+                                            .gap_3()
                                             .child(
-                                                Checkbox::new("checkbox1").label("Or a Checkbox"),
+                                                "An item takes any element as its content, \
+                                            not just text. The height animation measures \
+                                            whatever you put in it.",
+                                            )
+                                            .child(
+                                                h_flex()
+                                                    .gap_4()
+                                                    .child(Switch::new("switch1").label("Switch"))
+                                                    .child(
+                                                        Checkbox::new("checkbox1")
+                                                            .label("Or a Checkbox"),
+                                                    ),
                                             ),
-                                    ),
-                            )
-                        })
-                        .item(|this| {
-                            this.open(self.open_ixs.contains(&2))
-                                .when(self.show_icon, |this| this.icon(IconName::Moon))
-                                .title("This is third accordion")
-                                .child(
-                                    "This is the third accordion content. \
-                                It can be any view, like a text view or a button.",
-                                )
-                        })
-                        .on_toggle_click(cx.listener(|this, open_ixs: &[usize], window, cx| {
-                            this.toggle_accordion(open_ixs.to_vec(), window, cx);
-                        })),
+                                    )
+                            })
+                            .item(|this| {
+                                this.open(self.open_ixs.contains(&2))
+                                    .when(self.show_icon, |this| this.icon(IconName::Moon))
+                                    .title("Is it animated?")
+                                    .child(
+                                        "Yes. Expanding and collapsing animates the height of \
+                                    the content, and the chevron rotates to follow. \
+                                    Items below move along with it.",
+                                    )
+                            })
+                            .on_toggle_click(cx.listener(
+                                |this, open_ixs: &[usize], window, cx| {
+                                    this.toggle_accordion(open_ixs.to_vec(), window, cx);
+                                },
+                            )),
+                    ),
+                ),
+            )
+            .child(
+                section("Custom Style").child(
+                    // A tinted frame around the card.
+                    div()
+                        .w(px(480.))
+                        .p(px(4.))
+                        .rounded(px(16.))
+                        .bg(cx.theme().secondary.opacity(0.5))
+                        .border_1()
+                        .border_color(cx.theme().border.opacity(0.5))
+                        .child(
+                            Accordion::new("custom-style")
+                                .multiple(self.multiple)
+                                .disabled(self.disabled)
+                                .item(|this| {
+                                    settings_item(
+                                        this,
+                                        IconName::Settings,
+                                        "Account Settings",
+                                        Some(Tag::success().outline().child("New")),
+                                        "Manage your account preferences, security settings, \
+                                    and personal information. You can also configure \
+                                    two-factor authentication here.",
+                                        icon_bg,
+                                        muted_fg,
+                                    )
+                                    .open(self.styled_open_ixs.contains(&0))
+                                })
+                                .item(|this| {
+                                    settings_item(
+                                        this,
+                                        IconName::Eye,
+                                        "Privacy & Security",
+                                        None,
+                                        "Control who can see your profile and how your data \
+                                    is used.",
+                                        icon_bg,
+                                        muted_fg,
+                                    )
+                                    .open(self.styled_open_ixs.contains(&1))
+                                })
+                                .item(|this| {
+                                    settings_item(
+                                        this,
+                                        IconName::Info,
+                                        "Help & Support",
+                                        None,
+                                        "Browse the documentation, or get in touch with the \
+                                    support team.",
+                                        icon_bg,
+                                        muted_fg,
+                                    )
+                                    .open(self.styled_open_ixs.contains(&2))
+                                })
+                                .on_toggle_click(cx.listener(|this, open_ixs: &[usize], _, cx| {
+                                    this.styled_open_ixs = open_ixs.to_vec();
+                                    cx.notify();
+                                })),
+                        ),
                 ),
             )
     }

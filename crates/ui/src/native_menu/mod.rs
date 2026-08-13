@@ -22,9 +22,9 @@
 //!     .show(position, window, cx);
 //! ```
 
-use crate::Icon;
 #[cfg(target_os = "windows")]
 use crate::ActiveTheme as _;
+use crate::Icon;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use gpui::AssetSource;

@@ -290,8 +290,7 @@ impl Sankey {
 
         compute_node_links(&mut graph);
         compute_node_values(&mut graph);
-        compute_node_ranks(&mut graph, true)?;
-        compute_node_ranks(&mut graph, false)?;
+        compute_node_ranks(&mut graph)?;
         self.compute_node_layers(&mut graph);
 
         Ok(graph)
@@ -667,43 +666,53 @@ fn compute_node_values(graph: &mut SankeyGraph) {
     }
 }
 
-/// Assign topological ranks by BFS waves; later waves overwrite, yielding the
-/// longest-path rank. More waves than nodes means a cycle.
-///
-/// `forward` walks source links to their targets and writes `depth`;
-/// otherwise it walks target links to their sources and writes `height`.
-fn compute_node_ranks(graph: &mut SankeyGraph, forward: bool) -> Result<(), SankeyError> {
+/// Assign the longest-path `depth` (from any source) and `height` (to any
+/// sink) from a single topological ordering. A node left unordered means its
+/// incoming links never resolved, i.e. a cycle.
+fn compute_node_ranks(graph: &mut SankeyGraph) -> Result<(), SankeyError> {
     let n = graph.nodes.len();
-    let mut current: Vec<usize> = (0..n).collect();
-    let mut x = 0;
-    while !current.is_empty() {
-        let mut next = vec![false; n];
-        for &index in &current {
-            let node = &graph.nodes[index];
-            let links = if forward {
-                &node.source_links
-            } else {
-                &node.target_links
-            };
-            for &link in links {
-                let neighbor = if forward {
-                    graph.links[link].target
-                } else {
-                    graph.links[link].source
-                };
-                next[neighbor] = true;
-            }
-            if forward {
-                graph.nodes[index].depth = x;
-            } else {
-                graph.nodes[index].height = x;
+    let mut incoming: Vec<usize> = graph
+        .nodes
+        .iter()
+        .map(|node| node.target_links.len())
+        .collect();
+    // Doubles as the traversal queue and, once drained, the topological order.
+    let mut order: Vec<usize> = (0..n).filter(|&index| incoming[index] == 0).collect();
+
+    // Ranks live in their own arrays rather than in the nodes: the traversal
+    // hops between them by index, and the node struct is an order of magnitude
+    // wider than a `usize`.
+    let mut depths = vec![0usize; n];
+    let mut visited = 0;
+    while visited < order.len() {
+        let index = order[visited];
+        visited += 1;
+        let depth = depths[index] + 1;
+        for &link in &graph.nodes[index].source_links {
+            let target = graph.links[link].target;
+            depths[target] = depths[target].max(depth);
+            incoming[target] -= 1;
+            if incoming[target] == 0 {
+                order.push(target);
             }
         }
-        x += 1;
-        if x > n {
-            return Err(SankeyError::CircularLink);
+    }
+    if order.len() != n {
+        return Err(SankeyError::CircularLink);
+    }
+
+    // Walking the order backwards means every target's height is already final
+    // when its sources are visited.
+    let mut heights = vec![0usize; n];
+    for &index in order.iter().rev() {
+        for &link in &graph.nodes[index].source_links {
+            heights[index] = heights[index].max(heights[graph.links[link].target] + 1);
         }
-        current = (0..n).filter(|&index| next[index]).collect();
+    }
+
+    for (node, (depth, height)) in graph.nodes.iter_mut().zip(depths.into_iter().zip(heights)) {
+        node.depth = depth;
+        node.height = height;
     }
     Ok(())
 }
@@ -1030,6 +1039,18 @@ mod tests {
         for (a, b) in completed.links.iter().zip(&graph.links) {
             assert_eq!((a.y0, a.y1, a.width), (b.y0, b.y1, b.width));
         }
+    }
+
+    #[test]
+    fn test_sankey_topology_large_chain() {
+        const NODE_COUNT: usize = 50_000;
+        let links: Vec<SankeyLink> = (0..NODE_COUNT - 1)
+            .map(|source| SankeyLink::new(source, source + 1, 1.))
+            .collect();
+        let graph = Sankey::new().topology(NODE_COUNT, &links).unwrap();
+
+        assert_eq!(graph.nodes[0].height, NODE_COUNT - 1);
+        assert_eq!(graph.nodes[NODE_COUNT - 1].depth, NODE_COUNT - 1);
     }
 
     #[test]

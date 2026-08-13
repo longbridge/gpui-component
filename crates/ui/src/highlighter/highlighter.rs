@@ -1,4 +1,6 @@
-use crate::highlighter::{HighlightTheme, LanguageRegistry};
+#[cfg(test)]
+use crate::highlighter::HighlightTheme;
+use crate::highlighter::LanguageRegistry;
 
 use anyhow::{Context, Result, anyhow};
 use gpui::{HighlightStyle, SharedString};
@@ -1051,7 +1053,7 @@ impl SyntaxHighlighter {
     pub fn styles(
         &self,
         range: &Range<usize>,
-        theme: &HighlightTheme,
+        theme: &dyn gpui_base::input::HighlightStyleResolver,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut styles = vec![];
         let start_offset = range.start;
@@ -1290,7 +1292,8 @@ mod tests {
         assert!(highlighter.tree().is_none());
         assert_eq!(highlighter.text().to_string(), rope.to_string());
 
-        let styles = highlighter.styles(&(0..rope.len()), &HighlightTheme::default_dark());
+        let theme = HighlightTheme::default_dark();
+        let styles = highlighter.styles(&(0..rope.len()), theme.as_ref());
         assert_eq!(styles, vec![(0..rope.len(), HighlightStyle::default())]);
 
         // Unregistered languages fall back to plain text.
@@ -1441,7 +1444,7 @@ console.log(answer);
         }
 
         let theme = HighlightTheme::default_dark();
-        let styles = highlighter.styles(&(0..markdown.len()), &theme);
+        let styles = highlighter.styles(&(0..markdown.len()), theme.as_ref());
         let keyword_start = markdown.find("fn first").unwrap();
         let keyword_color = theme.style("keyword").and_then(|style| style.color);
         assert!(styles.iter().any(|(range, style)| {
@@ -1615,7 +1618,8 @@ $x = 1;
         let mut highlighter = SyntaxHighlighter::new("markdown");
         highlighter.update(None, &rope, None);
 
-        let styles = highlighter.styles(&(0..markdown.len()), &HighlightTheme::default_dark());
+        let theme = HighlightTheme::default_dark();
+        let styles = highlighter.styles(&(0..markdown.len()), theme.as_ref());
         for text in ["bold and italic", "with"] {
             let start = markdown.find(text).unwrap();
             let end = start + text.len();

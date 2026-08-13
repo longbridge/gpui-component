@@ -1,15 +1,26 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    cell::Cell,
+    collections::HashMap,
+    rc::Rc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 
 use gpui::{
-    Anchor, App, AppContext, Context, DismissEvent, Div, DragMoveEvent, Empty, Entity, EntityId,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
+    Anchor, Animation, AnimationExt as _, App, AppContext, Bounds, Context, DismissEvent, Div,
+    DragMoveEvent, Empty, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, ScrollHandle,
+    SharedString, StatefulInteractiveElement, StyleRefinement, Styled, WeakEntity, Window, div,
+    point, prelude::FluentBuilder, px, rems,
 };
 use rust_i18n::t;
 
 use crate::{
     ActiveTheme, AxisExt, IconName, Placement, Selectable, Sizable,
+    animation::{Lerp, ease_out_cubic},
     button::{Button, ButtonVariants as _},
     dock::PanelInfo,
     h_flex,
@@ -19,8 +30,8 @@ use crate::{
 };
 
 use super::{
-    ClosePanel, DockArea, DockPlacement, Panel, PanelControl, PanelEvent, PanelState, PanelStyle,
-    PanelView, StackPanel, ToggleZoom,
+    AnyDrag, ClosePanel, DockArea, DockEvent, DockPlacement, DropTarget, Panel, PanelControl,
+    PanelEvent, PanelState, PanelStyle, PanelView, StackPanel, ToggleZoom,
 };
 
 #[derive(Clone)]
@@ -36,12 +47,71 @@ struct TabState {
 pub(crate) struct DragPanel {
     pub(crate) panel: Arc<dyn PanelView>,
     pub(crate) tab_panel: Entity<TabPanel>,
+    drag_offset: Rc<Cell<Point<Pixels>>>,
+    drag_session_id: u64,
 }
+
+static NEXT_DRAG_SESSION_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Stands in for [`DragPanel::drag_session_id`] on host-owned drag items, which
+/// carry no session of their own. `NEXT_DRAG_SESSION_ID` starts at 1, so 0 never
+/// collides.
+const ITEM_DRAG_SESSION_ID: u64 = 0;
 
 impl DragPanel {
     pub(crate) fn new(panel: Arc<dyn PanelView>, tab_panel: Entity<TabPanel>) -> Self {
-        Self { panel, tab_panel }
+        Self {
+            panel,
+            tab_panel,
+            drag_offset: Rc::new(Cell::new(Point::default())),
+            drag_session_id: NEXT_DRAG_SESSION_ID.fetch_add(1, Ordering::Relaxed),
+        }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DropPlaceholderBounds {
+    origin: Point<Pixels>,
+    size: gpui::Size<Pixels>,
+}
+
+impl DropPlaceholderBounds {
+    fn for_placement(bounds: gpui::Bounds<Pixels>, placement: Option<Placement>) -> Self {
+        let half_width = bounds.size.width * 0.5;
+        let half_height = bounds.size.height * 0.5;
+
+        match placement {
+            Some(Placement::Left) => Self {
+                origin: Point::default(),
+                size: gpui::size(half_width, bounds.size.height),
+            },
+            Some(Placement::Right) => Self {
+                origin: point(half_width, px(0.)),
+                size: gpui::size(half_width, bounds.size.height),
+            },
+            Some(Placement::Top) => Self {
+                origin: Point::default(),
+                size: gpui::size(bounds.size.width, half_height),
+            },
+            Some(Placement::Bottom) => Self {
+                origin: point(px(0.), half_height),
+                size: gpui::size(bounds.size.width, half_height),
+            },
+            None => Self {
+                origin: Point::default(),
+                size: bounds.size,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DropPlaceholderAnimation {
+    drag_session_id: u64,
+    placement: Option<Placement>,
+    from: DropPlaceholderBounds,
+    to: DropPlaceholderBounds,
+    epoch: u64,
 }
 
 impl Render for DragPanel {
@@ -87,6 +157,8 @@ pub struct TabPanel {
     collapsed: bool,
     /// When drag move, will get the placement of the panel to be split
     will_split_placement: Option<Placement>,
+    drop_placeholder_animation: Option<DropPlaceholderAnimation>,
+    drop_placeholder_animation_name: SharedString,
     /// Is TabPanel used in Tiles.
     in_tiles: bool,
 }
@@ -170,6 +242,7 @@ impl TabPanel {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let entity_id = cx.entity_id();
         Self {
             focus_handle: cx.focus_handle(),
             dock_area,
@@ -181,6 +254,8 @@ impl TabPanel {
             tab_bar_scroll_handle: ScrollHandle::new(),
             pending_scroll_to_ix: None,
             will_split_placement: None,
+            drop_placeholder_animation: None,
+            drop_placeholder_animation_name: format!("dock-drop-placeholder-{entity_id}").into(),
             zoomed: false,
             collapsed: false,
             closable: true,
@@ -730,12 +805,10 @@ impl TabPanel {
                         .child(panel.title(window, cx))
                         .when(state.draggable, |this| {
                             this.on_drag(
-                                DragPanel {
-                                    panel: panel.clone(),
-                                    tab_panel: view,
-                                },
-                                |drag, _, _, cx| {
+                                DragPanel::new(panel.clone(), view),
+                                |drag, offset, _, cx| {
                                     cx.stop_propagation();
+                                    drag.drag_offset.set(offset);
                                     cx.new(|_| drag.clone())
                                 },
                             )
@@ -829,8 +902,9 @@ impl TabPanel {
                             this.when(state.draggable, |this| {
                                 this.on_drag(
                                     DragPanel::new(panel.clone(), view.clone()),
-                                    |drag, _, _, cx| {
+                                    |drag, offset, _, cx| {
                                         cx.stop_propagation();
+                                        drag.drag_offset.set(offset);
                                         cx.new(|_| drag.clone())
                                     },
                                 )
@@ -842,12 +916,24 @@ impl TabPanel {
                                         .border_r_0()
                                         .border_color(cx.theme().drag_border)
                                 })
-                                .on_drop(cx.listener(
-                                    move |this, drag: &DragPanel, window, cx| {
-                                        this.will_split_placement = None;
-                                        this.on_drop(drag, Some(ix), true, window, cx)
-                                    },
-                                ))
+                                .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
+                                    this.will_split_placement = None;
+                                    this.on_drop(drag, Some(ix), true, window, cx)
+                                }))
+                                .when(!self.in_tiles, |this| {
+                                    this.drag_over::<AnyDrag>(|this, _, _, cx| {
+                                        this.rounded_l_none()
+                                            .border_l_2()
+                                            .border_r_0()
+                                            .border_color(cx.theme().drag_border)
+                                    })
+                                    .on_drop(cx.listener(
+                                        |this, item: &AnyDrag, _, cx| {
+                                            this.will_split_placement = None;
+                                            this.emit_drag_drop(item, None, cx);
+                                        },
+                                    ))
+                                })
                             })
                         }),
                 )
@@ -863,19 +949,28 @@ impl TabPanel {
                         this.drag_over::<DragPanel>(|this, _, _, cx| {
                             this.bg(cx.theme().tokens.drop_target)
                         })
-                        .on_drop(cx.listener(
-                            move |this, drag: &DragPanel, window, cx| {
-                                this.will_split_placement = None;
+                        .on_drop(cx.listener(move |this, drag: &DragPanel, window, cx| {
+                            this.will_split_placement = None;
 
-                                let ix = if drag.tab_panel == view {
-                                    Some(tabs_count - 1)
-                                } else {
-                                    None
-                                };
+                            let ix = if drag.tab_panel == view {
+                                Some(tabs_count - 1)
+                            } else {
+                                None
+                            };
 
-                                this.on_drop(drag, ix, false, window, cx)
-                            },
-                        ))
+                            this.on_drop(drag, ix, false, window, cx)
+                        }))
+                        .when(!self.in_tiles, |this| {
+                            this.drag_over::<AnyDrag>(|this, _, _, cx| {
+                                this.bg(cx.theme().tokens.drop_target)
+                            })
+                            .on_drop(cx.listener(
+                                |this, item: &AnyDrag, _, cx| {
+                                    this.will_split_placement = None;
+                                    this.emit_drag_drop(item, None, cx);
+                                },
+                            ))
+                        })
                     }),
             )
             .when(!self.collapsed, |this| {
@@ -918,6 +1013,9 @@ impl TabPanel {
 
         let is_render_in_tabs = self.panels.len() > 1 && self.inner_padding(cx);
 
+        let placeholder = self.drop_placeholder_animation;
+        let placeholder_animation_name = self.drop_placeholder_animation_name.clone();
+
         v_flex()
             .id("active-panel")
             .group("")
@@ -937,31 +1035,63 @@ impl TabPanel {
             )
             .when(state.droppable, |this| {
                 this.on_drag_move(cx.listener(Self::on_panel_drag_move))
+                    .when(!self.in_tiles, |this| {
+                        this.on_drag_move(cx.listener(Self::on_item_drag_move))
+                    })
                     .child(
                         div()
                             .invisible()
                             .absolute()
-                            .bg(cx.theme().tokens.drop_target)
-                            .map(|this| match self.will_split_placement {
-                                Some(placement) => {
-                                    let size = relative(0.5);
-                                    match placement {
-                                        Placement::Left => this.left_0().top_0().bottom_0().w(size),
-                                        Placement::Right => {
-                                            this.right_0().top_0().bottom_0().w(size)
-                                        }
-                                        Placement::Top => this.top_0().left_0().right_0().h(size),
-                                        Placement::Bottom => {
-                                            this.bottom_0().left_0().right_0().h(size)
-                                        }
-                                    }
-                                }
+                            .map(|this| match placeholder {
+                                Some(animation) => this
+                                    .left(animation.to.origin.x)
+                                    .top(animation.to.origin.y)
+                                    .w(animation.to.size.width)
+                                    .h(animation.to.size.height),
                                 None => this.top_0().left_0().size_full(),
                             })
                             .group_drag_over::<DragPanel>("", |this| this.visible())
                             .on_drop(cx.listener(|this, drag: &DragPanel, window, cx| {
                                 this.on_drop(drag, None, true, window, cx)
-                            })),
+                            }))
+                            .when(!self.in_tiles, |this| {
+                                this.group_drag_over::<AnyDrag>("", |this| this.visible())
+                                    .on_drop(cx.listener(|this, item: &AnyDrag, _, cx| {
+                                        let placement = this.will_split_placement.take();
+                                        this.emit_drag_drop(item, placement, cx);
+                                    }))
+                            })
+                            .when_some(placeholder, |this, animation| {
+                                let from = animation.from.origin - animation.to.origin;
+                                this.child(
+                                    div()
+                                        .absolute()
+                                        .bg(cx.theme().tokens.drop_target)
+                                        .with_animation(
+                                            gpui::ElementId::NamedInteger(
+                                                placeholder_animation_name,
+                                                animation.epoch,
+                                            ),
+                                            Animation::new(Duration::from_millis(150))
+                                                .with_easing(ease_out_cubic),
+                                            move |this, delta| {
+                                                let origin = from.lerp(&Point::default(), delta);
+                                                let width = animation
+                                                    .from
+                                                    .size
+                                                    .width
+                                                    .lerp(&animation.to.size.width, delta);
+                                                let height = animation
+                                                    .from
+                                                    .size
+                                                    .height
+                                                    .lerp(&animation.to.size.height, delta);
+
+                                                this.left(origin.x).top(origin.y).w(width).h(height)
+                                            },
+                                        ),
+                                )
+                            }),
                     )
             })
             .into_any_element()
@@ -975,22 +1105,89 @@ impl TabPanel {
         cx: &mut Context<Self>,
     ) {
         let bounds = drag.bounds;
-        let position = drag.event.position;
+        let placement = split_placement_at(bounds, drag.event.position);
 
-        // Check the mouse position to determine the split direction
-        if position.x < bounds.left() + bounds.size.width * 0.35 {
-            self.will_split_placement = Some(Placement::Left);
-        } else if position.x > bounds.left() + bounds.size.width * 0.65 {
-            self.will_split_placement = Some(Placement::Right);
-        } else if position.y < bounds.top() + bounds.size.height * 0.35 {
-            self.will_split_placement = Some(Placement::Top);
-        } else if position.y > bounds.top() + bounds.size.height * 0.65 {
-            self.will_split_placement = Some(Placement::Bottom);
-        } else {
-            // center to merge into the current tab
-            self.will_split_placement = None;
+        let dragged_panel = drag.drag(cx);
+        let source = DropPlaceholderBounds {
+            origin: drag.event.position - dragged_panel.drag_offset.get() - bounds.origin,
+            size: gpui::size(px(96.), px(30.)),
+        };
+
+        self.sync_drop_placeholder(bounds, placement, dragged_panel.drag_session_id, source, cx);
+    }
+
+    /// Same as [`Self::on_panel_drag_move`], for a host-owned drag item.
+    ///
+    /// A drag item has no dragged tab to fly the placeholder in from, so it
+    /// starts at its resting position and only animates between placements.
+    fn on_item_drag_move(
+        &mut self,
+        drag: &DragMoveEvent<AnyDrag>,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let bounds = drag.bounds;
+        let placement = split_placement_at(bounds, drag.event.position);
+        let source = DropPlaceholderBounds::for_placement(bounds, placement);
+
+        self.sync_drop_placeholder(bounds, placement, ITEM_DRAG_SESSION_ID, source, cx);
+    }
+
+    fn sync_drop_placeholder(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        placement: Option<Placement>,
+        drag_session_id: u64,
+        source: DropPlaceholderBounds,
+        cx: &mut Context<Self>,
+    ) {
+        let to = DropPlaceholderBounds::for_placement(bounds, placement);
+
+        let should_restart = self.drop_placeholder_animation.is_none_or(|animation| {
+            animation.drag_session_id != drag_session_id || animation.placement != placement
+        });
+        if should_restart {
+            let (from, epoch) = self
+                .drop_placeholder_animation
+                .map(|animation| {
+                    let from = if animation.drag_session_id == drag_session_id {
+                        animation.to
+                    } else {
+                        source
+                    };
+                    (from, animation.epoch.wrapping_add(1))
+                })
+                .unwrap_or((source, 0));
+
+            self.drop_placeholder_animation = Some(DropPlaceholderAnimation {
+                drag_session_id,
+                placement,
+                from,
+                to,
+                epoch,
+            });
         }
+        self.will_split_placement = placement;
         cx.notify()
+    }
+
+    /// Report a host-owned drag landing on this TabPanel. `placement` is `None`
+    /// to merge into this tab group instead of splitting.
+    fn emit_drag_drop(
+        &mut self,
+        item: &AnyDrag,
+        placement: Option<Placement>,
+        cx: &mut Context<Self>,
+    ) {
+        let item = item.clone();
+        let target = DropTarget::Panel {
+            tab_panel: cx.entity(),
+            placement,
+        };
+        _ = self.dock_area.update(cx, |_, cx| {
+            cx.emit(DockEvent::DragDrop { item, target });
+        });
+        cx.notify();
     }
 
     /// Handle the drop event when dragging a panel
@@ -1249,6 +1446,22 @@ impl TabPanel {
     }
 }
 
+/// Split direction for a cursor position inside `bounds`; `None` means the
+/// centre zone, i.e. merge into the tab group instead of splitting.
+fn split_placement_at(bounds: Bounds<Pixels>, position: Point<Pixels>) -> Option<Placement> {
+    if position.x < bounds.left() + bounds.size.width * 0.35 {
+        Some(Placement::Left)
+    } else if position.x > bounds.left() + bounds.size.width * 0.65 {
+        Some(Placement::Right)
+    } else if position.y < bounds.top() + bounds.size.height * 0.35 {
+        Some(Placement::Top)
+    } else if position.y > bounds.top() + bounds.size.height * 0.65 {
+        Some(Placement::Bottom)
+    } else {
+        None
+    }
+}
+
 impl Focusable for TabPanel {
     fn focus_handle(&self, cx: &App) -> gpui::FocusHandle {
         if let Some(active_panel) = self.active_panel(cx) {
@@ -1291,7 +1504,102 @@ mod tests {
     use gpui::{TestAppContext, VisualTestContext, WindowHandle};
 
     use super::*;
-    use crate::{Root, Theme, dock::DockItem};
+    use crate::{
+        Root, Theme,
+        dock::{DockItem, TileMeta},
+    };
+
+    #[test]
+    fn drop_placeholder_bounds_cover_each_target_placement() {
+        let bounds = gpui::Bounds {
+            origin: point(px(120.), px(80.)),
+            size: gpui::size(px(400.), px(300.)),
+        };
+
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, Some(Placement::Left)),
+            DropPlaceholderBounds {
+                origin: point(px(0.), px(0.)),
+                size: gpui::size(px(200.), px(300.)),
+            }
+        );
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, Some(Placement::Right)),
+            DropPlaceholderBounds {
+                origin: point(px(200.), px(0.)),
+                size: gpui::size(px(200.), px(300.)),
+            }
+        );
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, Some(Placement::Top)),
+            DropPlaceholderBounds {
+                origin: point(px(0.), px(0.)),
+                size: gpui::size(px(400.), px(150.)),
+            }
+        );
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, Some(Placement::Bottom)),
+            DropPlaceholderBounds {
+                origin: point(px(0.), px(150.)),
+                size: gpui::size(px(400.), px(150.)),
+            }
+        );
+        assert_eq!(
+            DropPlaceholderBounds::for_placement(bounds, None),
+            DropPlaceholderBounds {
+                origin: point(px(0.), px(0.)),
+                size: gpui::size(px(400.), px(300.)),
+            }
+        );
+    }
+
+    #[test]
+    fn split_placement_follows_the_cursor_zone() {
+        let bounds = gpui::Bounds {
+            origin: point(px(120.), px(80.)),
+            size: gpui::size(px(400.), px(300.)),
+        };
+        // 35% / 65% of 400x300 from origin (120, 80).
+        let at = |x: f32, y: f32| split_placement_at(bounds, point(px(x), px(y)));
+
+        assert_eq!(at(130., 230.), Some(Placement::Left));
+        assert_eq!(at(510., 230.), Some(Placement::Right));
+        assert_eq!(at(320., 90.), Some(Placement::Top));
+        assert_eq!(at(320., 370.), Some(Placement::Bottom));
+        assert_eq!(at(320., 230.), None, "centre merges into the tab group");
+    }
+
+    #[test]
+    fn split_placement_prefers_horizontal_in_the_corners() {
+        let bounds = gpui::Bounds {
+            origin: Point::default(),
+            size: gpui::size(px(400.), px(300.)),
+        };
+
+        // Top-left corner satisfies both Left and Top; x is tested first.
+        assert_eq!(
+            split_placement_at(bounds, point(px(10.), px(10.))),
+            Some(Placement::Left)
+        );
+        assert_eq!(
+            split_placement_at(bounds, point(px(390.), px(290.))),
+            Some(Placement::Right)
+        );
+    }
+
+    #[test]
+    fn split_placement_boundaries_fall_into_the_centre() {
+        let bounds = gpui::Bounds {
+            origin: Point::default(),
+            size: gpui::size(px(400.), px(300.)),
+        };
+
+        // Comparisons are strict, so the threshold itself is the centre zone.
+        assert_eq!(split_placement_at(bounds, point(px(140.), px(150.))), None);
+        assert_eq!(split_placement_at(bounds, point(px(260.), px(150.))), None);
+        assert_eq!(split_placement_at(bounds, point(px(200.), px(105.))), None);
+        assert_eq!(split_placement_at(bounds, point(px(200.), px(195.))), None);
+    }
 
     /// Shared, cross-panel ordered log of every `set_active` delivery.
     type Log = Arc<Mutex<Vec<(&'static str, bool)>>>;
@@ -1300,11 +1608,16 @@ mod tests {
         name: &'static str,
         focus_handle: FocusHandle,
         log: Log,
+        visible: bool,
     }
 
     impl Panel for TestPanel {
         fn panel_name(&self) -> &'static str {
             "TestPanel"
+        }
+
+        fn visible(&self, _: &App) -> bool {
+            self.visible
         }
 
         fn set_active(&mut self, active: bool, _: &mut Window, _: &mut Context<Self>) {
@@ -1357,6 +1670,7 @@ mod tests {
             name,
             focus_handle: cx.focus_handle(),
             log,
+            visible: true,
         })
     }
 
@@ -1395,6 +1709,177 @@ mod tests {
 
     fn drain(log: &Log) -> Vec<(&'static str, bool)> {
         std::mem::take(&mut *log.lock().unwrap())
+    }
+
+    /// An empty StackPanel used to dump as `PanelInfo::Panel`, the `PanelState`
+    /// default, so restoring looked it up in `PanelRegistry` and failed.
+    #[gpui::test]
+    fn empty_center_round_trips_as_a_stack(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let center = cx.read(|cx| fixture.dock_area.read(cx).dump(cx).center);
+
+        assert_eq!(center.panel_name, "StackPanel");
+        assert!(
+            matches!(center.info, PanelInfo::Stack { .. }),
+            "got {:?}",
+            center.info
+        );
+    }
+
+    #[gpui::test]
+    fn fresh_center_is_empty(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        assert!(
+            cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)),
+            "DockArea::new starts with an empty StackPanel centre"
+        );
+    }
+
+    #[gpui::test]
+    fn center_holding_a_tab_group_is_not_empty(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (item, _, _) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.update(|window, cx| {
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(item, window, cx))
+        });
+        cx.run_until_parked();
+
+        assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    /// The `DockItem` tree still lists the tab group here, so anything reading
+    /// `DockItem::Split { items }` would report non-empty.
+    #[gpui::test]
+    fn center_is_empty_again_once_every_panel_is_removed(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (item, tab_panel, panels) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.update(|window, cx| {
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(item, window, cx))
+        });
+        cx.run_until_parked();
+
+        for panel in panels {
+            cx.update(|window, cx| {
+                tab_panel.update(cx, |tab_panel, cx| {
+                    tab_panel.remove_panel(Arc::new(panel.clone()), window, cx)
+                })
+            });
+        }
+        cx.run_until_parked();
+
+        assert!(cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    #[gpui::test]
+    fn center_is_not_empty_after_adding_to_a_tab_group(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (item, tab_panel, _) = build_tabs(&fixture, &[], None, &mut cx);
+        cx.update(|window, cx| {
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(item, window, cx))
+        });
+        cx.run_until_parked();
+        assert!(cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+
+        let log = fixture.log.clone();
+        cx.update(|window, cx| {
+            let panel = test_panel("A", &log, cx);
+            tab_panel.update(cx, |tab_panel, cx| {
+                tab_panel.add_panel(Arc::new(panel), window, cx)
+            });
+        });
+        cx.run_until_parked();
+
+        assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    /// Rendering skips invisible panels, so a centre holding only hidden ones
+    /// draws nothing and counts as empty.
+    #[gpui::test]
+    fn center_holding_only_hidden_panels_is_empty(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (item, tab_panel, panels) = build_tabs(&fixture, &["A", "B"], None, &mut cx);
+        cx.update(|window, cx| {
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(item, window, cx))
+        });
+        cx.run_until_parked();
+        assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+
+        cx.update(|_, cx| {
+            for panel in &panels {
+                panel.update(cx, |panel, _| panel.visible = false);
+            }
+        });
+        cx.run_until_parked();
+
+        assert_eq!(
+            cx.read(|cx| tab_panel.read(cx).panels.len()),
+            2,
+            "hiding a panel does not remove it from the tab group"
+        );
+        assert!(cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+    }
+
+    /// A `TabPanel` inside `Tiles` has no parent `StackPanel` to remove itself
+    /// from, so emptying it leaves the tile behind and the walk has to recurse.
+    #[gpui::test]
+    fn center_holding_only_empty_tiles_is_empty(cx: &mut TestAppContext) {
+        let fixture = setup(cx);
+        let mut cx = VisualTestContext::from_window(fixture.window.into(), cx);
+
+        let (tabs, tab_panel, panels) = build_tabs(&fixture, &["A"], None, &mut cx);
+        let weak_dock_area = fixture.dock_area.downgrade();
+        cx.update(|window, cx| {
+            let tiles = DockItem::tiles(
+                vec![tabs],
+                vec![TileMeta::default()],
+                &weak_dock_area,
+                window,
+                cx,
+            );
+            fixture
+                .dock_area
+                .update(cx, |area, cx| area.set_center(tiles, window, cx))
+        });
+        cx.run_until_parked();
+        assert!(!cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
+
+        for panel in panels {
+            cx.update(|window, cx| {
+                tab_panel.update(cx, |tab_panel, cx| {
+                    tab_panel.remove_panel(Arc::new(panel.clone()), window, cx)
+                })
+            });
+        }
+        cx.run_until_parked();
+
+        let tiles = cx.read(|cx| {
+            let DockItem::Tiles { view, .. } = fixture.dock_area.read(cx).center() else {
+                unreachable!("the centre is a Tiles item");
+            };
+            view.read(cx).panels().len()
+        });
+        assert_eq!(tiles, 1, "the emptied TabPanel is still listed as a tile");
+        assert!(cx.read(|cx| fixture.dock_area.read(cx).is_center_empty(cx)));
     }
 
     #[gpui::test]

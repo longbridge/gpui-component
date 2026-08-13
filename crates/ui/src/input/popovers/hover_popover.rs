@@ -34,10 +34,6 @@ impl HoverPopover {
             hover,
         })
     }
-
-    pub(crate) fn is_same(&self, offset: usize) -> bool {
-        self.symbol_range.contains(&offset)
-    }
 }
 
 impl Render for HoverPopover {
@@ -107,28 +103,7 @@ impl Popover {
     /// Get the bounds of the range in the editor, if it is visible.
     fn trigger_bounds(&self, cx: &App) -> Option<Bounds<Pixels>> {
         let editor = self.editor.read(cx);
-        let Some(last_layout) = editor.last_layout.as_ref() else {
-            return None;
-        };
-
-        let Some(last_bounds) = editor.last_bounds else {
-            return None;
-        };
-
-        let (_, _, start_pos) = editor.line_and_position_for_offset(self.range.start);
-        let (_, _, end_pos) = editor.line_and_position_for_offset(self.range.end);
-
-        let Some(start_pos) = start_pos else {
-            return None;
-        };
-        let Some(end_pos) = end_pos else {
-            return None;
-        };
-
-        Some(Bounds::from_corners(
-            last_bounds.origin + start_pos,
-            last_bounds.origin + end_pos + point(px(0.), last_layout.line_height),
-        ))
+        editor.range_to_bounds(&self.range)
     }
 }
 

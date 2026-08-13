@@ -7,7 +7,7 @@ use gpui_component::{
         PanelState, PanelView, register_panel,
     },
     input::{Input, InputState},
-    scroll::ScrollbarShow,
+    scroll::ScrollbarMode,
 };
 use gpui_component_assets::Assets;
 use gpui_component_story::{ButtonStory, IconStory, StoryContainer};
@@ -181,8 +181,8 @@ impl StoryTiles {
             window,
             |this, dock_area, ev: &DockEvent, window, cx| match ev {
                 DockEvent::LayoutChanged => this.save_layout(dock_area, window, cx),
-                DockEvent::DragDrop(item) => {
-                    println!("drag drop: {:?}", item);
+                DockEvent::DragDrop { item, target } => {
+                    println!("drag drop: {:?} on {:?}", item, target);
                 }
             },
         )
@@ -243,11 +243,11 @@ impl StoryTiles {
         Ok(())
     }
 
-    fn set_scrollbar_show(dock_area: &mut DockArea, cx: &mut App) {
+    fn set_scrollbar_mode(dock_area: &mut DockArea, cx: &mut App) {
         match dock_area.center() {
             DockItem::Tiles { view, .. } => {
                 view.update(cx, |this, cx| {
-                    this.set_scrollbar_show(Some(ScrollbarShow::Always), cx);
+                    this.set_scrollbar_mode(Some(ScrollbarMode::Always), cx);
                 });
             }
             _ => {}
@@ -288,7 +288,7 @@ impl StoryTiles {
 
         dock_area.update(cx, |dock_area, cx| {
             dock_area.load(state, window, cx).context("load layout")?;
-            Self::set_scrollbar_show(dock_area, cx);
+            Self::set_scrollbar_mode(dock_area, cx);
             Ok::<(), anyhow::Error>(())
         })
     }
@@ -303,7 +303,7 @@ impl StoryTiles {
             dock_area.set_version(TILES_DOCK_AREA.version, window, cx);
             dock_area.set_center(dock_item, window, cx);
 
-            Self::set_scrollbar_show(dock_area, cx);
+            Self::set_scrollbar_mode(dock_area, cx);
             Self::save_tiles(&dock_area.dump(cx)).unwrap();
         });
     }
@@ -363,11 +363,6 @@ impl StoryTiles {
         cx.spawn(async move |cx| {
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(window_bounds)),
-                titlebar: Some(TitlebarOptions {
-                    title: None,
-                    appears_transparent: true,
-                    traffic_light_position: Some(point(px(9.0), px(9.0))),
-                }),
                 window_min_size: Some(gpui::Size {
                     width: px(640.),
                     height: px(480.),
@@ -377,7 +372,7 @@ impl StoryTiles {
                 window_background: gpui::WindowBackgroundAppearance::Transparent,
                 #[cfg(target_os = "linux")]
                 window_decorations: Some(gpui::WindowDecorations::Client),
-                ..Default::default()
+                ..TitleBar::window_options()
             };
 
             let window = cx.open_window(options, |window, cx| {

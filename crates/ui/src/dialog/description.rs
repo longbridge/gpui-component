@@ -1,7 +1,7 @@
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    StyleRefinement, Styled, Window, div,
+    AnyElement, App, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled, Window,
 };
+use gpui_base::DialogDescription as BaseDialogDescription;
 
 use crate::{ActiveTheme as _, StyledExt as _};
 
@@ -16,13 +16,18 @@ use crate::{ActiveTheme as _, StyledExt as _};
 /// ```
 #[derive(IntoElement)]
 pub struct DialogDescription {
+    base: BaseDialogDescription,
     style: StyleRefinement,
     children: Vec<AnyElement>,
 }
 
 impl DialogDescription {
     pub fn new() -> Self {
-        Self { style: StyleRefinement::default(), children: vec![] }
+        Self {
+            base: BaseDialogDescription::new(),
+            style: StyleRefinement::default(),
+            children: vec![],
+        }
     }
 }
 
@@ -40,8 +45,7 @@ impl Styled for DialogDescription {
 
 impl RenderOnce for DialogDescription {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        div()
-            .id("dialog-description")
+        self.base
             .text_sm()
             .text_color(cx.theme().muted_foreground)
             .refine_style(&self.style)

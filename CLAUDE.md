@@ -71,6 +71,27 @@ samply record cargo run
 
 ## Core Architecture
 
+### Architecture Refactoring Constraints
+
+The implemented foundation architecture is documented in
+`docs/ARCHITECTURE.md`, with styling and motion rules in
+`docs/STYLING-AND-MOTION.md`. Preserve these constraints when designing or
+implementing this architecture:
+
+- Keep `gpui-component` as the ecosystem and product brand.
+- Name the foundation crate `gpui-base`.
+- Follow the ownership boundary: the framework owns behavior and infrastructure;
+  the application owns component source and visual style.
+- Keep the base layer visually unopinionated. It may provide interaction behavior,
+  accessibility, focus, overlay and popup infrastructure, positioning, animation,
+  virtual lists, dock infrastructure, and semantic design tokens.
+- Theme APIs must expose semantic tokens (colors, spacing, radius, typography, and
+  shadows), not an ever-growing set of component-specific styling fields.
+- Keep source distribution or registry tooling above the `gpui-base` seam; no
+  registry or CLI crate is currently part of the workspace.
+- Preserve 100% backward compatibility for existing consumers, including current
+  imports such as `use gpui_component::button::Button;`.
+
 ### Component Initialization
 
 **Critical requirement**: You must call `gpui_component::init(cx)` at your application's entry point before using any GPUI Component features.
@@ -157,6 +178,16 @@ Text input system based on Rope data structure:
 2. **Size system**: Supports `xs`, `sm`, `md` (default), `lg` sizes via `Sizable` trait.
 3. **Mouse cursor**: Buttons use `default` cursor not `pointer` (desktop app convention), unless it's a link button
 4. **Style system**: Provides CSS-like styling API via `Styled` trait and `ElementExt` extensions
+5. **Base controls are no-style**: Base controls and parts do not install layout,
+   positioning, colors, sizing, gaps, radius, borders, shadows, variants, or animation.
+   Complete presentation belongs to `crates/ui` or the application. The deliberate
+   exception is the foundational Base Input frame, which provides only a semantic
+   one-pixel input border and semantic radius baseline; UI/application layers own
+   its background, sizing, padding, typography, adornments, and richer focus style.
+6. **GPUI builder style**: Keep element construction as one fluent builder chain. Express
+   conditions with `when`, `when_some`, `when_none`, and `map`; do not split a chain into a
+   mutable temporary element followed by imperative reassignment when the builder API can
+   express the same operation.
 
 ## Code Style
 
@@ -194,9 +225,11 @@ Uses `rust-i18n` crate.
 
 ## Documentation
 
-- Documentation source files are in `docs/`.
-- Docs have two locales: English (`docs/docs/`) and Chinese (`docs/zh-CN/docs/`).
+- The documentation site source is in `website/`.
+- Site docs have two locales: English (`website/docs/`) and Chinese (`website/zh-CN/docs/`).
 - When modifying any documentation file, always sync changes to both `en` and `zh-CN` versions.
+- `docs/` holds internal architecture specifications (RFC, migration status, reviews).
+  These are single-language and are not published to the site; see `docs/README.md`.
 
 ## Platform Support
 

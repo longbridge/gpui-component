@@ -63,8 +63,6 @@ pub struct ThemeColor {
     pub accent_foreground: Hsla,
     /// Accordion background color.
     pub accordion: Hsla,
-    /// Accordion hover background color.
-    pub accordion_hover: Hsla,
     /// Default background color.
     pub background: Hsla,
     /// Default border color
@@ -346,8 +344,14 @@ pub struct ThemeColor {
 
 macro_rules! define_theme_tokens {
     ($($field:ident),+ $(,)?) => {
-        /// Resolved theme tokens used when a value needs both a solid representative
-        /// color and the configured paint background.
+        /// Legacy resolved tokens retained for compatibility with existing
+        /// `gpui-component` themes and components.
+        ///
+        /// This type intentionally includes component-specific fields such as
+        /// `button_primary`, `tab_active`, and `table_hover`. New application-owned
+        /// components should use [`gpui_base::SemanticThemeTokens`] instead. The
+        /// legacy fields remain public so existing theme files and direct field
+        /// access continue to work unchanged.
         #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, JsonSchema)]
         pub struct ThemeTokens {
             $(pub $field: ThemeToken,)+
@@ -373,7 +377,6 @@ define_theme_tokens! {
     accent,
     accent_foreground,
     accordion,
-    accordion_hover,
     background,
     border,
     button,

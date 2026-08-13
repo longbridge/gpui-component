@@ -9,12 +9,9 @@ use gpui::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    StyledExt,
-    resizable::{PANEL_MIN_SIZE, resize_handle},
-};
+use crate::{PANEL_MIN_SIZE, Side, StyledExt, resize_handle};
 
-use super::{DockArea, DockItem, PanelView, TabPanel};
+use super::{DockArea, DockEvent, DockItem, PanelView, TabPanel};
 
 #[derive(Clone)]
 struct ResizePanel;
@@ -297,7 +294,9 @@ impl Dock {
         let view = cx.entity().clone();
 
         resize_handle("resize-handle", axis)
-            .placement(self.placement)
+            .when(self.placement == DockPlacement::Left, |this| {
+                this.placement(Side::Left)
+            })
             .on_drag(ResizePanel {}, move |info, _, _, cx| {
                 cx.stop_propagation();
                 view.update(cx, |view, _| {
@@ -376,8 +375,17 @@ impl Dock {
         cx.notify();
     }
 
-    fn done_resizing(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+    fn done_resizing(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        if !self.resizing {
+            return;
+        }
         self.resizing = false;
+
+        // Dragging the dock's resize handle finished, bubble a layout change
+        // so subscribers can persist the new dock size.
+        _ = self.dock_area.update(cx, |_, cx| {
+            cx.emit(DockEvent::LayoutChanged);
+        });
     }
 }
 

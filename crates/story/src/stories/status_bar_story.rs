@@ -65,7 +65,9 @@ impl Render for StatusBarStory {
                     v_flex().w_full().child(
                         StatusBar::new()
                             .left(
-                                Button::new("branch").ghost().xsmall()
+                                Button::new("branch")
+                                    .ghost()
+                                    .xsmall()
                                     .icon(IconName::Github)
                                     .label("main")
                                     .tooltip("Git branch")
@@ -102,7 +104,9 @@ impl Render for StatusBarStory {
                                     ),
                             )
                             .right(
-                                Button::new("position").ghost().xsmall()
+                                Button::new("position")
+                                    .ghost()
+                                    .xsmall()
                                     .label("Ln 12, Col 34")
                                     .tooltip("Go to Line/Column")
                                     .on_click(|_, window, cx| {
@@ -110,16 +114,24 @@ impl Render for StatusBarStory {
                                     }),
                             )
                             .right(Separator::vertical().h_3())
-                            .right(Button::new("encoding").ghost().xsmall().label("UTF-8").on_click(
-                                |_, window, cx| {
-                                    window.push_notification("Select encoding", cx);
-                                },
-                            ))
-                            .right(Button::new("language").ghost().xsmall().label("Rust").on_click(
-                                |_, window, cx| {
-                                    window.push_notification("Select language", cx);
-                                },
-                            )),
+                            .right(
+                                Button::new("encoding")
+                                    .ghost()
+                                    .xsmall()
+                                    .label("UTF-8")
+                                    .on_click(|_, window, cx| {
+                                        window.push_notification("Select encoding", cx);
+                                    }),
+                            )
+                            .right(
+                                Button::new("language")
+                                    .ghost()
+                                    .xsmall()
+                                    .label("Rust")
+                                    .on_click(|_, window, cx| {
+                                        window.push_notification("Select language", cx);
+                                    }),
+                            ),
                     ),
                 ),
             )
@@ -143,7 +155,9 @@ impl Render for StatusBarStory {
                             )
                             .right("All changes saved")
                             .right(
-                                Button::new("notifications").ghost().xsmall()
+                                Button::new("notifications")
+                                    .ghost()
+                                    .xsmall()
                                     .icon(IconName::Bell)
                                     .label("3")
                                     .tooltip("3 notifications")

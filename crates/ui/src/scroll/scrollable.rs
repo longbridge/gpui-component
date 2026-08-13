@@ -1,6 +1,6 @@
 use std::{panic::Location, rc::Rc};
 
-use crate::StyledExt;
+use crate::{InteractiveElementExt as _, StyledExt};
 
 use super::{Scrollbar, ScrollbarAxis, ScrollbarHandle};
 use gpui::{
@@ -153,7 +153,7 @@ where
             })
             // On a single-axis area gpui otherwise remaps the other axis' delta
             // onto ours, so a purely horizontal swipe scrolls this vertically.
-            .restrict_scroll_to_axis()
+            .lock_scroll_axis()
             .child(content);
 
         div()
@@ -247,11 +247,14 @@ fn render_scrollbar<H: ScrollbarHandle + Clone>(
 
     div()
         .absolute()
-        .top_0()
-        .left_0()
-        .right_0()
-        .bottom_0()
-        .child(Scrollbar::new(scroll_handle).id(id).axis(axis))
+        .inset_0()
+        .debug_selector(|| "scrollbar-overlay".to_string())
+        .child(
+            Scrollbar::new(scroll_handle)
+                .id(id)
+                .axis(axis)
+                .viewport_from_layout(),
+        )
 }
 
 #[cfg(test)]
@@ -404,6 +407,31 @@ mod tests {
     }
 
     struct GapLayoutTest;
+
+    struct PaddedScrollbarOverlayTest;
+
+    impl Render for PaddedScrollbarOverlayTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            crate::v_flex()
+                .w(px(100.))
+                .h(px(100.))
+                .p(px(20.))
+                .overflow_y_scrollbar()
+                .children((0..4).map(|_| plain_row(50.)))
+        }
+    }
+
+    #[gpui::test]
+    fn scrollbar_overlay_ignores_content_padding(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| PaddedScrollbarOverlayTest);
+        let cx: &mut VisualTestContext = cx;
+        draw(cx);
+
+        let overlay = cx.debug_bounds("scrollbar-overlay").unwrap();
+        assert_eq!(overlay.origin, point(px(0.), px(0.)));
+        assert_eq!(overlay.size, gpui::size(px(100.), px(100.)));
+    }
 
     impl Render for GapLayoutTest {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {

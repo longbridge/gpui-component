@@ -218,26 +218,13 @@ impl Render for MenuStory {
                                         menu.link("Crates", "https://crates.io")
                                             .link("Rust Docs", "https://docs.rs")
                                             .separator()
-                                            .submenu(
-                                                "Nested",
-                                                window,
-                                                cx,
-                                                |menu, window, cx| {
-                                                    menu.link("Docs.rs", "https://docs.rs")
-                                                        .separator()
-                                                        .submenu(
-                                                            "Deeper",
-                                                            window,
-                                                            cx,
-                                                            |menu, _, _| {
-                                                                menu.link(
-                                                                    "GPUI",
-                                                                    "https://gpui.rs",
-                                                                )
-                                                            },
-                                                        )
-                                                },
-                                            )
+                                            .submenu("Nested", window, cx, |menu, window, cx| {
+                                                menu.link("Docs.rs", "https://docs.rs")
+                                                    .separator()
+                                                    .submenu("Deeper", window, cx, |menu, _, _| {
+                                                        menu.link("GPUI", "https://gpui.rs")
+                                                    })
+                                            })
                                     })
                             }),
                     )

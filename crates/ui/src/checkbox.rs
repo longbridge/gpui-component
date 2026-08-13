@@ -1,21 +1,24 @@
 use std::{rc::Rc, time::Duration};
 
 use crate::{
-    ActiveTheme, Disableable, FocusableExt, IconName, Selectable, Sizable, Size, StyledExt as _,
-    icon::IconNamed, text::Text, tooltip::ComponentTooltip, v_flex,
+    ActiveTheme, Disableable, FocusableExt, IconName, RoleOverride, Selectable, Sizable, Size,
+    StyledExt as _, icon::IconNamed, text::Text, tooltip::ComponentTooltip, v_flex,
 };
 use gpui::{
-    Animation, AnimationExt, AnyElement, App, Div, ElementId, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, Role, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Toggled, Window, div, prelude::FluentBuilder as _, px, relative, rems, svg,
+    Animation, AnimationExt, AnyElement, App, ElementId, InteractiveElement, IntoElement,
+    MouseButton, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _, px, relative, rems, svg,
 };
+use gpui_base::CheckboxIndicator;
 
 /// A Checkbox element.
 #[derive(IntoElement)]
 pub struct Checkbox {
     id: ElementId,
-    base: Div,
+    base: gpui_base::Checkbox,
     style: StyleRefinement,
+    // `Text` is legacy presentation state. During render it is composed into
+    // the Base Checkbox child seam together with application children.
     label: Option<Text>,
     children: Vec<AnyElement>,
     checked: bool,
@@ -25,14 +28,16 @@ pub struct Checkbox {
     tab_index: isize,
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
     tooltip: ComponentTooltip,
+    role: RoleOverride,
 }
 
 impl Checkbox {
     /// Create a new Checkbox with the given id.
     pub fn new(id: impl Into<ElementId>) -> Self {
+        let id = id.into();
         Self {
-            id: id.into(),
-            base: div(),
+            id: id.clone(),
+            base: gpui_base::Checkbox::new(id),
             style: StyleRefinement::default(),
             label: None,
             children: Vec::new(),
@@ -43,7 +48,13 @@ impl Checkbox {
             tab_stop: true,
             tab_index: 0,
             tooltip: ComponentTooltip::default(),
+            role: RoleOverride::default(),
         }
+    }
+
+    pub fn role(mut self, role: impl Into<RoleOverride>) -> Self {
+        self.role = role.into();
+        self
     }
 
     /// Set tooltip text for the checkbox.
@@ -82,18 +93,6 @@ impl Checkbox {
     pub fn tab_index(mut self, tab_index: isize) -> Self {
         self.tab_index = tab_index;
         self
-    }
-
-    fn handle_click(
-        on_click: &Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
-        checked: bool,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        let new_checked = !checked;
-        if let Some(f) = on_click {
-            (f)(&new_checked, window, cx);
-        }
     }
 }
 
@@ -201,42 +200,47 @@ impl RenderOnce for Checkbox {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let checked = self.checked;
 
+        let base = self.base;
+        let children = self.children;
+        let accessibility_label = self.label.as_ref().map(|label| label.get_text(cx));
+        let on_click = self.on_click.clone();
         let focus_handle = window
             .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
             .read(cx)
             .clone();
         let is_focused = focus_handle.is_focused(window);
 
-        let border_color = if checked {
-            cx.theme().primary
+        let unchecked_border = cx.theme().input;
+        let checked_color = cx.theme().primary;
+        let disabled_indicator_color = if checked {
+            checked_color.opacity(0.5)
         } else {
-            cx.theme().input
-        };
-        let color = if self.disabled {
-            border_color.opacity(0.5)
-        } else {
-            border_color
+            unchecked_border.opacity(0.5)
         };
         let radius = cx.theme().radius.min(px(4.));
-
-        self.base
-            .id(self.id.clone())
-            .role(Role::CheckBox)
-            .aria_toggled(if checked {
-                Toggled::True
-            } else {
-                Toggled::False
+        let disabled_text_color = cx.theme().muted_foreground;
+        let instance_style = self.style.clone();
+        base.role(self.role)
+            .checked(checked)
+            .disabled(self.disabled)
+            .styles(|styles| {
+                styles.disabled(|style| {
+                    style
+                        .text_color(disabled_text_color)
+                        .refine_style(&instance_style)
+                })
             })
-            .when_some(
-                self.label.as_ref().map(|l| l.get_text(cx)),
-                |this, label| this.aria_label(label),
-            )
-            .when(!self.disabled, |this| {
-                this.track_focus(
-                    &focus_handle
-                        .tab_stop(self.tab_stop)
-                        .tab_index(self.tab_index),
-                )
+            .tab_stop(self.tab_stop)
+            .tab_index(self.tab_index)
+            .track_focus(&focus_handle)
+            .when_some(accessibility_label, |this, label| {
+                this.accessibility_label(label)
+            })
+            .when_some(on_click, |this, on_click| {
+                this.on_change(move |_, _, window, cx| {
+                    window.prevent_default();
+                    on_click(&!checked, window, cx);
+                })
             })
             .h_flex()
             .gap_2()
@@ -250,14 +254,13 @@ impl RenderOnce for Checkbox {
                 Size::Large => this.text_lg(),
                 _ => this,
             })
-            .when(self.disabled, |this| {
-                this.text_color(cx.theme().muted_foreground)
-            })
             .rounded(cx.theme().radius * 0.5)
             .focus_ring(is_focused, px(2.), window, cx)
             .refine_style(&self.style)
             .child(
-                div()
+                CheckboxIndicator::new()
+                    .checked(checked)
+                    .disabled(self.disabled)
                     .relative()
                     .map(|this| match self.size {
                         Size::XSmall => this.size_3(),
@@ -268,12 +271,23 @@ impl RenderOnce for Checkbox {
                     })
                     .flex_shrink_0()
                     .border_1()
-                    .border_color(color)
                     .rounded(radius)
-                    .map(|this| match checked {
-                        false => this.bg(cx.theme().input_background()),
-                        true if self.disabled => this.bg(color),
-                        true => this.bg(cx.theme().tokens.primary),
+                    .when(!checked, |this| {
+                        this.bg(cx.theme().input_background())
+                            .when(!self.disabled, |this| this.border_color(unchecked_border))
+                    })
+                    .styles(|styles| {
+                        styles
+                            .checked(|style| {
+                                style
+                                    .border_color(checked_color)
+                                    .bg(cx.theme().tokens.primary)
+                            })
+                            .disabled(|style| {
+                                style
+                                    .border_color(disabled_indicator_color)
+                                    .when(checked, |style| style.bg(disabled_indicator_color))
+                            })
                     })
                     .child(checkbox_check_icon(
                         self.id,
@@ -284,7 +298,7 @@ impl RenderOnce for Checkbox {
                         cx,
                     )),
             )
-            .when(self.label.is_some() || !self.children.is_empty(), |this| {
+            .when(self.label.is_some() || !children.is_empty(), |this| {
                 this.child(
                     v_flex()
                         .flex_1()
@@ -307,22 +321,141 @@ impl RenderOnce for Checkbox {
                                 this
                             }
                         })
-                        .children(self.children),
+                        .children(children),
                 )
             })
-            .on_mouse_down(gpui::MouseButton::Left, |_, window, _| {
-                // Avoid focus on mouse down.
+            .on_mouse_down(MouseButton::Left, |_, window, _| {
+                // Preserve the legacy Checkbox behavior: pointer presses do
+                // not move focus, including while disabled.
                 window.prevent_default();
             })
-            .when(!self.disabled, |this| {
-                this.on_click({
-                    let on_click = self.on_click.clone();
-                    move |_, window, cx| {
-                        window.prevent_default();
-                        Self::handle_click(&on_click, checked, window, cx);
-                    }
-                })
-            })
             .map(|this| self.tooltip.apply(this))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{
+        Context, KeyDownEvent, KeyUpEvent, Keystroke, Modifiers, Render, TestAppContext,
+        VisualTestContext, point,
+    };
+
+    use super::*;
+
+    struct CheckboxHarness {
+        disabled: bool,
+        clicks: Rc<Cell<usize>>,
+        parent_clicks: Rc<Cell<usize>>,
+    }
+
+    impl Render for CheckboxHarness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let clicks = self.clicks.clone();
+            let parent_clicks = self.parent_clicks.clone();
+            div()
+                .id("checkbox-parent")
+                .tab_group()
+                .size(px(100.))
+                .on_click(move |_, _, _| parent_clicks.set(parent_clicks.get() + 1))
+                .child(
+                    Checkbox::new("checkbox")
+                        .disabled(self.disabled)
+                        .size_full()
+                        .on_click(move |checked, _, _| {
+                            assert!(*checked);
+                            clicks.set(clicks.get() + 1);
+                        }),
+                )
+        }
+    }
+
+    fn harness(
+        cx: &mut TestAppContext,
+        disabled: bool,
+    ) -> (&mut VisualTestContext, Rc<Cell<usize>>, Rc<Cell<usize>>) {
+        cx.update(crate::init);
+        let clicks = Rc::new(Cell::new(0));
+        let parent_clicks = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let clicks = clicks.clone();
+            let parent_clicks = parent_clicks.clone();
+            move |_, _| CheckboxHarness {
+                disabled,
+                clicks,
+                parent_clicks,
+            }
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        (cx, clicks, parent_clicks)
+    }
+
+    fn activate_key(cx: &mut VisualTestContext, key: &str) {
+        let keystroke = Keystroke::parse(key).unwrap();
+        cx.simulate_event(KeyDownEvent {
+            keystroke: keystroke.clone(),
+            is_held: false,
+            prefer_character_input: false,
+        });
+        cx.simulate_event(KeyUpEvent { keystroke });
+    }
+
+    #[gpui::test]
+    fn facade_pointer_activation_fires_once_without_moving_focus(cx: &mut TestAppContext) {
+        let (cx, clicks, _) = harness(cx, false);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+
+        assert_eq!(clicks.get(), 1);
+        cx.update(|window, cx| assert!(window.focused(cx).is_none()));
+    }
+
+    #[gpui::test]
+    fn facade_supports_tab_enter_and_space(cx: &mut TestAppContext) {
+        let (cx, clicks, _) = harness(cx, false);
+        cx.update(|window, cx| window.focus_next(cx));
+        cx.update(|window, cx| assert!(window.focused(cx).is_some()));
+
+        activate_key(cx, "enter");
+        activate_key(cx, "space");
+
+        assert_eq!(clicks.get(), 2);
+    }
+
+    #[gpui::test]
+    fn facade_disabled_is_inert_and_pointer_activation_bubbles(cx: &mut TestAppContext) {
+        let (cx, clicks, parent_clicks) = harness(cx, true);
+        cx.simulate_click(point(px(10.), px(10.)), Modifiers::default());
+
+        assert_eq!(clicks.get(), 0);
+        assert_eq!(parent_clicks.get(), 1);
+        cx.update(|window, cx| assert!(window.focused(cx).is_none()));
+    }
+
+    #[gpui::test]
+    fn facade_prepaints_label_and_custom_content_through_the_base_slot(cx: &mut TestAppContext) {
+        struct ContentHarness;
+
+        impl Render for ContentHarness {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                Checkbox::new("content-checkbox")
+                    .label("Remember me")
+                    .child(
+                        div()
+                            .debug_selector(|| "checkbox-custom-content".into())
+                            .child("Additional detail"),
+                    )
+            }
+        }
+
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|_, _| ContentHarness);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let bounds = cx
+            .debug_bounds("checkbox-custom-content")
+            .expect("custom content must prepaint through the Base child seam");
+        assert!(bounds.size.width > px(0.));
+        assert!(bounds.size.height > px(0.));
     }
 }
