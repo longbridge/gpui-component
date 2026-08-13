@@ -26,7 +26,6 @@ rand = "0.8"
 regex = "1"
 serde = "1"
 serde_json = "1"
-syntect.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "registry"], default-features = false }
 unindent = "0.2.3"
@@ -42,6 +41,9 @@ color-lsp = "0.2.0"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true
+# WASM has no tree-sitter grammars, so the Editor story highlights with
+# `syntect` there. Native uses the built-in tree-sitter highlighter.
+syntect.workspace = true
 # `rand 0.8` (via `fake`) does not enable the `js` feature of getrandom,
 # which is required to build for wasm32-unknown-unknown.
 getrandom = { version = "0.2", features = ["js"] }
