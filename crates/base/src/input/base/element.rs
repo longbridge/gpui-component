@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    InputState, TextDecoration,
+    InputBaseState, TextDecoration,
     layout::{LastLayout, WhitespaceIndicators},
     mode::InputMode,
 };
@@ -116,14 +116,14 @@ impl EditorScrollbarSnapshot {
         last_layout: &LastLayout,
         scroll_size: Size<Pixels>,
         cursor_scroll_offset: Point<Pixels>,
-        state: &InputState,
+        state: &InputBaseState,
     ) -> Self {
         Self {
             layout: EditorScrollbarLayout::new(
                 input_bounds,
                 last_layout.line_number_width,
                 scroll_size,
-                Edges::default(),
+                state.editor_paddings,
             ),
             cursor_scroll_offset,
             soft_wrap: state.soft_wrap,
@@ -164,11 +164,11 @@ impl EditorScrollbarLayout {
 }
 
 pub(super) struct EditorScrollbar {
-    state: Entity<InputState>,
+    state: Entity<InputBaseState>,
 }
 
 impl EditorScrollbar {
-    pub(super) fn new(state: Entity<InputState>) -> Self {
+    pub(super) fn new(state: Entity<InputBaseState>) -> Self {
         Self { state }
     }
 }
@@ -278,12 +278,16 @@ fn editor_gutter_bounds(
     input_bounds: Bounds<Pixels>,
     line_number_width: Pixels,
     ghost_lines_height: Pixels,
+    paddings: Edges<Pixels>,
 ) -> Bounds<Pixels> {
     Bounds {
-        origin: input_bounds.origin,
+        origin: point(
+            input_bounds.origin.x - paddings.left,
+            input_bounds.origin.y - paddings.top,
+        ),
         size: size(
-            line_number_width,
-            input_bounds.size.height + ghost_lines_height,
+            line_number_width + paddings.left,
+            input_bounds.size.height + ghost_lines_height + paddings.top + paddings.bottom,
         ),
     }
 }
@@ -317,7 +321,7 @@ fn ime_marked_display_range(
 
 /// Minimum pixel padding the cursor is kept clear of the viewport's
 /// top/bottom edges before auto-scroll engages. Backs
-/// [`InputState::cursor_surrounding_lines`].
+/// [`InputBaseState::cursor_surrounding_lines`].
 ///
 /// Auto-grow uses one line. Otherwise `None` falls back to the historical
 /// heuristic ([`BOTTOM_MARGIN_ROWS`] lines, or one line on small
@@ -349,7 +353,7 @@ pub(super) fn cursor_surrounding_padding(
 }
 
 /// Pixel height of the empty area below the last line in the editor's
-/// scrollable region. Backs [`InputState::scroll_beyond_last_line`].
+/// scrollable region. Backs [`InputBaseState::scroll_beyond_last_line`].
 ///
 /// `0` outside code-editor mode. Inside it, `None` is half the viewport
 /// (floored at [`BOTTOM_MARGIN_ROWS`] line-heights); `Some(n)` is exactly
@@ -378,12 +382,12 @@ struct FoldIconLayout {
 }
 
 pub(super) struct TextElement {
-    pub(crate) state: Entity<InputState>,
+    pub(crate) state: Entity<InputBaseState>,
     placeholder: SharedString,
 }
 
 impl TextElement {
-    pub(super) fn new(state: Entity<InputState>) -> Self {
+    pub(super) fn new(state: Entity<InputBaseState>) -> Self {
         Self {
             state,
             placeholder: SharedString::default(),
@@ -860,7 +864,7 @@ impl TextElement {
     /// - visible_top: The top position of the first visible line in the scroll viewport.
     fn calculate_visible_range(
         &self,
-        state: &InputState,
+        state: &InputBaseState,
         line_height: Pixels,
         input_height: Pixels,
     ) -> (Range<usize>, Vec<usize>, Pixels) {
@@ -926,7 +930,7 @@ impl TextElement {
 
     /// Return (line_number_width, line_number_len)
     fn layout_line_numbers(
-        state: &InputState,
+        state: &InputBaseState,
         text: &Rope,
         font_size: Pixels,
         style: &TextStyle,
@@ -971,7 +975,7 @@ impl TextElement {
     ///
     /// Returns `WhitespaceIndicators` with shaped lines for space and tab characters.
     fn layout_whitespace_indicators(
-        state: &InputState,
+        state: &InputBaseState,
         text_size: Pixels,
         style: &TextStyle,
         window: &mut Window,
@@ -1028,7 +1032,7 @@ impl TextElement {
     /// - first_line: Shaped text for the first line (goes after cursor on same line)
     /// - ghost_lines: Shaped lines for subsequent lines (shift content down)
     fn layout_inline_completion(
-        state: &InputState,
+        state: &InputBaseState,
         visible_range: &Range<usize>,
         font_size: Pixels,
         window: &mut Window,
@@ -1283,7 +1287,7 @@ impl TextElement {
 
     #[allow(clippy::too_many_arguments)]
     fn layout_lines(
-        state: &InputState,
+        state: &InputBaseState,
         display_text: &Rope,
         last_layout: &LastLayout,
         font_size: Pixels,
@@ -2063,7 +2067,7 @@ impl Element for TextElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let (focus_handle, show_cursor, disabled, selected_range, editor_style) = {
+        let (focus_handle, show_cursor, disabled, selected_range, editor_style, editor_paddings) = {
             let state = self.state.read(cx);
             (
                 state.focus_handle.clone(),
@@ -2071,6 +2075,7 @@ impl Element for TextElement {
                 state.disabled,
                 state.selected_range,
                 state.editor_style.clone(),
+                state.editor_paddings,
             )
         };
         let focused = focus_handle.is_focused(window);
@@ -2255,14 +2260,13 @@ impl Element for TextElement {
             let gutter_bg = editor_style
                 .editor_gutter_background
                 .unwrap_or(editor_background);
-            window.paint_quad(fill(
-                editor_gutter_bounds(
-                    input_bounds,
-                    prepaint.last_layout.line_number_width,
-                    prepaint.ghost_lines_height,
-                ),
-                gutter_bg,
-            ));
+            let gutter_bounds = editor_gutter_bounds(
+                input_bounds,
+                prepaint.last_layout.line_number_width,
+                prepaint.ghost_lines_height,
+                editor_paddings,
+            );
+            window.paint_quad(fill(gutter_bounds, gutter_bg));
 
             // Each item is the normal lines.
             for (lines, &buffer_line) in line_numbers
@@ -2278,12 +2282,8 @@ impl Element for TextElement {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
                             Bounds::new(
-                                p,
-                                size(
-                                    prepaint.last_layout.line_number_width
-                                        - LINE_NUMBER_RIGHT_MARGIN,
-                                    height,
-                                ),
+                                point(gutter_bounds.origin.x, p.y),
+                                size(gutter_bounds.size.width, height),
                             ),
                             bg_color,
                         ));
@@ -2595,8 +2595,18 @@ mod tests {
         let input_bounds = Bounds::new(point(px(10.), px(20.)), size(px(300.), px(80.)));
 
         assert_eq!(
-            editor_gutter_bounds(input_bounds, px(48.), px(16.)),
-            Bounds::new(point(px(10.), px(20.)), size(px(48.), px(96.)))
+            editor_gutter_bounds(
+                input_bounds,
+                px(48.),
+                px(16.),
+                Edges {
+                    top: px(2.),
+                    right: px(3.),
+                    bottom: px(5.),
+                    left: px(7.),
+                },
+            ),
+            Bounds::new(point(px(3.), px(18.)), size(px(55.), px(103.)))
         );
     }
 

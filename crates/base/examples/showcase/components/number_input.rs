@@ -65,7 +65,7 @@ impl BaseShowcase {
             .text_xs()
             .child(div().text_xs().child("Quantity"))
             .child(
-                NumberInput::new(&self.input)
+                NumberInput::new(self.input.read(cx).base_state())
                     .controls_right()
                     .w_full()
                     .h_7()

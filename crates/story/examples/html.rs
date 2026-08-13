@@ -3,7 +3,7 @@ use gpui_component::{
     ActiveTheme as _, Sizable as _,
     button::{Button, ButtonVariants as _},
     highlighter::Language,
-    input::{Input, InputState, TabSize},
+    input::{Input, InputBaseState, TabSize},
     resizable::h_resizable,
     status_bar::StatusBar,
     text::{SelectionFormat, html},
@@ -12,7 +12,7 @@ use gpui_component::{
 use gpui_component_assets::Assets;
 
 pub struct Example {
-    input_state: Entity<InputState>,
+    input_state: Entity<InputBaseState>,
     /// Whether copying a selection yields the rendered text or its source.
     selection_format: SelectionFormat,
     _subscribe: Subscription,
@@ -23,7 +23,7 @@ const EXAMPLE: &str = include_str!("./fixtures/test.html");
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
-            InputState::new(window, cx)
+            InputBaseState::new(window, cx)
                 .code_editor(Language::Html)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -66,7 +66,7 @@ impl Render for Example {
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
                                 .child(
-                                    Input::new(&self.input_state)
+                                    Input::from_base(&self.input_state)
                                         .h_full()
                                         .appearance(false)
                                         .focus_bordered(false),

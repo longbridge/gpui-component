@@ -1,7 +1,7 @@
 use gpui::{Context, Point, Window};
 
 use crate::input::{
-    InputState, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight,
+    InputBaseState, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight,
     MoveToEnd, MoveToNextWord, MoveToPreviousWord, MoveToStart, MoveUp, RopeExt as _,
 };
 
@@ -11,7 +11,7 @@ pub(crate) enum MoveDirection {
     Down,
 }
 
-impl InputState {
+impl InputBaseState {
     /// Called after moving the cursor. Updates preferred_column if we know where the cursor now is.
     pub(super) fn update_preferred_column(&mut self) {
         let Some(last_layout) = &self.last_layout else {

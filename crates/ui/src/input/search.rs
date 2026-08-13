@@ -12,7 +12,10 @@ use crate::{
     ActiveTheme, Disableable, ElementExt, IconName, Selectable, Sizable,
     button::{Button, ButtonVariants},
     h_flex,
-    input::{Enter, Escape, IndentInline, Input, InputEvent, InputState, OutdentInline, Replace},
+    input::{
+        Enter, Escape, IndentInline, Input, InputBaseState, InputEvent, InputState, OutdentInline,
+        Replace,
+    },
     label::Label,
     v_flex,
 };
@@ -32,7 +35,7 @@ enum MoveDirection {
 }
 
 pub(super) struct SearchPanel {
-    editor: WeakEntity<InputState>,
+    editor: WeakEntity<InputBaseState>,
     search_input: Entity<InputState>,
     replace_input: Entity<InputState>,
     session: gpui_base::input::SearchSession,
@@ -70,7 +73,7 @@ impl SearchPanel {
         }
     }
 
-    pub fn new(editor: Entity<InputState>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub fn new(editor: Entity<InputBaseState>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         let search_input = cx.new(|cx| InputState::new(window, cx));
         let replace_input = cx.new(|cx| InputState::new(window, cx));
 

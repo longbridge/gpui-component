@@ -221,7 +221,7 @@ impl InputMode {
         &mut self,
         update: HighlighterUpdate<'_>,
         window: &mut Window,
-        cx: &mut Context<crate::input::InputState>,
+        cx: &mut Context<crate::input::InputBaseState>,
     ) {
         match &self {
             InputMode::CodeEditor {

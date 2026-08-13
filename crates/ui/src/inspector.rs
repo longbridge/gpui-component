@@ -20,7 +20,7 @@ use crate::{
     clipboard::Clipboard,
     description_list::DescriptionList,
     h_flex,
-    input::{CompletionProvider, Input, InputEvent, InputState, RopeExt, TabSize},
+    input::{CompletionProvider, Input, InputBaseState, InputEvent, RopeExt, TabSize},
     link::Link,
     v_flex,
 };
@@ -62,7 +62,7 @@ pub(crate) fn init(cx: &mut App) {
 
 struct EditorState {
     /// The input state for the editor.
-    state: Entity<InputState>,
+    state: Entity<InputBaseState>,
     /// Error to display from parsing the input, or if serialization errors somehow occur.
     error: Option<SharedString>,
     /// Whether the editor is currently being edited.
@@ -86,13 +86,13 @@ impl DivInspector {
         let lsp_provider = Rc::new(LspProvider {});
 
         let json_input_state = cx.new(|cx| {
-            InputState::new(window, cx)
+            InputBaseState::new(window, cx)
                 .code_editor("json")
                 .line_number(false)
         });
 
         let rust_input_state = cx.new(|cx| {
-            let mut editor = InputState::new(window, cx)
+            let mut editor = InputBaseState::new(window, cx)
                 .code_editor("rust")
                 .line_number(false)
                 .tab_size(TabSize {
@@ -437,7 +437,7 @@ impl Render for DivInspector {
                                 .gap_y_1()
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
-                                .child(Input::new(&self.rust_state.state).h_full())
+                                .child(Input::from_base(&self.rust_state.state).h_full())
                                 .when_some(self.rust_state.error.clone(), |this, err| {
                                     this.child(Alert::error("rust-error", err).text_xs())
                                 }),
@@ -465,7 +465,7 @@ impl Render for DivInspector {
                                 .gap_y_1()
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
-                                .child(Input::new(&self.json_state.state).h_full())
+                                .child(Input::from_base(&self.json_state.state).h_full())
                                 .when_some(self.json_state.error.clone(), |this, err| {
                                     this.child(Alert::error("json-error", err).text_xs())
                                 }),
@@ -570,7 +570,7 @@ impl CompletionProvider for LspProvider {
         offset: usize,
         _: lsp_types::CompletionContext,
         _: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     ) -> Task<Result<CompletionResponse>> {
         let mut left_offset = 0;
         while left_offset < 100 {
@@ -627,7 +627,7 @@ impl CompletionProvider for LspProvider {
         })
     }
 
-    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputState>) -> bool {
+    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputBaseState>) -> bool {
         true
     }
 }

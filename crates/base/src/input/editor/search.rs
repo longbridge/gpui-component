@@ -3,7 +3,7 @@ use gpui::{Context, Window};
 use ropey::Rope;
 use std::{ops::Range, rc::Rc};
 
-use super::{InputState, Replace, RopeExt as _, Search, movement::MoveDirection};
+use super::{InputBaseState, Replace, RopeExt as _, Search, movement::MoveDirection};
 
 /// Stateful, presentation-independent search engine used by text inputs.
 #[derive(Debug, Clone)]
@@ -57,7 +57,7 @@ impl SearchSession {
     }
 }
 
-impl InputState {
+impl InputBaseState {
     pub fn open_search(&mut self, replace_mode: bool, cx: &mut Context<Self>) {
         if !self.searchable {
             return;

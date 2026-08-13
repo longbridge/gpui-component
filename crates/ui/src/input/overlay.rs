@@ -4,14 +4,14 @@ use gpui::{AnyElement, App, Entity, EntityId, Global, IntoElement, WeakEntity, W
 use ropey::Rope;
 
 use super::{
-    InputState,
+    InputBaseState,
     popovers::{CodeActionMenu, CompletionMenu, DiagnosticPopover, HoverPopover},
     search::SearchPanel,
 };
 
 #[derive(Default)]
 struct InputOverlayRegistry {
-    hosts: HashMap<EntityId, (WeakEntity<InputState>, InputOverlayHost)>,
+    hosts: HashMap<EntityId, (WeakEntity<InputBaseState>, InputOverlayHost)>,
 }
 
 impl Global for InputOverlayRegistry {}
@@ -48,7 +48,7 @@ impl InputOverlays {
 }
 
 impl InputOverlayHost {
-    fn new(state: Entity<InputState>, window: &mut Window, cx: &mut App) -> Self {
+    fn new(state: Entity<InputBaseState>, window: &mut Window, cx: &mut App) -> Self {
         let search = SearchPanel::new(state.clone(), window, cx);
         let completion = CompletionMenu::new(state.clone(), window, cx);
         let code_actions = CodeActionMenu::new(state.clone(), window, cx);
@@ -68,7 +68,7 @@ impl InputOverlayHost {
 
     fn sync(
         &mut self,
-        state: &Entity<InputState>,
+        state: &Entity<InputBaseState>,
         window: &mut Window,
         cx: &mut App,
     ) -> InputOverlays {
@@ -197,7 +197,7 @@ impl InputOverlayHost {
 }
 
 pub(super) fn render_overlays(
-    state: &Entity<InputState>,
+    state: &Entity<InputBaseState>,
     window: &mut Window,
     cx: &mut App,
 ) -> InputOverlays {
@@ -239,7 +239,7 @@ pub(super) fn render_overlays(
     overlays
 }
 
-fn install_action_handler(state: &Entity<InputState>, cx: &mut App) {
+fn install_action_handler(state: &Entity<InputBaseState>, cx: &mut App) {
     let id = state.entity_id();
     state.update(cx, move |state, _| {
         state.set_overlay_action_handler(move |kind, action, window, cx| {
@@ -271,7 +271,7 @@ mod tests {
     use lsp_types::{CodeAction, CompletionItem, Hover, HoverContents, MarkedString};
 
     struct OverlayProbe {
-        state: Entity<InputState>,
+        state: Entity<InputBaseState>,
     }
 
     impl Render for OverlayProbe {
@@ -289,7 +289,7 @@ mod tests {
         cx.update(crate::init);
         let (probe, cx) = cx.add_window_view(|window, cx| OverlayProbe {
             state: cx.new(|cx| {
-                InputState::new(window, cx)
+                InputBaseState::new(window, cx)
                     .multi_line(true)
                     .searchable(true)
                     .replaceable(true)
@@ -366,7 +366,7 @@ mod tests {
 
         let dropped_owner = cx.update(|window, cx| {
             let ephemeral = cx.new(|cx| {
-                InputState::new(window, cx)
+                InputBaseState::new(window, cx)
                     .multi_line(true)
                     .searchable(true)
             });

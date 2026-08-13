@@ -15,17 +15,22 @@ pub use gpui_base::input::{
     Backspace, BufferPoint, CodeActionItem, CodeActionProvider, CompletionMenuOptions,
     CompletionProvider, Copy, Cut, DefinitionProvider, Delete, DeleteToBeginningOfLine,
     DeleteToEndOfLine, DeleteToNextWordEnd, DeleteToPreviousWordStart, DisplayMap, DisplayPoint,
-    DocumentColorProvider, DocumentRangeSemanticTokensProvider, Enter, Escape, FoldRange,
-    GoToDefinition, HoverPopoverState, HoverProvider, Indent, IndentInline, InputEdit, InputEvent,
-    InputState, Lsp, MaskPattern, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown, MovePageUp,
-    MoveRight, MoveToEnd, MoveToEndOfLine, MoveToNextWord, MoveToPreviousWord, MoveToStart,
-    MoveToStartOfLine, MoveUp, Outdent, OutdentInline, Paste, Point, Redo, Replace, Rope, RopeExt,
-    RopeLines, Search, SelectAll, SelectToEnd, SelectToEndOfLine, SelectToNextWordEnd,
-    SelectToPreviousWordStart, SelectToStart, SelectToStartOfLine, Selection, ShowCharacterPalette,
-    ShowDocumentHandler, TabSize, TextDecoration, TextDecorationCollection, ToggleCodeActions,
-    Undo, WrappingIndent,
+    DocumentColorProvider, DocumentRangeSemanticTokensProvider, EditorState, Enter, Escape,
+    FoldRange, GoToDefinition, HoverPopoverState, HoverProvider, Indent, IndentInline,
+    InputBaseState, InputEdit, InputEvent, InputState, Lsp, MaskPattern, MoveDown, MoveEnd,
+    MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight, MoveToEnd, MoveToEndOfLine,
+    MoveToNextWord, MoveToPreviousWord, MoveToStart, MoveToStartOfLine, MoveUp, Outdent,
+    OutdentInline, Paste, Point, Redo, Replace, Rope, RopeExt, RopeLines, Search, SelectAll,
+    SelectToEnd, SelectToEndOfLine, SelectToNextWordEnd, SelectToPreviousWordStart, SelectToStart,
+    SelectToStartOfLine, Selection, ShowCharacterPalette, ShowDocumentHandler, TabSize,
+    TextDecoration, TextDecorationCollection, TextareaState, ToggleCodeActions, Undo,
+    WrappingIndent,
 };
+mod editor;
+mod textarea;
+pub use editor::Editor;
 pub use input::*;
 pub use lsp_types::Position;
 pub use number_input::{NumberInput, NumberInputEvent, NumberStep, StepAction};
 pub use otp_input::*;
+pub use textarea::Textarea;

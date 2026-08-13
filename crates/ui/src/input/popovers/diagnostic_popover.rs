@@ -7,20 +7,20 @@ use gpui::{
 use crate::{
     highlighter::DiagnosticEntry,
     input::{
-        InputState,
+        InputBaseState,
         popovers::{Popover, render_markdown},
     },
 };
 
 pub struct DiagnosticPopover {
-    state: WeakEntity<InputState>,
+    state: WeakEntity<InputBaseState>,
     pub(crate) diagnostic: Rc<DiagnosticEntry>,
 }
 
 impl DiagnosticPopover {
     pub fn new(
         diagnostic: &DiagnosticEntry,
-        state: Entity<InputState>,
+        state: Entity<InputBaseState>,
         cx: &mut App,
     ) -> Entity<Self> {
         let diagnostic = Rc::new(diagnostic.clone());

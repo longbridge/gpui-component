@@ -16,7 +16,8 @@ use gpui_component::{
     h_flex,
     highlighter::Language,
     input::{
-        DocumentRangeSemanticTokensProvider, Input, InputEvent, InputState, Rope, RopeExt, TabSize,
+        DocumentRangeSemanticTokensProvider, Input, InputBaseState, InputEvent, Rope, RopeExt,
+        TabSize,
     },
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
@@ -1110,7 +1111,7 @@ impl DocumentRangeSemanticTokensProvider for MarkerHighlighter {
 }
 
 pub struct Example {
-    input_state: Entity<InputState>,
+    input_state: Entity<InputBaseState>,
     /// When `true`, tables wrap cell content to fit the width; when `false`
     /// (the default), tables keep cells on one line and scroll horizontally.
     table_wrap: bool,
@@ -1125,7 +1126,7 @@ const EXAMPLE: &str = include_str!("./fixtures/test.md");
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
-            let mut input_state = InputState::new(window, cx)
+            let mut input_state = InputBaseState::new(window, cx)
                 .code_editor(Language::Markdown)
                 .line_number(true)
                 .tab_size(TabSize {
@@ -1224,7 +1225,7 @@ impl Render for Example {
                                             .font_family(cx.theme().mono_font_family.clone())
                                             .text_size(cx.theme().mono_font_size)
                                             .child(
-                                                Input::new(&self.input_state)
+                                                Input::from_base(&self.input_state)
                                                     .h_full()
                                                     .p_0()
                                                     .border_0()

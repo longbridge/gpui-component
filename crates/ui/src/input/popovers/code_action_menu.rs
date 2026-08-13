@@ -13,7 +13,7 @@ const MAX_MENU_HEIGHT: Pixels = px(480.);
 
 use crate::{
     ActiveTheme, IndexPath, Selectable, actions, h_flex,
-    input::{self, InputState, popovers::editor_popover},
+    input::{self, InputBaseState, popovers::editor_popover},
     list::{List, ListDelegate, ListEvent, ListState},
 };
 
@@ -136,7 +136,7 @@ impl ListDelegate for MenuDelegate {
 /// A context menu for code completions and code actions.
 pub struct CodeActionMenu {
     offset: usize,
-    state: WeakEntity<InputState>,
+    state: WeakEntity<InputBaseState>,
     list: Entity<ListState<MenuDelegate>>,
     open: bool,
 
@@ -146,9 +146,9 @@ pub struct CodeActionMenu {
 impl CodeActionMenu {
     /// Creates a new `CompletionMenu` with the given offset and completion items.
     ///
-    /// NOTE: This element should not call from InputState::new, unless that will stack overflow.
+    /// NOTE: This element should not call from InputBaseState::new, unless that will stack overflow.
     pub(crate) fn new(
-        state: Entity<InputState>,
+        state: Entity<InputBaseState>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {

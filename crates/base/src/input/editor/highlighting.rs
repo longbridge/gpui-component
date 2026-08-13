@@ -3,7 +3,7 @@ use std::{ops::Range, rc::Rc, sync::Arc};
 use gpui::{AnyElement, Context, HighlightStyle, Hsla, SharedString, Window};
 use ropey::Rope;
 
-use super::{FoldRange, InputEdit, InputState};
+use super::{FoldRange, InputBaseState, InputEdit};
 
 /// Resolves semantic highlight names into renderable GPUI styles.
 ///
@@ -35,7 +35,7 @@ pub trait InputHighlighter {
         text: &Rope,
         folding: bool,
         window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     );
 
     fn styles(
