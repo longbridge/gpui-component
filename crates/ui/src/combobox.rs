@@ -1,7 +1,7 @@
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Context, DismissEvent, Edges, ElementId, Entity,
-    EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, KeyBinding,
-    Length, MouseDownEvent, ParentElement, Pixels, Render, RenderOnce, Role, SharedString,
+    EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, Length,
+    MouseDownEvent, ParentElement, Pixels, Render, RenderOnce, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, Window, anchored, deferred, div,
     prelude::FluentBuilder, px, rems,
 };
@@ -12,10 +12,7 @@ pub use crate::select::Caret;
 
 use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Sizable, Size,
-    StyleSized, StyledExt,
-    actions::{Cancel, Confirm, SelectDown, SelectUp},
-    global_state::GlobalState,
-    h_flex,
+    StyleSized, StyledExt, h_flex,
     input::{clear_button, input_style},
     list::{List, ListState},
     searchable_list::{
@@ -24,22 +21,7 @@ use crate::{
     },
     v_flex,
 };
-
-const CONTEXT: &str = "Combobox";
-
-pub(crate) fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("up", SelectUp, Some(CONTEXT)),
-        KeyBinding::new("down", SelectDown, Some(CONTEXT)),
-        KeyBinding::new("enter", Confirm { secondary: false }, Some(CONTEXT)),
-        KeyBinding::new(
-            "secondary-enter",
-            Confirm { secondary: true },
-            Some(CONTEXT),
-        ),
-        KeyBinding::new("escape", Cancel, Some(CONTEXT)),
-    ])
-}
+use gpui_base::{Combobox as BaseCombobox, GlobalState};
 
 // MARK: ComboboxTriggerCtx
 
@@ -464,35 +446,6 @@ where
         cx.notify();
     }
 
-    fn up(&mut self, _: &SelectUp, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.state.open {
-            self.set_open(true, cx);
-        }
-
-        self.state.list.focus_handle(cx).focus(window, cx);
-        cx.propagate();
-    }
-
-    fn down(&mut self, _: &SelectDown, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.state.open {
-            self.set_open(true, cx);
-        }
-
-        self.state.list.focus_handle(cx).focus(window, cx);
-        cx.propagate();
-    }
-
-    fn enter(&mut self, _: &Confirm, window: &mut Window, cx: &mut Context<Self>) {
-        cx.propagate();
-
-        if !self.state.open {
-            self.set_open(true, cx);
-            cx.notify();
-        }
-
-        self.state.list.focus_handle(cx).focus(window, cx);
-    }
-
     fn toggle_menu(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
 
@@ -526,27 +479,13 @@ where
         cx.notify();
     }
 
-    fn escape(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.state.open {
-            cx.propagate();
-            return;
-        }
-
-        cx.stop_propagation();
-        cx.emit(ComboboxEvent::Confirm(self.selected_values()));
-
-        self.set_open(false, cx);
-        self.focus(window, cx);
-        cx.notify();
-    }
-
     fn set_open(&mut self, open: bool, cx: &mut Context<Self>) {
         self.state.open = open;
 
         if self.state.open {
-            GlobalState::global_mut(cx).register_deferred_popover(&self.state.focus_handle)
+            GlobalState::register_deferred_popover(&self.state.focus_handle, cx)
         } else {
-            GlobalState::global_mut(cx).unregister_deferred_popover(&self.state.focus_handle)
+            GlobalState::unregister_deferred_popover(&self.state.focus_handle, cx)
         }
 
         cx.notify();
@@ -898,9 +837,9 @@ where
     D: SearchableListDelegate + 'static,
     <D::Item as SearchableListItem>::Value: PartialEq + Clone,
 {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let disabled = self.options.disabled;
-        let focus_handle = self.state.focus_handle(cx);
+        let focus_handle = self.state.read(cx).state.focus_handle.clone();
         let render_trigger = self.render_trigger;
         let footer = self.footer;
         let empty = self.empty;
@@ -927,19 +866,25 @@ where
         });
 
         let is_open = self.state.read(cx).state.open;
+        let content_focus_handle = self.state.read(cx).state.list.focus_handle(cx);
+        let open_state = self.state.clone();
+        let confirm_state = self.state.clone();
 
-        div()
-            .id(self.id.clone())
-            .role(Role::ComboBox)
-            .aria_expanded(is_open)
-            .key_context(CONTEXT)
-            .when(!disabled, |this| {
-                this.track_focus(&focus_handle.tab_stop(true))
+        BaseCombobox::new(self.id)
+            .open(is_open)
+            .disabled(disabled)
+            .focus_handle(&focus_handle)
+            .content_focus_handle(&content_focus_handle)
+            .on_open_change(move |open, _, cx| {
+                open_state.update(cx, |state, cx| state.set_open(open, cx));
             })
-            .on_action(window.listener_for(&self.state, ComboboxState::up))
-            .on_action(window.listener_for(&self.state, ComboboxState::down))
-            .on_action(window.listener_for(&self.state, ComboboxState::enter))
-            .on_action(window.listener_for(&self.state, ComboboxState::escape))
+            // This combobox commits its pending selection when the popup
+            // closes, so it listens for dismissal rather than Confirm.
+            .on_dismiss(move |_, cx| {
+                confirm_state.update(cx, |state, cx| {
+                    cx.emit(ComboboxEvent::Confirm(state.selected_values()));
+                });
+            })
             .size_full()
             .child(self.state)
     }

@@ -9,35 +9,14 @@ pub(crate) use diagnostic_popover::*;
 pub(crate) use hover_popover::*;
 
 use gpui::{
-    App, Div, ElementId, Entity, InteractiveElement as _, IntoElement, SharedString, Stateful,
-    StyleRefinement, Styled as _, Window, div, px, rems,
+    App, Div, ElementId, InteractiveElement as _, SharedString, Stateful, StyleRefinement,
+    Styled as _, Window, div, px, rems,
 };
 
 use crate::{
     ActiveTheme, StyledExt as _,
     text::{TextView, TextViewStyle},
 };
-
-pub(crate) enum ContextMenu {
-    Completion(Entity<CompletionMenu>),
-    CodeAction(Entity<CodeActionMenu>),
-}
-
-impl ContextMenu {
-    pub(crate) fn is_open(&self, cx: &App) -> bool {
-        match self {
-            ContextMenu::Completion(menu) => menu.read(cx).is_open(),
-            ContextMenu::CodeAction(menu) => menu.read(cx).is_open(),
-        }
-    }
-
-    pub(crate) fn render(&self) -> impl IntoElement {
-        match self {
-            ContextMenu::Completion(menu) => menu.clone().into_any_element(),
-            ContextMenu::CodeAction(menu) => menu.clone().into_any_element(),
-        }
-    }
-}
 
 pub(super) fn render_markdown(
     id: impl Into<ElementId>,

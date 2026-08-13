@@ -19,6 +19,7 @@ use crate::{
 };
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
+use gpui_base::DatePicker as BaseDatePicker;
 
 const CONTEXT: &'static str = "DatePicker";
 pub(crate) fn init(cx: &mut App) {
@@ -196,7 +197,7 @@ impl DatePickerState {
     fn set_canlendar_disabled_matcher(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let matcher = self.disabled_matcher.clone();
         self.calendar.update(cx, |state, _| {
-            state.disabled_matcher = matcher;
+            state.set_disabled_matcher_shared(matcher);
         });
     }
 
@@ -209,13 +210,6 @@ impl DatePickerState {
         self.open = false;
 
         cx.notify();
-    }
-
-    fn on_enter(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.open {
-            self.open = true;
-            cx.notify();
-        }
     }
 
     fn on_delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
@@ -330,7 +324,7 @@ impl DatePicker {
             placeholder: None,
             size: Size::default(),
             style: StyleRefinement::default(),
-            number_of_months: 2,
+            number_of_months: 1,
             presets: None,
             appearance: true,
             disabled: false,
@@ -355,7 +349,7 @@ impl DatePicker {
         self
     }
 
-    /// Set number of months to display in the calendar, default is 2.
+    /// Set number of months to display in the calendar, default is 1.
     pub fn number_of_months(mut self, number_of_months: usize) -> Self {
         self.number_of_months = number_of_months;
         self
@@ -389,15 +383,22 @@ impl RenderOnce for DatePicker {
 
         let (bg, fg) = input_style(self.disabled, cx);
 
-        div()
-            .id(self.id.clone())
-            .key_context(CONTEXT)
-            .track_focus(&self.focus_handle(cx).tab_stop(true))
-            .on_action(window.listener_for(&self.state, DatePickerState::on_enter))
-            .on_action(window.listener_for(&self.state, DatePickerState::on_delete))
-            .when(state.open, |this| {
-                this.on_action(window.listener_for(&self.state, DatePickerState::on_escape))
+        let picker_state = self.state.clone();
+
+        BaseDatePicker::new(self.id, &state.focus_handle)
+            .open(state.open)
+            .disabled(self.disabled)
+            .on_open_change(move |open, window, cx| {
+                picker_state.update(cx, |state, cx| {
+                    if !open {
+                        state.focus_back_if_need(window, cx);
+                    }
+                    state.open = open;
+                    cx.notify();
+                });
             })
+            .key_context(CONTEXT)
+            .on_action(window.listener_for(&self.state, DatePickerState::on_delete))
             .flex_none()
             .w_full()
             .relative()

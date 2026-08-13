@@ -1,22 +1,31 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled, Task,
-    Window, div, prelude::FluentBuilder as _, px,
+    Action, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, Styled, Task, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Selectable, Sizable,
+    ActiveTheme, IconName, Sizable, Size, StyledExt,
     button::Button,
     h_flex,
     progress::{Progress, ProgressCircle},
     v_flex,
 };
+use serde::Deserialize;
 use std::time::Duration;
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
+
+#[derive(Action, Clone, PartialEq, Deserialize)]
+#[action(namespace = progress_story, no_json)]
+enum ProgressAction {
+    SetValue(f32),
+    ToggleLoading,
+}
 
 pub struct ProgressStory {
     focus_handle: gpui::FocusHandle,
     value: f32,
     loading: bool,
+    size: Size,
     _task: Option<Task<()>>,
 }
 
@@ -26,7 +35,7 @@ impl super::Story for ProgressStory {
     }
 
     fn description() -> &'static str {
-        "Displays an indicator showing the completion progress of a task, typically displayed as a progress bar."
+        "Show task completion with determinate or loading indicators."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -44,6 +53,7 @@ impl ProgressStory {
             focus_handle: cx.focus_handle(),
             value: 25.,
             loading: false,
+            size: Size::Medium,
             _task: None,
         }
     }
@@ -94,165 +104,142 @@ impl Render for ProgressStory {
         v_flex()
             .w_full()
             .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, action: &ProgressAction, _, cx| {
+                match action {
+                    ProgressAction::SetValue(value) => this.set_value(*value),
+                    ProgressAction::ToggleLoading => this.loading = !this.loading,
+                }
+                cx.notify();
+            }))
             .child(
-                h_flex()
-                    .w_full()
-                    .gap_3()
-                    .justify_between()
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(Button::new("button-1").small().label("0%").on_click(
-                                cx.listener(|this, _, _, _| {
-                                    this.set_value(0.);
-                                }),
-                            ))
-                            .child(Button::new("button-2").small().label("25%").on_click(
-                                cx.listener(|this, _, _, _| {
-                                    this.set_value(25.);
-                                }),
-                            ))
-                            .child(Button::new("button-3").small().label("75%").on_click(
-                                cx.listener(|this, _, _, _| {
-                                    this.set_value(75.);
-                                }),
-                            ))
-                            .child(Button::new("button-4").small().label("100%").on_click(
-                                cx.listener(|this, _, _, _| {
-                                    this.set_value(100.);
-                                }),
-                            ))
-                            .child(
-                                Button::new("circle-animation-button")
-                                    .small()
-                                    .icon(IconName::Play)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.start_animation(cx);
-                                    })),
-                            )
-                            .child(
-                                Button::new("loading-toggle-button")
-                                    .small()
-                                    .label("Loading")
-                                    .selected(self.loading)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.loading = !this.loading;
-                                        cx.notify();
-                                    })),
-                            ),
+                story_toolbar(self.size)
+                    .dropdown_child(
+                        Button::new("progress-value").label(format!("Value: {}%", self.value)),
+                        {
+                            let value = self.value;
+                            move |menu, _, _| {
+                                [0., 25., 75., 100.].into_iter().fold(menu, |menu, preset| {
+                                    menu.menu_with_check(
+                                        format!("{}%", preset),
+                                        value == preset,
+                                        Box::new(ProgressAction::SetValue(preset)),
+                                    )
+                                })
+                            }
+                        },
                     )
+                    .dropdown_child(Button::new("progress-options").label("Options"), {
+                        let loading = self.loading;
+                        move |menu, _, _| {
+                            menu.menu_with_check(
+                                "Loading",
+                                loading,
+                                Box::new(ProgressAction::ToggleLoading),
+                            )
+                        }
+                    })
                     .child(
-                        h_flex()
-                            .gap_2()
+                        Button::new("progress-play")
+                            .icon(IconName::Play)
+                            .on_click(cx.listener(|this, _, _, cx| this.start_animation(cx))),
+                    ),
+            )
+            .child(
+                section("Upload")
+                    .description("Pair progress with a clear label, value, and status.")
+                    .w(px(560.))
+                    .items_center()
+                    .child(
+                        v_flex()
+                            .w(px(400.))
+                            .gap_3()
+                            .p_4()
+                            .rounded(cx.theme().radius_lg)
+                            .border_1()
+                            .border_color(cx.theme().border)
                             .child(
-                                Button::new("circle-button-5")
-                                    .icon(IconName::Minus)
-                                    .on_click(cx.listener(|this, _, _, _| {
-                                        this.set_value((this.value - 1.).max(0.));
-                                    })),
+                                h_flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(div().font_medium().child("Uploading design-assets.zip"))
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(format!("{}%", self.value)),
+                                    ),
                             )
                             .child(
-                                Button::new("circle-button-6")
-                                    .icon(IconName::Plus)
-                                    .on_click(cx.listener(|this, _, _, _| {
-                                        this.set_value((this.value + 1.).min(100.));
-                                    })),
+                                Progress::new("upload-progress")
+                                    .value(self.value)
+                                    .loading(self.loading),
+                            )
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("24.8 MB of 96 MB")
+                                    .child(if self.loading {
+                                        "Calculating…"
+                                    } else {
+                                        "About 1 min left"
+                                    }),
                             ),
                     ),
             )
             .child(
-                section("Progress Bar").max_w_md().child(
-                    Progress::new("progress-1")
-                        .value(self.value)
-                        .loading(self.loading),
-                ),
-            )
-            .child(
-                section("Custom Style").max_w_md().child(
-                    Progress::new("progress-2")
-                        .value(32.)
-                        .loading(self.loading)
-                        .h(px(16.))
-                        .rounded(px(2.))
-                        .color(cx.theme().green_light)
-                        .border_2()
-                        .border_color(cx.theme().green),
-                ),
-            )
-            .child(
-                section("Circle Progress").max_w_md().child(
-                    ProgressCircle::new("circle-progress-1")
-                        .value(self.value)
-                        .loading(self.loading)
-                        .size_20()
-                        .when(!self.loading, |this| {
-                            this.child(
+                section("Circular")
+                    .description("Use a compact radial indicator for focused tasks.")
+                    .w(px(560.))
+                    .items_center()
+                    .child(
+                        h_flex()
+                            .w(px(400.))
+                            .items_center()
+                            .gap_5()
+                            .p_4()
+                            .rounded(cx.theme().radius_lg)
+                            .bg(cx.theme().muted.opacity(0.4))
+                            .child(
+                                ProgressCircle::new("analysis-progress")
+                                    .with_size(self.size)
+                                    .value(self.value)
+                                    .loading(self.loading)
+                                    .size_20()
+                                    .when(!self.loading, |this| {
+                                        this.child(
+                                            div()
+                                                .size_full()
+                                                .flex()
+                                                .items_center()
+                                                .justify_center()
+                                                .font_semibold()
+                                                .child(format!("{}%", self.value)),
+                                        )
+                                    }),
+                            )
+                            .child(
                                 v_flex()
-                                    .size_full()
-                                    .items_center()
-                                    .justify_center()
                                     .gap_1()
+                                    .child(div().font_medium().child("Analyzing project"))
                                     .child(
                                         div()
-                                            .child(format!("{}%", self.value))
-                                            .text_color(cx.theme().progress_bar),
-                                    )
-                                    .child(div().child("Loading").text_xs()),
-                            )
-                        }),
-                ),
-            )
-            .child(
-                section("With size").max_w_md().child(
-                    h_flex()
-                        .gap_2()
-                        .child(
-                            ProgressCircle::new("circle-progress-2")
-                                .value(self.value)
-                                .loading(self.loading)
-                                .large(),
-                        )
-                        .child(
-                            ProgressCircle::new("circle-progress-3")
-                                .value(self.value)
-                                .loading(self.loading),
-                        )
-                        .child(
-                            ProgressCircle::new("circle-progress-4")
-                                .value(self.value)
-                                .loading(self.loading)
-                                .small(),
-                        )
-                        .child(
-                            ProgressCircle::new("circle-progress-5")
-                                .value(self.value)
-                                .loading(self.loading)
-                                .xsmall(),
-                        ),
-                ),
-            )
-            .child(
-                section("With Label").max_w_md().child(
-                    h_flex()
-                        .gap_2()
-                        .child(
-                            ProgressCircle::new("circle-progress-6")
-                                .color(cx.theme().primary)
-                                .value(self.value)
-                                .loading(self.loading)
-                                .size_4(),
-                        )
-                        .child("Downloading..."),
-                ),
-            )
-            .child(
-                section("Circle with Color").max_w_md().child(
-                    ProgressCircle::new("circle-progress-7")
-                        .color(cx.theme().yellow)
-                        .value(self.value)
-                        .loading(self.loading)
-                        .size_12(),
-                ),
+                                            .text_sm()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(if self.loading {
+                                                "Preparing analysis…"
+                                            } else {
+                                                "Scanning components and dependencies."
+                                            }),
+                                    ),
+                            ),
+                    ),
             )
     }
 }

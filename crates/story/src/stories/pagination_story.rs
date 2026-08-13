@@ -1,15 +1,10 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, Styled, Window,
 };
-use gpui_component::{
-    Disableable, Selectable as _, Sizable, Size,
-    button::{Button, ButtonGroup},
-    pagination::Pagination,
-    v_flex,
-};
+use gpui_component::{Disableable, Sizable, Size, pagination::Pagination, v_flex};
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct PaginationStory {
     basic_page: usize,
@@ -43,11 +38,6 @@ impl PaginationStory {
             size: Size::default(),
         })
     }
-
-    fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = size;
-        cx.notify();
-    }
 }
 
 impl Focusable for PaginationStory {
@@ -62,43 +52,13 @@ impl Render for PaginationStory {
 
         v_flex()
             .gap_6()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                ButtonGroup::new("toggle-size")
-                    .outline()
-                    .compact()
-                    .child(
-                        Button::new("xsmall")
-                            .label("XSmall")
-                            .selected(self.size == Size::XSmall),
-                    )
-                    .child(
-                        Button::new("small")
-                            .label("Small")
-                            .selected(self.size == Size::Small),
-                    )
-                    .child(
-                        Button::new("medium")
-                            .label("Medium")
-                            .selected(self.size == Size::Medium),
-                    )
-                    .child(
-                        Button::new("large")
-                            .label("Large")
-                            .selected(self.size == Size::Large),
-                    )
-                    .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
-                        let size = match selecteds[0] {
-                            0 => Size::XSmall,
-                            1 => Size::Small,
-                            2 => Size::Medium,
-                            3 => Size::Large,
-                            _ => Size::Medium,
-                        };
-                        this.set_size(size, window, cx);
-                    })),
-            )
-            .child(
-                section("Basic").child(
+                section("Default").child(
                     Pagination::new("basic-pagination")
                         .current_page(self.basic_page)
                         .total_pages(10)
@@ -115,22 +75,26 @@ impl Render for PaginationStory {
                 ),
             )
             .child(
-                section("Pagination with 10 visible pages").child(
-                    Pagination::new("many-pages-pagination")
-                        .current_page(self.many_pages_page)
-                        .total_pages(50)
-                        .visible_pages(10)
-                        .with_size(self.size)
-                        .on_click({
-                            let entity = entity.clone();
-                            move |page, _, cx| {
-                                entity.update(cx, |this, cx| {
-                                    this.many_pages_page = *page;
-                                    cx.notify();
-                                });
-                            }
-                        }),
-                ),
+                section("Visible Pages")
+                    .description(
+                        "Control how many page links remain visible in a larger result set.",
+                    )
+                    .child(
+                        Pagination::new("many-pages-pagination")
+                            .current_page(self.many_pages_page)
+                            .total_pages(50)
+                            .visible_pages(10)
+                            .with_size(self.size)
+                            .on_click({
+                                let entity = entity.clone();
+                                move |page, _, cx| {
+                                    entity.update(cx, |this, cx| {
+                                        this.many_pages_page = *page;
+                                        cx.notify();
+                                    });
+                                }
+                            }),
+                    ),
             )
             .child(
                 section("Compact Style").child(

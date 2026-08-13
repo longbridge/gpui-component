@@ -8,14 +8,21 @@ use gpui_component::{
     scroll::ScrollableElement,
     select::{Select, SelectEvent, SelectItem, SelectState},
     sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
-    switch::Switch,
     v_flex,
 };
+use serde::Deserialize;
 
 use crate::stories::theme_story::checkerboard::Checkerboard;
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = theme_colors_story, no_json)]
+enum ThemeOption {
+    ShowInherited,
+    ExpandAll,
+}
 
 #[derive(Clone)]
 struct ColorEntry {
@@ -697,88 +704,106 @@ fn filter_categories(
 impl Render for ThemeColorsStory {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
+            .on_action(cx.listener(|this, action: &ThemeOption, _, cx| {
+                match action {
+                    ThemeOption::ShowInherited => {
+                        this.show_all_colors = !this.show_all_colors;
+                        this.compute_categories(cx);
+                    }
+                    ThemeOption::ExpandAll => {
+                        this.sidebar_render_key += 1;
+                        this.force_open_state = Some(this.force_open_state != Some(true));
+                    }
+                }
+                cx.notify();
+            }))
             .gap_4()
             .size_full()
             .overflow_hidden()
             .child(
                 // Theme selector at the top
                 h_flex()
-                    .gap_x_3()
-                    .child(div().w(px(300.)).child(Select::new(&self.select_state)))
+                    .w_full()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .flex_wrap()
                     .child(
-                        Button::new("set_theme")
-                            .primary()
-                            .label("Set Theme")
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                use gpui_component::{Theme, ThemeRegistry};
+                        h_flex()
+                            .gap_2()
+                            .child(div().w(px(300.)).child(Select::new(&self.select_state)))
+                            .child(
+                                Button::new("set_theme")
+                                    .primary()
+                                    .label("Set Theme")
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        use gpui_component::{Theme, ThemeRegistry};
 
-                                let registry = ThemeRegistry::global(cx);
-                                if let Some(theme_config) =
-                                    registry.themes().get(&this.selected_theme_name).cloned()
-                                {
-                                    let mode = theme_config.mode;
-                                    let theme = Theme::global_mut(cx);
-                                    if mode.is_dark() {
-                                        theme.dark_theme = theme_config;
-                                    } else {
-                                        theme.light_theme = theme_config;
-                                    }
-                                    Theme::change(mode, None, cx);
-                                    cx.refresh_windows();
+                                        let registry = ThemeRegistry::global(cx);
+                                        if let Some(theme_config) = registry
+                                            .themes()
+                                            .get(&this.selected_theme_name)
+                                            .cloned()
+                                        {
+                                            let mode = theme_config.mode;
+                                            let theme = Theme::global_mut(cx);
+                                            if mode.is_dark() {
+                                                theme.dark_theme = theme_config;
+                                            } else {
+                                                theme.light_theme = theme_config;
+                                            }
+                                            Theme::change(mode, None, cx);
+                                            cx.refresh_windows();
 
-                                    // Refresh the select items to update the active checkmark
-                                    let active_theme_name = cx.theme().theme_name().clone();
-                                    let themes = ThemeRegistry::global(cx).sorted_themes();
+                                            // Refresh the select items to update the active checkmark
+                                            let active_theme_name = cx.theme().theme_name().clone();
+                                            let themes = ThemeRegistry::global(cx).sorted_themes();
 
-                                    // Re-create items with new active state
-                                    let mut items: Vec<ThemeItem> = themes
-                                        .iter()
-                                        .map(|theme| {
-                                            ThemeItem::new(
-                                                theme.name.clone(),
-                                                // Note: we need to handle case sensitivity if names differ,
-                                                // but usually accurate.
-                                                theme.name == active_theme_name,
-                                            )
-                                        })
-                                        .collect();
+                                            // Re-create items with new active state
+                                            let mut items: Vec<ThemeItem> = themes
+                                                .iter()
+                                                .map(|theme| {
+                                                    ThemeItem::new(
+                                                        theme.name.clone(),
+                                                        // Note: we need to handle case sensitivity if names differ,
+                                                        // but usually accurate.
+                                                        theme.name == active_theme_name,
+                                                    )
+                                                })
+                                                .collect();
 
-                                    // Sort again to be safe/consistent
-                                    items.sort_by(|a, b| {
-                                        a.name.to_lowercase().cmp(&b.name.to_lowercase())
-                                    });
+                                            // Sort again to be safe/consistent
+                                            items.sort_by(|a, b| {
+                                                a.name.to_lowercase().cmp(&b.name.to_lowercase())
+                                            });
 
-                                    // Update the select state
-                                    this.select_state.update(cx, |state, cx| {
-                                        state.set_items(items, window, cx);
-                                    });
-                                }
-                            })),
+                                            // Update the select state
+                                            this.select_state.update(cx, |state, cx| {
+                                                state.set_items(items, window, cx);
+                                            });
+                                        }
+                                    })),
+                            ),
                     )
-                    .child(
-                        Switch::new("show_all_colors")
-                            .checked(self.show_all_colors)
-                            .label("Show Inherited Colors")
-                            .on_click(cx.listener(|this, checked: &bool, _window, cx| {
-                                this.show_all_colors = *checked;
-                                this.compute_categories(cx);
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Switch::new("expand_collapse_switch")
-                            .checked(self.force_open_state == Some(true))
-                            .label(if self.force_open_state == Some(true) {
-                                "Collapse All"
-                            } else {
-                                "Expand All"
-                            })
-                            .on_click(cx.listener(|this, checked: &bool, _window, cx| {
-                                this.sidebar_render_key += 1;
-                                this.force_open_state = Some(*checked);
-                                cx.notify();
-                            })),
-                    ),
+                    .child(crate::story_toolbar_group().dropdown_child(
+                        Button::new("theme-options").label("Options"),
+                        {
+                            let show_all_colors = self.show_all_colors;
+                            let expand_all = self.force_open_state == Some(true);
+                            move |menu, _, _| {
+                                menu.menu_with_check(
+                                    "Inherited Colors",
+                                    show_all_colors,
+                                    Box::new(ThemeOption::ShowInherited),
+                                )
+                                .menu_with_check(
+                                    "Expand All",
+                                    expand_all,
+                                    Box::new(ThemeOption::ExpandAll),
+                                )
+                            }
+                        },
+                    )),
             )
             .child(
                 h_flex()

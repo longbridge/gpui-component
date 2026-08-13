@@ -2174,19 +2174,21 @@ where
 
     fn render_vertical_scrollbar(
         &mut self,
-
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
-        let header_rows = self.header_layout.len().max(1);
         Some(
             div()
                 .absolute()
-                .top(self.options.size.table_row_height() * header_rows as f32)
+                .top(self.options.size.table_row_height() * self.header_layout.len().max(1) as f32)
                 .right_0()
                 .bottom_0()
                 .w(Scrollbar::width())
-                .child(Scrollbar::vertical(&self.vertical_scroll_handle).max_fps(60)),
+                .child(
+                    Scrollbar::vertical(&self.vertical_scroll_handle)
+                        .viewport_from_layout()
+                        .max_fps(60),
+                ),
         )
     }
 
@@ -2201,7 +2203,7 @@ where
             .right_0()
             .bottom_0()
             .h(Scrollbar::width())
-            .child(Scrollbar::horizontal(&self.horizontal_scroll_handle))
+            .child(Scrollbar::horizontal(&self.horizontal_scroll_handle).viewport_from_layout())
     }
 }
 

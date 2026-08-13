@@ -1,12 +1,12 @@
 use gpui::{prelude::*, *};
 use gpui_component::{
-    Icon, IconName, Sizable as _,
+    Icon, IconName,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputEvent, InputState},
     resizable::{h_resizable, resizable_panel},
     separator::Separator,
-    sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    sidebar::{Sidebar, SidebarHeader, SidebarMenu, SidebarMenuItem},
     status_bar::StatusBar,
     v_flex,
 };
@@ -18,13 +18,23 @@ pub struct Gallery {
     active_group_index: Option<usize>,
     active_index: Option<usize>,
     collapsed: bool,
+    embedded: bool,
     search_input: Entity<InputState>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl Gallery {
     pub fn new(init_story: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search..."));
+        Self::new_with_mode(init_story, false, window, cx)
+    }
+
+    fn new_with_mode(
+        init_story: Option<&str>,
+        embedded: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search…"));
         let _subscriptions = vec![cx.subscribe(&search_input, |this, _, e, cx| match e {
             InputEvent::Change => {
                 this.active_group_index = Some(0);
@@ -33,78 +43,73 @@ impl Gallery {
             }
             _ => {}
         })];
-        let stories = vec![
-            (
-                "Getting Started",
-                vec![StoryContainer::panel::<WelcomeStory>(window, cx)],
-            ),
-            (
-                "Components",
-                vec![
-                    StoryContainer::panel::<AccordionStory>(window, cx),
-                    StoryContainer::panel::<AlertStory>(window, cx),
-                    StoryContainer::panel::<AlertDialogStory>(window, cx),
-                    StoryContainer::panel::<AvatarStory>(window, cx),
-                    StoryContainer::panel::<BadgeStory>(window, cx),
-                    StoryContainer::panel::<BreadcrumbStory>(window, cx),
-                    StoryContainer::panel::<ButtonStory>(window, cx),
-                    StoryContainer::panel::<CalendarStory>(window, cx),
-                    StoryContainer::panel::<ChartStory>(window, cx),
-                    StoryContainer::panel::<CheckboxStory>(window, cx),
-                    StoryContainer::panel::<ClipboardStory>(window, cx),
-                    StoryContainer::panel::<CollapsibleStory>(window, cx),
-                    StoryContainer::panel::<ColorPickerStory>(window, cx),
-                    StoryContainer::panel::<ComboboxStory>(window, cx),
-                    StoryContainer::panel::<DatePickerStory>(window, cx),
-                    StoryContainer::panel::<DescriptionListStory>(window, cx),
-                    StoryContainer::panel::<DialogStory>(window, cx),
-                    StoryContainer::panel::<DropdownButtonStory>(window, cx),
-                    StoryContainer::panel::<EditorStory>(window, cx),
-                    StoryContainer::panel::<FormStory>(window, cx),
-                    StoryContainer::panel::<GroupBoxStory>(window, cx),
-                    StoryContainer::panel::<HoverCardStory>(window, cx),
-                    StoryContainer::panel::<IconStory>(window, cx),
-                    StoryContainer::panel::<ImageStory>(window, cx),
-                    StoryContainer::panel::<InputStory>(window, cx),
-                    StoryContainer::panel::<KbdStory>(window, cx),
-                    StoryContainer::panel::<LabelStory>(window, cx),
-                    StoryContainer::panel::<ListStory>(window, cx),
-                    StoryContainer::panel::<MenuStory>(window, cx),
-                    StoryContainer::panel::<NativeMenuStory>(window, cx),
-                    StoryContainer::panel::<NotificationStory>(window, cx),
-                    StoryContainer::panel::<NumberInputStory>(window, cx),
-                    StoryContainer::panel::<OtpInputStory>(window, cx),
-                    StoryContainer::panel::<PaginationStory>(window, cx),
-                    StoryContainer::panel::<PopoverStory>(window, cx),
-                    StoryContainer::panel::<ProgressStory>(window, cx),
-                    StoryContainer::panel::<RadioStory>(window, cx),
-                    StoryContainer::panel::<RatingStory>(window, cx),
-                    StoryContainer::panel::<ResizableStory>(window, cx),
-                    StoryContainer::panel::<ScrollbarStory>(window, cx),
-                    StoryContainer::panel::<SelectStory>(window, cx),
-                    StoryContainer::panel::<SeparatorStory>(window, cx),
-                    StoryContainer::panel::<SettingsStory>(window, cx),
-                    StoryContainer::panel::<SheetStory>(window, cx),
-                    StoryContainer::panel::<SidebarStory>(window, cx),
-                    StoryContainer::panel::<SkeletonStory>(window, cx),
-                    StoryContainer::panel::<SliderStory>(window, cx),
-                    StoryContainer::panel::<SpinnerStory>(window, cx),
-                    StoryContainer::panel::<StatusBarStory>(window, cx),
-                    StoryContainer::panel::<StepperStory>(window, cx),
-                    StoryContainer::panel::<SwitchStory>(window, cx),
-                    StoryContainer::panel::<DataTableStory>(window, cx),
-                    StoryContainer::panel::<TableStory>(window, cx),
-                    StoryContainer::panel::<TabsStory>(window, cx),
-                    StoryContainer::panel::<TagStory>(window, cx),
-                    StoryContainer::panel::<TextareaStory>(window, cx),
-                    StoryContainer::panel::<ThemeColorsStory>(window, cx),
-                    StoryContainer::panel::<ToggleStory>(window, cx),
-                    StoryContainer::panel::<TooltipStory>(window, cx),
-                    StoryContainer::panel::<TreeStory>(window, cx),
-                    StoryContainer::panel::<VirtualListStory>(window, cx),
-                ],
-            ),
-        ];
+        let stories = vec![(
+            "",
+            vec![
+                StoryContainer::panel::<WelcomeStory>(window, cx),
+                StoryContainer::panel::<AccordionStory>(window, cx),
+                StoryContainer::panel::<AlertStory>(window, cx),
+                StoryContainer::panel::<AlertDialogStory>(window, cx),
+                StoryContainer::panel::<AvatarStory>(window, cx),
+                StoryContainer::panel::<BadgeStory>(window, cx),
+                StoryContainer::panel::<BreadcrumbStory>(window, cx),
+                StoryContainer::panel::<ButtonStory>(window, cx),
+                StoryContainer::panel::<CalendarStory>(window, cx),
+                StoryContainer::panel::<ChartStory>(window, cx),
+                StoryContainer::panel::<CheckboxStory>(window, cx),
+                StoryContainer::panel::<ClipboardStory>(window, cx),
+                StoryContainer::panel::<CollapsibleStory>(window, cx),
+                StoryContainer::panel::<ColorPickerStory>(window, cx),
+                StoryContainer::panel::<ComboboxStory>(window, cx),
+                StoryContainer::panel::<DataTableStory>(window, cx),
+                StoryContainer::panel::<DatePickerStory>(window, cx),
+                StoryContainer::panel::<DescriptionListStory>(window, cx),
+                StoryContainer::panel::<DialogStory>(window, cx),
+                StoryContainer::panel::<DropdownButtonStory>(window, cx),
+                StoryContainer::panel::<EditorStory>(window, cx),
+                StoryContainer::panel::<FormStory>(window, cx),
+                StoryContainer::panel::<GroupBoxStory>(window, cx),
+                StoryContainer::panel::<HoverCardStory>(window, cx),
+                StoryContainer::panel::<IconStory>(window, cx),
+                StoryContainer::panel::<ImageStory>(window, cx),
+                StoryContainer::panel::<InputStory>(window, cx),
+                StoryContainer::panel::<KbdStory>(window, cx),
+                StoryContainer::panel::<LabelStory>(window, cx),
+                StoryContainer::panel::<ListStory>(window, cx),
+                StoryContainer::panel::<MenuStory>(window, cx),
+                StoryContainer::panel::<NativeMenuStory>(window, cx),
+                StoryContainer::panel::<NotificationStory>(window, cx),
+                StoryContainer::panel::<NumberInputStory>(window, cx),
+                StoryContainer::panel::<OtpInputStory>(window, cx),
+                StoryContainer::panel::<PaginationStory>(window, cx),
+                StoryContainer::panel::<PopoverStory>(window, cx),
+                StoryContainer::panel::<ProgressStory>(window, cx),
+                StoryContainer::panel::<RadioStory>(window, cx),
+                StoryContainer::panel::<RatingStory>(window, cx),
+                StoryContainer::panel::<ResizableStory>(window, cx),
+                StoryContainer::panel::<ScrollbarStory>(window, cx),
+                StoryContainer::panel::<SelectStory>(window, cx),
+                StoryContainer::panel::<SeparatorStory>(window, cx),
+                StoryContainer::panel::<SettingsStory>(window, cx),
+                StoryContainer::panel::<SheetStory>(window, cx),
+                StoryContainer::panel::<SidebarStory>(window, cx),
+                StoryContainer::panel::<SkeletonStory>(window, cx),
+                StoryContainer::panel::<SliderStory>(window, cx),
+                StoryContainer::panel::<SpinnerStory>(window, cx),
+                StoryContainer::panel::<StatusBarStory>(window, cx),
+                StoryContainer::panel::<StepperStory>(window, cx),
+                StoryContainer::panel::<SwitchStory>(window, cx),
+                StoryContainer::panel::<TableStory>(window, cx),
+                StoryContainer::panel::<TabsStory>(window, cx),
+                StoryContainer::panel::<TagStory>(window, cx),
+                StoryContainer::panel::<TextareaStory>(window, cx),
+                StoryContainer::panel::<ThemeColorsStory>(window, cx),
+                StoryContainer::panel::<ToggleStory>(window, cx),
+                StoryContainer::panel::<TooltipStory>(window, cx),
+                StoryContainer::panel::<TreeStory>(window, cx),
+                StoryContainer::panel::<VirtualListStory>(window, cx),
+            ],
+        )];
 
         let mut this = Self {
             search_input,
@@ -112,6 +117,7 @@ impl Gallery {
             active_group_index: Some(0),
             active_index: Some(0),
             collapsed: false,
+            embedded,
             _subscriptions,
         };
 
@@ -123,14 +129,32 @@ impl Gallery {
     }
 
     fn set_active_story(&mut self, name: &str, window: &mut Window, cx: &mut App) {
-        let name = name.to_string();
+        let name = name.trim().to_string();
+        let exact_index = self
+            .stories
+            .iter()
+            .flat_map(|(_, stories)| stories)
+            .filter(|story| {
+                story
+                    .read(cx)
+                    .name
+                    .to_lowercase()
+                    .contains(&name.to_lowercase())
+            })
+            .position(|story| story.read(cx).name.eq_ignore_ascii_case(&name));
         self.search_input.update(cx, |this, cx| {
             this.set_value(&name, window, cx);
-        })
+        });
+        self.active_group_index = Some(0);
+        self.active_index = Some(exact_index.unwrap_or(0));
     }
 
     pub fn view(init_story: Option<&str>, window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(init_story, window, cx))
+    }
+
+    pub fn embedded_view(story: &str, window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|cx| Self::new_with_mode(Some(story), true, window, cx))
     }
 }
 
@@ -170,6 +194,14 @@ impl Render for Gallery {
 
         let current_story = story_name.clone();
         let total_components: usize = self.stories.iter().map(|(_, items)| items.len()).sum();
+
+        if self.embedded {
+            return div()
+                .id("embedded-story")
+                .size_full()
+                .when_some(active_story, |this, story| this.child(story.clone()))
+                .into_any_element();
+        }
 
         let body = h_resizable("gallery-container")
             .child(
@@ -227,7 +259,7 @@ impl Render for Gallery {
                                                                 .text_color(
                                                                     cx.theme().muted_foreground,
                                                                 )
-                                                                .child("Gallery")
+                                                                .child("Component showcase")
                                                                 .text_xs(),
                                                         ),
                                                 )
@@ -251,26 +283,23 @@ impl Render for Gallery {
                                     ),
                             )
                             .children(stories.clone().into_iter().enumerate().map(
-                                |(group_ix, (group_name, sub_stories))| {
-                                    SidebarGroup::new(*group_name).child(
-                                        SidebarMenu::new().children(
-                                            sub_stories.iter().enumerate().map(|(ix, story)| {
-                                                SidebarMenuItem::new(story.read(cx).name.clone())
-                                                    .active(
-                                                        self.active_group_index == Some(group_ix)
-                                                            && self.active_index == Some(ix),
-                                                    )
-                                                    .on_click(cx.listener(
-                                                        move |this, _: &ClickEvent, _, cx| {
-                                                            this.active_group_index =
-                                                                Some(group_ix);
-                                                            this.active_index = Some(ix);
-                                                            cx.notify();
-                                                        },
-                                                    ))
-                                            }),
-                                        ),
-                                    )
+                                |(group_ix, (_, sub_stories))| {
+                                    SidebarMenu::new().children(sub_stories.iter().enumerate().map(
+                                        |(ix, story)| {
+                                            SidebarMenuItem::new(story.read(cx).name.clone())
+                                                .active(
+                                                    self.active_group_index == Some(group_ix)
+                                                        && self.active_index == Some(ix),
+                                                )
+                                                .on_click(cx.listener(
+                                                    move |this, _: &ClickEvent, _, cx| {
+                                                        this.active_group_index = Some(group_ix);
+                                                        this.active_index = Some(ix);
+                                                        cx.notify();
+                                                    },
+                                                ))
+                                        },
+                                    ))
                                 },
                             )),
                     ),
@@ -291,7 +320,7 @@ impl Render for Gallery {
                             .child(
                                 v_flex()
                                     .gap_1()
-                                    .child(div().text_xl().child(story_name))
+                                    .child(div().text_2xl().font_semibold().child(story_name))
                                     .child(
                                         div()
                                             .text_color(cx.theme().muted_foreground)
@@ -335,5 +364,6 @@ impl Render for Gallery {
                             }),
                     ),
             )
+            .into_any_element()
     }
 }

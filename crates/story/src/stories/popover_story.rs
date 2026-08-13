@@ -151,7 +151,7 @@ impl super::Story for PopoverStory {
     }
 
     fn description() -> &'static str {
-        "A popup displays content on top of the main page."
+        "Show focused content beside a trigger."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -238,111 +238,120 @@ impl Render for PopoverStory {
             .size_full()
             .gap_6()
             .child(
-                section("Basic Popover").child(
-                    Popover::new("popover-0")
-                        .max_w(px(600.))
-                        .trigger(Button::new("btn").outline().label("Popover"))
-                        .gap_2()
-                        .text_sm()
-                        .w(px(400.))
-                        .child("Hello, this is a Popover.")
-                        .child(Separator::horizontal())
-                        .child(
-                            "You can put any content here, including text,\
+                section("Default")
+                    .description("Display lightweight contextual content.")
+                    .child(
+                        Popover::new("popover-0")
+                            .max_w(px(600.))
+                            .trigger(Button::new("btn").outline().label("Popover"))
+                            .gap_2()
+                            .text_sm()
+                            .w(px(400.))
+                            .child("Hello, this is a Popover.")
+                            .child(Separator::horizontal())
+                            .child(
+                                "You can put any content here, including text,\
                             buttons, forms, and more.",
-                        ),
-                ),
+                            ),
+                    )
+                    .child(
+                        Popover::new("default-open-popover")
+                            .default_open(true)
+                            .trigger(
+                                Button::new("default-open-btn")
+                                    .label("Default Open")
+                                    .outline(),
+                            )
+                            .child("This popover is open by default when first rendered."),
+                    ),
             )
             .child(
-                section("Popover with Form").child(
-                    Popover::new("popover-form")
-                        .p_0()
-                        .text_sm()
-                        .trigger(Button::new("pop").outline().label("Popup Form"))
-                        .track_focus(&form.focus_handle(cx))
-                        .open(self.form_popover_open)
-                        .on_open_change(cx.listener(move |this, open, _, cx| {
-                            println!("Popover form open changed: {}", open);
-                            this.form_popover_open = *open;
-                            cx.notify();
-                        }))
-                        .child(form.clone()),
-                ),
+                section("Form")
+                    .description("Keep focus and controlled open state around a form.")
+                    .child(
+                        Popover::new("popover-form")
+                            .p_0()
+                            .text_sm()
+                            .trigger(Button::new("pop").outline().label("Popup Form"))
+                            .track_focus(&form.focus_handle(cx))
+                            .open(self.form_popover_open)
+                            .on_open_change(cx.listener(move |this, open, _, cx| {
+                                println!("Popover form open changed: {}", open);
+                                this.form_popover_open = *open;
+                                cx.notify();
+                            }))
+                            .child(form.clone()),
+                    ),
             )
             .child(
-                section("Popover with List").child(
-                    Popover::new("popover-list")
-                        .p_0()
-                        .text_sm()
-                        .open(self.list_popover_open)
-                        .on_open_change(cx.listener(move |this, open, _, cx| {
-                            this.list_popover_open = *open;
-                            cx.notify();
-                        }))
-                        .trigger(Button::new("pop").outline().label("Popup List"))
-                        .track_focus(&self.list.focus_handle(cx))
-                        .child(List::new(&self.list))
-                        .w_64()
-                        .h(px(200.)),
-                ),
+                section("List")
+                    .description("Place a scrollable selection list in the popover.")
+                    .child(
+                        Popover::new("popover-list")
+                            .p_0()
+                            .text_sm()
+                            .open(self.list_popover_open)
+                            .on_open_change(cx.listener(move |this, open, _, cx| {
+                                this.list_popover_open = *open;
+                                cx.notify();
+                            }))
+                            .trigger(Button::new("pop").outline().label("Popup List"))
+                            .track_focus(&self.list.focus_handle(cx))
+                            .child(List::new(&self.list))
+                            .w_64()
+                            .h(px(200.)),
+                    ),
             )
             .child(
-                section("Right click to open Popover").child(
-                    Popover::new("popover-right-click")
-                        .mouse_button(MouseButton::Right)
-                        .trigger(Button::new("btn").outline().label("Right Click Popover"))
-                        .max_w(px(600.))
-                        .content(|_, _, cx| {
-                            v_flex()
-                                .gap_2()
-                                .child("Hello, this is a Popover on the Bottom Right.")
-                                .child(Separator::horizontal())
-                                .child(
-                                    Button::new("info1")
-                                        .primary()
-                                        .label("Dismiss")
-                                        .w(px(80.))
-                                        .on_click(cx.listener(|_, _, window, cx| {
-                                            window.push_notification(
-                                                "You have clicked dismiss via DismissEvent.",
-                                                cx,
-                                            );
-                                            cx.emit(DismissEvent);
-                                        })),
-                                )
-                        }),
-                ),
+                section("Right click")
+                    .description("Open from the secondary mouse button.")
+                    .child(
+                        Popover::new("popover-right-click")
+                            .mouse_button(MouseButton::Right)
+                            .trigger(Button::new("btn").outline().label("Right Click Popover"))
+                            .max_w(px(600.))
+                            .content(|_, _, cx| {
+                                v_flex()
+                                    .gap_2()
+                                    .child("Hello, this is a Popover on the Bottom Right.")
+                                    .child(Separator::horizontal())
+                                    .child(
+                                        Button::new("info1")
+                                            .primary()
+                                            .label("Dismiss")
+                                            .w(px(80.))
+                                            .on_click(cx.listener(|_, _, window, cx| {
+                                                window.push_notification(
+                                                    "You have clicked dismiss via DismissEvent.",
+                                                    cx,
+                                                );
+                                                cx.emit(DismissEvent);
+                                            })),
+                                    )
+                            }),
+                    ),
             )
             .child(
-                section("Styling Popover").child(
-                    Popover::new("popover-1")
-                        .trigger(Button::new("btn").outline().label("Style Popover"))
-                        .appearance(false)
-                        .py_1()
-                        .px_2()
-                        .bg(cx.theme().primary)
-                        .text_color(cx.theme().primary_foreground)
-                        .max_w(px(600.))
-                        .rounded(cx.theme().radius.half())
-                        .text_sm()
-                        .shadow_2xl()
-                        .child("A styled Popover with custom background and text color."),
-                ),
+                section("Custom style")
+                    .description("Customize appearance, radius, and shadow.")
+                    .child(
+                        Popover::new("popover-1")
+                            .trigger(Button::new("btn").outline().label("Style Popover"))
+                            .appearance(false)
+                            .py_1()
+                            .px_2()
+                            .bg(cx.theme().primary)
+                            .text_color(cx.theme().primary_foreground)
+                            .max_w(px(600.))
+                            .rounded(cx.theme().radius.half())
+                            .text_sm()
+                            .shadow_2xl()
+                            .child("A styled Popover with custom background and text color."),
+                    ),
             )
             .child(
-                section("Default Open").child(
-                    Popover::new("default-open-popover")
-                        .default_open(true)
-                        .trigger(
-                            Button::new("default-open-btn")
-                                .label("Default Open")
-                                .outline(),
-                        )
-                        .child("This popover is open by default when first rendered."),
-                ),
-            )
-            .child(
-                section("Async Submenu")
+                section("Async submenu")
+                    .description("Rebuild submenu content after asynchronous loading.")
                     .child(
                         Button::new("async-menu")
                             .outline()
@@ -382,7 +391,9 @@ impl Render for PopoverStory {
                     .child(self.message.clone()),
             )
             .child(
-                section("Popover Anchor")
+                section("Anchor")
+                    .description("Position content from each edge of the trigger.")
+                    .w_full()
                     .min_h(px(360.))
                     .v_flex()
                     .child(

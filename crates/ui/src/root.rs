@@ -1,13 +1,12 @@
 use crate::{
     ActiveTheme, ElementExt, Placement, StyledExt,
     dialog::{ANIMATION_DURATION, Dialog},
-    focus_trap::FocusTrapManager,
     input::{Copy, InputState},
     native_menu::FallbackMenuOverlay,
     notification::{Notification, NotificationList},
     sheet::Sheet,
     text::{SelectionScope, TextSelectionController, TextViewState, WindowTextSelection},
-    tooltip::TooltipOverlay,
+    tooltip::render_tooltip,
     window_border,
 };
 use gpui::{
@@ -42,7 +41,7 @@ pub struct Root {
     pub(crate) active_dialogs: Vec<ActiveDialog>,
     pub(super) focused_input: Option<Entity<InputState>>,
     pub notification: Entity<NotificationList>,
-    pub(crate) tooltip_overlay: Entity<TooltipOverlay>,
+    pub(crate) tooltip_overlay: Entity<gpui_base::TooltipOverlay>,
     pub(crate) native_menu_overlay: Entity<FallbackMenuOverlay>,
     sheet_size: Option<DefiniteLength>,
     window_shadow_size: Pixels,
@@ -95,7 +94,7 @@ impl Root {
     /// Create a new Root view.
     pub fn new(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         #[cfg(all(target_os = "macos", not(test)))]
-        crate::macos_accessibility::install_window_hit_test_forwarder(window);
+        gpui_base::install_window_hit_test_forwarder(window);
 
         Self {
             style: StyleRefinement::default(),
@@ -104,7 +103,8 @@ impl Root {
             active_dialogs: Vec::new(),
             focused_input: None,
             notification: cx.new(|cx| NotificationList::new(window, cx)),
-            tooltip_overlay: cx.new(|_| TooltipOverlay::new()),
+            tooltip_overlay: cx
+                .new(|_| gpui_base::TooltipOverlay::new().render_with(render_tooltip)),
             native_menu_overlay: cx.new(|_| FallbackMenuOverlay::new()),
             sheet_size: None,
             window_shadow_size: window_border::SHADOW_SIZE,
@@ -145,6 +145,14 @@ impl Root {
         root.update(cx, |root, cx| f(root, window, cx))
     }
 
+    pub(crate) fn try_update<F, R>(window: &mut Window, cx: &mut App, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut Self, &mut Window, &mut Context<Self>) -> R,
+    {
+        let root = window.root::<Root>().flatten()?;
+        Some(root.update(cx, |root, cx| f(root, window, cx)))
+    }
+
     pub fn read<'a>(window: &'a Window, cx: &'a App) -> &'a Self {
         &window
             .root::<Root>()
@@ -172,6 +180,7 @@ impl Root {
         };
 
         let placement = cx.theme().notification.placement;
+        let margins = &cx.theme().notification.margins;
 
         Some(
             div()
@@ -198,7 +207,28 @@ impl Root {
                 .when_some(mr, |this, offset| this.mr(offset))
                 .when_some(mb, |this, offset| this.mb(offset))
                 .when_some(ml, |this, offset| this.ml(offset))
-                .child(root.read(cx).notification.clone()),
+                .child(
+                    div()
+                        .when(matches!(placement, Anchor::TopRight), |this| {
+                            this.mt(margins.top).mr(margins.right)
+                        })
+                        .when(matches!(placement, Anchor::TopLeft), |this| {
+                            this.mt(margins.top).ml(margins.left)
+                        })
+                        .when(matches!(placement, Anchor::TopCenter), |this| {
+                            this.mt(margins.top)
+                        })
+                        .when(matches!(placement, Anchor::BottomRight), |this| {
+                            this.mb(margins.bottom).mr(margins.right)
+                        })
+                        .when(matches!(placement, Anchor::BottomLeft), |this| {
+                            this.mb(margins.bottom).ml(margins.left)
+                        })
+                        .when(matches!(placement, Anchor::BottomCenter), |this| {
+                            this.mb(margins.bottom)
+                        })
+                        .child(root.read(cx).notification.clone()),
+                ),
         )
     }
 
@@ -445,7 +475,10 @@ impl Root {
     }
 
     /// Get the tooltip overlay entity for this window.
-    pub(crate) fn tooltip_overlay(window: &Window, cx: &App) -> Option<Entity<TooltipOverlay>> {
+    pub(crate) fn tooltip_overlay(
+        window: &Window,
+        cx: &App,
+    ) -> Option<Entity<gpui_base::TooltipOverlay>> {
         let root = window.root::<Root>()??;
         Some(root.read(cx).tooltip_overlay.clone())
     }
@@ -466,7 +499,7 @@ impl Root {
 
     fn on_action_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
         // Check if we're inside a focus trap
-        if let Some(container_focus_handle) = FocusTrapManager::find_active_trap(window, cx) {
+        if let Some(container_focus_handle) = gpui_base::active_focus_trap(window, cx) {
             // We're in a focus trap - try to focus next, then check if we're still inside
             let before_focus = window.focused(cx);
 
@@ -501,7 +534,7 @@ impl Root {
 
     fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
         // Check if we're inside a focus trap
-        if let Some(container_focus_handle) = FocusTrapManager::find_active_trap(window, cx) {
+        if let Some(container_focus_handle) = gpui_base::active_focus_trap(window, cx) {
             // We're in a focus trap - try to focus previous, then check if we're still inside
             let before_focus = window.focused(cx);
 

@@ -11,27 +11,40 @@
         box-sizing: border-box;
       }
 
+      /* Match the gpui theme this gallery is about to render, so the loading
+         screen does not flash a different colour before the first frame.
+         `neutral-950` is the default dark theme's background. */
+      :root {
+        --loading-bg: #fff;
+        --loading-fg: #000;
+      }
+
+      :root.dark {
+        --loading-bg: #0a0a0a;
+        --loading-fg: #fafafa;
+      }
+
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
         overflow: hidden;
         width: 100vw;
         height: 100vh;
+        background: var(--loading-bg);
+        color: var(--loading-fg);
       }
 
-      #app {
-        width: 100%;
-        height: 100%;
-        position: relative;
-      }
-
-      #canvas {
+      body > canvas {
+        position: fixed;
+        inset: 0;
         display: block;
         width: 100%;
         height: 100%;
       }
 
       #loading {
-        position: absolute;
+        position: fixed;
+        z-index: 1;
+        pointer-events: none;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
@@ -39,8 +52,8 @@
       }
 
       .spinner {
-        border: 4px solid rgba(0, 0, 0, 0.1);
-        border-left-color: #000;
+        border: 4px solid color-mix(in srgb, var(--loading-fg) 10%, transparent);
+        border-left-color: var(--loading-fg);
         border-radius: 50%;
         width: 40px;
         height: 40px;
@@ -60,14 +73,25 @@
         text-align: center;
       }
     </style>
+    <script>
+      // Adopt the embedding page's appearance before the first paint, so the
+      // loading screen matches the theme the gallery is about to render.
+      try {
+        if (
+          window.parent !== window &&
+          window.parent.document.documentElement.classList.contains('dark')
+        ) {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (error) {
+        // Cross-origin embedding: keep the default light loading screen.
+      }
+    </script>
   </head>
   <body>
-    <div id="app">
-      <canvas id="canvas"></canvas>
-      <div id="loading">
-        <div class="spinner"></div>
-        <p>Loading GPUI Component Story Gallery...</p>
-      </div>
+    <div id="loading">
+      <div class="spinner"></div>
+      <p>Loading GPUI Component Story Gallery...</p>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

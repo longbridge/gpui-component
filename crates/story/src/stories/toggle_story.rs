@@ -1,39 +1,41 @@
 use gpui::{
-    App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window,
+    App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled as _, Window, div,
 };
 
 use gpui_component::{
-    IconName, Sizable, StyledExt,
+    IconName, Sizable, Size, StyledExt,
     button::{Toggle, ToggleGroup, ToggleVariants},
-    v_flex,
+    h_flex, v_flex,
 };
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct ToggleStory {
     focus_handle: FocusHandle,
     single_toggle: usize,
     checked: Vec<bool>,
+    size: Size,
 }
 
 impl ToggleStory {
     pub fn view(_: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self {
             focus_handle: cx.focus_handle(),
-            single_toggle: 0,
-            checked: vec![false; 20],
+            single_toggle: 1,
+            checked: vec![false; 12],
+            size: Size::Medium,
         })
     }
 }
 
 impl super::Story for ToggleStory {
     fn title() -> &'static str {
-        "ToggleButton"
+        "Toggle"
     }
 
     fn description() -> &'static str {
-        ""
+        "Turn an option on or off, alone or in a group."
     }
 
     fn closable() -> bool {
@@ -56,236 +58,126 @@ impl Render for ToggleStory {
         v_flex()
             .w_full()
             .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                section("Toggle")
+                section("Default")
+                    .description("Text and icon toggles with clear selected states.")
+                    .w_128()
+                    .v_flex()
+                    .items_center()
+                    .gap_3()
                     .child(
-                        Toggle::new("item1")
-                            .label("Single Toggle Item 1")
-                            .large()
-                            .checked(self.single_toggle == 1)
-                            .on_click(cx.listener(|view, checked, _, cx| {
-                                if *checked {
-                                    view.single_toggle = 1;
-                                }
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Toggle::new("item2")
-                            .label("Single Toggle Item 2")
-                            .large()
-                            .checked(self.single_toggle == 2)
-                            .on_click(cx.listener(|view, checked, _, cx| {
-                                if *checked {
-                                    view.single_toggle = 2;
-                                }
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Toggle::new("item3")
-                            .icon(IconName::Eye)
-                            .large()
-                            .checked(self.single_toggle == 3)
-                            .on_click(cx.listener(|view, checked, _, cx| {
-                                if *checked {
-                                    view.single_toggle = 3;
-                                }
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .gap_2()
+                            .child(
+                                Toggle::new("preview")
+                                    .label("Preview")
+                                    .with_size(self.size)
+                                    .checked(self.single_toggle == 1)
+                                    .on_click(cx.listener(|this, checked, _, cx| {
+                                        this.single_toggle = usize::from(*checked);
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Toggle::new("favorite")
+                                    .icon(IconName::Star)
+                                    .with_size(self.size)
+                                    .checked(self.checked[0])
+                                    .on_click(cx.listener(|this, checked, _, cx| {
+                                        this.checked[0] = *checked;
+                                        cx.notify();
+                                    })),
+                            ),
                     ),
             )
             .child(
-                section("Toggle Group with Ghost Style")
+                section("Variants")
+                    .description("Ghost and outline treatments for different surfaces.")
+                    .w_128()
                     .v_flex()
+                    .items_center()
                     .gap_4()
                     .child(
-                        ToggleGroup::new("toggle-button-group1")
-                            .child(Toggle::new(0).icon(IconName::Bell).checked(self.checked[0]))
-                            .child(Toggle::new(1).icon(IconName::Bot).checked(self.checked[1]))
+                        v_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(div().text_sm().font_medium().child("Ghost"))
                             .child(
-                                Toggle::new(2)
-                                    .icon(IconName::Inbox)
-                                    .checked(self.checked[2]),
-                            )
-                            .child(
-                                Toggle::new(3)
-                                    .icon(IconName::Check)
-                                    .checked(self.checked[3]),
-                            )
-                            .child(Toggle::new(4).label("Other").checked(self.checked[4]))
-                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
-                                view.checked[0] = checkeds[0];
-                                view.checked[1] = checkeds[1];
-                                view.checked[2] = checkeds[2];
-                                view.checked[3] = checkeds[3];
-                                view.checked[4] = checkeds[4];
-                                cx.notify();
-                            })),
+                                ToggleGroup::new("ghost-group")
+                                    .with_size(self.size)
+                                    .child(
+                                        Toggle::new(0)
+                                            .icon(IconName::Bell)
+                                            .checked(self.checked[1]),
+                                    )
+                                    .child(
+                                        Toggle::new(1)
+                                            .icon(IconName::Inbox)
+                                            .checked(self.checked[2]),
+                                    )
+                                    .child(
+                                        Toggle::new(2)
+                                            .icon(IconName::Check)
+                                            .checked(self.checked[3]),
+                                    )
+                                    .on_click(cx.listener(|this, values: &Vec<bool>, _, cx| {
+                                        this.checked[1..4].copy_from_slice(values);
+                                        cx.notify();
+                                    })),
+                            ),
                     )
                     .child(
-                        ToggleGroup::new("toggle-button-group1-sm")
-                            .small()
-                            .child(Toggle::new(0).icon(IconName::Bell).checked(self.checked[0]))
-                            .child(Toggle::new(1).icon(IconName::Bot).checked(self.checked[1]))
+                        v_flex()
+                            .items_center()
+                            .gap_2()
+                            .child(div().text_sm().font_medium().child("Outline"))
                             .child(
-                                Toggle::new(2)
-                                    .icon(IconName::Inbox)
-                                    .checked(self.checked[2]),
-                            )
-                            .child(
-                                Toggle::new(3)
-                                    .icon(IconName::Check)
-                                    .checked(self.checked[3]),
-                            )
-                            .child(Toggle::new(4).label("Other").checked(self.checked[4]))
-                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
-                                view.checked[0] = checkeds[0];
-                                view.checked[1] = checkeds[1];
-                                view.checked[2] = checkeds[2];
-                                view.checked[3] = checkeds[3];
-                                view.checked[4] = checkeds[4];
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        ToggleGroup::new("toggle-button-group1-xs")
-                            .xsmall()
-                            .child(Toggle::new(0).icon(IconName::Bell).checked(self.checked[0]))
-                            .child(Toggle::new(1).icon(IconName::Bot).checked(self.checked[1]))
-                            .child(
-                                Toggle::new(2)
-                                    .icon(IconName::Inbox)
-                                    .checked(self.checked[2]),
-                            )
-                            .child(
-                                Toggle::new(3)
-                                    .icon(IconName::Check)
-                                    .checked(self.checked[3]),
-                            )
-                            .child(Toggle::new(4).label("Other").checked(self.checked[4]))
-                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
-                                view.checked[0] = checkeds[0];
-                                view.checked[1] = checkeds[1];
-                                view.checked[2] = checkeds[2];
-                                view.checked[3] = checkeds[3];
-                                view.checked[4] = checkeds[4];
-                                cx.notify();
-                            })),
+                                ToggleGroup::new("outline-group")
+                                    .outline()
+                                    .with_size(self.size)
+                                    .child(
+                                        Toggle::new(0)
+                                            .icon(IconName::Bell)
+                                            .checked(self.checked[4]),
+                                    )
+                                    .child(
+                                        Toggle::new(1)
+                                            .icon(IconName::Inbox)
+                                            .checked(self.checked[5]),
+                                    )
+                                    .child(
+                                        Toggle::new(2)
+                                            .icon(IconName::Check)
+                                            .checked(self.checked[6]),
+                                    )
+                                    .on_click(cx.listener(|this, values: &Vec<bool>, _, cx| {
+                                        this.checked[4..7].copy_from_slice(values);
+                                        cx.notify();
+                                    })),
+                            ),
                     ),
             )
             .child(
-                section("Toggle Group with Outline Style")
+                section("Group")
+                    .description("Connected toggles keep related choices together.")
+                    .w_128()
                     .v_flex()
-                    .gap_4()
+                    .items_center()
                     .child(
-                        ToggleGroup::new("toggle-button-group2")
-                            .outline()
-                            .child(Toggle::new(0).icon(IconName::Bell).checked(self.checked[0]))
-                            .child(Toggle::new(1).icon(IconName::Bot).checked(self.checked[1]))
-                            .child(
-                                Toggle::new(2)
-                                    .icon(IconName::Inbox)
-                                    .checked(self.checked[2]),
-                            )
-                            .child(
-                                Toggle::new(3)
-                                    .icon(IconName::Check)
-                                    .checked(self.checked[3]),
-                            )
-                            .child(Toggle::new(4).label("Other").checked(self.checked[4]))
-                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
-                                view.checked[0] = checkeds[0];
-                                view.checked[1] = checkeds[1];
-                                view.checked[2] = checkeds[2];
-                                view.checked[3] = checkeds[3];
-                                view.checked[4] = checkeds[4];
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        ToggleGroup::new("toggle-button-group2-sm")
-                            .outline()
-                            .small()
-                            .child(Toggle::new(0).icon(IconName::Bell).checked(self.checked[0]))
-                            .child(Toggle::new(1).icon(IconName::Bot).checked(self.checked[1]))
-                            .child(
-                                Toggle::new(2)
-                                    .icon(IconName::Inbox)
-                                    .checked(self.checked[2]),
-                            )
-                            .child(
-                                Toggle::new(3)
-                                    .icon(IconName::Check)
-                                    .checked(self.checked[3]),
-                            )
-                            .child(Toggle::new(4).label("Other").checked(self.checked[4]))
-                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
-                                view.checked[0] = checkeds[0];
-                                view.checked[1] = checkeds[1];
-                                view.checked[2] = checkeds[2];
-                                view.checked[3] = checkeds[3];
-                                view.checked[4] = checkeds[4];
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        ToggleGroup::new("toggle-button-group2-xs")
-                            .outline()
-                            .xsmall()
-                            .child(Toggle::new(0).icon(IconName::Bell).checked(self.checked[0]))
-                            .child(Toggle::new(1).icon(IconName::Bot).checked(self.checked[1]))
-                            .child(
-                                Toggle::new(2)
-                                    .icon(IconName::Inbox)
-                                    .checked(self.checked[2]),
-                            )
-                            .child(
-                                Toggle::new(3)
-                                    .icon(IconName::Check)
-                                    .checked(self.checked[3]),
-                            )
-                            .child(Toggle::new(4).label("Other").checked(self.checked[4]))
-                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
-                                view.checked[0] = checkeds[0];
-                                view.checked[1] = checkeds[1];
-                                view.checked[2] = checkeds[2];
-                                view.checked[3] = checkeds[3];
-                                view.checked[4] = checkeds[4];
-                                cx.notify();
-                            })),
-                    ),
-            )
-            .child(
-                section("Toggle Group with Segmented Style")
-                    .v_flex()
-                    .gap_4()
-                    .child(
-                        ToggleGroup::new("toggle-button-group-segmented-outline")
+                        ToggleGroup::new("segmented-group")
                             .segmented()
                             .outline()
-                            .child(Toggle::new(0).label("Bold").checked(self.checked[5]))
-                            .child(Toggle::new(1).label("Italic").checked(self.checked[6]))
-                            .child(Toggle::new(2).label("Code").checked(self.checked[7]))
-                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
-                                for (offset, checked) in checkeds.iter().enumerate() {
-                                    view.checked[5 + offset] = *checked;
-                                }
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        ToggleGroup::new("toggle-button-group-segmented-gap")
-                            .segmented()
-                            .outline()
-                            .small()
-                            .child(Toggle::new(0).label("Star").checked(self.checked[8]))
-                            .child(Toggle::new(1).label("Watch").checked(self.checked[9]))
-                            .child(Toggle::new(2).label("Pin").checked(self.checked[10]))
-                            .on_click(cx.listener(|view, checkeds: &Vec<bool>, _, cx| {
-                                for (offset, checked) in checkeds.iter().enumerate() {
-                                    view.checked[8 + offset] = *checked;
-                                }
+                            .with_size(self.size)
+                            .child(Toggle::new(0).label("Bold").checked(self.checked[7]))
+                            .child(Toggle::new(1).label("Italic").checked(self.checked[8]))
+                            .child(Toggle::new(2).label("Code").checked(self.checked[9]))
+                            .on_click(cx.listener(|this, values: &Vec<bool>, _, cx| {
+                                this.checked[7..10].copy_from_slice(values);
                                 cx.notify();
                             })),
                     ),

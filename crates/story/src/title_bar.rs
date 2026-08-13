@@ -10,10 +10,10 @@ use gpui_component::{
     badge::Badge,
     button::{Button, ButtonVariants as _},
     menu::{AppMenuBar, DropdownMenu as _},
-    scroll::ScrollbarShow,
+    scroll::ScrollbarMode,
 };
 
-use crate::{SelectFont, SelectRadius, SelectScrollbarShow, ToggleListActiveHighlight, app_menus};
+use crate::{SelectFont, SelectRadius, SelectScrollbarMode, ToggleListActiveHighlight, app_menus};
 
 pub struct AppTitleBar {
     app_menu_bar: Entity<AppMenuBar>,
@@ -126,13 +126,13 @@ impl FontSizeSelector {
         window.refresh();
     }
 
-    fn on_select_scrollbar_show(
+    fn on_select_scrollbar_mode(
         &mut self,
-        show: &SelectScrollbarShow,
+        show: &SelectScrollbarMode,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        Theme::global_mut(cx).scrollbar_show = show.0;
+        Theme::set_scrollbar_mode(show.0, cx);
         window.refresh();
     }
 
@@ -153,14 +153,14 @@ impl Render for FontSizeSelector {
         let focus_handle = self.focus_handle.clone();
         let font_size = cx.theme().font_size.as_f32() as i32;
         let radius = cx.theme().radius.as_f32() as i32;
-        let scroll_show = cx.theme().scrollbar_show;
+        let scroll_show = cx.theme().scrollbar_mode;
 
         div()
             .id("font-size-selector")
             .track_focus(&focus_handle)
             .on_action(cx.listener(Self::on_select_font))
             .on_action(cx.listener(Self::on_select_radius))
-            .on_action(cx.listener(Self::on_select_scrollbar_show))
+            .on_action(cx.listener(Self::on_select_scrollbar_mode))
             .on_action(cx.listener(Self::on_toggle_list_active_highlight))
             .child(
                 Button::new("btn")
@@ -193,18 +193,18 @@ impl Render for FontSizeSelector {
                             .label("Scrollbar")
                             .menu_with_check(
                                 "Scrolling to show",
-                                scroll_show == ScrollbarShow::Scrolling,
-                                Box::new(SelectScrollbarShow(ScrollbarShow::Scrolling)),
+                                scroll_show == ScrollbarMode::Scrolling,
+                                Box::new(SelectScrollbarMode(ScrollbarMode::Scrolling)),
                             )
                             .menu_with_check(
                                 "Hover to show",
-                                scroll_show == ScrollbarShow::Hover,
-                                Box::new(SelectScrollbarShow(ScrollbarShow::Hover)),
+                                scroll_show == ScrollbarMode::Hover,
+                                Box::new(SelectScrollbarMode(ScrollbarMode::Hover)),
                             )
                             .menu_with_check(
                                 "Always show",
-                                scroll_show == ScrollbarShow::Always,
-                                Box::new(SelectScrollbarShow(ScrollbarShow::Always)),
+                                scroll_show == ScrollbarMode::Always,
+                                Box::new(SelectScrollbarMode(ScrollbarMode::Always)),
                             )
                             .separator()
                             .menu_with_check(

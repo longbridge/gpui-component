@@ -1,19 +1,23 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, SharedString,
-    Styled, Subscription, Window, div, px, rems,
+    Action, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, SharedString, Styled, Subscription, Window, div, px, rems,
 };
 
 use gpui_component::{
-    IconName, StyledExt,
-    button::{Button, ButtonVariant, ButtonVariants as _},
-    checkbox::Checkbox,
-    green_500, h_flex,
+    ActiveTheme, IconName, StyledExt,
+    button::{Button, ButtonVariants as _},
+    h_flex,
     input::{Input, InputEvent, InputState},
     label::{HighlightsMatch, Label},
     v_flex,
 };
+use serde::Deserialize;
 
-use crate::section;
+use crate::{section, story_toolbar_group};
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = label_story, no_json)]
+struct TogglePrefix;
 
 pub struct LabelStory {
     focus_handle: gpui::FocusHandle,
@@ -30,7 +34,7 @@ impl super::Story for LabelStory {
     }
 
     fn description() -> &'static str {
-        "Label used to display text or other content."
+        "Display concise text with hierarchy, highlighting, and masking."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -42,7 +46,7 @@ impl LabelStory {
     pub(crate) fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let highlights_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("Enter text to highlight in the label")
+                .placeholder("Search labels")
                 .clean_on_escape()
         });
 
@@ -93,122 +97,141 @@ impl Render for LabelStory {
         let ht = self.highlights_text();
 
         v_flex()
+            .w_full()
+            .items_center()
             .gap_6()
+            .on_action(cx.listener(|this, _: &TogglePrefix, _, cx| {
+                this.prefix = !this.prefix;
+                cx.notify();
+            }))
+            .child(story_toolbar_group().dropdown_child(
+                Button::new("label-options").label("Options"),
+                {
+                    let prefix = self.prefix;
+                    move |menu, _, _| {
+                        menu.menu_with_check("Prefix Match", prefix, Box::new(TogglePrefix))
+                    }
+                },
+            ))
             .child(
-                h_flex()
-                    .gap_x_3()
-                    .child(Input::new(&self.highlights_input).w_1_3())
+                section("Default")
+                    .description("Present primary text with optional supporting context.")
+                    .w(px(560.))
+                    .items_center()
                     .child(
-                        Checkbox::new("prefix")
-                            .label("Prefix")
-                            .checked(self.prefix)
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.prefix = !view.prefix;
-                                cx.notify();
-                            })),
+                        v_flex()
+                            .w(px(320.))
+                            .gap_4()
+                            .child(Label::new("Account details"))
+                            .child(Label::new("Company address").secondary("Optional"))
+                            .child(
+                                Label::new("Workspace owner")
+                                    .font_semibold()
+                                    .secondary("Administrator"),
+                            ),
                     ),
             )
             .child(
-                section("Label").max_w_md().items_start().child(
-                    v_flex()
-                        .gap_y_4()
-                        .child(Label::new("This is a label").highlights(ht.clone()))
-                        // This case for test match CJK with ASCII, it was has a crash bug before.
-                        // Try to input "AA" to see the highlights effect.
-                        .child(Label::new("AAA中文BB").highlights(ht.clone())),
-                ),
-            )
-            .child(
-                section("Label with secondary text")
-                    .max_w_md()
-                    .items_start()
+                section("Highlighting")
+                    .description("Find matching text across Latin and CJK content.")
+                    .w(px(560.))
+                    .items_center()
                     .child(
-                        Label::new("Company Address")
-                            .secondary("(optional)")
-                            .highlights(ht.clone()),
+                        v_flex()
+                            .w(px(320.))
+                            .gap_4()
+                            .child(Input::new(&self.highlights_input))
+                            .child(
+                                v_flex()
+                                    .w_full()
+                                    .gap_3()
+                                    .p_4()
+                                    .rounded(cx.theme().radius_lg)
+                                    .border_1()
+                                    .border_color(cx.theme().border)
+                                    .child(
+                                        Label::new("Design system documentation")
+                                            .highlights(ht.clone()),
+                                    )
+                                    // Keeps the mixed ASCII/CJK matching regression visible.
+                                    .child(Label::new("AAA中文BB").highlights(ht.clone())),
+                            ),
                     ),
             )
             .child(
-                section("Alignment").max_w_md().child(
-                    v_flex()
-                        .w_full()
-                        .gap_4()
-                        .child(Label::new("Text align left").highlights(ht.clone()))
-                        .child(
-                            Label::new("Text align center")
-                                .text_center()
-                                .highlights(ht.clone()),
-                        )
-                        .child(
-                            Label::new("Text align right")
-                                .text_right()
-                                .highlights(ht.clone()),
-                        ),
-                ),
-            )
-            .child(
-                section("Label with color").max_w_md().child(
-                    Label::new("Color Label")
-                        .text_color(green_500())
-                        .highlights(ht.clone()),
-                ),
-            )
-            .child(
-                section("Font Size").max_w_md().child(
-                    Label::new("Font Size Label")
-                        .text_size(px(20.))
-                        .font_semibold()
-                        .line_height(rems(1.8))
-                        .highlights(ht.clone()),
-                ),
-            )
-            .child(
-                section("Multi-line, line-height and text wrap")
-                    .max_w_md()
+                section("Layout")
+                    .description("Labels support alignment and natural wrapping.")
+                    .w(px(560.))
+                    .items_center()
                     .child(
-                        div().w(px(200.)).child(
-                            Label::new(
-                                "Label should support text wrap in default, \
-                                if the text is too long, it should wrap to the next line.",
+                        v_flex()
+                            .w(px(320.))
+                            .gap_4()
+                            .child(
+                                v_flex()
+                                    .w_full()
+                                    .gap_2()
+                                    .p_4()
+                                    .rounded(cx.theme().radius_lg)
+                                    .bg(cx.theme().muted.opacity(0.4))
+                                    .child(Label::new("Start aligned"))
+                                    .child(Label::new("Center aligned").text_center())
+                                    .child(Label::new("End aligned").text_right()),
                             )
-                            .line_height(rems(1.8))
-                            .highlights(ht.clone()),
-                        ),
+                            .child(
+                                div().w(px(220.)).child(
+                                    Label::new(
+                                        "Long labels wrap cleanly inside constrained layouts.",
+                                    )
+                                    .line_height(rems(1.5)),
+                                ),
+                            ),
                     ),
             )
             .child(
-                section("Masked Label").max_w_md().child(
-                    v_flex()
-                        .w_full()
-                        .gap_4()
-                        .child(
-                            h_flex()
-                                .child(
-                                    Label::new("9,182,1 USD")
-                                        .text_2xl()
-                                        .masked(self.masked)
-                                        .highlights(ht.clone()),
-                                )
-                                .child(
-                                    Button::new("btn-mask")
-                                        .with_variant(ButtonVariant::Ghost)
-                                        .icon(if self.masked {
-                                            IconName::EyeOff
-                                        } else {
-                                            IconName::Eye
-                                        })
-                                        .on_click(cx.listener(|this, _, _, _| {
-                                            this.masked = !this.masked;
-                                        })),
-                                ),
-                        )
-                        .child(
-                            Label::new("500 USD")
-                                .text_xl()
-                                .masked(self.masked)
-                                .highlights(ht.clone()),
-                        ),
-                ),
+                section("Masked")
+                    .description("Reveal or conceal sensitive values in place.")
+                    .w(px(560.))
+                    .items_center()
+                    .child(
+                        h_flex()
+                            .w(px(320.))
+                            .items_center()
+                            .justify_between()
+                            .p_4()
+                            .rounded(cx.theme().radius_lg)
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .child(
+                                v_flex()
+                                    .gap_1()
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("Available balance"),
+                                    )
+                                    .child(
+                                        Label::new("$9,182.10")
+                                            .text_2xl()
+                                            .font_semibold()
+                                            .masked(self.masked),
+                                    ),
+                            )
+                            .child(
+                                Button::new("btn-mask")
+                                    .ghost()
+                                    .icon(if self.masked {
+                                        IconName::EyeOff
+                                    } else {
+                                        IconName::Eye
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.masked = !this.masked;
+                                        cx.notify();
+                                    })),
+                            ),
+                    ),
             )
     }
 }

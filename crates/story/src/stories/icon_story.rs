@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window,
+    Styled, Window, px,
 };
 use gpui_component::{
     ActiveTheme as _, Icon, IconName, Sizable,
@@ -54,9 +54,12 @@ impl Focusable for IconStory {
 impl Render for IconStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_4()
+            .items_center()
+            .gap_6()
             .child(
-                section("Icon")
+                section("Icons")
+                    .description("Common interface symbols from the bundled icon set.")
+                    .w(px(480.))
                     .text_lg()
                     .child(IconName::Info)
                     .child(IconName::Map)
@@ -67,7 +70,9 @@ impl Render for IconStory {
                     .child(IconName::Heart),
             )
             .child(
-                section("Color Icon")
+                section("Color")
+                    .description("Icons inherit semantic foreground colors.")
+                    .w(px(480.))
                     .child(
                         Icon::new(IconName::Maximize)
                             .size_6()
@@ -80,47 +85,53 @@ impl Render for IconStory {
                     ),
             )
             .child(
-                section("Icon Button").child(
-                    h_flex()
-                        .gap_4()
-                        .child(
-                            Button::new("like1")
-                                .icon(
-                                    Icon::new(IconName::Heart)
-                                        .text_color(neutral_500())
-                                        .size_6(),
-                                )
-                                .with_variant(ButtonVariant::Ghost),
-                        )
-                        .child(
-                            Button::new("like2")
-                                .icon(
-                                    Icon::new(IconName::HeartOff)
-                                        .text_color(cx.theme().red)
-                                        .size_6(),
-                                )
-                                .with_variant(ButtonVariant::Ghost),
-                        )
-                        .child(
-                            Button::new("like3")
-                                .icon(
-                                    Icon::new(IconName::Heart)
-                                        .text_color(cx.theme().green)
-                                        .size_6(),
-                                )
-                                .with_variant(ButtonVariant::Ghost),
-                        ),
-                ),
+                section("Icon Buttons")
+                    .description("Icons can be used as compact button content.")
+                    .w(px(480.))
+                    .child(
+                        h_flex()
+                            .gap_4()
+                            .child(
+                                Button::new("like1")
+                                    .icon(
+                                        Icon::new(IconName::Heart)
+                                            .text_color(neutral_500())
+                                            .size_6(),
+                                    )
+                                    .with_variant(ButtonVariant::Ghost),
+                            )
+                            .child(
+                                Button::new("like2")
+                                    .icon(
+                                        Icon::new(IconName::HeartOff)
+                                            .text_color(cx.theme().red)
+                                            .size_6(),
+                                    )
+                                    .with_variant(ButtonVariant::Ghost),
+                            )
+                            .child(
+                                Button::new("like3")
+                                    .icon(
+                                        Icon::new(IconName::Heart)
+                                            .text_color(cx.theme().green)
+                                            .size_6(),
+                                    )
+                                    .with_variant(ButtonVariant::Ghost),
+                            ),
+                    ),
             )
             .child(
-                section("Button with size").child(
-                    Button::new("button-with-size")
-                        .outline()
-                        .size_5()
-                        .small()
-                        .px_0()
-                        .label("10"),
-                ),
+                section("Custom Size")
+                    .description("Explicit dimensions support dense controls and counters.")
+                    .w(px(480.))
+                    .child(
+                        Button::new("button-with-size")
+                            .outline()
+                            .size_5()
+                            .small()
+                            .px_0()
+                            .label("10"),
+                    ),
             )
     }
 }
