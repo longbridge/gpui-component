@@ -79,68 +79,76 @@ impl SidebarStory {
             .w_full()
             .min_h_0()
             .flex_1()
-            .gap_5()
+            .gap_4()
             .child(
-                h_flex().w_full().justify_end().child(
-                    crate::story_toolbar_group()
-                        .dropdown_child(Button::new("sidebar-mode").label("Mode"), {
-                            let collapsible = self.collapsible;
-                            move |menu, _, _| {
-                                menu.menu_with_check(
-                                    "Icon",
-                                    collapsible == SidebarCollapsible::Icon,
-                                    Box::new(SidebarOption::Icon),
-                                )
-                                .menu_with_check(
-                                    "Offcanvas",
-                                    collapsible == SidebarCollapsible::Offcanvas,
-                                    Box::new(SidebarOption::Offcanvas),
-                                )
-                                .menu_with_check(
-                                    "None",
-                                    collapsible == SidebarCollapsible::None,
-                                    Box::new(SidebarOption::None),
-                                )
-                            }
-                        })
-                        .dropdown_child(Button::new("sidebar-options").label("Options"), {
-                            let right = self.side.is_right();
-                            let click_to_open = self.click_to_open_submenu;
-                            let dynamic_children = self.show_dynamic_children;
-                            move |menu, _, _| {
-                                menu.menu_with_check(
-                                    "Right Side",
-                                    right,
-                                    Box::new(SidebarOption::Right),
-                                )
-                                .menu_with_check(
-                                    "Click to Open",
-                                    click_to_open,
-                                    Box::new(SidebarOption::ClickToOpen),
-                                )
-                                .menu_with_check(
-                                    "Dynamic Children",
-                                    dynamic_children,
-                                    Box::new(SidebarOption::DynamicChildren),
-                                )
-                            }
-                        }),
-                ),
-            )
-            .child(
-                v_flex()
-                    .gap_1()
+                h_flex()
+                    .w_full()
+                    .items_start()
+                    .justify_between()
+                    .gap_4()
                     .child(
-                        div()
-                            .text_2xl()
-                            .font_semibold()
-                            .child(self.last_active_item.label()),
+                        v_flex()
+                            .min_w_0()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_2xl()
+                                    .font_semibold()
+                                    .child(self.last_active_item.label()),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("A quick view of your workspace activity."),
+                            ),
                     )
                     .child(
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child("A quick view of your workspace activity."),
+                        crate::story_toolbar_group()
+                            .w_auto()
+                            .flex_shrink_0()
+                            .dropdown_child(Button::new("sidebar-mode").label("Mode"), {
+                                let collapsible = self.collapsible;
+                                move |menu, _, _| {
+                                    menu.menu_with_check(
+                                        "Icon",
+                                        collapsible == SidebarCollapsible::Icon,
+                                        Box::new(SidebarOption::Icon),
+                                    )
+                                    .menu_with_check(
+                                        "Offcanvas",
+                                        collapsible == SidebarCollapsible::Offcanvas,
+                                        Box::new(SidebarOption::Offcanvas),
+                                    )
+                                    .menu_with_check(
+                                        "None",
+                                        collapsible == SidebarCollapsible::None,
+                                        Box::new(SidebarOption::None),
+                                    )
+                                }
+                            })
+                            .dropdown_child(Button::new("sidebar-options").label("Options"), {
+                                let right = self.side.is_right();
+                                let click_to_open = self.click_to_open_submenu;
+                                let dynamic_children = self.show_dynamic_children;
+                                move |menu, _, _| {
+                                    menu.menu_with_check(
+                                        "Right Side",
+                                        right,
+                                        Box::new(SidebarOption::Right),
+                                    )
+                                    .menu_with_check(
+                                        "Click to Open",
+                                        click_to_open,
+                                        Box::new(SidebarOption::ClickToOpen),
+                                    )
+                                    .menu_with_check(
+                                        "Dynamic Children",
+                                        dynamic_children,
+                                        Box::new(SidebarOption::DynamicChildren),
+                                    )
+                                }
+                            }),
                     ),
             )
             .child(
@@ -181,6 +189,7 @@ impl SidebarStory {
                     .w_full()
                     .min_h_0()
                     .flex_1()
+                    .mt_2()
                     .rounded(cx.theme().radius_lg)
                     .border_1()
                     .border_color(cx.theme().border)

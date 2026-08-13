@@ -1,24 +1,26 @@
 use gpui::{
-    Action, Anchor, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity,
-    EventEmitter, FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement,
-    KeyBinding, ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement,
-    Styled, Window, WindowBounds, WindowKind, WindowOptions, actions, div,
-    prelude::FluentBuilder as _, px, rems, size,
+    Action, Anchor, AnyElement, AnyView, App, AppContext, Bounds, Context, DismissEvent, Div,
+    Entity, EventEmitter, FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement,
+    KeyBinding, ParentElement, Pixels, Render, RenderOnce, SharedString, Size, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, WindowBounds, WindowKind,
+    WindowOptions, actions, div, prelude::FluentBuilder as _, px, rems, size,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _, TitleBar,
-    WindowExt,
-    button::Button,
+    ActiveTheme, IconName, Root, Selectable, Sizable as _, Size as ComponentSize, StyledExt as _,
+    TitleBar, WindowExt,
+    button::{Button, ButtonGroup},
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
-    menu::{DropdownMenu as _, PopupMenu},
+    menu::PopupMenu,
     notification::Notification,
+    popover::Popover,
     scroll::{ScrollableElement as _, ScrollbarMode},
     text::markdown,
     v_flex,
 };
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 
 mod app_menus;
 mod embedded_themes;
@@ -399,14 +401,117 @@ impl StoryToolbar {
         button: Button,
         builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
+        let id = SharedString::from(format!("story-toolbar-menu-{}", self.children.len()));
         self.children.push(
-            button
-                .outline()
-                .small()
-                .dropdown_menu_with_anchor(Anchor::TopRight, builder)
-                .into_any_element(),
+            StoryToolbarMenu {
+                id,
+                button,
+                builder: Rc::new(builder),
+            }
+            .into_any_element(),
         );
         self
+    }
+}
+
+type StoryMenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+
+#[derive(Default)]
+struct StoryToolbarMenuState {
+    menu: Option<Entity<PopupMenu>>,
+}
+
+#[derive(IntoElement)]
+struct StoryToolbarMenu {
+    id: SharedString,
+    button: Button,
+    builder: StoryMenuBuilder,
+}
+
+#[derive(IntoElement)]
+struct StoryToolbarMenuTrigger {
+    base: Stateful<Div>,
+    group: ButtonGroup,
+    selected: bool,
+}
+
+impl Selectable for StoryToolbarMenuTrigger {
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
+    }
+}
+
+impl InteractiveElement for StoryToolbarMenuTrigger {
+    fn interactivity(&mut self) -> &mut gpui::Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for StoryToolbarMenuTrigger {}
+
+impl Styled for StoryToolbarMenuTrigger {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl RenderOnce for StoryToolbarMenuTrigger {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        self.base.child(self.group)
+    }
+}
+
+impl RenderOnce for StoryToolbarMenu {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state =
+            window.use_keyed_state(self.id.clone(), cx, |_, _| StoryToolbarMenuState::default());
+        let builder = self.builder;
+
+        let popover_id = SharedString::from(format!("story-toolbar-popover-{}", self.id));
+        let group_id = SharedString::from(format!("story-toolbar-group-{}", self.id));
+
+        Popover::new(popover_id)
+            .appearance(false)
+            .overlay_closable(false)
+            .anchor(Anchor::TopRight)
+            .trigger(StoryToolbarMenuTrigger {
+                base: div().id(group_id.clone()),
+                group: ButtonGroup::new(group_id)
+                    .outline()
+                    .small()
+                    .child(self.button),
+                selected: false,
+            })
+            .content(move |_, window, cx| {
+                if let Some(menu) = state.read(cx).menu.clone() {
+                    return menu;
+                }
+
+                let builder = builder.clone();
+                let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+                    builder(menu, window, cx)
+                });
+                state.update(cx, |state, _| state.menu = Some(menu.clone()));
+                menu.focus_handle(cx).focus(window, cx);
+
+                let popover = cx.entity();
+                window
+                    .subscribe(&menu, cx, {
+                        let state = state.clone();
+                        move |_, _: &DismissEvent, window, cx| {
+                            popover.update(cx, |popover, cx| popover.dismiss(window, cx));
+                            state.update(cx, |state, _| state.menu = None);
+                        }
+                    })
+                    .detach();
+
+                menu
+            })
     }
 }
 
