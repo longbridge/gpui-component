@@ -1,5 +1,5 @@
 <template>
-    <header class="home-nav">
+    <header class="home-nav shadow-sm">
         <div class="home-nav__inner">
             <a :href="homeHref" class="home-brand">
                 <img :src="isDark ? darkLogoHref : logoHref" alt="" />
@@ -60,7 +60,41 @@
                     <Sun v-if="isDark" />
                     <Moon v-else />
                 </button>
+                <button
+                    class="home-nav__icon home-nav__burger"
+                    :aria-label="copy.menuNav"
+                    :aria-expanded="menuOpen"
+                    @click="menuOpen = !menuOpen"
+                >
+                    <X v-if="menuOpen" />
+                    <Menu v-else />
+                </button>
             </div>
+        </div>
+
+        <!-- The section links are hidden on phones, so they need a way back. -->
+        <div v-if="menuOpen" class="home-nav__drawer">
+            <template v-for="item in navItems" :key="item.text">
+                <a
+                    v-if="item.link"
+                    :href="item.href"
+                    :target="item.external ? '_blank' : undefined"
+                    @click="menuOpen = false"
+                    >{{ item.text }}</a
+                >
+                <template v-else>
+                    <span class="home-nav__drawer-label">{{ item.text }}</span>
+                    <a
+                        v-for="child in item.items"
+                        :key="child.text"
+                        :href="child.href"
+                        :target="child.external ? '_blank' : undefined"
+                        class="is-child"
+                        @click="menuOpen = false"
+                        >{{ child.text }}</a
+                    >
+                </template>
+            </template>
         </div>
     </header>
 
@@ -328,7 +362,9 @@
             <div class="principle__grid" aria-hidden="true"></div>
             <div class="band__inner principle">
                 <div class="principle__quote">
-                    <span class="section-kicker">{{ copy.principleKicker }}</span>
+                    <span class="section-kicker">{{
+                        copy.principleKicker
+                    }}</span>
                     <blockquote>
                         <span>{{ copy.principleLead }}</span>
                         <span class="principle__accent">{{
@@ -388,8 +424,9 @@ import {
     Blocks,
     Check,
     Copy,
-    Github,
     Gauge,
+    Github,
+    Menu,
     Layers3,
     LayoutDashboard,
     List,
@@ -402,6 +439,7 @@ import {
     Star,
     Sun,
     Table2,
+    X,
 } from "lucide-vue-next";
 import { data as repo } from "./data/repo.data";
 
@@ -429,6 +467,7 @@ const navItems = computed(() =>
 const isZh = computed(() => localeIndex.value === "zh-CN");
 const localePrefix = computed(() => (isZh.value ? "/zh-CN" : ""));
 
+const menuOpen = ref(false);
 const stars = repo.stargazers_count ?? 0;
 const starLabel = stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : `${stars}`;
 
@@ -563,6 +602,7 @@ const copy = computed(() =>
               searchNav: "搜索文档",
               searchShort: "搜索",
               themeNav: "切换主题",
+              menuNav: "打开菜单",
               copyLabel: "复制安装命令",
               eyebrow: "基于 GPUI —— Zed 背后的渲染引擎",
               title: "用 Rust 构建原生桌面应用。",
@@ -663,6 +703,7 @@ const copy = computed(() =>
               searchNav: "Search documentation",
               searchShort: "Search",
               themeNav: "Toggle color theme",
+              menuNav: "Open menu",
               copyLabel: "Copy install command",
               eyebrow: "Built on GPUI — the renderer behind Zed",
               title: "Build native desktop apps in Rust.",
@@ -805,8 +846,6 @@ const copy = computed(() =>
     top: 0;
     height: 3.5rem;
     background: color-mix(in srgb, var(--background) 80%, transparent);
-    box-shadow: var(--shadow-raise);
-    backdrop-filter: blur(18px) saturate(160%);
 }
 
 /* A toolbar, not a marketing header: the brand and the sections sit together
@@ -1008,6 +1047,42 @@ const copy = computed(() =>
 .home-nav__icon {
     width: 2rem;
     cursor: pointer;
+}
+
+/* Only exists on phones, where the section links are hidden. */
+.home-nav__burger {
+    display: none;
+}
+
+.home-nav__drawer {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.5rem 0 0.85rem;
+    border-top: 1px solid var(--border);
+    background: var(--background);
+
+    a {
+        padding: 0.6rem 0;
+        color: var(--foreground);
+        font-size: 0.95rem;
+        font-weight: 520;
+        text-decoration: none;
+
+        &.is-child {
+            padding-left: 0.85rem;
+            color: var(--muted-foreground);
+            font-size: 0.88rem;
+            font-weight: 450;
+        }
+    }
+}
+
+.home-nav__drawer-label {
+    padding: 0.85rem 0 0.25rem;
+    color: var(--muted-foreground);
+    font: 620 0.66rem/1 var(--vp-font-family-mono);
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
 }
 .home-nav__icon--text {
     font-size: 0.78rem;
@@ -1920,6 +1995,25 @@ html[lang^="zh"] .section-kicker {
     .home-nav nav {
         display: none;
     }
+
+    .home-nav__burger {
+        display: inline-flex;
+    }
+
+    /* The drawer is part of the sticky header, so it pushes nothing and closes
+       over the page. */
+    .home-nav {
+        height: auto;
+    }
+
+    .home-nav__inner {
+        height: 3.5rem;
+    }
+
+    .home-nav__drawer {
+        width: calc(100% - 2rem);
+        margin-inline: auto;
+    }
     .home-nav__search span,
     .home-nav__github span {
         display: none;
@@ -1929,6 +2023,16 @@ html[lang^="zh"] .section-kicker {
         width: 2rem;
         min-width: auto;
         padding: 0;
+    }
+
+    .home-nav__search {
+        border-color: transparent;
+        background: transparent;
+    }
+
+    .home-nav__search:hover {
+        border-color: transparent;
+        background: var(--secondary);
     }
 
     .hero__inner,

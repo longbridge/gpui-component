@@ -130,6 +130,11 @@ Two constraints that are easy to get wrong:
 - Check for horizontal overflow at phone widths. Grid columns must be
   `minmax(0, 1fr)` — a bare `1fr` takes its minimum from content, and a
   `nowrap` snippet will push the page wider than the viewport.
+- Under 640px the section links are hidden, so they move into a drawer behind a
+  burger button in the header. Anything removed at a breakpoint needs somewhere
+  else to live — hiding it outright is a dead end for phone users. The window
+  title is dropped there too, since the segmented control already names the
+  current view.
 
 ## Surfaces and the window language
 
@@ -154,6 +159,30 @@ window, which stays pure chrome.
 
 Radii: `--radius-control` 0.375rem for controls, `--radius-card` 0.625rem for
 cards, `--radius-surface` 0.875rem for large surfaces, 0.75rem for windows.
+
+## Social card
+
+`public/og.png` (1200×630) is the Open Graph / Twitter card for every page.
+`public/og-dark.png` is the same card on the dark palette — social platforms
+cannot choose by theme, so it is not referenced from any meta tag; it exists for
+surfaces that can, such as a `<picture>` in the GitHub README.
+
+Both are screenshots of `public/og-template.html`, which holds both palettes in
+one file behind `prefers-color-scheme`, so the two renders cannot drift. To
+regenerate: serve the site, open the template at a 1200×630 viewport with
+`deviceScaleFactor: 1`, and capture once per colour scheme.
+
+The card carries **identity only** — mark, product name, tagline, and three
+facts that do not expire. It must not carry a headline: the platform draws the
+page's own `og:title` and description beside the image, and a baked-in headline
+competes with them. For the same reason the facts avoid the star count, which a
+static image cannot keep current.
+
+Per-page `og:title`, `og:description`, `og:url` and the canonical link come from
+`transformPageData` in `config.mts`. Note it uses `||`, not `??`: the home page
+supplies empty strings rather than undefined. A per-page image would need a
+server to render it — shadcn and reui use a dynamic `/og?title=` route — and
+GitHub Pages has none, so one shared image is the right trade.
 
 ## Motion
 

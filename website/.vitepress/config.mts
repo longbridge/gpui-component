@@ -173,6 +173,13 @@ const sharedThemeConfig = {
   },
 };
 
+// Absolute URLs are required for social cards; relative paths are ignored by
+// every crawler.
+const SITE_URL = "https://longbridge.github.io/gpui-component";
+const SITE_TITLE = "GPUI Component";
+const SITE_DESCRIPTION =
+  "UI components for building fantastic desktop applications in Rust, using GPUI.";
+
 // https://vitepress.dev/reference/site-config
 const config: UserConfig = {
   title: "GPUI Component",
@@ -197,7 +204,45 @@ const config: UserConfig = {
         media: "(prefers-color-scheme: dark)",
       },
     ],
+    // The card image is one static asset for every page — the same approach
+    // Base UI takes. A per-page image would need a server to render it, which
+    // GitHub Pages does not give us.
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: SITE_TITLE }],
+    ["meta", { property: "og:image", content: `${SITE_URL}/og.png` }],
+    ["meta", { property: "og:image:type", content: "image/png" }],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    ["meta", { property: "og:image:alt", content: SITE_TITLE }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:image", content: `${SITE_URL}/og.png` }],
   ],
+
+  // Each page contributes its own title, description and canonical URL; the
+  // image stays shared.
+  transformPageData(pageData) {
+    const title = pageData.frontmatter.title || pageData.title || SITE_TITLE;
+    const description =
+      pageData.frontmatter.description ||
+      pageData.description ||
+      SITE_DESCRIPTION;
+    const path = pageData.relativePath
+      .replace(/index\.md$/, "")
+      .replace(/\.md$/, "");
+    const url = `${SITE_URL}/${path}`;
+    const socialTitle =
+      title === SITE_TITLE ? title : `${title} · ${SITE_TITLE}`;
+
+    pageData.frontmatter.head ??= [];
+    pageData.frontmatter.head.push(
+      ["meta", { property: "og:title", content: socialTitle }],
+      ["meta", { property: "og:description", content: description }],
+      ["meta", { property: "og:url", content: url }],
+      ["meta", { name: "twitter:title", content: socialTitle }],
+      ["meta", { name: "twitter:description", content: description }],
+      ["link", { rel: "canonical", href: url }],
+    );
+  },
   vite: {
     plugins: [wasmExamplesDevServer(), llmstxt(), tailwindcss(), ViteToml()],
   },
