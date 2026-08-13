@@ -1983,9 +1983,14 @@ html[lang^="zh"] .section-kicker {
         grid-template-columns: 1fr;
         align-items: start;
     }
+    /* A narrow gallery wraps its own content, so the same story needs more
+       vertical room here than on a wide screen to show a comparable amount.
+       Sizing by share of the viewport keeps that room proportional on both a
+       tall tablet and a short desktop window, where a fixed height would either
+       waste space or swallow the whole screen. */
     .showcase__frame iframe,
     .showcase__placeholder {
-        height: 480px;
+        height: clamp(480px, 62dvh, 560px);
     }
 }
 
@@ -2054,7 +2059,17 @@ html[lang^="zh"] .section-kicker {
     }
     .showcase__frame iframe,
     .showcase__placeholder {
-        height: 420px;
+        height: clamp(420px, 66dvh, 560px);
+    }
+}
+
+/* A short viewport — a phone held sideways — cannot spare the minimum height
+   the width breakpoints above ask for. Fit the window to the screen instead, so
+   the title bar and the frame stay visible together. */
+@media (max-width: 860px) and (max-height: 560px) {
+    .showcase__frame iframe,
+    .showcase__placeholder {
+        height: calc(100dvh - 7rem);
     }
 }
 

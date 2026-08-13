@@ -41,7 +41,7 @@ const storyNames: Record<string, string> = {
     scrollable: "Scrollbar",
     "status-bar": "StatusBar",
     "text-view": "Editor",
-    "title-bar": "Welcome",
+    "title-bar": "Introduction",
     "virtual-list": "VirtualList",
 };
 

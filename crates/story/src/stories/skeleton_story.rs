@@ -52,37 +52,57 @@ impl Render for SkeletonStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .w_full()
-            .gap_3()
+            .items_center()
+            .gap_6()
             .child(
-                section("Skeleton")
-                    .max_w_md()
-                    .child(Skeleton::new().size_12().rounded_full())
+                section("Text")
+                    .description("Represents an avatar and text while profile content loads.")
+                    .w(px(360.))
                     .child(
-                        v_flex()
-                            .gap_2()
-                            .child(Skeleton::new().w(px(250.)).h_4().rounded(cx.theme().radius))
-                            .child(Skeleton::new().w(px(200.)).h_4().rounded(cx.theme().radius)),
+                        gpui_component::h_flex()
+                            .w_full()
+                            .gap_3()
+                            .child(Skeleton::new().size_12().rounded_full())
+                            .child(
+                                v_flex()
+                                    .flex_1()
+                                    .gap_2()
+                                    .child(
+                                        Skeleton::new().w_full().h_4().rounded(cx.theme().radius),
+                                    )
+                                    .child(
+                                        Skeleton::new().w_2_3().h_4().rounded(cx.theme().radius),
+                                    ),
+                            ),
                     ),
             )
             .child(
-                section("Card").max_w_md().child(
-                    v_flex()
-                        .gap_2()
-                        .child(
-                            Skeleton::new()
-                                .w(px(250.))
-                                .h(px(125.))
-                                .rounded(cx.theme().radius),
-                        )
-                        .child(
-                            v_flex()
-                                .gap_2()
-                                .child(Skeleton::new().w(px(250.)).h_4().rounded(cx.theme().radius))
-                                .child(
-                                    Skeleton::new().w(px(200.)).h_4().rounded(cx.theme().radius),
-                                ),
-                        ),
-                ),
+                section("Card")
+                    .description("Combines media and text placeholders in a content card.")
+                    .w(px(360.))
+                    .child(
+                        v_flex()
+                            .gap_2()
+                            .child(
+                                Skeleton::new()
+                                    .w_full()
+                                    .h(px(180.))
+                                    .rounded(cx.theme().radius),
+                            )
+                            .child(
+                                v_flex()
+                                    .gap_2()
+                                    .child(
+                                        Skeleton::new().w_full().h_4().rounded(cx.theme().radius),
+                                    )
+                                    .child(
+                                        Skeleton::new()
+                                            .w(px(200.))
+                                            .h_4()
+                                            .rounded(cx.theme().radius),
+                                    ),
+                            ),
+                    ),
             )
     }
 }

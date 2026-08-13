@@ -182,7 +182,7 @@ impl Render for TextareaStory {
             .w_full()
             .gap_3()
             .child(
-                section("Textarea").child(
+                section("Textarea").w(px(560.)).child(
                     v_flex()
                         .gap_2()
                         .w_full()
@@ -218,21 +218,21 @@ impl Render for TextareaStory {
             )
             .child(
                 section("No Wrap")
-                    .max_w_md()
+                    .w(px(560.))
                     .child(Textarea::new(&self.textarea_no_wrap).h(px(200.))),
             )
             .child(
                 section("Auto Grow")
-                    .max_w_md()
+                    .w(px(560.))
                     .child(Textarea::new(&self.textarea_auto_grow)),
             )
             .child(
                 section("Auto Grow with No Wrap")
-                    .max_w_md()
+                    .w(px(560.))
                     .child(Textarea::new(&self.textarea_auto_grow_no_wrap)),
             )
             .child(
-                section("Submit on Enter (Chat)").max_w_md().child(
+                section("Submit on Enter (Chat)").w(px(560.)).child(
                     v_flex()
                         .gap_2()
                         .w_full()

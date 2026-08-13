@@ -1,13 +1,18 @@
-use gpui::{App, AppContext as _, Context, Entity, IntoElement, Render, Styled, Window};
+use gpui::{
+    App, AppContext as _, Context, Entity, HighlightStyle, IntoElement, ParentElement, Render,
+    Styled, Window, div,
+};
 
-use gpui_component::{ActiveTheme, input::*};
+use gpui_component::{ActiveTheme, input::*, tab::TabBar, v_flex};
 
-const EXAMPLE_CODE: &str = include_str!("./editor_story.rs");
+const EXAMPLE_CODE: &str = include_str!("./editor_preview.rs");
 
 pub struct EditorStory {
     editor_state: Entity<EditorState>,
+    decorations_state: Entity<EditorState>,
+    _decorations: TextDecorationCollection,
+    active_tab: usize,
 }
-
 impl super::Story for EditorStory {
     fn title() -> &'static str {
         "Editor"
@@ -59,16 +64,103 @@ impl EditorStory {
             });
         }
 
-        Self { editor_state }
+        let decoration_text = "Decoration styles\nColor highlights important text.\nItalic adds emphasis.\nUnderline marks a review range.";
+        let decorations_state =
+            cx.new(|cx| EditorState::new("text", window, cx).default_value(decoration_text));
+        decorations_state.update(cx, |state, cx| state.prepare(window, cx));
+
+        let marker = "Decoration styles";
+        let color_range = "Color";
+        let italic_range = "Italic";
+        let underline_range = "Underline";
+        let marker_start = decoration_text.find(marker).unwrap_or_default();
+        let color_start = decoration_text.find(color_range).unwrap_or_default();
+        let italic_start = decoration_text.find(italic_range).unwrap_or_default();
+        let underline_start = decoration_text.find(underline_range).unwrap_or_default();
+        let decorations = decorations_state.update(cx, |state, cx| {
+            state.create_decorations_collection(
+                vec![
+                    TextDecoration::new(
+                        marker_start..marker_start + marker.len(),
+                        HighlightStyle {
+                            background_color: Some(cx.theme().warning.opacity(0.2)),
+                            font_weight: Some(gpui::FontWeight::BOLD),
+                            color: Some(cx.theme().danger),
+                            ..Default::default()
+                        },
+                    ),
+                    TextDecoration::new(
+                        color_start..color_start + color_range.len(),
+                        HighlightStyle {
+                            color: Some(cx.theme().success),
+                            font_weight: Some(gpui::FontWeight::BOLD),
+                            font_style: Some(gpui::FontStyle::Italic),
+                            ..Default::default()
+                        },
+                    ),
+                    TextDecoration::new(
+                        italic_start..italic_start + italic_range.len(),
+                        HighlightStyle {
+                            color: Some(cx.theme().info),
+                            font_style: Some(gpui::FontStyle::Italic),
+                            ..Default::default()
+                        },
+                    ),
+                    TextDecoration::new(
+                        underline_start..underline_start + underline_range.len(),
+                        HighlightStyle {
+                            underline: Some(gpui::UnderlineStyle {
+                                color: Some(cx.theme().warning),
+                                thickness: gpui::px(2.),
+                                wavy: true,
+                            }),
+                            ..Default::default()
+                        },
+                    ),
+                ],
+                cx,
+            )
+        });
+
+        Self {
+            editor_state,
+            decorations_state,
+            _decorations: decorations,
+            active_tab: 0,
+        }
     }
 }
 
 impl Render for EditorStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        Editor::new(&self.editor_state)
-            .font_family(cx.theme().mono_font_family.clone())
-            .text_size(cx.theme().mono_font_size)
+        v_flex()
             .size_full()
+            .gap_3()
+            .child(
+                TabBar::new("editor-story-tabs")
+                    .w_64()
+                    .underline()
+                    .selected_index(self.active_tab)
+                    .on_click(cx.listener(|this, selected: &usize, _, cx| {
+                        this.active_tab = *selected;
+                        cx.notify();
+                    }))
+                    .child("Code")
+                    .child("Decorations"),
+            )
+            .child(div().min_h_0().flex_1().child(if self.active_tab == 0 {
+                Editor::new(&self.editor_state)
+                    .font_family(cx.theme().mono_font_family.clone())
+                    .text_size(cx.theme().mono_font_size)
+                    .size_full()
+                    .into_any_element()
+            } else {
+                Editor::new(&self.decorations_state)
+                    .font_family(cx.theme().mono_font_family.clone())
+                    .text_size(cx.theme().mono_font_size)
+                    .size_full()
+                    .into_any_element()
+            }))
     }
 }
 

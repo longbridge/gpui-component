@@ -127,9 +127,14 @@ impl Render for MenuStory {
             .on_action(cx.listener(Self::on_action_toggle_check))
             .size_full()
             .min_h(px(400.))
+            .items_center()
             .gap_6()
             .child(
                 section("Popup Menu")
+                    .description(
+                        "Supports actions, links, checks, icons, custom rows, and nested menus.",
+                    )
+                    .w(px(640.))
                     .child(
                         Button::new("popup-menu-1")
                             .outline()
@@ -232,6 +237,8 @@ impl Render for MenuStory {
             )
             .child(
                 section("Context Menu")
+                    .description("Different regions can provide their own right-click actions.")
+                    .w(px(640.))
                     .v_flex()
                     .gap_4()
                     .child(
@@ -384,7 +391,11 @@ impl Render for MenuStory {
                     ),
             )
             .child(
-                section("Menu with scrollbar")
+                section("Scrollable")
+                    .description(
+                        "Long menus constrain their height while short menus stay compact.",
+                    )
+                    .w(px(640.))
                     .child(
                         Button::new("dropdown-menu-scrollable-1")
                             .outline()

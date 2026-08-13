@@ -1,17 +1,29 @@
 use std::{ops::Range, rc::Rc};
 
 use gpui::{
-    App, AppContext, Context, Div, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    ParentElement, Pixels, Render, ScrollStrategy, Size, Styled, Window, div, px, size,
+    Action, App, AppContext, Context, Div, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Pixels, Render, ScrollStrategy, Size, Styled, Window, div, px,
+    size,
 };
 use gpui_component::{
-    ActiveTheme as _, Selectable, Sizable, VirtualListScrollHandle,
-    button::{Button, ButtonGroup},
+    ActiveTheme as _, VirtualListScrollHandle,
+    button::Button,
     h_flex,
     scroll::{ScrollableElement, ScrollbarAxis},
-    separator::Separator,
     v_flex, v_virtual_list,
 };
+use serde::Deserialize;
+
+use crate::story_toolbar_group;
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = virtual_list_story, no_json)]
+enum VirtualListAction {
+    Dataset(usize),
+    Both,
+    Vertical,
+    Horizontal,
+}
 
 pub struct VirtualListStory {
     focus_handle: FocusHandle,
@@ -78,99 +90,69 @@ impl VirtualListStory {
         v_flex()
             .gap_2()
             .child(
-                h_flex()
-                    .gap_2()
-                    .justify_between()
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                ButtonGroup::new("test-cases")
-                                    .outline()
-                                    .compact()
-                                    .child(
-                                        Button::new("test-0")
-                                            .label("Size 0")
-                                            .selected(self.size_mode == 0),
-                                    )
-                                    .child(
-                                        Button::new("test-1")
-                                            .label("Size 1")
-                                            .selected(self.size_mode == 1),
-                                    )
-                                    .child(
-                                        Button::new("test-2")
-                                            .label("Size 2")
-                                            .selected(self.size_mode == 2),
-                                    )
-                                    .child(
-                                        Button::new("test-3")
-                                            .label("Size 3")
-                                            .selected(self.size_mode == 3),
-                                    )
-                                    .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
-                                        if clicks.contains(&0) {
-                                            view.change_test_cases(0, cx)
-                                        } else if clicks.contains(&1) {
-                                            view.change_test_cases(1, cx)
-                                        } else if clicks.contains(&2) {
-                                            view.change_test_cases(2, cx)
-                                        } else if clicks.contains(&3) {
-                                            view.change_test_cases(3, cx)
-                                        }
-                                    })),
-                            )
-                            .child(Separator::vertical().px_2())
-                            .child(
-                                ButtonGroup::new("scrollbars")
-                                    .outline()
-                                    .compact()
-                                    .child(
-                                        Button::new("test-axis-both")
-                                            .label("Both Scrollbar")
-                                            .selected(self.axis.is_both()),
-                                    )
-                                    .child(
-                                        Button::new("test-axis-vertical")
-                                            .label("Vertical")
-                                            .selected(self.axis.is_vertical()),
-                                    )
-                                    .child(
-                                        Button::new("test-axis-horizontal")
-                                            .label("Horizontal")
-                                            .selected(self.axis.is_horizontal()),
-                                    )
-                                    .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
-                                        if clicks.contains(&0) {
-                                            view.change_axis(ScrollbarAxis::Both, cx)
-                                        } else if clicks.contains(&1) {
-                                            view.change_axis(ScrollbarAxis::Vertical, cx)
-                                        } else if clicks.contains(&2) {
-                                            view.change_axis(ScrollbarAxis::Horizontal, cx)
-                                        }
-                                    })),
-                            ),
+                story_toolbar_group()
+                    .dropdown_child(
+                        Button::new("virtual-list-dataset").label(format!(
+                            "Dataset: {}",
+                            ["Standard", "Wide", "Stress", "Short"][self.size_mode]
+                        )),
+                        {
+                            let selected = self.size_mode;
+                            move |menu, _, _| {
+                                ["Standard", "Wide", "Stress", "Short"]
+                                    .into_iter()
+                                    .enumerate()
+                                    .fold(menu, |menu, (index, label)| {
+                                        menu.menu_with_check(
+                                            label,
+                                            selected == index,
+                                            Box::new(VirtualListAction::Dataset(index)),
+                                        )
+                                    })
+                            }
+                        },
                     )
-                    .child(format!("visible_range: {:?}", self.visible_range)),
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        Button::new("scroll-to0")
-                            .small()
-                            .outline()
-                            .label("Scroll to Top")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
-                                cx.notify();
-                            })),
+                    .dropdown_child(
+                        Button::new("virtual-list-axis").label(format!(
+                            "Axis: {}",
+                            if self.axis.is_both() {
+                                "Both"
+                            } else if self.axis.is_vertical() {
+                                "Vertical"
+                            } else {
+                                "Horizontal"
+                            }
+                        )),
+                        {
+                            let axis = self.axis;
+                            move |menu, _, _| {
+                                menu.menu_with_check(
+                                    "Both",
+                                    axis.is_both(),
+                                    Box::new(VirtualListAction::Both),
+                                )
+                                .menu_with_check(
+                                    "Vertical",
+                                    axis.is_vertical(),
+                                    Box::new(VirtualListAction::Vertical),
+                                )
+                                .menu_with_check(
+                                    "Horizontal",
+                                    axis.is_horizontal(),
+                                    Box::new(VirtualListAction::Horizontal),
+                                )
+                            }
+                        },
                     )
+                    .child(Button::new("scroll-to0").label("Top").on_click(cx.listener(
+                        |this, _, _, cx| {
+                            this.scroll_handle.scroll_to_item(0, ScrollStrategy::Top);
+                            cx.notify();
+                        },
+                    )))
                     .child(
                         Button::new("scroll-to1")
-                            .small()
-                            .outline()
-                            .label("Scroll to 50")
+                            .label("Row 50")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.scroll_handle.scroll_to_item(50, ScrollStrategy::Top);
                                 cx.notify();
@@ -178,9 +160,7 @@ impl VirtualListStory {
                     )
                     .child(
                         Button::new("scroll-to2")
-                            .small()
-                            .outline()
-                            .label("Scroll to 25 (center)")
+                            .label("Center 25")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.scroll_handle
                                     .scroll_to_item(25, ScrollStrategy::Center);
@@ -189,15 +169,14 @@ impl VirtualListStory {
                     )
                     .child(
                         Button::new("scroll-to-bottom")
-                            .small()
-                            .outline()
-                            .label("Scroll to Bottom")
+                            .label("Bottom")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.scroll_handle.scroll_to_bottom();
                                 cx.notify();
                             })),
                     ),
             )
+            .child(format!("Visible: {:?}", self.visible_range))
     }
 }
 
@@ -245,6 +224,16 @@ impl Render for VirtualListStory {
         v_flex()
             .size_full()
             .gap_4()
+            .on_action(
+                cx.listener(|this, action: &VirtualListAction, _, cx| match action {
+                    VirtualListAction::Dataset(index) => this.change_test_cases(*index, cx),
+                    VirtualListAction::Both => this.change_axis(ScrollbarAxis::Both, cx),
+                    VirtualListAction::Vertical => this.change_axis(ScrollbarAxis::Vertical, cx),
+                    VirtualListAction::Horizontal => {
+                        this.change_axis(ScrollbarAxis::Horizontal, cx)
+                    }
+                }),
+            )
             .child(self.render_buttons(cx))
             .child(
                 div().w_full().flex_1().min_h_64().child(

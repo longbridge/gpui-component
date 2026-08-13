@@ -1,20 +1,30 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement,
-    ParentElement as _, Render, StyleRefinement, Styled as _, Window, div,
+    Action, App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, InteractiveElement,
+    IntoElement, ParentElement as _, Render, StyleRefinement, Styled as _, Window, div,
     prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Selectable, Sizable, Size, StyledExt as _,
+    ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt as _,
     accordion::{Accordion, AccordionItem},
-    button::{Button, ButtonGroup},
+    button::Button,
     checkbox::Checkbox,
     h_flex,
     switch::Switch,
     tag::Tag,
     v_flex,
 };
+use serde::Deserialize;
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = accordion_story, no_json)]
+enum ToggleOption {
+    Multiple,
+    Icon,
+    Disabled,
+    Bordered,
+}
 
 /// A settings row: the icon sits in a rounded square, and the content lines up
 /// with the title rather than with the icon.
@@ -99,7 +109,7 @@ impl AccordionStory {
             styled_open_ixs: vec![0],
             size: Size::default(),
             disabled: false,
-            multiple: true,
+            multiple: false,
             show_icon: false,
             focus_handle: cx.focus_handle(),
         }
@@ -107,11 +117,6 @@ impl AccordionStory {
 
     fn toggle_accordion(&mut self, open_ixs: Vec<usize>, _: &mut Window, cx: &mut Context<Self>) {
         self.open_ixs = open_ixs;
-        cx.notify();
-    }
-
-    fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = size;
         cx.notify();
     }
 }
@@ -128,99 +133,59 @@ impl Render for AccordionStory {
         let muted_fg = cx.theme().muted_foreground;
 
         v_flex()
-            .gap_5()
+            .w_full()
+            .items_center()
+            .gap_6()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, action: &ToggleOption, _, cx| {
+                match action {
+                    ToggleOption::Multiple => this.multiple = !this.multiple,
+                    ToggleOption::Icon => this.show_icon = !this.show_icon,
+                    ToggleOption::Disabled => this.disabled = !this.disabled,
+                    ToggleOption::Bordered => this.bordered = !this.bordered,
+                }
+                cx.notify();
+            }))
             .child(
-                h_flex()
+                story_toolbar(self.size)
                     .items_center()
-                    .justify_between()
-                    .gap_4()
                     .flex_wrap()
-                    .child(
-                        ButtonGroup::new("toggle-size")
-                            .outline()
-                            .compact()
-                            .child(
-                                Button::new("xsmall")
-                                    .label("XSmall")
-                                    .selected(self.size == Size::XSmall),
+                    .dropdown_child(Button::new("accordion-options").label("Options"), {
+                        let multiple = self.multiple;
+                        let show_icon = self.show_icon;
+                        let disabled = self.disabled;
+                        let bordered = self.bordered;
+                        move |menu, _, _| {
+                            menu.menu_with_check(
+                                "Multiple",
+                                multiple,
+                                Box::new(ToggleOption::Multiple),
                             )
-                            .child(
-                                Button::new("small")
-                                    .label("Small")
-                                    .selected(self.size == Size::Small),
+                            .menu_with_check("Icons", show_icon, Box::new(ToggleOption::Icon))
+                            .menu_with_check("Disabled", disabled, Box::new(ToggleOption::Disabled))
+                            .menu_with_check(
+                                "Bordered",
+                                bordered,
+                                Box::new(ToggleOption::Bordered),
                             )
-                            .child(
-                                Button::new("medium")
-                                    .label("Medium")
-                                    .selected(self.size == Size::Medium),
-                            )
-                            .child(
-                                Button::new("large")
-                                    .label("Large")
-                                    .selected(self.size == Size::Large),
-                            )
-                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
-                                let size = match selecteds[0] {
-                                    0 => Size::XSmall,
-                                    1 => Size::Small,
-                                    2 => Size::Medium,
-                                    3 => Size::Large,
-                                    _ => unreachable!(),
-                                };
-                                this.set_size(size, window, cx);
-                            })),
-                    )
-                    .child(
-                        h_flex()
-                            .gap_2()
-                            .child(
-                                Checkbox::new("multiple")
-                                    .label("Multiple")
-                                    .checked(self.multiple)
-                                    .on_click(cx.listener(|this, checked, _, cx| {
-                                        this.multiple = *checked;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("show_icon")
-                                    .label("Icon")
-                                    .checked(self.show_icon)
-                                    .on_click(cx.listener(|this, checked, _, cx| {
-                                        this.show_icon = *checked;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("disabled")
-                                    .label("Disabled")
-                                    .checked(self.disabled)
-                                    .on_click(cx.listener(|this, checked, _, cx| {
-                                        this.disabled = *checked;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("bordered")
-                                    .label("Bordered")
-                                    .checked(self.bordered)
-                                    .on_click(cx.listener(|this, checked, _, cx| {
-                                        this.bordered = *checked;
-                                        cx.notify();
-                                    })),
-                            ),
-                    ),
+                        }
+                    }),
             )
             .child(
-                section("Normal").child(
-                    div().w(px(480.)).child(
-                        Accordion::new("test")
-                            .bordered(self.bordered)
-                            .with_size(self.size)
-                            .disabled(self.disabled)
-                            .multiple(self.multiple)
-                            .item(|this| {
-                                this.open(self.open_ixs.contains(&0))
+                section("Default")
+                    .description("Expand one item at a time by default.")
+                    .child(
+                        div().w(px(480.)).child(
+                            Accordion::new("test")
+                                .bordered(self.bordered)
+                                .with_size(self.size)
+                                .disabled(self.disabled)
+                                .multiple(self.multiple)
+                                .item(|this| {
+                                    this.open(self.open_ixs.contains(&0))
                                     .when(self.show_icon, |this| this.icon(IconName::Info))
                                     .title("Is it accessible?")
                                     .child(
@@ -228,50 +193,52 @@ impl Render for AccordionStory {
                                     so screen readers announce whether the section is open, \
                                     and the whole group can be reached with the keyboard.",
                                     )
-                            })
-                            .item(|this| {
-                                this.open(self.open_ixs.contains(&1))
-                                    .when(self.show_icon, |this| this.icon(IconName::Inbox))
-                                    .title("Can it hold any content?")
-                                    .child(
-                                        v_flex()
-                                            .gap_3()
-                                            .child(
-                                                "An item takes any element as its content, \
+                                })
+                                .item(|this| {
+                                    this.open(self.open_ixs.contains(&1))
+                                        .when(self.show_icon, |this| this.icon(IconName::Inbox))
+                                        .title("Can it hold any content?")
+                                        .child(
+                                            v_flex()
+                                                .gap_3()
+                                                .child(
+                                                    "An item takes any element as its content, \
                                             not just text. The height animation measures \
                                             whatever you put in it.",
-                                            )
-                                            .child(
-                                                h_flex()
-                                                    .gap_4()
-                                                    .child(Switch::new("switch1").label("Switch"))
-                                                    .child(
-                                                        Checkbox::new("checkbox1")
-                                                            .label("Or a Checkbox"),
-                                                    ),
-                                            ),
-                                    )
-                            })
-                            .item(|this| {
-                                this.open(self.open_ixs.contains(&2))
-                                    .when(self.show_icon, |this| this.icon(IconName::Moon))
-                                    .title("Is it animated?")
-                                    .child(
-                                        "Yes. Expanding and collapsing animates the height of \
+                                                )
+                                                .child(
+                                                    h_flex()
+                                                        .gap_4()
+                                                        .child(
+                                                            Switch::new("switch1").label("Switch"),
+                                                        )
+                                                        .child(
+                                                            Checkbox::new("checkbox1")
+                                                                .label("Or a Checkbox"),
+                                                        ),
+                                                ),
+                                        )
+                                })
+                                .item(|this| {
+                                    this.open(self.open_ixs.contains(&2))
+                                        .when(self.show_icon, |this| this.icon(IconName::Moon))
+                                        .title("Is it animated?")
+                                        .child(
+                                            "Yes. Expanding and collapsing animates the height of \
                                     the content, and the chevron rotates to follow. \
                                     Items below move along with it.",
-                                    )
-                            })
-                            .on_toggle_click(cx.listener(
-                                |this, open_ixs: &[usize], window, cx| {
-                                    this.toggle_accordion(open_ixs.to_vec(), window, cx);
-                                },
-                            )),
+                                        )
+                                })
+                                .on_toggle_click(cx.listener(
+                                    |this, open_ixs: &[usize], window, cx| {
+                                        this.toggle_accordion(open_ixs.to_vec(), window, cx);
+                                    },
+                                )),
+                        ),
                     ),
-                ),
             )
             .child(
-                section("Custom Style").child(
+                section("Custom style").child(
                     // A tinted frame around the card.
                     div()
                         .w(px(480.))

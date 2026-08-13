@@ -44,50 +44,61 @@ impl Render for SeparatorStory {
         v_flex()
             .gap_6()
             .child(
-                section("Horizontal Separators").child(
-                    v_flex()
-                        .gap_4()
-                        .w_full()
-                        .mt_4()
-                        .child(Separator::horizontal())
-                        .child(Separator::horizontal().label("With Label"))
-                        .child(Separator::horizontal_dashed())
-                        .child(Separator::horizontal_dashed().label("Dashed With Label")),
-                ),
+                section("Horizontal")
+                    .description(
+                        "Separates stacked content, with optional labels and dashed rules.",
+                    )
+                    .w(px(520.))
+                    .child(
+                        v_flex()
+                            .gap_4()
+                            .w_full()
+                            .mt_4()
+                            .child(Separator::horizontal())
+                            .child(Separator::horizontal().label("With Label"))
+                            .child(Separator::horizontal_dashed())
+                            .child(Separator::horizontal_dashed().label("Dashed With Label")),
+                    ),
             )
             .child(
-                section("Vertical Separators").child(
-                    h_flex()
-                        .gap_4()
-                        .h(px(100.))
-                        .child(Separator::vertical())
-                        .child(Separator::vertical().label("Solid"))
-                        .child(Separator::vertical_dashed())
-                        .child(Separator::vertical_dashed().label("Dashed")),
-                ),
+                section("Vertical")
+                    .description("Separates actions or values arranged in a row.")
+                    .w(px(520.))
+                    .child(
+                        h_flex()
+                            .gap_4()
+                            .h(px(100.))
+                            .child(Separator::vertical())
+                            .child(Separator::vertical().label("Solid"))
+                            .child(Separator::vertical_dashed())
+                            .child(Separator::vertical_dashed().label("Dashed")),
+                    ),
             )
             .child(
-                section("Combination Separators").child(
-                    v_flex()
-                        .gap_y_4()
-                        .child(
-                            v_flex().gap_y_2().child("Hello GPUI Component").child(
-                                Label::new(DESCRIPTION)
-                                    .text_color(cx.theme().muted_foreground)
-                                    .text_sm(),
+                section("In Context")
+                    .description("Horizontal and vertical rules can structure compact content.")
+                    .w(px(520.))
+                    .child(
+                        v_flex()
+                            .gap_y_4()
+                            .child(
+                                v_flex().gap_y_2().child("Hello GPUI Component").child(
+                                    Label::new(DESCRIPTION)
+                                        .text_color(cx.theme().muted_foreground)
+                                        .text_sm(),
+                                ),
+                            )
+                            .child(Separator::horizontal())
+                            .child(
+                                h_flex()
+                                    .gap_x_4()
+                                    .child("Docs")
+                                    .child(Separator::vertical().dashed())
+                                    .child("GitHub")
+                                    .child(Separator::vertical().dashed())
+                                    .child("Source"),
                             ),
-                        )
-                        .child(Separator::horizontal())
-                        .child(
-                            h_flex()
-                                .gap_x_4()
-                                .child("Docs")
-                                .child(Separator::vertical().dashed())
-                                .child("Github")
-                                .child(Separator::vertical().dashed())
-                                .child("Source"),
-                        ),
-                ),
+                    ),
             )
     }
 }

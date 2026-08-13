@@ -1,9 +1,13 @@
 use gpui::*;
-use gpui_component::{button::*, checkbox::*, input::*, select::*, separator::*, *};
+use gpui_component::{button::*, input::*, select::*, separator::*, *};
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize};
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = select_story, no_json)]
+struct ToggleDisabled;
 
 pub fn init(_: &mut App) {}
 
@@ -37,6 +41,7 @@ impl SelectItem for Country {
 
 pub struct SelectStory {
     disabled: bool,
+    size: gpui_component::Size,
     country_select: Entity<SelectState<SearchableVec<SelectGroup<Country>>>>,
     fruit_select: Entity<SelectState<SearchableVec<&'static str>>>,
     simple_select1: Entity<SelectState<Vec<&'static str>>>,
@@ -121,6 +126,7 @@ impl SelectStory {
 
             Self {
                 disabled: false,
+                size: gpui_component::Size::Medium,
                 country_select,
                 fruit_select,
                 simple_select1: cx.new(|cx| {
@@ -182,145 +188,199 @@ impl SelectStory {
             SelectEvent::Confirm(value) => println!("Selected country: {:?}", value),
         }
     }
-
-    fn toggle_disabled(&mut self, disabled: bool, _: &mut Window, cx: &mut Context<Self>) {
-        self.disabled = disabled;
-        cx.notify();
-    }
 }
 
 impl Render for SelectStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
+            .items_center()
             .gap_4()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ToggleDisabled, _, cx| {
+                this.disabled = !this.disabled;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size).dropdown_child(
+                Button::new("select-options").label("Options"),
+                {
+                    let disabled = self.disabled;
+                    move |menu, _, _| {
+                        menu.menu_with_check("Disabled", disabled, Box::new(ToggleDisabled))
+                    }
+                },
+            ))
             .child(
-                Checkbox::new("disable-selects")
-                    .label("Disabled")
-                    .checked(self.disabled)
-                    .on_click(cx.listener(|this, checked, window, cx| {
-                        this.toggle_disabled(*checked, window, cx);
-                    })),
+                section("Search and clear")
+                    .description("Search options and clear the value.")
+                    .w(px(280.))
+                    .items_center()
+                    .child(
+                        Select::new(&self.country_select)
+                            .w(px(280.))
+                            .with_size(self.size)
+                            .search_placeholder("Search…")
+                            .cleanable(true)
+                            .disabled(self.disabled),
+                    ),
             )
             .child(
-                section("Select").max_w_128().child(
-                    Select::new(&self.country_select)
-                        .search_placeholder("Search country by name or code")
-                        .cleanable(true)
-                        .disabled(self.disabled),
-                ),
-            )
-            .child(
-                section("Searchable").max_w_128().child(
-                    Select::new(&self.fruit_select)
-                        .disabled(self.disabled)
-                        .icon(IconName::Search)
-                        .w(px(320.))
-                        .menu_width(px(400.)),
-                ),
+                section("Menu width")
+                    .description("Set trigger and menu widths independently.")
+                    .w(px(280.))
+                    .items_center()
+                    .child(
+                        Select::new(&self.fruit_select)
+                            .with_size(self.size)
+                            .disabled(self.disabled)
+                            .icon(IconName::Search)
+                            .w(px(280.))
+                            .menu_width(px(400.)),
+                    ),
             )
             .child(
                 section("Disabled")
-                    .max_w_128()
-                    .child(Select::new(&self.disabled_select).disabled(true)),
+                    .description("Keep the selected value visible.")
+                    .w(px(280.))
+                    .items_center()
+                    .child(
+                        Select::new(&self.disabled_select)
+                            .w(px(280.))
+                            .with_size(self.size)
+                            .disabled(true),
+                    ),
             )
             .child(
-                section("With preview label").max_w_128().child(
-                    Select::new(&self.simple_select1)
-                        .disabled(self.disabled)
-                        .small()
-                        .placeholder("UI")
-                        .title_prefix("UI: "),
-                ),
+                section("Title prefix")
+                    .description("Prefix the selected value.")
+                    .w(px(280.))
+                    .items_center()
+                    .child(
+                        Select::new(&self.simple_select1)
+                            .w(px(280.))
+                            .with_size(self.size)
+                            .disabled(self.disabled)
+                            .placeholder("UI")
+                            .title_prefix("UI: "),
+                    ),
             )
             .child(
-                section("Custom Menu Max Height").max_w_128().child(
-                    Select::new(&self.menu_max_h_select)
-                        .disabled(self.disabled)
-                        .small()
-                        .placeholder("UI")
-                        .title_prefix("UI: ")
-                        .menu_max_h(rems(6.)),
-                ),
+                section("Menu height")
+                    .description("Limit the popup height.")
+                    .w(px(280.))
+                    .items_center()
+                    .child(
+                        Select::new(&self.menu_max_h_select)
+                            .w(px(280.))
+                            .with_size(self.size)
+                            .disabled(self.disabled)
+                            .placeholder("UI")
+                            .title_prefix("UI: ")
+                            .menu_max_h(rems(6.)),
+                    ),
             )
             .child(
-                section("Searchable Select").max_w_128().child(
-                    Select::new(&self.simple_select2)
-                        .disabled(self.disabled)
-                        .small()
-                        .placeholder("Language")
-                        .title_prefix("Language: "),
-                ),
+                section("Search")
+                    .description("Filter options from the popup.")
+                    .w(px(280.))
+                    .items_center()
+                    .child(
+                        Select::new(&self.simple_select2)
+                            .w(px(280.))
+                            .with_size(self.size)
+                            .disabled(self.disabled)
+                            .placeholder("Language")
+                            .title_prefix("Language: "),
+                    ),
             )
             .child(
-                section("Empty Items").max_w_128().child(
-                    Select::new(&self.simple_select3)
-                        .disabled(self.disabled)
-                        .small()
-                        .empty(|_, cx| {
-                            h_flex()
-                                .h_24()
-                                .justify_center()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("No Data")
-                        }),
-                ),
+                section("Empty")
+                    .description("Render a custom empty state.")
+                    .w(px(280.))
+                    .items_center()
+                    .child(
+                        Select::new(&self.simple_select3)
+                            .w(px(280.))
+                            .with_size(self.size)
+                            .disabled(self.disabled)
+                            .empty(|_, cx| {
+                                h_flex()
+                                    .h_24()
+                                    .justify_center()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("No Data")
+                            }),
+                    ),
             )
             .child(
-                section("Appearance false with Input").max_w_128().child(
-                    h_flex()
-                        .border_1()
-                        .border_color(cx.theme().input)
-                        .rounded(cx.theme().radius_lg)
-                        .text_color(cx.theme().secondary_foreground)
-                        .w_full()
-                        .gap_1()
-                        .child(
-                            div().w(px(140.)).child(
-                                Select::new(&self.appearance_select)
-                                    .appearance(false)
-                                    .py_2()
-                                    .pl_3(),
+                section("Custom appearance")
+                    .description("Compose an appearance-free select with another control.")
+                    .w(px(280.))
+                    .items_center()
+                    .child(
+                        h_flex()
+                            .border_1()
+                            .border_color(cx.theme().input)
+                            .rounded(cx.theme().radius_lg)
+                            .text_color(cx.theme().secondary_foreground)
+                            .w(px(280.))
+                            .gap_1()
+                            .child(
+                                div().w(px(140.)).child(
+                                    Select::new(&self.appearance_select)
+                                        .with_size(self.size)
+                                        .appearance(false)
+                                        .py_2()
+                                        .pl_3(),
+                                ),
+                            )
+                            .child(Separator::vertical())
+                            .child(
+                                div().flex_1().child(
+                                    Input::new(&self.input_state)
+                                        .appearance(false)
+                                        .pr_3()
+                                        .py_2(),
+                                ),
+                            )
+                            .child(
+                                div().p_2().child(
+                                    Button::new("send")
+                                        .with_size(self.size)
+                                        .ghost()
+                                        .label("Send"),
+                                ),
                             ),
-                        )
-                        .child(Separator::vertical())
-                        .child(
-                            div().flex_1().child(
-                                Input::new(&self.input_state)
-                                    .appearance(false)
-                                    .pr_3()
-                                    .py_2(),
-                            ),
-                        )
-                        .child(
-                            div()
-                                .p_2()
-                                .child(Button::new("send").small().ghost().label("Send")),
-                        ),
-                ),
+                    ),
             )
             .child(
-                section("Selected Values").max_w_lg().child(
-                    v_flex()
-                        .gap_3()
-                        .child(format!(
-                            "Country: {:?}",
-                            self.country_select.read(cx).selected_value()
-                        ))
-                        .child(format!(
-                            "fruit: {:?}",
-                            self.fruit_select.read(cx).selected_value()
-                        ))
-                        .child(format!(
-                            "UI: {:?}",
-                            self.simple_select1.read(cx).selected_value()
-                        ))
-                        .child(format!(
-                            "Language: {:?}",
-                            self.simple_select2.read(cx).selected_value()
-                        ))
-                        .child("This is other text."),
-                ),
+                section("Values")
+                    .description("Read selected values from state.")
+                    .w_128()
+                    .child(
+                        v_flex()
+                            .gap_3()
+                            .child(format!(
+                                "Country: {:?}",
+                                self.country_select.read(cx).selected_value()
+                            ))
+                            .child(format!(
+                                "fruit: {:?}",
+                                self.fruit_select.read(cx).selected_value()
+                            ))
+                            .child(format!(
+                                "UI: {:?}",
+                                self.simple_select1.read(cx).selected_value()
+                            ))
+                            .child(format!(
+                                "Language: {:?}",
+                                self.simple_select2.read(cx).selected_value()
+                            ))
+                            .child("This is other text."),
+                    ),
             )
     }
 }

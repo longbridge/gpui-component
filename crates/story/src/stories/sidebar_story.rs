@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 
 use gpui::{
-    Action, App, AppContext, ClickEvent, Context, Entity, Focusable, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window, div, prelude::FluentBuilder, px, relative,
+    Action, App, AppContext, ClickEvent, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window, div, prelude::FluentBuilder,
+    px, relative,
 };
 
 use gpui_component::{
-    ActiveTheme, Icon, IconName, Selectable as _, Side, Sizable,
+    ActiveTheme, Icon, IconName, Side, Sizable, StyledExt,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
-    button::{Button, ButtonGroup},
+    button::Button,
     h_flex,
     menu::DropdownMenu,
     separator::Separator,
@@ -25,6 +26,17 @@ use serde::Deserialize;
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = sidebar_story, no_json)]
 pub struct SelectCompany(SharedString);
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = sidebar_story, no_json)]
+enum SidebarOption {
+    Icon,
+    Offcanvas,
+    None,
+    Right,
+    ClickToOpen,
+    DynamicChildren,
+}
 
 pub struct SidebarStory {
     active_items: HashMap<Item, bool>,
@@ -65,76 +77,179 @@ impl SidebarStory {
     fn render_content(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .w_full()
-            .gap_3()
-            .child(
-                h_flex().w_full().items_center().child(
-                    ButtonGroup::new("collapsible-mode")
-                        .outline()
-                        .compact()
-                        .flex_shrink_0()
-                        .child(
-                            Button::new("collapsible-icon")
-                                .label("Icon")
-                                .selected(self.collapsible == SidebarCollapsible::Icon),
-                        )
-                        .child(
-                            Button::new("collapsible-offcanvas")
-                                .label("Offcanvas")
-                                .selected(self.collapsible == SidebarCollapsible::Offcanvas),
-                        )
-                        .child(
-                            Button::new("collapsible-none")
-                                .label("None")
-                                .selected(self.collapsible == SidebarCollapsible::None),
-                        )
-                        .on_click(cx.listener(|this, selecteds: &Vec<usize>, _, cx| {
-                            let Some(selected) = selecteds.first().copied() else {
-                                return;
-                            };
-
-                            this.collapsible = match selected {
-                                0 => SidebarCollapsible::Icon,
-                                1 => SidebarCollapsible::Offcanvas,
-                                2 => SidebarCollapsible::None,
-                                _ => return,
-                            };
-                            cx.notify();
-                        })),
-                ),
-            )
+            .min_h_0()
+            .flex_1()
+            .gap_4()
             .child(
                 h_flex()
                     .w_full()
-                    .items_center()
-                    .gap_3()
-                    .gap_y_2()
-                    .flex_wrap()
+                    .items_start()
+                    .justify_between()
+                    .gap_4()
                     .child(
-                        Switch::new("side")
-                            .label("Placement Right")
-                            .checked(self.side.is_right())
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.side = if *checked { Side::Right } else { Side::Left };
-                                cx.notify();
-                            })),
+                        v_flex()
+                            .min_w_0()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_2xl()
+                                    .font_semibold()
+                                    .child(self.last_active_item.label()),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("A quick view of your workspace activity."),
+                            ),
                     )
                     .child(
-                        Switch::new("click-to-open")
-                            .checked(self.click_to_open_submenu)
-                            .label("Click to open submenu")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.click_to_open_submenu = *checked;
-                                cx.notify();
-                            })),
-                    )
+                        crate::story_toolbar_group()
+                            .w_auto()
+                            .flex_shrink_0()
+                            .dropdown_child(Button::new("sidebar-options").label("Options"), {
+                                let collapsible = self.collapsible;
+                                let right = self.side.is_right();
+                                let click_to_open = self.click_to_open_submenu;
+                                let dynamic_children = self.show_dynamic_children;
+                                move |menu, _, _| {
+                                    menu.menu_with_check(
+                                        "Icon mode",
+                                        collapsible == SidebarCollapsible::Icon,
+                                        Box::new(SidebarOption::Icon),
+                                    )
+                                    .menu_with_check(
+                                        "Offcanvas mode",
+                                        collapsible == SidebarCollapsible::Offcanvas,
+                                        Box::new(SidebarOption::Offcanvas),
+                                    )
+                                    .menu_with_check(
+                                        "Fixed mode",
+                                        collapsible == SidebarCollapsible::None,
+                                        Box::new(SidebarOption::None),
+                                    )
+                                    .separator()
+                                    .menu_with_check(
+                                        "Right Side",
+                                        right,
+                                        Box::new(SidebarOption::Right),
+                                    )
+                                    .menu_with_check(
+                                        "Click to Open",
+                                        click_to_open,
+                                        Box::new(SidebarOption::ClickToOpen),
+                                    )
+                                    .menu_with_check(
+                                        "Dynamic Children",
+                                        dynamic_children,
+                                        Box::new(SidebarOption::DynamicChildren),
+                                    )
+                                }
+                            }),
+                    ),
+            )
+            .child(
+                h_flex().w_full().gap_3().children(
+                    [
+                        ("Active projects", "12", "+2 this week"),
+                        ("Team members", "28", "4 online"),
+                        ("Tasks completed", "84%", "+6% this month"),
+                    ]
+                    .into_iter()
+                    .map(|(label, value, detail)| {
+                        v_flex()
+                            .min_w_0()
+                            .flex_1()
+                            .gap_2()
+                            .p_4()
+                            .rounded(cx.theme().radius_lg)
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(label),
+                            )
+                            .child(div().text_2xl().font_semibold().child(value))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(detail),
+                            )
+                    }),
+                ),
+            )
+            .child(
+                v_flex()
+                    .w_full()
+                    .min_h_0()
+                    .flex_1()
+                    .mt_2()
+                    .rounded(cx.theme().radius_lg)
+                    .border_1()
+                    .border_color(cx.theme().border)
                     .child(
-                        Switch::new("dynamic-children")
-                            .checked(self.show_dynamic_children)
-                            .label("Show dynamic children (test default_open)")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.show_dynamic_children = *checked;
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .px_4()
+                            .py_2()
+                            .child(div().font_medium().child("Recent activity"))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("Today"),
+                            ),
+                    )
+                    .child(Separator::horizontal())
+                    .children(
+                        [
+                            (
+                                IconName::CircleCheck,
+                                "Design review completed",
+                                "12 minutes ago",
+                            ),
+                            (IconName::File, "Project brief updated", "1 hour ago"),
+                            (
+                                IconName::CircleUser,
+                                "Maya joined the workspace",
+                                "3 hours ago",
+                            ),
+                        ]
+                        .into_iter()
+                        .map(|(icon, title, time)| {
+                            h_flex()
+                                .items_center()
+                                .gap_3()
+                                .px_4()
+                                .py_3()
+                                .child(
+                                    div()
+                                        .size_8()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .rounded_full()
+                                        .bg(cx.theme().muted)
+                                        .child(Icon::new(icon).small()),
+                                )
+                                .child(
+                                    v_flex()
+                                        .min_w_0()
+                                        .flex_1()
+                                        .gap_0p5()
+                                        .child(div().text_sm().child(title))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(time),
+                                        ),
+                                )
+                        }),
                     ),
             )
     }
@@ -341,6 +456,27 @@ impl Render for SidebarStory {
         let toggle_collapsed = self.collapsed && collapsible != SidebarCollapsible::None;
 
         h_flex()
+            .on_action(cx.listener(|this, action: &SidebarOption, _, cx| {
+                match action {
+                    SidebarOption::Icon => this.collapsible = SidebarCollapsible::Icon,
+                    SidebarOption::Offcanvas => this.collapsible = SidebarCollapsible::Offcanvas,
+                    SidebarOption::None => this.collapsible = SidebarCollapsible::None,
+                    SidebarOption::Right => {
+                        this.side = if this.side.is_right() {
+                            Side::Left
+                        } else {
+                            Side::Right
+                        }
+                    }
+                    SidebarOption::ClickToOpen => {
+                        this.click_to_open_submenu = !this.click_to_open_submenu
+                    }
+                    SidebarOption::DynamicChildren => {
+                        this.show_dynamic_children = !this.show_dynamic_children
+                    }
+                }
+                cx.notify();
+            }))
             .rounded(cx.theme().radius)
             .border_1()
             .border_color(cx.theme().border)

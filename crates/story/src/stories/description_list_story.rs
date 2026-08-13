@@ -3,11 +3,10 @@ use gpui::{
     Action, App, AppContext, Axis, Context, Entity, FocusHandle, Focusable, IntoElement,
     ParentElement, Render, Styled, Window,
 };
-use gpui_component::{AxisExt, h_flex, menu::DropdownMenu as _};
+use gpui_component::AxisExt;
 use gpui_component::{
     Sizable as _, Size,
     button::Button,
-    checkbox::Checkbox,
     description_list::{DescriptionItem, DescriptionList},
     dock::PanelControl,
     text::TextView,
@@ -17,7 +16,12 @@ use serde::Deserialize;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = description_list_story, no_json)]
-struct ChangeSize(Size);
+enum ToggleOption {
+    Vertical,
+    Bordered,
+}
+
+use crate::{ChangeStorySize, story_toolbar};
 
 pub struct DescriptionListStory {
     focus_handle: FocusHandle,
@@ -74,21 +78,6 @@ impl DescriptionListStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
-
-    fn set_layout(&mut self, layout: Axis, cx: &mut Context<Self>) {
-        self.layout = layout;
-        cx.notify();
-    }
-
-    fn set_bordered(&mut self, bordered: bool, cx: &mut Context<Self>) {
-        self.bordered = bordered;
-        cx.notify();
-    }
-
-    fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = a.0;
-        cx.notify();
-    }
 }
 
 impl super::Story for DescriptionListStory {
@@ -97,7 +86,7 @@ impl super::Story for DescriptionListStory {
     }
 
     fn description() -> &'static str {
-        "Use to display details with a tidy layout."
+        "Present labels and values in a structured summary."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -119,78 +108,57 @@ impl Render for DescriptionListStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .id("example")
-            .on_action(cx.listener(Self::on_change_size))
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, action: &ToggleOption, _, cx| {
+                match action {
+                    ToggleOption::Vertical => {
+                        this.layout = if this.layout.is_vertical() {
+                            Axis::Horizontal
+                        } else {
+                            Axis::Vertical
+                        }
+                    }
+                    ToggleOption::Bordered => this.bordered = !this.bordered,
+                }
+                cx.notify();
+            }))
             .p_4()
             .size_full()
-            .gap_2()
+            .items_center()
+            .gap_6()
+            .child(story_toolbar(self.size).dropdown_child(
+                Button::new("description-list-options").label("Options"),
+                {
+                    let vertical = self.layout.is_vertical();
+                    let bordered = self.bordered;
+                    move |menu, _, _| {
+                        menu.menu_with_check("Vertical", vertical, Box::new(ToggleOption::Vertical))
+                            .menu_with_check("Bordered", bordered, Box::new(ToggleOption::Bordered))
+                    }
+                },
+            ))
             .child(
-                h_flex()
-                    .gap_3()
-                    .child(
-                        Checkbox::new("layout")
-                            .checked(self.layout.is_vertical())
-                            .label("Vertical Layout")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                let new_layout = if *checked {
-                                    Axis::Vertical
-                                } else {
-                                    Axis::Horizontal
-                                };
-                                this.set_layout(new_layout, cx);
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("bordered")
-                            .checked(self.bordered)
-                            .label("Bordered")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.set_bordered(*checked, cx);
-                            })),
-                    )
-                    .child(
-                        Button::new("size")
-                            .small()
-                            .outline()
-                            .label(format!("size: {:?}", self.size))
-                            .dropdown_menu({
-                                let size = self.size;
-                                move |menu, _, _| {
-                                    menu.menu_with_check(
-                                        "Large",
-                                        size == Size::Large,
-                                        Box::new(ChangeSize(Size::Large)),
-                                    )
-                                    .menu_with_check(
-                                        "Medium",
-                                        size == Size::Medium,
-                                        Box::new(ChangeSize(Size::Medium)),
-                                    )
-                                    .menu_with_check(
-                                        "Small",
-                                        size == Size::Small,
-                                        Box::new(ChangeSize(Size::Small)),
-                                    )
+                div().w(px(720.)).child(
+                    DescriptionList::new()
+                        .columns(3)
+                        .layout(self.layout)
+                        .bordered(self.bordered)
+                        .with_size(self.size)
+                        .children(self.items.clone().into_iter().enumerate().map(
+                            |(ix, (label, value, span))| {
+                                if label == "--" {
+                                    return DescriptionItem::Separator;
                                 }
-                            }),
-                    ),
-            )
-            .child(
-                DescriptionList::new()
-                    .columns(3)
-                    .layout(self.layout)
-                    .bordered(self.bordered)
-                    .with_size(self.size)
-                    .children(self.items.clone().into_iter().enumerate().map(
-                        |(ix, (label, value, span))| {
-                            if label == "--" {
-                                return DescriptionItem::Separator;
-                            }
 
-                            DescriptionItem::new(label)
-                                .value(TextView::markdown(ix, value).into_any_element())
-                                .span(span)
-                        },
-                    )),
+                                DescriptionItem::new(label)
+                                    .value(TextView::markdown(ix, value).into_any_element())
+                                    .span(span)
+                            },
+                        )),
+                ),
             )
     }
 }

@@ -1,21 +1,21 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window, div, px,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, ParentElement,
+    Render, Styled, Window, div, px,
 };
 
 use gpui_component::{
-    ActiveTheme, Sizable, h_flex,
+    ActiveTheme, Sizable, Size,
     radio::{Radio, RadioGroup},
     v_flex,
 };
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct RadioStory {
     focus_handle: gpui::FocusHandle,
-    radio_check1: bool,
-    radio_check2: bool,
-    radio_group_checked: Option<usize>,
+    delivery: Option<usize>,
+    billing: Option<usize>,
+    size: Size,
 }
 
 impl super::Story for RadioStory {
@@ -24,7 +24,7 @@ impl super::Story for RadioStory {
     }
 
     fn description() -> &'static str {
-        "A set of checkable buttons—known as radio buttons—where no more than one of the buttons can be checked at a time."
+        "Choose one option from a set."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -40,9 +40,9 @@ impl RadioStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
-            radio_check1: false,
-            radio_check2: true,
-            radio_group_checked: Some(1),
+            delivery: Some(0),
+            billing: Some(1),
+            size: Size::default(),
         }
     }
 }
@@ -56,105 +56,88 @@ impl Focusable for RadioStory {
 impl Render for RadioStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_6()
+            .w_full()
+            .items_center()
+            .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                section("Radio")
-                    .max_w_md()
+                section("Delivery")
+                    .description("Choose one option from a clearly described set.")
+                    .w(px(320.))
+                    .items_center()
                     .child(
-                        Radio::new("radio1")
-                            .checked(self.radio_check1)
-                            .on_click(cx.listener(|this, checked, _, _| {
-                                this.radio_check1 = *checked;
-                            })),
-                    )
-                    .child(
-                        Radio::new("radio2")
-                            .label("Radio 2")
-                            .checked(self.radio_check2)
-                            .on_click(cx.listener(|this, checked, _, _| {
-                                this.radio_check2 = *checked;
-                            })),
-                    ),
-            )
-            .child(
-                section("Disabled")
-                    .child(Radio::new("a").label("Disabled").disabled(true))
-                    .child(
-                        Radio::new("b")
-                            .label("Disabled with Checked")
-                            .checked(true)
-                            .disabled(true),
-                    ),
-            )
-            .child(
-                section("Multi-line Label").child(
-                    Radio::new("radio3")
-                        .label("The long long label text.")
-                        .child(
-                            div()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("This line should wrap when the text is too long."),
-                        )
-                        .w(px(300.))
-                        .checked(true)
-                        .disabled(true),
-                ),
-            )
-            .child(
-                section("Sizeable").child(
-                    h_flex()
-                        .h_full()
-                        .gap_x_4()
-                        .child(
-                            Radio::new("xsmall")
-                                .label("Small")
-                                .xsmall()
-                                .checked(self.radio_check2)
-                                .on_click(cx.listener(|this, v, _, _| {
-                                    this.radio_check2 = *v;
-                                })),
-                        )
-                        .child(
-                            Radio::new("large")
-                                .label("Large")
-                                .large()
-                                .checked(self.radio_check2)
-                                .on_click(cx.listener(|this, v, _, _| {
-                                    this.radio_check2 = *v;
-                                })),
-                        ),
-                ),
-            )
-            .child(
-                section("Radio Group").max_w_md().child(
-                    v_flex().child(
-                        RadioGroup::horizontal("radio_group_1")
-                            .children(["One", "Two", "Three"])
-                            .selected_index(self.radio_group_checked)
-                            .on_click(cx.listener(|this, selected_ix: &usize, _, cx| {
-                                this.radio_group_checked = Some(*selected_ix);
+                        RadioGroup::vertical("delivery")
+                            .w(px(320.))
+                            .gap_3()
+                            .child(
+                                Radio::new("standard")
+                                    .with_size(self.size)
+                                    .w_full()
+                                    .label("Standard delivery")
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("Arrives in 3–5 business days."),
+                                    ),
+                            )
+                            .child(
+                                Radio::new("express")
+                                    .with_size(self.size)
+                                    .w_full()
+                                    .label("Express delivery")
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("Arrives the next business day."),
+                                    ),
+                            )
+                            .child(
+                                Radio::new("pickup")
+                                    .with_size(self.size)
+                                    .w_full()
+                                    .label("Store pickup")
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child("Unavailable for this order."),
+                                    )
+                                    .disabled(true),
+                            )
+                            .selected_index(self.delivery)
+                            .on_click(cx.listener(|this, selected: &usize, _, cx| {
+                                this.delivery = Some(*selected);
                                 cx.notify();
                             })),
                     ),
-                ),
             )
             .child(
-                section("Radio Group Vertical (With container style)")
-                    .max_w_md()
+                section("Billing cycle")
+                    .description("Horizontal groups work for short, related choices.")
+                    .w(px(320.))
+                    .items_center()
                     .child(
-                        v_flex().items_center().content_center().child(
-                            RadioGroup::vertical("radio_group_2")
-                                .w(px(220.))
-                                .p_2()
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded(cx.theme().radius)
-                                .disabled(true)
-                                .child(Radio::new("one1").label("United States"))
-                                .child(Radio::new("one2").label("Canada"))
-                                .child(Radio::new("one3").label("Mexico"))
-                                .selected_index(Some(1)),
-                        ),
+                        RadioGroup::horizontal("billing")
+                            .w(px(320.))
+                            .justify_between()
+                            .child(Radio::new("monthly").with_size(self.size).label("Monthly"))
+                            .child(Radio::new("yearly").with_size(self.size).label("Yearly"))
+                            .child(
+                                Radio::new("lifetime")
+                                    .with_size(self.size)
+                                    .label("Lifetime"),
+                            )
+                            .selected_index(self.billing)
+                            .on_click(cx.listener(|this, selected_ix: &usize, _, cx| {
+                                this.billing = Some(*selected_ix);
+                                cx.notify();
+                            })),
                     ),
             )
     }
