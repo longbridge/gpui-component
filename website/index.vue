@@ -804,8 +804,8 @@ const copy = computed(() =>
     z-index: 50;
     top: 0;
     height: 3.5rem;
-    border-bottom: 1px solid var(--border);
     background: color-mix(in srgb, var(--background) 80%, transparent);
+    box-shadow: var(--shadow-raise);
     backdrop-filter: blur(18px) saturate(160%);
 }
 

@@ -348,9 +348,9 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   /* The docs navbar is the same toolbar as the landing page: brand and
      sections grouped left, controls right, one hairline underneath. */
   .VPNav {
-    @apply border-b border-(--border);
     background: color-mix(in srgb, var(--background) 80%, transparent);
     backdrop-filter: blur(18px) saturate(160%);
+    box-shadow: var(--shadow-raise);
 
     .divider {
       @apply hidden;
