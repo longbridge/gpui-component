@@ -11,7 +11,7 @@ use gpui::{
 use gpui::{Corners, Pixels};
 
 use super::scrollable::caller_id;
-use crate::{AxisExt, StyledExt as _};
+use crate::{AxisExt, OngoingScrollExt as _, StyledExt as _};
 
 /// A horizontal scroll viewport that only consumes horizontal wheel deltas.
 ///
@@ -232,7 +232,7 @@ impl Element for ScrollableMask {
                     if event.delta.precise() {
                         ongoing_scroll
                             .borrow_mut()
-                            .filter(&mut delta, event.touch_phase);
+                            .lock_axis(&mut delta, event.touch_phase);
                     }
 
                     // Limit for only one way scrolling at same time.
