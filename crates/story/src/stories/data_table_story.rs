@@ -1346,8 +1346,6 @@ impl Render for DataTableStory {
                             .justify_between()
                             .gap_3()
                             .px_3()
-                            .border_t_1()
-                            .border_color(cx.theme().border)
                             .bg(cx.theme().muted.opacity(0.35))
                             .text_xs()
                             .text_color(cx.theme().muted_foreground)
