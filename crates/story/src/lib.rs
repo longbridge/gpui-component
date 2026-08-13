@@ -1,14 +1,14 @@
 use gpui::{
     Action, Anchor, AnyElement, AnyView, App, AppContext, Bounds, Context, DismissEvent, Div,
     Entity, EventEmitter, FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement,
-    KeyBinding, ParentElement, Pixels, Render, RenderOnce, SharedString, Size, Stateful,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, WindowBounds, WindowKind,
-    WindowOptions, actions, div, prelude::FluentBuilder as _, px, rems, size,
+    KeyBinding, ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement,
+    Styled, Window, WindowBounds, WindowKind, WindowOptions, actions, div,
+    prelude::FluentBuilder as _, px, rems, size,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Root, Selectable, Sizable as _, Size as ComponentSize, StyledExt as _,
-    TitleBar, WindowExt,
-    button::{Button, ButtonGroup},
+    ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _, TitleBar,
+    WindowExt,
+    button::Button,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
@@ -386,13 +386,20 @@ pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
 #[derive(IntoElement)]
 pub(crate) struct StoryToolbar {
     base: Div,
-    children: Vec<AnyElement>,
+    items: Vec<StoryToolbarItem>,
+}
+
+enum StoryToolbarItem {
+    Button(Button),
+    Dropdown {
+        button: Button,
+        builder: StoryMenuBuilder,
+    },
 }
 
 impl StoryToolbar {
     pub(crate) fn child(mut self, button: Button) -> Self {
-        self.children
-            .push(button.outline().small().into_any_element());
+        self.items.push(StoryToolbarItem::Button(button));
         self
     }
 
@@ -401,15 +408,10 @@ impl StoryToolbar {
         button: Button,
         builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
     ) -> Self {
-        let id = SharedString::from(format!("story-toolbar-menu-{}", self.children.len()));
-        self.children.push(
-            StoryToolbarMenu {
-                id,
-                button,
-                builder: Rc::new(builder),
-            }
-            .into_any_element(),
-        );
+        self.items.push(StoryToolbarItem::Dropdown {
+            button,
+            builder: Rc::new(builder),
+        });
         self
     }
 }
@@ -428,44 +430,6 @@ struct StoryToolbarMenu {
     builder: StoryMenuBuilder,
 }
 
-#[derive(IntoElement)]
-struct StoryToolbarMenuTrigger {
-    base: Stateful<Div>,
-    group: ButtonGroup,
-    selected: bool,
-}
-
-impl Selectable for StoryToolbarMenuTrigger {
-    fn selected(mut self, selected: bool) -> Self {
-        self.selected = selected;
-        self
-    }
-
-    fn is_selected(&self) -> bool {
-        self.selected
-    }
-}
-
-impl InteractiveElement for StoryToolbarMenuTrigger {
-    fn interactivity(&mut self) -> &mut gpui::Interactivity {
-        self.base.interactivity()
-    }
-}
-
-impl StatefulInteractiveElement for StoryToolbarMenuTrigger {}
-
-impl Styled for StoryToolbarMenuTrigger {
-    fn style(&mut self) -> &mut StyleRefinement {
-        self.base.style()
-    }
-}
-
-impl RenderOnce for StoryToolbarMenuTrigger {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base.child(self.group)
-    }
-}
-
 impl RenderOnce for StoryToolbarMenu {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state =
@@ -473,20 +437,12 @@ impl RenderOnce for StoryToolbarMenu {
         let builder = self.builder;
 
         let popover_id = SharedString::from(format!("story-toolbar-popover-{}", self.id));
-        let group_id = SharedString::from(format!("story-toolbar-group-{}", self.id));
 
         Popover::new(popover_id)
             .appearance(false)
             .overlay_closable(false)
             .anchor(Anchor::TopRight)
-            .trigger(StoryToolbarMenuTrigger {
-                base: div().id(group_id.clone()),
-                group: ButtonGroup::new(group_id)
-                    .outline()
-                    .small()
-                    .child(self.button),
-                selected: false,
-            })
+            .trigger(self.button)
             .content(move |_, window, cx| {
                 if let Some(menu) = state.read(cx).menu.clone() {
                     return menu;
@@ -523,14 +479,40 @@ impl Styled for StoryToolbar {
 
 impl RenderOnce for StoryToolbar {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        self.base.children(self.children)
+        let last = self.items.len().saturating_sub(1);
+
+        self.base
+            .children(self.items.into_iter().enumerate().map(|(ix, item)| {
+                // Join the buttons into one segmented control: square off the
+                // inner corners, and let each button after the first sit on its
+                // neighbour's border instead of drawing a second one.
+                let joined = |button: Button| {
+                    button
+                        .outline()
+                        .small()
+                        .when(ix > 0, |this| {
+                            this.rounded_tl(px(0.)).rounded_bl(px(0.)).border_l_0()
+                        })
+                        .when(ix < last, |this| this.rounded_tr(px(0.)).rounded_br(px(0.)))
+                };
+
+                match item {
+                    StoryToolbarItem::Button(button) => joined(button).into_any_element(),
+                    StoryToolbarItem::Dropdown { button, builder } => StoryToolbarMenu {
+                        id: SharedString::from(format!("story-toolbar-menu-{ix}")),
+                        button: joined(button),
+                        builder,
+                    }
+                    .into_any_element(),
+                }
+            }))
     }
 }
 
 pub(crate) fn story_toolbar_group() -> StoryToolbar {
     StoryToolbar {
         base: h_flex().w_full().justify_end(),
-        children: vec![],
+        items: vec![],
     }
 }
 
