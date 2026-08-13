@@ -1,21 +1,20 @@
-use std::{
-    cell::RefCell,
-    collections::HashSet,
-    rc::Rc,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{
     AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId,
     InspectorElementId, InteractiveElement as _, IntoElement, LayoutId, ParentElement, Pixels,
-    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, Style, StyleRefinement,
-    Styled, Window, div, percentage, prelude::FluentBuilder as _, px, relative, rems, size,
+    RenderOnce, SharedString, StatefulInteractiveElement as _, Style, StyleRefinement, Styled,
+    Window, div, percentage, prelude::FluentBuilder as _, px, relative, rems, size,
 };
 
 use crate::{
     ActiveTheme as _, Icon, IconName, Sizable, Size, StyledExt as _, animation::ease_out_cubic,
-    h_flex, v_flex,
+    h_flex,
+};
+use gpui_base::{
+    Accordion as BaseAccordion, AccordionHeader as BaseAccordionHeader,
+    AccordionItem as BaseAccordionItem, AccordionPanel as BaseAccordionPanel, AccordionTrigger,
+    Transition, transition,
 };
 
 /// Duration of the expand/collapse animation.
@@ -104,12 +103,12 @@ impl Styled for Accordion {
 
 impl RenderOnce for Accordion {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let open_ixs = Rc::new(RefCell::new(HashSet::new()));
-        let is_multiple = self.multiple;
+        let open_indices = Rc::new(RefCell::new(HashSet::new()));
+        let multiple = self.multiple;
         let last_ix = self.children.len().saturating_sub(1);
 
-        v_flex()
-            .id(self.id)
+        BaseAccordion::new(self.id)
+            .v_flex()
             .size_full()
             // The bordered accordion is a single rounded card, the items are
             // joined by their separators.
@@ -126,7 +125,7 @@ impl RenderOnce for Accordion {
                     .enumerate()
                     .map(|(ix, accordion)| {
                         if accordion.open {
-                            open_ixs.borrow_mut().insert(ix);
+                            open_indices.borrow_mut().insert(ix);
                         }
 
                         accordion
@@ -135,16 +134,16 @@ impl RenderOnce for Accordion {
                             .with_size(self.size)
                             .disabled(self.disabled)
                             .on_toggle_click({
-                                let open_ixs = Rc::clone(&open_ixs);
+                                let open_indices = open_indices.clone();
                                 move |open, _, _| {
-                                    let mut open_ixs = open_ixs.borrow_mut();
+                                    let mut open_indices = open_indices.borrow_mut();
                                     if *open {
-                                        if !is_multiple {
-                                            open_ixs.clear();
+                                        if !multiple {
+                                            open_indices.clear();
                                         }
-                                        open_ixs.insert(ix);
+                                        open_indices.insert(ix);
                                     } else {
-                                        open_ixs.remove(&ix);
+                                        open_indices.remove(&ix);
                                     }
                                 }
                             })
@@ -152,12 +151,11 @@ impl RenderOnce for Accordion {
             )
             .when_some(
                 self.on_toggle_click.filter(|_| !self.disabled),
-                move |this, on_toggle_click| {
-                    let open_ixs = Rc::clone(&open_ixs);
+                |this, on_toggle| {
                     this.on_click(move |_, window, cx| {
-                        let open_ixs: Vec<usize> = open_ixs.borrow().iter().map(|&ix| ix).collect();
-
-                        on_toggle_click(&open_ixs, window, cx);
+                        let open_indices =
+                            open_indices.borrow().iter().copied().collect::<Vec<_>>();
+                        on_toggle(&open_indices, window, cx)
                     })
                 },
             )
@@ -168,61 +166,29 @@ impl RenderOnce for Accordion {
 ///
 /// It stays in the tree while closed, clipped to zero height, to be able to
 /// animate the collapse and to keep its natural height measured.
-struct AccordionContent {
+struct AnimatedAccordionPanel {
     id: ElementId,
-    open: bool,
+    progress: f32,
     child: AnyElement,
 }
 
-#[derive(Clone, Copy)]
-struct AccordionContentState {
-    open: bool,
-    /// The progress when the current animation started.
-    from: f32,
-    started_at: Option<Instant>,
+#[derive(Clone, Copy, Default)]
+struct AnimatedAccordionPanelState {
     /// The natural height measured in the last prepaint.
     height: Option<Pixels>,
 }
 
-impl AccordionContentState {
-    fn new(open: bool) -> Self {
-        Self {
-            open,
-            from: if open { 1. } else { 0. },
-            started_at: None,
-            height: None,
-        }
-    }
-
-    /// Progress from 0. (closed) to 1. (open), ending the animation when the
-    /// duration has passed.
-    fn progress(&mut self) -> f32 {
-        let target = if self.open { 1. } else { 0. };
-        let Some(started_at) = self.started_at else {
-            return target;
-        };
-
-        let t = started_at.elapsed().as_secs_f32() / ANIMATION_DURATION.as_secs_f32();
-        if t >= 1. {
-            self.started_at = None;
-            return target;
-        }
-
-        self.from + (target - self.from) * ease_out_cubic(t)
-    }
-}
-
-impl AccordionContent {
-    fn new(id: impl Into<ElementId>, open: bool, child: AnyElement) -> Self {
+impl AnimatedAccordionPanel {
+    fn new(id: impl Into<ElementId>, progress: f32, child: AnyElement) -> Self {
         Self {
             id: id.into(),
-            open,
+            progress,
             child,
         }
     }
 }
 
-impl IntoElement for AccordionContent {
+impl IntoElement for AnimatedAccordionPanel {
     type Element = Self;
 
     fn into_element(self) -> Self::Element {
@@ -230,7 +196,7 @@ impl IntoElement for AccordionContent {
     }
 }
 
-impl Element for AccordionContent {
+impl Element for AnimatedAccordionPanel {
     type RequestLayoutState = ();
     type PrepaintState = ();
 
@@ -249,24 +215,11 @@ impl Element for AccordionContent {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let open = self.open;
-        let (progress, height) = window.with_element_state(
-            global_id.expect("AccordionContent must have an id"),
-            |state: Option<AccordionContentState>, window| {
-                let mut state = state.unwrap_or_else(|| AccordionContentState::new(open));
-
-                if state.open != open {
-                    state.from = state.progress();
-                    state.open = open;
-                    state.started_at = Some(Instant::now());
-                }
-
-                let progress = state.progress();
-                if state.started_at.is_some() {
-                    window.request_animation_frame();
-                }
-
-                ((progress, state.height), state)
+        let height = window.with_element_state(
+            global_id.expect("AnimatedAccordionPanel must have an id"),
+            |state: Option<AnimatedAccordionPanelState>, _| {
+                let state = state.unwrap_or_default();
+                (state.height, state)
             },
         );
 
@@ -274,9 +227,9 @@ impl Element for AccordionContent {
         style.size.width = relative(1.).into();
         match height {
             // Not measured yet, let the content lay itself out.
-            None if open => {}
+            None if self.progress > 0. => {}
             None => style.size.height = px(0.).into(),
-            Some(height) => style.size.height = (height * progress).into(),
+            Some(height) => style.size.height = (height * self.progress).into(),
         }
 
         (window.request_layout(style, None, cx), ())
@@ -299,9 +252,9 @@ impl Element for AccordionContent {
         let measured = self.child.layout_as_root(available, window, cx);
 
         let changed = window.with_element_state(
-            global_id.expect("AccordionContent must have an id"),
-            |state: Option<AccordionContentState>, _| {
-                let mut state = state.unwrap_or_else(|| AccordionContentState::new(self.open));
+            global_id.expect("AnimatedAccordionPanel must have an id"),
+            |state: Option<AnimatedAccordionPanelState>, _| {
+                let mut state = state.unwrap_or_default();
                 let changed = state.height != Some(measured.height);
                 state.height = Some(measured.height);
                 (changed, state)
@@ -457,90 +410,147 @@ impl Styled for AccordionItem {
 }
 
 impl RenderOnce for AccordionItem {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let text_size = match self.size {
             Size::XSmall => rems(0.8125),
             Size::Large => rems(1.0),
             _ => rems(0.875),
         };
+        let progress = transition(
+            (self.index, "accordion-panel"),
+            if self.open { 1. } else { 0. },
+            Transition::new(ANIMATION_DURATION).ease(ease_out_cubic),
+            window,
+            cx,
+        );
+        let trigger = AccordionTrigger::new(("trigger", self.index))
+            .open(self.open)
+            .disabled(self.disabled)
+            .h_flex()
+            .justify_between()
+            .gap_3()
+            .font_medium()
+            .map(|this| match self.size {
+                Size::XSmall => this.py_1().px_1p5(),
+                Size::Small => this.py_1p5().px_2(),
+                Size::Large => this.py_3().px_4(),
+                _ => this.py_2().px_3(),
+            })
+            .when(self.open, |this| this.text_color(cx.theme().foreground))
+            .refine_style(&self.title_style)
+            .child(
+                h_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .items_center()
+                    .map(|this| match self.size {
+                        Size::XSmall | Size::Small => this.gap_1(),
+                        _ => this.gap_2(),
+                    })
+                    .when_some(self.icon, |this, icon| {
+                        this.child(icon.with_size(self.size))
+                    })
+                    .child(self.title),
+            )
+            .when(!self.disabled, |this| {
+                this.when_some(self.hover_style, |this, hover_style| {
+                    this.hover(move |this| this.refine_style(&hover_style))
+                })
+                .child(
+                    Icon::new(IconName::ChevronDown)
+                        .xsmall()
+                        .flex_none()
+                        .text_color(cx.theme().muted_foreground)
+                        .rotate(percentage(if self.open { 0.5 } else { 0. })),
+                )
+                .when_some(self.on_toggle_click, |this, on_toggle_click| {
+                    this.on_change(move |open, _, window, cx| {
+                        on_toggle_click(&open, window, cx);
+                    })
+                })
+            });
 
         div().flex_1().child(
-            v_flex()
+            BaseAccordionItem::new()
+                .open(self.open)
+                .disabled(self.disabled)
+                .header(
+                    BaseAccordionHeader::new(trigger)
+                        .id(("header", self.index))
+                        .w_full(),
+                )
+                .panel(
+                    BaseAccordionPanel::new()
+                        .id(("panel", self.index))
+                        .open(self.open)
+                        .keep_mounted(true)
+                        .w_full()
+                        .child(AnimatedAccordionPanel::new(
+                            ("content", self.index),
+                            progress,
+                            div()
+                                .map(|this| match self.size {
+                                    Size::XSmall => this.pb_1().px_1p5(),
+                                    Size::Small => this.pb_1p5().px_2(),
+                                    Size::Large => this.pb_3().px_4(),
+                                    _ => this.pb_2().px_3(),
+                                })
+                                .refine_style(&self.content_style)
+                                .children(self.children)
+                                .into_any_element(),
+                        )),
+                )
+                .v_flex()
                 .w_full()
                 .bg(cx.theme().tokens.accordion)
                 .overflow_hidden()
-                // Separated by a line under each item, below the content.
                 .when(!self.last, |this| {
                     this.border_b_1().border_color(cx.theme().border)
                 })
                 .text_size(text_size)
-                .refine_style(&self.style)
-                .child(
-                    h_flex()
-                        .id(self.index)
-                        .role(Role::Button)
-                        .aria_expanded(self.open)
-                        .justify_between()
-                        .gap_3()
-                        .font_medium()
-                        .map(|this| match self.size {
-                            Size::XSmall => this.py_1().px_1p5(),
-                            Size::Small => this.py_1p5().px_2(),
-                            Size::Large => this.py_3().px_4(),
-                            _ => this.py_2().px_3(),
-                        })
-                        .when(self.open, |this| this.text_color(cx.theme().foreground))
-                        .refine_style(&self.title_style)
-                        .child(
-                            h_flex()
-                                .items_center()
-                                .map(|this| match self.size {
-                                    Size::XSmall => this.gap_1(),
-                                    Size::Small => this.gap_1(),
-                                    _ => this.gap_2(),
-                                })
-                                .when_some(self.icon, |this, icon| {
-                                    this.child(icon.with_size(self.size))
-                                })
-                                .child(self.title),
-                        )
-                        .when(!self.disabled, |this| {
-                            this.when_some(self.hover_style, |this, hover_style| {
-                                this.hover(move |this| this.refine_style(&hover_style))
-                            })
-                            .child(
-                                Icon::new(IconName::ChevronDown)
-                                    .xsmall()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .rotate(percentage(if self.open { 0.5 } else { 0. })),
-                            )
-                            .when_some(
-                                self.on_toggle_click,
-                                |this, on_toggle_click| {
-                                    this.on_click({
-                                        move |_, window, cx| {
-                                            on_toggle_click(&!self.open, window, cx);
-                                        }
-                                    })
-                                },
-                            )
-                        }),
-                )
-                .child(AccordionContent::new(
-                    ("content", self.index),
-                    self.open,
-                    div()
-                        // No top padding, the title has its own bottom padding.
-                        .map(|this| match self.size {
-                            Size::XSmall => this.pb_1().px_1p5(),
-                            Size::Small => this.pb_1p5().px_2(),
-                            Size::Large => this.pb_3().px_4(),
-                            _ => this.pb_2().px_3(),
-                        })
-                        .refine_style(&self.content_style)
-                        .children(self.children)
-                        .into_any_element(),
-                )),
+                .refine_style(&self.style),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui::{Context, InteractiveElement as _, Render, TestAppContext, div, px};
+
+    use super::*;
+
+    struct Harness;
+
+    impl Render for Harness {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            Accordion::new("accordion-layout")
+                .w(px(240.))
+                .h(px(100.))
+                .item(|item| {
+                    item.open(true)
+                        .title(div().debug_selector(|| "first-title".into()).child("First"))
+                        .child(div().debug_selector(|| "first-content".into()).h(px(60.)))
+                })
+                .item(|item| {
+                    item.title(
+                        div()
+                            .debug_selector(|| "second-title".into())
+                            .child("Second"),
+                    )
+                })
+        }
+    }
+
+    #[gpui::test]
+    fn expanded_panel_keeps_content_between_its_header_and_the_next_item(cx: &mut TestAppContext) {
+        cx.update(crate::theme::init);
+        let (_, cx) = cx.add_window_view(|_, _| Harness);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let first = cx.debug_bounds("first-title").unwrap();
+        let content = cx.debug_bounds("first-content").unwrap();
+        let second = cx.debug_bounds("second-title").unwrap();
+        assert!(first.origin.y < content.origin.y);
+        assert!(content.origin.y + content.size.height <= second.origin.y);
     }
 }

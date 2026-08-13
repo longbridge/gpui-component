@@ -13,7 +13,7 @@ use crate::text::TextViewFormat;
 use crate::text::markdown_ext::{MarkdownExtensions, MarkdownNode, MarkdownPlugin};
 use crate::text::node::CodeBlock;
 use crate::text::state::{SelectionFormat, TextViewState};
-use crate::{global_state::GlobalState, text::TextViewStyle};
+use crate::{global_state::UiGlobalState, text::TextViewStyle};
 
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
@@ -399,11 +399,11 @@ impl Element for TextView {
             crate::Root::register_selectable_text_view(state, hitbox, window, cx);
         }
 
-        GlobalState::global_mut(cx)
+        UiGlobalState::global_mut(cx)
             .text_view_state_stack
             .push(state.clone());
         request_layout.element.paint(window, cx);
-        GlobalState::global_mut(cx).text_view_state_stack.pop();
+        UiGlobalState::global_mut(cx).text_view_state_stack.pop();
     }
 }
 
@@ -543,9 +543,9 @@ mod tests {
                 _cx: &mut Context<Self>,
             ) -> impl IntoElement {
                 div().w(px(840.)).h(px(400.)).child(
-                    crate::resizable::h_resizable("markdown-width-test")
-                        .child(crate::resizable::resizable_panel().child(div()))
-                        .child(crate::resizable::resizable_panel().child(
+                    crate::h_resizable("markdown-width-test")
+                        .child(crate::resizable_panel().child(div()))
+                        .child(crate::resizable_panel().child(
                             TextView::markdown(
                                 "list-with-code",
                                 "1. List item\n   ```rust\n   nested code\n   ```\n\n```rust\ntop-level code\n```",

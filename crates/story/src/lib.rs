@@ -13,7 +13,7 @@ use gpui_component::{
     h_flex,
     menu::PopupMenu,
     notification::Notification,
-    scroll::{ScrollableElement as _, ScrollbarShow},
+    scroll::{ScrollableElement as _, ScrollbarMode},
     text::markdown,
     v_flex,
 };
@@ -33,7 +33,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
-pub struct SelectScrollbarShow(ScrollbarShow);
+pub struct SelectScrollbarMode(ScrollbarMode);
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
@@ -191,17 +191,6 @@ pub fn init(cx: &mut App) {
     {
         let http_client =
             reqwest_client::ReqwestClient::user_agent("gpui-component/story").unwrap();
-        cx.set_http_client(std::sync::Arc::new(http_client));
-    }
-
-    #[cfg(target_family = "wasm")]
-    {
-        // Safety: the web examples run single-threaded; the client is
-        // created and used exclusively on the main thread.
-        let http_client = unsafe {
-            gpui_web::FetchHttpClient::with_user_agent("gpui-component/story")
-                .expect("failed to create FetchHttpClient")
-        };
         cx.set_http_client(std::sync::Arc::new(http_client));
     }
 
@@ -635,6 +624,7 @@ pub struct StoryRoot {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) title_bar: Entity<AppTitleBar>,
     pub(crate) view: AnyView,
+    pub(crate) embedded: bool,
 }
 
 impl StoryRoot {
@@ -649,6 +639,17 @@ impl StoryRoot {
             focus_handle: cx.focus_handle(),
             title_bar,
             view: view.into(),
+            embedded: false,
+        }
+    }
+
+    pub fn embedded(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let title_bar = cx.new(|cx| AppTitleBar::new("", window, cx));
+        Self {
+            focus_handle: cx.focus_handle(),
+            title_bar,
+            view: view.into(),
+            embedded: true,
         }
     }
 
@@ -704,7 +705,7 @@ impl Render for StoryRoot {
             .child(
                 v_flex()
                     .size_full()
-                    .child(self.title_bar.clone())
+                    .when(!self.embedded, |this| this.child(self.title_bar.clone()))
                     .child(
                         div()
                             .track_focus(&self.focus_handle)

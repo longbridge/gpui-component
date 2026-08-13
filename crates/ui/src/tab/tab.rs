@@ -4,9 +4,9 @@ use crate::animation::{Lerp, ease_in_out_cubic};
 use crate::{ActiveTheme, Icon, IconName, Selectable, Sizable, Size, StyledExt, h_flex};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, Background, ClickEvent, Div, Edges, ElementId,
-    Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Pixels, RenderOnce, Role,
-    SharedString, StatefulInteractiveElement, Styled, Window, div, px, relative,
+    Animation, AnimationExt as _, AnyElement, App, Background, ClickEvent, Edges, ElementId, Hsla,
+    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, px, relative,
 };
 
 /// Tab variants.
@@ -393,7 +393,7 @@ impl Default for TabStyle {
 #[derive(IntoElement)]
 pub struct Tab {
     ix: usize,
-    base: Div,
+    base: gpui_base::Tab,
     pub(super) label: Option<SharedString>,
     aria_label: Option<SharedString>,
     pub(super) icon: Option<Icon>,
@@ -448,7 +448,7 @@ impl Default for Tab {
     fn default() -> Self {
         Self {
             ix: 0,
-            base: div(),
+            base: gpui_base::Tab::new(0usize),
             label: None,
             aria_label: None,
             icon: None,
@@ -556,6 +556,7 @@ impl Tab {
     /// Set index to the tab.
     pub(crate) fn ix(mut self, ix: usize) -> Self {
         self.ix = ix;
+        self.base = self.base.id(ix);
         self
     }
 
@@ -606,23 +607,29 @@ impl Sizable for Tab {
 
 impl RenderOnce for Tab {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut tab_style = if self.selected {
-            self.variant.selected(cx)
-        } else {
-            self.variant.normal(cx)
-        };
+        let mut normal_style = self.variant.normal(cx);
+        let mut selected_style = self.variant.selected(cx);
+        let mut disabled_style = self.variant.disabled(self.selected, cx);
         let mut hover_style = self.variant.hovered(self.selected, cx);
         if self.disabled {
-            tab_style = self.variant.disabled(self.selected, cx);
             hover_style = self.variant.disabled(self.selected, cx);
         }
         let tab_bar_prefix = self.tab_bar_prefix.unwrap_or_default();
         if !tab_bar_prefix {
             if self.ix == 0 && self.variant == TabVariant::Tab {
-                tab_style.borders.left = px(0.);
+                normal_style.borders.left = px(0.);
+                selected_style.borders.left = px(0.);
+                disabled_style.borders.left = px(0.);
                 hover_style.borders.left = px(0.);
             }
         }
+        let tab_style = if self.disabled {
+            &disabled_style
+        } else if self.selected {
+            &selected_style
+        } else {
+            &normal_style
+        };
         let radius = self.variant.radius(self.size, cx);
         let inner_radius = self.variant.inner_radius(self.size, cx);
         let inner_paddings = self.variant.inner_paddings(self.size);
@@ -654,18 +661,18 @@ impl RenderOnce for Tab {
         let suppress_active_visual =
             self.selected && !self.disabled && self.indicator_active && self.indicator_ready;
         // Pill paints its active state via the outer `bg`.
-        let outer_bg = if suppress_active_visual && self.variant == TabVariant::Pill {
+        let selected_outer_bg = if suppress_active_visual && self.variant == TabVariant::Pill {
             cx.theme().transparent.into()
         } else {
-            tab_style.bg
+            selected_style.bg
         };
         // Underline paints its active state via the bottom `border_color`.
-        let outer_border_color = if suppress_active_visual && self.variant == TabVariant::Underline
-        {
-            cx.theme().transparent
-        } else {
-            tab_style.border_color
-        };
+        let selected_outer_border_color =
+            if suppress_active_visual && self.variant == TabVariant::Underline {
+                cx.theme().transparent
+            } else {
+                selected_style.border_color
+            };
 
         // For Pill, the newly selected tab's text color (`primary_foreground`)
         // would otherwise snap to white instantly while the indicator is still
@@ -727,9 +734,32 @@ impl RenderOnce for Tab {
 
         self.base
             .id(self.ix)
-            .role(Role::Tab)
-            .when_some(aria_label, |this, label| this.aria_label(label))
-            .aria_selected(self.selected)
+            .selected(self.selected)
+            .disabled(self.disabled)
+            .when_some(aria_label, |this, label| this.accessibility_label(label))
+            .styles(|styles| {
+                styles
+                    .selected(|style| {
+                        style
+                            .text_color(selected_style.fg)
+                            .bg(selected_outer_bg)
+                            .border_l(selected_style.borders.left)
+                            .border_r(selected_style.borders.right)
+                            .border_t(selected_style.borders.top)
+                            .border_b(selected_style.borders.bottom)
+                            .border_color(selected_outer_border_color)
+                    })
+                    .disabled(|style| {
+                        style
+                            .text_color(disabled_style.fg)
+                            .bg(disabled_style.bg)
+                            .border_l(disabled_style.borders.left)
+                            .border_r(disabled_style.borders.right)
+                            .border_t(disabled_style.borders.top)
+                            .border_b(disabled_style.borders.bottom)
+                            .border_color(disabled_style.border_color)
+                    })
+            })
             .relative()
             .flex()
             .flex_wrap()
@@ -738,19 +768,21 @@ impl RenderOnce for Tab {
             .flex_shrink_0()
             .h(height)
             .overflow_hidden()
-            .text_color(tab_style.fg)
             .map(|this| match self.size {
                 Size::XSmall => this.text_xs(),
                 Size::Large => this.text_base(),
                 _ => this.text_sm(),
             })
-            .bg(outer_bg)
-            .border_l(tab_style.borders.left)
-            .border_r(tab_style.borders.right)
-            .border_t(tab_style.borders.top)
-            .border_b(tab_style.borders.bottom)
-            .border_color(outer_border_color)
             .rounded(radius)
+            .when(!self.selected && !self.disabled, |this| {
+                this.text_color(normal_style.fg)
+                    .bg(normal_style.bg)
+                    .border_l(normal_style.borders.left)
+                    .border_r(normal_style.borders.right)
+                    .border_t(normal_style.borders.top)
+                    .border_b(normal_style.borders.bottom)
+                    .border_color(normal_style.border_color)
+            })
             .hover(|this| {
                 // Always register the hover style: GPUI only refreshes the cached
                 // hover state while one is present. If the selected tab skipped it,
@@ -790,15 +822,8 @@ impl RenderOnce for Tab {
             .when_some(self.prefix, |this, prefix| this.child(prefix))
             .child(inner_element)
             .when_some(self.suffix, |this, suffix| this.child(suffix))
-            .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                // Stop propagation behavior, for works on TitleBar.
-                // https://github.com/longbridge/gpui-component/issues/1836
-                cx.stop_propagation();
-            })
-            .when(!self.disabled, |this| {
-                this.when_some(self.on_click.clone(), |this, on_click| {
-                    this.on_click(move |event, window, cx| on_click(event, window, cx))
-                })
+            .when_some(self.on_click.clone(), |this, on_click| {
+                this.on_click(move |event, window, cx| on_click(event, window, cx))
             })
     }
 }

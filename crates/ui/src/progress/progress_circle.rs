@@ -1,11 +1,11 @@
 use crate::{ActiveTheme, Sizable, Size, StyledExt};
+use gpui::Bounds;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement, Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas,
-    ease_in_out, px, relative,
+    Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, IntoElement, ParentElement,
+    Pixels, RenderOnce, StyleRefinement, Styled, Window, canvas, ease_in_out, px, relative,
 };
-use gpui::{Bounds, div};
+use gpui_base::Progress as BaseProgress;
 use instant::Duration;
 use std::f32::consts::TAU;
 
@@ -161,8 +161,9 @@ impl RenderOnce for ProgressCircle {
 
         let color = self.color.unwrap_or(cx.theme().progress_bar);
 
-        div()
-            .id(self.id.clone())
+        BaseProgress::new(self.id.clone())
+            .value(value)
+            .indeterminate(loading)
             .flex()
             .items_center()
             .justify_center()

@@ -442,6 +442,12 @@ impl HighlightTheme {
     }
 }
 
+impl gpui_base::input::HighlightStyleResolver for HighlightTheme {
+    fn style(&self, name: &str) -> Option<HighlightStyle> {
+        self.style.syntax.style(name)
+    }
+}
+
 // Language registry stub
 pub struct LanguageRegistry {
     languages: Mutex<HashMap<SharedString, LanguageConfig>>,

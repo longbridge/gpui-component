@@ -1,0 +1,433 @@
+use std::rc::Rc;
+use std::{cell::RefCell, ops::Range};
+
+use gpui::{Context, SharedString, Window};
+use ropey::Rope;
+
+use super::DisplayMap;
+use crate::input::{
+    DiagnosticSet, InputEdit, InputHighlighter, InputHighlighterFactory, RopeExt as _, TabSize,
+};
+
+pub(super) struct HighlighterUpdate<'a> {
+    pub(super) selected_range: &'a Range<usize>,
+    pub(super) old_text: &'a Rope,
+    pub(super) new_text: &'a Rope,
+    pub(super) change_text: &'a str,
+    pub(super) force: bool,
+}
+
+#[derive(Clone)]
+pub(crate) enum InputMode {
+    /// A plain text input mode.
+    PlainText {
+        multi_line: bool,
+        tab: TabSize,
+        rows: usize,
+    },
+    /// An auto grow input mode.
+    AutoGrow {
+        rows: usize,
+        min_rows: usize,
+        max_rows: usize,
+    },
+    /// A code editor input mode.
+    CodeEditor {
+        multi_line: bool,
+        tab: TabSize,
+        rows: usize,
+        /// Show line number
+        line_number: bool,
+        language: SharedString,
+        indent_guides: bool,
+        folding: bool,
+        highlighter: Rc<RefCell<Option<Box<dyn InputHighlighter>>>>,
+        highlighter_factory: Option<InputHighlighterFactory>,
+        diagnostics: DiagnosticSet,
+    },
+}
+
+impl Default for InputMode {
+    fn default() -> Self {
+        InputMode::plain_text()
+    }
+}
+
+#[allow(unused)]
+impl InputMode {
+    /// Create a plain input mode with default settings.
+    pub(super) fn plain_text() -> Self {
+        InputMode::PlainText {
+            multi_line: false,
+            tab: TabSize::default(),
+            rows: 1,
+        }
+    }
+
+    /// Create a code editor input mode with default settings.
+    pub(super) fn code_editor(language: impl Into<SharedString>) -> Self {
+        InputMode::CodeEditor {
+            rows: 2,
+            multi_line: true,
+            tab: TabSize::default(),
+            language: language.into(),
+            highlighter: Rc::new(RefCell::new(None)),
+            highlighter_factory: None,
+            line_number: true,
+            indent_guides: true,
+            folding: true,
+            diagnostics: DiagnosticSet::new(&Rope::new()),
+        }
+    }
+
+    /// Create an auto grow input mode with given min and max rows.
+    pub(super) fn auto_grow(min_rows: usize, max_rows: usize) -> Self {
+        InputMode::AutoGrow {
+            rows: min_rows,
+            min_rows,
+            max_rows,
+        }
+    }
+
+    pub(super) fn multi_line(mut self, multi_line: bool) -> Self {
+        match &mut self {
+            InputMode::PlainText { multi_line: ml, .. } => *ml = multi_line,
+            InputMode::CodeEditor { multi_line: ml, .. } => *ml = multi_line,
+            InputMode::AutoGrow { .. } => {}
+        }
+        self
+    }
+
+    #[inline]
+    pub(super) fn is_single_line(&self) -> bool {
+        !self.is_multi_line()
+    }
+
+    #[inline]
+    pub(super) fn is_code_editor(&self) -> bool {
+        matches!(self, InputMode::CodeEditor { .. })
+    }
+
+    /// Return true if the mode is code editor and `folding: true`, `multi_line: true`.
+    #[inline]
+    pub(crate) fn is_folding(&self) -> bool {
+        if cfg!(target_family = "wasm") {
+            return false;
+        }
+
+        matches!(
+            self,
+            InputMode::CodeEditor {
+                folding: true,
+                multi_line: true,
+                ..
+            }
+        )
+    }
+
+    #[inline]
+    pub(super) fn is_auto_grow(&self) -> bool {
+        matches!(self, InputMode::AutoGrow { .. })
+    }
+
+    #[inline]
+    pub(super) fn is_multi_line(&self) -> bool {
+        match self {
+            InputMode::PlainText { multi_line, .. } => *multi_line,
+            InputMode::CodeEditor { multi_line, .. } => *multi_line,
+            InputMode::AutoGrow { max_rows, .. } => *max_rows > 1,
+        }
+    }
+
+    pub(super) fn set_rows(&mut self, new_rows: usize) {
+        match self {
+            InputMode::PlainText { rows, .. } => {
+                *rows = new_rows;
+            }
+            InputMode::CodeEditor { rows, .. } => {
+                *rows = new_rows;
+            }
+            InputMode::AutoGrow {
+                rows,
+                min_rows,
+                max_rows,
+            } => {
+                *rows = new_rows.clamp(*min_rows, *max_rows);
+            }
+        }
+    }
+
+    pub(super) fn update_auto_grow(&mut self, display_map: &DisplayMap) {
+        if self.is_single_line() {
+            return;
+        }
+
+        let wrapped_lines = display_map.wrap_row_count();
+        self.set_rows(wrapped_lines);
+    }
+
+    /// At least 1 row be return.
+    pub(super) fn rows(&self) -> usize {
+        if !self.is_multi_line() {
+            return 1;
+        }
+
+        match self {
+            InputMode::PlainText { rows, .. } => *rows,
+            InputMode::CodeEditor { rows, .. } => *rows,
+            InputMode::AutoGrow { rows, .. } => *rows,
+        }
+        .max(1)
+    }
+
+    /// At least 1 row be return.
+    #[allow(unused)]
+    pub(super) fn min_rows(&self) -> usize {
+        match self {
+            InputMode::AutoGrow { min_rows, .. } => *min_rows,
+            _ => 1,
+        }
+        .max(1)
+    }
+
+    #[allow(unused)]
+    pub(super) fn max_rows(&self) -> usize {
+        if !self.is_multi_line() {
+            return 1;
+        }
+
+        match self {
+            InputMode::AutoGrow { max_rows, .. } => *max_rows,
+            _ => usize::MAX,
+        }
+    }
+
+    /// Return false if the mode is not [`InputMode::CodeEditor`].
+    #[inline]
+    pub(super) fn line_number(&self) -> bool {
+        match self {
+            InputMode::CodeEditor {
+                line_number,
+                multi_line,
+                ..
+            } => *line_number && *multi_line,
+            _ => false,
+        }
+    }
+
+    /// Update the syntax highlighter with new text.
+    ///
+    pub(super) fn update_highlighter(
+        &mut self,
+        update: HighlighterUpdate<'_>,
+        window: &mut Window,
+        cx: &mut Context<crate::input::InputState>,
+    ) {
+        match &self {
+            InputMode::CodeEditor {
+                language,
+                highlighter,
+                highlighter_factory,
+                folding,
+                ..
+            } => {
+                if !update.force && highlighter.borrow().is_some() {
+                    return;
+                }
+
+                let mut highlighter_ref = highlighter.borrow_mut();
+                if highlighter_ref.is_none() {
+                    let Some(factory) = highlighter_factory else {
+                        return;
+                    };
+                    *highlighter_ref = factory(language);
+                }
+
+                let Some(h) = highlighter_ref.as_mut() else {
+                    return;
+                };
+
+                let edit = replacement_input_edit(
+                    update.old_text,
+                    update.new_text,
+                    update.selected_range,
+                    update.change_text,
+                );
+                h.update(Some(edit), update.new_text, *folding, window, cx);
+            }
+            _ => {}
+        }
+    }
+
+    #[allow(unused)]
+    pub(super) fn diagnostics(&self) -> Option<&DiagnosticSet> {
+        match self {
+            InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
+            _ => None,
+        }
+    }
+
+    pub(super) fn diagnostics_mut(&mut self) -> Option<&mut DiagnosticSet> {
+        match self {
+            InputMode::CodeEditor { diagnostics, .. } => Some(diagnostics),
+            _ => None,
+        }
+    }
+
+    /// Get a reference to the highlighter (if available)
+    pub(super) fn highlighter(&self) -> Option<&Rc<RefCell<Option<Box<dyn InputHighlighter>>>>> {
+        match self {
+            InputMode::CodeEditor { highlighter, .. } => Some(highlighter),
+            _ => None,
+        }
+    }
+
+    pub(super) fn set_highlighter_factory(&mut self, factory: InputHighlighterFactory) {
+        if let InputMode::CodeEditor {
+            highlighter_factory,
+            highlighter,
+            ..
+        } = self
+        {
+            *highlighter_factory = Some(factory);
+            *highlighter.borrow_mut() = None;
+        }
+    }
+
+    pub(super) fn ensure_highlighter_factory(&mut self, factory: InputHighlighterFactory) {
+        if let InputMode::CodeEditor {
+            highlighter_factory,
+            ..
+        } = self
+        {
+            if highlighter_factory.is_none() {
+                *highlighter_factory = Some(factory);
+            }
+        }
+    }
+}
+
+/// Builds the tree-sitter edit for a text replacement.
+///
+/// Byte offsets and positions for `start`/`old_end` come from `old_text`;
+/// `new_end` byte/position come from the post-edit `text`.
+fn replacement_input_edit(
+    old_text: &Rope,
+    new_text: &Rope,
+    selected_range: &Range<usize>,
+    change_text: &str,
+) -> InputEdit {
+    let start_byte = selected_range.start.min(old_text.len());
+    let old_end_byte = selected_range.end.min(old_text.len()).max(start_byte);
+    let new_end_byte = (start_byte + change_text.len()).min(new_text.len());
+
+    InputEdit {
+        start_byte,
+        old_end_byte,
+        new_end_byte,
+        start_position: old_text.offset_to_point(start_byte),
+        old_end_position: old_text.offset_to_point(old_end_byte),
+        new_end_position: new_text.offset_to_point(new_end_byte),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ropey::Rope;
+
+    use super::replacement_input_edit;
+    use crate::input::{DiagnosticSet, Point, TabSize, mode::InputMode};
+
+    #[test]
+    fn test_replacement_input_edit_backspace_at_end_uses_old_range() {
+        let old_text = Rope::from_str("-=");
+        let text = Rope::from_str("-");
+        let edit = replacement_input_edit(&old_text, &text, &(1..2), "");
+
+        assert_eq!(edit.start_byte, 1);
+        assert_eq!(edit.old_end_byte, 2);
+        assert_eq!(edit.new_end_byte, 1);
+        assert_eq!(edit.start_position, Point::new(0, 1));
+        assert_eq!(edit.old_end_position, Point::new(0, 2));
+        assert_eq!(edit.new_end_position, Point::new(0, 1));
+    }
+
+    #[test]
+    fn test_code_editor() {
+        let mode = InputMode::code_editor("rust");
+        assert_eq!(mode.is_code_editor(), true);
+        assert_eq!(mode.is_multi_line(), true);
+        assert_eq!(mode.is_single_line(), false);
+        assert_eq!(mode.line_number(), true);
+        assert_eq!(mode.has_indent_guides(), true);
+        assert_eq!(mode.max_rows(), usize::MAX);
+        assert_eq!(mode.min_rows(), 1);
+        assert_eq!(mode.is_folding(), true);
+
+        let mode = InputMode::CodeEditor {
+            multi_line: false,
+            line_number: true,
+            indent_guides: true,
+            folding: true,
+            rows: 0,
+            tab: Default::default(),
+            language: "rust".into(),
+            highlighter: Default::default(),
+            highlighter_factory: None,
+            diagnostics: DiagnosticSet::new(&Rope::new()),
+        };
+        assert_eq!(mode.is_code_editor(), true);
+        assert_eq!(mode.is_multi_line(), false);
+        assert_eq!(mode.is_single_line(), true);
+        assert_eq!(mode.line_number(), false);
+        assert_eq!(mode.has_indent_guides(), false);
+        assert_eq!(mode.max_rows(), 1);
+        assert_eq!(mode.min_rows(), 1);
+        assert_eq!(mode.is_folding(), false);
+    }
+
+    #[test]
+    fn test_plain() {
+        let mode = InputMode::PlainText {
+            multi_line: true,
+            tab: TabSize::default(),
+            rows: 5,
+        };
+        assert_eq!(mode.is_code_editor(), false);
+        assert_eq!(mode.is_multi_line(), true);
+        assert_eq!(mode.is_single_line(), false);
+        assert_eq!(mode.line_number(), false);
+        assert_eq!(mode.rows(), 5);
+        assert_eq!(mode.max_rows(), usize::MAX);
+        assert_eq!(mode.min_rows(), 1);
+
+        let mode = InputMode::plain_text();
+        assert_eq!(mode.is_code_editor(), false);
+        assert_eq!(mode.is_multi_line(), false);
+        assert_eq!(mode.is_single_line(), true);
+        assert_eq!(mode.line_number(), false);
+        assert_eq!(mode.max_rows(), 1);
+        assert_eq!(mode.min_rows(), 1);
+    }
+
+    #[test]
+    fn test_auto_grow() {
+        let mut mode = InputMode::auto_grow(2, 5);
+        assert_eq!(mode.is_code_editor(), false);
+        assert_eq!(mode.is_multi_line(), true);
+        assert_eq!(mode.is_single_line(), false);
+        assert_eq!(mode.line_number(), false);
+        assert_eq!(mode.rows(), 2);
+        assert_eq!(mode.max_rows(), 5);
+        assert_eq!(mode.min_rows(), 2);
+
+        mode.set_rows(4);
+        assert_eq!(mode.rows(), 4);
+
+        mode.set_rows(1);
+        assert_eq!(mode.rows(), 2);
+
+        mode.set_rows(10);
+        assert_eq!(mode.rows(), 5);
+    }
+}

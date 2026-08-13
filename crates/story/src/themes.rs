@@ -1,5 +1,5 @@
 use gpui::{Action, App, SharedString};
-use gpui_component::{Theme, ThemeMode, ThemeRegistry, scroll::ScrollbarShow};
+use gpui_component::{Theme, ThemeMode, ThemeRegistry, scroll::ScrollbarMode};
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(target_family = "wasm"))]
@@ -13,14 +13,15 @@ const STATE_FILE: &str = "target/state.json";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct State {
     theme: SharedString,
-    scrollbar_show: Option<ScrollbarShow>,
+    #[serde(alias = "scrollbar_show")]
+    scrollbar_mode: Option<ScrollbarMode>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
             theme: "Default Light".into(),
-            scrollbar_show: None,
+            scrollbar_mode: None,
         }
     }
 }
@@ -63,8 +64,8 @@ pub fn init(cx: &mut App) {
         tracing::error!("Failed to watch themes directory: {}", err);
     }
 
-    if let Some(scrollbar_show) = state.scrollbar_show {
-        Theme::global_mut(cx).scrollbar_show = scrollbar_show;
+    if let Some(scrollbar_mode) = state.scrollbar_mode {
+        Theme::set_scrollbar_mode(scrollbar_mode, cx);
     }
     cx.refresh_windows();
 
@@ -72,7 +73,7 @@ pub fn init(cx: &mut App) {
     cx.observe_global::<Theme>(|cx| {
         let state = State {
             theme: cx.theme().theme_name().clone(),
-            scrollbar_show: Some(cx.theme().scrollbar_show),
+            scrollbar_mode: Some(cx.theme().scrollbar_mode),
         };
 
         if let Ok(json) = serde_json::to_string_pretty(&state) {

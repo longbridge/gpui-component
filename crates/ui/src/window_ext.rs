@@ -147,7 +147,7 @@ impl WindowExt for Window {
         F: Fn(AlertDialog, &mut Window, &mut App) -> AlertDialog + 'static,
     {
         self.open_dialog(cx, move |_, window, cx| {
-            build(AlertDialog::new(cx), window, cx).into_dialog(window, cx)
+            build(AlertDialog::new(cx), window, cx).build_surface(window, cx)
         })
     }
 

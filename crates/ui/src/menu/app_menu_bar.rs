@@ -1,5 +1,5 @@
 use crate::{
-    Selectable, Sizable,
+    InteractiveElementExt as _, Selectable, Sizable,
     actions::{Cancel, SelectLeft, SelectRight},
     button::{Button, ButtonVariants},
     global_state::GlobalState,
@@ -128,7 +128,7 @@ impl Render for AppMenuBar {
             .size_full()
             .gap_x_1()
             .overflow_x_scroll()
-            .restrict_scroll_to_axis()
+            .lock_scroll_axis()
             .children(self.menus.clone())
     }
 }

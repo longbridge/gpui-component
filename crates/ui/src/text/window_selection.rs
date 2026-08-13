@@ -6,7 +6,12 @@ use gpui::{
     MouseUpEvent, Pixels, Point, ScrollWheelEvent, Style, WeakEntity, Window,
 };
 
-use crate::{Root, global_state::GlobalState, scroll::AutoScroll, text::TextViewState};
+use crate::{
+    Root,
+    global_state::{GlobalState, UiGlobalState},
+    scroll::AutoScroll,
+    text::TextViewState,
+};
 
 /// The modal layer a selectable [`TextView`](crate::text::TextView) belongs to.
 ///
@@ -115,7 +120,7 @@ impl<E: Element> Element for SelectionScopeMarker<E> {
         // so bracketing the child paint is sufficient. Paint is depth-first and
         // single-threaded, so the bracket is exact even if the dialog layer is
         // later wrapped in a deferred draw.
-        GlobalState::global_mut(cx).push_selection_scope(self.scope);
+        UiGlobalState::global_mut(cx).push_selection_scope(self.scope);
         self.element.paint(
             id,
             inspector_id,
@@ -125,7 +130,7 @@ impl<E: Element> Element for SelectionScopeMarker<E> {
             window,
             cx,
         );
-        GlobalState::global_mut(cx).pop_selection_scope();
+        UiGlobalState::global_mut(cx).pop_selection_scope();
     }
 }
 
@@ -265,7 +270,7 @@ impl Root {
         let hitbox = hitbox.clone();
         // Capture the modal scope this view is painting under (set by the
         // `SelectionScopeMarker` wrapping a Dialog/Sheet content subtree).
-        let scope = GlobalState::global(cx).current_selection_scope();
+        let scope = UiGlobalState::global(cx).current_selection_scope();
         root.update(cx, |root, _| {
             // Prune dead views on each registration. This is O(N) per call (O(N²)
             // per frame across N selectable views), acceptable for typical view
@@ -818,14 +823,14 @@ impl Element for TextSelectionController {
                 // Reset the suppression flag at the start of every press, then
                 // clear the previous selection (browser behavior), even when an
                 // interactive component consumes the event in the bubble phase.
-                GlobalState::global_mut(cx).suppress_text_selection = false;
+                GlobalState::reset_text_selection_suppression(cx);
                 Root::update(window, cx, |root, _, cx| root.clear_text_selection(cx));
             } else if event.click_count == 1 {
                 // Reaching bubble phase means no component stopped propagation.
                 // Components that own their own press (Button, Input, etc.) set
                 // `suppress_text_selection` in their bubble handler; if set, the
                 // press is theirs and must not start a window selection.
-                if GlobalState::global(cx).suppress_text_selection {
+                if GlobalState::is_text_selection_suppressed(cx) {
                     return;
                 }
                 Root::update(window, cx, |root, window, cx| {

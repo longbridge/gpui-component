@@ -301,18 +301,6 @@ impl Render for AlertDialogStory {
                         },
                     )),
                 ))
-                .child(section("Overlay Closable").child(
-                    Button::new("overlay-closable").outline().label("Overlay Closable").on_click(cx.listener(
-                        |_, _, window, cx| {
-                            window.open_alert_dialog(cx, |alert, _, _| {
-                                alert
-                                    .title("Overlay Closable")
-                                    .description("Click outside this dialog or press ESC to close it.")
-                                    .overlay_closable(true)
-                            });
-                        },
-                    )),
-                ))
                 .child(section("Prevent Close").child(
                     Button::new("prevent-close").outline().label("Prevent Close").on_click(cx.listener(
                         |_, _, window, cx| {

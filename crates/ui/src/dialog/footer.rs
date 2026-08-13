@@ -3,11 +3,7 @@ use gpui::{
     StatefulInteractiveElement, StyleRefinement, Styled, Window, div, relative,
 };
 
-use crate::{
-    ActiveTheme as _, StyledExt as _,
-    dialog::{CancelDialog, ConfirmDialog},
-    h_flex,
-};
+use crate::{ActiveTheme as _, StyledExt as _, dialog::Confirm, h_flex};
 
 /// Footer section of a dialog, typically contains action buttons.
 ///
@@ -66,33 +62,28 @@ pub trait DialogFooterButton {
         false
     }
 }
-
 #[derive(IntoElement)]
 pub struct DialogClose {
-    children: Vec<AnyElement>,
+    base: gpui_base::DialogClose,
 }
 
 impl DialogClose {
     pub fn new() -> Self {
         Self {
-            children: Vec::new(),
+            base: gpui_base::DialogClose::new(),
         }
     }
 }
 
 impl ParentElement for DialogClose {
     fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
+        self.base.extend(elements);
     }
 }
 
 impl RenderOnce for DialogClose {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div()
-            .size_full()
-            .id("dialog-close")
-            .on_click(move |_, window, cx| window.dispatch_action(Box::new(CancelDialog), cx))
-            .children(self.children)
+        div().size_full().child(self.base)
     }
 }
 
@@ -120,7 +111,9 @@ impl RenderOnce for DialogAction {
         div()
             .size_full()
             .id("dialog-action")
-            .on_click(move |_, window, cx| window.dispatch_action(Box::new(ConfirmDialog), cx))
+            .on_click(move |_, window, cx| {
+                window.dispatch_action(Box::new(Confirm { secondary: false }), cx)
+            })
             .children(self.children)
     }
 }
