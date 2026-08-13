@@ -159,12 +159,6 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
         },
       ],
     },
-    {
-      component: "LanguageSwitcher",
-    },
-    {
-      component: "GitHubStar",
-    },
   ];
 }
 

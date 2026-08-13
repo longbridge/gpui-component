@@ -15,6 +15,10 @@ export default {
   Layout: () => {
     return h(DefaultTheme.Layout, null, {
       "doc-before": () => h(ComponentExample),
+      // Rendered after the navbar's own content so the docs toolbar ends with
+      // the same control group as the landing page: search, stars, language,
+      // appearance.
+      "nav-bar-content-after": () => [h(GitHubStar), h(LanguageSwitcher)],
     });
   },
   enhanceApp({ app, router, siteData }) {

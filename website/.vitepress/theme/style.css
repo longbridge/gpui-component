@@ -24,7 +24,11 @@
   --brand-line: color-mix(in srgb, var(--foreground) 24%, transparent);
 
   /* chart_1 … chart_5 — the only saturated colours in the system, reserved
-     for data the way the theme reserves them. */
+     for data the way the theme reserves them.
+
+     chart_2 (#3b82f6) doubles as the brand blue: it is the accent stroke in
+     the logo and the highlight in the capability diagrams. It is deliberately
+     the same value in both themes, so the mark never shifts hue. */
   --data-1: #93c5fd;
   --data-2: #3b82f6;
   --data-3: #2563eb;
@@ -39,8 +43,36 @@
      near-black would not read as a live signal. */
   --success: #22c55e;
 
+  /* Taken from src/light.theme.json ("macos-classic-light"), the same theme
+     shiki uses for the documentation. Hand-written snippets on the landing
+     page must not invent their own highlighting. */
+  /* macos-classic-light's editor.background is #f6f6f7; we run code surfaces
+     on pure white and rely on the border to separate them. */
+  --code-bg: #ffffff;
+  --code-fg: #000000;
+  --code-keyword: #0433ff;
+  --code-string: #036a07;
+  --code-comment: #9a9a9a;
+  --code-fn: #0000a2;
+  --code-type: #571ab7;
+
   /* Hairline grid used behind the hero and section dividers. */
   --grid-line: color-mix(in srgb, var(--foreground) 7%, transparent);
+
+  /* Scrollbars: literal rgba, because WebKit's scrollbar pseudo-elements do
+     not resolve color-mix() and fall back to opaque black. */
+  --scrollbar-track: rgb(10 10 10 / 4%);
+  --scrollbar-thumb: rgb(10 10 10 / 8%);
+  --scrollbar-thumb-hover: rgb(10 10 10 / 42%);
+
+  /* Shadows are always cast in black — never mixed from --foreground, which is
+     near-white in dark mode and would glow instead of shade. */
+  --shadow-hairline: 0 0 0 0.5px rgb(0 0 0 / 22%);
+  --shadow-raise: 0 1px 2px rgb(0 0 0 / 7%);
+  --shadow-window:
+    0 1px 1px rgb(0 0 0 / 4%), 0 10px 24px -8px rgb(0 0 0 / 14%),
+    0 40px 72px -28px rgb(0 0 0 / 20%);
+  --shadow-panel: 0 20px 50px -24px rgb(0 0 0 / 20%);
   --background: #ffffff;
   --foreground: #0a0a0a;
   --card: #ffffff;
@@ -95,6 +127,8 @@
   --vp-input-switch-bg-color: var(--secondary);
   --vp-input-border-color: var(--input);
   --vp-c-divider: var(--border);
+  --vp-code-block-bg: var(--code-bg);
+  --vp-sidebar-bg-color: var(--background);
   --vp-font-family-base:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
     "Segoe UI", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
@@ -147,13 +181,35 @@
   --brand-subtle: #262626;
   --brand-line: color-mix(in srgb, var(--foreground) 26%, transparent);
 
-  --data-1: #93c5fd;
-  --data-2: #3b82f6;
-  --data-3: #60a5fa;
-  --data-4: #1d4ed8;
-  --data-5: #1e40af;
+  --data-1: #e9a05a;
+  --data-2: #b54e05;
+  --data-3: #c9761f;
+  --data-4: #8f3d04;
+  --data-5: #6b2d03;
+
+  --selection: #c2610a;
 
   --grid-line: color-mix(in srgb, var(--foreground) 8%, transparent);
+
+  --scrollbar-track: rgb(250 250 250 / 8%);
+  --scrollbar-thumb: rgb(250 250 250 / 22%);
+  --scrollbar-thumb-hover: rgb(250 250 250 / 40%);
+
+  --shadow-hairline: 0 0 0 0.5px rgb(0 0 0 / 70%);
+  --shadow-raise: 0 1px 2px rgb(0 0 0 / 45%);
+  --shadow-window:
+    0 1px 1px rgb(0 0 0 / 40%), 0 10px 24px -8px rgb(0 0 0 / 55%),
+    0 40px 72px -28px rgb(0 0 0 / 70%);
+  --shadow-panel: 0 20px 50px -24px rgb(0 0 0 / 65%);
+
+  /* src/dark.theme.json ("macos-classic-dark") */
+  --code-bg: #151515;
+  --code-fg: #caccca;
+  --code-keyword: #c28b12;
+  --code-string: #76ba53;
+  --code-comment: #9e9e9e;
+  --code-fn: #fdd888;
+  --code-type: #b54e05;
 }
 
 html {
@@ -189,6 +245,43 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   background: color-mix(in srgb, var(--selection) 38%, transparent);
 }
 
+/* ---- Scrollbars ----
+   WebKit/Blink gets the exact geometry through the pseudo-elements. The
+   standard properties are scoped to Firefox on purpose: setting
+   `scrollbar-color` in Chromium makes it drop the pseudo-elements entirely and
+   fall back to its own thin bar. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@supports (scrollbar-width: thin) and (not selector(::-webkit-scrollbar)) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--vp-c-brand-1);
   outline-offset: 2px;
@@ -199,8 +292,7 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     @apply p-1 bg-(--popover);
     border: 1px solid var(--border);
     border-radius: var(--radius-card);
-    box-shadow: 0 16px 48px
-      color-mix(in srgb, var(--foreground) 10%, transparent);
+    box-shadow: var(--shadow-panel);
 
     .link {
       @apply text-sm py-1.5;
@@ -209,14 +301,47 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   }
 
   .DocSearch-Button {
-    @apply py-0 px-2.5 h-8 lg:w-48 xl:w-56;
+    @apply py-0 pr-1 pl-2.5 h-8 lg:w-44 xl:w-52;
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
-    background: transparent;
+    background: var(--background);
+    transition: border-color 140ms ease;
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
+      background: var(--background);
+    }
+
+    .DocSearch-Button-Placeholder {
+      @apply text-[0.8125rem];
+      color: var(--muted-foreground);
+    }
+
+    .DocSearch-Search-Icon {
+      width: 0.9rem;
+      height: 0.9rem;
+      color: var(--muted-foreground);
+    }
 
     .DocSearch-Button-Keys {
-      @apply p-1;
+      @apply p-0 gap-0;
+      min-width: auto;
+      padding: 0.1rem 0.3rem;
+      border: 1px solid var(--border);
       border-radius: 0.25rem;
+      background: var(--secondary);
+    }
+
+    .DocSearch-Button-Key {
+      width: auto;
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      color: var(--muted-foreground);
+      font: 0.68rem/1.4 var(--vp-font-family-mono);
     }
   }
 
@@ -238,6 +363,79 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
 
   .VPNavBar .container {
     max-width: none;
+  }
+
+  /* The docs navbar is rearranged into the landing page's toolbar: brand, then
+     the sections — with every control collected on the right. Reusing
+     VitePress's own navbar keeps the real search working. */
+  .VPNavBar .content-body {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: transparent;
+  }
+
+  .VPNavBarMenu {
+    order: -1;
+    margin-right: auto;
+    padding-left: 0.25rem;
+  }
+
+  /* VitePress lets the search wrapper grow to fill the bar, which left a wide
+     gap between it and the controls. */
+  .VPNavBarSearch {
+    flex: 0 0 auto;
+    padding-left: 0;
+  }
+
+  .VPNavBarMenu {
+    display: flex;
+    align-items: center;
+  }
+
+  .VPNavBarMenuLink,
+  .VPNavBarMenuGroup,
+  .VPNavBarMenuGroup .button {
+    height: 2rem;
+    line-height: 2rem;
+  }
+
+  .VPNavBarMenuLink,
+  .VPNavBarMenuGroup .button {
+    padding: 0 0.6rem;
+    border-radius: var(--radius-control);
+    transition:
+      background 140ms ease,
+      color 140ms ease;
+  }
+
+  .VPNavBarMenuLink:hover,
+  .VPNavBarMenuGroup .button:hover {
+    background: var(--secondary);
+  }
+
+  /* Search, stars, language, then appearance — the landing page's order. */
+  .VPNavBarSearch {
+    order: 1;
+  }
+
+  .github-star-button {
+    order: 2;
+  }
+
+  .LanguageSwitcher {
+    order: 3;
+  }
+
+  .VPNavBarAppearance {
+    order: 4;
+    margin-left: 0.3rem;
+    padding-left: 0.45rem;
+    border-left: 1px solid var(--border);
+  }
+
+  .VPNavBarExtra {
+    order: 5;
   }
 
   .VPNavBarTitle .title {
@@ -275,10 +473,32 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     background: var(--sidebar);
   }
 
+  /* The sidebar is a long list, so it shows a persistent rail: a faint track
+     the full height, with a darker thumb riding in it. */
   .VPSidebar {
-    @apply border-r border-(--border) bg-(--background);
-    background: var(--sidebar);
-    scrollbar-width: thin;
+    scrollbar-gutter: stable;
+  }
+
+  .VPSidebar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .VPSidebar::-webkit-scrollbar-track {
+    margin-top: calc(var(--vp-nav-height) + 2rem);
+    margin-bottom: 2rem;
+    border-radius: 999px;
+    background: var(--scrollbar-track);
+  }
+
+  .VPSidebar::-webkit-scrollbar-thumb {
+    min-height: 3rem;
+    border: 0;
+    border-radius: 999px;
+    background: var(--scrollbar-thumb);
+  }
+
+  .VPSidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
   }
 
   .VPSidebarItem .text {
@@ -309,16 +529,57 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     background: var(--vp-c-brand-1);
   }
 
+  /* The outline keeps VitePress's single rail (the `.content` border) and only
+     restyles it; the active marker rides on top of that same line. */
+  .VPDocAsideOutline .content {
+    border-left: 1px solid var(--border);
+    padding-left: 0.9rem;
+  }
+
+  .VPDocAsideOutline .outline-marker {
+    left: -1px;
+    width: 1px;
+    border-radius: 0;
+    background: var(--foreground);
+    opacity: 1;
+    transition:
+      top 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 160ms ease;
+  }
+
   .VPDocAsideOutline .outline-title {
-    color: var(--foreground);
-    font: 650 0.7rem/1 var(--vp-font-family-mono);
-    letter-spacing: 0.08em;
+    margin-bottom: 0.6rem;
+    color: var(--muted-foreground);
+    font: 620 0.66rem/1 var(--vp-font-family-mono);
+    letter-spacing: 0.11em;
     text-transform: uppercase;
   }
 
+  .VPDocAsideOutline .root {
+    padding-left: 0;
+  }
+
   .VPDocAsideOutline .outline-link {
-    font-size: 0.76rem;
-    line-height: 1.45;
+    padding: 0.22rem 0;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    font-weight: 450;
+    line-height: 1.5;
+    transition: color 140ms ease;
+  }
+
+  .VPDocAsideOutline .outline-link:hover {
+    color: var(--foreground);
+  }
+
+  .VPDocAsideOutline .outline-link.active {
+    color: var(--foreground);
+    font-weight: 560;
+  }
+
+  .VPDocAsideOutline .nested .outline-link {
+    padding-left: 0.75rem;
+    font-size: 0.78rem;
   }
 
   .VPNavBarTitle {
@@ -354,6 +615,10 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
 .vp-doc {
   color: var(--vp-c-text-1);
 
+  h1 {
+    margin-bottom: 1rem;
+  }
+
   > h1:first-child {
     margin-bottom: 0.85rem;
     font-size: clamp(2rem, 3.6vw, 2.7rem);
@@ -387,9 +652,53 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     letter-spacing: -0.012em;
   }
 
+  /* A comfortable measure for prose. Code blocks, tables and the example
+     window stay full width, which is the usual docs compromise. */
+  p,
+  ul,
+  ol,
+  blockquote {
+    max-width: 46rem;
+  }
+
   p,
   li {
     line-height: 1.75;
+  }
+
+  ul,
+  ol {
+    padding-left: 1.2rem;
+  }
+
+  li::marker {
+    color: var(--muted-foreground);
+  }
+
+  li + li {
+    margin-top: 0.25rem;
+  }
+
+  /* Markdown wraps loose list items in <p>, which doubled their spacing. */
+  li > p {
+    margin: 0;
+  }
+
+  li > ul,
+  li > ol {
+    margin: 0.25rem 0 0;
+  }
+
+  h2 + p,
+  h3 + p,
+  h2 + ul,
+  h3 + ul {
+    margin-top: 0.9rem;
+  }
+
+  /* Without an intro paragraph, the first section sat too far from the title. */
+  > h1:first-child + h2 {
+    margin-top: 2.5rem;
   }
 
   /* The brand colour is near-black, so links are distinguished by a rule
@@ -462,18 +771,27 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   }
 
   [class*="language-"] pre {
-    @apply py-5 text-sm font-mono;
+    @apply py-4 text-sm font-mono;
+    line-height: 1.68;
     margin: 0;
     border: 0;
     border-radius: 0;
 
-    .dark & {
-      background-color: #0f0f0f !important;
-    }
+    background-color: var(--code-bg) !important;
   }
 
   [class*="language-"] pre code {
-    @apply px-5;
+    @apply px-4;
+  }
+
+  /* API tables read as reference material: identifiers in mono, one hairline
+     per row, no vertical rules. */
+  td:first-child code {
+    border: 0;
+    background: transparent;
+    color: var(--foreground);
+    font-weight: 500;
+    padding-inline: 0;
   }
 
   [class*="language-"] > span.lang {
@@ -589,11 +907,7 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   overflow: hidden;
   border-radius: 0.75rem;
   background: var(--background);
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--foreground) 26%, transparent),
-    0 1px 1px color-mix(in srgb, var(--foreground) 4%, transparent),
-    0 10px 24px -8px color-mix(in srgb, var(--foreground) 16%, transparent),
-    0 40px 72px -28px color-mix(in srgb, var(--foreground) 26%, transparent);
+  box-shadow: var(--shadow-hairline), var(--shadow-window);
 }
 
 /* The inner highlight is what makes a macOS window look lit from above. */
@@ -618,7 +932,7 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   gap: 0.75rem;
   height: 2.35rem;
   padding: 0 0.85rem;
-  border-bottom: 1px solid var(--border);
+  box-shadow: inset 0 -1px 0 var(--border);
   background: linear-gradient(
     to bottom,
     color-mix(in srgb, var(--sidebar) 55%, var(--background)),

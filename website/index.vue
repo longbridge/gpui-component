@@ -5,17 +5,34 @@
                 <img :src="isDark ? darkLogoHref : logoHref" alt="" />
                 <span>GPUI Component</span>
             </a>
-            <span class="home-nav__rule" aria-hidden="true"></span>
             <nav aria-label="Primary navigation">
-                <a :href="docsHref">{{ copy.docsNav }}</a>
-                <a :href="componentsHref">{{ copy.componentsNav }}</a>
-                <a :href="baseHref">GPUI Base</a>
+                <template v-for="item in navItems" :key="item.text">
+                    <a
+                        v-if="item.link"
+                        :href="item.href"
+                        :target="item.external ? '_blank' : undefined"
+                        >{{ item.text }}</a
+                    >
+                    <span v-else class="home-nav__group">
+                        <button type="button">
+                            {{ item.text }} <ChevronDown />
+                        </button>
+                        <span class="home-nav__menu">
+                            <a
+                                v-for="child in item.items"
+                                :key="child.text"
+                                :href="child.href"
+                                :target="child.external ? '_blank' : undefined"
+                                >{{ child.text }}</a
+                            >
+                        </span>
+                    </span>
+                </template>
             </nav>
             <div class="home-nav__actions">
                 <a :href="searchHref" class="home-nav__search">
                     <Search />
                     <span>{{ copy.searchShort }}</span>
-                    <kbd>⌘K</kbd>
                 </a>
                 <a
                     href="https://github.com/longbridge/gpui-component"
@@ -104,9 +121,7 @@
                     <pre><code><span class="c-kw">use</span> gpui_component::{<span class="c-mod">button</span>::*, *};
 
 <span class="c-kw">impl</span> <span class="c-type">Render</span> <span class="c-kw">for</span> <span class="c-type">HelloWorld</span> {
-    <span class="c-kw">fn</span> <span class="c-fn">render</span>(&<span class="c-kw">mut</span> self, _: &<span class="c-kw">mut</span> <span class="c-type">Window</span>, cx: &<span class="c-kw">mut</span> <span class="c-type">Context</span>&lt;Self&gt;)
-        -&gt; <span class="c-kw">impl</span> <span class="c-type">IntoElement</span>
-    {
+    <span class="c-kw">fn</span> <span class="c-fn">render</span>(&<span class="c-kw">mut</span> self, _: &<span class="c-kw">mut</span> <span class="c-type">Window</span>, cx: &<span class="c-kw">mut</span> <span class="c-type">Context</span>&lt;Self&gt;) -&gt; <span class="c-kw">impl</span> <span class="c-type">IntoElement</span> {
         <span class="c-fn">div</span>()
             .<span class="c-fn">v_flex</span>()
             .<span class="c-fn">gap_2</span>()
@@ -209,22 +224,12 @@
                             aria-hidden="true"
                         >
                             <template v-if="cap.icon === 'perf'">
-                                <svg
-                                    viewBox="0 0 240 60"
-                                    preserveAspectRatio="none"
-                                >
-                                    <polyline
-                                        class="cap__spark"
-                                        points="0,14 20,10 40,15 60,11 80,9 100,14 120,10 140,13 160,9 180,14 200,10 220,13 240,9"
-                                    />
-                                    <line
-                                        class="cap__baseline"
-                                        x1="0"
-                                        y1="42"
-                                        x2="240"
-                                        y2="42"
-                                    />
-                                </svg>
+                                <span class="cap__budget" />
+                                <u
+                                    v-for="(frame, i) in frames"
+                                    :key="i"
+                                    :style="{ height: `${frame}%` }"
+                                />
                             </template>
                             <template v-else-if="cap.icon === 'table'">
                                 <i v-for="n in 5" :key="n"><b /><b /><b /></i>
@@ -233,15 +238,21 @@
                                 <i v-for="w in [86, 68, 92, 74, 60]" :key="w">
                                     <b :style="{ width: `${w}%` }" />
                                 </i>
-                                <span class="cap__scroll" />
+                                <span class="cap__track">
+                                    <span class="cap__thumb" />
+                                </span>
                             </template>
                             <template v-else-if="cap.icon === 'editor'">
                                 <i
-                                    v-for="line in editorLines"
-                                    :key="line.join()"
+                                    v-for="(line, row) in editorLines"
+                                    :key="row"
+                                    :style="{
+                                        paddingLeft: `${line.indent * 0.6}rem`,
+                                    }"
                                 >
+                                    <s class="cap__gutter" />
                                     <b
-                                        v-for="(w, i) in line"
+                                        v-for="(w, i) in line.tokens"
                                         :key="i"
                                         :style="{ width: `${w}rem` }"
                                     />
@@ -275,7 +286,8 @@
                         </div>
                         <h3>{{ copy.shipTitle }}</h3>
                         <p>{{ copy.shipDescription }}</p>
-                        <pre><code><span class="c-type">Button</span>::new(<span class="c-str">"save"</span>)
+                        <pre><code><span class="c-type">Button</span>::<span class="c-fn">new</span>(<span class="c-str">"save"</span>)
+    .<span class="c-fn">primary</span>()
     .<span class="c-fn">label</span>(<span class="c-str">"Save changes"</span>)
     .<span class="c-fn">on_click</span>(cx.<span class="c-fn">listener</span>(Self::save))</code></pre>
                         <ul>
@@ -295,9 +307,8 @@
                         </div>
                         <h3>{{ copy.ownTitle }}</h3>
                         <p>{{ copy.ownDescription }}</p>
-                        <pre><code><span class="c-type">Button</span>::new(<span class="c-str">"save"</span>)
+                        <pre><code><span class="c-type">Button</span>::<span class="c-fn">new</span>(<span class="c-str">"save"</span>)
     .<span class="c-fn">on_click</span>(cx.<span class="c-fn">listener</span>(Self::save))
-    <span class="c-cmt">// presentation is entirely yours</span>
     .<span class="c-fn">rounded_md</span>()
     .<span class="c-fn">child</span>(<span class="c-str">"Save changes"</span>)</code></pre>
                         <ul>
@@ -316,17 +327,21 @@
         <section class="band band--principle">
             <div class="principle__grid" aria-hidden="true"></div>
             <div class="band__inner principle">
-                <span class="section-kicker">{{ copy.principleKicker }}</span>
-                <blockquote>
-                    <span>{{ copy.principleLead }}</span>
-                    <span class="principle__accent">{{
-                        copy.principleTail
-                    }}</span>
-                </blockquote>
-                <p>{{ copy.principleDetail }}</p>
-                <a :href="baseHref" class="btn btn--primary"
-                    >{{ copy.baseAction }} <ArrowRight
-                /></a>
+                <div class="principle__quote">
+                    <span class="section-kicker">{{ copy.principleKicker }}</span>
+                    <blockquote>
+                        <span>{{ copy.principleLead }}</span>
+                        <span class="principle__accent">{{
+                            copy.principleTail
+                        }}</span>
+                    </blockquote>
+                </div>
+                <div class="principle__aside">
+                    <p>{{ copy.principleDetail }}</p>
+                    <a :href="baseHref" class="btn btn--primary"
+                        >{{ copy.baseAction }} <ArrowRight
+                    /></a>
+                </div>
             </div>
         </section>
     </main>
@@ -369,6 +384,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useData, withBase } from "vitepress";
 import {
     ArrowRight,
+    ChevronDown,
     Blocks,
     Check,
     Copy,
@@ -389,7 +405,27 @@ import {
 } from "lucide-vue-next";
 import { data as repo } from "./data/repo.data";
 
-const { isDark, localeIndex } = useData();
+const { isDark, localeIndex, theme } = useData();
+
+// The navbar renders the very same `nav` array that config.mts feeds to the
+// docs navbar, so the two can never drift apart.
+const isExternal = (link) => /^https?:\/\//.test(link);
+const resolve = (link) => (isExternal(link) ? link : withBase(link));
+const navItems = computed(() =>
+    (theme.value.nav ?? [])
+        .filter((item) => item.text)
+        .map((item) => ({
+            text: item.text,
+            link: item.link,
+            href: item.link ? resolve(item.link) : undefined,
+            external: item.link ? isExternal(item.link) : false,
+            items: (item.items ?? []).map((child) => ({
+                text: child.text,
+                href: resolve(child.link),
+                external: isExternal(child.link),
+            })),
+        })),
+);
 const isZh = computed(() => localeIndex.value === "zh-CN");
 const localePrefix = computed(() => (isZh.value ? "/zh-CN" : ""));
 
@@ -417,13 +453,23 @@ const contributorsHref = computed(() =>
 const skillsHref = computed(() => withBase(`${localePrefix.value}/skills`));
 const llmsHref = computed(() => withBase("/llms-full.txt"));
 
-// Token widths (rem) per line — an indent pattern that reads as code without
-// pretending to be a specific snippet.
+// Indent depth and token widths (rem) per line — an indent pattern that reads
+// as code without pretending to be a specific snippet.
 const editorLines = [
-    [0.5, 1.6, 0.9],
-    [1.1, 2.2],
-    [1.1, 1.4, 0.7],
-    [0.5, 1.2],
+    { indent: 0, tokens: [0.45, 1.5, 0.75] },
+    { indent: 0, tokens: [0.9, 1.15, 1.8] },
+    { indent: 1, tokens: [1.2, 0.8, 1.35] },
+    { indent: 2, tokens: [0.7, 1.55] },
+    { indent: 2, tokens: [1.05, 0.65, 0.9] },
+    { indent: 1, tokens: [0.55, 1.25] },
+    { indent: 0, tokens: [0.4] },
+];
+
+// A dense frame-time trace: every bar is one frame, and the point is that they
+// all clear the budget line.
+const frames = [
+    72, 78, 74, 81, 76, 84, 79, 73, 88, 77, 82, 75, 86, 80, 71, 83, 76, 90, 74,
+    79, 85, 72, 81, 77, 87, 75, 80, 73, 84, 78,
 ];
 
 const capIcons = {
@@ -436,15 +482,24 @@ const capIcons = {
 };
 
 // The crate is not published yet, so the real dependency is a git one — the
-// hero must not suggest a `cargo add` that would fail.
+// hero must not suggest a `cargo add` that would fail. The line on screen is
+// the headline dependency; the clipboard gets the full block from the Getting
+// Started guide, because gpui-component alone does not build.
 const installCommand =
     'gpui-component = { git = "https://github.com/longbridge/gpui-component" }';
+const installSnippet = [
+    "[dependencies]",
+    'gpui = { git = "https://github.com/zed-industries/zed" }',
+    'gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }',
+    'gpui-component = { git = "https://github.com/longbridge/gpui-component" }',
+    'gpui-component-assets = { git = "https://github.com/longbridge/gpui-component" }',
+].join("\n");
 
 const copied = ref(false);
 let copyTimer;
 const copyInstall = async () => {
     try {
-        await navigator.clipboard.writeText(installCommand);
+        await navigator.clipboard.writeText(installSnippet);
         copied.value = true;
         clearTimeout(copyTimer);
         copyTimer = setTimeout(() => (copied.value = false), 1600);
@@ -505,8 +560,6 @@ onBeforeUnmount(() => {
 const copy = computed(() =>
     isZh.value
         ? {
-              docsNav: "文档",
-              componentsNav: "组件",
               searchNav: "搜索文档",
               searchShort: "搜索",
               themeNav: "切换主题",
@@ -607,8 +660,6 @@ const copy = computed(() =>
               and: "与",
           }
         : {
-              docsNav: "Docs",
-              componentsNav: "Components",
               searchNav: "Search documentation",
               searchShort: "Search",
               themeNav: "Toggle color theme",
@@ -763,10 +814,18 @@ const copy = computed(() =>
 .home-nav__inner {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
+    gap: 1.9rem;
     width: min(100% - 3rem, var(--page, 1280px));
     height: 100%;
     margin-inline: auto;
+}
+
+.home-nav__rule {
+    display: block;
+    flex-shrink: 0;
+    width: 1px;
+    height: 1.1rem;
+    background: var(--border);
 }
 
 .home-nav__rule--tight {
@@ -797,9 +856,12 @@ const copy = computed(() =>
 }
 
 .home-nav nav a {
-    padding: 0.4rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    height: 2rem;
+    padding: 0 0.6rem;
     border-radius: var(--radius-control);
-    color: var(--muted-foreground);
+    color: var(--foreground);
     font-size: 0.8125rem;
     font-weight: 500;
     text-decoration: none;
@@ -809,8 +871,65 @@ const copy = computed(() =>
 
     &:hover {
         background: var(--secondary);
-        color: var(--foreground);
     }
+}
+
+.home-nav__group {
+    position: relative;
+
+    > button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        height: 2rem;
+        padding: 0 0.6rem;
+        border-radius: var(--radius-control);
+        color: var(--foreground);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 140ms ease;
+
+        svg {
+            width: 0.8rem;
+            height: 0.8rem;
+            opacity: 0.55;
+        }
+    }
+
+    &:hover > button {
+        background: var(--secondary);
+    }
+}
+
+.home-nav__menu {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 0;
+    display: grid;
+    min-width: 11rem;
+    padding: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--popover);
+    box-shadow: var(--shadow-panel);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+        opacity 140ms ease,
+        visibility 140ms ease;
+
+    a {
+        height: auto;
+        padding: 0.4rem 0.55rem;
+        font-weight: 450;
+        white-space: nowrap;
+    }
+}
+
+.home-nav__group:hover .home-nav__menu {
+    opacity: 1;
+    visibility: visible;
 }
 
 .home-nav__actions {
@@ -911,7 +1030,7 @@ const copy = computed(() =>
     font-size: 0.875rem;
     font-weight: 600;
     text-decoration: none !important;
-    box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 6%, transparent);
+    box-shadow: var(--shadow-raise);
     transition:
         background 150ms ease,
         border-color 150ms ease,
@@ -934,9 +1053,7 @@ const copy = computed(() =>
     border-color: var(--brand);
     background: var(--brand);
     color: var(--brand-contrast) !important;
-    box-shadow:
-        0 1px 2px color-mix(in srgb, var(--brand) 30%, transparent),
-        0 8px 24px color-mix(in srgb, var(--brand) 22%, transparent);
+    box-shadow: var(--shadow-raise);
 
     &:hover {
         border-color: var(--brand-hover);
@@ -1003,7 +1120,7 @@ html[lang^="zh"] .section-kicker {
 .hero__inner {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    grid-template-columns: minmax(0, 0.93fr) minmax(0, 1.07fr);
     align-items: center;
     gap: clamp(2rem, 4vw, 3.5rem);
     width: min(100% - 3rem, var(--page));
@@ -1039,7 +1156,6 @@ html[lang^="zh"] .section-kicker {
     position: relative;
     width: 0.4rem;
     height: 0.4rem;
-    margin: 0 6px;
     border-radius: 50%;
     background: var(--success);
 
@@ -1053,13 +1169,9 @@ html[lang^="zh"] .section-kicker {
     }
 }
 
-.hero {
-    margin-bottom: 2.5rem;
-}
-
 .hero h1 {
     max-width: 18ch;
-    margin: 1.25rem 0;
+    margin: 1.25rem 0 0;
     font-size: clamp(2.2rem, 4.3vw, 3.6rem);
     font-weight: 660;
     letter-spacing: -0.042em;
@@ -1067,7 +1179,7 @@ html[lang^="zh"] .section-kicker {
 }
 
 .hero__lead {
-    max-width: 32rem;
+    max-width: min(32rem, 100%);
     margin: 1.25rem 0;
     color: var(--muted-foreground);
     font-size: 1.03rem;
@@ -1078,6 +1190,7 @@ html[lang^="zh"] .section-kicker {
     display: flex;
     flex-wrap: wrap;
     gap: 0.65rem;
+    margin-top: 1.5rem;
 }
 
 .hero__install {
@@ -1085,13 +1198,14 @@ html[lang^="zh"] .section-kicker {
     align-items: center;
     gap: 0.6rem;
     max-width: 100%;
-    margin-top: 1.35rem;
+    margin-top: 1.25rem;
     padding: 0.4rem 0.4rem 0.4rem 0.6rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-control);
     background: var(--sidebar);
 
     code {
+        min-width: 0;
         overflow-x: auto;
         color: var(--foreground);
         font: 0.73rem/1.6 var(--vp-font-family-mono);
@@ -1138,22 +1252,15 @@ html[lang^="zh"] .section-kicker {
         margin: 0;
         padding: 1.05rem 1.25rem 1.25rem;
         overflow-x: auto;
-        background: var(--sidebar);
-        font: 0.75rem/1.68 var(--vp-font-family-mono);
+        background: var(--code-bg);
+        font: 0.72rem/1.7 var(--vp-font-family-mono);
         scrollbar-width: thin;
         tab-size: 4;
     }
 
     code {
-        color: var(--foreground);
+        color: var(--code-fg);
     }
-}
-
-.c-kw {
-    color: var(--data-3);
-}
-.c-mod {
-    color: var(--muted-foreground);
 }
 
 .hero__install-label {
@@ -1246,8 +1353,7 @@ html[lang^="zh"] .section-kicker {
         &.is-active {
             border-color: var(--border);
             background: var(--background);
-            box-shadow: 0 1px 2px
-                color-mix(in srgb, var(--foreground) 8%, transparent);
+            box-shadow: var(--shadow-raise);
             color: var(--foreground);
             font-weight: 560;
         }
@@ -1360,7 +1466,7 @@ html[lang^="zh"] .section-kicker {
     display: flex;
     align-items: stretch;
     gap: 0.32rem;
-    height: 5.5rem;
+    height: 6rem;
     margin-top: 1.1rem;
     padding: 0.75rem;
     overflow: hidden;
@@ -1411,54 +1517,83 @@ html[lang^="zh"] .section-kicker {
     }
 }
 
-.cap__preview--list i:nth-child(2) b {
-    background: var(--data-2);
+/* A thumb on its own looked like a rendering glitch, so it sits in a track and
+   the rows leave room for it. */
+.cap__preview--list {
+    padding-right: 1.4rem;
+
+    i:nth-child(2) b {
+        background: var(--data-2);
+    }
 }
 
-/* The scrollbar is what makes a virtualized list legible as one. */
-.cap__scroll {
+.cap__track {
     position: absolute;
     top: 0.75rem;
-    right: 0.75rem;
-    width: 0.18rem;
+    right: 0.7rem;
+    bottom: 0.75rem;
+    width: 0.28rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.cap__thumb {
+    display: block;
+    width: 100%;
     height: 42%;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--foreground) 26%, transparent);
+    background: color-mix(in srgb, var(--foreground) 30%, transparent);
 }
 
 .cap__preview--editor {
-    i:nth-child(2),
-    i:nth-child(3) {
-        padding-left: 0.75rem;
-    }
+    gap: 0.3rem;
+
     i:nth-child(1) b:nth-child(2) {
         background: var(--data-2);
     }
     i:nth-child(3) b:last-child {
         background: color-mix(in srgb, var(--success) 60%, transparent);
     }
+    i:nth-child(5) b:first-child {
+        background: color-mix(in srgb, var(--data-2) 55%, transparent);
+    }
 }
 
-/* A frame-time trace that stays flat — the point is the absence of spikes. */
-.cap__preview--perf svg {
-    display: block;
-    width: 100%;
-    height: 100%;
+/* Line-number gutter. */
+.cap__gutter {
+    flex-shrink: 0;
+    width: 0.5rem;
+    height: 0.28rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--foreground) 12%, transparent);
+    text-decoration: none;
 }
 
-.cap__spark {
-    fill: none;
-    stroke: var(--data-2);
-    stroke-linejoin: round;
-    stroke-width: 1.5;
-    vector-effect: non-scaling-stroke;
+/* A dense frame-time trace. Thirty bars, all above the budget line — the point
+   is the absence of spikes, which a single flat line failed to convey. */
+.cap__preview--perf {
+    align-items: flex-end;
+    gap: 0.1rem;
+
+    u {
+        flex: 1;
+        min-width: 0;
+        border-radius: 0.08rem 0.08rem 0 0;
+        background: linear-gradient(
+            to top,
+            color-mix(in srgb, var(--data-2) 35%, transparent),
+            var(--data-2)
+        );
+    }
 }
 
-.cap__baseline {
-    stroke: var(--border);
-    stroke-dasharray: 3 3;
-    stroke-width: 1;
-    vector-effect: non-scaling-stroke;
+.cap__budget {
+    position: absolute;
+    top: 40%;
+    right: 0.75rem;
+    left: 0.75rem;
+    border-top: 1px dashed
+        color-mix(in srgb, var(--foreground) 28%, transparent);
 }
 
 .cap__preview--dock {
@@ -1529,8 +1664,7 @@ html[lang^="zh"] .section-kicker {
 
     &:hover {
         border-color: color-mix(in srgb, var(--foreground) 20%, var(--border));
-        box-shadow: 0 20px 50px -24px
-            color-mix(in srgb, var(--foreground) 20%, transparent);
+        box-shadow: var(--shadow-panel);
     }
 
     h3 {
@@ -1540,6 +1674,7 @@ html[lang^="zh"] .section-kicker {
         letter-spacing: -0.03em;
     }
     p {
+        min-height: 3.05rem;
         margin: 0.65rem 0 0;
         color: var(--muted-foreground);
         font-size: 0.92rem;
@@ -1552,7 +1687,8 @@ html[lang^="zh"] .section-kicker {
         overflow-x: auto;
         border: 1px solid var(--border);
         border-radius: var(--radius-card);
-        background: var(--sidebar);
+        background: var(--code-bg);
+        color: var(--code-fg);
         font: 0.78rem/1.75 var(--vp-font-family-mono);
     }
 
@@ -1615,31 +1751,40 @@ html[lang^="zh"] .section-kicker {
 }
 
 .c-type {
-    color: var(--data-3);
+    color: var(--code-type);
 }
 .c-fn {
-    color: var(--foreground);
-    font-weight: 560;
+    color: var(--code-fn);
 }
 .c-str {
-    color: var(--success);
+    color: var(--code-string);
 }
 .c-cmt {
-    color: var(--muted-foreground);
+    color: var(--code-comment);
+}
+.c-kw {
+    color: var(--code-keyword);
+}
+.c-mod {
+    color: var(--code-fg);
 }
 
 /* ------------------------------------------------------------- principle */
 
 .principle {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    align-items: end;
+    gap: clamp(2rem, 5vw, 4rem);
+
     blockquote {
-        max-width: 34rem;
         margin: 1.1rem 0 0;
         border: 0;
         padding: 0;
-        font-size: clamp(1.6rem, 3vw, 2.4rem);
+        font-size: clamp(1.5rem, 2.8vw, 2.25rem);
         font-weight: 640;
         letter-spacing: -0.04em;
-        line-height: 1.12;
+        line-height: 1.14;
 
         span {
             display: block;
@@ -1647,15 +1792,18 @@ html[lang^="zh"] .section-kicker {
     }
 
     p {
-        max-width: 40rem;
-        margin: 1.35rem 0 0;
+        margin: 0;
         color: var(--muted-foreground);
         line-height: 1.7;
     }
 
     .btn {
-        margin-top: 2rem;
+        margin-top: 1.5rem;
     }
+}
+
+.principle__aside {
+    padding-bottom: 0.3rem;
 }
 
 .principle__accent {
@@ -1728,7 +1876,7 @@ html[lang^="zh"] .section-kicker {
     /* Below this the code window would be too narrow to read, and the hero is
        already complete without it. */
     .hero__inner {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .hero__code {
@@ -1753,6 +1901,11 @@ html[lang^="zh"] .section-kicker {
     .paths__grid {
         grid-template-columns: 1fr;
     }
+
+    .principle {
+        grid-template-columns: 1fr;
+        align-items: start;
+    }
     .showcase__frame iframe,
     .showcase__placeholder {
         height: 480px;
@@ -1774,6 +1927,7 @@ html[lang^="zh"] .section-kicker {
     .home-nav__search,
     .home-nav__github {
         width: 2rem;
+        min-width: auto;
         padding: 0;
     }
 
