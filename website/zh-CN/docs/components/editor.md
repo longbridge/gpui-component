@@ -1,394 +1,81 @@
 ---
 title: Editor
-description: 支持自动增高、校验和高级编辑能力的多行文本输入组件。
+description: 支持语法高亮、行号、折叠和文本装饰的源代码编辑器。
 ---
 
 # Editor
 
-Editor 是一个功能更强的多行文本输入组件，在基础输入能力之上增加了多行编辑、自动增高、语法高亮、行号和代码编辑功能，适合表单、代码编辑器和内容编辑场景。
+`Editor` 用于编辑源代码。单行输入请使用 [Input](./input.md)，普通多行文本请使用 [Textarea](./textarea.md)。
 
 ## 导入
 
 ```rust
-use gpui_component::input::{InputState, Input};
+use gpui_component::input::{Editor, EditorState, TabSize};
 ```
 
-## 用法
-
-### Textarea
+## 基础用法
 
 ```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .multi_line(true)
-        .placeholder("Enter your message...")
-);
-
-Input::new(&state)
-```
-
-固定高度的 Textarea：
-
-```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .multi_line(true)
-        .rows(10)
-        .placeholder("Enter text here...")
-);
-
-Input::new(&state)
-    .h(px(320.))
-```
-
-### AutoGrow
-
-```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .auto_grow(1, 5)
-        .placeholder("Type here and watch it grow...")
-);
-
-Input::new(&state)
-```
-
-### CodeEditor
-
-GPUI Component 的 `InputState` 支持代码编辑器模式，可提供语法高亮、行号和搜索功能。
-
-它面向高性能场景，能够高效处理大文件。语法高亮基于 [tree-sitter](https://tree-sitter.github.io/tree-sitter/)，文本存储和编辑基于 [ropey](https://github.com/cessen/ropey)。
-
-启用 `gpui-component/tree-sitter-languages` 可包含所有内置 Tree-sitter 语法；如果只需要少量语言，可以只启用 `gpui-component/tree-sitter-markdown` 或 `gpui-component/tree-sitter-rust` 等单语言 feature，以减少下游应用体积。
-
-```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .code_editor("rust")
+let editor = cx.new(|cx| {
+    EditorState::new("rust", window, cx)
         .line_number(true)
-        .searchable(true)
-        .show_whitespaces(true)
-        .default_value("fn main() {\n    println!(\"Hello, world!\");\n}")
-);
-
-Input::new(&state)
-    .h_full()
-```
-
-#### 单行模式
-
-有时你希望保留代码编辑能力，但只允许输入一行，例如命令或代码片段：
-
-```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .code_editor("rust")
-        .multi_line(false)
-        .default_value("println!(\"Hello, world!\");")
-);
-
-Input::new(&state)
-```
-
-### TabSize
-
-```rust
-use gpui_component::input::TabSize;
-
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .multi_line(true)
+        .folding(true)
         .tab_size(TabSize {
             tab_size: 4,
             hard_tabs: false,
         })
-);
-
-Input::new(&state)
-```
-
-### Searchable
-
-所有多行输入都可以通过 `searchable(true)` 开启搜索能力，并支持 `Ctrl+F` 或 macOS 上的 `Cmd+F`。
-
-按 `Ctrl+H`（macOS 上为 `Cmd+Shift+F`）可以打开搜索栏并展开替换输入框，通过 `replaceable(false)` 可以关闭替换功能。
-
-```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .multi_line(true)
-        .searchable(true)
-        .rows(15)
-        .default_value("Search through this content...")
-);
-
-Input::new(&state)
-```
-
-### SoftWrap
-
-默认情况下，多行输入会启用软换行，长文本会自动换到下一行。你也可以关闭软换行，改为横向滚动：
-
-```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .multi_line(true)
-        .soft_wrap(true)
-        .rows(6)
-);
-
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .multi_line(true)
-        .soft_wrap(false)
-        .rows(6)
-        .default_value("This is a very long line that will not wrap automatically but will show horizontal scrollbar instead.")
-);
-```
-
-### 滚动行为
-
-在 `code_editor` 模式下，可以调整编辑器在光标附近以及文档末尾的滚动方式。两个选项分别对应 VSCode / JetBrains 中的同名设置，且仅在 `code_editor` 模式下生效。
-
-- `scroll_beyond_last_line(Option<usize>)` — 在最后一行下方保留的空行数（“scroll beyond last line”，对应 VSCode 的 `editor.scrollBeyondLastLine`）。`None`（默认）保留历史行为，约为半个视口高度；`Some(0)` 不保留空白，光标紧贴最后一行；`Some(n)` 精确保留 `n` 行。
-- `cursor_surrounding_lines(Option<usize>)` — 触发自动滚动前，光标距视口上/下边缘保持的最小行数（对应 VSCode 的 `editor.cursorSurroundingLines`）。`None`（默认）保留历史行为；`Some(n)` 精确保留 `n` 行。
-
-```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .code_editor("rust")
-        // 在最后一行下方保留 3 个空行。
-        .scroll_beyond_last_line(Some(3))
-        // 让光标距上/下边缘至少保持 1 行。
-        .cursor_surrounding_lines(Some(1))
-);
-
-Input::new(&state)
-    .h_full()
-```
-
-两者也可以在运行时通过 `set_scroll_beyond_last_line` 和 `set_cursor_surrounding_lines` 修改。
-
-### 文本操作
-
-```rust
-state.update(cx, |state, cx| {
-    state.insert("inserted text", window, cx);
+        .default_value("fn main() {\n    println!(\"Hello\");\n}")
 });
 
-state.update(cx, |state, cx| {
-    state.replace("new content", window, cx);
-});
-
-state.update(cx, |state, cx| {
-    state.set_cursor_position(Position { line: 2, character: 5 }, window, cx);
-});
-
-let position = state.read(cx).cursor_position();
-println!("Line: {}, Column: {}", position.line, position.character);
+Editor::new(&editor).h(px(320.))
 ```
 
-### 校验
+`EditorState::new` 的第一个参数指定语法高亮语言。应用需要启用对应的 Cargo feature，例如 `tree-sitter-rust` 或 `tree-sitter-markdown`；也可以使用 `tree-sitter-languages` 包含全部内置语法。
+
+## 编辑器选项
 
 ```rust
-let state = cx.new(|cx|
-    InputState::new(window, cx)
-        .multi_line(true)
-        .validate(|text, _| {
-            !text.trim().is_empty() && text.len() <= 1000
-        })
-);
-
-Input::new(&state)
-```
-
-### 处理事件
-
-```rust
-cx.subscribe_in(&state, window, |view, state, event, window, cx| {
-    match event {
-        InputEvent::Change => {
-            let content = state.read(cx).value();
-            println!("Content changed: {} characters", content.len());
-        }
-        InputEvent::PressEnter { secondary } => {
-            if secondary {
-                println!("Shift+Enter pressed - insert line break");
-            } else {
-                println!("Enter pressed - could submit form");
-            }
-        }
-        InputEvent::Focus => println!("Textarea focused"),
-        InputEvent::Blur => println!("Textarea blurred"),
-    }
+let editor = cx.new(|cx| {
+    EditorState::new("json", window, cx)
+        .line_number(true)
+        .folding(true)
+        .show_whitespaces(true)
+        .default_value(source)
 });
 ```
 
-### 禁用状态
+## 文本装饰
 
 ```rust
-Input::new(&state)
-    .disabled(true)
-    .h(px(200.))
+let decorations = editor.update(cx, |state, cx| {
+    state.create_decorations_collection(initial_decorations, cx)
+});
 ```
 
-### 自定义样式
+需要装饰存在多久，就应将返回的 `TextDecorationCollection` 保留多久；文本修改后，其 range 会自动跟随内容变化。
+
+## 值与事件
 
 ```rust
-Input::new(&state)
-    .appearance(false)
-    .h(px(200.))
+let source = editor.read(cx).value();
 
-div()
-    .bg(cx.theme().background)
-    .border_2()
-    .border_color(cx.theme().input)
-    .rounded(cx.theme().radius_lg)
-    .p_4()
-    .child(
-        Input::new(&state)
-            .appearance(false)
-            .h(px(150.))
-    )
+editor.update(cx, |state, cx| {
+    state.set_value(new_source, window, cx);
+});
 ```
 
-## 示例
+`EditorState` 会发出 `InputEvent::Change`、`Focus` 和 `Blur` 等事件。
 
-### 评论框
+## 外观
 
 ```rust
-struct CommentBox {
-    state: Entity<InputState>,
-    char_limit: usize,
-}
-
-impl CommentBox {
-    fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let state = cx.new(|cx|
-            InputState::new(window, cx)
-                .auto_grow(3, 8)
-                .placeholder("Write your comment...")
-                .validate(|text, _| text.len() <= 500)
-        );
-
-        Self {
-            state,
-            char_limit: 500,
-        }
-    }
-}
-
-impl Render for CommentBox {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let content = self.state.read(cx).value();
-        let char_count = content.len();
-        let remaining = self.char_limit.saturating_sub(char_count);
-
-        v_flex()
-            .gap_2()
-            .child(Input::new(&self.state))
-            .child(
-                h_flex()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(format!("{} characters remaining", remaining))
-                    )
-                    .child(
-                        Button::new("submit")
-                            .primary()
-                            .disabled(char_count == 0 || char_count > self.char_limit)
-                            .label("Post Comment")
-                    )
-            )
-    }
-}
+Editor::new(&editor)
+    .h(px(480.))
+    .bordered(true)
+    .disabled(false)
+    .aria_label("Rust 源代码")
 ```
 
-### 带语言选择的代码编辑器
+Editor 聚焦时不会应用单行 Input 的焦点边框效果。gutter、当前行背景和滚动条会作为同一个编辑器表面对齐绘制。
 
-```rust
-struct CodeEditor {
-    editor: Entity<InputState>,
-    language: String,
-}
-
-impl CodeEditor {
-    fn set_language(&mut self, language: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.language = language.clone();
-        self.editor.update(cx, |editor, cx| {
-            editor.set_highlighter(language, cx);
-        });
-    }
-}
-
-impl Render for CodeEditor {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_3()
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child("Language:")
-                    .child(
-                        div().child(self.language.clone())
-                    )
-            )
-            .child(
-                Input::new(&self.editor)
-                    .h(px(400.))
-                    .bordered(true)
-            )
-    }
-}
-```
-
-### 带工具栏的文本编辑器
-
-```rust
-struct TextEditor {
-    editor: Entity<InputState>,
-}
-
-impl TextEditor {
-    fn format_bold(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.editor.update(cx, |editor, cx| {
-            if !editor.selected_range.is_empty() {
-                let selected = editor.selected_text().to_string();
-                editor.replace(&format!("**{}**", selected), window, cx);
-            }
-        });
-    }
-}
-
-impl Render for TextEditor {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
-            .gap_2()
-            .child(
-                h_flex()
-                    .gap_1()
-                    .p_2()
-                    .border_b_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        Button::new("bold")
-                            .ghost()
-                            .icon(IconName::Bold)
-                            .on_click(cx.listener(Self::format_bold))
-                    )
-                    .child(
-                        Button::new("italic")
-                            .ghost()
-                            .icon(IconName::Italic)
-                    )
-            )
-            .child(
-                Input::new(&self.editor)
-                    .h(px(300.))
-            )
-    }
-}
-```
+前后缀、密码显示切换和清除按钮只属于单行 Input。Editor 的工具栏和操作按钮应组合在组件外部。

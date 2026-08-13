@@ -554,12 +554,14 @@ const demos = computed(() =>
         ? [
               { story: "DataTable", label: "数据表格" },
               { story: "Chart", label: "图表" },
+              { story: "Editor", label: "编辑器" },
               { story: "List", label: "列表" },
               { story: "Sidebar", label: "侧边栏" },
           ]
         : [
               { story: "DataTable", label: "Data table" },
               { story: "Chart", label: "Charts" },
+              { story: "Editor", label: "Editor" },
               { story: "List", label: "List" },
               { story: "Sidebar", label: "Sidebar" },
           ],

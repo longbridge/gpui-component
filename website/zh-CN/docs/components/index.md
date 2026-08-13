@@ -21,14 +21,15 @@ collapsed: false
 
 ## 表单组件
 
-- [Input](input) - 文本输入与类输入控件
+- [Input](input) - 单行文本输入与类输入控件
+- [Textarea](textarea) - 支持固定行数或自动增高的多行文本输入
+- [Editor](editor) - 支持语法高亮、行号和折叠的源代码编辑器
 - [Select](select) - 选项选择器
 - [Combobox](combobox) - 可搜索的单选或多选下拉组件
 - [NumberInput](number-input) - 数字输入
 - [DatePicker](date-picker) - 日期选择器
 - [OtpInput](otp-input) - 一次性验证码输入
 - [ColorPicker](color-picker) - 颜色选择器
-- [Editor](editor) - 多行文本与代码编辑器
 - [Form](form) - 表单容器与布局
 
 ## 布局与高级组件

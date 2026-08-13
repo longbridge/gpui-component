@@ -1,4 +1,5 @@
 mod components;
+mod syntect_highlighter;
 
 use gpui::{
     App, AppContext as _, Application, Context, InteractiveElement as _, IntoElement,
@@ -25,8 +26,44 @@ use gpui_base::{
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
 use std::rc::Rc;
+use syntect_highlighter::SyntectHighlighter;
 
 actions!(base_showcase, [Quit]);
+
+const EDITOR_EXAMPLE: &str = r#"use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+struct Workspace {
+    name: String,
+    files: HashMap<String, usize>,
+}
+
+impl Workspace {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            files: HashMap::new(),
+        }
+    }
+
+    fn index(&mut self, path: &str, lines: usize) {
+        // Keep the latest line count for each source file.
+        self.files.insert(path.to_owned(), lines);
+    }
+
+    fn summary(&self) -> String {
+        let total: usize = self.files.values().sum();
+        format!("{}: {} files, {total} lines", self.name, self.files.len())
+    }
+}
+
+fn main() {
+    let mut workspace = Workspace::new("gpui-component");
+    workspace.index("src/main.rs", 128);
+    workspace.index("src/editor.rs", 372);
+    println!("{}", workspace.summary());
+}
+"#;
 
 pub const COMPONENTS: &[&str] = &[
     "accordion",
@@ -40,6 +77,7 @@ pub const COMPONENTS: &[&str] = &[
     "combobox",
     "date-picker",
     "dialog",
+    "editor",
     "hover-card",
     "input",
     "link",
@@ -59,6 +97,7 @@ pub const COMPONENTS: &[&str] = &[
     "switch",
     "table",
     "tabs",
+    "textarea",
     "toast",
     "toggle",
     "toggle-group",
@@ -144,10 +183,19 @@ impl BaseShowcase {
         let editor = cx.new(|cx| {
             EditorState::new("rust", window, cx)
                 .line_number(true)
-                .default_value("fn main() {\n    println!(\"Hello GPUI\");\n}")
+                .folding(true)
+                .show_whitespaces(true)
+                .default_value(EDITOR_EXAMPLE)
         });
         let editor_base = editor.read(cx).base_state().clone();
-        editor_base.update(cx, |state, _| {
+        editor_base.update(cx, |state, cx| {
+            state.set_highlighter_factory(
+                Rc::new(|language| {
+                    SyntectHighlighter::new(language)
+                        .map(|highlighter| Box::new(highlighter) as Box<_>)
+                }),
+                cx,
+            );
             state.set_editor_style(InputEditorStyle {
                 foreground: rgb(0x171717).into(),
                 muted_foreground: rgb(0x737373).into(),
@@ -174,6 +222,10 @@ impl BaseShowcase {
         .detach();
         if matches!(component.as_str(), "input" | "number-input") {
             input.update(cx, |state, cx| state.focus(window, cx));
+        } else if component == "textarea" {
+            textarea.update(cx, |state, cx| state.focus(window, cx));
+        } else if component == "editor" {
+            editor.update(cx, |state, cx| state.focus(window, cx));
         } else if component == "otp-input" {
             otp.update(cx, |state, cx| state.focus(window, cx));
         }
@@ -304,6 +356,7 @@ impl Render for BaseShowcase {
             "combobox" => self.combobox(window, cx).into_any_element(),
             "date-picker" => self.date_picker(cx).into_any_element(),
             "dialog" => self.dialog(cx).into_any_element(),
+            "editor" => self.editor().into_any_element(),
             "hover-card" => self.hover_card().into_any_element(),
             "input" => self.input().into_any_element(),
             "link" => self.link().into_any_element(),
@@ -323,6 +376,7 @@ impl Render for BaseShowcase {
             "switch" => self.switch(cx).into_any_element(),
             "table" => self.table().into_any_element(),
             "tabs" => self.tabs(cx).into_any_element(),
+            "textarea" => self.textarea().into_any_element(),
             "toast" => self.toast(cx).into_any_element(),
             "toggle" => self.toggle(cx).into_any_element(),
             "toggle-group" => self.toggle_group(cx).into_any_element(),

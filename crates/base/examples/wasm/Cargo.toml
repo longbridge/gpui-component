@@ -14,6 +14,7 @@ gpui_platform.workspace = true
 console_error_panic_hook = "0.1"
 console_log = "1.0"
 log.workspace = true
+syntect.workspace = true
 tracing-wasm = "0.2"
 wasm-bindgen = "=0.2.121"
 

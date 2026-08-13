@@ -37,13 +37,14 @@ collapsed: false
 ### Form Components
 
 - [Input](input) - An input field or a component that looks like an input field.
+- [Textarea](textarea) - Multi-line text with fixed rows or auto-grow.
+- [Editor](editor) - Source-code editing with highlighting, gutter, and folding.
 - [Select](select) - A list of options for the user to pick.
 - [Combobox](combobox) - Searchable single-select or multi-select dropdown.
 - [NumberInput](number-input) - Numeric input with increment/decrement
 - [DatePicker](date-picker) - Date selection with calendar
 - [OtpInput](otp-input) - One-time password input
 - [ColorPicker](color-picker) - Color selection interface
-- [Editor](editor) - Multi-line text editor and code editor
 - [Form](form) - Form container and layout
 
 ### Layout Components

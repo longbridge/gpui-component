@@ -5,12 +5,12 @@ description: 带校验、掩码和多种扩展能力的文本输入组件。
 
 # Input
 
-Input 是一个灵活的文本输入组件，支持校验、输入掩码、前后缀元素以及多种交互状态。
+Input 是一个单行文本输入组件，支持校验、输入掩码、前后缀元素以及多种交互状态。普通多行文本请使用 [Textarea](./textarea.md)，源代码编辑请使用 [Editor](./editor.md)。
 
 ## 导入
 
 ```rust
-use gpui_component::input::{InputState, Input};
+use gpui_component::input::{Input, InputState};
 ```
 
 ## 用法

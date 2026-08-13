@@ -14,7 +14,7 @@ impl BaseShowcase {
             .child("Navigation is application-owned")
             .child(
                 Link::new("example-link")
-                    .href("/base/components/link")
+                    .href("/base/primitives/link")
                     .open_with(|href, _, _, cx| cx.open_url(href))
                     .h_7()
                     .px_3()
