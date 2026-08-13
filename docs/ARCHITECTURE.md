@@ -229,10 +229,11 @@ LSP configuration are absent from its API. Multi-line code must construct
 
 The implementation under `crates/base/src/input` is organized by responsibility:
 
-- `controls/` contains the three public controls and their state facades;
-- `engine/` contains shared editing, display mapping, search, layout, selection,
-  and painting mechanics;
-- `editor/` contains highlighting, diagnostics, decorations, indentation, and LSP.
+- `base/` contains the shared editing engine and foundational mechanics;
+- `input/` contains the single-line control and state facade;
+- `textarea/` contains the multi-line control and state facade;
+- `editor/` contains the editor control and state facade, plus display mapping,
+  highlighting, search, diagnostics, decorations, indentation, and LSP.
 
 These are implementation folders rather than public Rust module segments. The
 external seam remains `gpui_base::input`, with stable re-exports in `mod.rs`.
