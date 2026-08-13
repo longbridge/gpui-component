@@ -139,21 +139,37 @@ impl InputHighlighter for SyntectHighlighter {
         range: &Range<usize>,
         resolver: &dyn HighlightStyleResolver,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
-        self.highlights
-            .iter()
-            .filter_map(|(token_range, name)| {
-                let start = token_range.start.max(range.start);
-                let end = token_range.end.min(range.end);
-                (start < end)
-                    .then(|| resolver.style(name).map(|style| (start..end, style)))
-                    .flatten()
-            })
-            .collect()
+        resolve_styles(&self.highlights, range, resolver)
     }
 
     fn fold_ranges(&self, text: &Rope) -> Vec<FoldRange> {
         brace_fold_ranges(&text.to_string())
     }
+}
+
+fn resolve_styles(
+    highlights: &[(Range<usize>, &'static str)],
+    range: &Range<usize>,
+    resolver: &dyn HighlightStyleResolver,
+) -> Vec<(Range<usize>, HighlightStyle)> {
+    let mut runs = Vec::new();
+    let mut cursor = range.start;
+    for (highlight_range, name) in highlights {
+        let start = highlight_range.start.max(range.start);
+        let end = highlight_range.end.min(range.end);
+        if start >= end || end <= cursor {
+            continue;
+        }
+        if cursor < start {
+            runs.push((cursor..start, HighlightStyle::default()));
+        }
+        runs.push((start..end, resolver.style(name).unwrap_or_default()));
+        cursor = end;
+    }
+    if cursor < range.end {
+        runs.push((cursor..range.end, HighlightStyle::default()));
+    }
+    runs
 }
 
 fn push_highlight(

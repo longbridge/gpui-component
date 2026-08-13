@@ -87,21 +87,37 @@ impl InputHighlighter for SyntectHighlighter {
         range: &Range<usize>,
         resolver: &dyn HighlightStyleResolver,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
-        self.highlights
-            .iter()
-            .filter_map(|(token_range, name)| {
-                let start = token_range.start.max(range.start);
-                let end = token_range.end.min(range.end);
-                (start < end)
-                    .then(|| resolver.style(name).map(|style| (start..end, style)))
-                    .flatten()
-            })
-            .collect()
+        resolve_styles(&self.highlights, range, resolver)
     }
 
     fn fold_ranges(&self, text: &Rope) -> Vec<FoldRange> {
         brace_fold_ranges(&text.to_string())
     }
+}
+
+fn resolve_styles(
+    highlights: &[(Range<usize>, &'static str)],
+    range: &Range<usize>,
+    resolver: &dyn HighlightStyleResolver,
+) -> Vec<(Range<usize>, HighlightStyle)> {
+    let mut runs = Vec::new();
+    let mut cursor = range.start;
+    for (highlight_range, name) in highlights {
+        let start = highlight_range.start.max(range.start);
+        let end = highlight_range.end.min(range.end);
+        if start >= end || end <= cursor {
+            continue;
+        }
+        if cursor < start {
+            runs.push((cursor..start, HighlightStyle::default()));
+        }
+        runs.push((start..end, resolver.style(name).unwrap_or_default()));
+        cursor = end;
+    }
+    if cursor < range.end {
+        runs.push((cursor..range.end, HighlightStyle::default()));
+    }
+    runs
 }
 
 fn push_highlight(
@@ -190,19 +206,35 @@ pub(super) struct ShowcaseHighlightStyles;
 impl HighlightStyleResolver for ShowcaseHighlightStyles {
     fn style(&self, name: &str) -> Option<HighlightStyle> {
         let color = match name.split('.').next()? {
-            "comment" => 0x6a737d,
-            "string" => 0x032f62,
-            "number" | "boolean" | "constant" => 0x005cc5,
-            "keyword" | "operator" => 0xd73a49,
-            "function" => 0x6f42c1,
-            "type" => 0x22863a,
-            "variable" => 0x24292e,
-            "punctuation" => 0x586069,
+            "comment" => 0x007fff,
+            "string" => 0x036a07,
+            "number" | "keyword" => 0x0433ff,
+            "boolean" | "constant" => 0xc5060b,
+            "function" => 0x0000a2,
+            "type" => 0x6f42c1,
+            "variable" => 0x333333,
             _ => return None,
         };
         Some(HighlightStyle {
             color: Some(rgb(color).into()),
             ..Default::default()
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolved_styles_cover_the_requested_range_without_gaps() {
+        let runs = resolve_styles(
+            &[(2..4, "keyword"), (6..8, "string")],
+            &(0..10),
+            &ShowcaseHighlightStyles,
+        );
+        let ranges: Vec<_> = runs.into_iter().map(|(range, _)| range).collect();
+
+        assert_eq!(ranges, vec![0..2, 2..4, 4..6, 6..8, 8..10]);
     }
 }

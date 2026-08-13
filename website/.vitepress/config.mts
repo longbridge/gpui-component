@@ -70,6 +70,8 @@ function createSidebar(scanStartPath: string, rootGroupText: string) {
       ["components", "primitives"].includes(item.text.toLowerCase()),
   );
   if (catalog) {
+    catalog.text =
+      catalog.text.toLowerCase() === "primitives" ? "Primitives" : "Components";
     catalog.items.sort((left: any, right: any) =>
       left.text.localeCompare(right.text, "en", { sensitivity: "base" }),
     );
