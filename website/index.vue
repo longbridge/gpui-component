@@ -198,7 +198,10 @@
                     </div>
                 </header>
 
-                <div class="showcase__frame mac-window">
+                <div
+                    class="showcase__frame mac-window"
+                    :class="{ 'mac-window--zoomed': zoomed }"
+                >
                     <div class="mac-window__bar">
                         <span class="mac-window__lights" aria-hidden="true"
                             ><i /><i /><i
@@ -209,6 +212,12 @@
                         <span class="live__badge">
                             {{ copy.liveBadge }}
                         </span>
+                        <WindowZoomButton
+                            class="mac-window__action--always"
+                            :zoomed="zoomed"
+                            :label="zoomLabel"
+                            @click="setZoomed(!zoomed)"
+                        />
                     </div>
                     <iframe
                         v-if="liveSrc"
@@ -442,8 +451,12 @@ import {
     X,
 } from "lucide-vue-next";
 import { data as repo } from "./data/repo.data";
+import { useWindowZoom } from "./.vitepress/theme/composables/zoom";
+import WindowZoomButton from "./.vitepress/theme/components/WindowZoomButton.vue";
 
 const { isDark, localeIndex, theme } = useData();
+
+const { zoomed, zoomLabel, setZoomed } = useWindowZoom("demo");
 
 // The navbar renders the very same `nav` array that config.mts feeds to the
 // docs navbar, so the two can never drift apart.
