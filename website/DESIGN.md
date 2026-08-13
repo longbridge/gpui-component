@@ -115,7 +115,14 @@ Two constraints that are easy to get wrong:
   Height 3.5rem/56px. The docs navbar is the same toolbar — VitePress's own
   navbar is reordered by CSS, and the language and star controls are injected
   through the `nav-bar-content-after` slot rather than living in `nav` items, so
-  the real search keeps working.
+  the real search keeps working. The controls are that one set at every width:
+  VitePress would otherwise move the appearance switch into a `…` flyout on
+  mid-size screens and into the hamburger screen on phones.
+- The docs navbar's blur belongs on `.VPNavBar`, never on `.VPNav`. `.VPNav`
+  wraps both the bar and the phone menu screen, and a `backdrop-filter` makes
+  its element the containing block for fixed descendants — on `.VPNav` it
+  collapses the screen, which is anchored `top: nav-height; bottom: 0`, to zero
+  height, and the hamburger opens onto nothing.
 - The hero is two columns: copy, and a macOS window holding a real snippet from
   the Quick Start guide. Its vertical rhythm is 20 / 20 / 24 / 24 / 20 px.
 - **The WASM gallery must not be in the first screen.** It is a full
@@ -135,6 +142,11 @@ Two constraints that are easy to get wrong:
   else to live — hiding it outright is a dead end for phone users. The window
   title is dropped there too, since the segmented control already names the
   current view.
+- The docs navbar collapses on VitePress's own 768px breakpoint, and the same
+  rule applies: the sections and the language menu move into the hamburger
+  screen (`nav-screen-content-after`), while the star count is only a label
+  beside an icon that stays. A 360px phone leaves about 180px next to the
+  title, which is four 2rem controls — measure before adding a fifth.
 
 ## Surfaces and the window language
 
@@ -162,15 +174,19 @@ cards, `--radius-surface` 0.875rem for large surfaces, 0.75rem for windows.
 
 ## Social card
 
-`public/og.png` (1200×630) is the Open Graph / Twitter card for every page.
-`public/og-dark.png` is the same card on the dark palette — social platforms
-cannot choose by theme, so it is not referenced from any meta tag; it exists for
-surfaces that can, such as a `<picture>` in the GitHub README.
+`public/og.png` is the Open Graph / Twitter card for every page. It is drawn at
+1200×630 and stored at 2400×1260, because Slack and the other unfurlers
+re-encode the image at their own preview size and a 1× source arrives soft on a
+high-density screen. `og:image:width` and `og:image:height` state the stored
+size. `public/og-dark.png` is the same card on the dark palette — social
+platforms cannot choose by theme, so it is not referenced from any meta tag; it
+exists for surfaces that can, such as a `<picture>` in the GitHub README.
 
 Both are screenshots of `public/og-template.html`, which holds both palettes in
 one file behind `prefers-color-scheme`, so the two renders cannot drift. To
 regenerate: serve the site, open the template at a 1200×630 viewport with
-`deviceScaleFactor: 1`, and capture once per colour scheme.
+`deviceScaleFactor: 2`, and capture once per colour scheme. The template pins
+its own layout viewport to 1200px, so the capture frames the card exactly.
 
 The card carries **identity only** — mark, product name, tagline, and three
 facts that do not expire. It must not carry a headline: the platform draws the

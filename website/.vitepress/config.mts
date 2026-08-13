@@ -188,22 +188,10 @@ const config: UserConfig = {
     "Rust GUI components for building fantastic cross-platform desktop application by using GPUI.",
   cleanUrls: true,
   head: [
-    [
-      "link",
-      {
-        rel: "icon",
-        href: "/gpui-component/logo.svg",
-        media: "(prefers-color-scheme: light)",
-      },
-    ],
-    [
-      "link",
-      {
-        rel: "icon",
-        href: "/gpui-component/logo-dark.svg",
-        media: "(prefers-color-scheme: dark)",
-      },
-    ],
+    // One icon link, not a `prefers-color-scheme` pair: the site's own
+    // appearance toggle is what the reader sees, and it can disagree with the
+    // OS setting. `useThemeFavicon` repoints this link on every switch.
+    ["link", { rel: "icon", href: "/gpui-component/logo.svg" }],
     // The card image is one static asset for every page — the same approach
     // Base UI takes. A per-page image would need a server to render it, which
     // GitHub Pages does not give us.
@@ -211,8 +199,11 @@ const config: UserConfig = {
     ["meta", { property: "og:site_name", content: SITE_TITLE }],
     ["meta", { property: "og:image", content: `${SITE_URL}/og.png` }],
     ["meta", { property: "og:image:type", content: "image/png" }],
-    ["meta", { property: "og:image:width", content: "1200" }],
-    ["meta", { property: "og:image:height", content: "630" }],
+    // The card is drawn at 1200×630 and captured at 2× — Slack and the other
+    // unfurlers re-encode the image at their own preview size, and a 1× source
+    // came back soft on high-density screens.
+    ["meta", { property: "og:image:width", content: "2400" }],
+    ["meta", { property: "og:image:height", content: "1260" }],
     ["meta", { property: "og:image:alt", content: SITE_TITLE }],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
     ["meta", { name: "twitter:image", content: `${SITE_URL}/og.png` }],

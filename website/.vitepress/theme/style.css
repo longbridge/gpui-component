@@ -345,20 +345,23 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     }
   }
 
+  .VPNav .divider {
+    @apply hidden;
+  }
+
   /* The docs navbar is the same toolbar as the landing page: brand and
-     sections grouped left, controls right, one hairline underneath. */
-  .VPNav {
+     sections grouped left, controls right, one hairline underneath.
+
+     The blur belongs here and not on `.VPNav`, which wraps both the bar and
+     the phone menu screen: a `backdrop-filter` makes its element the
+     containing block for fixed descendants, so on `.VPNav` it clipped the
+     screen — anchored `top: nav-height; bottom: 0` — to zero height, and the
+     hamburger opened onto nothing. */
+  .VPNavBar {
+    border-bottom: 0;
     background: color-mix(in srgb, var(--background) 80%, transparent);
     backdrop-filter: blur(18px) saturate(160%);
     box-shadow: var(--shadow-raise);
-
-    .divider {
-      @apply hidden;
-    }
-  }
-
-  .VPNavBar {
-    border-bottom: 0;
   }
 
   .VPNavBar .container {
@@ -372,6 +375,9 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     display: flex;
     align-items: center;
     gap: 0.3rem;
+    /* VitePress ends the bar flush with the window, which only worked because
+       the appearance switch used to carry a wide divider in front of it. */
+    padding-right: 1.5rem;
     background: transparent;
   }
 
@@ -413,7 +419,9 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     background: var(--secondary);
   }
 
-  /* Search, stars, language, then appearance — the landing page's order. */
+  /* Search, stars, language, then appearance — the landing page's order, with
+     the hamburger after them. VitePress gives the hamburger no order, so it
+     would otherwise sort ahead of every control and sit against the title. */
   .VPNavBarSearch {
     order: 1;
   }
@@ -426,15 +434,73 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     order: 3;
   }
 
+  /* Appearance stays on the bar at every width, the way the landing page keeps
+     its toggle. VitePress would otherwise move it into a "…" flyout between
+     768px and 1280px and into the hamburger screen below 768px, so the same
+     control changes place twice on the way down. */
   .VPNavBarAppearance {
+    display: flex;
     order: 4;
-    margin-left: 0.3rem;
-    padding-left: 0.45rem;
-    border-left: 1px solid var(--border);
   }
 
-  .VPNavBarExtra {
+  /* The controls read as one group, so VitePress's rule before the appearance
+     switch only adds a seam. */
+  .VPNavBarAppearance::before {
+    display: none;
+  }
+
+  /* Both places it came from, now that it never leaves the bar. The flyout has
+     nothing else to hold: the translations menu below is hidden too. */
+  .VPNavBarExtra,
+  .VPNavScreenAppearance {
+    display: none;
+  }
+
+  .VPNavBarHamburger {
     order: 5;
+  }
+
+  /* Below VitePress's navbar breakpoint the sections fold into the hamburger
+     screen and the bar is controls only. The star count goes with them and
+     each remaining control shrinks to the landing page's 2rem square: a 360px
+     phone leaves about 180px next to the title, which is four squares. */
+  @media (max-width: 767px) {
+    .VPNavBar .content-body {
+      gap: 0.2rem;
+      padding-right: 1rem;
+    }
+
+    .github-star-button {
+      width: 2rem;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .github-star-button span {
+      display: none;
+    }
+
+    /* The language menu is the one control with a home in the screen, so it is
+       the one that moves; see `nav-screen-content-after` in index.ts. */
+    .VPNavBar .LanguageSwitcher {
+      display: none;
+    }
+
+    .VPNavBarHamburger {
+      width: 2rem;
+    }
+
+    /* Down here the search is an icon among icons, so it drops the field
+       framing it carries when it is a full search box. */
+    .DocSearch-Button {
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .DocSearch-Button:hover {
+      border-color: transparent;
+      background: var(--secondary);
+    }
   }
 
   .VPNavBarTitle .title {
