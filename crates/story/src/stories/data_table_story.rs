@@ -64,6 +64,10 @@ enum ToggleTableOption {
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = data_table_story, no_json)]
+struct ClearTableSelection;
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = data_table_story, no_json)]
 enum GoToTablePosition {
     Top,
     Bottom,
@@ -162,6 +166,16 @@ impl Stock {
     }
 }
 
+/// Restarts ids from zero and builds a fresh set of rows.
+fn regenerate_stocks(size: usize) -> Vec<Stock> {
+    {
+        let mut id_lock = INCREMENT_ID.lock().unwrap();
+        *id_lock = 0;
+    }
+
+    random_stocks(size)
+}
+
 fn random_stocks(size: usize) -> Vec<Stock> {
     // Incremental ID with size.
     let start = {
@@ -171,6 +185,28 @@ fn random_stocks(size: usize) -> Vec<Stock> {
         start
     };
 
+    // Drawing all 40-odd fields per row costs ~24s for a million rows in a debug
+    // build, which is most of the time spent switching to the largest example.
+    // Draw a pool of fully random rows instead and clone from it, still giving
+    // every row its own id and counter so no two rows read alike on screen.
+    const POOL_SIZE: usize = 512;
+    if size > POOL_SIZE * 2 {
+        let pool = random_stocks_exact(0, POOL_SIZE);
+        return (start..start + size)
+            .map(|id| {
+                let mut stock = pool[(id - start) % POOL_SIZE].clone();
+                stock.id = id;
+                stock.counter = Counter::random();
+                stock
+            })
+            .collect();
+    }
+
+    random_stocks_exact(start, size)
+}
+
+/// Builds `size` rows with every field independently randomized.
+fn random_stocks_exact(start: usize, size: usize) -> Vec<Stock> {
     (start..start + size)
         .map(|id| Stock {
             id,
@@ -251,8 +287,7 @@ impl StockTableDelegate {
                     .fixed(ColumnFixed::Left)
                     .resizable(true)
                     .min_width(40.)
-                    .max_width(100.)
-                    .text_center(),
+                    .max_width(100.),
                 Column::new("market", "Market")
                     .width(60.)
                     .fixed(ColumnFixed::Left)
@@ -328,15 +363,9 @@ impl StockTableDelegate {
         }
     }
 
-    fn update_stocks(&mut self, size: usize) {
-        // Reset incremental ID
-        {
-            let mut id_lock = INCREMENT_ID.lock().unwrap();
-            *id_lock = 0;
-        }
-
-        self.stocks = random_stocks(size);
-        self.eof = size <= 50;
+    fn set_stocks(&mut self, stocks: Vec<Stock>) {
+        self.eof = stocks.len() <= 50;
+        self.stocks = stocks;
         self.loading = false;
         self.full_loading = false;
     }
@@ -779,6 +808,7 @@ pub struct DataTableStory {
 
     _subscriptions: Vec<Subscription>,
     _load_task: Task<()>,
+    _load_rows_task: Task<()>,
 }
 
 impl super::Story for DataTableStory {
@@ -828,15 +858,23 @@ impl DataTableStory {
                     }
 
                     this.table.update(cx, |table, _| {
-                        table.delegate_mut().stocks.iter_mut().enumerate().for_each(
-                            |(i, stock)| {
+                        // Only walk the head of the table. It paints a few dozen
+                        // rows at a time, so ticking every row of the million-row
+                        // example would stall the frame for nothing on screen.
+                        const MAX_REFRESH_ROWS: usize = 2_000;
+                        table
+                            .delegate_mut()
+                            .stocks
+                            .iter_mut()
+                            .take(MAX_REFRESH_ROWS)
+                            .enumerate()
+                            .for_each(|(i, stock)| {
                                 let n = (3..10).fake::<usize>();
                                 // update 30% of the stocks
                                 if i % n == 0 {
                                     stock.random_update();
                                 }
-                            },
-                        );
+                            });
                     });
                     cx.notify();
                 })
@@ -851,6 +889,7 @@ impl DataTableStory {
             size: Size::default(),
             _subscriptions,
             _load_task,
+            _load_rows_task: Task::ready(()),
         }
     }
 
@@ -1053,10 +1092,29 @@ impl Render for DataTableStory {
                 if action.0 == this.table.read(cx).delegate().stocks.len() {
                     return;
                 }
-                this.table.update(cx, |table, _| {
-                    table.delegate_mut().update_stocks(action.0);
+
+                // Building the largest example allocates a few hundred MB, which
+                // drops frames if it runs between two paints. Show the loading
+                // state, build off-thread, and swap the rows in when they land.
+                let size = action.0;
+                this.table.update(cx, |table, cx| {
+                    table.delegate_mut().full_loading = true;
+                    cx.notify();
                 });
-                cx.notify();
+                this._load_rows_task = cx.spawn(async move |this, cx| {
+                    let stocks = cx
+                        .background_spawn(async move { regenerate_stocks(size) })
+                        .await;
+
+                    this.update(cx, |this, cx| {
+                        this.table.update(cx, |table, cx| {
+                            table.delegate_mut().set_stocks(stocks);
+                            table.refresh(cx);
+                        });
+                        cx.notify();
+                    })
+                    .ok();
+                });
             }))
             .on_action(cx.listener(|this, action: &ChangeExtraColumns, _, cx| {
                 this.table.update(cx, |table, cx| {
@@ -1064,6 +1122,9 @@ impl Render for DataTableStory {
                     table.refresh(cx);
                 });
                 cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ClearTableSelection, _, cx| {
+                this.table.update(cx, |table, cx| table.clear_selection(cx));
             }))
             .on_action(cx.listener(|this, action: &GoToTablePosition, _, cx| {
                 this.table.update(cx, |table, cx| match action {
@@ -1182,11 +1243,6 @@ impl Render for DataTableStory {
                             )
                             .menu_with_check("500", rows_count == 500, Box::new(ChangeRows(500)))
                             .menu_with_check(
-                                "1,000",
-                                rows_count == 1_000,
-                                Box::new(ChangeRows(1_000)),
-                            )
-                            .menu_with_check(
                                 "5,000",
                                 rows_count == 5_000,
                                 Box::new(ChangeRows(5_000)),
@@ -1195,6 +1251,11 @@ impl Render for DataTableStory {
                                 "10,000",
                                 rows_count == 10_000,
                                 Box::new(ChangeRows(10_000)),
+                            )
+                            .menu_with_check(
+                                "1,000,000",
+                                rows_count == 1_000_000,
+                                Box::new(ChangeRows(1_000_000)),
                             )
                         },
                     )
@@ -1305,6 +1366,8 @@ impl Render for DataTableStory {
                                 show_group_headers,
                                 Box::new(ToggleTableOption::GroupHeaders),
                             )
+                            .separator()
+                            .menu("Clear Selection", Box::new(ClearTableSelection))
                         }
                     })
                     .dropdown_child(Button::new("go-to").label("Go To"), |menu, _, _| {
@@ -1318,15 +1381,6 @@ impl Render for DataTableStory {
                         Button::new("dump-csv")
                             .label("Export CSV")
                             .on_click(cx.listener(Self::dump_csv)),
-                    )
-                    .child(
-                        Button::new("clear-selection")
-                            .child("Clear")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.table.update(cx, |table, cx| {
-                                    table.clear_selection(cx);
-                                })
-                            })),
                     ),
             )
             .child(

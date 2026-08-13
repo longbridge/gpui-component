@@ -8,6 +8,8 @@ import {
     watch,
 } from "vue";
 import { useData, useRoute, withBase } from "vitepress";
+import { useWindowZoom } from "../composables/zoom";
+import WindowZoomButton from "./WindowZoomButton.vue";
 
 const route = useRoute();
 const { frontmatter } = useData();
@@ -78,6 +80,8 @@ const windowTitle = computed(() =>
 
 const target = shallowRef<HTMLElement>();
 
+const { zoomed, zoomLabel, setZoomed } = useWindowZoom("example");
+
 const createTargetAfterDescription = async () => {
     await nextTick();
     target.value?.remove();
@@ -99,7 +103,11 @@ const createTargetAfterDescription = async () => {
 };
 
 onMounted(createTargetAfterDescription);
-watch(() => route.path, createTargetAfterDescription);
+watch(() => route.path, () => {
+    // A new page means a new example, so it starts unzoomed.
+    setZoomed(false);
+    createTargetAfterDescription();
+});
 onBeforeUnmount(() => target.value?.remove());
 </script>
 
@@ -116,10 +124,24 @@ onBeforeUnmount(() => target.value?.remove());
                 <span>Example</span>
                 <span class="component-example__live">Rust &amp; WASM</span>
             </div>
-            <div class="mac-window">
+            <div class="mac-window" :class="{ 'mac-window--zoomed': zoomed }">
                 <div class="mac-window__bar">
-                    <span class="mac-window__lights" aria-hidden="true"><i /><i /><i /></span>
+                    <span class="mac-window__lights">
+                        <i aria-hidden="true" /><i aria-hidden="true" /><button
+                            type="button"
+                            class="mac-window__zoom"
+                            :title="zoomLabel"
+                            :aria-label="zoomLabel"
+                            :aria-pressed="zoomed"
+                            @click="setZoomed(!zoomed)"
+                        />
+                    </span>
                     <span class="mac-window__title">{{ windowTitle }}</span>
+                    <WindowZoomButton
+                        :zoomed="zoomed"
+                        :label="zoomLabel"
+                        @click="setZoomed(!zoomed)"
+                    />
                 </div>
                 <iframe
                     :key="src"
