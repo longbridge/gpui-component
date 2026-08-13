@@ -1,7 +1,7 @@
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, IndexPath, Sizable as _, StyledExt as _, ThemeColor,
-    button::{Button, ButtonGroup, ButtonVariants as _},
+    ActiveTheme as _, Icon, IconName, IndexPath, StyledExt as _, ThemeColor,
+    button::{Button, ButtonVariants as _},
     h_flex,
     input::{Input, InputEvent, InputState},
     menu::PopupMenuItem,
@@ -785,28 +785,25 @@ impl Render for ThemeColorsStory {
                                     })),
                             ),
                     )
-                    .child(
-                        ButtonGroup::new("theme-toolbar")
-                            .outline()
-                            .small()
-                            .dropdown_anchor(gpui::Anchor::TopRight)
-                            .dropdown_child(Button::new("theme-options").label("Options"), {
-                                let show_all_colors = self.show_all_colors;
-                                let expand_all = self.force_open_state == Some(true);
-                                move |menu, _, _| {
-                                    menu.menu_with_check(
-                                        "Inherited Colors",
-                                        show_all_colors,
-                                        Box::new(ThemeOption::ShowInherited),
-                                    )
-                                    .menu_with_check(
-                                        "Expand All",
-                                        expand_all,
-                                        Box::new(ThemeOption::ExpandAll),
-                                    )
-                                }
-                            }),
-                    ),
+                    .child(crate::story_toolbar_group().dropdown_child(
+                        Button::new("theme-options").label("Options"),
+                        {
+                            let show_all_colors = self.show_all_colors;
+                            let expand_all = self.force_open_state == Some(true);
+                            move |menu, _, _| {
+                                menu.menu_with_check(
+                                    "Inherited Colors",
+                                    show_all_colors,
+                                    Box::new(ThemeOption::ShowInherited),
+                                )
+                                .menu_with_check(
+                                    "Expand All",
+                                    expand_all,
+                                    Box::new(ThemeOption::ExpandAll),
+                                )
+                            }
+                        },
+                    )),
             )
             .child(
                 h_flex()

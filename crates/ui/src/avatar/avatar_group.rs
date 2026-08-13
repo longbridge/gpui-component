@@ -84,20 +84,11 @@ impl RenderOnce for AvatarGroup {
             .refine_style(&self.style)
             .children(if self.ellipsis && avatars_len > self.limit {
                 Some(
-                    div()
-                        .size(super::avatar_size(self.size))
-                        .flex()
-                        .flex_shrink_0()
-                        .items_center()
-                        .justify_center()
-                        .rounded_full()
+                    Avatar::new()
+                        .name("⋯")
                         .bg(cx.theme().tokens.secondary)
                         .text_color(cx.theme().muted_foreground)
-                        .text_xs()
-                        .font_medium()
-                        .border_1()
-                        .border_color(cx.theme().border)
-                        .child(format!("+{}", avatars_len - self.limit))
+                        .with_size(self.size)
                         .ml_1(),
                 )
             } else {

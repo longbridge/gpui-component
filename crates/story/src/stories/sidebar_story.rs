@@ -10,7 +10,7 @@ use gpui_component::{
     ActiveTheme, Icon, IconName, Side, Sizable, StyledExt,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
-    button::{Button, ButtonGroup},
+    button::Button,
     h_flex,
     menu::DropdownMenu,
     separator::Separator,
@@ -82,10 +82,7 @@ impl SidebarStory {
             .gap_5()
             .child(
                 h_flex().w_full().justify_end().child(
-                    ButtonGroup::new("sidebar-toolbar")
-                        .outline()
-                        .compact()
-                        .dropdown_anchor(gpui::Anchor::TopRight)
+                    crate::story_toolbar_group()
                         .dropdown_child(Button::new("sidebar-mode").label("Mode"), {
                             let collapsible = self.collapsible;
                             move |menu, _, _| {

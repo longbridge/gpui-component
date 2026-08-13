@@ -1330,10 +1330,15 @@ impl Render for DataTableStory {
                     ),
             )
             .child(
-                DataTable::new(&self.table)
-                    .with_size(self.size)
-                    .stripe(self.stripe)
-                    .footer(
+                v_flex()
+                    .min_h_0()
+                    .flex_1()
+                    .child(
+                        DataTable::new(&self.table)
+                            .with_size(self.size)
+                            .stripe(self.stripe),
+                    )
+                    .child(
                         h_flex()
                             .w_full()
                             .min_h_9()

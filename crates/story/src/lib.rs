@@ -8,11 +8,11 @@ use gpui::{
 use gpui_component::{
     ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _, TitleBar,
     WindowExt,
-    button::{Button, ButtonGroup},
+    button::Button,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
-    menu::PopupMenu,
+    menu::{DropdownMenu as _, PopupMenu},
     notification::Notification,
     scroll::{ScrollableElement as _, ScrollbarMode},
     text::markdown,
@@ -381,16 +381,55 @@ pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     }
 }
 
-pub(crate) fn story_toolbar_group() -> ButtonGroup {
-    ButtonGroup::new("story-toolbar")
-        .outline()
-        .small()
-        .dropdown_anchor(Anchor::TopRight)
-        .w_full()
-        .justify_end()
+#[derive(IntoElement)]
+pub(crate) struct StoryToolbar {
+    base: Div,
+    children: Vec<AnyElement>,
 }
 
-pub(crate) fn story_toolbar(size: ComponentSize) -> ButtonGroup {
+impl StoryToolbar {
+    pub(crate) fn child(mut self, button: Button) -> Self {
+        self.children
+            .push(button.outline().small().into_any_element());
+        self
+    }
+
+    pub(crate) fn dropdown_child(
+        mut self,
+        button: Button,
+        builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        self.children.push(
+            button
+                .outline()
+                .small()
+                .dropdown_menu_with_anchor(Anchor::TopRight, builder)
+                .into_any_element(),
+        );
+        self
+    }
+}
+
+impl Styled for StoryToolbar {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl RenderOnce for StoryToolbar {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        self.base.children(self.children)
+    }
+}
+
+pub(crate) fn story_toolbar_group() -> StoryToolbar {
+    StoryToolbar {
+        base: h_flex().w_full().justify_end(),
+        children: vec![],
+    }
+}
+
+pub(crate) fn story_toolbar(size: ComponentSize) -> StoryToolbar {
     let label = match size {
         ComponentSize::XSmall => "XSmall",
         ComponentSize::Small => "Small",

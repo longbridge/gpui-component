@@ -7,8 +7,8 @@ use crate::{
     table::{TableDelegate, TableState},
 };
 use gpui::{
-    AnyElement, App, Edges, Entity, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, RenderOnce, Styled, Window, div, prelude::FluentBuilder,
+    App, Edges, Entity, Focusable, InteractiveElement, IntoElement, KeyBinding, ParentElement,
+    RenderOnce, Styled, Window, div, prelude::FluentBuilder,
 };
 
 const CONTEXT: &'static str = "DataTable";
@@ -90,7 +90,6 @@ impl Default for TableOptions {
 pub struct DataTable<D: TableDelegate> {
     state: Entity<TableState<D>>,
     options: TableOptions,
-    footer: Option<AnyElement>,
 }
 
 impl<D> DataTable<D>
@@ -102,14 +101,7 @@ where
         Self {
             state: state.clone(),
             options: TableOptions::default(),
-            footer: None,
         }
-    }
-
-    /// Add content below the scrollable table body.
-    pub fn footer(mut self, footer: impl IntoElement) -> Self {
-        self.footer = Some(footer.into_any_element());
-        self
     }
 
     /// Set to use stripe style of the table, default to false.
@@ -159,8 +151,6 @@ where
         div()
             .id("table")
             .size_full()
-            .flex()
-            .flex_col()
             .key_context(CONTEXT)
             .track_focus(&focus_handle)
             .on_action(window.listener_for(&self.state, TableState::action_cancel))
@@ -178,7 +168,6 @@ where
                     .border_1()
                     .border_color(cx.theme().border)
             })
-            .child(div().min_h_0().flex_1().child(self.state))
-            .when_some(self.footer, |this, footer| this.child(footer))
+            .child(self.state)
     }
 }

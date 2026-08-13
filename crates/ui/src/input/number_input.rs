@@ -96,7 +96,6 @@ impl Styled for NumberInput {
 
 impl RenderOnce for NumberInput {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let has_explicit_width = self.style.size.width.is_some();
         let focused = self.state.read(cx).focus_handle(cx).is_focused(window) && !self.disabled;
         let (bg, _) = input_style(self.disabled, cx);
         let border_color = if self.disabled {
@@ -120,7 +119,7 @@ impl RenderOnce for NumberInput {
 
         BaseNumberInput::new(&base_state)
             .disabled(self.disabled)
-            .when(!has_explicit_width, |this| this.flex_1())
+            .flex_1()
             .input_h(self.size)
             .rounded(cx.theme().radius)
             // The buttons are ghost, so the frame around the whole control is
