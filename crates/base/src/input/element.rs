@@ -278,12 +278,16 @@ fn editor_gutter_bounds(
     input_bounds: Bounds<Pixels>,
     line_number_width: Pixels,
     ghost_lines_height: Pixels,
+    paddings: Edges<Pixels>,
 ) -> Bounds<Pixels> {
     Bounds {
-        origin: input_bounds.origin,
+        origin: point(
+            input_bounds.origin.x - paddings.left,
+            input_bounds.origin.y - paddings.top,
+        ),
         size: size(
-            line_number_width,
-            input_bounds.size.height + ghost_lines_height,
+            line_number_width + paddings.left,
+            input_bounds.size.height + ghost_lines_height + paddings.top + paddings.bottom,
         ),
     }
 }
@@ -2063,7 +2067,7 @@ impl Element for TextElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let (focus_handle, show_cursor, disabled, selected_range, editor_style) = {
+        let (focus_handle, show_cursor, disabled, selected_range, editor_style, editor_paddings) = {
             let state = self.state.read(cx);
             (
                 state.focus_handle.clone(),
@@ -2071,6 +2075,7 @@ impl Element for TextElement {
                 state.disabled,
                 state.selected_range,
                 state.editor_style.clone(),
+                state.editor_paddings,
             )
         };
         let focused = focus_handle.is_focused(window);
@@ -2260,6 +2265,7 @@ impl Element for TextElement {
                     input_bounds,
                     prepaint.last_layout.line_number_width,
                     prepaint.ghost_lines_height,
+                    editor_paddings,
                 ),
                 gutter_bg,
             ));
@@ -2595,8 +2601,18 @@ mod tests {
         let input_bounds = Bounds::new(point(px(10.), px(20.)), size(px(300.), px(80.)));
 
         assert_eq!(
-            editor_gutter_bounds(input_bounds, px(48.), px(16.)),
-            Bounds::new(point(px(10.), px(20.)), size(px(48.), px(96.)))
+            editor_gutter_bounds(
+                input_bounds,
+                px(48.),
+                px(16.),
+                Edges {
+                    top: px(2.),
+                    right: px(3.),
+                    bottom: px(5.),
+                    left: px(7.),
+                },
+            ),
+            Bounds::new(point(px(3.), px(18.)), size(px(55.), px(103.)))
         );
     }
 
