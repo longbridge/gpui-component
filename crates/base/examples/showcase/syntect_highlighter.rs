@@ -1,36 +1,64 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range, sync::LazyLock};
 
 use gpui::{Context, HighlightStyle, SharedString, Window, rgb};
 use gpui_base::input::{
     FoldRange, HighlightStyleResolver, InputBaseState, InputEdit, InputHighlighter, Rope,
 };
 use syntect::{
-    parsing::{ParseState, ScopeStack, SyntaxSet},
+    parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet},
     util::LinesWithEndings,
 };
+
+/// Loading the default syntax definitions deserializes a few megabytes, so share
+/// one set across every highlighter instance.
+static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 
 /// A small, WASM-compatible example adapter for Base's parser-independent
 /// highlighting API. Syntect identifies scopes; the application-owned resolver
 /// supplies all colors and font styles.
 pub(super) struct SyntectHighlighter {
     language: SharedString,
-    syntax_set: SyntaxSet,
+    /// Non-overlapping highlights, ordered by start offset.
     highlights: Vec<(Range<usize>, &'static str)>,
+    fold_ranges: Vec<FoldRange>,
+    /// Scope ids are cheap to compare but expensive to stringify, so remember
+    /// the semantic name each one maps to.
+    semantic_names: HashMap<Scope, Option<&'static str>>,
 }
 
 impl SyntectHighlighter {
     pub(super) fn new(language: &str) -> Option<Self> {
-        let syntax_set = SyntaxSet::load_defaults_newlines();
-        syntax_set
-            .find_syntax_by_token(language)
-            .or_else(|| syntax_set.find_syntax_by_extension(language))?;
+        find_syntax(language)?;
 
         Some(Self {
             language: language.to_owned().into(),
-            syntax_set,
             highlights: Vec::new(),
+            fold_ranges: Vec::new(),
+            semantic_names: HashMap::new(),
         })
     }
+
+    fn push_highlight(&mut self, range: Range<usize>, scopes: &ScopeStack) {
+        if range.is_empty() {
+            return;
+        }
+
+        let name = scopes.scopes.iter().rev().find_map(|scope| {
+            *self
+                .semantic_names
+                .entry(*scope)
+                .or_insert_with(|| semantic_name(*scope))
+        });
+        if let Some(name) = name {
+            self.highlights.push((range, name));
+        }
+    }
+}
+
+fn find_syntax(language: &str) -> Option<&'static SyntaxReference> {
+    SYNTAX_SET
+        .find_syntax_by_token(language)
+        .or_else(|| SYNTAX_SET.find_syntax_by_extension(language))
 }
 
 impl InputHighlighter for SyntectHighlighter {
@@ -42,44 +70,38 @@ impl InputHighlighter for SyntectHighlighter {
         &mut self,
         _edit: Option<InputEdit>,
         text: &Rope,
-        _folding: bool,
+        folding: bool,
         _window: &mut Window,
         _cx: &mut Context<InputBaseState>,
     ) {
+        // `syntect` has no incremental mode, so the whole document is reparsed.
+        // Read the rope once and reuse that string for folding too.
         let text = text.to_string();
-        let syntax = self
-            .syntax_set
-            .find_syntax_by_token(self.language.as_ref())
-            .or_else(|| {
-                self.syntax_set
-                    .find_syntax_by_extension(self.language.as_ref())
-            })
-            .unwrap_or_else(|| self.syntax_set.find_syntax_plain_text());
+        let syntax = find_syntax(self.language.as_ref())
+            .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
         let mut parser = ParseState::new(syntax);
         let mut scopes = ScopeStack::new();
         let mut offset = 0;
         self.highlights.clear();
 
         for line in LinesWithEndings::from(&text) {
-            if let Ok(operations) = parser.parse_line(line, &self.syntax_set) {
+            if let Ok(operations) = parser.parse_line(line, &SYNTAX_SET) {
                 let mut cursor = 0;
                 for (index, operation) in operations {
-                    push_highlight(
-                        &mut self.highlights,
-                        offset + cursor..offset + index,
-                        &scopes,
-                    );
+                    self.push_highlight(offset + cursor..offset + index, &scopes);
                     let _ = scopes.apply(&operation);
                     cursor = index;
                 }
-                push_highlight(
-                    &mut self.highlights,
-                    offset + cursor..offset + line.len(),
-                    &scopes,
-                );
+                self.push_highlight(offset + cursor..offset + line.len(), &scopes);
             }
             offset += line.len();
         }
+
+        self.fold_ranges = if folding {
+            brace_fold_ranges(&text)
+        } else {
+            Vec::new()
+        };
     }
 
     fn styles(
@@ -90,19 +112,33 @@ impl InputHighlighter for SyntectHighlighter {
         resolve_styles(&self.highlights, range, resolver)
     }
 
-    fn fold_ranges(&self, text: &Rope) -> Vec<FoldRange> {
-        brace_fold_ranges(&text.to_string())
+    fn fold_ranges(&self, _: &Rope) -> Vec<FoldRange> {
+        self.fold_ranges.clone()
+    }
+
+    fn fold_ranges_for_edit(&self, _: Range<usize>, _: &Rope) -> Vec<FoldRange> {
+        self.fold_ranges.clone()
     }
 }
 
+/// Turn the highlights overlapping `range` into gap-free style runs.
+///
+/// `highlights` is ordered and non-overlapping, so the first candidate is found
+/// by binary search instead of scanning the whole document on every frame.
 fn resolve_styles(
     highlights: &[(Range<usize>, &'static str)],
     range: &Range<usize>,
     resolver: &dyn HighlightStyleResolver,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
+    let first = highlights.partition_point(|(highlight, _)| highlight.end <= range.start);
     let mut runs = Vec::new();
     let mut cursor = range.start;
-    for (highlight_range, name) in highlights {
+
+    for (highlight_range, name) in &highlights[first..] {
+        if highlight_range.start >= range.end {
+            break;
+        }
+
         let start = highlight_range.start.max(range.start);
         let end = highlight_range.end.min(range.end);
         if start >= end || end <= cursor {
@@ -114,58 +150,46 @@ fn resolve_styles(
         runs.push((start..end, resolver.style(name).unwrap_or_default()));
         cursor = end;
     }
+
     if cursor < range.end {
         runs.push((cursor..range.end, HighlightStyle::default()));
     }
     runs
 }
 
-fn push_highlight(
-    highlights: &mut Vec<(Range<usize>, &'static str)>,
-    range: Range<usize>,
-    scopes: &ScopeStack,
-) {
-    if !range.is_empty() {
-        if let Some(name) = semantic_name(scopes) {
-            highlights.push((range, name));
-        }
-    }
-}
-
-fn semantic_name(scopes: &ScopeStack) -> Option<&'static str> {
-    for scope in scopes.scopes.iter().rev() {
-        let scope = scope.build_string();
-        if scope.starts_with("comment") {
-            return Some("comment");
-        } else if scope.starts_with("constant.character.escape") {
-            return Some("string.escape");
-        } else if scope.starts_with("string") {
-            return Some("string");
-        } else if scope.starts_with("constant.numeric") {
-            return Some("number");
-        } else if scope.starts_with("constant.language.boolean") {
-            return Some("boolean");
-        } else if scope.starts_with("keyword.operator") {
-            return Some("operator");
-        } else if scope.starts_with("keyword") || scope.starts_with("storage") {
-            return Some("keyword");
-        } else if scope.starts_with("entity.name.function") || scope.starts_with("support.function")
-        {
-            return Some("function");
-        } else if scope.starts_with("entity.name.type")
-            || scope.starts_with("entity.name.class")
-            || scope.starts_with("support.type")
-        {
-            return Some("type");
-        } else if scope.starts_with("variable") {
-            return Some("variable");
-        } else if scope.starts_with("constant") {
-            return Some("constant");
-        } else if scope.starts_with("punctuation") {
-            return Some("punctuation");
-        }
-    }
-    None
+fn semantic_name(scope: Scope) -> Option<&'static str> {
+    let scope = scope.build_string();
+    let name = if scope.starts_with("comment") {
+        "comment"
+    } else if scope.starts_with("constant.character.escape") {
+        "string.escape"
+    } else if scope.starts_with("string") {
+        "string"
+    } else if scope.starts_with("constant.numeric") {
+        "number"
+    } else if scope.starts_with("constant.language.boolean") {
+        "boolean"
+    } else if scope.starts_with("keyword.operator") {
+        "operator"
+    } else if scope.starts_with("keyword") || scope.starts_with("storage") {
+        "keyword"
+    } else if scope.starts_with("entity.name.function") || scope.starts_with("support.function") {
+        "function"
+    } else if scope.starts_with("entity.name.type")
+        || scope.starts_with("entity.name.class")
+        || scope.starts_with("support.type")
+    {
+        "type"
+    } else if scope.starts_with("variable") {
+        "variable"
+    } else if scope.starts_with("constant") {
+        "constant"
+    } else if scope.starts_with("punctuation") {
+        "punctuation"
+    } else {
+        return None;
+    };
+    Some(name)
 }
 
 fn brace_fold_ranges(text: &str) -> Vec<FoldRange> {

@@ -13,7 +13,6 @@ pub struct EditorStory {
     _decorations: TextDecorationCollection,
     active_tab: usize,
 }
-
 impl super::Story for EditorStory {
     fn title() -> &'static str {
         "Editor"
