@@ -107,32 +107,29 @@ impl SidebarStory {
                         crate::story_toolbar_group()
                             .w_auto()
                             .flex_shrink_0()
-                            .dropdown_child(Button::new("sidebar-mode").label("Mode"), {
-                                let collapsible = self.collapsible;
-                                move |menu, _, _| {
-                                    menu.menu_with_check(
-                                        "Icon",
-                                        collapsible == SidebarCollapsible::Icon,
-                                        Box::new(SidebarOption::Icon),
-                                    )
-                                    .menu_with_check(
-                                        "Offcanvas",
-                                        collapsible == SidebarCollapsible::Offcanvas,
-                                        Box::new(SidebarOption::Offcanvas),
-                                    )
-                                    .menu_with_check(
-                                        "None",
-                                        collapsible == SidebarCollapsible::None,
-                                        Box::new(SidebarOption::None),
-                                    )
-                                }
-                            })
                             .dropdown_child(Button::new("sidebar-options").label("Options"), {
+                                let collapsible = self.collapsible;
                                 let right = self.side.is_right();
                                 let click_to_open = self.click_to_open_submenu;
                                 let dynamic_children = self.show_dynamic_children;
                                 move |menu, _, _| {
                                     menu.menu_with_check(
+                                        "Icon mode",
+                                        collapsible == SidebarCollapsible::Icon,
+                                        Box::new(SidebarOption::Icon),
+                                    )
+                                    .menu_with_check(
+                                        "Offcanvas mode",
+                                        collapsible == SidebarCollapsible::Offcanvas,
+                                        Box::new(SidebarOption::Offcanvas),
+                                    )
+                                    .menu_with_check(
+                                        "Fixed mode",
+                                        collapsible == SidebarCollapsible::None,
+                                        Box::new(SidebarOption::None),
+                                    )
+                                    .separator()
+                                    .menu_with_check(
                                         "Right Side",
                                         right,
                                         Box::new(SidebarOption::Right),
