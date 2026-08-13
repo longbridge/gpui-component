@@ -4,9 +4,9 @@ use gpui::{Context, Window};
 use ropey::Rope;
 use sum_tree::Bias;
 
-use super::{InputState, RopeExt as _};
+use super::{InputBaseState, RopeExt as _};
 
-impl InputState {
+impl InputBaseState {
     /// Select the word at the given offset on double-click.
     ///
     /// The offset is the UTF-8 offset.

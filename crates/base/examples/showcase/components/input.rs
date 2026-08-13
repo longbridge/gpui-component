@@ -4,7 +4,8 @@ use gpui::MouseButton;
 impl BaseShowcase {
     pub(in super::super) fn input(&self) -> impl IntoElement {
         let input_state = self.input.clone();
-        let multiline_state = self.multiline_input.clone();
+        let textarea_state = self.textarea.clone();
+        let editor_state = self.editor.clone();
         div()
             .w_56()
             .flex()
@@ -21,7 +22,7 @@ impl BaseShowcase {
                     .gap_1()
                     .child(div().h(px(16.)).flex().items_center().child("Project name"))
                     .child(
-                        Input::new("example-input")
+                        InputBase::new("example-input")
                             .w_full()
                             .h_7()
                             .px_2()
@@ -35,7 +36,7 @@ impl BaseShowcase {
                             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                 input_state.update(cx, |state, cx| state.focus(window, cx));
                             })
-                            .child(self.input.clone()),
+                            .child(Input::new(&self.input)),
                     ),
             )
             .child(
@@ -45,9 +46,9 @@ impl BaseShowcase {
                     .flex_col()
                     .items_start()
                     .gap_1()
-                    .child(div().h(px(16.)).flex().items_center().child("Notes"))
+                    .child(div().h(px(16.)).flex().items_center().child("Textarea"))
                     .child(
-                        Input::new("example-multiline-input")
+                        InputBase::new("example-multiline-input")
                             .w_full()
                             .h_16()
                             .px_2()
@@ -62,9 +63,35 @@ impl BaseShowcase {
                                 styles.focused(|style| style.border_color(rgb(0x171717)))
                             })
                             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                multiline_state.update(cx, |state, cx| state.focus(window, cx));
+                                textarea_state.update(cx, |state, cx| state.focus(window, cx));
                             })
-                            .child(div().size_full().child(self.multiline_input.clone())),
+                            .child(div().size_full().child(Textarea::new(&self.textarea))),
+                    ),
+            )
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .flex_col()
+                    .items_start()
+                    .gap_1()
+                    .child(div().h(px(16.)).flex().items_center().child("Editor"))
+                    .child(
+                        InputBase::new("example-editor")
+                            .w_full()
+                            .h_24()
+                            .px_2()
+                            .py_2()
+                            .overflow_hidden()
+                            .border_1()
+                            .border_color(rgb(0xd4d4d4))
+                            .styles(|styles| {
+                                styles.focused(|style| style.border_color(rgb(0x171717)))
+                            })
+                            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                                editor_state.update(cx, |state, cx| state.focus(window, cx));
+                            })
+                            .child(div().size_full().child(Editor::new(&self.editor))),
                     ),
             )
     }

@@ -8,7 +8,7 @@ use lsp_types::{
 use ropey::Rope;
 use std::{cell::RefCell, ops::Range, rc::Rc, time::Duration};
 
-use crate::input::InputState;
+use crate::input::InputBaseState;
 
 /// Default debounce duration for inline completions.
 const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(300);
@@ -16,7 +16,7 @@ const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(300);
 /// Display options for the LSP completion popover.
 ///
 /// Accessed through [`super::Lsp::completion_menu`] so embedders can tweak the
-/// popover without growing the [`InputState`] API.
+/// popover without growing the [`InputBaseState`] API.
 #[derive(Debug, Clone, Copy)]
 pub struct CompletionMenuOptions {
     /// Maximum width of the popover.
@@ -50,7 +50,7 @@ pub trait CompletionProvider {
         offset: usize,
         trigger: CompletionContext,
         window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     ) -> Task<Result<CompletionResponse>>;
 
     /// Fetches an inline completion suggestion for the given position.
@@ -73,7 +73,7 @@ pub trait CompletionProvider {
         _offset: usize,
         _trigger: InlineCompletionContext,
         _window: &mut Window,
-        _cx: &mut Context<InputState>,
+        _cx: &mut Context<InputBaseState>,
     ) -> Task<Result<InlineCompletionResponse>> {
         Task::ready(Ok(InlineCompletionResponse::Array(vec![])))
     }
@@ -90,7 +90,7 @@ pub trait CompletionProvider {
         &self,
         _completion_indices: Vec<usize>,
         _completions: Rc<RefCell<Box<[Completion]>>>,
-        _: &mut Context<InputState>,
+        _: &mut Context<InputBaseState>,
     ) -> Task<Result<bool>> {
         Task::ready(Ok(false))
     }
@@ -102,7 +102,7 @@ pub trait CompletionProvider {
         &self,
         offset: usize,
         new_text: &str,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     ) -> bool;
 }
 
@@ -122,7 +122,7 @@ impl Default for InlineCompletion {
     }
 }
 
-impl InputState {
+impl InputBaseState {
     pub(crate) fn handle_completion_trigger(
         &mut self,
         range: &Range<usize>,

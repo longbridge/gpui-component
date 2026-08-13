@@ -5,7 +5,7 @@
 use anyhow::Result;
 use gpui::TextAlign;
 use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
@@ -270,8 +270,8 @@ pub(crate) fn init(cx: &mut App) {
     ]);
 }
 
-/// InputState to keep editing state of the [`super::Input`].
-pub struct InputState {
+/// InputBaseState to keep editing state of the [`super::Input`].
+pub struct InputBaseState {
     pub(super) focus_handle: FocusHandle,
     pub(super) mode: InputMode,
     pub(super) text: Rope,
@@ -329,6 +329,7 @@ pub struct InputState {
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
+    pub(super) editor_paddings: Edges<Pixels>,
     pub(super) decorations: DecorationCollections,
     pub(super) editor_style: InputEditorStyle,
 
@@ -362,7 +363,7 @@ pub struct InputState {
                 super::InputOverlayKind,
                 Box<dyn Action>,
                 &mut Window,
-                &mut Context<InputState>,
+                &mut Context<InputBaseState>,
             ) -> bool,
         >,
     >,
@@ -409,9 +410,9 @@ pub struct InputPresentation {
     pub mask_placeholder: Option<String>,
 }
 
-impl EventEmitter<InputEvent> for InputState {}
+impl EventEmitter<InputEvent> for InputBaseState {}
 
-impl InputState {
+impl InputBaseState {
     #[doc(hidden)]
     pub fn cursor_layout(&self) -> Option<(Bounds<Pixels>, Pixels)> {
         let layout = self.last_layout.as_ref()?;
@@ -544,6 +545,7 @@ impl InputState {
             scroll_handle: ScrollHandle::new(),
             scroll_size: gpui::size(px(0.), px(0.)),
             editor_scrollbar_snapshot: Cell::new(None),
+            editor_paddings: Edges::default(),
             deferred_scroll_offset: None,
             preferred_column: None,
             placeholder: SharedString::default(),
@@ -575,12 +577,14 @@ impl InputState {
     /// Set Input to use multi line mode.
     ///
     /// Default rows is 2.
+    #[doc(hidden)]
     pub fn multi_line(mut self, multi_line: bool) -> Self {
         self.mode = self.mode.multi_line(multi_line);
         self
     }
 
     /// Set Input to use [`InputMode::AutoGrow`] mode with min, max rows limit.
+    #[doc(hidden)]
     pub fn auto_grow(mut self, min_rows: usize, max_rows: usize) -> Self {
         self.mode = InputMode::auto_grow(min_rows, max_rows);
         self
@@ -607,6 +611,7 @@ impl InputState {
     /// - Auto Indent
     /// - Line Number
     /// - Large Text support, up to 50K lines.
+    #[doc(hidden)]
     pub fn code_editor(mut self, language: impl Into<SharedString>) -> Self {
         let language: SharedString = language.into();
         self.mode = InputMode::code_editor(language);
@@ -623,14 +628,26 @@ impl InputState {
         self
     }
 
+    pub(crate) fn set_context_menu_enabled(&mut self, enabled: bool) {
+        self.enable_context_menu = enabled;
+    }
+
     /// Set this input is searchable, default is false (Default true for Code Editor).
+    #[doc(hidden)]
     pub fn searchable(mut self, searchable: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.searchable = searchable;
         self
     }
 
+    pub(crate) fn set_searchable(&mut self, searchable: bool, cx: &mut Context<Self>) {
+        debug_assert!(self.mode.is_multi_line());
+        self.searchable = searchable;
+        cx.notify();
+    }
+
     /// Set whether search UI allows replacement, default is true.
+    #[doc(hidden)]
     pub fn replaceable(mut self, allow: bool) -> Self {
         self.replaceable = allow;
         self
@@ -645,6 +662,7 @@ impl InputState {
     /// Set enable/disable code folding, only for [`InputMode::CodeEditor`] mode.
     ///
     /// Default: true
+    #[doc(hidden)]
     pub fn folding(mut self, folding: bool) -> Self {
         debug_assert!(self.mode.is_code_editor());
         if let InputMode::CodeEditor { folding: f, .. } = &mut self.mode {
@@ -668,6 +686,7 @@ impl InputState {
     }
 
     /// Set enable/disable line number, only for [`InputMode::CodeEditor`] mode.
+    #[doc(hidden)]
     pub fn line_number(mut self, line_number: bool) -> Self {
         debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let InputMode::CodeEditor { line_number: l, .. } = &mut self.mode {
@@ -690,6 +709,7 @@ impl InputState {
     /// This is only used when `multi_line` is set to true.
     ///
     /// default: 2
+    #[doc(hidden)]
     pub fn rows(mut self, rows: usize) -> Self {
         match &mut self.mode {
             InputMode::PlainText { rows: r, .. } | InputMode::CodeEditor { rows: r, .. } => {
@@ -705,6 +725,32 @@ impl InputState {
             }
         }
         self
+    }
+
+    pub(crate) fn set_rows(&mut self, rows: usize, cx: &mut Context<Self>) {
+        match &mut self.mode {
+            InputMode::PlainText { rows: value, .. }
+            | InputMode::CodeEditor { rows: value, .. } => *value = rows,
+            InputMode::AutoGrow {
+                rows: value,
+                max_rows,
+                ..
+            } => {
+                *value = rows;
+                *max_rows = rows;
+            }
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn set_auto_grow(
+        &mut self,
+        min_rows: usize,
+        max_rows: usize,
+        cx: &mut Context<Self>,
+    ) {
+        self.mode = InputMode::auto_grow(min_rows, max_rows.max(min_rows));
+        cx.notify();
     }
 
     /// Set highlighter language for for [`InputMode::CodeEditor`] mode.
@@ -755,6 +801,12 @@ impl InputState {
 
     pub fn set_editor_style(&mut self, style: InputEditorStyle) {
         self.editor_style = style;
+    }
+
+    /// Set presentation padding for multi-line text and its scrollbar layout.
+    #[doc(hidden)]
+    pub fn set_editor_paddings(&mut self, paddings: Edges<Pixels>) {
+        self.editor_paddings = paddings;
     }
 
     pub fn apply_highlighter_fold_candidates(
@@ -990,16 +1042,27 @@ impl InputState {
         self
     }
 
+    pub(crate) fn set_clean_on_escape(&mut self, clean: bool) {
+        self.clean_on_escape = clean;
+    }
+
     /// Set true to treat `Enter` as a submit action in multi-line mode,
     /// while `Shift+Enter` inserts a newline.
     ///
     /// Default is `false` (both `Enter` and `Shift+Enter` insert a newline).
+    #[doc(hidden)]
     pub fn submit_on_enter(mut self, submit: bool) -> Self {
         self.submit_on_enter = submit;
         self
     }
 
+    pub(crate) fn set_submit_on_enter(&mut self, submit: bool, cx: &mut Context<Self>) {
+        self.submit_on_enter = submit;
+        cx.notify();
+    }
+
     /// Set the soft wrap mode for multi-line input, default is true.
+    #[doc(hidden)]
     pub fn soft_wrap(mut self, wrap: bool) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.soft_wrap = wrap;
@@ -1007,12 +1070,14 @@ impl InputState {
     }
 
     /// Set whether to show whitespace characters.
+    #[doc(hidden)]
     pub fn show_whitespaces(mut self, show: bool) -> Self {
         self.show_whitespaces = show;
         self
     }
 
     /// Set how soft-wrapped continuation lines are indented, default is [`WrappingIndent::Same`]
+    #[doc(hidden)]
     pub fn wrapping_indent(mut self, wrapping_indent: WrappingIndent) -> Self {
         debug_assert!(self.mode.is_multi_line());
         self.wrapping_indent = wrapping_indent;
@@ -1148,6 +1213,14 @@ impl InputState {
         self
     }
 
+    pub(crate) fn set_validator(
+        &mut self,
+        validate: impl Fn(&str, &mut Context<Self>) -> bool + 'static,
+        _cx: &mut Context<Self>,
+    ) {
+        self.validate = Some(Box::new(validate));
+    }
+
     /// Set the step value of the [`super::NumberInput`] for increment/decrement.
     ///
     /// Only for [`InputMode::SingleLine`] mode with [`super::NumberInput`].
@@ -1177,13 +1250,13 @@ impl InputState {
     ///
     /// The closure receives a [`Context<Self>`] to read or update other
     /// entities while computing the step, but must not re-enter the owning
-    /// [`InputState`] (it is mutably borrowed during stepping).
+    /// [`InputBaseState`] (it is mutably borrowed during stepping).
     ///
     /// # Example
     ///
     /// ```ignore
     /// // At the boundary 1.0 the step is 0.1 going down and 0.5 going up.
-    /// InputState::new(window, cx).step_by(|value, action, _cx| match action {
+    /// InputBaseState::new(window, cx).step_by(|value, action, _cx| match action {
     ///     StepAction::Increment => if value < 1.0 { 0.1 } else { 0.5 },
     ///     StepAction::Decrement => if value <= 1.0 { 0.1 } else { 0.5 },
     /// })
@@ -2694,7 +2767,7 @@ impl InputState {
     }
 }
 
-impl EntityInputHandler for InputState {
+impl EntityInputHandler for InputBaseState {
     fn text_for_range(
         &mut self,
         range_utf16: Range<usize>,
@@ -3018,13 +3091,13 @@ impl EntityInputHandler for InputState {
     }
 }
 
-impl Focusable for InputState {
+impl Focusable for InputBaseState {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for InputState {
+impl Render for InputBaseState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
         if self._pending_update {
@@ -3050,84 +3123,92 @@ impl Render for InputState {
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .when(!self.disabled, |this| {
-                this.on_action(window.listener_for(&entity, InputState::backspace))
-                    .on_action(window.listener_for(&entity, InputState::delete))
+                this.on_action(window.listener_for(&entity, InputBaseState::backspace))
+                    .on_action(window.listener_for(&entity, InputBaseState::delete))
                     .on_action(
-                        window.listener_for(&entity, InputState::delete_to_beginning_of_line),
+                        window.listener_for(&entity, InputBaseState::delete_to_beginning_of_line),
                     )
-                    .on_action(window.listener_for(&entity, InputState::delete_to_end_of_line))
-                    .on_action(window.listener_for(&entity, InputState::delete_previous_word))
-                    .on_action(window.listener_for(&entity, InputState::delete_next_word))
-                    .on_action(window.listener_for(&entity, InputState::enter))
-                    .on_action(window.listener_for(&entity, InputState::escape))
-                    .on_action(window.listener_for(&entity, InputState::paste))
-                    .on_action(window.listener_for(&entity, InputState::cut))
-                    .on_action(window.listener_for(&entity, InputState::undo))
-                    .on_action(window.listener_for(&entity, InputState::redo))
+                    .on_action(window.listener_for(&entity, InputBaseState::delete_to_end_of_line))
+                    .on_action(window.listener_for(&entity, InputBaseState::delete_previous_word))
+                    .on_action(window.listener_for(&entity, InputBaseState::delete_next_word))
+                    .on_action(window.listener_for(&entity, InputBaseState::enter))
+                    .on_action(window.listener_for(&entity, InputBaseState::escape))
+                    .on_action(window.listener_for(&entity, InputBaseState::paste))
+                    .on_action(window.listener_for(&entity, InputBaseState::cut))
+                    .on_action(window.listener_for(&entity, InputBaseState::undo))
+                    .on_action(window.listener_for(&entity, InputBaseState::redo))
                     .when(self.mode.is_multi_line(), |this| {
-                        this.on_action(window.listener_for(&entity, InputState::indent_inline))
-                            .on_action(window.listener_for(&entity, InputState::outdent_inline))
-                            .on_action(window.listener_for(&entity, InputState::indent_block))
-                            .on_action(window.listener_for(&entity, InputState::outdent_block))
+                        this.on_action(window.listener_for(&entity, InputBaseState::indent_inline))
+                            .on_action(window.listener_for(&entity, InputBaseState::outdent_inline))
+                            .on_action(window.listener_for(&entity, InputBaseState::indent_block))
+                            .on_action(window.listener_for(&entity, InputBaseState::outdent_block))
                     })
                     .on_action(
-                        window.listener_for(&entity, InputState::on_action_toggle_code_actions),
+                        window.listener_for(&entity, InputBaseState::on_action_toggle_code_actions),
                     )
             })
-            .on_action(window.listener_for(&entity, InputState::left))
-            .on_action(window.listener_for(&entity, InputState::right))
-            .on_action(window.listener_for(&entity, InputState::select_left))
-            .on_action(window.listener_for(&entity, InputState::select_right))
+            .on_action(window.listener_for(&entity, InputBaseState::left))
+            .on_action(window.listener_for(&entity, InputBaseState::right))
+            .on_action(window.listener_for(&entity, InputBaseState::select_left))
+            .on_action(window.listener_for(&entity, InputBaseState::select_right))
             .when(self.mode.is_multi_line(), |this| {
-                this.on_action(window.listener_for(&entity, InputState::up))
-                    .on_action(window.listener_for(&entity, InputState::down))
-                    .on_action(window.listener_for(&entity, InputState::select_up))
-                    .on_action(window.listener_for(&entity, InputState::select_down))
-                    .on_action(window.listener_for(&entity, InputState::page_up))
-                    .on_action(window.listener_for(&entity, InputState::page_down))
-                    .on_action(window.listener_for(&entity, InputState::on_action_go_to_definition))
+                this.on_action(window.listener_for(&entity, InputBaseState::up))
+                    .on_action(window.listener_for(&entity, InputBaseState::down))
+                    .on_action(window.listener_for(&entity, InputBaseState::select_up))
+                    .on_action(window.listener_for(&entity, InputBaseState::select_down))
+                    .on_action(window.listener_for(&entity, InputBaseState::page_up))
+                    .on_action(window.listener_for(&entity, InputBaseState::page_down))
+                    .on_action(
+                        window.listener_for(&entity, InputBaseState::on_action_go_to_definition),
+                    )
             })
-            .on_action(window.listener_for(&entity, InputState::on_action_select_all))
-            .on_action(window.listener_for(&entity, InputState::select_to_start_of_line))
-            .on_action(window.listener_for(&entity, InputState::select_to_end_of_line))
-            .on_action(window.listener_for(&entity, InputState::select_to_previous_word))
-            .on_action(window.listener_for(&entity, InputState::select_to_next_word))
-            .on_action(window.listener_for(&entity, InputState::home))
-            .on_action(window.listener_for(&entity, InputState::end))
-            .on_action(window.listener_for(&entity, InputState::move_to_start))
-            .on_action(window.listener_for(&entity, InputState::move_to_end))
-            .on_action(window.listener_for(&entity, InputState::move_to_previous_word))
-            .on_action(window.listener_for(&entity, InputState::move_to_next_word))
-            .on_action(window.listener_for(&entity, InputState::select_to_start))
-            .on_action(window.listener_for(&entity, InputState::select_to_end))
-            .on_action(window.listener_for(&entity, InputState::show_character_palette))
-            .on_action(window.listener_for(&entity, InputState::copy))
-            .on_action(window.listener_for(&entity, InputState::on_action_search))
-            .on_action(window.listener_for(&entity, InputState::on_action_replace))
-            .on_key_down(window.listener_for(&entity, InputState::on_key_down))
+            .on_action(window.listener_for(&entity, InputBaseState::on_action_select_all))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_start_of_line))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_end_of_line))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_previous_word))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_next_word))
+            .on_action(window.listener_for(&entity, InputBaseState::home))
+            .on_action(window.listener_for(&entity, InputBaseState::end))
+            .on_action(window.listener_for(&entity, InputBaseState::move_to_start))
+            .on_action(window.listener_for(&entity, InputBaseState::move_to_end))
+            .on_action(window.listener_for(&entity, InputBaseState::move_to_previous_word))
+            .on_action(window.listener_for(&entity, InputBaseState::move_to_next_word))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_start))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_end))
+            .on_action(window.listener_for(&entity, InputBaseState::show_character_palette))
+            .on_action(window.listener_for(&entity, InputBaseState::copy))
+            .on_action(window.listener_for(&entity, InputBaseState::on_action_search))
+            .on_action(window.listener_for(&entity, InputBaseState::on_action_replace))
+            .on_key_down(window.listener_for(&entity, InputBaseState::on_key_down))
             .on_mouse_down(
                 MouseButton::Left,
-                window.listener_for(&entity, InputState::on_mouse_down),
+                window.listener_for(&entity, InputBaseState::on_mouse_down),
             )
             .on_mouse_down(
                 MouseButton::Right,
-                window.listener_for(&entity, InputState::on_mouse_down),
+                window.listener_for(&entity, InputBaseState::on_mouse_down),
             )
             .on_mouse_up(
                 MouseButton::Left,
-                window.listener_for(&entity, InputState::on_mouse_up),
+                window.listener_for(&entity, InputBaseState::on_mouse_up),
             )
             .on_mouse_up(
                 MouseButton::Right,
-                window.listener_for(&entity, InputState::on_mouse_up),
+                window.listener_for(&entity, InputBaseState::on_mouse_up),
             )
-            .on_mouse_move(window.listener_for(&entity, InputState::on_mouse_move))
-            .on_scroll_wheel(window.listener_for(&entity, InputState::on_scroll_wheel))
+            .on_mouse_move(window.listener_for(&entity, InputBaseState::on_mouse_move))
+            .on_scroll_wheel(window.listener_for(&entity, InputBaseState::on_scroll_wheel))
             .when(!self.disabled, |this| this.cursor_text())
             .flex_1()
             .when(self.mode.is_multi_line(), |this| this.h_full())
             .flex_grow_1()
             .overflow_x_hidden()
+            .when(self.mode.is_multi_line(), |this| {
+                this.pt(self.editor_paddings.top)
+                    .pr(self.editor_paddings.right)
+                    .pb(self.editor_paddings.bottom)
+                    .pl(self.editor_paddings.left)
+            })
             .child(TextElement::new(entity.clone()).placeholder(self.placeholder.clone()))
             .child(EditorScrollbar::new(entity))
     }
@@ -3140,7 +3221,7 @@ mod tests {
     use crate::theme::Theme;
     use gpui::{TestAppContext, VisualTestContext};
 
-    struct TestRoot(Entity<InputState>);
+    struct TestRoot(Entity<InputBaseState>);
 
     impl Render for TestRoot {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -3149,11 +3230,11 @@ mod tests {
     }
 
     struct InputView {
-        input: Entity<InputState>,
+        input: Entity<InputBaseState>,
         window_handle: gpui::WindowHandle<TestRoot>,
     }
 
-    /// Helper to create an InputState in a window for testing
+    /// Helper to create an InputBaseState in a window for testing
     impl InputView {
         pub fn new(cx: &mut TestAppContext) -> Self {
             Self::build(cx, |state| state.code_editor("sql"))
@@ -3161,9 +3242,9 @@ mod tests {
 
         pub fn build(
             cx: &mut TestAppContext,
-            f: impl FnOnce(InputState) -> InputState + 'static,
+            f: impl FnOnce(InputBaseState) -> InputBaseState + 'static,
         ) -> Self {
-            let mut input: Option<Entity<InputState>> = None;
+            let mut input: Option<Entity<InputBaseState>> = None;
 
             let window = cx.update(|cx| {
                 cx.open_window(Default::default(), |window, cx| {
@@ -3172,7 +3253,7 @@ mod tests {
                     // Initialize input keybindings
                     super::super::init(cx);
 
-                    input = Some(cx.new(|cx| f(InputState::new(window, cx))));
+                    input = Some(cx.new(|cx| f(InputBaseState::new(window, cx))));
 
                     cx.new(|_| TestRoot(input.clone().unwrap()))
                 })

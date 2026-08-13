@@ -5,7 +5,7 @@ use gpui::{
 use ropey::Rope;
 use std::{ops::Range, rc::Rc};
 
-use crate::input::{GoToDefinition, InputState, RopeExt, element::TextElement};
+use crate::input::{GoToDefinition, InputBaseState, RopeExt, element::TextElement};
 
 /// Definition provider
 ///
@@ -60,7 +60,7 @@ impl HoverDefinition {
     }
 }
 
-impl InputState {
+impl InputBaseState {
     pub(crate) fn handle_hover_definition(
         &mut self,
         offset: usize,
@@ -129,7 +129,7 @@ impl InputState {
         event: &MouseDownEvent,
         offset: usize,
         window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     ) -> bool {
         if !event.modifiers.secondary() {
             return false;
@@ -220,7 +220,7 @@ impl TextElement {
 
     pub(crate) fn layout_hover_definition_hitbox(
         &self,
-        editor: &InputState,
+        editor: &InputBaseState,
         window: &mut Window,
         _cx: &App,
     ) -> Option<Hitbox> {

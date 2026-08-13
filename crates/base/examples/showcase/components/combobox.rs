@@ -60,7 +60,7 @@ impl BaseShowcase {
             .border_color(rgb(0xd4d4d4))
             .bg(rgb(0xffffff))
             .child(
-                Input::new("combobox-search")
+                InputBase::new("combobox-search")
                     .w_full()
                     .h_7()
                     .px_2()

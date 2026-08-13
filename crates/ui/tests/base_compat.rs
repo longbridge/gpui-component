@@ -224,8 +224,8 @@ fn base_combobox_accepts_application_owned_content() {
 
 #[test]
 fn base_input_frames_accept_application_owned_content() {
-    let _ = gpui_base::Input::new("input").child(gpui::div());
-    fn build_number(state: &gpui::Entity<gpui_base::input::InputState>) {
+    let _ = gpui_base::InputBase::new("input").child(gpui::div());
+    fn build_number(state: &gpui::Entity<gpui_base::input::InputBaseState>) {
         let _ = gpui_base::NumberInput::new(state)
             .on_step(|_, _, _| {})
             .decrement_button(|button| button.child("-"))
@@ -254,7 +254,7 @@ fn base_input_accepts_application_owned_highlighters() {
             _: &gpui_base::input::Rope,
             _: bool,
             _: &mut gpui::Window,
-            _: &mut gpui::Context<gpui_base::input::InputState>,
+            _: &mut gpui::Context<gpui_base::input::InputBaseState>,
         ) {
         }
 

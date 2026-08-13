@@ -4,7 +4,7 @@ use gpui::{App, Context, HighlightStyle, WeakEntity};
 use ropey::Rope;
 use sum_tree::Bias;
 
-use super::{InputState, RopeExt as _};
+use super::{InputBaseState, RopeExt as _};
 
 /// A presentation style applied to a UTF-8 byte range in an input.
 ///
@@ -32,7 +32,7 @@ struct TextDecorationCollectionId(usize);
 /// [`IEditorDecorationsCollection`](https://microsoft.github.io/monaco-editor/typedoc/interfaces/editor_editor_api.editor.IEditorDecorationsCollection.html).
 #[derive(Clone, Debug)]
 pub struct TextDecorationCollection {
-    state: WeakEntity<InputState>,
+    state: WeakEntity<InputBaseState>,
     id: TextDecorationCollectionId,
 }
 
@@ -216,7 +216,7 @@ fn normalize(text: &Rope, decorations: Vec<TextDecoration>) -> Vec<TextDecoratio
         .collect()
 }
 
-impl InputState {
+impl InputBaseState {
     /// Create an independently managed collection of text decorations.
     ///
     /// This follows Monaco's
@@ -228,7 +228,7 @@ impl InputState {
     /// range, matching Monaco's
     /// [`NeverGrowsWhenTypingAtEdges`](https://microsoft.github.io/monaco-editor/typedoc/enums/editor_editor_api.editor.TrackedRangeStickiness.html#NeverGrowsWhenTypingAtEdges)
     /// behavior. Decorations are not rendered while the input is masked.
-    /// Collections live until their [`InputState`] is dropped.
+    /// Collections live until their [`InputBaseState`] is dropped.
     ///
     /// Collections are layered in insertion order; the first collection wins
     /// when overlapping decorations set the same [`HighlightStyle`] property.

@@ -3,7 +3,7 @@ use gpui::{App, Context, Entity, SharedString, Task, Window};
 use lsp_types::CodeAction;
 use std::ops::Range;
 
-use crate::input::{InputState, ToggleCodeActions};
+use crate::input::{InputBaseState, ToggleCodeActions};
 
 pub trait CodeActionProvider {
     /// The id for this CodeAction.
@@ -16,7 +16,7 @@ pub trait CodeActionProvider {
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_codeAction
     fn code_actions(
         &self,
-        state: Entity<InputState>,
+        state: Entity<InputBaseState>,
         range: Range<usize>,
         window: &mut Window,
         cx: &mut App,
@@ -25,7 +25,7 @@ pub trait CodeActionProvider {
     /// Performs the specified code action.
     fn perform_code_action(
         &self,
-        state: Entity<InputState>,
+        state: Entity<InputBaseState>,
         action: CodeAction,
         push_to_history: bool,
         window: &mut Window,
@@ -39,7 +39,7 @@ pub struct CodeActionItem {
     pub action: CodeAction,
 }
 
-impl InputState {
+impl InputBaseState {
     pub(crate) fn on_action_toggle_code_actions(
         &mut self,
         _: &ToggleCodeActions,

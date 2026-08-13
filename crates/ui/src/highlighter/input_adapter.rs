@@ -11,8 +11,8 @@ use std::{
 
 use gpui::{HighlightStyle, SharedString, Task};
 use gpui_base::input::{
-    FoldRange, HighlightStyleResolver, InputEdit as BaseInputEdit, InputHighlighter,
-    InputHighlighterFactory, InputState,
+    FoldRange, HighlightStyleResolver, InputBaseState, InputEdit as BaseInputEdit,
+    InputHighlighter, InputHighlighterFactory,
 };
 use ropey::Rope;
 use tree_sitter::{InputEdit, ParseOptions, Parser, Point};
@@ -64,7 +64,7 @@ impl InputHighlighter for TreeSitterInputHighlighter {
         text: &Rope,
         folding: bool,
         window: &mut gpui::Window,
-        cx: &mut gpui::Context<InputState>,
+        cx: &mut gpui::Context<InputBaseState>,
     ) {
         const SYNC_PARSE_TIMEOUT: Duration = Duration::from_millis(2);
         const SYNC_PARSE_MAX_BYTES: usize = 256 * 1024;

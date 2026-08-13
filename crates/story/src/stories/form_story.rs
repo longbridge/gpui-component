@@ -10,7 +10,7 @@ use gpui_component::{
     date_picker::{DatePicker, DatePickerState},
     form::{field, v_form},
     h_flex,
-    input::{Input, InputState},
+    input::{Input, InputState, Textarea, TextareaState},
     select::{Select, SelectState},
     separator::Separator,
     switch::Switch,
@@ -22,7 +22,7 @@ pub struct FormStory {
     name_prefix_state: Entity<SelectState<Vec<String>>>,
     name_input: Entity<InputState>,
     email_input: Entity<InputState>,
-    bio_input: Entity<InputState>,
+    bio_input: Entity<TextareaState>,
     color_state: Entity<ColorPickerState>,
     subscribe_email: bool,
     date: Entity<DatePickerState>,
@@ -75,7 +75,7 @@ impl FormStory {
         let email_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Enter text here..."));
         let bio_input = cx.new(|cx| {
-            InputState::new(window, cx)
+            TextareaState::new(window, cx)
                 .auto_grow(5, 20)
                 .placeholder("Enter text here...")
                 .default_value("Hello 世界，this is GPUI component.")
@@ -220,7 +220,7 @@ impl Render for FormStory {
                         field()
                             .label("Bio")
                             .when(self.layout.is_vertical(), |this| this.items_start())
-                            .child(Input::new(&self.bio_input))
+                            .child(Textarea::new(&self.bio_input))
                             .description_fn(|_, _| {
                                 div().child("Use at most 100 words to describe yourself.")
                             }),

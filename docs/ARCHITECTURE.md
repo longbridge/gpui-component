@@ -101,7 +101,7 @@ semantic seams. Base does not walk arbitrary descendant trees to discover them.
 
 ### 3. Stateful systems
 
-Examples include InputState, CalendarState, TreeState, SliderState,
+Examples include InputState, TextareaState, EditorState, CalendarState, TreeState, SliderState,
 ResizableState, OtpState, ColorPickerState, ToastManager, and ToastStackState.
 
 These modules retain data because their behavior spans frames or requires
@@ -191,27 +191,81 @@ Compound and stateful modules expose explicit presentation seams:
 - style refinements for internal virtualized containers;
 - presentation snapshots such as `InputPresentation`.
 
-## Input and Editor Architecture
+## Input, Textarea, and Editor Architecture
 
-Input is intentionally deeper than the semantic elements.
+Text editing is intentionally deeper than the semantic elements, but callers do
+not need to learn the complete editor interface for every text field.
 
-`InputState` owns the text model and editing behavior:
+### Public forms
+
+Both `gpui-base` and `gpui-component` expose three purpose-specific forms:
+
+| Form | State | Intended interface |
+| --- | --- | --- |
+| `Input` | `InputState` | Single-line values, placeholders, masks, validation, and submission |
+| `Textarea` | `TextareaState` | Ordinary multi-line text, fixed rows, soft wrapping, and optional auto-grow limits |
+| `Editor` | `EditorState` | Source text, language-aware highlighting, line numbers, folding, search, diagnostics, and LSP integration |
+
+`gpui-base` provides unstyled forms. `gpui-component` adapts the same behavior
+into the product theme and sizing system. `InputBase` is the foundational frame
+used for input semantics, state styling, accessibility, and application-owned
+content; it is not one of the three editing forms.
+
+Existing `gpui-component::Input::new(&Entity<InputState>)` call sites remain the
+single-line compatibility path. `InputState` is a real facade, not a type alias
+for the editing engine: multiline, auto-grow, gutter, folding, diagnostics, and
+LSP configuration are absent from its API. Multi-line code must construct
+`TextareaState` or `EditorState` instead.
+
+### Shared engine
+
+`InputBaseState` owns mechanics shared by all three states:
 
 - Rope-backed text and edit history;
-- cursor, selection, IME, masking, validation, and number stepping;
-- single-line, multi-line, auto-grow, and code-editor modes;
-- wrapping, indentation, folding, decorations, diagnostics, and search;
-- LSP provider interfaces and overlay state;
-- auto-scroll, editor scrolling, and cursor visibility;
+- cursor, selection, IME, clipboard, and focus;
+- shaping, layout, hit testing, selection and caret painting;
+- auto-scroll, viewport scrolling, and cursor visibility;
 - native text-content integration where supported.
 
-The custom input element owns shaping, layout, hit testing, selection and caret
-painting, line-number and gutter painting, and editor scrollbar integration.
+The implementation under `crates/base/src/input` is organized by responsibility:
+
+- `base/` contains the shared editing engine and foundational mechanics;
+- `input/` contains the single-line control and state facade;
+- `textarea/` contains the multi-line control and state facade;
+- `editor/` contains the editor control and state facade, plus display mapping,
+  highlighting, search, diagnostics, decorations, indentation, and LSP.
+
+These are implementation folders rather than public Rust module segments. The
+external seam remains `gpui_base::input`, with stable re-exports in `mod.rs`.
+
+Purpose-specific state facades configure the shared engine and forward
+`InputEvent` without duplicating those mechanics. `InputState`, `TextareaState`,
+and `EditorState` are distinct GPUI entity types. Their private bridge to
+`InputBaseState` exists for component composition; it is not the application
+API.
+
+Editor-only implementation includes indentation, folding, decorations,
+diagnostics, search, LSP providers, overlays, line-number/gutter painting, and
+syntax highlighting. Textarea owns rows, soft wrapping, Enter submission, and
+auto-grow policy. Masking, validation, and number stepping remain input-only
+concepts.
+
+### Presentation and geometry
 
 Presentation is injected through `InputEditorStyle`, highlighter interfaces,
-fold-icon renderers, context-menu adapters, and the higher-level UI input frame.
-This keeps the hard editor mechanics local while allowing `crates/ui` or an
-application to supply theme colors and surrounding controls.
+fold-icon renderers, context-menu adapters, and the higher-level UI forms.
+`gpui-component` supplies editor insets from its size system. Base consumes
+those insets only as geometry so text, the fixed gutter, and scrollbars share a
+coordinate system:
+
+- text remains inset from the frame;
+- vertical and horizontal scrollbars terminate at the frame edge;
+- the gutter background covers the complete fixed column, including top,
+  bottom, and leading insets;
+- editor focus does not add the single-line input focus-border treatment.
+
+This keeps product values in the presentation layer while keeping coupled text,
+gutter, and scrollbar geometry local to the editing engine.
 
 Platform-specific behavior is isolated behind adapters. For example, folding is
 disabled on WebAssembly, time uses `web_time` where needed, and native text

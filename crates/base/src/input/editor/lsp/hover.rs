@@ -3,7 +3,7 @@ use gpui::{App, Context, MouseMoveEvent, Task, Window};
 use instant::Duration;
 use ropey::Rope;
 
-use crate::input::{HoverPopoverState, InputState, RopeExt};
+use crate::input::{HoverPopoverState, InputBaseState, RopeExt};
 
 /// Hover provider
 ///
@@ -21,13 +21,13 @@ pub trait HoverProvider {
     ) -> Task<Result<Option<lsp_types::Hover>>>;
 }
 
-impl InputState {
+impl InputBaseState {
     /// Handle hover trigger LSP request.
     pub(super) fn handle_hover_popover(
         &mut self,
         offset: usize,
         window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     ) {
         if self.selecting {
             return;

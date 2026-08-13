@@ -6,7 +6,7 @@ use instant::Duration;
 use lsp_types::{Position, SemanticTokens, SemanticTokensLegend};
 use ropey::Rope;
 
-use crate::input::{HighlightStyleResolver, InputState, Lsp, RopeExt};
+use crate::input::{HighlightStyleResolver, InputBaseState, Lsp, RopeExt};
 
 /// A provider of semantic highlighting tokens, layered on top of the
 /// built-in tree-sitter [`SyntaxHighlighter`](crate::highlighter::SyntaxHighlighter).
@@ -15,7 +15,7 @@ use crate::input::{HighlightStyleResolver, InputState, Lsp, RopeExt};
 /// `textDocument/semanticTokens/range` request (and Monaco Editor's
 /// [`DocumentRangeSemanticTokensProvider`][monaco]). Like the other
 /// providers on [`Lsp`](crate::input::Lsp) — `DocumentColorProvider`,
-/// `HoverProvider`, … — it is installed on `InputState::lsp`, fetched
+/// `HoverProvider`, … — it is installed on `InputBaseState::lsp`, fetched
 /// asynchronously when the document changes, and its result is cached and
 /// composed into the render pipeline. It does **not** replace the
 /// tree-sitter highlighter.
@@ -109,7 +109,7 @@ impl Lsp {
         &mut self,
         text: &Rope,
         window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     ) {
         let Some(provider) = self.semantic_tokens_provider.as_ref() else {
             return;
