@@ -81,7 +81,7 @@ impl RenderOnce for Editor {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| state.prepare(window, cx));
         let base = self.state.read(cx).base_state().clone();
-        Input::new(&base)
+        Input::from_base(&base)
             .appearance(self.appearance)
             .bordered(self.bordered)
             .focus_bordered(false)

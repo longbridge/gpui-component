@@ -16,14 +16,15 @@ pub use gpui_base::input::{
     CompletionProvider, Copy, Cut, DefinitionProvider, Delete, DeleteToBeginningOfLine,
     DeleteToEndOfLine, DeleteToNextWordEnd, DeleteToPreviousWordStart, DisplayMap, DisplayPoint,
     DocumentColorProvider, DocumentRangeSemanticTokensProvider, EditorState, Enter, Escape,
-    FoldRange, GoToDefinition, HoverPopoverState, HoverProvider, Indent, IndentInline, InputEdit,
-    InputEvent, InputState, Lsp, MaskPattern, MoveDown, MoveEnd, MoveHome, MoveLeft, MovePageDown,
-    MovePageUp, MoveRight, MoveToEnd, MoveToEndOfLine, MoveToNextWord, MoveToPreviousWord,
-    MoveToStart, MoveToStartOfLine, MoveUp, Outdent, OutdentInline, Paste, Point, Redo, Replace,
-    Rope, RopeExt, RopeLines, Search, SelectAll, SelectToEnd, SelectToEndOfLine,
-    SelectToNextWordEnd, SelectToPreviousWordStart, SelectToStart, SelectToStartOfLine, Selection,
-    ShowCharacterPalette, ShowDocumentHandler, TabSize, TextDecoration, TextDecorationCollection,
-    TextareaState, ToggleCodeActions, Undo, WrappingIndent,
+    FoldRange, GoToDefinition, HoverPopoverState, HoverProvider, Indent, IndentInline,
+    InputBaseState, InputEdit, InputEvent, InputState, Lsp, MaskPattern, MoveDown, MoveEnd,
+    MoveHome, MoveLeft, MovePageDown, MovePageUp, MoveRight, MoveToEnd, MoveToEndOfLine,
+    MoveToNextWord, MoveToPreviousWord, MoveToStart, MoveToStartOfLine, MoveUp, Outdent,
+    OutdentInline, Paste, Point, Redo, Replace, Rope, RopeExt, RopeLines, Search, SelectAll,
+    SelectToEnd, SelectToEndOfLine, SelectToNextWordEnd, SelectToPreviousWordStart, SelectToStart,
+    SelectToStartOfLine, Selection, ShowCharacterPalette, ShowDocumentHandler, TabSize,
+    TextDecoration, TextDecorationCollection, TextareaState, ToggleCodeActions, Undo,
+    WrappingIndent,
 };
 mod editor;
 mod textarea;

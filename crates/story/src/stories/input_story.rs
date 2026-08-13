@@ -1,6 +1,6 @@
 use gpui::{
     App, AppContext as _, ClickEvent, Context, Entity, HighlightStyle, InteractiveElement,
-    IntoElement, ParentElement as _, Render, Role, Styled, Subscription, Window, div,
+    IntoElement, ParentElement as _, Render, Role, Styled, Subscription, Window, div, px,
 };
 
 use crate::section;
@@ -31,9 +31,9 @@ pub struct InputStory {
     currency_input: Entity<InputState>,
     custom_input: Entity<InputState>,
     custom_menu_input: Entity<InputState>,
-    code_input: Entity<InputState>,
+    code_input: Entity<EditorState>,
     color_input: Entity<InputState>,
-    decorations_input: Entity<InputState>,
+    decorations_input: Entity<EditorState>,
     color_decorations: TextDecorationCollection,
     underline_decorations: TextDecorationCollection,
     decorations_visible: bool,
@@ -133,7 +133,7 @@ impl InputStory {
         });
 
         let decorations_input =
-            cx.new(|cx| InputState::new(window, cx).default_value(DECORATIONS_EXAMPLE));
+            cx.new(|cx| EditorState::new("text", window, cx).default_value(DECORATIONS_EXAMPLE));
         let (color_decorations, underline_decorations) =
             decorations_input.update(cx, |state, cx| {
                 let color = state.create_decorations_collection(
@@ -173,9 +173,7 @@ impl InputStory {
             });
 
         let code_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .code_editor("json")
-                .multi_line(false)
+            EditorState::new("json", window, cx)
                 .show_whitespaces(true)
                 .default_value(CODE_EXAMPLE)
         });
@@ -646,28 +644,34 @@ impl Render for InputStory {
             )
             .child(
                 section("Text Decorations").max_w_md().child(
-                    Input::new(&self.decorations_input).suffix(
-                        Button::new("toggle-text-decorations")
-                            .text()
-                            .xsmall()
-                            .label(if self.decorations_visible {
-                                "Hide decorations"
-                            } else {
-                                "Show decorations"
-                            })
-                            .on_click(cx.listener(Self::on_click_toggle_decorations)),
-                    ),
+                    v_flex()
+                        .gap_2()
+                        .child(Editor::new(&self.decorations_input).h(px(80.)))
+                        .child(
+                            Button::new("toggle-text-decorations")
+                                .text()
+                                .xsmall()
+                                .label(if self.decorations_visible {
+                                    "Hide decorations"
+                                } else {
+                                    "Show decorations"
+                                })
+                                .on_click(cx.listener(Self::on_click_toggle_decorations)),
+                        ),
                 ),
             )
             .child(
-                section("Single line code editor").max_w_md().child(
-                    Input::new(&self.code_input).suffix(
-                        Button::new("code-reset")
-                            .text()
-                            .label("Reset")
-                            .xsmall()
-                            .on_click(cx.listener(Self::on_click_reset)),
-                    ),
+                section("Code Editor").max_w_md().child(
+                    v_flex()
+                        .gap_2()
+                        .child(Editor::new(&self.code_input).h(px(80.)))
+                        .child(
+                            Button::new("code-reset")
+                                .text()
+                                .label("Reset")
+                                .xsmall()
+                                .on_click(cx.listener(Self::on_click_reset)),
+                        ),
                 ),
             )
     }

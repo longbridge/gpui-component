@@ -65,7 +65,7 @@ pub use rope_ext::{InputEdit, Point, RopeExt, RopeLines};
 pub use ropey::Rope;
 pub use search::{SearchMatcher, SearchSession};
 pub use state::*;
-pub use state_facades::{EditorState, TextareaState};
+pub use state_facades::{EditorState, InputState, TextareaState};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InputContextMenuCapabilities {

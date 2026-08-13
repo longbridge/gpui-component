@@ -35,7 +35,7 @@ pub enum InputOverlayKind {
     CodeAction,
 }
 
-impl InputState {
+impl InputBaseState {
     pub fn present_completion_items(
         &mut self,
         trigger_start_offset: usize,
@@ -101,7 +101,7 @@ impl InputState {
             InputOverlayKind,
             Box<dyn gpui::Action>,
             &mut Window,
-            &mut Context<InputState>,
+            &mut Context<InputBaseState>,
         ) -> bool
         + 'static,
     ) {

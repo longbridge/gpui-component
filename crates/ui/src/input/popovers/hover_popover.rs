@@ -9,11 +9,11 @@ use gpui::{
 
 use crate::{
     StyledExt,
-    input::{InputState, popovers::render_markdown},
+    input::{InputBaseState, popovers::render_markdown},
 };
 
 pub struct HoverPopover {
-    editor: Entity<InputState>,
+    editor: Entity<InputBaseState>,
     /// The symbol range byte of the hover trigger.
     pub(crate) symbol_range: Range<usize>,
     pub(crate) hover: Rc<lsp_types::Hover>,
@@ -21,7 +21,7 @@ pub struct HoverPopover {
 
 impl HoverPopover {
     pub fn new(
-        editor: Entity<InputState>,
+        editor: Entity<InputBaseState>,
         symbol_range: Range<usize>,
         hover: &lsp_types::Hover,
         cx: &mut App,
@@ -67,7 +67,7 @@ impl Render for HoverPopover {
 pub(crate) struct Popover {
     id: ElementId,
     style: StyleRefinement,
-    editor: Entity<InputState>,
+    editor: Entity<InputBaseState>,
     range: Range<usize>,
     width_limit: Range<Pixels>,
     content_builder: Box<dyn Fn(&mut Window, &mut App) -> AnyElement>,
@@ -82,7 +82,7 @@ impl Styled for Popover {
 impl Popover {
     pub fn new<F, E>(
         id: impl Into<ElementId>,
-        editor: Entity<InputState>,
+        editor: Entity<InputBaseState>,
         range: Range<usize>,
         f: F,
     ) -> Self

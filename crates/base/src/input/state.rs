@@ -270,7 +270,7 @@ pub(crate) fn init(cx: &mut App) {
     ]);
 }
 
-/// InputState to keep editing state of the [`super::Input`].
+/// InputBaseState to keep editing state of the [`super::Input`].
 pub struct InputBaseState {
     pub(super) focus_handle: FocusHandle,
     pub(super) mode: InputMode,
@@ -363,7 +363,7 @@ pub struct InputBaseState {
                 super::InputOverlayKind,
                 Box<dyn Action>,
                 &mut Window,
-                &mut Context<InputState>,
+                &mut Context<InputBaseState>,
             ) -> bool,
         >,
     >,
@@ -395,14 +395,6 @@ pub struct InputBaseState {
     pub(super) auto_scroll: AutoScroll,
 }
 
-/// Compatibility name for the shared editing engine.
-///
-/// New code should use one of the purpose-specific state types exposed by the
-/// input facade. This alias remains while existing component consumers are
-/// migrated.
-#[doc(hidden)]
-pub type InputState = InputBaseState;
-
 /// Read-only styling data exposed to presentation facades.
 #[derive(Clone)]
 pub struct InputPresentation {
@@ -418,9 +410,9 @@ pub struct InputPresentation {
     pub mask_placeholder: Option<String>,
 }
 
-impl EventEmitter<InputEvent> for InputState {}
+impl EventEmitter<InputEvent> for InputBaseState {}
 
-impl InputState {
+impl InputBaseState {
     #[doc(hidden)]
     pub fn cursor_layout(&self) -> Option<(Bounds<Pixels>, Pixels)> {
         let layout = self.last_layout.as_ref()?;
@@ -634,6 +626,10 @@ impl InputState {
     pub fn context_menu(mut self, enable: bool) -> Self {
         self.enable_context_menu = enable;
         self
+    }
+
+    pub(crate) fn set_context_menu_enabled(&mut self, enabled: bool) {
+        self.enable_context_menu = enabled;
     }
 
     /// Set this input is searchable, default is false (Default true for Code Editor).
@@ -1046,6 +1042,10 @@ impl InputState {
         self
     }
 
+    pub(crate) fn set_clean_on_escape(&mut self, clean: bool) {
+        self.clean_on_escape = clean;
+    }
+
     /// Set true to treat `Enter` as a submit action in multi-line mode,
     /// while `Shift+Enter` inserts a newline.
     ///
@@ -1213,6 +1213,14 @@ impl InputState {
         self
     }
 
+    pub(crate) fn set_validator(
+        &mut self,
+        validate: impl Fn(&str, &mut Context<Self>) -> bool + 'static,
+        _cx: &mut Context<Self>,
+    ) {
+        self.validate = Some(Box::new(validate));
+    }
+
     /// Set the step value of the [`super::NumberInput`] for increment/decrement.
     ///
     /// Only for [`InputMode::SingleLine`] mode with [`super::NumberInput`].
@@ -1242,13 +1250,13 @@ impl InputState {
     ///
     /// The closure receives a [`Context<Self>`] to read or update other
     /// entities while computing the step, but must not re-enter the owning
-    /// [`InputState`] (it is mutably borrowed during stepping).
+    /// [`InputBaseState`] (it is mutably borrowed during stepping).
     ///
     /// # Example
     ///
     /// ```ignore
     /// // At the boundary 1.0 the step is 0.1 going down and 0.5 going up.
-    /// InputState::new(window, cx).step_by(|value, action, _cx| match action {
+    /// InputBaseState::new(window, cx).step_by(|value, action, _cx| match action {
     ///     StepAction::Increment => if value < 1.0 { 0.1 } else { 0.5 },
     ///     StepAction::Decrement => if value <= 1.0 { 0.1 } else { 0.5 },
     /// })
@@ -2759,7 +2767,7 @@ impl InputState {
     }
 }
 
-impl EntityInputHandler for InputState {
+impl EntityInputHandler for InputBaseState {
     fn text_for_range(
         &mut self,
         range_utf16: Range<usize>,
@@ -3083,13 +3091,13 @@ impl EntityInputHandler for InputState {
     }
 }
 
-impl Focusable for InputState {
+impl Focusable for InputBaseState {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for InputState {
+impl Render for InputBaseState {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
         if self._pending_update {
@@ -3115,79 +3123,81 @@ impl Render for InputState {
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
             .when(!self.disabled, |this| {
-                this.on_action(window.listener_for(&entity, InputState::backspace))
-                    .on_action(window.listener_for(&entity, InputState::delete))
+                this.on_action(window.listener_for(&entity, InputBaseState::backspace))
+                    .on_action(window.listener_for(&entity, InputBaseState::delete))
                     .on_action(
-                        window.listener_for(&entity, InputState::delete_to_beginning_of_line),
+                        window.listener_for(&entity, InputBaseState::delete_to_beginning_of_line),
                     )
-                    .on_action(window.listener_for(&entity, InputState::delete_to_end_of_line))
-                    .on_action(window.listener_for(&entity, InputState::delete_previous_word))
-                    .on_action(window.listener_for(&entity, InputState::delete_next_word))
-                    .on_action(window.listener_for(&entity, InputState::enter))
-                    .on_action(window.listener_for(&entity, InputState::escape))
-                    .on_action(window.listener_for(&entity, InputState::paste))
-                    .on_action(window.listener_for(&entity, InputState::cut))
-                    .on_action(window.listener_for(&entity, InputState::undo))
-                    .on_action(window.listener_for(&entity, InputState::redo))
+                    .on_action(window.listener_for(&entity, InputBaseState::delete_to_end_of_line))
+                    .on_action(window.listener_for(&entity, InputBaseState::delete_previous_word))
+                    .on_action(window.listener_for(&entity, InputBaseState::delete_next_word))
+                    .on_action(window.listener_for(&entity, InputBaseState::enter))
+                    .on_action(window.listener_for(&entity, InputBaseState::escape))
+                    .on_action(window.listener_for(&entity, InputBaseState::paste))
+                    .on_action(window.listener_for(&entity, InputBaseState::cut))
+                    .on_action(window.listener_for(&entity, InputBaseState::undo))
+                    .on_action(window.listener_for(&entity, InputBaseState::redo))
                     .when(self.mode.is_multi_line(), |this| {
-                        this.on_action(window.listener_for(&entity, InputState::indent_inline))
-                            .on_action(window.listener_for(&entity, InputState::outdent_inline))
-                            .on_action(window.listener_for(&entity, InputState::indent_block))
-                            .on_action(window.listener_for(&entity, InputState::outdent_block))
+                        this.on_action(window.listener_for(&entity, InputBaseState::indent_inline))
+                            .on_action(window.listener_for(&entity, InputBaseState::outdent_inline))
+                            .on_action(window.listener_for(&entity, InputBaseState::indent_block))
+                            .on_action(window.listener_for(&entity, InputBaseState::outdent_block))
                     })
                     .on_action(
-                        window.listener_for(&entity, InputState::on_action_toggle_code_actions),
+                        window.listener_for(&entity, InputBaseState::on_action_toggle_code_actions),
                     )
             })
-            .on_action(window.listener_for(&entity, InputState::left))
-            .on_action(window.listener_for(&entity, InputState::right))
-            .on_action(window.listener_for(&entity, InputState::select_left))
-            .on_action(window.listener_for(&entity, InputState::select_right))
+            .on_action(window.listener_for(&entity, InputBaseState::left))
+            .on_action(window.listener_for(&entity, InputBaseState::right))
+            .on_action(window.listener_for(&entity, InputBaseState::select_left))
+            .on_action(window.listener_for(&entity, InputBaseState::select_right))
             .when(self.mode.is_multi_line(), |this| {
-                this.on_action(window.listener_for(&entity, InputState::up))
-                    .on_action(window.listener_for(&entity, InputState::down))
-                    .on_action(window.listener_for(&entity, InputState::select_up))
-                    .on_action(window.listener_for(&entity, InputState::select_down))
-                    .on_action(window.listener_for(&entity, InputState::page_up))
-                    .on_action(window.listener_for(&entity, InputState::page_down))
-                    .on_action(window.listener_for(&entity, InputState::on_action_go_to_definition))
+                this.on_action(window.listener_for(&entity, InputBaseState::up))
+                    .on_action(window.listener_for(&entity, InputBaseState::down))
+                    .on_action(window.listener_for(&entity, InputBaseState::select_up))
+                    .on_action(window.listener_for(&entity, InputBaseState::select_down))
+                    .on_action(window.listener_for(&entity, InputBaseState::page_up))
+                    .on_action(window.listener_for(&entity, InputBaseState::page_down))
+                    .on_action(
+                        window.listener_for(&entity, InputBaseState::on_action_go_to_definition),
+                    )
             })
-            .on_action(window.listener_for(&entity, InputState::on_action_select_all))
-            .on_action(window.listener_for(&entity, InputState::select_to_start_of_line))
-            .on_action(window.listener_for(&entity, InputState::select_to_end_of_line))
-            .on_action(window.listener_for(&entity, InputState::select_to_previous_word))
-            .on_action(window.listener_for(&entity, InputState::select_to_next_word))
-            .on_action(window.listener_for(&entity, InputState::home))
-            .on_action(window.listener_for(&entity, InputState::end))
-            .on_action(window.listener_for(&entity, InputState::move_to_start))
-            .on_action(window.listener_for(&entity, InputState::move_to_end))
-            .on_action(window.listener_for(&entity, InputState::move_to_previous_word))
-            .on_action(window.listener_for(&entity, InputState::move_to_next_word))
-            .on_action(window.listener_for(&entity, InputState::select_to_start))
-            .on_action(window.listener_for(&entity, InputState::select_to_end))
-            .on_action(window.listener_for(&entity, InputState::show_character_palette))
-            .on_action(window.listener_for(&entity, InputState::copy))
-            .on_action(window.listener_for(&entity, InputState::on_action_search))
-            .on_action(window.listener_for(&entity, InputState::on_action_replace))
-            .on_key_down(window.listener_for(&entity, InputState::on_key_down))
+            .on_action(window.listener_for(&entity, InputBaseState::on_action_select_all))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_start_of_line))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_end_of_line))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_previous_word))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_next_word))
+            .on_action(window.listener_for(&entity, InputBaseState::home))
+            .on_action(window.listener_for(&entity, InputBaseState::end))
+            .on_action(window.listener_for(&entity, InputBaseState::move_to_start))
+            .on_action(window.listener_for(&entity, InputBaseState::move_to_end))
+            .on_action(window.listener_for(&entity, InputBaseState::move_to_previous_word))
+            .on_action(window.listener_for(&entity, InputBaseState::move_to_next_word))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_start))
+            .on_action(window.listener_for(&entity, InputBaseState::select_to_end))
+            .on_action(window.listener_for(&entity, InputBaseState::show_character_palette))
+            .on_action(window.listener_for(&entity, InputBaseState::copy))
+            .on_action(window.listener_for(&entity, InputBaseState::on_action_search))
+            .on_action(window.listener_for(&entity, InputBaseState::on_action_replace))
+            .on_key_down(window.listener_for(&entity, InputBaseState::on_key_down))
             .on_mouse_down(
                 MouseButton::Left,
-                window.listener_for(&entity, InputState::on_mouse_down),
+                window.listener_for(&entity, InputBaseState::on_mouse_down),
             )
             .on_mouse_down(
                 MouseButton::Right,
-                window.listener_for(&entity, InputState::on_mouse_down),
+                window.listener_for(&entity, InputBaseState::on_mouse_down),
             )
             .on_mouse_up(
                 MouseButton::Left,
-                window.listener_for(&entity, InputState::on_mouse_up),
+                window.listener_for(&entity, InputBaseState::on_mouse_up),
             )
             .on_mouse_up(
                 MouseButton::Right,
-                window.listener_for(&entity, InputState::on_mouse_up),
+                window.listener_for(&entity, InputBaseState::on_mouse_up),
             )
-            .on_mouse_move(window.listener_for(&entity, InputState::on_mouse_move))
-            .on_scroll_wheel(window.listener_for(&entity, InputState::on_scroll_wheel))
+            .on_mouse_move(window.listener_for(&entity, InputBaseState::on_mouse_move))
+            .on_scroll_wheel(window.listener_for(&entity, InputBaseState::on_scroll_wheel))
             .when(!self.disabled, |this| this.cursor_text())
             .flex_1()
             .when(self.mode.is_multi_line(), |this| this.h_full())
@@ -3211,7 +3221,7 @@ mod tests {
     use crate::theme::Theme;
     use gpui::{TestAppContext, VisualTestContext};
 
-    struct TestRoot(Entity<InputState>);
+    struct TestRoot(Entity<InputBaseState>);
 
     impl Render for TestRoot {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -3220,11 +3230,11 @@ mod tests {
     }
 
     struct InputView {
-        input: Entity<InputState>,
+        input: Entity<InputBaseState>,
         window_handle: gpui::WindowHandle<TestRoot>,
     }
 
-    /// Helper to create an InputState in a window for testing
+    /// Helper to create an InputBaseState in a window for testing
     impl InputView {
         pub fn new(cx: &mut TestAppContext) -> Self {
             Self::build(cx, |state| state.code_editor("sql"))
@@ -3232,9 +3242,9 @@ mod tests {
 
         pub fn build(
             cx: &mut TestAppContext,
-            f: impl FnOnce(InputState) -> InputState + 'static,
+            f: impl FnOnce(InputBaseState) -> InputBaseState + 'static,
         ) -> Self {
-            let mut input: Option<Entity<InputState>> = None;
+            let mut input: Option<Entity<InputBaseState>> = None;
 
             let window = cx.update(|cx| {
                 cx.open_window(Default::default(), |window, cx| {
@@ -3243,7 +3253,7 @@ mod tests {
                     // Initialize input keybindings
                     super::super::init(cx);
 
-                    input = Some(cx.new(|cx| f(InputState::new(window, cx))));
+                    input = Some(cx.new(|cx| f(InputBaseState::new(window, cx))));
 
                     cx.new(|_| TestRoot(input.clone().unwrap()))
                 })

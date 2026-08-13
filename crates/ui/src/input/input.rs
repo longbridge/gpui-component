@@ -20,6 +20,12 @@ use gpui_base::InputBase as BaseInput;
 use rust_i18n::t;
 
 use super::{InputContentType, InputState, sync_native_content_type};
+use gpui_base::input::InputBaseState;
+
+enum InputStateSource {
+    Input(Entity<InputState>),
+    Base(Entity<InputBaseState>),
+}
 
 pub(super) fn sync_focused_input_registry(
     focused: bool,
@@ -52,7 +58,7 @@ pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
 /// A text input element bind to an [`InputState`].
 #[derive(IntoElement)]
 pub struct Input {
-    state: Entity<InputState>,
+    state: InputStateSource,
     style: StyleRefinement,
     size: Size,
     prefix: Option<AnyElement>,
@@ -98,8 +104,22 @@ impl Selectable for Input {
 impl Input {
     /// Create a new [`Input`] element bind to the [`InputState`].
     pub fn new(state: &Entity<InputState>) -> Self {
+        Self::with_state(InputStateSource::Input(state.clone()))
+    }
+
+    /// Builds an input renderer around the shared editing engine.
+    ///
+    /// This is intended for advanced component implementations. Application
+    /// code should normally use [`Input::new`], [`super::Textarea`], or
+    /// [`super::Editor`].
+    #[doc(hidden)]
+    pub fn from_base(state: &Entity<InputBaseState>) -> Self {
+        Self::with_state(InputStateSource::Base(state.clone()))
+    }
+
+    fn with_state(state: InputStateSource) -> Self {
         Self {
-            state: state.clone(),
+            state,
             size: Size::default(),
             style: StyleRefinement::default(),
             prefix: None,
@@ -224,7 +244,7 @@ impl Input {
         self
     }
 
-    fn render_toggle_mask_button(state: &Entity<InputState>, cx: &App) -> impl IntoElement {
+    fn render_toggle_mask_button(state: &Entity<InputBaseState>, cx: &App) -> impl IntoElement {
         let masked = state.read(cx).presentation().masked;
         Button::new("toggle-mask")
             .icon(if masked {
@@ -318,7 +338,7 @@ impl Input {
     }
 
     fn handle_accessibility_set_value(
-        state: &Entity<InputState>,
+        state: &Entity<InputBaseState>,
         data: Option<&gpui::accesskit::ActionData>,
         window: &mut Window,
         cx: &mut App,
@@ -333,7 +353,7 @@ impl Input {
 
     /// This method must after the refine_style.
     fn render_editor(
-        input_state: &Entity<InputState>,
+        input_state: &Entity<InputBaseState>,
         search_panel: Option<AnyElement>,
         _: &Window,
     ) -> impl IntoElement {
@@ -354,14 +374,23 @@ impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
-        sync_focused_input_registry(
-            self.state.read(cx).focus_handle(cx).is_focused(window),
-            self.state.clone(),
-            window,
-            cx,
-        );
+        let (state, input_state) = match &self.state {
+            InputStateSource::Input(input) => {
+                input.update(cx, |state, cx| state.prepare(window, cx));
+                (input.read(cx).base_state().clone(), Some(input.clone()))
+            }
+            InputStateSource::Base(state) => (state.clone(), None),
+        };
+        if let Some(input) = input_state {
+            sync_focused_input_registry(
+                state.read(cx).focus_handle(cx).is_focused(window),
+                input,
+                window,
+                cx,
+            );
+        }
 
-        self.state.update(cx, |state, cx| {
+        state.update(cx, |state, cx| {
             state.ensure_highlighter_factory(crate::highlighter::input_highlighter_factory());
             state.set_editor_style(gpui_base::input::InputEditorStyle {
                 foreground: cx.theme().foreground,
@@ -452,14 +481,14 @@ impl RenderOnce for Input {
                 menu.show(position, window, cx);
             }));
         });
-        let overlays = super::overlay::render_overlays(&self.state, window, cx);
+        let overlays = super::overlay::render_overlays(&state, window, cx);
 
-        let presentation = self.state.read(cx).presentation();
+        let presentation = state.read(cx).presentation();
         let content_type = self.content_type;
         let disabled = self.disabled;
         let is_multi_line = presentation.multi_line;
         let accessibility_role = Self::accessibility_role(is_multi_line, content_type, self.role);
-        let accessibility_state = self.state.clone();
+        let accessibility_state = state.clone();
         // Materializing the whole rope is only observable through the
         // accessibility tree, so skip it when no client is listening.
         let accessibility_value = (window.is_a11y_active()
@@ -509,7 +538,7 @@ impl RenderOnce for Input {
             None => placeholder.clone(),
         };
 
-        BaseInput::new(("input", self.state.entity_id()))
+        BaseInput::new(("input", state.entity_id()))
             .focused(focused)
             .disabled(disabled)
             .styles(|styles| {
@@ -561,11 +590,9 @@ impl RenderOnce for Input {
                     .child(p)
             }))
             .when(presentation.multi_line, |this| {
-                this.child(Self::render_editor(&self.state, overlays.search, window))
+                this.child(Self::render_editor(&state, overlays.search, window))
             })
-            .when(!presentation.multi_line, |this| {
-                this.child(self.state.clone())
-            })
+            .when(!presentation.multi_line, |this| this.child(state.clone()))
             .when(has_suffix, |this| {
                 this.pr(self.size.input_px()).child(
                     h_flex()
@@ -578,11 +605,11 @@ impl RenderOnce for Input {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
                         })
                         .when(self.mask_toggle, |this| {
-                            this.child(Self::render_toggle_mask_button(&self.state, cx))
+                            this.child(Self::render_toggle_mask_button(&state, cx))
                         })
                         .when(show_clear_button, |this| {
                             this.child(clear_button(cx).on_click({
-                                let state = self.state.clone();
+                                let state = state.clone();
                                 move |_, window, cx| {
                                     state.update(cx, |state, cx| {
                                         state.clean(window, cx);
@@ -792,14 +819,15 @@ mod tests {
         assert_eq!(*captured.lock().unwrap(), Some((None, true)));
 
         let state = probe.read_with(cx, |probe, _| probe.state.clone());
+        let base = state.read_with(cx, |state, _| state.base_state().clone());
         cx.update(|window, cx| {
-            Input::handle_accessibility_set_value(&state, None, window, cx);
+            Input::handle_accessibility_set_value(&base, None, window, cx);
         });
         assert_eq!(state.read_with(cx, |state, _| state.value()), "initial");
 
         let action = gpui::accesskit::ActionData::Value("updated".into());
         cx.update(|window, cx| {
-            Input::handle_accessibility_set_value(&state, Some(&action), window, cx);
+            Input::handle_accessibility_set_value(&base, Some(&action), window, cx);
         });
         assert_eq!(state.read_with(cx, |state, _| state.value()), "updated");
     }

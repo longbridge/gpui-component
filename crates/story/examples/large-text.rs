@@ -3,14 +3,14 @@ use gpui_component::{
     ActiveTheme, Selectable, Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{self, Input, InputEvent, InputState, TabSize},
+    input::{self, Input, InputBaseState, InputEvent, TabSize},
     v_flex,
 };
 use gpui_component_assets::Assets;
 
 pub struct Example {
-    editor: Entity<InputState>,
-    go_to_line_state: Entity<InputState>,
+    editor: Entity<InputBaseState>,
+    go_to_line_state: Entity<InputBaseState>,
     soft_wrap: bool,
     _subscribes: Vec<Subscription>,
 }
@@ -21,7 +21,7 @@ impl Example {
         let text = "这是一个中文演示段落，用于展示更多的 [Markdown GFM] 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。\n".repeat(10000);
 
         let editor = cx.new(|cx| {
-            InputState::new(window, cx)
+            InputBaseState::new(window, cx)
                 .multi_line(true)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -31,7 +31,7 @@ impl Example {
                 .placeholder("Enter your code here...")
                 .default_value(text)
         });
-        let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
+        let go_to_line_state = cx.new(|cx| InputBaseState::new(window, cx));
 
         let _subscribes = vec![cx.subscribe(&editor, |_, _, _: &InputEvent, cx| {
             cx.notify();
@@ -66,7 +66,7 @@ impl Example {
 
             dialog
                 .title("Go to line")
-                .child(Input::new(&input_state))
+                .child(Input::from_base(&input_state))
                 .on_ok({
                     let editor = editor.clone();
                     let input_state = input_state.clone();
@@ -114,7 +114,7 @@ impl Render for Example {
                 .w_full()
                 .flex_1()
                 .child(
-                    Input::new(&self.editor)
+                    Input::from_base(&self.editor)
                         .bordered(false)
                         .h_full()
                         .focus_bordered(false),

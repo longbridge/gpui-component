@@ -1,5 +1,5 @@
 use crate::input::{
-    Indent, IndentInline, InputState, Outdent, OutdentInline, RopeExt, element::TextElement,
+    Indent, IndentInline, InputBaseState, Outdent, OutdentInline, RopeExt, element::TextElement,
     layout::LastLayout, mode::InputMode,
 };
 use gpui::{
@@ -104,7 +104,7 @@ impl TextElement {
 
     pub(super) fn layout_indent_guides(
         &self,
-        state: &InputState,
+        state: &InputBaseState,
         bounds: &Bounds<Pixels>,
         last_layout: &LastLayout,
         text_style: &TextStyle,
@@ -164,7 +164,7 @@ impl TextElement {
     }
 }
 
-impl InputState {
+impl InputBaseState {
     /// Set whether to show indent guides in code editor mode, default is true.
     ///
     /// Only for [`InputMode::CodeEditor`] mode.

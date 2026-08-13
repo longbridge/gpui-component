@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    InputState, TextDecoration,
+    InputBaseState, TextDecoration,
     layout::{LastLayout, WhitespaceIndicators},
     mode::InputMode,
 };
@@ -116,7 +116,7 @@ impl EditorScrollbarSnapshot {
         last_layout: &LastLayout,
         scroll_size: Size<Pixels>,
         cursor_scroll_offset: Point<Pixels>,
-        state: &InputState,
+        state: &InputBaseState,
     ) -> Self {
         Self {
             layout: EditorScrollbarLayout::new(
@@ -164,11 +164,11 @@ impl EditorScrollbarLayout {
 }
 
 pub(super) struct EditorScrollbar {
-    state: Entity<InputState>,
+    state: Entity<InputBaseState>,
 }
 
 impl EditorScrollbar {
-    pub(super) fn new(state: Entity<InputState>) -> Self {
+    pub(super) fn new(state: Entity<InputBaseState>) -> Self {
         Self { state }
     }
 }
@@ -321,7 +321,7 @@ fn ime_marked_display_range(
 
 /// Minimum pixel padding the cursor is kept clear of the viewport's
 /// top/bottom edges before auto-scroll engages. Backs
-/// [`InputState::cursor_surrounding_lines`].
+/// [`InputBaseState::cursor_surrounding_lines`].
 ///
 /// Auto-grow uses one line. Otherwise `None` falls back to the historical
 /// heuristic ([`BOTTOM_MARGIN_ROWS`] lines, or one line on small
@@ -353,7 +353,7 @@ pub(super) fn cursor_surrounding_padding(
 }
 
 /// Pixel height of the empty area below the last line in the editor's
-/// scrollable region. Backs [`InputState::scroll_beyond_last_line`].
+/// scrollable region. Backs [`InputBaseState::scroll_beyond_last_line`].
 ///
 /// `0` outside code-editor mode. Inside it, `None` is half the viewport
 /// (floored at [`BOTTOM_MARGIN_ROWS`] line-heights); `Some(n)` is exactly
@@ -382,12 +382,12 @@ struct FoldIconLayout {
 }
 
 pub(super) struct TextElement {
-    pub(crate) state: Entity<InputState>,
+    pub(crate) state: Entity<InputBaseState>,
     placeholder: SharedString,
 }
 
 impl TextElement {
-    pub(super) fn new(state: Entity<InputState>) -> Self {
+    pub(super) fn new(state: Entity<InputBaseState>) -> Self {
         Self {
             state,
             placeholder: SharedString::default(),
@@ -864,7 +864,7 @@ impl TextElement {
     /// - visible_top: The top position of the first visible line in the scroll viewport.
     fn calculate_visible_range(
         &self,
-        state: &InputState,
+        state: &InputBaseState,
         line_height: Pixels,
         input_height: Pixels,
     ) -> (Range<usize>, Vec<usize>, Pixels) {
@@ -930,7 +930,7 @@ impl TextElement {
 
     /// Return (line_number_width, line_number_len)
     fn layout_line_numbers(
-        state: &InputState,
+        state: &InputBaseState,
         text: &Rope,
         font_size: Pixels,
         style: &TextStyle,
@@ -975,7 +975,7 @@ impl TextElement {
     ///
     /// Returns `WhitespaceIndicators` with shaped lines for space and tab characters.
     fn layout_whitespace_indicators(
-        state: &InputState,
+        state: &InputBaseState,
         text_size: Pixels,
         style: &TextStyle,
         window: &mut Window,
@@ -1032,7 +1032,7 @@ impl TextElement {
     /// - first_line: Shaped text for the first line (goes after cursor on same line)
     /// - ghost_lines: Shaped lines for subsequent lines (shift content down)
     fn layout_inline_completion(
-        state: &InputState,
+        state: &InputBaseState,
         visible_range: &Range<usize>,
         font_size: Pixels,
         window: &mut Window,
@@ -1287,7 +1287,7 @@ impl TextElement {
 
     #[allow(clippy::too_many_arguments)]
     fn layout_lines(
-        state: &InputState,
+        state: &InputBaseState,
         display_text: &Rope,
         last_layout: &LastLayout,
         font_size: Pixels,
