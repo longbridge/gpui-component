@@ -1,7 +1,7 @@
 use gpui::Corners;
 use gpui::InteractiveElement;
 use gpui::ParentElement;
-use gpui::{App, Axis, Edges, ElementId, IntoElement, Window};
+use gpui::{Anchor, App, Axis, Context, Edges, ElementId, IntoElement, Window};
 use gpui::{
     RenderOnce, StatefulInteractiveElement as _, StyleRefinement, Styled, div,
     prelude::FluentBuilder as _,
@@ -11,17 +11,34 @@ use std::{cell::Cell, rc::Rc};
 use crate::{
     Disableable, Sizable, Size, StyledExt,
     button::{Button, ButtonVariant, ButtonVariants},
+    menu::{DropdownMenu as _, PopupMenu},
 };
+
+type MenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+
+enum ButtonGroupChild {
+    Button(Button),
+    Dropdown(Button, MenuBuilder),
+}
+
+impl ButtonGroupChild {
+    fn button(&self) -> &Button {
+        match self {
+            Self::Button(button) | Self::Dropdown(button, _) => button,
+        }
+    }
+}
 
 /// A ButtonGroup element, to wrap multiple buttons in a group.
 #[derive(IntoElement)]
 pub struct ButtonGroup {
     id: ElementId,
     style: StyleRefinement,
-    children: Vec<Button>,
+    children: Vec<ButtonGroupChild>,
     pub(super) multiple: bool,
     pub(super) disabled: bool,
     pub(super) layout: Axis,
+    dropdown_anchor: Anchor,
 
     // The button props
     pub(super) compact: bool,
@@ -53,19 +70,41 @@ impl ButtonGroup {
             multiple: false,
             disabled: false,
             layout: Axis::Horizontal,
+            dropdown_anchor: Anchor::TopLeft,
             on_click: None,
         }
     }
 
     /// Adds a button as a child to the ButtonGroup.
     pub fn child(mut self, child: Button) -> Self {
-        self.children.push(child.disabled(self.disabled));
+        self.children
+            .push(ButtonGroupChild::Button(child.disabled(self.disabled)));
+        self
+    }
+
+    /// Adds a dropdown-menu button as a child of the group.
+    pub fn dropdown_child(
+        mut self,
+        child: Button,
+        builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        self.children.push(ButtonGroupChild::Dropdown(
+            child.disabled(self.disabled),
+            Rc::new(builder),
+        ));
+        self
+    }
+
+    /// Set the anchor used by dropdown children.
+    pub fn dropdown_anchor(mut self, anchor: impl Into<Anchor>) -> Self {
+        self.dropdown_anchor = anchor.into();
         self
     }
 
     /// Adds multiple buttons as children to the ButtonGroup.
     pub fn children(mut self, children: impl IntoIterator<Item = Button>) -> Self {
-        self.children.extend(children);
+        self.children
+            .extend(children.into_iter().map(ButtonGroupChild::Button));
         self
     }
 
@@ -156,7 +195,7 @@ impl RenderOnce for ButtonGroup {
         let state = Rc::new(Cell::new(None));
 
         for (ix, child) in self.children.iter().enumerate() {
-            if child.selected {
+            if child.button().selected {
                 selected_ixs.push(ix);
             }
         }
@@ -175,6 +214,10 @@ impl RenderOnce for ButtonGroup {
                     .enumerate()
                     .map(|(child_index, child)| {
                         let state = Rc::clone(&state);
+                        let (child, menu_builder) = match child {
+                            ButtonGroupChild::Button(child) => (child, None),
+                            ButtonGroupChild::Dropdown(child, builder) => (child, Some(builder)),
+                        };
                         // The group as a whole is a toggle control, so every
                         // child advertises its pressed state.
                         let selected = child.selected;
@@ -237,7 +280,15 @@ impl RenderOnce for ButtonGroup {
                             })
                         });
 
-                        child
+                        match menu_builder {
+                            Some(builder) => child
+                                .dropdown_menu_with_anchor(
+                                    self.dropdown_anchor,
+                                    move |menu, window, cx| builder(menu, window, cx),
+                                )
+                                .into_any_element(),
+                            None => child.into_any_element(),
+                        }
                     }),
             )
             .when_some(

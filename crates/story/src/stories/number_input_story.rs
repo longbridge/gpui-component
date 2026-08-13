@@ -31,7 +31,7 @@ impl super::Story for NumberInputStory {
     }
 
     fn description() -> &'static str {
-        "NumberInput design to support + - to adjust the input value."
+        "Adjust constrained numeric values precisely with typing or increment and decrement controls."
     }
 
     fn closable() -> bool {
@@ -199,34 +199,54 @@ impl Render for NumberInputStory {
             .justify_start()
             .gap_3()
             .child(
-                section("Normal Size")
-                    .max_w(px(200.))
-                    .child(NumberInput::new(&self.number_input1)),
+                section("Default")
+                    .description("Application-managed step events.")
+                    .w_128()
+                    .items_center()
+                    .child(NumberInput::new(&self.number_input1).w(px(260.))),
             )
             .child(
                 section("Disabled")
-                    .max_w(px(200.))
-                    .child(NumberInput::new(&self.disabled_input).disabled(true)),
+                    .description("Read-only disabled state.")
+                    .w_128()
+                    .items_center()
+                    .child(
+                        NumberInput::new(&self.disabled_input)
+                            .w(px(260.))
+                            .disabled(true),
+                    ),
             )
             .child(
-                section("Small Size with suffix").max_w(px(200.)).child(
-                    NumberInput::new(&self.number_input2)
-                        .small()
-                        .suffix(Button::new("info").text().icon(IconName::Info).xsmall()),
-                ),
+                section("Suffix")
+                    .description("Small size with a suffix action.")
+                    .w_128()
+                    .items_center()
+                    .child(
+                        NumberInput::new(&self.number_input2)
+                            .w(px(260.))
+                            .small()
+                            .suffix(Button::new("info").text().icon(IconName::Info).xsmall()),
+                    ),
             )
             .child(
-                section("With mask pattern")
-                    .max_w(px(200.))
-                    .child(NumberInput::new(&self.number_input3)),
+                section("Number format")
+                    .description("Grouping, decimals, range, and step.")
+                    .w_128()
+                    .items_center()
+                    .child(NumberInput::new(&self.number_input3).w(px(260.))),
             )
             .child(
-                section("Without appearance").max_w(px(200.)).child(
-                    NumberInput::new(&self.number_input4)
-                        .appearance(false)
-                        .bg(cx.theme().secondary)
-                        .text_color(cx.theme().info),
-                ),
+                section("Custom style")
+                    .description("Appearance-free input with dynamic steps.")
+                    .w_128()
+                    .items_center()
+                    .child(
+                        NumberInput::new(&self.number_input4)
+                            .w(px(260.))
+                            .appearance(false)
+                            .bg(cx.theme().secondary)
+                            .text_color(cx.theme().info),
+                    ),
             )
     }
 }

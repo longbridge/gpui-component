@@ -220,7 +220,7 @@ impl Render for TreeStory {
             .child(
                 section("File tree")
                     .sub_title("Press `enter` to rename. Right-click for context menu.")
-                    .max_w_md()
+                    .w(px(480.))
                     .child(
                         v_flex()
                             .w_full()

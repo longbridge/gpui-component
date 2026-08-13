@@ -1,24 +1,40 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window, px,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, Styled, Window, px,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Sizable as _, StyledExt,
+    ActiveTheme, IconName, Sizable as _, Size, StyledExt,
     avatar::{Avatar, AvatarGroup},
     dock::PanelControl,
     v_flex,
 };
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
+
+const AVATARS: [&str; 11] = [
+    "https://avatars.githubusercontent.com/u/5518?v=4",
+    "https://avatars.githubusercontent.com/u/28998859?v=4",
+    "https://avatars.githubusercontent.com/u/20092316?v=4",
+    "https://avatars.githubusercontent.com/u/22312482?v=4",
+    "https://avatars.githubusercontent.com/u/150917089?v=4",
+    "https://avatars.githubusercontent.com/u/20337280?v=4",
+    "https://avatars.githubusercontent.com/u/629429?v=4",
+    "https://avatars.githubusercontent.com/u/583231?v=4",
+    "https://avatars.githubusercontent.com/u/1264109?v=4",
+    "https://avatars.githubusercontent.com/u/2936367?v=4",
+    "https://avatars.githubusercontent.com/u/1253486?v=4",
+];
 
 pub struct AvatarStory {
     focus_handle: gpui::FocusHandle,
+    size: Size,
 }
 
 impl AvatarStory {
     fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            size: Size::Medium,
         }
     }
 
@@ -33,7 +49,7 @@ impl super::Story for AvatarStory {
     }
 
     fn description() -> &'static str {
-        "Avatar is an image that represents a user or organization."
+        "Represent a person or organization with an image or fallback."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -54,201 +70,77 @@ impl Focusable for AvatarStory {
 impl Render for AvatarStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
-            .gap_4()
+            .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                section("Avatar with image")
-                    .max_w_md()
+                section("Image")
+                    .description("Use an image when one is available.")
+                    .w_128()
                     .child(
                         Avatar::new()
-                            .name("Jason lee")
-                            .src("https://avatars.githubusercontent.com/u/5518?v=4")
-                            .with_size(px(100.)),
+                            .name("Jason Lee")
+                            .src(AVATARS[0])
+                            .with_size(self.size),
                     )
+                    .child(Avatar::new().src(AVATARS[1]).with_size(self.size)),
+            )
+            .child(
+                section("Fallback")
+                    .description("Show initials or an icon when no image is available.")
+                    .w_128()
+                    .child(Avatar::new().name("Jason Lee").with_size(self.size))
+                    .child(Avatar::new().with_size(self.size))
                     .child(
                         Avatar::new()
-                            .src("https://avatars.githubusercontent.com/u/28998859?v=4")
-                            .large(),
-                    )
-                    .child(
-                        Avatar::new()
-                            .src("https://avatars.githubusercontent.com/u/10757551?s=64&v=4"),
-                    )
-                    .child(
-                        Avatar::new()
-                            .src("https://avatars.githubusercontent.com/u/20092316?v=4")
-                            .small(),
-                    )
-                    .child(
-                        Avatar::new()
-                            .src("https://avatars.githubusercontent.com/u/150917089?v=4")
-                            .xsmall(),
+                            .placeholder(IconName::Building2)
+                            .with_size(self.size),
                     ),
             )
             .child(
-                section("Avatar with text")
-                    .max_w_md()
-                    .child(Avatar::new().name("Jason Lee").large())
-                    .child(Avatar::new().name("Floyd Wang"))
-                    .child(Avatar::new().name("xda").small())
-                    .child(Avatar::new().name("ihavecoke").xsmall()),
-            )
-            .child(
-                section("Placeholder")
-                    .max_w_md()
-                    .child(Avatar::new().large())
-                    .child(Avatar::new())
-                    .child(Avatar::new().small())
-                    .child(Avatar::new().xsmall())
-                    .child(Avatar::new().placeholder(IconName::Building2)),
-            )
-            .child(
-                section("Avatar Group")
+                section("Group")
+                    .description("Groups can limit visible avatars and show overflow.")
                     .v_flex()
-                    .max_w_md()
+                    .w_128()
+                    .items_center()
+                    .gap_5()
                     .child(
                         AvatarGroup::new()
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/5518?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/28998859?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/22312482?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/150917089?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/1253486?v=4"),
-                            ),
+                            .with_size(self.size)
+                            .children(AVATARS[..6].iter().map(|src| Avatar::new().src(*src))),
                     )
                     .child(
                         AvatarGroup::new()
-                            .small()
+                            .with_size(self.size)
                             .limit(5)
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/5518?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/28998859?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/22312482?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/150917089?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/20337280?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/629429?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/583231?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/1264109?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/2936367?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/1253486?v=4"),
-                            ),
-                    )
-                    .child(
-                        AvatarGroup::new()
-                            .xsmall()
-                            .limit(6)
                             .ellipsis()
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/5518?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/28998859?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/20092316?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/22312482?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/150917089?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/20337280?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/2936367?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/583231?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/1264109?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/10757551?v=4"),
-                            )
-                            .child(
-                                Avatar::new()
-                                    .src("https://avatars.githubusercontent.com/u/1506323?v=4"),
-                            ),
+                            .children(AVATARS.iter().map(|src| Avatar::new().src(*src))),
                     ),
             )
             .child(
-                section("Custom rounded").child(
-                    Avatar::new()
-                        .src("https://avatars.githubusercontent.com/u/5518?v=4")
-                        .with_size(px(100.))
-                        .rounded(px(20.)),
-                ),
+                section("Custom shape")
+                    .description("Set an explicit size and corner radius.")
+                    .child(
+                        Avatar::new()
+                            .src(AVATARS[0])
+                            .with_size(px(100.))
+                            .rounded(px(20.)),
+                    ),
             )
             .child(
-                section("Custom Style").child(
-                    Avatar::new()
-                        .src("https://avatars.githubusercontent.com/u/20092316?v=4")
-                        .with_size(px(100.))
-                        .border_3()
-                        .border_color(cx.theme().foreground)
-                        .shadow_sm(),
-                ),
+                section("Custom style")
+                    .description("Add borders and shadows to the image.")
+                    .child(
+                        Avatar::new()
+                            .src(AVATARS[2])
+                            .with_size(px(100.))
+                            .border_3()
+                            .border_color(cx.theme().foreground)
+                            .shadow_sm(),
+                    ),
             )
     }
 }

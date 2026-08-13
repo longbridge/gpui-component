@@ -1,11 +1,9 @@
 use gpui::{
-    App, AppContext as _, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
-    Render, Styled, Window, prelude::FluentBuilder as _, px,
+    App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, Styled, Window, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme, Selectable as _, Sizable, Size,
-    button::{Button, ButtonGroup},
-    h_flex,
+    ActiveTheme, Sizable, Size,
     table::{
         Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow,
     },
@@ -13,7 +11,7 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct TableStory {
     focus_handle: FocusHandle,
@@ -30,11 +28,6 @@ impl TableStory {
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
-    }
-
-    fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = size;
-        cx.notify();
     }
 }
 
@@ -95,45 +88,13 @@ impl Render for TableStory {
         v_flex()
             .size_full()
             .gap_6()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                h_flex().gap_3().child(
-                    ButtonGroup::new("toggle-size")
-                        .outline()
-                        .compact()
-                        .child(
-                            Button::new("xsmall")
-                                .label("XSmall")
-                                .selected(self.size == Size::XSmall),
-                        )
-                        .child(
-                            Button::new("small")
-                                .label("Small")
-                                .selected(self.size == Size::Small),
-                        )
-                        .child(
-                            Button::new("medium")
-                                .label("Medium")
-                                .selected(self.size == Size::Medium),
-                        )
-                        .child(
-                            Button::new("large")
-                                .label("Large")
-                                .selected(self.size == Size::Large),
-                        )
-                        .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
-                            let size = match selecteds[0] {
-                                0 => Size::XSmall,
-                                1 => Size::Small,
-                                2 => Size::Medium,
-                                3 => Size::Large,
-                                _ => unreachable!(),
-                            };
-                            this.set_size(size, window, cx);
-                        })),
-                ),
-            )
-            .child(
-                section("Table").child(
+                section("Default").w_full().child(
                     Table::new()
                         .with_size(self.size)
                         .child(
@@ -171,7 +132,7 @@ impl Render for TableStory {
                 ),
             )
             .child(
-                section("With Border").child(
+                section("Bordered").w_full().child(
                     Table::new()
                         .with_size(self.size)
                         .border_1()

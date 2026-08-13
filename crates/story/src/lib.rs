@@ -1,13 +1,14 @@
 use gpui::{
-    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter,
-    FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement, Styled, Window,
-    WindowBounds, WindowKind, WindowOptions, actions, div, prelude::FluentBuilder as _, px, rems,
-    size,
+    Action, Anchor, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity,
+    EventEmitter, FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement,
+    KeyBinding, ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement,
+    Styled, Window, WindowBounds, WindowKind, WindowOptions, actions, div,
+    prelude::FluentBuilder as _, px, rems, size,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Root, TitleBar, WindowExt,
-    button::Button,
+    ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _, TitleBar,
+    WindowExt,
+    button::{Button, ButtonGroup},
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
@@ -46,6 +47,10 @@ pub struct SelectFont(usize);
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
 pub struct SelectRadius(usize);
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
+pub(crate) struct ChangeStorySize(pub ComponentSize);
 
 actions!(
     story,
@@ -270,11 +275,17 @@ pub fn init(cx: &mut App) {
 struct StorySection {
     base: Div,
     title: SharedString,
+    description: Option<SharedString>,
     sub_title: Vec<AnyElement>,
     children: Vec<AnyElement>,
 }
 
 impl StorySection {
+    pub fn description(mut self, description: impl Into<SharedString>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
     pub fn sub_title(mut self, sub_title: impl IntoElement) -> Self {
         self.sub_title.push(sub_title.into_any_element());
         self
@@ -322,12 +333,26 @@ impl RenderOnce for StorySection {
         GroupBox::new()
             .id(self.title.clone())
             .outline()
+            .mb_6()
             .title(
                 h_flex()
                     .justify_between()
+                    .items_start()
                     .w_full()
                     .gap_4()
-                    .child(self.title)
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .child(div().font_medium().child(self.title))
+                            .when_some(self.description, |this, description| {
+                                this.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(description),
+                                )
+                            }),
+                    )
                     .children(self.sub_title),
             )
             .content_style(
@@ -344,6 +369,7 @@ impl RenderOnce for StorySection {
 pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     StorySection {
         title: title.into(),
+        description: None,
         sub_title: vec![],
         base: h_flex()
             .w_full()
@@ -353,6 +379,51 @@ pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
             .gap_4(),
         children: vec![],
     }
+}
+
+pub(crate) fn story_toolbar_group() -> ButtonGroup {
+    ButtonGroup::new("story-toolbar")
+        .outline()
+        .small()
+        .dropdown_anchor(Anchor::TopRight)
+        .w_full()
+        .justify_end()
+}
+
+pub(crate) fn story_toolbar(size: ComponentSize) -> ButtonGroup {
+    let label = match size {
+        ComponentSize::XSmall => "XSmall",
+        ComponentSize::Small => "Small",
+        ComponentSize::Medium => "Medium",
+        ComponentSize::Large => "Large",
+        ComponentSize::Size(_) => "Custom",
+    };
+
+    story_toolbar_group().dropdown_child(
+        Button::new("story-size").label(format!("Size: {label}")),
+        move |menu, _, _| {
+            menu.menu_with_check(
+                "XSmall",
+                size == ComponentSize::XSmall,
+                Box::new(ChangeStorySize(ComponentSize::XSmall)),
+            )
+            .menu_with_check(
+                "Small",
+                size == ComponentSize::Small,
+                Box::new(ChangeStorySize(ComponentSize::Small)),
+            )
+            .menu_with_check(
+                "Medium",
+                size == ComponentSize::Medium,
+                Box::new(ChangeStorySize(ComponentSize::Medium)),
+            )
+            .menu_with_check(
+                "Large",
+                size == ComponentSize::Large,
+                Box::new(ChangeStorySize(ComponentSize::Large)),
+            )
+        },
+    )
 }
 
 pub struct StoryContainer {

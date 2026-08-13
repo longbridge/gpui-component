@@ -1,17 +1,20 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Subscription, Window,
+    Action, App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, Styled, Subscription, Window, px,
 };
 use gpui_component::{
-    IconName, Selectable as _, Sizable, Size, StyledExt,
-    button::{Button, ButtonGroup},
-    checkbox::Checkbox,
-    h_flex,
+    IconName, Sizable, Size, StyledExt,
+    button::Button,
     stepper::{Stepper, StepperItem},
     v_flex,
 };
+use serde::Deserialize;
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = stepper_story, no_json)]
+struct ToggleDisabled;
 
 pub struct StepperStory {
     focus_handle: gpui::FocusHandle,
@@ -68,57 +71,25 @@ impl Render for StepperStory {
         v_flex()
             .w_full()
             .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ToggleDisabled, _, cx| {
+                this.disabled = !this.disabled;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size).dropdown_child(
+                Button::new("stepper-options").label("Options"),
+                {
+                    let disabled = self.disabled;
+                    move |menu, _, _| {
+                        menu.menu_with_check("Disabled", disabled, Box::new(ToggleDisabled))
+                    }
+                },
+            ))
             .child(
-                h_flex()
-                    .gap_3()
-                    .child(
-                        ButtonGroup::new("toggle-size")
-                            .outline()
-                            .compact()
-                            .child(
-                                Button::new("xsmall")
-                                    .label("XSmall")
-                                    .selected(self.size == Size::XSmall),
-                            )
-                            .child(
-                                Button::new("small")
-                                    .label("Small")
-                                    .selected(self.size == Size::Small),
-                            )
-                            .child(
-                                Button::new("medium")
-                                    .label("Medium")
-                                    .selected(self.size == Size::Medium),
-                            )
-                            .child(
-                                Button::new("large")
-                                    .label("Large")
-                                    .selected(self.size == Size::Large),
-                            )
-                            .on_click(cx.listener(|this, selecteds: &Vec<usize>, _, cx| {
-                                let size = match selecteds[0] {
-                                    0 => Size::XSmall,
-                                    1 => Size::Small,
-                                    2 => Size::Medium,
-                                    3 => Size::Large,
-                                    _ => unreachable!(),
-                                };
-                                this.size = size;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("disabled")
-                            .checked(self.disabled)
-                            .label("Disabled")
-                            .on_click(cx.listener(|this, check: &bool, _, cx| {
-                                this.disabled = *check;
-                                cx.notify();
-                            })),
-                    ),
-            )
-            .child(
-                section("Horizontal Stepper").max_w_md().v_flex().child(
+                section("Horizontal Stepper").w(px(480.)).v_flex().child(
                     Stepper::new("stepper0")
                         .w_full()
                         .with_size(self.size)
@@ -136,7 +107,7 @@ impl Render for StepperStory {
                 ),
             )
             .child(
-                section("Icon Stepper").max_w_md().v_flex().child(
+                section("Icon Stepper").w(px(480.)).v_flex().child(
                     Stepper::new("stepper1")
                         .w_full()
                         .with_size(self.size)
@@ -157,7 +128,7 @@ impl Render for StepperStory {
                 ),
             )
             .child(
-                section("Vertical Stepper").max_w_md().v_flex().child(
+                section("Vertical Stepper").w(px(480.)).v_flex().child(
                     Stepper::new("stepper3")
                         .vertical()
                         .with_size(self.size)
@@ -188,7 +159,7 @@ impl Render for StepperStory {
                 ),
             )
             .child(
-                section("Text Center").max_w_md().v_flex().child(
+                section("Text Center").w(px(480.)).v_flex().child(
                     Stepper::new("stepper4")
                         .with_size(self.size)
                         .disabled(self.disabled)

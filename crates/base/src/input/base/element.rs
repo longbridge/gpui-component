@@ -75,7 +75,9 @@ fn compose_decorations(
         styles.push((visible_byte_range.clone(), HighlightStyle::default()));
     }
 
-    Some(gpui::combine_highlights(visible_decorations, styles).collect())
+    // Decorations are application-authored overrides and must win over syntax
+    // and semantic highlighting when both set the same style property.
+    Some(gpui::combine_highlights(styles, visible_decorations).collect())
 }
 
 fn compose_decoration_collections<'a>(
@@ -83,7 +85,10 @@ fn compose_decoration_collections<'a>(
     collections: impl IntoIterator<Item = &'a [TextDecoration]>,
     visible_byte_range: Range<usize>,
 ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
-    for decorations in collections {
+    // Apply collections in reverse creation order so the first collection is
+    // composed last and retains its documented precedence.
+    let collections = collections.into_iter().collect::<Vec<_>>();
+    for decorations in collections.into_iter().rev() {
         styles = compose_decorations(
             styles,
             decorations
@@ -2559,6 +2564,28 @@ mod tests {
 
         assert_eq!(styles.len(), 1);
         assert_eq!(styles[0].1.background_color, Some(gpui::red()));
+    }
+
+    #[test]
+    fn test_decorations_override_syntax_highlights() {
+        let syntax = vec![(
+            0..8,
+            HighlightStyle {
+                color: Some(gpui::blue()),
+                ..Default::default()
+            },
+        )];
+        let decoration = HighlightStyle {
+            color: Some(gpui::red()),
+            font_style: Some(gpui::FontStyle::Italic),
+            ..Default::default()
+        };
+
+        let styles = compose_decorations(syntax, [(2..6, decoration)], 0..8).unwrap();
+
+        assert_eq!(styles[1].0, 2..6);
+        assert_eq!(styles[1].1.color, Some(gpui::red()));
+        assert_eq!(styles[1].1.font_style, Some(gpui::FontStyle::Italic));
     }
 
     #[test]

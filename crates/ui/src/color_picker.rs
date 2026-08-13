@@ -1,5 +1,5 @@
 use gpui::{
-    Anchor, App, ElementId, Entity, FocusHandle, Focusable, Hsla, InteractiveElement as _,
+    Anchor, App, ElementId, Entity, FocusHandle, Focusable, Half, Hsla, InteractiveElement as _,
     IntoElement, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, TextAlign, Window, div, hsla, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _,
@@ -110,31 +110,29 @@ impl ColorPicker {
         self
     }
 
-    fn render_item(&self, color: Hsla, cx: &mut App) -> ColorSwatch {
+    fn render_item(&self, id: impl Into<ElementId>, color: Hsla, cx: &mut App) -> ColorSwatch {
         let selected = self.state.read(cx).value() == Some(color);
         let hover_state = self.state.clone();
         let click_state = self.state.clone();
 
-        ColorSwatch::new(
-            SharedString::from(format!("color-{}", color.to_hex())),
-            color,
-        )
-        .selected(selected)
-        .h_5()
-        .w_5()
-        .bg(color)
-        .border_1()
-        .border_color(color.darken(0.1))
-        .hover(|this| this.border_color(color.darken(0.3)).bg(color.lighten(0.1)))
-        .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
-        .on_hover(move |color, entered, window, cx| {
-            if entered {
-                hover_state.update(cx, |state, cx| state.preview_color(color, window, cx));
-            }
-        })
-        .on_click(move |color, _, window, cx| {
-            click_state.update(cx, |state, cx| state.select_color(color, window, cx));
-        })
+        ColorSwatch::new(id, color)
+            .selected(selected)
+            .h_5()
+            .w_5()
+            .rounded(cx.theme().radius.half())
+            .bg(color)
+            .border_1()
+            .border_color(color.darken(0.1))
+            .hover(|this| this.border_color(color.darken(0.3)).bg(color.lighten(0.1)))
+            .active(|this| this.border_color(color.darken(0.5)).bg(color.darken(0.2)))
+            .on_hover(move |color, entered, window, cx| {
+                if entered {
+                    hover_state.update(cx, |state, cx| state.preview_color(color, window, cx));
+                }
+            })
+            .on_click(move |color, _, window, cx| {
+                click_state.update(cx, |state, cx| state.select_color(color, window, cx));
+            })
     }
 
     fn render_colors(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -215,21 +213,34 @@ impl ColorPicker {
                 h_flex().gap_1().children(
                     featured_colors
                         .iter()
-                        .map(|color| self.render_item(*color, cx)),
+                        .enumerate()
+                        .map(|(ix, color)| self.render_item(("featured-color", ix), *color, cx)),
                 ),
             )
             .child(Separator::horizontal())
             .child(
                 v_flex()
                     .gap_1()
-                    .children(color_palettes().iter().map(|sub_colors| {
-                        h_flex().gap_1().children(
-                            sub_colors
-                                .iter()
-                                .rev()
-                                .map(|color| self.render_item(*color, cx)),
-                        )
-                    })),
+                    .children(
+                        color_palettes()
+                            .iter()
+                            .enumerate()
+                            .map(|(row_ix, sub_colors)| {
+                                h_flex()
+                                    .gap_1()
+                                    .children(sub_colors.iter().rev().enumerate().map(
+                                        |(col_ix, color)| {
+                                            self.render_item(
+                                                SharedString::from(format!(
+                                                    "palette-color-{row_ix}-{col_ix}"
+                                                )),
+                                                *color,
+                                                cx,
+                                            )
+                                        },
+                                    ))
+                            }),
+                    ),
             )
     }
 

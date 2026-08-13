@@ -1,7 +1,7 @@
 use gpui::div;
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window, prelude::FluentBuilder as _,
+    Styled, Window, prelude::FluentBuilder as _, px,
 };
 
 use gpui_component::group_box::{GroupBox, GroupBoxVariants as _};
@@ -66,23 +66,23 @@ impl Render for CollapsibleStory {
         ];
 
         v_flex()
+            .w_full()
+            .items_center()
             .gap_6()
             .child(
-                section("Expland Paragraphs").v_flex().child(
+                section("Text")
+                    .description("Reveals supporting text without leaving the current view.")
+                    .w(px(520.))
+                    .v_flex()
+                    .child(
                     Collapsible::new()
-                        .max_w_128()
                         .gap_1()
                         .open(self.item1_open)
                         .child(
-                            "This is a collapsible component. \
-            Click the header to expand or collapse the content.",
+                            "A short summary stays visible while the supporting details remain optional.",
                         )
                         .content(
-                            "This is the full content of the Collapsible component. \
-                        It is only visible when the component is expanded. \n\
-                        You can put any content you like here, including text, images, \
-                        or other UI elements.
-                        ",
+                            "Expanded content can contain text, images, actions, or any other element.",
                         )
                         .child(
                             h_flex().justify_center().child(
@@ -105,11 +105,14 @@ impl Render for CollapsibleStory {
                 ),
             )
             .child(
-                section("Card").child(
+                section("Card")
+                    .description("Keeps secondary portfolio details compact until requested.")
+                    .w(px(420.))
+                    .child(
                     GroupBox::new()
                         .outline()
-                        .w_80()
-                        .title("Collapsible in a Card")
+                        .w_full()
+                        .title("Portfolio performance")
                         .child(
                             Collapsible::new()
                                 .gap_1()
