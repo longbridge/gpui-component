@@ -8,7 +8,7 @@ use gpui::{
 #[cfg(not(target_family = "wasm"))]
 use gpui::{KeyBinding, WindowBounds};
 use gpui_base::input::InputEditorStyle;
-use gpui_base::input::InputState;
+use gpui_base::input::{EditorState, InputState, TextareaState};
 use gpui_base::slider::SliderState;
 use gpui_base::{
     Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger, AlertDialog,
@@ -16,11 +16,11 @@ use gpui_base::{
     AlertDialogPopup, AlertDialogTitle, Avatar, AvatarFallback, Button, Calendar, CalendarItemKind,
     CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible, ColorPicker,
     ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop, DialogDescription,
-    DialogPopup, DialogTitle, HoverCard, InputBase, OtpState, Popup, Scrollbar, ScrollbarMode,
-    Select, Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch, SwitchThumb,
-    SwitchTrack, Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Tabs, Toast,
-    ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem, TreeState,
-    VirtualListScrollHandle, v_virtual_list,
+    DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, OtpState, Popup, Scrollbar,
+    ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch,
+    SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+    Tabs, Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
+    TreeState, VirtualListScrollHandle, v_virtual_list,
 };
 #[cfg(target_family = "wasm")]
 use std::borrow::Cow;
@@ -94,7 +94,8 @@ pub struct BaseShowcase {
     page: usize,
     slider: gpui::Entity<SliderState>,
     input: gpui::Entity<InputState>,
-    multiline_input: gpui::Entity<InputState>,
+    textarea: gpui::Entity<TextareaState>,
+    editor: gpui::Entity<EditorState>,
     otp: gpui::Entity<OtpState>,
     calendar: gpui::Entity<CalendarState>,
     tree: gpui::Entity<TreeState>,
@@ -125,10 +126,13 @@ impl BaseShowcase {
             state
         });
         let otp = cx.new(|cx| OtpState::new(6, window, cx).default_value("12"));
-        let multiline_input = cx.new(|cx| {
-            let mut state = InputState::new(window, cx)
-                .multi_line(true)
-                .default_value("Build focused interfaces.\nKeep behavior composable.");
+        let textarea = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .rows(3)
+                .default_value("Build focused interfaces.\nKeep behavior composable.")
+        });
+        let textarea_base = textarea.read(cx).base_state().clone();
+        textarea_base.update(cx, |state, _| {
             state.set_editor_style(InputEditorStyle {
                 foreground: rgb(0x171717).into(),
                 muted_foreground: rgb(0x737373).into(),
@@ -136,7 +140,21 @@ impl BaseShowcase {
                 caret: rgb(0x171717).into(),
                 ..InputEditorStyle::default()
             });
-            state
+        });
+        let editor = cx.new(|cx| {
+            EditorState::new("rust", window, cx)
+                .line_number(true)
+                .default_value("fn main() {\n    println!(\"Hello GPUI\");\n}")
+        });
+        let editor_base = editor.read(cx).base_state().clone();
+        editor_base.update(cx, |state, _| {
+            state.set_editor_style(InputEditorStyle {
+                foreground: rgb(0x171717).into(),
+                muted_foreground: rgb(0x737373).into(),
+                selection: gpui::hsla(0.6, 0.8, 0.7, 0.45),
+                caret: rgb(0x171717).into(),
+                ..InputEditorStyle::default()
+            });
         });
         let combobox_query = cx.new(|cx| {
             let mut state = InputState::new(window, cx).placeholder("Search frameworks…");
@@ -194,7 +212,8 @@ impl BaseShowcase {
             page: 3,
             slider,
             input,
-            multiline_input,
+            textarea,
+            editor,
             otp,
             calendar: cx.new(|cx| CalendarState::new(window, cx)),
             tree: cx.new(|cx| {

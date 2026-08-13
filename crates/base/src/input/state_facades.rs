@@ -104,6 +104,10 @@ impl TextareaState {
         self.value.clone()
     }
 
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        self.focus_handle(cx).focus(window, cx);
+    }
+
     pub fn set_value(
         &mut self,
         value: impl Into<SharedString>,
@@ -272,6 +276,10 @@ impl EditorState {
 
     pub fn value(&self) -> SharedString {
         self.value.clone()
+    }
+
+    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        self.focus_handle(cx).focus(window, cx);
     }
 
     pub fn set_value(

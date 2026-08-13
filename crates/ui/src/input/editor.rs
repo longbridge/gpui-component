@@ -14,7 +14,6 @@ pub struct Editor {
     height: Option<DefiniteLength>,
     appearance: bool,
     bordered: bool,
-    focus_bordered: bool,
     disabled: bool,
     tab_index: isize,
     role: RoleOverride,
@@ -29,7 +28,6 @@ impl Editor {
             height: None,
             appearance: true,
             bordered: true,
-            focus_bordered: true,
             disabled: false,
             tab_index: 0,
             role: RoleOverride::default(),
@@ -49,11 +47,6 @@ impl Editor {
 
     pub fn bordered(mut self, bordered: bool) -> Self {
         self.bordered = bordered;
-        self
-    }
-
-    pub fn focus_bordered(mut self, bordered: bool) -> Self {
-        self.focus_bordered = bordered;
         self
     }
 
@@ -91,7 +84,7 @@ impl RenderOnce for Editor {
         Input::new(&base)
             .appearance(self.appearance)
             .bordered(self.bordered)
-            .focus_bordered(self.focus_bordered)
+            .focus_bordered(false)
             .disabled(self.disabled)
             .tab_index(self.tab_index)
             .role(self.role)

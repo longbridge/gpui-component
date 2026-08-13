@@ -5,7 +5,7 @@
 use anyhow::Result;
 use gpui::TextAlign;
 use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
@@ -329,6 +329,7 @@ pub struct InputBaseState {
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
     pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
+    pub(super) editor_paddings: Edges<Pixels>,
     pub(super) decorations: DecorationCollections,
     pub(super) editor_style: InputEditorStyle,
 
@@ -552,6 +553,7 @@ impl InputState {
             scroll_handle: ScrollHandle::new(),
             scroll_size: gpui::size(px(0.), px(0.)),
             editor_scrollbar_snapshot: Cell::new(None),
+            editor_paddings: Edges::default(),
             deferred_scroll_offset: None,
             preferred_column: None,
             placeholder: SharedString::default(),
@@ -803,6 +805,12 @@ impl InputState {
 
     pub fn set_editor_style(&mut self, style: InputEditorStyle) {
         self.editor_style = style;
+    }
+
+    /// Set presentation padding for multi-line text and its scrollbar layout.
+    #[doc(hidden)]
+    pub fn set_editor_paddings(&mut self, paddings: Edges<Pixels>) {
+        self.editor_paddings = paddings;
     }
 
     pub fn apply_highlighter_fold_candidates(
@@ -3185,6 +3193,12 @@ impl Render for InputState {
             .when(self.mode.is_multi_line(), |this| this.h_full())
             .flex_grow_1()
             .overflow_x_hidden()
+            .when(self.mode.is_multi_line(), |this| {
+                this.pt(self.editor_paddings.top)
+                    .pr(self.editor_paddings.right)
+                    .pb(self.editor_paddings.bottom)
+                    .pl(self.editor_paddings.left)
+            })
             .child(TextElement::new(entity.clone()).placeholder(self.placeholder.clone()))
             .child(EditorScrollbar::new(entity))
     }

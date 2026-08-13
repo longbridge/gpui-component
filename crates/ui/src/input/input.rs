@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AccessibleAction, AnyElement, App, DefiniteLength, Entity, Focusable, Hsla,
+    AccessibleAction, AnyElement, App, DefiniteLength, Edges, Entity, Focusable, Hsla,
     InteractiveElement as _, IntoElement, ParentElement as _, Rems, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
@@ -395,6 +395,16 @@ impl RenderOnce for Input {
                         .into_any_element()
                 })),
             });
+            state.set_editor_paddings(if state.presentation().multi_line {
+                Edges {
+                    top: self.size.input_py(),
+                    right: self.size.input_px(),
+                    bottom: self.size.input_py(),
+                    left: self.size.input_px(),
+                }
+            } else {
+                Edges::default()
+            });
             state.set_disabled(self.disabled, cx);
             state.set_text_align(text_align, cx);
             let custom = self.context_menu_builder.clone();
@@ -525,8 +535,9 @@ impl RenderOnce for Input {
             .flex()
             .size_full()
             .line_height(LINE_HEIGHT)
-            .input_px(self.size)
-            .input_py(self.size)
+            .when(!is_multi_line, |this| {
+                this.input_px(self.size).input_py(self.size)
+            })
             .input_h(self.size)
             .input_text_size(self.size)
             .items_center()
