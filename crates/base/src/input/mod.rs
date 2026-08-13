@@ -8,26 +8,47 @@ use gpui::{
 /// Character used by masked editor modes.
 pub(crate) const MASK_CHAR: char = '•';
 
+#[path = "engine/blink_cursor.rs"]
 pub(crate) mod blink_cursor;
+#[path = "engine/change.rs"]
 mod change;
+#[path = "controls/controls.rs"]
 mod controls;
+#[path = "engine/cursor.rs"]
 mod cursor;
+#[path = "editor/decorations.rs"]
 mod decorations;
+#[path = "editor/diagnostics.rs"]
 mod diagnostics;
+#[path = "engine/display_map/mod.rs"]
 mod display_map;
+#[path = "engine/element.rs"]
 mod element;
+#[path = "editor/highlighting.rs"]
 mod highlighting;
+#[path = "editor/indent.rs"]
 mod indent;
+#[path = "engine/layout.rs"]
 mod layout;
+#[path = "editor/lsp/mod.rs"]
 mod lsp;
+#[path = "engine/mask_pattern.rs"]
 mod mask_pattern;
+#[path = "engine/mode.rs"]
 mod mode;
+#[path = "engine/movement.rs"]
 mod movement;
+#[path = "engine/native.rs"]
 mod native;
+#[path = "engine/rope_ext.rs"]
 mod rope_ext;
+#[path = "engine/search.rs"]
 mod search;
+#[path = "engine/selection.rs"]
 mod selection;
+#[path = "engine/state.rs"]
 mod state;
+#[path = "controls/state_facades.rs"]
 mod state_facades;
 
 pub(crate) fn init(cx: &mut App) {

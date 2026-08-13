@@ -227,6 +227,16 @@ LSP configuration are absent from its API. Multi-line code must construct
 - auto-scroll, viewport scrolling, and cursor visibility;
 - native text-content integration where supported.
 
+The implementation under `crates/base/src/input` is organized by responsibility:
+
+- `controls/` contains the three public controls and their state facades;
+- `engine/` contains shared editing, display mapping, search, layout, selection,
+  and painting mechanics;
+- `editor/` contains highlighting, diagnostics, decorations, indentation, and LSP.
+
+These are implementation folders rather than public Rust module segments. The
+external seam remains `gpui_base::input`, with stable re-exports in `mod.rs`.
+
 Purpose-specific state facades configure the shared engine and forward
 `InputEvent` without duplicating those mechanics. `InputState`, `TextareaState`,
 and `EditorState` are distinct GPUI entity types. Their private bridge to
