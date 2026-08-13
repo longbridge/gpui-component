@@ -194,7 +194,8 @@ impl SidebarStory {
                         h_flex()
                             .items_center()
                             .justify_between()
-                            .p_4()
+                            .px_4()
+                            .py_3()
                             .child(div().font_medium().child("Recent activity"))
                             .child(
                                 div()
