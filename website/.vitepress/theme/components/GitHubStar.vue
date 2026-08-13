@@ -25,15 +25,17 @@ const starLabel =
 <style lang="scss" scoped>
 @reference "../style.css";
 
+/* The button only ever sits in the navbar, so it stays an inline control at
+   every width; the navbar itself decides when the count is dropped. */
 .github-star-button {
-    @apply flex w-full py-3 px-0 lg:inline-flex lg:w-auto lg:py-0 lg:px-2;
+    @apply inline-flex w-auto py-0 px-2;
     @apply items-center text-sm gap-2 text-[var(--vp-c-text-1)] hover:text-[var(--vp-c-brand-1)] no-underline;
     border-radius: var(--radius);
     font-size: 0.76rem;
     font-variant-numeric: tabular-nums;
 
     svg {
-        @apply w-4 h-4;
+        @apply w-4 h-4 shrink-0;
         stroke-width: 1.8;
     }
 }
