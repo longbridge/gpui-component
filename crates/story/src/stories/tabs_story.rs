@@ -1,6 +1,6 @@
 use gpui::{
     Action, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, Styled, Window,
+    IntoElement, ParentElement, Render, Styled, Window, prelude::FluentBuilder as _, px,
 };
 use serde::Deserialize;
 
@@ -18,6 +18,13 @@ use crate::{ChangeStorySize, section, story_toolbar};
 #[action(namespace = tabs_story, no_json)]
 struct ToggleMoreMenu;
 
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = tabs_story, no_json)]
+struct SetMaxTabWidth(usize);
+
+/// The max tab widths to choose from in the story, `None` leaves tabs uncapped.
+const MAX_WIDTHS: [Option<f32>; 5] = [None, Some(60.), Some(90.), Some(120.), Some(160.)];
+
 pub struct TabsStory {
     focus_handle: FocusHandle,
     active_tab_ix: usize,
@@ -26,6 +33,7 @@ pub struct TabsStory {
     dynamic_next_tab_id: usize,
     size: Size,
     menu: bool,
+    max_width_ix: usize,
 }
 
 impl super::Story for TabsStory {
@@ -56,6 +64,7 @@ impl TabsStory {
             dynamic_next_tab_id: 3,
             size: Size::default(),
             menu: false,
+            max_width_ix: 0,
         }
     }
 
@@ -98,6 +107,12 @@ impl Focusable for TabsStory {
 
 impl Render for TabsStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let max_width = MAX_WIDTHS[self.max_width_ix].map(px);
+        let max_width_label = |width: Option<f32>| match width {
+            Some(width) => format!("{width:.0}px"),
+            None => "Unlimited".into(),
+        };
+
         v_flex()
             .w_full()
             .gap_3()
@@ -109,21 +124,47 @@ impl Render for TabsStory {
                 this.menu = !this.menu;
                 cx.notify();
             }))
-            .child(story_toolbar(self.size).dropdown_child(
-                Button::new("tabs-options").label("Options"),
-                {
-                    let menu = self.menu;
-                    move |popup, _, _| {
-                        popup.menu_with_check("More menu", menu, Box::new(ToggleMoreMenu))
-                    }
-                },
-            ))
+            .on_action(cx.listener(|this, action: &SetMaxTabWidth, _, cx| {
+                this.max_width_ix = action.0;
+                cx.notify();
+            }))
+            .child(
+                story_toolbar(self.size)
+                    .dropdown_child(
+                        Button::new("tabs-max-width").label(format!(
+                            "Max width: {}",
+                            max_width_label(MAX_WIDTHS[self.max_width_ix])
+                        )),
+                        {
+                            let max_width_ix = self.max_width_ix;
+                            move |menu, _, _| {
+                                MAX_WIDTHS
+                                    .iter()
+                                    .enumerate()
+                                    .fold(menu, |menu, (ix, width)| {
+                                        menu.menu_with_check(
+                                            max_width_label(*width),
+                                            ix == max_width_ix,
+                                            Box::new(SetMaxTabWidth(ix)),
+                                        )
+                                    })
+                            }
+                        },
+                    )
+                    .dropdown_child(Button::new("tabs-options").label("Options"), {
+                        let menu = self.menu;
+                        move |popup, _, _| {
+                            popup.menu_with_check("More menu", menu, Box::new(ToggleMoreMenu))
+                        }
+                    }),
+            )
             .child(
                 section("Tabs").w_full().child(
                     TabBar::new("tabs")
                         .w_full()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when_some(max_width, |this, max_width| this.max_width(max_width))
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -174,6 +215,7 @@ impl Render for TabsStory {
                         .underline()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when_some(max_width, |this, max_width| this.max_width(max_width))
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -195,6 +237,7 @@ impl Render for TabsStory {
                         .pill()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when_some(max_width, |this, max_width| this.max_width(max_width))
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -216,6 +259,7 @@ impl Render for TabsStory {
                         .outline()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when_some(max_width, |this, max_width| this.max_width(max_width))
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -237,6 +281,7 @@ impl Render for TabsStory {
                         .segmented()
                         .with_size(self.size)
                         .menu(self.menu)
+                        .when_some(max_width, |this, max_width| this.max_width(max_width))
                         .selected_index(self.active_tab_ix)
                         .on_click(cx.listener(|this, ix: &usize, window, cx| {
                             this.set_active_tab(*ix, window, cx);
@@ -275,6 +320,7 @@ impl Render for TabsStory {
                             .w_full()
                             .segmented()
                             .with_size(self.size)
+                            .when_some(max_width, |this, max_width| this.max_width(max_width))
                             .selected_index(self.dynamic_active_tab_ix)
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
                                 this.set_dynamic_active_tab(*ix, window, cx);
@@ -304,6 +350,7 @@ impl Render for TabsStory {
                             .w_full()
                             .segmented()
                             .with_size(self.size)
+                            .when_some(max_width, |this, max_width| this.max_width(max_width))
                             .selected_index(self.active_tab_ix)
                             .on_click(cx.listener(|this, ix: &usize, window, cx| {
                                 this.set_active_tab(*ix, window, cx);
