@@ -218,11 +218,7 @@ impl SettingPage {
                                     .py_4()
                                     .render(
                                         &query,
-                                        &RenderOptions {
-                                            page_ix: ix,
-                                            group_ix,
-                                            ..options
-                                        },
+                                        &options.with_page_ix(ix).with_group_ix(group_ix),
                                         window,
                                         cx,
                                     )

@@ -23,15 +23,42 @@ use crate::{
 };
 use gpui_base::{Combobox as BaseCombobox, GlobalState};
 
-// MARK: ComboboxTriggerCtx
+// MARK: ComboboxTriggerContext
 
 /// Context passed to the `render_trigger` closure on [`Combobox`].
-pub struct ComboboxTriggerCtx<'a, D: SearchableListDelegate + 'static> {
-    pub selection: &'a [(IndexPath, D::Item)],
-    pub placeholder: Option<&'a SharedString>,
-    pub open: bool,
-    pub disabled: bool,
-    pub size: Size,
+///
+/// The fields are private and reached through the methods below, so that a new
+/// one can be added without breaking the trigger renderers.
+pub struct ComboboxTriggerContext<'a, D: SearchableListDelegate + 'static> {
+    selection: &'a [(IndexPath, D::Item)],
+    placeholder: Option<&'a SharedString>,
+    open: bool,
+    disabled: bool,
+    size: Size,
+}
+
+impl<'a, D: SearchableListDelegate + 'static> ComboboxTriggerContext<'a, D> {
+    /// The items currently selected, empty when the combobox has no value.
+    pub fn selection(&self) -> &'a [(IndexPath, D::Item)] {
+        self.selection
+    }
+
+    pub fn placeholder(&self) -> Option<&'a SharedString> {
+        self.placeholder
+    }
+
+    /// Whether the dropdown list is showing.
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+
+    pub fn size(&self) -> Size {
+        self.size
+    }
 }
 
 // MARK: ComboboxChange
@@ -87,8 +114,9 @@ where
     searchable: bool,
     trigger_icon: Option<Icon>,
     check_icon: Option<Icon>,
-    render_trigger:
-        Option<Box<dyn Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
+    render_trigger: Option<
+        Box<dyn Fn(&ComboboxTriggerContext<D>, &mut Window, &mut App) -> AnyElement + 'static>,
+    >,
     footer: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
 }
 
@@ -573,7 +601,7 @@ where
         let has_custom_trigger = self.render_trigger.is_some();
 
         let trigger_body = if let Some(render_trigger) = &self.render_trigger {
-            let ctx = ComboboxTriggerCtx {
+            let trigger = ComboboxTriggerContext {
                 selection,
                 placeholder,
                 open,
@@ -581,7 +609,7 @@ where
                 size,
             };
 
-            render_trigger(&ctx, window, cx)
+            render_trigger(&trigger, window, cx)
         } else {
             self.default_trigger_body(window, cx)
         };
@@ -703,8 +731,9 @@ where
     id: ElementId,
     state: Entity<ComboboxState<D>>,
     options: ComboboxOptions,
-    render_trigger:
-        Option<Box<dyn Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> AnyElement + 'static>>,
+    render_trigger: Option<
+        Box<dyn Fn(&ComboboxTriggerContext<D>, &mut Window, &mut App) -> AnyElement + 'static>,
+    >,
     footer: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
     empty: Option<Box<dyn Fn(&mut Window, &App) -> AnyElement + 'static>>,
 }
@@ -793,10 +822,10 @@ where
     /// Override the entire trigger element.
     pub fn render_trigger<E: IntoElement + 'static>(
         mut self,
-        f: impl Fn(&ComboboxTriggerCtx<D>, &mut Window, &mut App) -> E + 'static,
+        f: impl Fn(&ComboboxTriggerContext<D>, &mut Window, &mut App) -> E + 'static,
     ) -> Self {
-        self.render_trigger = Some(Box::new(move |ctx, window, cx| {
-            f(ctx, window, cx).into_any_element()
+        self.render_trigger = Some(Box::new(move |trigger, window, cx| {
+            f(trigger, window, cx).into_any_element()
         }));
         self
     }

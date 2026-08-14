@@ -202,10 +202,25 @@ capability of a control shows up as another flag in the state it hands out.
 The shape to use instead:
 
 - private fields;
-- a builder for construction — `new()` plus one chained setter per field, named
-  after the field;
-- a reader per field, named `is_`/`has_`/`can_` for booleans and after the field
-  otherwise, so the reader never collides with the setter.
+- a builder for construction — `new()` plus one chained setter per field;
+- a reader per field.
+
+Setters and readers must not collide, which decides the naming:
+
+- a type whose fields are all boolean names its setters after the field and its
+  readers `is_`/`has_`/`can_`, matching how elements read — `CalendarItemState`,
+  `InputContextMenuCapabilities`;
+- a type carrying non-boolean fields prefixes every setter with `with_`, so the
+  readers keep the plain field name — `RenderOptions::with_item_ix` against
+  `RenderOptions::item_ix`. This follows `Sizable::with_size`.
+
+A `with_`-style setter that takes `self` by value also replaces functional
+update syntax, which stops compiling once the fields are private:
+
+```rust
+// was: RenderOptions { item_ix, ..*options }
+item.render_item(&options.with_item_ix(item_ix), window, cx)
+```
 
 A type that is only ever built inside its own module — `InputPresentation` is
 built by `InputBaseState::presentation` and nowhere else — needs the private
@@ -228,8 +243,15 @@ readers are always combined the same way — `!disabled && !readonly` — publis
 that combination as its own reader (`is_editable`) so the rule has one
 definition and new inputs to it stay invisible to callers.
 
+Name such a type in full: `ComboboxTriggerContext`, never `…Ctx`. In a GPUI
+codebase `cx` is reserved for `App`, `Context<T>`, and `AsyncApp`, so an
+abbreviated `ctx` for anything else reads as a second, competing context. A
+callback that receives both takes the GPUI one as `cx` and gives the other a
+name describing what it holds.
+
 This applies to state snapshots (`InputPresentation`, `CalendarItemState`),
-capability sets (`InputContextMenuCapabilities`), and option sets. It does not
+capability sets (`InputContextMenuCapabilities`), render contexts
+(`ComboboxTriggerContext`), and option sets (`RenderOptions`). It does not
 apply to value types whose fields *are* the definition and cannot grow, such as
 `Point`, `Selection`, `Edges`, `IndexPath`, or `FoldRange`, nor to types that
 mirror an external schema, such as the LSP `Diagnostic`.
