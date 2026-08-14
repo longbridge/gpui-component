@@ -81,7 +81,10 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
             div()
                 .flex_none()
                 .absolute()
-                .inset_0()
+                .top(-border_widths.top)
+                .left(-border_widths.left)
+                .right(-border_widths.right)
+                .bottom(-border_widths.bottom)
                 .border_1()
                 .border_color(cx.theme().ring)
                 .refine_style(&border_style),
