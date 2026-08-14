@@ -272,7 +272,6 @@ impl SettingItem {
 
                     div()
                         .w_full()
-                        .overflow_hidden()
                         .when(disabled, |this| this.opacity(0.5))
                         .map(|this| {
                             if layout.is_horizontal() {

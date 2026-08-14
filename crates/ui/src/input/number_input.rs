@@ -199,14 +199,14 @@ impl RenderOnce for NumberInput {
                     .when(focused, |this| this.focused_border(cx))
             })
             .refine_style(&self.style)
+            .when(self.disabled, |this| this.opacity(0.5))
+            .child(content)
             .draw_focus_ring(
                 focused && self.appearance && self.focus_ring_enabled,
                 px(0.),
                 window,
                 cx,
             )
-            .when(self.disabled, |this| this.opacity(0.5))
-            .child(content)
     }
 }
 
