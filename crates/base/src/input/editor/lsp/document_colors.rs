@@ -7,6 +7,9 @@ use std::ops::Range;
 
 use crate::input::{InputBaseState, Lsp, RopeExt};
 
+/// Maximum number of document colors accepted from a single provider response.
+const MAX_DOCUMENT_COLORS: usize = 10_000;
+
 pub trait DocumentColorProvider {
     /// Fetches document colors for the specified range.
     ///
@@ -19,6 +22,32 @@ pub trait DocumentColorProvider {
         window: &mut Window,
         cx: &mut App,
     ) -> Task<Result<Vec<ColorInformation>>>;
+}
+
+fn document_colors_from_response(
+    colors: &[ColorInformation],
+) -> Option<Vec<(lsp_types::Range, Hsla)>> {
+    if colors.len() > MAX_DOCUMENT_COLORS {
+        return None;
+    }
+
+    let mut document_colors = colors
+        .iter()
+        .map(|info| {
+            let color = gpui::Rgba {
+                r: info.color.red,
+                g: info.color.green,
+                b: info.color.blue,
+                a: info.color.alpha,
+            }
+            .into();
+
+            (info.range, color)
+        })
+        .collect::<Vec<_>>();
+    document_colors.sort_by_key(|(range, _)| range.start);
+
+    Some(document_colors)
 }
 
 impl Lsp {
@@ -74,21 +103,9 @@ impl Lsp {
             if let Some(task) = task_result {
                 if let Ok(colors) = task.await {
                     let _ = input_state.update(cx, |input_state, cx| {
-                        let mut document_colors: Vec<(lsp_types::Range, Hsla)> = colors
-                            .iter()
-                            .map(|info| {
-                                let color = gpui::Rgba {
-                                    r: info.color.red,
-                                    g: info.color.green,
-                                    b: info.color.blue,
-                                    a: info.color.alpha,
-                                }
-                                .into();
-
-                                (info.range, color)
-                            })
-                            .collect();
-                        document_colors.sort_by_key(|(range, _)| range.start);
+                        let Some(document_colors) = document_colors_from_response(&colors) else {
+                            return;
+                        };
 
                         if document_colors != input_state.lsp.document_colors {
                             input_state.lsp.document_colors = document_colors;
@@ -98,5 +115,35 @@ impl Lsp {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_document_colors_from_response_enforces_limit() {
+        let color = ColorInformation {
+            range: lsp_types::Range::new(
+                lsp_types::Position::new(0, 0),
+                lsp_types::Position::new(0, 1),
+            ),
+            color: lsp_types::Color {
+                red: 1.,
+                green: 0.,
+                blue: 0.,
+                alpha: 1.,
+            },
+        };
+        let colors = vec![color; MAX_DOCUMENT_COLORS + 1];
+
+        assert_eq!(
+            document_colors_from_response(&colors[..MAX_DOCUMENT_COLORS])
+                .unwrap()
+                .len(),
+            MAX_DOCUMENT_COLORS
+        );
+        assert!(document_colors_from_response(&colors).is_none());
     }
 }
