@@ -77,7 +77,7 @@ pub struct Example {
     soft_wrap: bool,
     show_whitespaces: bool,
     folding: bool,
-    disabled: bool,
+    readonly: bool,
     scroll_beyond_last_line: Option<usize>,
     cursor_surrounding_lines: Option<usize>,
     lsp_store: ExampleLspStore,
@@ -744,7 +744,7 @@ impl Example {
             soft_wrap: false,
             show_whitespaces: false,
             folding: true,
-            disabled: false,
+            readonly: false,
             scroll_beyond_last_line: None,
             cursor_surrounding_lines: None,
             lsp_store,
@@ -1046,14 +1046,14 @@ impl Example {
             }))
     }
 
-    fn render_disabled_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Button {
-        Button::new("disabled")
+    fn render_readonly_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Button {
+        Button::new("readonly")
             .ghost()
             .xsmall()
-            .when(self.disabled, |this| this.icon(IconName::Check))
-            .label("Disabled")
+            .when(self.readonly, |this| this.icon(IconName::Check))
+            .label("Read only")
             .on_click(cx.listener(|this, _, _window, cx| {
-                this.disabled = !this.disabled;
+                this.readonly = !this.readonly;
                 cx.notify();
             }))
     }
@@ -1167,7 +1167,7 @@ impl Render for Example {
                             )
                             .child(
                                 Input::from_base(&self.editor)
-                                    .disabled(self.disabled)
+                                    .readonly(self.readonly)
                                     .bordered(false)
                                     .p_0()
                                     .h_full()
@@ -1184,7 +1184,7 @@ impl Render for Example {
                             .left(self.render_show_whitespaces_button(window, cx))
                             .left(self.render_indent_guides_button(window, cx))
                             .left(self.render_folding_button(window, cx))
-                            .left(self.render_disabled_button(window, cx))
+                            .left(self.render_readonly_button(window, cx))
                             .left(self.render_scroll_beyond_last_line_button(window, cx))
                             .left(self.render_cursor_surrounding_lines_button(window, cx))
                             .right(self.render_go_to_line_button(window, cx)),

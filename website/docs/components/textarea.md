@@ -68,8 +68,13 @@ Textarea::new(&notes)
     .h(px(160.))
     .bordered(true)
     .disabled(false)
+    .readonly(false)
     .aria_label("Notes")
 ```
+
+Unlike `disabled`, a read-only textarea keeps the normal appearance and still
+can be focused, selected and copied, it only rejects the changes made by the
+user.
 
 `Textarea` deliberately does not expose Input-only adornments such as `prefix`,
 `suffix`, mask toggle, or the clear button. Compose related actions beside the

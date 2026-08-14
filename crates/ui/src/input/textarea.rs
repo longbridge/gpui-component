@@ -15,6 +15,7 @@ pub struct Textarea {
     appearance: bool,
     bordered: bool,
     disabled: bool,
+    readonly: bool,
     tab_index: isize,
     role: RoleOverride,
     aria_label: Option<SharedString>,
@@ -29,6 +30,7 @@ impl Textarea {
             appearance: true,
             bordered: true,
             disabled: false,
+            readonly: false,
             tab_index: 0,
             role: RoleOverride::default(),
             aria_label: None,
@@ -52,6 +54,16 @@ impl Textarea {
 
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Set the textarea to read-only, default is `false`.
+    ///
+    /// Unlike [`Self::disabled`], a read-only textarea keeps the normal appearance
+    /// and still can be focused, selected and copied, it only rejects the changes
+    /// made by the user.
+    pub fn readonly(mut self, readonly: bool) -> Self {
+        self.readonly = readonly;
         self
     }
 
@@ -85,6 +97,7 @@ impl RenderOnce for Textarea {
             .appearance(self.appearance)
             .bordered(self.bordered)
             .disabled(self.disabled)
+            .readonly(self.readonly)
             .tab_index(self.tab_index)
             .role(self.role)
             .when_some(self.height, |this, height| this.h(height))

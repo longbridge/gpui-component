@@ -8,6 +8,7 @@ use gpui::{
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct InputContextMenuCapabilities {
     pub disabled: bool,
+    pub readonly: bool,
     pub code_editor: bool,
     pub selection: bool,
     pub go_to_definition: bool,
