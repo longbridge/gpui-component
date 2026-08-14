@@ -3,7 +3,8 @@ use gpui::{
     Styled as _, Window, div, px, relative,
 };
 use gpui_component::{
-    ActiveTheme, StyledExt, avatar::Avatar, button::Button, h_flex, hover_card::HoverCard, v_flex,
+    ActiveTheme, StyledExt, avatar::Avatar, button::Button, h_flex, hover_card::HoverCard,
+    link::Link, v_flex,
 };
 use std::time::Duration;
 
@@ -69,7 +70,7 @@ impl HoverCardStory {
         )
     }
 
-    fn render_user_profile_example(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_user_profile_example(&self, _: &mut Context<Self>) -> impl IntoElement {
         section("Rich Content")
             .description("Cards can contain avatars, typography, and structured details.")
             .w(px(520.))
@@ -78,12 +79,7 @@ impl HoverCardStory {
                     .child("Hover over ")
                     .child(
                         HoverCard::new("user-profile")
-                            .trigger(
-                                div()
-                                    .child("@huacnlee")
-                                    .cursor_pointer()
-                                    .text_color(cx.theme().link),
-                            )
+                            .trigger(Link::new("user-profile-link").child("@huacnlee"))
                             .content(|_, _, cx| {
                                 h_flex()
                                     .w(px(320.))
