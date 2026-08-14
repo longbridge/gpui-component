@@ -519,7 +519,7 @@ impl RenderOnce for DatePicker {
                                 ),
                         ),
                     )
-                    .with_priority(2),
+                    .with_priority(gpui_base::POPUP_PRIORITY),
                 )
             })
     }

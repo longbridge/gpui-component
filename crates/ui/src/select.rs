@@ -573,7 +573,7 @@ where
                                 })),
                         ),
                     )
-                    .with_priority(1),
+                    .with_priority(gpui_base::POPUP_PRIORITY),
                 )
             })
     }

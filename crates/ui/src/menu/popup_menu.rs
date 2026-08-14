@@ -339,7 +339,7 @@ impl PopupMenu {
             external_link_icon: true,
             size: Size::default(),
             submenu_anchor: (Anchor::TopLeft, Pixels::ZERO),
-            priority: 1,
+            priority: gpui_base::POPUP_PRIORITY,
             _subscriptions: vec![],
         }
     }

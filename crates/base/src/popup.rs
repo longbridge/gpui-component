@@ -11,6 +11,9 @@ use crate::{ElementExt as _, Positioner, StyledExt as _};
 /// Distance kept between a popup and the window edge.
 const WINDOW_MARGIN: Pixels = px(8.);
 
+/// Deferred paint priority for interactive surfaces that must appear above dialogs.
+pub const POPUP_PRIORITY: usize = 100;
+
 #[derive(Default)]
 struct PopupAnchorState {
     bounds: Bounds<Pixels>,
@@ -135,7 +138,7 @@ impl RenderOnce for Popup {
                     .margin(WINDOW_MARGIN)
                     .child(content),
             )
-            .with_priority(1),
+            .with_priority(POPUP_PRIORITY),
         )
     }
 }
