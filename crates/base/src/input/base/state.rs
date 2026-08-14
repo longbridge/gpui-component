@@ -301,6 +301,7 @@ pub struct InputBaseState {
     pub(super) last_selected_range: Option<Selection>,
     pub(super) selecting: bool,
     pub(crate) disabled: bool,
+    pub(crate) readonly: bool,
     pub(crate) text_align: TextAlign,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
@@ -400,6 +401,7 @@ pub struct InputBaseState {
 pub struct InputPresentation {
     pub focus_handle: FocusHandle,
     pub disabled: bool,
+    pub readonly: bool,
     pub loading: bool,
     pub masked: bool,
     pub multi_line: bool,
@@ -408,6 +410,15 @@ pub struct InputPresentation {
     pub placeholder: SharedString,
     pub value: String,
     pub mask_placeholder: Option<String>,
+}
+
+impl InputPresentation {
+    /// Returns true if the user is allowed to change the text.
+    ///
+    /// See also: [`InputBaseState::is_editable`].
+    pub fn is_editable(&self) -> bool {
+        !self.disabled && !self.readonly
+    }
 }
 
 impl EventEmitter<InputEvent> for InputBaseState {}
@@ -435,6 +446,7 @@ impl InputBaseState {
         InputPresentation {
             focus_handle: self.focus_handle.clone(),
             disabled: self.disabled,
+            readonly: self.readonly,
             loading: self.loading,
             masked: self.masked,
             multi_line: self.mode.is_multi_line(),
@@ -449,6 +461,7 @@ impl InputBaseState {
     pub fn context_menu_capabilities(&self) -> InputContextMenuCapabilities {
         InputContextMenuCapabilities {
             disabled: self.disabled,
+            readonly: self.readonly,
             code_editor: self.mode.is_code_editor(),
             selection: !self.selected_range.is_empty(),
             go_to_definition: self.lsp.definition_provider.is_some(),
@@ -522,6 +535,7 @@ impl InputBaseState {
             input_bounds: Bounds::default(),
             selecting: false,
             disabled: false,
+            readonly: false,
             text_align: TextAlign::Left,
             masked: false,
             clean_on_escape: false,
@@ -921,6 +935,17 @@ impl InputBaseState {
         cx.notify();
     }
 
+    /// Perform `f` with the user-facing edit restrictions lifted.
+    ///
+    /// The `disabled` and `readonly` modes only reject the changes made by the
+    /// user, the programmatic APIs must always be able to update the text.
+    fn with_edits_allowed(&mut self, f: impl FnOnce(&mut Self)) {
+        let (was_disabled, was_readonly) = (self.disabled, self.readonly);
+        (self.disabled, self.readonly) = (false, false);
+        f(self);
+        (self.disabled, self.readonly) = (was_disabled, was_readonly);
+    }
+
     /// Insert text at the current cursor position.
     ///
     /// And the cursor will be moved to the end of inserted text.
@@ -930,13 +955,12 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let was_disabled = self.disabled;
-        self.disabled = false;
         let text: SharedString = text.into();
-        let range_utf16 = self.range_to_utf16(&(self.cursor()..self.cursor()));
-        self.replace_text_in_range_silent(Some(range_utf16), &text, window, cx);
-        self.selected_range = (self.selected_range.end..self.selected_range.end).into();
-        self.disabled = was_disabled;
+        self.with_edits_allowed(|this| {
+            let range_utf16 = this.range_to_utf16(&(this.cursor()..this.cursor()));
+            this.replace_text_in_range_silent(Some(range_utf16), &text, window, cx);
+            this.selected_range = (this.selected_range.end..this.selected_range.end).into();
+        });
     }
 
     /// Replace text at the current cursor position.
@@ -948,12 +972,11 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let was_disabled = self.disabled;
-        self.disabled = false;
         let text: SharedString = text.into();
-        self.replace_text_in_range_silent(None, &text, window, cx);
-        self.selected_range = (self.selected_range.end..self.selected_range.end).into();
-        self.disabled = was_disabled;
+        self.with_edits_allowed(|this| {
+            this.replace_text_in_range_silent(None, &text, window, cx);
+            this.selected_range = (this.selected_range.end..this.selected_range.end).into();
+        });
     }
 
     fn replace_text(
@@ -962,13 +985,12 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let was_disabled = self.disabled;
-        self.disabled = false;
         let text: SharedString = text.into();
-        let range = 0..self.text.chars().map(|c| c.len_utf16()).sum();
-        self.replace_text_in_range_silent(Some(range), &text, window, cx);
-        self.reset_highlighter(cx);
-        self.disabled = was_disabled;
+        self.with_edits_allowed(|this| {
+            let range = 0..this.text.chars().map(|c| c.len_utf16()).sum();
+            this.replace_text_in_range_silent(Some(range), &text, window, cx);
+            this.reset_highlighter(cx);
+        });
     }
 
     fn reset_selection(&mut self) {
@@ -1016,6 +1038,39 @@ impl InputBaseState {
 
         self.disabled = disabled;
         cx.notify();
+    }
+
+    /// Set with read-only mode.
+    ///
+    /// Unlike [`Self::disabled`], a read-only input keeps the normal appearance,
+    /// focus, cursor, selection and copy behavior, it only rejects any change
+    /// of the text made by the user.
+    ///
+    /// See also: [`Self::set_readonly`].
+    #[allow(unused)]
+    pub(crate) fn readonly(mut self, readonly: bool) -> Self {
+        self.readonly = readonly;
+        self
+    }
+
+    pub fn set_readonly(&mut self, readonly: bool, cx: &mut Context<Self>) {
+        if self.readonly == readonly {
+            return;
+        }
+
+        self.readonly = readonly;
+        if readonly {
+            self.search_session.replace_mode = false;
+        }
+        cx.notify();
+    }
+
+    /// Returns true if the user is allowed to change the text.
+    ///
+    /// This is false when the input is `disabled` or `readonly`, the programmatic
+    /// APIs (e.g.: [`Self::set_value`], [`Self::insert`]) are not limited by this.
+    pub fn is_editable(&self) -> bool {
+        !self.disabled && !self.readonly
     }
 
     /// Set with password masked state.
@@ -2823,7 +2878,7 @@ impl EntityInputHandler for InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.disabled {
+        if !self.is_editable() {
             return;
         }
 
@@ -2939,7 +2994,7 @@ impl EntityInputHandler for InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.disabled {
+        if !self.is_editable() {
             return;
         }
 
@@ -3129,7 +3184,7 @@ impl Render for InputBaseState {
             .id("input-state")
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
-            .when(!self.disabled, |this| {
+            .when(self.is_editable(), |this| {
                 this.on_action(window.listener_for(&entity, InputBaseState::backspace))
                     .on_action(window.listener_for(&entity, InputBaseState::delete))
                     .on_action(
@@ -3305,6 +3360,64 @@ mod tests {
             })
         });
         assert_eq!(calls.get(), 1);
+    }
+
+    #[gpui::test]
+    fn test_readonly_rejects_user_edits_only(cx: &mut TestAppContext) {
+        let input_view = InputView::new(cx);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("hello", window, cx);
+                state.set_readonly(true, cx);
+            });
+        });
+
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert!(!state.is_editable());
+                assert!(!state.is_replaceable());
+            });
+        });
+
+        // Typing (and IME) goes through the input handler, it must be rejected.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, " world", window, cx);
+                state.replace_and_mark_text_in_range(None, "あ", None, window, cx);
+            });
+        });
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| assert_eq!(state.value(), "hello"));
+        });
+
+        // The programmatic APIs are not limited by the readonly mode.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.insert(" world", window, cx);
+                state.set_value("changed", window, cx);
+            });
+        });
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| assert_eq!(state.value(), "changed"));
+        });
+
+        // And the user can edit again after leaving the readonly mode.
+        // The caret is at the start, because `set_value` has reset the selection.
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_readonly(false, cx);
+                state.replace_text_in_range(None, "!", window, cx);
+            });
+        });
+        cx.update(|_, cx| {
+            input.read_with(cx, |state, _| {
+                assert!(state.is_editable());
+                assert_eq!(state.value(), "!changed");
+            });
+        });
     }
 
     /// Regression test: `scroll_to` at end-of-buffer must produce a deferred

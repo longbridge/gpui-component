@@ -3,7 +3,7 @@ use gpui::{
     Styled, Window, div,
 };
 
-use gpui_component::{ActiveTheme, input::*, tab::TabBar, v_flex};
+use gpui_component::{ActiveTheme, h_flex, input::*, switch::Switch, tab::TabBar, v_flex};
 
 const EXAMPLE_CODE: &str = include_str!("./editor_preview.rs");
 
@@ -12,6 +12,7 @@ pub struct EditorStory {
     decorations_state: Entity<EditorState>,
     _decorations: TextDecorationCollection,
     active_tab: usize,
+    readonly: bool,
 }
 impl super::Story for EditorStory {
     fn title() -> &'static str {
@@ -127,6 +128,7 @@ impl EditorStory {
             decorations_state,
             _decorations: decorations,
             active_tab: 0,
+            readonly: false,
         }
     }
 }
@@ -137,27 +139,42 @@ impl Render for EditorStory {
             .size_full()
             .gap_3()
             .child(
-                TabBar::new("editor-story-tabs")
-                    .w_64()
-                    .underline()
-                    .selected_index(self.active_tab)
-                    .on_click(cx.listener(|this, selected: &usize, _, cx| {
-                        this.active_tab = *selected;
-                        cx.notify();
-                    }))
-                    .child("Code")
-                    .child("Decorations"),
+                h_flex()
+                    .justify_between()
+                    .child(
+                        TabBar::new("editor-story-tabs")
+                            .w_64()
+                            .underline()
+                            .selected_index(self.active_tab)
+                            .on_click(cx.listener(|this, selected: &usize, _, cx| {
+                                this.active_tab = *selected;
+                                cx.notify();
+                            }))
+                            .child("Code")
+                            .child("Decorations"),
+                    )
+                    .child(
+                        Switch::new("editor-read-only")
+                            .label("Read only")
+                            .checked(self.readonly)
+                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                                this.readonly = *checked;
+                                cx.notify();
+                            })),
+                    ),
             )
             .child(div().min_h_0().flex_1().child(if self.active_tab == 0 {
                 Editor::new(&self.editor_state)
                     .font_family(cx.theme().mono_font_family.clone())
                     .text_size(cx.theme().mono_font_size)
+                    .readonly(self.readonly)
                     .size_full()
                     .into_any_element()
             } else {
                 Editor::new(&self.decorations_state)
                     .font_family(cx.theme().mono_font_family.clone())
                     .text_size(cx.theme().mono_font_size)
+                    .readonly(self.readonly)
                     .size_full()
                     .into_any_element()
             }))

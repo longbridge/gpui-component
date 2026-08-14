@@ -16,6 +16,7 @@ pub struct InputStory {
     input_text_right: Entity<InputState>,
     mask_input: Entity<InputState>,
     disabled_input: Entity<InputState>,
+    readonly_input: Entity<InputState>,
     prefix_input1: Entity<InputState>,
     suffix_input1: Entity<InputState>,
     both_input1: Entity<InputState>,
@@ -264,6 +265,8 @@ impl InputStory {
             mask_input,
             disabled_input: cx
                 .new(|cx| InputState::new(window, cx).default_value("This is disabled input")),
+            readonly_input: cx
+                .new(|cx| InputState::new(window, cx).default_value("This is read-only input")),
             small_input: cx.new(|cx| {
                 InputState::new(window, cx)
                     .validate(|s, _| s.parse::<f32>().is_ok())
@@ -394,12 +397,17 @@ impl Render for InputStory {
             )
             .child(
                 section("States")
-                    .description("Disabled and revealable password inputs.")
+                    .description("Disabled, read-only and revealable password inputs.")
                     .w_128()
                     .child(
                         Input::new(&self.disabled_input)
                             .with_size(self.size)
                             .disabled(true),
+                    )
+                    .child(
+                        Input::new(&self.readonly_input)
+                            .with_size(self.size)
+                            .readonly(true),
                     )
                     .child(
                         Input::new(&self.mask_input)

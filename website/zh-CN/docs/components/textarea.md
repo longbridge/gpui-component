@@ -66,7 +66,10 @@ Textarea::new(&notes)
     .h(px(160.))
     .bordered(true)
     .disabled(false)
+    .readonly(false)
     .aria_label("备注")
 ```
+
+与 `disabled` 不同，只读 Textarea 保持正常外观，仍然可以聚焦、选中和复制，只是拒绝用户对内容的修改。
 
 `Textarea` 不提供只适用于单行 Input 的前后缀、密码显示切换和清除按钮；相关操作应组合在 Textarea 外部。

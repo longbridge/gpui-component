@@ -106,6 +106,15 @@ Input::new(&input).small()
 Input::new(&input).disabled(true)
 ```
 
+### Read-only Input
+
+Unlike `disabled`, a read-only input keeps the normal appearance and still can
+be focused, selected and copied, it only rejects the changes made by the user.
+
+```rust
+Input::new(&input).readonly(true)
+```
+
 ### Clean on ESC
 
 ```rust

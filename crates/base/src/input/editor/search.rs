@@ -62,7 +62,8 @@ impl InputBaseState {
         if !self.searchable {
             return;
         }
-        self.search_session.open(replace_mode, self.replaceable);
+        self.search_session
+            .open(replace_mode, self.is_replaceable());
         let selected = self.selected_text().to_string();
         if !selected.is_empty() {
             self.search_session.query = selected;
@@ -88,12 +89,16 @@ impl InputBaseState {
 
     #[doc(hidden)]
     pub fn set_search_replace_mode(&mut self, replace_mode: bool, cx: &mut Context<Self>) {
-        self.search_session.replace_mode = replace_mode && self.replaceable;
+        self.search_session.replace_mode = replace_mode && self.is_replaceable();
         cx.notify();
     }
 
+    /// Returns true if the search panel can replace the matches.
+    ///
+    /// This is false when the input is not `replaceable`, or when it is
+    /// `disabled` or `readonly`.
     pub fn is_replaceable(&self) -> bool {
-        self.replaceable
+        self.replaceable && self.is_editable()
     }
 
     pub fn set_search_query(
@@ -136,7 +141,7 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        if !self.replaceable {
+        if !self.is_replaceable() {
             return false;
         }
         let matcher = &mut self.search_session.matcher;
@@ -167,7 +172,7 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> usize {
-        if !self.replaceable {
+        if !self.is_replaceable() {
             return 0;
         }
         let ranges = self.search_session.matcher.matched_ranges();

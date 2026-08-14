@@ -83,7 +83,17 @@ Editor::new(&editor)
     .h(px(480.))
     .bordered(true)
     .disabled(false)
+    .readonly(false)
     .aria_label("Rust source")
+```
+
+Use `readonly` to preview a file without allowing changes. Unlike `disabled`,
+a read-only editor keeps the normal appearance and still can be focused,
+selected, copied and searched, it only rejects the changes made by the user.
+The programmatic APIs such as `set_value` keep working.
+
+```rust
+Editor::new(&editor).readonly(true)
 ```
 
 Editor focus does not add the single-line Input focus-border treatment. The

@@ -68,6 +68,7 @@ pub struct Input {
     cleanable: bool,
     mask_toggle: bool,
     disabled: bool,
+    readonly: bool,
     bordered: bool,
     focus_bordered: bool,
     tab_index: isize,
@@ -129,6 +130,7 @@ impl Input {
             cleanable: false,
             mask_toggle: false,
             disabled: false,
+            readonly: false,
             bordered: true,
             focus_bordered: true,
             tab_index: 0,
@@ -224,6 +226,16 @@ impl Input {
     /// Set to disable the input field.
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
+        self
+    }
+
+    /// Set the input field to read-only, default is `false`.
+    ///
+    /// Unlike [`Self::disabled`], a read-only input keeps the normal appearance
+    /// and still can be focused, selected and copied, it only rejects the changes
+    /// made by the user.
+    pub fn readonly(mut self, readonly: bool) -> Self {
+        self.readonly = readonly;
         self
     }
 
@@ -435,6 +447,7 @@ impl RenderOnce for Input {
                 Edges::default()
             });
             state.set_disabled(self.disabled, cx);
+            state.set_readonly(self.readonly, cx);
             state.set_text_align(text_align, cx);
             let custom = self.context_menu_builder.clone();
             state.on_context_menu(Rc::new(move |_, capabilities, position, window, cx| {
@@ -442,6 +455,9 @@ impl RenderOnce for Input {
                     custom(NativeMenu::new(), window, cx)
                 } else {
                     let enabled = !capabilities.disabled;
+                    // A read-only input can still navigate the code, it only
+                    // rejects the items that would change the text.
+                    let editable = enabled && !capabilities.readonly;
                     let mut menu = NativeMenu::new();
                     if capabilities.code_editor {
                         menu = menu
@@ -452,14 +468,14 @@ impl RenderOnce for Input {
                             )
                             .menu_with_disabled(
                                 t!("Input.Show Code Actions"),
-                                !(enabled && capabilities.code_actions),
+                                !(editable && capabilities.code_actions),
                                 Box::new(gpui_base::input::ToggleCodeActions),
                             )
                             .separator();
                     }
                     menu.menu_with_disabled(
                         t!("Input.Cut"),
-                        !(enabled && capabilities.selection),
+                        !(editable && capabilities.selection),
                         Box::new(gpui_base::input::Cut),
                     )
                     .menu_with_disabled(
@@ -469,7 +485,7 @@ impl RenderOnce for Input {
                     )
                     .menu_with_disabled(
                         t!("Input.Paste"),
-                        !(enabled && cx.read_from_clipboard().is_some()),
+                        !(editable && cx.read_from_clipboard().is_some()),
                         Box::new(gpui_base::input::Paste),
                     )
                     .separator()
@@ -496,7 +512,7 @@ impl RenderOnce for Input {
         .then(|| presentation.value.clone());
         let focused = presentation.focus_handle.is_focused(window) && !presentation.disabled;
         if focused {
-            sync_native_content_type(window, content_type, presentation.disabled);
+            sync_native_content_type(window, content_type, presentation.is_editable());
         }
 
         let gap_x = match self.size {
@@ -519,7 +535,7 @@ impl RenderOnce for Input {
         let prefix = self.prefix;
         let suffix = self.suffix;
         let show_clear_button = self.cleanable
-            && !presentation.disabled
+            && presentation.is_editable()
             && !presentation.loading
             && !presentation.value.is_empty()
             && !presentation.multi_line;
