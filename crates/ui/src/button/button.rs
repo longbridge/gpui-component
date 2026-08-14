@@ -717,6 +717,9 @@ impl RenderOnce for Button {
                 this
             }
         })
+        .when(is_focused && self.focus_ring_enabled, |this| {
+            this.focused_border(cx)
+        })
         .draw_focus_ring(is_focused && self.focus_ring_enabled, px(0.), window, cx)
     }
 }
