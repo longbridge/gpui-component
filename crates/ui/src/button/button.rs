@@ -721,33 +721,6 @@ impl RenderOnce for Button {
             is_focused && self.focus_ring_enabled && (self.variant.is_default() || self.outline),
             |this| this.border_color(focus_border_color(cx)),
         )
-        .when(
-            is_focused && self.focus_ring_enabled && !(self.variant.is_default() || self.outline),
-            |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .when(self.border_edges.left, |this| this.border_l_1())
-                        .when(self.border_edges.right, |this| this.border_r_1())
-                        .when(self.border_edges.top, |this| this.border_t_1())
-                        .when(self.border_edges.bottom, |this| this.border_b_1())
-                        .border_color(focus_border_color(cx))
-                        .when(self.border_corners.top_left, |this| {
-                            this.rounded_tl(rounding)
-                        })
-                        .when(self.border_corners.top_right, |this| {
-                            this.rounded_tr(rounding)
-                        })
-                        .when(self.border_corners.bottom_left, |this| {
-                            this.rounded_bl(rounding)
-                        })
-                        .when(self.border_corners.bottom_right, |this| {
-                            this.rounded_br(rounding)
-                        }),
-                )
-            },
-        )
         .draw_focus_ring(is_focused && self.focus_ring_enabled, px(0.), window, cx)
     }
 }

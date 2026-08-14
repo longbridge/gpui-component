@@ -53,6 +53,11 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
                 .unwrap_or_default(),
         };
         let outer_radius = radius.map(|value| *value + FOCUS_RING_OFFSET + margin);
+        let mut border_style = StyleRefinement::default();
+        border_style.corner_radii.top_left = Some(radius.top_left.into());
+        border_style.corner_radii.top_right = Some(radius.top_right.into());
+        border_style.corner_radii.bottom_left = Some(radius.bottom_left.into());
+        border_style.corner_radii.bottom_right = Some(radius.bottom_right.into());
         let mut ring_style = StyleRefinement::default();
         ring_style.corner_radii.top_left = Some(outer_radius.top_left.into());
         ring_style.corner_radii.top_right = Some(outer_radius.top_right.into());
@@ -73,6 +78,15 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
                 .border(FOCUS_RING_WIDTH)
                 .border_color(ring_color)
                 .refine_style(&ring_style),
+        )
+        .child(
+            div()
+                .flex_none()
+                .absolute()
+                .inset_0()
+                .border_1()
+                .border_color(focus_border_color(cx))
+                .refine_style(&border_style),
         )
     }
 }
