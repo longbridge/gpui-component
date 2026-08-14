@@ -636,14 +636,12 @@ impl Render for ComboboxStory {
                     .w(px(280.))
                     .description("Add an action below the option list.")
                     .child({
-                        let search_query = self.with_footer.read(cx).query(cx);
-                        let view = cx.entity();
+                        let state = self.with_footer.clone();
                         Combobox::new(&self.with_footer)
                             .placeholder("Select university")
                             .search_placeholder("Search…")
                             .footer(move |_, cx| {
-                                let search_query = search_query.clone();
-                                let view = view.clone();
+                                let state = state.clone();
                                 Button::new("add-new")
                                     .ghost()
                                     .label("New university")
@@ -652,21 +650,19 @@ impl Render for ComboboxStory {
                                     .w_full()
                                     .justify_start()
                                     .on_click(move |_, window, cx| {
-                                        let search_query = search_query.clone();
-                                        cx.update_entity(&view, move |this, cx| {
-                                            let mut items = SearchableVec::new(vec![
-                                                "Harvard University".to_string(),
-                                                "MIT".to_string(),
-                                                "Stanford".to_string(),
-                                                "Cambridge".to_string(),
-                                                search_query.clone().into(),
-                                            ]);
+                                        let search_query = state.read(cx).query(cx);
+                                        let mut items = SearchableVec::new(vec![
+                                            "Harvard University".to_string(),
+                                            "MIT".to_string(),
+                                            "Stanford".to_string(),
+                                            "Cambridge".to_string(),
+                                            search_query.to_string(),
+                                        ]);
 
-                                            drop(items.perform_search(&search_query, window, cx));
+                                        drop(items.perform_search(&search_query, window, cx));
 
-                                            this.with_footer.update(cx, |this, cx| {
-                                                this.set_items(items, window, cx);
-                                            })
+                                        state.update(cx, |state, cx| {
+                                            state.set_items(items, window, cx);
                                         });
                                     })
                                     .into_any_element()

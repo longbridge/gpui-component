@@ -1157,9 +1157,9 @@ mod tests {
             let items = SearchableVec::new(vec!["Rust", "Go", "C++"]);
             let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx).searchable(true));
 
-            state.update(cx, |state, cx| state.set_query("Rust", window, cx));
+            state.update(cx, |state, cx| state.set_query(" Rust ", window, cx));
 
-            assert_eq!(state.read(cx).query(cx).as_ref(), "Rust");
+            assert_eq!(state.read(cx).query(cx).as_ref(), " Rust ");
             assert_eq!(
                 state
                     .read(cx)
