@@ -25,7 +25,7 @@ impl super::Story for AlertDialogStory {
     }
 
     fn description() -> &'static str {
-        "A modal dialog that interrupts the user with important content"
+        "Require a response before the user can continue."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -57,24 +57,25 @@ impl Render for AlertDialogStory {
             v_flex()
                 .gap_6()
                 .child(
-                    section("AlertDialog").child(
+                    section("Default")
+                        .description("Compose the header, message, and footer actions.")
+                        .child(
                         AlertDialog::new(cx)
                             .p_0()
-                            .trigger(Button::new("info-alert").outline().label("Show Info Alert"))
+                            .trigger(Button::new("info-alert").outline().label("Discard Draft"))
                             .on_ok(|_, window, cx| {
-                                window.push_notification("You have confirmed the alert", cx);
+                                window.push_notification("Draft discarded", cx);
                                 true
                             })
                             .on_cancel(|_, window, cx| {
-                                window.push_notification("Ok, you canceled the alert", cx);
+                                window.push_notification("Continuing to edit", cx);
                                 true
                             })
                             .content(|content, _, cx| {
                                 content
-                                    .child(DialogHeader::new().p_4().child(DialogTitle::new().child("Are you absolutely sure?")).child(
+                                    .child(DialogHeader::new().p_4().child(DialogTitle::new().child("Discard unsaved changes?")).child(
                                         DialogDescription::new().child(
-                                            "This action cannot be undone. \
-                                            This will permanently delete your account from our servers.",
+                                            "Your edits since the last save will be permanently lost.",
                                         ),
                                     ))
                                     .child(DialogFooter::new()
@@ -89,15 +90,15 @@ impl Render for AlertDialogStory {
                                         )
                                         .child(
                                             DialogAction::new().child(
-                                                Button::new("ok").label("Continue").primary()
+                                                Button::new("ok").label("Discard").danger()
                                             )
                                         )
                                     )
                             }),
                     ),
                 )
-                .child(section("With open_alert_dialog").child(
-                    Button::new("confirm-alert").outline().label("Show Confirmation").on_click(cx.listener(
+                .child(section("Imperative API").description("Open an alert directly from the window.").child(
+                    Button::new("confirm-alert").outline().label("Delete File").on_click(cx.listener(
                         |_, _, window, cx| {
                             use gpui_component::dialog::DialogButtonProps;
 
@@ -124,7 +125,7 @@ impl Render for AlertDialogStory {
                         },
                     )),
                 ))
-                .child(section("With Icon").child(
+                .child(section("Icon").description("Add a visual cue above the title.").child(
                     AlertDialog::new(cx).w(px(320.)).trigger(
                         Button::new("icon-alert").outline().label("Request Permission"),
                     ).on_ok(|_, window, cx| {
@@ -156,14 +157,16 @@ impl Render for AlertDialogStory {
                                     )
                                     .child(
                                         DialogClose::new().child(
-                                            Button::new("disagree").w_full().outline().label("Don't Allow")
+                                            Button::new("disagree").w_full().outline().label("Deny")
                                         )
                                     )
                             )
                     }),
                 ))
                 .child(
-                    section("Destructive Action").child(
+                    section("Destructive")
+                        .description("Use a destructive action for irreversible choices.")
+                        .child(
                         AlertDialog::new(cx)
                             .trigger(Button::new("destructive-action").outline().danger().label("Delete Account"))
                             .on_ok(|_, window, cx| {
@@ -191,27 +194,26 @@ impl Render for AlertDialogStory {
                                                         .flex_1()
                                                         .outline()
                                                         .danger()
-                                                        .label("Delete Forever")
+                                                        .label("Delete")
                                                 )
                                             )
                                     )
                             }),
                     ),
                 )
-                .child(section("Without Title").child(
-                    Button::new("without-title").outline().label("Dialog without Title").on_click(cx.listener(
+                .child(section("Without title").description("Render content without a heading.").child(
+                    Button::new("without-title").outline().label("Continue without Title").on_click(cx.listener(
                         |_, _, window, cx| {
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 alert
                                     .confirm()
-                                    .child("This is a AlertDialog with `confirm` mode.\
-                                        Will have OK, CANCEL buttons.")
+                                    .child("Continue with this action?")
                             });
                         },
                     )),
                 ))
-                .child(section("Session Timeout").child(
-                    Button::new("session-timeout").outline().label("Session Timeout").on_click(cx.listener(
+                .child(section("Custom footer").description("Replace the default action row.").child(
+                    Button::new("session-timeout").outline().label("Show Session Expiry").on_click(cx.listener(
                         |_, _, window, cx| {
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 alert
@@ -236,9 +238,9 @@ impl Render for AlertDialogStory {
                         },
                     )),
                 ))
-                .child(section("Update Available").child(
+                .child(section("Custom content").description("Style header and footer regions independently.").child(
                     AlertDialog::new(cx)
-                        .trigger(Button::new("update").outline().label("Update Available"))
+                        .trigger(Button::new("update").outline().label("Install Update"))
                         .on_cancel(|_, window, cx| {
                             window.push_notification("Update postponed", cx);
                             true
@@ -266,15 +268,15 @@ impl Render for AlertDialogStory {
                                         )
                                         .child(
                                             DialogAction::new().child(
-                                                Button::new("update-now").flex_1().primary().label("Update Now")
+                                                Button::new("update-now").flex_1().primary().label("Update")
                                             )
                                         )
                                 )
                         },
                     ),
                 ))
-                .child(section("Keyboard Disabled").child(
-                    Button::new("keyboard-disabled").outline().label("Keyboard Disabled").on_click(cx.listener(
+                .child(section("Keyboard").description("Disable keyboard dismissal when required.").child(
+                    Button::new("keyboard-disabled").outline().label("Review Notice").on_click(cx.listener(
                         |_, _, window, cx| {
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 alert
@@ -283,36 +285,35 @@ impl Render for AlertDialogStory {
                                         "Please read this important notice \
                                                 carefully before proceeding.",
                                     )
+                                    .button_props(DialogButtonProps::default().ok_text("Got It"))
                                     .keyboard(false)
                             });
                         },
                     )),
                 ))
-                .child(section("With confirm mode").child(
-                    Button::new("overlay-closable").outline().label("Confirm Mode").on_click(cx.listener(
+                .child(section("Confirm mode").description("Provide standard OK and Cancel actions.").child(
+                    Button::new("overlay-closable").outline().label("Open Confirmation").on_click(cx.listener(
                         |_, _, window, cx| {
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 alert
                                     .confirm()
                                     .title("Are you sure?")
-                                    .child("This is a AlertDialog with `confirm` mode.\
-                                        Will have OK, CANCEL buttons.")
+                                    .child("Continue with this action?")
                             });
                         },
                     )),
                 ))
-                .child(section("Prevent Close").child(
-                    Button::new("prevent-close").outline().label("Prevent Close").on_click(cx.listener(
+                .child(section("Prevent close").description("Callbacks can keep the dialog open.").child(
+                    Button::new("prevent-close").outline().label("Close During Sync").on_click(cx.listener(
                         |_, _, window, cx| {
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 alert
-                                    .title("Processing")
+                                    .title("Sync in progress")
                                     .close_button(true)
                                     .description(
-                                        "A process is running. \
-                                                Click Continue to stop it or Cancel to keep waiting.",
+                                        "Your changes are still syncing. The dialog remains open until syncing finishes.",
                                     )
-                                    .button_props(DialogButtonProps::default().ok_text("Continue").show_cancel(true))
+                                    .button_props(DialogButtonProps::default().ok_text("Close").cancel_text("Wait").show_cancel(true))
                                     .on_ok(|_, window, cx| {
                                         // Return false to prevent closing
                                         window.push_notification("Cannot close: Process still running", cx);

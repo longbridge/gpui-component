@@ -89,7 +89,7 @@ pub use dialog::{
     DialogPopup, DialogTitle, DialogTrigger,
 };
 pub use element_ext::ElementExt;
-pub use event::InteractiveElementExt;
+pub use event::{InteractiveElementExt, OngoingScrollExt};
 pub use focus_trap::FocusTrapElement;
 #[doc(hidden)]
 pub use focus_trap::active_focus_trap;

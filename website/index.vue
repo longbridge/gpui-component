@@ -198,7 +198,10 @@
                     </div>
                 </header>
 
-                <div class="showcase__frame mac-window">
+                <div
+                    class="showcase__frame mac-window"
+                    :class="{ 'mac-window--zoomed': zoomed }"
+                >
                     <div class="mac-window__bar">
                         <span class="mac-window__lights" aria-hidden="true"
                             ><i /><i /><i
@@ -209,6 +212,12 @@
                         <span class="live__badge">
                             {{ copy.liveBadge }}
                         </span>
+                        <WindowZoomButton
+                            class="mac-window__action--always"
+                            :zoomed="zoomed"
+                            :label="zoomLabel"
+                            @click="setZoomed(!zoomed)"
+                        />
                     </div>
                     <iframe
                         v-if="liveSrc"
@@ -442,8 +451,12 @@ import {
     X,
 } from "lucide-vue-next";
 import { data as repo } from "./data/repo.data";
+import { useWindowZoom } from "./.vitepress/theme/composables/zoom";
+import WindowZoomButton from "./.vitepress/theme/components/WindowZoomButton.vue";
 
 const { isDark, localeIndex, theme } = useData();
+
+const { zoomed, zoomLabel, setZoomed } = useWindowZoom("demo");
 
 // The navbar renders the very same `nav` array that config.mts feeds to the
 // docs navbar, so the two can never drift apart.
@@ -554,12 +567,14 @@ const demos = computed(() =>
         ? [
               { story: "DataTable", label: "数据表格" },
               { story: "Chart", label: "图表" },
+              { story: "Editor", label: "编辑器" },
               { story: "List", label: "列表" },
               { story: "Sidebar", label: "侧边栏" },
           ]
         : [
               { story: "DataTable", label: "Data table" },
               { story: "Chart", label: "Charts" },
+              { story: "Editor", label: "Editor" },
               { story: "List", label: "List" },
               { story: "Sidebar", label: "Sidebar" },
           ],
@@ -1981,9 +1996,14 @@ html[lang^="zh"] .section-kicker {
         grid-template-columns: 1fr;
         align-items: start;
     }
+    /* A narrow gallery wraps its own content, so the same story needs more
+       vertical room here than on a wide screen to show a comparable amount.
+       Sizing by share of the viewport keeps that room proportional on both a
+       tall tablet and a short desktop window, where a fixed height would either
+       waste space or swallow the whole screen. */
     .showcase__frame iframe,
     .showcase__placeholder {
-        height: 480px;
+        height: clamp(480px, 62dvh, 560px);
     }
 }
 
@@ -2052,7 +2072,17 @@ html[lang^="zh"] .section-kicker {
     }
     .showcase__frame iframe,
     .showcase__placeholder {
-        height: 420px;
+        height: clamp(420px, 66dvh, 560px);
+    }
+}
+
+/* A short viewport — a phone held sideways — cannot spare the minimum height
+   the width breakpoints above ask for. Fit the window to the screen instead, so
+   the title bar and the frame stay visible together. */
+@media (max-width: 860px) and (max-height: 560px) {
+    .showcase__frame iframe,
+    .showcase__placeholder {
+        height: calc(100dvh - 7rem);
     }
 }
 

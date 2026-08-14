@@ -1,15 +1,15 @@
 use chrono::{Datelike, Days, Duration, Utc};
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement as _, Render,
-    Styled as _, Subscription, Window, div, px,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled as _, Subscription, Window, div, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Sizable as _, calendar,
+    ActiveTheme as _, Sizable as _, Size, StyledExt, calendar,
     date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
     v_flex,
 };
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct DatePickerStory {
     date_picker: Entity<DatePickerState>,
@@ -21,6 +21,7 @@ pub struct DatePickerStory {
     default_range_mode_picker: Entity<DatePickerState>,
     birthday_picker: Entity<DatePickerState>,
     without_appearance_picker: Entity<DatePickerState>,
+    size: Size,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -124,6 +125,7 @@ impl DatePickerStory {
             default_range_mode_picker,
             birthday_picker,
             without_appearance_picker,
+            size: Size::Medium,
             date_picker_value: None,
             _subscriptions,
         }
@@ -177,67 +179,105 @@ impl Render for DatePickerStory {
 
         v_flex()
             .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                section("Normal").max_w_128().child(
-                    DatePicker::new(&self.date_picker)
-                        .cleanable(true)
-                        .presets(presets),
-                ),
+                section("Default")
+                    .description("Single-date selection with presets and clear action.")
+                    .w_128()
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        DatePicker::new(&self.date_picker)
+                            .with_size(self.size)
+                            .w(px(280.))
+                            .cleanable(true)
+                            .presets(presets),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(format!("Value: {:?}", self.date_picker_value)),
+                    ),
             )
             .child(
-                section("Small with 180px width")
-                    .max_w_128()
-                    .child(DatePicker::new(&self.date_picker_small).small().w(px(180.))),
+                section("Disabled dates")
+                    .description("Matchers can block intervals, ranges, or custom dates.")
+                    .w_128()
+                    .v_flex()
+                    .gap_3()
+                    .child(
+                        DatePicker::new(&self.date_picker_small)
+                            .with_size(self.size)
+                            .w(px(280.)),
+                    )
+                    .child(
+                        DatePicker::new(&self.date_picker_large)
+                            .with_size(self.size)
+                            .w(px(280.)),
+                    )
+                    .child(
+                        DatePicker::new(&self.data_picker_custom)
+                            .with_size(self.size)
+                            .w(px(280.)),
+                    ),
             )
             .child(
-                section("Large")
-                    .max_w_128()
-                    .child(DatePicker::new(&self.date_picker_large).large().w(px(300.))),
+                section("Date range")
+                    .description("Two months with range presets.")
+                    .w_128()
+                    .child(
+                        DatePicker::new(&self.date_range_picker)
+                            .with_size(self.size)
+                            .w(px(280.))
+                            .number_of_months(2)
+                            .cleanable(true)
+                            .presets(range_presets.clone()),
+                    ),
             )
             .child(
-                section("Custom (First 5 days of each month disabled)")
-                    .max_w_128()
-                    .child(DatePicker::new(&self.data_picker_custom)),
+                section("Empty range")
+                    .description("Empty range with presets.")
+                    .w_128()
+                    .child(
+                        DatePicker::new(&self.default_range_mode_picker)
+                            .with_size(self.size)
+                            .w(px(280.))
+                            .placeholder("Range mode picker")
+                            .cleanable(true)
+                            .presets(range_presets.clone()),
+                    ),
             )
             .child(
-                section("Date Range").max_w_128().child(
-                    DatePicker::new(&self.date_range_picker)
-                        .number_of_months(2)
-                        .cleanable(true)
-                        .presets(range_presets.clone()),
-                ),
-            )
-            .child(
-                section("Default Range Mode").max_w_128().child(
-                    DatePicker::new(&self.default_range_mode_picker)
-                        .placeholder("Range mode picker")
-                        .cleanable(true)
-                        .presets(range_presets.clone()),
-                ),
-            )
-            .child(
-                section("Date Picker Value").max_w_128().child(
-                    format!("Date picker value: {:?}", self.date_picker_value).into_element(),
-                ),
-            )
-            .child(
-                section("Custom Year Range (birthday, 1900 to current)")
-                    .max_w_128()
+                section("Year range")
+                    .description("Custom year range.")
+                    .w_128()
                     .child(
                         DatePicker::new(&self.birthday_picker)
+                            .with_size(self.size)
+                            .w(px(280.))
                             .number_of_months(1)
                             .cleanable(true)
                             .placeholder("Select birthday"),
                     ),
             )
             .child(
-                section("Without Appearance").max_w_128().child(
-                    div().w_full().bg(cx.theme().secondary).child(
-                        DatePicker::new(&self.without_appearance_picker)
-                            .appearance(false)
-                            .placeholder("Without appearance"),
+                section("Custom style")
+                    .description("Appearance-free input.")
+                    .w_128()
+                    .child(
+                        div().w(px(280.)).bg(cx.theme().secondary).child(
+                            DatePicker::new(&self.without_appearance_picker)
+                                .with_size(self.size)
+                                .w(px(280.))
+                                .appearance(false)
+                                .placeholder("Without appearance"),
+                        ),
                     ),
-                ),
             )
     }
 }

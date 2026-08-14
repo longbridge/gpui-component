@@ -64,20 +64,23 @@ function createSidebar(scanStartPath: string, rootGroupText: string) {
 
   rootItems.text = rootGroupText;
 
-  const components = rootItems.items?.find(
-    (item: any) => Array.isArray(item.items) && item.text.toLowerCase() === "components",
+  const catalog = rootItems.items?.find(
+    (item: any) =>
+      Array.isArray(item.items) &&
+      ["components", "primitives"].includes(item.text.toLowerCase()),
   );
-  if (components) {
-    components.text = "Components";
-    components.items.sort((left: any, right: any) =>
+  if (catalog) {
+    catalog.text =
+      catalog.text.toLowerCase() === "primitives" ? "Primitives" : "Components";
+    catalog.items.sort((left: any, right: any) =>
       left.text.localeCompare(right.text, "en", { sensitivity: "base" }),
     );
 
-    // Keep guide pages ahead of the component catalogue while preserving their
+    // Keep guide pages ahead of the API catalogue while preserving their
     // frontmatter-defined order.
     rootItems.items = [
-      ...rootItems.items.filter((item: any) => item !== components),
-      components,
+      ...rootItems.items.filter((item: any) => item !== catalog),
+      catalog,
     ];
   }
 

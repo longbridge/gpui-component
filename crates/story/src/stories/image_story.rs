@@ -1,9 +1,9 @@
 use crate::section;
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled, Window, img,
+    Render, Styled, Window, div, img, px,
 };
-use gpui_component::{dock::PanelControl, v_flex};
+use gpui_component::{ActiveTheme as _, dock::PanelControl, v_flex};
 
 pub struct ImageStory {
     focus_handle: gpui::FocusHandle,
@@ -46,10 +46,26 @@ impl Focusable for ImageStory {
 }
 
 impl Render for ImageStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        v_flex().gap_4().size_full().child(
-            section("SVG from URL")
-                .child(img("https://pub.lbkrs.com/files/202503/vEnnmgUM6bo362ya/sdk.svg").h_24()),
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex().size_full().items_center().gap_6().child(
+            section("Remote SVG")
+                .description("Loads and renders an SVG from a remote URL.")
+                .w(px(480.))
+                .child(
+                    div()
+                        .w_full()
+                        .h(px(180.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(cx.theme().radius_lg)
+                        .border_1()
+                        .border_color(cx.theme().border)
+                        .child(
+                            img("https://pub.lbkrs.com/files/202503/vEnnmgUM6bo362ya/sdk.svg")
+                                .h_24(),
+                        ),
+                ),
         )
     }
 }

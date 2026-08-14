@@ -1011,20 +1011,96 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   gap: 0.5rem;
 }
 
-.mac-window__lights i {
+.mac-window__lights i,
+.mac-window__lights button {
   width: 0.75rem;
   height: 0.75rem;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   background: #ff5f57;
   box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 12%);
 }
 
-.mac-window__lights i:nth-child(2) {
+.mac-window__lights > :nth-child(2) {
   background: #febc2e;
 }
 
-.mac-window__lights i:nth-child(3) {
+.mac-window__lights > :nth-child(3) {
   background: #28c840;
+}
+
+/* Only the zoom light does anything, and like macOS it reveals its glyph when
+   the pointer is over the title bar. */
+.mac-window__zoom {
+  cursor: pointer;
+}
+
+.mac-window__zoom::before {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgb(0 0 0 / 55%);
+  font-size: 0.5rem;
+  line-height: 1;
+  opacity: 0;
+  content: "⤢";
+  transition: opacity 0.12s ease;
+}
+
+.mac-window--zoomed .mac-window__zoom::before {
+  content: "⤡";
+}
+
+.mac-window__bar:hover .mac-window__zoom::before,
+.mac-window__zoom:focus-visible::before {
+  opacity: 1;
+}
+
+/* The explicit zoom control on the right of the bar. It stays out of the way
+   until the pointer reaches the title bar. */
+.mac-window__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0.375rem;
+  opacity: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    opacity 0.12s ease,
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.mac-window__bar:hover .mac-window__action,
+.mac-window__action:focus-visible {
+  opacity: 1;
+}
+
+.mac-window__action:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+}
+
+/* When something other than the (absolutely positioned) title already sits
+   before the control — the home page badge — that element does the pushing;
+   two auto margins would split the free space between them instead. */
+.mac-window__bar > :not(.mac-window__title) + .mac-window__action {
+  margin-left: 0;
+}
+
+/* The home page demo is the site's headline proof that this really runs, so its
+   control stays visible instead of waiting to be discovered. */
+.mac-window__action--always {
+  opacity: 1;
 }
 
 /* Centred in the bar, as macOS does, and independent of the traffic lights. */
@@ -1108,4 +1184,33 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   .component-example--base iframe {
     height: 380px;
   }
+}
+
+/* A zoomed window takes over the viewport, above the nav and the sidebar, while
+   the page underneath stops scrolling. Its title bar stays put, so the control
+   that restores it is always in reach. The doubled class keeps these rules
+   ahead of the per-page frame heights, wherever those are declared. */
+.has-zoomed-window,
+.has-zoomed-window body {
+  overflow: hidden;
+}
+
+.mac-window.mac-window--zoomed {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.mac-window.mac-window--zoomed::after {
+  display: none;
+}
+
+.mac-window.mac-window--zoomed iframe,
+.mac-window.mac-window--zoomed .showcase__placeholder {
+  flex: 1;
+  height: auto;
 }

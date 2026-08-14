@@ -61,4 +61,4 @@ The examples used by this website also run as a native GPUI application:
 cargo run -p gpui-base --example base_components -- button
 ```
 
-Replace `button` with a component slug from the [component catalog](./components/index.md). The website compiles the same showcase for `wasm32-unknown-unknown` and loads it on each component page.
+Replace `button` with a primitive slug from the [primitive catalog](./primitives/index.md). The website compiles the same showcase for `wasm32-unknown-unknown` and loads it on each primitive page.

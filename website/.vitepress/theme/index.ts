@@ -7,6 +7,7 @@ import "./style.css";
 import GitHubStar from "./components/GitHubStar.vue";
 import LanguageSwitcher from "./components/LanguageSwitcher.vue";
 import ComponentExample from "./components/ComponentExample.vue";
+import SidebarFilter from "./components/SidebarFilter.vue";
 import { useThemeFavicon } from "./composables/favicon";
 import config from "../../../crates/ui/Cargo.toml";
 
@@ -27,6 +28,10 @@ const Layout = defineComponent({
         // — where VitePress keeps its own translations menu too.
         "nav-screen-content-after": () =>
           h(LanguageSwitcher, { screenMenu: true }),
+        // The component catalogue is long enough that scanning it costs more
+        // than typing: the filter narrows the tree in place, while search
+        // still covers page contents.
+        "sidebar-nav-before": () => h(SidebarFilter),
       });
   },
 });

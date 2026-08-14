@@ -5,10 +5,11 @@ use gpui::{
 use gpui_component::{
     ActiveTheme, Sizable as _,
     button::Button,
-    h_flex,
     resizable::{ResizableState, h_resizable, resizable_panel, v_resizable},
     v_flex,
 };
+
+use crate::{section, story_toolbar_group};
 
 pub struct ResizableStory {
     focus_handle: FocusHandle,
@@ -64,56 +65,72 @@ impl Render for ResizableStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
+            .items_center()
             .gap_6()
             .child(
-                div()
-                    .h(px(600.))
-                    .border_1()
-                    .border_color(cx.theme().border)
+                section("Nested Panels")
+                    .description(
+                        "Combines horizontal and vertical splits with constrained panel sizes.",
+                    )
+                    .w_full()
                     .child(
-                        v_resizable("resizable-1")
-                            .on_resize(|state, _, cx| {
-                                println!("Resized: {:?}", state.read(cx).sizes());
-                            })
+                        div()
+                            .w_full()
+                            .h(px(600.))
+                            .border_1()
+                            .border_color(cx.theme().border)
                             .child(
-                                h_resizable("resizable-1.1")
-                                    .size(px(150.))
+                                v_resizable("resizable-1")
+                                    .on_resize(|state, _, cx| {
+                                        println!("Resized: {:?}", state.read(cx).sizes());
+                                    })
                                     .child(
-                                        resizable_panel()
-                                            .size(px(150.))
-                                            .size_range(px(120.)..px(300.))
-                                            .child(panel_box("Left (120px .. 300px)", cx)),
+                                        h_resizable("resizable-1.1")
+                                            .child(
+                                                resizable_panel()
+                                                    .size(px(150.))
+                                                    .size_range(px(120.)..px(300.))
+                                                    .child(panel_box("Left (120px .. 300px)", cx)),
+                                            )
+                                            .child(panel_box("Center", cx))
+                                            .child(
+                                                resizable_panel()
+                                                    .size(px(300.))
+                                                    .child(panel_box("Right", cx)),
+                                            ),
                                     )
                                     .child(panel_box("Center", cx))
                                     .child(
                                         resizable_panel()
-                                            .size(px(300.))
-                                            .child(panel_box("Right", cx)),
+                                            .size(px(80.))
+                                            .size_range(px(80.)..Pixels::MAX)
+                                            .child(panel_box("Bottom (80px .. 150px)", cx)),
                                     ),
-                            )
-                            .child(panel_box("Center", cx))
-                            .child(
-                                resizable_panel()
-                                    .size(px(80.))
-                                    .size_range(px(80.)..Pixels::MAX)
-                                    .child(panel_box("Bottom (80px .. 150px)", cx)),
                             ),
                     ),
             )
             .child(
-                div()
-                    .h(px(400.))
-                    .border_1()
-                    .border_color(cx.theme().border)
+                section("Growing Panel")
+                    .description(
+                        "A flexible panel absorbs the space left by a constrained neighbor.",
+                    )
+                    .w_full()
                     .child(
-                        h_resizable("resizable-3")
+                        div()
+                            .w_full()
+                            .h(px(400.))
+                            .border_1()
+                            .border_color(cx.theme().border)
                             .child(
-                                resizable_panel()
-                                    .size(px(200.))
-                                    .size_range(px(200.)..px(400.))
-                                    .child(panel_box("Left 2", cx)),
-                            )
-                            .child(panel_box("Right (Grow)", cx)),
+                                h_resizable("resizable-3")
+                                    .child(
+                                        resizable_panel()
+                                            .size(px(200.))
+                                            .size_range(px(200.)..px(400.))
+                                            .child(panel_box("Left 2", cx)),
+                                    )
+                                    .child(panel_box("Right (Grow)", cx)),
+                            ),
                     ),
             )
             // Demonstrates `.flex_none()`. Toggle the left panel's
@@ -129,67 +146,73 @@ impl Render for ResizableStory {
             // Use the two buttons to record before/after for the same
             // layout in a single session.
             .child(
-                v_flex()
-                    .gap_2()
+                section("Flex Behavior")
+                    .description("Compare fixed and growing panels while toggling visibility.")
+                    .w_full()
                     .child(
-                        h_flex()
+                        v_flex()
+                            .w_full()
                             .gap_2()
                             .child(
-                                Button::new("toggle-left")
-                                    .outline()
-                                    .label(if self.show_left {
-                                        "Hide Left"
-                                    } else {
-                                        "Show Left"
-                                    })
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.show_left = !this.show_left;
-                                        cx.notify();
-                                    })),
+                                story_toolbar_group()
+                                    .child(
+                                        Button::new("toggle-left")
+                                            .outline()
+                                            .label(if self.show_left {
+                                                "Hide Left"
+                                            } else {
+                                                "Show Left"
+                                            })
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.show_left = !this.show_left;
+                                                cx.notify();
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("toggle-flex-none")
+                                            .outline()
+                                            .label(if self.use_flex_none {
+                                                "Use flex_none: ON"
+                                            } else {
+                                                "Use flex_none: OFF"
+                                            })
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.use_flex_none = !this.use_flex_none;
+                                                cx.notify();
+                                            })),
+                                    ),
                             )
                             .child(
-                                Button::new("toggle-flex-none")
-                                    .outline()
-                                    .label(if self.use_flex_none {
-                                        "Use flex_none: ON"
-                                    } else {
-                                        "Use flex_none: OFF"
-                                    })
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.use_flex_none = !this.use_flex_none;
-                                        cx.notify();
-                                    })),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .h(px(200.))
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .child(
-                                h_resizable("resizable-flex-none")
-                                    .child({
-                                        let mut p = resizable_panel()
-                                            .visible(self.show_left)
-                                            .size(px(200.))
-                                            .size_range(px(150.)..px(400.))
-                                            .child(panel_box("Left", cx));
-                                        if self.use_flex_none {
-                                            p = p.flex_none();
-                                        }
-                                        p
-                                    })
-                                    .child(panel_box("Center", cx))
-                                    .child({
-                                        let mut p = resizable_panel()
-                                            .size(px(280.))
-                                            .size_range(px(200.)..px(400.))
-                                            .child(panel_box("Right", cx));
-                                        if self.use_flex_none {
-                                            p = p.flex_none();
-                                        }
-                                        p
-                                    }),
+                                div()
+                                    .w_full()
+                                    .h(px(200.))
+                                    .border_1()
+                                    .border_color(cx.theme().border)
+                                    .child(
+                                        h_resizable("resizable-flex-none")
+                                            .child({
+                                                let mut p = resizable_panel()
+                                                    .visible(self.show_left)
+                                                    .size(px(200.))
+                                                    .size_range(px(150.)..px(400.))
+                                                    .child(panel_box("Left", cx));
+                                                if self.use_flex_none {
+                                                    p = p.flex_none();
+                                                }
+                                                p
+                                            })
+                                            .child(panel_box("Center", cx))
+                                            .child({
+                                                let mut p = resizable_panel()
+                                                    .size(px(280.))
+                                                    .size_range(px(200.)..px(400.))
+                                                    .child(panel_box("Right", cx));
+                                                if self.use_flex_none {
+                                                    p = p.flex_none();
+                                                }
+                                                p
+                                            }),
+                                    ),
                             ),
                     ),
             )
@@ -198,70 +221,76 @@ impl Render for ResizableStory {
             // mutate the shared state; subscribers (none here) would observe
             // a `ResizablePanelEvent::Resized` just like a drag-finish.
             .child(
-                v_flex()
-                    .gap_2()
+                section("Programmatic Resize")
+                    .description("Panel sizes can be changed by actions as well as dragging.")
+                    .w_full()
                     .child(
-                        h_flex()
+                        v_flex()
+                            .w_full()
                             .gap_2()
                             .child(
-                                Button::new("compact-left")
-                                    .small()
-                                    .label("Compact left → 100")
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.programmatic_state.update(cx, |state, cx| {
-                                            state.resize_panel(0, px(100.), window, cx);
-                                        });
-                                    })),
-                            )
-                            .child(
-                                Button::new("reset-left")
-                                    .small()
-                                    .label("Reset left → 200")
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.programmatic_state.update(cx, |state, cx| {
-                                            state.resize_panel(0, px(200.), window, cx);
-                                        });
-                                    })),
-                            )
-                            .child(
-                                Button::new("compact-right")
-                                    .small()
-                                    .label("Compact right → 80")
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.programmatic_state.update(cx, |state, cx| {
-                                            state.resize_panel(2, px(80.), window, cx);
-                                        });
-                                    })),
-                            )
-                            .child(
-                                Button::new("reset-right")
-                                    .small()
-                                    .label("Reset right → 200")
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.programmatic_state.update(cx, |state, cx| {
-                                            state.resize_panel(2, px(200.), window, cx);
-                                        });
-                                    })),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .h(px(200.))
-                            .border_1()
-                            .border_color(cx.theme().border)
-                            .child(
-                                h_resizable("resizable-programmatic")
-                                    .with_state(&self.programmatic_state)
+                                story_toolbar_group()
                                     .child(
-                                        resizable_panel()
-                                            .size(px(200.))
-                                            .child(panel_box("Left", cx)),
+                                        Button::new("compact-left")
+                                            .small()
+                                            .label("Compact left → 100")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.programmatic_state.update(cx, |state, cx| {
+                                                    state.resize_panel(0, px(100.), window, cx);
+                                                });
+                                            })),
                                     )
-                                    .child(panel_box("Center (grow)", cx))
                                     .child(
-                                        resizable_panel()
-                                            .size(px(200.))
-                                            .child(panel_box("Right", cx)),
+                                        Button::new("reset-left")
+                                            .small()
+                                            .label("Reset left → 200")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.programmatic_state.update(cx, |state, cx| {
+                                                    state.resize_panel(0, px(200.), window, cx);
+                                                });
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("compact-right")
+                                            .small()
+                                            .label("Compact right → 80")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.programmatic_state.update(cx, |state, cx| {
+                                                    state.resize_panel(2, px(80.), window, cx);
+                                                });
+                                            })),
+                                    )
+                                    .child(
+                                        Button::new("reset-right")
+                                            .small()
+                                            .label("Reset right → 200")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.programmatic_state.update(cx, |state, cx| {
+                                                    state.resize_panel(2, px(200.), window, cx);
+                                                });
+                                            })),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .w_full()
+                                    .h(px(200.))
+                                    .border_1()
+                                    .border_color(cx.theme().border)
+                                    .child(
+                                        h_resizable("resizable-programmatic")
+                                            .with_state(&self.programmatic_state)
+                                            .child(
+                                                resizable_panel()
+                                                    .size(px(200.))
+                                                    .child(panel_box("Left", cx)),
+                                            )
+                                            .child(panel_box("Center (grow)", cx))
+                                            .child(
+                                                resizable_panel()
+                                                    .size(px(200.))
+                                                    .child(panel_box("Right", cx)),
+                                            ),
                                     ),
                             ),
                     ),

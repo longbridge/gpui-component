@@ -38,3 +38,22 @@ We pefer the following format for breaking changes descriptions:
 + Sidebar::new("sidebar").side(Side::Right)
 ```
 ````
+
+### Large API changes
+
+When one change forces several migration paths, use one `###` subsection per path, each with a short label and a `diff` block, as in [#2691](https://github.com/longbridge/gpui-component/pull/2691):
+
+````md
+## Breaking Changes
+
+### Multiline Input → Textarea
+
+Imports:
+
+```diff
+- use gpui_component::input::{Input, InputState};
++ use gpui_component::input::{Textarea, TextareaState};
+```
+````
+
+Skip the whole section when the change is purely additive or does not touch the public API of `crates/ui`.

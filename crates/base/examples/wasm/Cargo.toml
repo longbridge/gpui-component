@@ -14,6 +14,7 @@ gpui_platform.workspace = true
 console_error_panic_hook = "0.1"
 console_log = "1.0"
 log.workspace = true
+syntect.workspace = true
 tracing-wasm = "0.2"
 wasm-bindgen = "=0.2.121"
 
@@ -21,6 +22,6 @@ wasm-bindgen = "=0.2.121"
 workspace = true
 
 # The shared showcase is included with `#[path]`, which cargo-machete cannot
-# follow when detecting its `gpui_base` imports.
+# follow when detecting its `gpui_base` and `syntect` imports.
 [package.metadata.cargo-machete]
-ignored = ["gpui-base"]
+ignored = ["gpui-base", "syntect"]

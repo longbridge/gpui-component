@@ -345,7 +345,7 @@ impl SettingsStory {
                                 .justify_between()
                                 .flex_wrap()
                                 .gap_3()
-                                .child("This is a custom element item by use SettingItem::element.")
+                                .child("View source, report issues, and follow project updates.")
                                 .when(options.disabled, |this| this.opacity(0.5))
                                 .child(
                                     Button::new("action")

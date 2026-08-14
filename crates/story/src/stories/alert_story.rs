@@ -1,17 +1,12 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, Styled, Window,
 };
 use gpui_component::{
-    IconName, Selectable as _, Sizable as _, Size,
-    alert::Alert,
-    button::{Button, ButtonGroup},
-    dock::PanelControl,
-    text::markdown,
-    v_flex,
+    IconName, Sizable as _, Size, alert::Alert, dock::PanelControl, text::markdown, v_flex,
 };
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct AlertStory {
     size: Size,
@@ -31,11 +26,6 @@ impl AlertStory {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
-
-    fn set_size(&mut self, size: Size, _: &mut Window, cx: &mut Context<Self>) {
-        self.size = size;
-        cx.notify();
-    }
 }
 
 impl super::Story for AlertStory {
@@ -44,7 +34,7 @@ impl super::Story for AlertStory {
     }
 
     fn description() -> &'static str {
-        "Displays a callout for user attention."
+        "Communicate important status changes without interrupting the user's workflow."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -66,64 +56,40 @@ impl Render for AlertStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .gap_4()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                ButtonGroup::new("toggle-size")
-                    .outline()
-                    .compact()
+                section("Default")
+                    .description("Title, icon, and rich text content.")
+                    .w_2_3()
                     .child(
-                        Button::new("xsmall")
-                            .label("XSmall")
-                            .selected(self.size == Size::XSmall),
-                    )
-                    .child(
-                        Button::new("small")
-                            .label("Small")
-                            .selected(self.size == Size::Small),
-                    )
-                    .child(
-                        Button::new("medium")
-                            .label("Medium")
-                            .selected(self.size == Size::Medium),
-                    )
-                    .child(
-                        Button::new("large")
-                            .label("Large")
-                            .selected(self.size == Size::Large),
-                    )
-                    .on_click(cx.listener(|this, selecteds: &Vec<usize>, window, cx| {
-                        let size = match selecteds[0] {
-                            0 => Size::XSmall,
-                            1 => Size::Small,
-                            2 => Size::Medium,
-                            3 => Size::Large,
-                            _ => unreachable!(),
-                        };
-                        this.set_size(size, window, cx);
-                    })),
-            )
-            .child(
-                section("Default").w_2_3().child(
                     Alert::new(
                         "alert-default",
                         markdown(
-                            "This is an alert with icon, title and description (in Markdown).\n\
-                            - This is a **list** item.\n\
-                            - This is another list item.",
+                            "Your workspace is ready for the team.\n\
+                            - **12 members** have access\n\
+                            - Billing remains with the workspace owner",
                         ),
                     )
                     .with_size(self.size)
-                    .title("Success! Your changes have been saved"),
+                    .title("Workspace settings saved"),
                 ),
             )
             .child(
-                section("With variant").w_2_3().child(
+                section("Variants")
+                    .description("Info, success, warning, and error states.")
+                    .w_2_3()
+                    .child(
                     v_flex()
                         .w_full()
                         .gap_3()
                         .child(
-                            Alert::info("info1", "This is an info alert.")
+                            Alert::info("info1", "Maintenance starts Friday at 22:00 UTC.")
                                 .with_size(self.size)
-                                .title("Info message")
+                                .title("Scheduled maintenance")
                                 .on_close(cx.listener(|_, _, _, _| {
                                     println!("Info alert closed");
                                 })),
@@ -131,17 +97,16 @@ impl Render for AlertStory {
                         .child(
                             Alert::success(
                                 "success-1",
-                                "You have successfully submitted your form.\n\
-                        Thank you for your submission!",
+                                "The transfer is queued and usually settles within one business day.",
                             )
                             .with_size(self.size)
-                            .title("Submit Successful"),
+                            .title("Transfer submitted"),
                         )
                         .child(
                             Alert::warning(
                                 "warning-1",
-                                "This is a warning alert with icon, but no title.\n\
-                            This is second line of text to test is the line-height is correct.",
+                                "Two teammates still use recovery codes generated more than a year ago.\n\
+                            Ask them to generate a fresh set in Security settings.",
                             )
                             .with_size(self.size),
                         )
@@ -161,15 +126,17 @@ impl Render for AlertStory {
                 ),
             )
             .child(
-                section("Banner").w_2_3().child(
+                section("Banner")
+                    .description("Full-width and closable alerts.")
+                    .w_2_3()
+                    .child(
                     v_flex()
                         .w_full()
                         .gap_2()
                         .child(
                             Alert::new(
                                 "banner-1",
-                                "This is a banner alert, it will take \
-                       the full width of the container.",
+                                "Reporting is read-only while the nightly ledger closes.",
                             )
                             .banner()
                             .on_close(cx.listener(|this, _, _, cx| {
@@ -182,8 +149,7 @@ impl Render for AlertStory {
                         .child(
                             Alert::info(
                                 "banner-info",
-                                "This is a banner alert, it will take the full width of the\
-                    container.",
+                                "A new desktop update will install after you restart.",
                             )
                             .banner()
                             .with_size(self.size),
@@ -191,8 +157,7 @@ impl Render for AlertStory {
                         .child(
                             Alert::success(
                                 "banner-success",
-                                "This is a banner alert, it will take the full width of the\
-                    container.",
+                                "All 1,284 records finished importing.",
                             )
                             .banner()
                             .with_size(self.size),
@@ -200,8 +165,7 @@ impl Render for AlertStory {
                         .child(
                             Alert::warning(
                                 "banner-warning",
-                                "This is a banner alert, it will take the full width of the\
-                    container.",
+                                "Your API key expires in 6 days. Rotate it before August 19.",
                             )
                             .banner()
                             .with_size(self.size),
@@ -209,8 +173,7 @@ impl Render for AlertStory {
                         .child(
                             Alert::error(
                                 "banner-error",
-                                "This is a banner alert, it will take the full width of the\
-                    container.",
+                                "Live updates are disconnected. Changes may be delayed.",
                             )
                             .banner()
                             .with_size(self.size),
@@ -218,15 +181,16 @@ impl Render for AlertStory {
                 ),
             )
             .child(
-                section("Custom Icon").w_2_3().child(
+                section("Custom icon")
+                    .description("Custom icon and long content.")
+                    .w_2_3()
+                    .child(
                     Alert::new(
                         "other-1",
-                        "Custom icon with info alert with long \
-                    long long long long long long long long \
-                    long long long long long long long long long \
-                    long long messageeeeeeeee.",
+                        "The quarterly planning review overlaps with the APAC operations call. \
+                    Move one event or invite another owner before sending the agenda.",
                     )
-                    .title("Custom Icon")
+                    .title("Two events overlap by 30 minutes")
                     .with_size(self.size)
                     .icon(IconName::Calendar),
                 ),

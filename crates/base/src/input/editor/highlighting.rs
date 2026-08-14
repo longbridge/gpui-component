@@ -38,6 +38,8 @@ pub trait InputHighlighter {
         cx: &mut Context<InputBaseState>,
     );
 
+    /// Return ordered, non-overlapping style runs that fully cover `range`.
+    /// Use [`HighlightStyle::default`] for text without a semantic style.
     fn styles(
         &self,
         range: &Range<usize>,
