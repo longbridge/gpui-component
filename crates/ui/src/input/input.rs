@@ -522,10 +522,19 @@ impl RenderOnce for Input {
         let accessibility_value = (window.is_a11y_active()
             && Self::exposes_accessibility_value(presentation.is_masked(), content_type))
         .then(|| presentation.value().to_owned());
-        let focused = presentation.focus_handle().is_focused(window) && !presentation.is_disabled();
-        if focused {
+        let input_focused =
+            presentation.focus_handle().is_focused(window) && !presentation.is_disabled();
+        if input_focused {
             sync_native_content_type(window, content_type, presentation.is_editable());
         }
+        let frame_focus_handle = window
+            .use_keyed_state(("input-frame-focus", state.entity_id()), cx, |_, cx| {
+                cx.focus_handle()
+            })
+            .read(cx)
+            .clone();
+        let focused = input_focused
+            || (frame_focus_handle.contains_focused(window, cx) && !presentation.is_disabled());
 
         let gap_x = match self.size {
             Size::Small => px(4.),
@@ -567,6 +576,7 @@ impl RenderOnce for Input {
         BaseInput::new(("input", state.entity_id()))
             .focused(focused)
             .disabled(disabled)
+            .track_focus(&frame_focus_handle)
             .styles(|styles| {
                 styles.focused(|style| {
                     style.when(

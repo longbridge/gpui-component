@@ -492,7 +492,9 @@ where
                     .input_size(self.state.size)
                     .input_text_size(self.state.size)
                     .refine_style(&self.state.style)
-                    .when(outline_visible, |this| this.focused_border(cx))
+                    .when(outline_visible && self.state.appearance, |this| {
+                        this.focused_border(cx)
+                    })
                     .draw_focus_ring(
                         outline_visible && self.state.appearance && self.focus_ring_enabled,
                         px(0.),
