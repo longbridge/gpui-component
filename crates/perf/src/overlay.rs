@@ -5,6 +5,9 @@ use gpui::{
 
 use crate::monitor::FpsMonitor;
 
+/// Distance from the edges the HUD is pinned to.
+const MARGIN: Pixels = px(12.);
+
 /// Pins an [`FpsMonitor`] to an edge or corner of its parent, the way a game
 /// overlays its frame counter.
 ///
@@ -17,28 +20,26 @@ use crate::monitor::FpsMonitor;
 ///
 /// ```no_run
 /// # use gpui::*;
-/// # use gpui_perf::{FpsMonitor, PerfOverlay};
+/// # use gpui_perf::{FpsMonitor, FpsOverlay};
 /// # fn example(monitor: &Entity<FpsMonitor>, content: impl IntoElement) -> impl IntoElement {
 /// div()
 ///     .relative()
 ///     .size_full()
 ///     .child(content)
-///     .child(PerfOverlay::new(monitor).anchor(Anchor::BottomLeft))
+///     .child(FpsOverlay::new(monitor).anchor(Anchor::BottomLeft))
 /// # }
 /// ```
 #[derive(IntoElement)]
-pub struct PerfOverlay {
+pub struct FpsOverlay {
     monitor: Entity<FpsMonitor>,
     anchor: Anchor,
-    margin: Pixels,
 }
 
-impl PerfOverlay {
+impl FpsOverlay {
     pub fn new(monitor: &Entity<FpsMonitor>) -> Self {
         Self {
             monitor: monitor.clone(),
             anchor: Anchor::TopRight,
-            margin: px(12.),
         }
     }
 
@@ -47,17 +48,11 @@ impl PerfOverlay {
         self.anchor = anchor;
         self
     }
-
-    /// Distance from the edges the HUD is pinned to. Defaults to 12px.
-    pub fn margin(mut self, margin: Pixels) -> Self {
-        self.margin = margin;
-        self
-    }
 }
 
-impl RenderOnce for PerfOverlay {
+impl RenderOnce for FpsOverlay {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let margin = self.margin;
+        let margin = MARGIN;
 
         // Corners are placed by their own two offsets so the overlay stays the
         // size of the HUD. The centered anchors need a strip to center within,

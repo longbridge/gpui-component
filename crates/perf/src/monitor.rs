@@ -2,14 +2,14 @@ use std::time::Duration;
 
 use gpui::{
     Bounds, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, PathBuilder,
-    Pixels, Point, Render, SharedString, StatefulInteractiveElement as _, Styled, Task, Window,
-    canvas, div, point, prelude::FluentBuilder as _, px, relative,
+    Pixels, Point, Render, StatefulInteractiveElement as _, Styled, Task, Window, canvas, div,
+    point, prelude::FluentBuilder as _, px, relative,
 };
 
 use crate::{
     FrameTraceGuard,
     sampler::{FrameSampler, ResourceSample, minimum_resource_interval},
-    style::PerfStyle,
+    style::FpsStyle,
 };
 
 /// One frame at 60Hz, the default budget a frame is judged against.
@@ -40,6 +40,10 @@ const HEADLINE_HEIGHT: Pixels = px(35.);
 /// looking cramped.
 const FIGURE_SIZE: Pixels = px(28.);
 const FIGURE_WIDTH: Pixels = px(70.);
+
+/// Width of the `FPS` unit, and of the empty box mirroring it on the other side
+/// of the figure so the figure lands on the HUD's true center.
+const UNIT_WIDTH: Pixels = px(22.);
 
 /// Fraction of the target frame rate that still counts as meeting it. Vsync and
 /// the sampling window each cost a frame or so a second, so a 60Hz display that
@@ -75,12 +79,11 @@ const DEFAULT_FONT: &str = "monospace";
 /// ```
 pub struct FpsMonitor {
     sampler: FrameSampler,
-    style: PerfStyle,
+    style: FpsStyle,
     frame_budget: Duration,
     continuous: bool,
     show_resources: bool,
     resource_interval: Duration,
-    font_family: Option<SharedString>,
     resources: Option<ResourceSample>,
     compact: bool,
     /// Upper bound of the chart's y axis, in seconds.
@@ -94,12 +97,11 @@ impl FpsMonitor {
         let frame_budget = DEFAULT_FRAME_BUDGET;
         Self {
             sampler: FrameSampler::new(window.window_handle().window_id(), DEFAULT_CAPACITY),
-            style: PerfStyle::default(),
+            style: FpsStyle::default(),
             frame_budget,
             continuous: true,
             show_resources: true,
             resource_interval: DEFAULT_RESOURCE_INTERVAL,
-            font_family: None,
             resources: None,
             compact: false,
             axis_max: frame_budget.as_secs_f32() * 2.,
@@ -149,28 +151,6 @@ impl FpsMonitor {
     pub fn resource_interval(mut self, interval: Duration) -> Self {
         self.resource_interval = interval;
         self
-    }
-
-    /// The font used for the readouts. Defaults to the inherited font; pass a
-    /// monospace family to keep the digits from shifting as the numbers change.
-    pub fn font_family(mut self, font_family: impl Into<SharedString>) -> Self {
-        self.font_family = Some(font_family.into());
-        self
-    }
-
-    pub fn style(mut self, style: PerfStyle) -> Self {
-        self.style = style;
-        self
-    }
-
-    /// Frames per second over the last second.
-    pub fn fps(&self) -> f32 {
-        self.sampler.fps()
-    }
-
-    /// The most recent CPU and memory sample, if one has been taken.
-    pub fn resources(&self) -> Option<ResourceSample> {
-        self.resources
     }
 
     /// Sampling starts on the first render rather than in `new` so that the
@@ -332,16 +312,20 @@ impl FpsMonitor {
                     .items_end()
                     .justify_center()
                     .gap_1()
+                    // An empty box matching the unit on the right. Without it
+                    // the unit's own width pushes the figure off center by half
+                    // of it, which reads as misalignment.
+                    .child(div().w(UNIT_WIDTH))
                     .child(
                         div()
                             .w(FIGURE_WIDTH)
-                            .text_right()
+                            .text_center()
                             .text_size(FIGURE_SIZE)
                             .line_height(relative(1.))
                             .text_color(color)
                             .child(format!("{fps:.0}")),
                     )
-                    .child(div().text_color(style.muted).child("FPS")),
+                    .child(div().w(UNIT_WIDTH).text_color(style.muted).child("FPS")),
             )
     }
 }
@@ -369,10 +353,6 @@ impl Render for FpsMonitor {
         let compact = self.compact;
 
         let width = if compact { COMPACT_WIDTH } else { HUD_WIDTH };
-        let font = self
-            .font_family
-            .clone()
-            .unwrap_or_else(|| DEFAULT_FONT.into());
 
         div()
             .id("gpui-perf-hud")
@@ -383,7 +363,7 @@ impl Render for FpsMonitor {
             .py_1p5()
             .rounded(px(4.))
             .bg(style.background)
-            .font_family(font)
+            .font_family(DEFAULT_FONT)
             .text_size(px(10.))
             .text_color(style.muted)
             .on_click(cx.listener(|this, _, _, cx| {
@@ -430,7 +410,7 @@ impl Render for FpsMonitor {
 /// exactly 60.00 — so an exact comparison would paint a perfectly healthy
 /// application as over budget. Anything within [`FPS_TOLERANCE`] of the target
 /// counts as meeting it.
-fn fps_color(fps: f32, budget: Duration, style: PerfStyle) -> Hsla {
+fn fps_color(fps: f32, budget: Duration, style: FpsStyle) -> Hsla {
     if fps <= 0. {
         return style.muted;
     }
@@ -447,7 +427,7 @@ fn fps_color(fps: f32, budget: Duration, style: PerfStyle) -> Hsla {
 
 /// A `LABEL value` pair kept together, for rows that carry more than one
 /// reading. The label stays muted so it reads as a caption, not as data.
-fn pair(label: &'static str, value: String, style: PerfStyle) -> Div {
+fn pair(label: &'static str, value: String, style: FpsStyle) -> Div {
     div()
         .flex()
         .gap_1()
@@ -458,7 +438,7 @@ fn pair(label: &'static str, value: String, style: PerfStyle) -> Div {
 /// One `LABEL … value` row. The value is right aligned against the HUD's inner
 /// edge, so in a monospace font every row's digits line up in a column and
 /// nothing shifts as the readings change width.
-fn reading(label: &'static str, value: String, value_color: Hsla, style: PerfStyle) -> Div {
+fn reading(label: &'static str, value: String, value_color: Hsla, style: FpsStyle) -> Div {
     div()
         .flex()
         .w_full()
@@ -499,8 +479,6 @@ mod tests {
                     .continuous(false)
                     .show_resources(false)
                     .resource_interval(Duration::from_secs(2))
-                    .font_family("monospace")
-                    .style(PerfStyle::light())
             });
 
             let monitor = monitor.read(cx);
@@ -509,8 +487,6 @@ mod tests {
             assert!(!monitor.continuous);
             assert!(!monitor.show_resources);
             assert_eq!(monitor.resource_interval, Duration::from_secs(2));
-            assert_eq!(monitor.font_family.as_deref(), Some("monospace"));
-            assert_eq!(monitor.style, PerfStyle::light());
             // The axis floor tracks the budget so a 144Hz budget doesn't leave
             // the chart scaled for 60Hz frames.
             assert_eq!(monitor.axis_max, budget.as_secs_f32() * 2.);
@@ -519,7 +495,7 @@ mod tests {
 
     #[test]
     fn a_display_keeping_up_is_never_graded_as_falling_behind() {
-        let style = PerfStyle::dark();
+        let style = FpsStyle::dark();
         let budget = DEFAULT_FRAME_BUDGET;
 
         // What a healthy 60Hz display actually reports.

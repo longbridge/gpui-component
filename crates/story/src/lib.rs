@@ -19,6 +19,7 @@ use gpui_component::{
     text::markdown,
     v_flex,
 };
+use gpui_perf::fps_monitor;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
@@ -65,7 +66,8 @@ actions!(
         Tab,
         TabPrev,
         ShowPanelInfo,
-        ToggleListActiveHighlight
+        ToggleListActiveHighlight,
+        ToggleFpsMonitor
     ]
 );
 
@@ -907,9 +909,14 @@ impl Render for StoryRoot {
                     .child(
                         div()
                             .track_focus(&self.focus_handle)
+                            .relative()
                             .flex_1()
                             .overflow_hidden()
-                            .child(self.view.clone()),
+                            .child(self.view.clone())
+                            // Mounted inside the content area rather than the
+                            // window root so the HUD's top right corner clears
+                            // the title bar's own controls.
+                            .child(fps_monitor(window, cx)),
                     )
                     .children(sheet_layer)
                     .children(dialog_layer)

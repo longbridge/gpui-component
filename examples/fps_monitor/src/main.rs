@@ -203,7 +203,7 @@ impl Render for Example {
             }))
             .child(self.render_curves())
             .child(self.render_load_controls(cx))
-            .child(fps_monitor(Anchor::TopRight, window, cx))
+            .child(fps_monitor(window, cx))
     }
 }
 
@@ -418,6 +418,9 @@ fn main() {
             cx.open_window(WindowOptions::default(), |window, cx| {
                 window.activate_window();
                 window.set_window_title("FPS Monitor");
+                // The HUD starts hidden, and looking at it is the whole point
+                // of this example.
+                gpui_perf::toggle_fps(window, cx);
                 cx.new(|cx| Example::new(window, cx))
             })
             .expect("failed to open window");

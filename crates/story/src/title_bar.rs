@@ -13,7 +13,10 @@ use gpui_component::{
     scroll::ScrollbarMode,
 };
 
-use crate::{SelectFont, SelectRadius, SelectScrollbarMode, ToggleListActiveHighlight, app_menus};
+use crate::{
+    SelectFont, SelectRadius, SelectScrollbarMode, ToggleFpsMonitor, ToggleListActiveHighlight,
+    app_menus,
+};
 
 pub struct AppTitleBar {
     app_menu_bar: Entity<AppMenuBar>,
@@ -146,14 +149,24 @@ impl FontSizeSelector {
         theme.list.active_highlight = !theme.list.active_highlight;
         window.refresh();
     }
+
+    fn on_toggle_fps_monitor(
+        &mut self,
+        _: &ToggleFpsMonitor,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        gpui_perf::toggle_fps(window, cx);
+    }
 }
 
 impl Render for FontSizeSelector {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let font_size = cx.theme().font_size.as_f32() as i32;
         let radius = cx.theme().radius.as_f32() as i32;
         let scroll_show = cx.theme().scrollbar_mode;
+        let show_fps_monitor = gpui_perf::fps_visible(window, cx);
 
         div()
             .id("font-size-selector")
@@ -162,6 +175,7 @@ impl Render for FontSizeSelector {
             .on_action(cx.listener(Self::on_select_radius))
             .on_action(cx.listener(Self::on_select_scrollbar_mode))
             .on_action(cx.listener(Self::on_toggle_list_active_highlight))
+            .on_action(cx.listener(Self::on_toggle_fps_monitor))
             .child(
                 Button::new("btn")
                     .small()
@@ -211,6 +225,11 @@ impl Render for FontSizeSelector {
                                 "List Active Highlight",
                                 cx.theme().list.active_highlight,
                                 Box::new(ToggleListActiveHighlight),
+                            )
+                            .menu_with_check(
+                                "FPS Monitor",
+                                show_fps_monitor,
+                                Box::new(ToggleFpsMonitor),
                             )
                     })
                     .anchor(Anchor::TopRight),

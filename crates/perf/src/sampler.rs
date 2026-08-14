@@ -8,7 +8,7 @@ const FPS_WINDOW: Duration = Duration::from_secs(1);
 
 /// One drawn frame.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct FrameSample {
+pub(crate) struct FrameSample {
     /// How long `Window::draw` took for this frame.
     pub draw: Duration,
     /// How many invalidations were coalesced into this frame. A number well
@@ -22,7 +22,7 @@ pub struct FrameSample {
 /// GPUI records frame timings into a process-wide ring buffer, so the sampler
 /// filters by window: without that, every other open window's frames would be
 /// counted as this window's.
-pub struct FrameSampler {
+pub(crate) struct FrameSampler {
     collector: FrameTimingCollector,
     window_id: WindowId,
     samples: VecDeque<FrameSample>,
@@ -32,7 +32,7 @@ pub struct FrameSampler {
 }
 
 impl FrameSampler {
-    pub fn new(window_id: WindowId, capacity: usize) -> Self {
+    pub(crate) fn new(window_id: WindowId, capacity: usize) -> Self {
         let capacity = capacity.max(1);
         Self {
             collector: FrameTimingCollector::new(),
@@ -45,12 +45,12 @@ impl FrameSampler {
 
     /// Drains the frames drawn since the previous call. Call once per rendered
     /// frame.
-    pub fn tick(&mut self) {
+    pub(crate) fn tick(&mut self) {
         let timings = self.collector.collect_unseen();
         self.ingest(timings, Instant::now());
     }
 
-    pub fn set_capacity(&mut self, capacity: usize) {
+    pub(crate) fn set_capacity(&mut self, capacity: usize) {
         self.capacity = capacity.max(1);
         while self.samples.len() > self.capacity {
             self.samples.pop_front();
@@ -62,7 +62,7 @@ impl FrameSampler {
     /// `n` frames span `n - 1` intervals, so the rate is derived from the
     /// elapsed span rather than from the raw count; that keeps the readout
     /// correct before the rolling window has filled up.
-    pub fn fps(&self) -> f32 {
+    pub(crate) fn fps(&self) -> f32 {
         if self.frame_times.len() < 2 {
             return 0.;
         }
@@ -77,20 +77,20 @@ impl FrameSampler {
         (self.frame_times.len() - 1) as f32 / span
     }
 
-    pub fn samples(&self) -> impl ExactSizeIterator<Item = &FrameSample> {
+    pub(crate) fn samples(&self) -> impl ExactSizeIterator<Item = &FrameSample> {
         self.samples.iter()
     }
 
-    pub fn capacity(&self) -> usize {
+    pub(crate) fn capacity(&self) -> usize {
         self.capacity
     }
 
-    pub fn last(&self) -> Option<FrameSample> {
+    pub(crate) fn last(&self) -> Option<FrameSample> {
         self.samples.back().copied()
     }
 
     /// Share of the retained frames that overran `budget`, in `0..1`.
-    pub fn over_budget_ratio(&self, budget: Duration) -> f32 {
+    pub(crate) fn over_budget_ratio(&self, budget: Duration) -> f32 {
         if self.samples.is_empty() {
             return 0.;
         }
@@ -103,7 +103,7 @@ impl FrameSampler {
     }
 
     /// The slowest retained frame, used to scale the chart's y axis.
-    pub fn peak_draw(&self) -> Duration {
+    pub(crate) fn peak_draw(&self) -> Duration {
         self.samples
             .iter()
             .map(|sample| sample.draw)
@@ -139,7 +139,7 @@ impl FrameSampler {
 
 /// A sample of this process' resource usage.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct ResourceSample {
+pub(crate) struct ResourceSample {
     /// CPU used by this process, normalized so that 100 means every logical
     /// core is saturated. `sysinfo` reports 100 per saturated core, so the raw
     /// value is divided by the core count.
@@ -153,7 +153,7 @@ pub struct ResourceSample {
 /// Refreshing is a blocking syscall walk, so this must be driven from a
 /// background thread rather than from the render loop.
 #[cfg(not(target_family = "wasm"))]
-pub struct ResourceProbe {
+pub(crate) struct ResourceProbe {
     system: sysinfo::System,
     pid: sysinfo::Pid,
     cores: f32,
@@ -163,7 +163,7 @@ pub struct ResourceProbe {
 impl ResourceProbe {
     /// Returns `None` when the current process id cannot be determined, which
     /// is the only way sampling can be unavailable on a supported platform.
-    pub fn new() -> Option<Self> {
+    pub(crate) fn new() -> Option<Self> {
         let pid = sysinfo::get_current_pid().ok()?;
         let cores = std::thread::available_parallelism()
             .map(|cores| cores.get() as f32)
@@ -180,7 +180,7 @@ impl ResourceProbe {
         Some(probe)
     }
 
-    pub fn sample(&mut self) -> Option<ResourceSample> {
+    pub(crate) fn sample(&mut self) -> Option<ResourceSample> {
         self.refresh();
         let process = self.system.process(self.pid)?;
         Some(ResourceSample {

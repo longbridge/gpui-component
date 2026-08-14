@@ -5,27 +5,23 @@ second, a rolling frame time trace, and this process' CPU and memory usage.
 
 ```
 ┌──────────────────────────┐
-│ 118 FPS          8.4 ms  │
-│ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌  │  ← the frame budget
-│ ﹋﹏﹋︿﹏﹋﹏︿﹋﹏﹋﹏﹋  │  ← one point per drawn frame
-│ CPU 12.4%      MEM 184 MB│
+│ ﹋﹏  118 FPS  ﹋︿﹏﹋   │  ← the trace runs behind the headline
+│ FRAME             8.4 ms │
+│ DROP                0.0% │
+│ CPU 12.4%     MEM 184 MB │
 └──────────────────────────┘
 ```
 
 Frame data comes from GPUI's own frame trace (`gpui::FrameTimingCollector`), so
 the numbers are what the framework actually spent in `Window::draw` rather than
 an estimate measured from the outside. The trace is colored against the frame
-budget — green within budget, amber up to twice the budget, red beyond — and the
-budget itself is drawn as a baseline across the chart.
+budget — green within budget, amber up to twice the budget, red beyond.
 
-This crate depends only on `gpui`, so it works in any GPUI application. It is
-also re-exported from GPUI Component as `gpui_component::perf`.
+This crate depends only on `gpui`, so it works in any GPUI application.
 
 ## Usage
 
-One call, which decides only *where* the HUD sits. Creating the monitor, keeping
-it alive across frames, enabling the frame trace and sampling CPU and memory are
-all handled internally.
+Mount it once in the window's root view:
 
 ```rust
 use gpui::*;
@@ -38,23 +34,33 @@ impl Render for Example {
             .relative()
             .size_full()
             .child("your app")
-            .child(fps_monitor(Anchor::TopRight, window, cx))
+            .child(fps_monitor(window, cx))
     }
 }
 ```
 
-Any [`gpui::Anchor`] works, so the HUD can sit in a corner or centered on an
-edge. Click it to collapse down to the FPS reading, and click again to expand.
+and switch it on and off from anywhere:
+
+```rust
+gpui_perf::toggle_fps(window, cx);
+```
+
+Nothing is drawn until it is switched on, so the mount point can be left in
+place permanently. GPUI draws only what the element tree produces — `Window`'s
+paint methods assert they are called from an element's paint phase — so there is
+no way to put the HUD on screen without a mount point somewhere; this is the
+smallest one.
+
+Click the HUD to collapse it down to the FPS reading, and click again to expand.
 
 ## Customization
 
-`fps_monitor` reuses one monitor per window with the default settings. Build an
-`FpsMonitor` yourself when you need a different frame budget, palette or
-placement, and render it directly (it is an ordinary view, so it can live in a
-status bar just as well as in an overlay):
+Neither call takes options. For a different corner or frame budget, compose the
+two pieces they use and render the monitor yourself (it is an ordinary view, so
+it can live in a status bar just as well as an overlay):
 
 ```rust
-use gpui_perf::{FpsMonitor, PerfOverlay, PerfStyle};
+use gpui_perf::{FpsMonitor, FpsOverlay};
 
 let monitor = cx.new(|cx| {
     FpsMonitor::new(window, cx)
@@ -64,13 +70,12 @@ let monitor = cx.new(|cx| {
         .show_resources(true)                           // CPU / memory row (default true)
         .resource_interval(Duration::from_millis(500))  // default 500ms
         .font_family("monospace")                       // keeps digits from shifting
-        .style(PerfStyle::light())                      // default PerfStyle::dark()
 });
 
 // Embedded:
 div().child(monitor.clone())
-// Or pinned to a relative parent:
-div().relative().child(PerfOverlay::new(&monitor).anchor(Anchor::BottomLeft))
+// Or pinned to a corner of a relative parent:
+div().relative().child(FpsOverlay::new(&monitor).anchor(Anchor::BottomLeft))
 ```
 
 ### `continuous`
@@ -102,5 +107,6 @@ window redraws for its own reasons, and reads zero while the window is idle.
 cargo run -p fps_monitor
 ```
 
-Renders animated Bézier ribbons whose count can be dialed up and down, so the
-trace can be watched reacting to real rendering load.
+A port of three.js' `webgl_lines_colors` demo — Hilbert curves smoothed with a
+centripetal Catmull-Rom spline — whose curve count can be dialed up and down, so
+the trace can be watched reacting to real rendering load.

@@ -4,11 +4,8 @@ use gpui::{
     Anchor, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
     Styled, Window, div, px,
 };
-use gpui_component::{
-    ActiveTheme as _,
-    perf::{FpsMonitor, PerfOverlay, PerfStyle},
-    v_flex,
-};
+use gpui_component::{ActiveTheme as _, v_flex};
+use gpui_perf::{FpsMonitor, FpsOverlay};
 
 use crate::section;
 
@@ -47,7 +44,6 @@ impl FpsMonitorStory {
                     // A 144Hz budget, so the baseline and the trace colors are
                     // judged against a high refresh rate display.
                     .frame_budget(Duration::from_micros(6_944))
-                    .style(PerfStyle::light())
             }),
         }
     }
@@ -75,7 +71,7 @@ impl Render for FpsMonitorStory {
                 section("Overlay")
                     .description(
                         "Pinned to an anchor of a relative parent, the way a game overlays its \
-                         frame counter. This one uses a light palette and a 144Hz budget.",
+                         frame counter. This one is judged against a 144Hz frame budget.",
                     )
                     .child(
                         div()
@@ -84,7 +80,7 @@ impl Render for FpsMonitorStory {
                             .h(px(160.))
                             .rounded(cx.theme().radius)
                             .bg(cx.theme().secondary)
-                            .child(PerfOverlay::new(&self.overlaid).anchor(Anchor::BottomRight)),
+                            .child(FpsOverlay::new(&self.overlaid).anchor(Anchor::BottomRight)),
                     ),
             )
     }
