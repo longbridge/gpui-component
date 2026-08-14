@@ -7,6 +7,7 @@ use crate::ActiveTheme as _;
 
 const FOCUS_RING_WIDTH: Pixels = px(3.);
 const FOCUS_RING_OPACITY: f32 = 0.5;
+const FOCUS_RING_OFFSET: Pixels = px(1.5);
 
 pub(crate) trait FocusRingStyleExt<T: ParentElement + Styled + Sized> {
     fn draw_focus_ring(self, visible: bool, margin: Pixels, window: &Window, cx: &App) -> Self;
@@ -42,7 +43,7 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
                 .map(|v| v.to_pixels(rem_size))
                 .unwrap_or_default(),
         };
-        let outer_radius = radius.map(|value| *value + FOCUS_RING_WIDTH);
+        let outer_radius = radius.map(|value| *value + FOCUS_RING_OFFSET);
         let mut border_style = StyleRefinement::default();
         border_style.corner_radii.top_left = Some(radius.top_left.into());
         border_style.corner_radii.top_right = Some(radius.top_right.into());
@@ -53,7 +54,7 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
         ring_style.corner_radii.top_right = Some(outer_radius.top_right.into());
         ring_style.corner_radii.bottom_left = Some(outer_radius.bottom_left.into());
         ring_style.corner_radii.bottom_right = Some(outer_radius.bottom_right.into());
-        let inset = FOCUS_RING_WIDTH + margin;
+        let inset = FOCUS_RING_OFFSET + margin;
 
         self.child(
             div()
