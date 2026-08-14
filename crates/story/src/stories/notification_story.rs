@@ -7,13 +7,13 @@ use gpui_component::{
     ActiveTheme, Theme, WindowExt as _,
     button::{Button, ButtonVariants},
     h_flex,
-    menu::{DropdownMenu as _, PopupMenuItem},
+    menu::PopupMenuItem,
     notification::{Notification, NotificationType},
     text::markdown,
     v_flex,
 };
 
-use crate::section;
+use crate::{section, story_toolbar_group};
 
 const NOTIFICATION_MARKDOWN: &str = r#"
 This is a custom notification.
@@ -32,7 +32,7 @@ impl super::Story for NotificationStory {
     }
 
     fn description() -> &'static str {
-        "Push notifications to display a message at the top right of the window"
+        "Show transient feedback without interrupting the current task."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -60,10 +60,12 @@ impl Focusable for NotificationStory {
 
 impl Render for NotificationStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        const ANCHORS: [Anchor; 6] = [
+        const ANCHORS: [Anchor; 8] = [
             Anchor::TopLeft,
             Anchor::TopCenter,
             Anchor::TopRight,
+            Anchor::LeftCenter,
+            Anchor::RightCenter,
             Anchor::BottomLeft,
             Anchor::BottomCenter,
             Anchor::BottomRight,
@@ -77,72 +79,70 @@ impl Render for NotificationStory {
             .size_full()
             .gap_3()
             .child(
-                h_flex()
-                    .gap_3()
-                    .child(
-                        Button::new("placement")
-                            .outline()
-                            .label(format!("{:?}", cx.theme().notification.placement))
-                            .dropdown_menu({
-                                let view = view.clone();
-                                move |menu, window, cx| {
-                                    let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
-                                        menu.item(
-                                            PopupMenuItem::new(format!("{:?}", placement))
-                                                .checked(
-                                                    cx.theme().notification.placement == placement,
-                                                )
-                                                .on_click(window.listener_for(
-                                                    &view,
-                                                    move |_, _, _, cx| {
-                                                        Theme::global_mut(cx)
-                                                            .notification
-                                                            .placement = placement;
-                                                        cx.notify();
-                                                    },
-                                                )),
-                                        )
-                                    });
-
-                                    menu
-                                }
-                            }),
-                    )
-                    .child(
-                        Button::new("max-items")
-                            .outline()
-                            .label(format!("Max items: {}", cx.theme().notification.max_items))
-                            .dropdown_menu(move |menu, window, cx| {
-                                const MAX_ITEMS: [usize; 5] = [1, 2, 3, 5, 10];
-                                MAX_ITEMS.into_iter().fold(menu, |menu, max_items| {
+                story_toolbar_group()
+                    .dropdown_child(
+                        Button::new("placement").label(format!(
+                            "Placement: {:?}",
+                            cx.theme().notification.placement
+                        )),
+                        {
+                            let view = view.clone();
+                            move |menu, window, cx| {
+                                let menu = ANCHORS.into_iter().fold(menu, |menu, placement| {
                                     menu.item(
-                                        PopupMenuItem::new(format!("{}", max_items))
-                                            .checked(cx.theme().notification.max_items == max_items)
+                                        PopupMenuItem::new(format!("{:?}", placement))
+                                            .checked(cx.theme().notification.placement == placement)
                                             .on_click(window.listener_for(
                                                 &view,
                                                 move |_, _, _, cx| {
-                                                    Theme::global_mut(cx).notification.max_items =
-                                                        max_items;
+                                                    Theme::global_mut(cx).notification.placement =
+                                                        placement;
                                                     cx.notify();
                                                 },
                                             )),
                                     )
-                                })
-                            }),
+                                });
+                                menu
+                            }
+                        },
+                    )
+                    .dropdown_child(
+                        Button::new("max-items")
+                            .label(format!("Max items: {}", cx.theme().notification.max_items)),
+                        move |menu, window, cx| {
+                            const MAX_ITEMS: [usize; 5] = [1, 2, 3, 5, 10];
+                            MAX_ITEMS.into_iter().fold(menu, |menu, max_items| {
+                                menu.item(
+                                    PopupMenuItem::new(format!("{}", max_items))
+                                        .checked(cx.theme().notification.max_items == max_items)
+                                        .on_click(window.listener_for(
+                                            &view,
+                                            move |_, _, _, cx| {
+                                                Theme::global_mut(cx).notification.max_items =
+                                                    max_items;
+                                                cx.notify();
+                                            },
+                                        )),
+                                )
+                            })
+                        },
                     ),
             )
             .child(
-                section("Simple Notification").child(
-                    Button::new("show-notify-0")
-                        .outline()
-                        .label("Show Notification")
-                        .on_click(cx.listener(|_, _, window, cx| {
-                            window.push_notification("This is a notification.", cx)
-                        })),
-                ),
+                section("Default")
+                    .description("Show a short message.")
+                    .child(
+                        Button::new("show-notify-0")
+                            .outline()
+                            .label("Show Notification")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification("This is a notification.", cx)
+                            })),
+                    ),
             )
             .child(
-                section("Notification with Type")
+                section("Types")
+                    .description("Use semantic treatments for common outcomes.")
                     .child(
                         Button::new("show-notify-info")
                             .info()
@@ -201,7 +201,8 @@ impl Render for NotificationStory {
                     ),
             )
             .child(
-                section("Type with Title and Description")
+                section("Title and description")
+                    .description("Pair a concise title with supporting detail.")
                     .child(
                         Button::new("show-typed-info")
                             .info()
@@ -264,129 +265,161 @@ impl Render for NotificationStory {
                     ),
             )
             .child(
-                section("Unique Notification").child(
-                    Button::new("show-notify-unique")
-                        .outline()
-                        .label("Unique Notification")
-                        .on_click(cx.listener(|_, _, window, cx| {
-                            window.push_notification(
-                                Notification::info("This is a unique notification.")
-                                    .id::<NotificationStory>()
-                                    .message("This is a unique notification.")
-                                    .on_close(|_, _| {
-                                        println!("Notification closed");
-                                    }),
-                                cx,
-                            )
-                        })),
-                ),
-            )
-            .child(
-                section("Unique with Key").child(
-                    h_flex()
-                        .gap_3()
-                        .child(
-                            Button::new("show-notify-unique-key0")
-                                .outline()
-                                .label("A Notification")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.push_notification(
-                                        Notification::info("This is A unique notification.")
-                                            .id1::<NotificationStory>(1),
-                                        cx,
-                                    )
-                                })),
-                        )
-                        .child(
-                            Button::new("show-notify-unique-key1")
-                                .outline()
-                                .label("B Notification")
-                                .on_click(cx.listener(|_, _, window, cx| {
-                                    window.push_notification(
-                                        Notification::info("This is B unique notification.")
-                                            .id1::<NotificationStory>(2),
-                                        cx,
-                                    )
-                                })),
-                        ),
-                ),
-            )
-            .child(
-                section("With title and action").child(
-                    Button::new("show-notify-with-title")
-                        .outline()
-                        .label("Notification with Title")
-                        .on_click(cx.listener(|_, _, window, cx| {
-                            struct TestNotification;
-
-                            window.push_notification(
-                                Notification::new()
-                                    .id::<TestNotification>()
-                                    .title("Uh oh! Something went wrong.")
-                                    .message("There was a problem with your request.")
-                                    .action(|_, _, cx| {
-                                        Button::new("try-again").primary().label("Retry").on_click(
-                                            cx.listener(|this, _, window, cx| {
-                                                println!("You have clicked the try again action.");
-                                                this.dismiss(window, cx);
-                                            }),
-                                        )
-                                    })
-                                    .on_click(cx.listener(|_, _, _, cx| {
-                                        println!("Notification clicked");
-                                        cx.notify();
-                                    })),
-                                cx,
-                            )
-                        })),
-                ),
-            )
-            .child(
-                section("on_click vs on_close").child(
-                    Button::new("show-notify-click-close")
-                        .outline()
-                        .label("Click vs Close")
-                        .on_click(cx.listener(|_, _, window, cx| {
-                            struct ClickCloseNotification;
-
-                            window.push_notification(
-                                Notification::info(
-                                    "Click the body to fire on_click; click the X to close. \
-                                    Watch the console.",
+                section("Unique")
+                    .description("Replace duplicate notifications by type.")
+                    .child(
+                        Button::new("show-notify-unique")
+                            .outline()
+                            .label("Unique Notification")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::info("This is a unique notification.")
+                                        .id::<NotificationStory>()
+                                        .message("This is a unique notification.")
+                                        .on_close(|_, _| {
+                                            println!("Notification closed");
+                                        }),
+                                    cx,
                                 )
-                                .id::<ClickCloseNotification>()
-                                .title("on_click vs on_close")
-                                .autohide(false)
-                                .on_click(|_, _, _| {
-                                    println!("[notification] on_click fired");
-                                })
-                                .on_close(|_, _| {
-                                    println!("[notification] on_close fired");
-                                }),
-                                cx,
-                            )
-                        })),
-                ),
+                            })),
+                    ),
             )
             .child(
-                section("Custom Notification").child(
-                    Button::new("show-notify-custom")
-                        .outline()
-                        .label("Show Custom Notification")
-                        .on_click(cx.listener(|_, _, window, cx| {
-                            window.push_notification(
-                                Notification::new().content(|_, _, _| {
-                                    markdown(NOTIFICATION_MARKDOWN).into_any_element()
-                                }),
-                                cx,
+                section("Keyed")
+                    .description("Keep separate unique notifications with keys.")
+                    .child(
+                        h_flex()
+                            .gap_3()
+                            .child(
+                                Button::new("show-notify-unique-key0")
+                                    .outline()
+                                    .label("A Notification")
+                                    .on_click(cx.listener(|_, _, window, cx| {
+                                        window.push_notification(
+                                            Notification::info("This is A unique notification.")
+                                                .id1::<NotificationStory>(1),
+                                            cx,
+                                        )
+                                    })),
                             )
-                        })),
-                ),
+                            .child(
+                                Button::new("show-notify-unique-key1")
+                                    .outline()
+                                    .label("B Notification")
+                                    .on_click(cx.listener(|_, _, window, cx| {
+                                        window.push_notification(
+                                            Notification::info("This is B unique notification.")
+                                                .id1::<NotificationStory>(2),
+                                            cx,
+                                        )
+                                    })),
+                            ),
+                    ),
+            )
+            .child(
+                section("Action")
+                    .description("Add an inline action to the notification.")
+                    .child(
+                        Button::new("show-notify-with-title")
+                            .outline()
+                            .label("Notification with Title")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                struct TestNotification;
+
+                                window.push_notification(
+                                    Notification::new()
+                                        .id::<TestNotification>()
+                                        .title("Uh oh! Something went wrong.")
+                                        .message("There was a problem with your request.")
+                                        .action(|_, _, cx| {
+                                            Button::new("try-again")
+                                                .primary()
+                                                .label("Retry")
+                                                .on_click(cx.listener(|this, _, window, cx| {
+                                                    println!(
+                                                        "You have clicked the try again action."
+                                                    );
+                                                    this.dismiss(window, cx);
+                                                }))
+                                        })
+                                        .on_click(cx.listener(|_, _, _, cx| {
+                                            println!("Notification clicked");
+                                            cx.notify();
+                                        })),
+                                    cx,
+                                )
+                            })),
+                    ),
+            )
+            .child(
+                section("Lifecycle")
+                    .description("Handle body clicks and close events independently.")
+                    .child(
+                        Button::new("show-notify-click-close")
+                            .outline()
+                            .label("Click vs Close")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                struct ClickCloseNotification;
+
+                                window.push_notification(
+                                    Notification::info(
+                                        "Click the body to fire on_click; click the X to close. \
+                                    Watch the console.",
+                                    )
+                                    .id::<ClickCloseNotification>()
+                                    .title("on_click vs on_close")
+                                    .autohide(false)
+                                    .on_click(|_, _, _| {
+                                        println!("[notification] on_click fired");
+                                    })
+                                    .on_close(|_, _| {
+                                        println!("[notification] on_close fired");
+                                    }),
+                                    cx,
+                                )
+                            })),
+                    ),
+            )
+            .child(
+                section("Placement per notification")
+                    .description("Override the global placement for a single notification.")
+                    .children(ANCHORS.into_iter().map(|placement| {
+                        Button::new(format!("show-notify-{placement:?}"))
+                            .outline()
+                            .label(format!("{placement:?}"))
+                            .on_click(cx.listener(move |_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::info(format!(
+                                        "This notification is at {placement:?}."
+                                    ))
+                                    .placement(placement),
+                                    cx,
+                                )
+                            }))
+                    })),
+            )
+            .child(
+                section("Custom content")
+                    .description("Render application-owned notification content.")
+                    .child(
+                        Button::new("show-notify-custom")
+                            .outline()
+                            .label("Show Custom Notification")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::new().content(|_, _, _| {
+                                        markdown(NOTIFICATION_MARKDOWN).into_any_element()
+                                    }),
+                                    cx,
+                                )
+                            })),
+                    ),
             )
             .child({
                 struct ManualOpenNotification;
 
-                section("Manual Close Notification")
+                section("Manual close")
+                    .description("Keep a notification visible until it is dismissed.")
                     .child(
                         Button::new("manual-open-notify")
                             .outline()

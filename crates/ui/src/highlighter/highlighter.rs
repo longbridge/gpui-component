@@ -1,4 +1,6 @@
-use crate::highlighter::{HighlightTheme, LanguageRegistry};
+#[cfg(test)]
+use crate::highlighter::HighlightTheme;
+use crate::highlighter::LanguageRegistry;
 
 use anyhow::{Context, Result, anyhow};
 use gpui::{HighlightStyle, SharedString};
@@ -21,6 +23,9 @@ const LARGE_NODE_THRESHOLD: usize = 8 * 1024;
 const MAX_INJECTION_RANGES: usize = 4096;
 const MAX_INJECTION_BYTES: usize = 512 * 1024;
 const MAX_INJECTION_LANGUAGE_BYTES: usize = 64;
+/// Parse attempts, not resulting layers: a failed parse still spends budget.
+/// Matches past it keep host highlighting but get no injected tokens.
+const MAX_NON_COMBINED_INJECTION_PARSES: usize = 512;
 const INJECTION_PARSE_TIMEOUT: Duration = Duration::from_millis(20);
 
 /// A syntax highlighter that supports incremental parsing, multiline text,
@@ -712,6 +717,7 @@ impl SyntaxHighlighter {
         let mut resolved_languages: HashMap<SharedString, Option<(SharedString, Arc<Query>)>> =
             HashMap::new();
         let mut new_layers = Vec::new();
+        let mut non_combined_parses = 0usize;
         while let Some(query_match) = matches.next() {
             let mut language_name: Option<SharedString> = None;
             let mut combined = false;
@@ -726,6 +732,11 @@ impl SyntaxHighlighter {
                     "injection.combined" => combined = true,
                     _ => {}
                 }
+            }
+
+            // Skip rather than break, so later combined ranges are still collected.
+            if !combined && non_combined_parses >= MAX_NON_COMBINED_INJECTION_PARSES {
+                continue;
             }
 
             if language_name.is_none() {
@@ -782,6 +793,7 @@ impl SyntaxHighlighter {
                     continue;
                 }
 
+                non_combined_parses += 1;
                 let old_tree = old_layer_trees
                     .get(&(language_name.clone(), ranges_cache_key(&ranges)))
                     .copied();
@@ -1051,7 +1063,7 @@ impl SyntaxHighlighter {
     pub fn styles(
         &self,
         range: &Range<usize>,
-        theme: &HighlightTheme,
+        theme: &dyn gpui_base::input::HighlightStyleResolver,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut styles = vec![];
         let start_offset = range.start;
@@ -1290,7 +1302,8 @@ mod tests {
         assert!(highlighter.tree().is_none());
         assert_eq!(highlighter.text().to_string(), rope.to_string());
 
-        let styles = highlighter.styles(&(0..rope.len()), &HighlightTheme::default_dark());
+        let theme = HighlightTheme::default_dark();
+        let styles = highlighter.styles(&(0..rope.len()), theme.as_ref());
         assert_eq!(styles, vec![(0..rope.len(), HighlightStyle::default())]);
 
         // Unregistered languages fall back to plain text.
@@ -1441,7 +1454,7 @@ console.log(answer);
         }
 
         let theme = HighlightTheme::default_dark();
-        let styles = highlighter.styles(&(0..markdown.len()), &theme);
+        let styles = highlighter.styles(&(0..markdown.len()), theme.as_ref());
         let keyword_start = markdown.find("fn first").unwrap();
         let keyword_color = theme.style("keyword").and_then(|style| style.color);
         assert!(styles.iter().any(|(range, style)| {
@@ -1471,6 +1484,7 @@ console.log(answer);
     #[cfg(feature = "tree-sitter-languages")]
     fn test_markdown_fenced_code_highlights_blocks_beyond_previous_limit() {
         const FENCE_COUNT: usize = 384;
+        const _: () = assert!(FENCE_COUNT <= MAX_NON_COMBINED_INJECTION_PARSES);
         let markdown = (0..FENCE_COUNT)
             .map(|i| format!("```rust\nfn function_{i}() {{}}\n```\n"))
             .collect::<String>();
@@ -1493,6 +1507,56 @@ console.log(answer);
             "function_383",
             "function"
         ));
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_markdown_fenced_code_injection_layers_are_bounded() {
+        const FENCE_COUNT: usize = MAX_NON_COMBINED_INJECTION_PARSES + 128;
+        // The paragraph trails the fences so the combined match is only reached
+        // once the non-combined budget is already exhausted.
+        let markdown = format!(
+            "{}\nparagraph *inline*\n",
+            (0..FENCE_COUNT)
+                .map(|i| format!("```rust\nfn function_{i}() {{}}\n```\n"))
+                .collect::<String>()
+        );
+        let rope = Rope::from_str(&markdown);
+        let mut highlighter = SyntaxHighlighter::new("markdown");
+
+        assert!(highlighter.update(None, &rope, None));
+        assert_eq!(
+            highlighter
+                .injection_layers
+                .iter()
+                .filter(|layer| layer.language_name.as_ref() == "rust")
+                .count(),
+            MAX_NON_COMBINED_INJECTION_PARSES
+        );
+        assert!(
+            highlighter
+                .injection_layers
+                .iter()
+                .any(|layer| layer.language_name.as_ref() == "markdown_inline"),
+            "the non-combined budget should not starve combined injection layers"
+        );
+
+        let highlights = highlighter.match_styles(0..markdown.len());
+        assert!(has_highlight_covering(
+            &highlights,
+            &markdown,
+            "function_0",
+            "function"
+        ));
+        assert!(
+            !has_highlight_covering(
+                &highlights,
+                &markdown,
+                &format!("function_{}", FENCE_COUNT - 1),
+                "function"
+            ),
+            "fences past the budget keep host highlighting but get no injected tokens"
+        );
     }
 
     #[test]
@@ -1615,7 +1679,8 @@ $x = 1;
         let mut highlighter = SyntaxHighlighter::new("markdown");
         highlighter.update(None, &rope, None);
 
-        let styles = highlighter.styles(&(0..markdown.len()), &HighlightTheme::default_dark());
+        let theme = HighlightTheme::default_dark();
+        let styles = highlighter.styles(&(0..markdown.len()), theme.as_ref());
         for text in ["bold and italic", "with"] {
             let start = markdown.find(text).unwrap();
             let end = start + text.len();

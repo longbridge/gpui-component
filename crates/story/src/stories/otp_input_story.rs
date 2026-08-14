@@ -1,17 +1,21 @@
 use gpui::{
-    App, AppContext as _, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    Action, App, AppContext as _, Context, Entity, Focusable, InteractiveElement, IntoElement,
     ParentElement as _, Render, SharedString, Styled, Subscription, Window,
     prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    Disableable as _, Sizable, StyledExt,
-    checkbox::Checkbox,
-    h_flex,
+    Disableable as _, Sizable, Size, StyledExt,
+    button::Button,
     input::{InputEvent, OtpInput, OtpState},
     v_flex,
 };
+use serde::Deserialize;
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = otp_input_story, no_json)]
+struct ToggleMasked;
 
 pub fn init(_: &mut App) {}
 
@@ -23,6 +27,7 @@ pub struct OtpInputStory {
     otp_state_large: Entity<OtpState>,
     otp_state_sized: Entity<OtpState>,
     otp_state_disabled: Entity<OtpState>,
+    size: Size,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -33,7 +38,7 @@ impl super::Story for OtpInputStory {
     }
 
     fn description() -> &'static str {
-        "OTP Input uses to one-time password (OTP) input field or number password input field."
+        "Enter short verification and recovery codes with clear grouping and masking controls."
     }
 
     fn closable() -> bool {
@@ -88,6 +93,7 @@ impl OtpInputStory {
                     .masked(true)
                     .default_value("123456")
             }),
+            size: Size::Medium,
             _subscriptions,
         }
     }
@@ -124,33 +130,63 @@ impl Render for OtpInputStory {
             .id("otp-input-story")
             .size_full()
             .gap_5()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ToggleMasked, window, cx| {
+                this.toggle_opt_masked(&false, window, cx);
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size).dropdown_child(
+                Button::new("otp-options").label("Options"),
+                {
+                    let masked = self.otp_masked;
+                    move |menu, _, _| menu.menu_with_check("Masked", masked, Box::new(ToggleMasked))
+                },
+            ))
             .child(
-                h_flex().items_center().child(
-                    Checkbox::new("otp-mask")
-                        .label("Masked")
-                        .checked(self.otp_masked)
-                        .on_click(cx.listener(Self::toggle_opt_masked)),
-                ),
-            )
-            .child(
-                section("Normal")
+                section("Default")
+                    .description("Six cells with masking and value updates.")
                     .v_flex()
-                    .child(OtpInput::new(&self.otp_state))
+                    .child(OtpInput::new(&self.otp_state).with_size(self.size))
                     .when_some(self.otp_value.clone(), |this, otp| {
-                        this.child(format!("Your OTP: {}", otp))
+                        this.child(format!("Value: {}", otp))
                     }),
             )
-            .child(section("Small").child(OtpInput::new(&self.otp_state_small).groups(1).small()))
-            .child(section("Large").child(OtpInput::new(&self.otp_state_large).groups(3).large()))
             .child(
-                section("With Size").child(
-                    OtpInput::new(&self.otp_state_sized)
-                        .groups(1)
-                        .with_size(px(55.)),
-                ),
+                section("Grouping")
+                    .description("Cells can be shown as one or several groups.")
+                    .v_flex()
+                    .gap_4()
+                    .child(
+                        OtpInput::new(&self.otp_state_small)
+                            .groups(1)
+                            .with_size(self.size),
+                    )
+                    .child(
+                        OtpInput::new(&self.otp_state_large)
+                            .groups(3)
+                            .with_size(self.size),
+                    ),
             )
             .child(
-                section("Disabled").child(OtpInput::new(&self.otp_state_disabled).disabled(true)),
+                section("Custom size")
+                    .description("Custom cell dimensions.")
+                    .child(
+                        OtpInput::new(&self.otp_state_sized)
+                            .groups(1)
+                            .with_size(px(55.)),
+                    ),
+            )
+            .child(
+                section("Disabled")
+                    .description("Disabled input with a value.")
+                    .child(
+                        OtpInput::new(&self.otp_state_disabled)
+                            .with_size(self.size)
+                            .disabled(true),
+                    ),
             )
     }
 }

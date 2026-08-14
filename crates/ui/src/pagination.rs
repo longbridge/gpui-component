@@ -1,10 +1,12 @@
-use std::{ops::Range, rc::Rc};
+use std::rc::Rc;
 
 use gpui::{
-    App, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce, SharedString,
-    StyleRefinement, Styled, Window, prelude::FluentBuilder, px,
+    App, ElementId, IntoElement, ParentElement, RenderOnce, SharedString, StyleRefinement, Styled,
+    Window, prelude::FluentBuilder, px,
 };
 use rust_i18n::t;
+
+use gpui_base::{Pagination as BasePagination, PaginationItem as PageItem, PaginationState};
 
 use crate::{
     Disableable, Icon, Sizable, Size, StyledExt,
@@ -26,12 +28,6 @@ pub struct Pagination {
     compact: bool,
     visible_pages: usize,
     on_click: Option<Rc<dyn Fn(&usize, &mut Window, &mut App)>>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-enum PageItem {
-    Page(usize),
-    Ellipsis(Range<usize>),
 }
 
 impl Pagination {
@@ -100,34 +96,24 @@ impl Pagination {
         self
     }
 
-    fn render_nav_button(&self, is_prev: bool) -> Button {
-        let (id, label, icon, disabled) = if is_prev {
-            (
-                "prev",
-                t!("Pagination.previous"),
-                IconName::ChevronLeft,
-                self.current_page <= 1,
-            )
+    fn render_nav_button(&self, state: &PaginationState, is_prev: bool) -> Button {
+        let (id, label, icon) = if is_prev {
+            ("prev", t!("Pagination.previous"), IconName::ChevronLeft)
         } else {
-            (
-                "next",
-                t!("Pagination.next"),
-                IconName::ChevronRight,
-                self.current_page >= self.total_pages,
-            )
+            ("next", t!("Pagination.next"), IconName::ChevronRight)
         };
 
         let target_page = if is_prev {
-            self.current_page.saturating_sub(1)
+            state.previous_page()
         } else {
-            self.current_page.saturating_add(1)
+            state.next_page()
         };
 
         Button::new(id)
             .ghost()
             .compact()
             .with_size(self.size)
-            .disabled(self.disabled || disabled)
+            .disabled(target_page.is_none())
             .tooltip(label.clone())
             .when(self.compact, |this| this.icon(icon.clone()))
             .when(!self.compact, |this| {
@@ -141,11 +127,15 @@ impl Pagination {
                         .child(Icon::new(icon)),
                 )
             })
-            .when_some(self.on_click.clone(), |this, handler| {
-                this.on_click(move |_, window, cx| {
-                    handler(&target_page, window, cx);
-                })
-            })
+            .when_some(
+                target_page.filter(|_| state.has_on_change()),
+                |this, target_page| {
+                    let state = state.clone();
+                    this.on_click(move |_, window, cx| {
+                        state.request_page(target_page, window, cx);
+                    })
+                },
+            )
     }
 }
 
@@ -171,24 +161,26 @@ impl Styled for Pagination {
 
 impl RenderOnce for Pagination {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let page_numbers = if !self.compact {
-            calculate_page_range(self.current_page, self.total_pages, self.visible_pages)
-        } else {
-            vec![]
-        };
+        let mut state = PaginationState::new(self.current_page, self.total_pages)
+            .visible_pages(self.visible_pages)
+            .disabled(self.disabled);
+        if let Some(on_click) = self.on_click.clone() {
+            state = state.on_change(move |page, window, cx| on_click(&page, window, cx));
+        }
+        let page_numbers = (!self.compact).then(|| state.items()).unwrap_or_default();
 
-        let current_page = self.current_page;
+        let current_page = state.current_page();
         let is_disabled = self.disabled;
-        let on_click = self.on_click.clone();
+        let item_state = state.clone();
 
-        h_flex()
-            .id(self.id.clone())
+        BasePagination::new(self.id.clone(), state.clone())
+            .h_flex()
             .px_2()
             .py_2()
             .gap_1()
             .items_center()
             .refine_style(&self.style)
-            .child(self.render_nav_button(true))
+            .child(self.render_nav_button(&state, true))
             .children({
                 page_numbers.into_iter().map(|item| match item {
                     PageItem::Page(page) => {
@@ -206,11 +198,10 @@ impl RenderOnce for Pagination {
                             .label(page.to_string())
                             .compact()
                             .disabled(is_disabled)
-                            .when(!is_selected, |this| {
-                                this.when_some(on_click.clone(), |this, handler| {
-                                    this.on_click(move |_, window, cx| {
-                                        handler(&page, window, cx);
-                                    })
+                            .when(!is_selected && item_state.has_on_change(), |this| {
+                                let state = item_state.clone();
+                                this.on_click(move |_, window, cx| {
+                                    state.request_page(page, window, cx);
                                 })
                             })
                             .into_any_element()
@@ -225,18 +216,16 @@ impl RenderOnce for Pagination {
                     .disabled(self.disabled)
                     .icon(IconName::Ellipsis)
                     .dropdown_menu({
-                        let on_click = on_click.clone();
+                        let state = item_state.clone();
                         move |mut menu, _, _| {
                             for page in range.clone() {
                                 menu = menu.item(
                                     PopupMenuItem::new(format!("{}", page))
                                         .checked(page == current_page)
                                         .on_click({
-                                            let on_click = on_click.clone();
+                                            let state = state.clone();
                                             move |_, window, cx| {
-                                                if let Some(handler) = &on_click {
-                                                    handler(&page, window, cx);
-                                                }
+                                                state.request_page(page, window, cx);
                                             }
                                         }),
                                 )
@@ -248,99 +237,6 @@ impl RenderOnce for Pagination {
                     .into_any_element(),
                 })
             })
-            .child(self.render_nav_button(false))
-    }
-}
-
-fn calculate_page_range(current: usize, total: usize, max_visible: usize) -> Vec<PageItem> {
-    if total <= 1 {
-        return vec![];
-    }
-
-    let max_visible = max_visible.max(5);
-
-    if total <= max_visible {
-        return (1..=total).map(PageItem::Page).collect();
-    }
-
-    let mut pages = vec![];
-    let side_pages = (max_visible - 3) / 2;
-
-    pages.push(PageItem::Page(1));
-
-    let start = if current <= side_pages + 1 {
-        2
-    } else if current > total - side_pages - 1 {
-        total - side_pages - 1
-    } else {
-        current - side_pages
-    };
-
-    if start > 2 {
-        pages.push(PageItem::Ellipsis(2..start));
-    }
-
-    let end = if current >= total - side_pages {
-        total - 1
-    } else if current <= side_pages + 1 {
-        side_pages + 2
-    } else {
-        current + side_pages
-    };
-
-    for page in start..=end {
-        pages.push(PageItem::Page(page));
-    }
-
-    if end < total - 1 {
-        pages.push(PageItem::Ellipsis(end + 1..total));
-    }
-
-    pages.push(PageItem::Page(total));
-
-    pages
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_calculate_page_range() {
-        use super::{PageItem, calculate_page_range};
-
-        let result = calculate_page_range(1, 10, 7);
-        let expected = vec![
-            PageItem::Page(1),
-            PageItem::Page(2),
-            PageItem::Page(3),
-            PageItem::Page(4),
-            PageItem::Ellipsis(5..10),
-            PageItem::Page(10),
-        ];
-        assert_eq!(result, expected);
-
-        let result = calculate_page_range(5, 10, 7);
-        let expected = vec![
-            PageItem::Page(1),
-            PageItem::Ellipsis(2..3),
-            PageItem::Page(3),
-            PageItem::Page(4),
-            PageItem::Page(5),
-            PageItem::Page(6),
-            PageItem::Page(7),
-            PageItem::Ellipsis(8..10),
-            PageItem::Page(10),
-        ];
-        assert_eq!(result, expected);
-
-        let result = calculate_page_range(10, 10, 7);
-        let expected = vec![
-            PageItem::Page(1),
-            PageItem::Ellipsis(2..7),
-            PageItem::Page(7),
-            PageItem::Page(8),
-            PageItem::Page(9),
-            PageItem::Page(10),
-        ];
-        assert_eq!(result, expected);
+            .child(self.render_nav_button(&state, false))
     }
 }

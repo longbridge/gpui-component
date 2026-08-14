@@ -58,12 +58,12 @@ where
             .unwrap_or_else(|| old_value.clone().into());
 
         Button::new("btn")
-            .when(options.layout.is_vertical(), |this| this.w_full())
+            .when(options.layout().is_vertical(), |this| this.w_full())
             .label(old_label)
             .dropdown_caret(true)
             .outline()
-            .disabled(options.disabled)
-            .with_size(options.size)
+            .disabled(options.is_disabled())
+            .with_size(options.size())
             .refine_style(style)
             .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, _, _| {
                 let set_value = set_value.clone();

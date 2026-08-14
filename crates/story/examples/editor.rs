@@ -16,7 +16,7 @@ use gpui_component::{
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
-        HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt, TabSize,
+        HoverProvider, Input, InputBaseState, InputEvent, Position, Rope, RopeExt, TabSize,
     },
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
@@ -68,16 +68,16 @@ fn init() {
 }
 
 pub struct Example {
-    editor: Entity<InputState>,
+    editor: Entity<InputBaseState>,
     tree_state: Entity<TreeState>,
-    go_to_line_state: Entity<InputState>,
+    go_to_line_state: Entity<InputBaseState>,
     language: Lang,
     line_number: bool,
     indent_guides: bool,
     soft_wrap: bool,
     show_whitespaces: bool,
     folding: bool,
-    disabled: bool,
+    readonly: bool,
     scroll_beyond_last_line: Option<usize>,
     cursor_surrounding_lines: Option<usize>,
     lsp_store: ExampleLspStore,
@@ -163,7 +163,7 @@ impl CompletionProvider for ExampleLspStore {
         offset: usize,
         trigger: CompletionContext,
         _: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     ) -> Task<Result<CompletionResponse>> {
         let trigger_character = trigger.trigger_character.unwrap_or_default();
         if trigger_character.is_empty() {
@@ -221,7 +221,7 @@ impl CompletionProvider for ExampleLspStore {
         offset: usize,
         _trigger: InlineCompletionContext,
         _window: &mut Window,
-        cx: &mut Context<InputState>,
+        cx: &mut Context<InputBaseState>,
     ) -> Task<Result<InlineCompletionResponse>> {
         let rope = rope.clone();
         cx.background_spawn(async move {
@@ -258,7 +258,7 @@ impl CompletionProvider for ExampleLspStore {
         &self,
         _offset: usize,
         _new_text: &str,
-        _cx: &mut Context<InputState>,
+        _cx: &mut Context<InputBaseState>,
     ) -> bool {
         true
     }
@@ -271,7 +271,7 @@ impl CodeActionProvider for ExampleLspStore {
 
     fn code_actions(
         &self,
-        _state: Entity<InputState>,
+        _state: Entity<InputBaseState>,
         range: Range<usize>,
         _window: &mut Window,
         _cx: &mut App,
@@ -290,7 +290,7 @@ impl CodeActionProvider for ExampleLspStore {
 
     fn perform_code_action(
         &self,
-        state: Entity<InputState>,
+        state: Entity<InputBaseState>,
         action: CodeAction,
         _push_to_history: bool,
         window: &mut Window,
@@ -440,7 +440,7 @@ impl CodeActionProvider for TextConvertor {
 
     fn code_actions(
         &self,
-        state: Entity<InputState>,
+        state: Entity<InputBaseState>,
         range: Range<usize>,
         _window: &mut Window,
         cx: &mut App,
@@ -594,7 +594,7 @@ impl CodeActionProvider for TextConvertor {
 
     fn perform_code_action(
         &self,
-        state: Entity<InputState>,
+        state: Entity<InputBaseState>,
         action: CodeAction,
         _push_to_history: bool,
         window: &mut Window,
@@ -696,7 +696,7 @@ impl Example {
         let lsp_store = ExampleLspStore::new();
 
         let editor = cx.new(|cx| {
-            let mut editor = InputState::new(window, cx)
+            let mut editor = InputBaseState::new(window, cx)
                 .code_editor(default_language.name().to_string())
                 .line_number(true)
                 .indent_guides(true)
@@ -725,7 +725,7 @@ impl Example {
             focus_handle.focus(window, cx);
         });
 
-        let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
+        let go_to_line_state = cx.new(|cx| InputBaseState::new(window, cx));
 
         let tree_state = cx.new(|cx| TreeState::new(cx));
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
@@ -744,7 +744,7 @@ impl Example {
             soft_wrap: false,
             show_whitespaces: false,
             folding: true,
-            disabled: false,
+            readonly: false,
             scroll_beyond_last_line: None,
             cursor_surrounding_lines: None,
             lsp_store,
@@ -781,7 +781,7 @@ impl Example {
 
             dialog
                 .title("Go to line")
-                .child(Input::new(&input_state))
+                .child(Input::from_base(&input_state))
                 .on_ok({
                     let editor = editor.clone();
                     let input_state = input_state.clone();
@@ -1046,14 +1046,14 @@ impl Example {
             }))
     }
 
-    fn render_disabled_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Button {
-        Button::new("disabled")
+    fn render_readonly_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Button {
+        Button::new("readonly")
             .ghost()
             .xsmall()
-            .when(self.disabled, |this| this.icon(IconName::Check))
-            .label("Disabled")
+            .when(self.readonly, |this| this.icon(IconName::Check))
+            .label("Read only")
             .on_click(cx.listener(|this, _, _window, cx| {
-                this.disabled = !this.disabled;
+                this.readonly = !this.readonly;
                 cx.notify();
             }))
     }
@@ -1166,8 +1166,8 @@ impl Render for Example {
                                     .child(self.render_file_tree(window, cx)),
                             )
                             .child(
-                                Input::new(&self.editor)
-                                    .disabled(self.disabled)
+                                Input::from_base(&self.editor)
+                                    .readonly(self.readonly)
                                     .bordered(false)
                                     .p_0()
                                     .h_full()
@@ -1184,7 +1184,7 @@ impl Render for Example {
                             .left(self.render_show_whitespaces_button(window, cx))
                             .left(self.render_indent_guides_button(window, cx))
                             .left(self.render_folding_button(window, cx))
-                            .left(self.render_disabled_button(window, cx))
+                            .left(self.render_readonly_button(window, cx))
                             .left(self.render_scroll_beyond_last_line_button(window, cx))
                             .left(self.render_cursor_surrounding_lines_button(window, cx))
                             .right(self.render_go_to_line_button(window, cx)),

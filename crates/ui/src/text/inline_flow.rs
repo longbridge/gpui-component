@@ -20,6 +20,7 @@ use crate::{
 use super::{
     inline::{Inline, InlineState},
     node::LinkMark,
+    utils::image_source,
 };
 
 const IMAGE_LEN: usize = 1;
@@ -125,7 +126,7 @@ impl InlineFlow {
         size: Size<Pixels>,
         link_click_handler: Option<Arc<LinkClickHandlerFn>>,
     ) -> AnyElement {
-        img(url.clone())
+        img(image_source(url))
             .id(ix)
             .object_fit(ObjectFit::Contain)
             .max_w(relative(1.))
@@ -629,7 +630,7 @@ fn intrinsic_image_size(
     window: &mut Window,
     cx: &mut App,
 ) -> Option<Size<Pixels>> {
-    let mut element = img(url.clone())
+    let mut element = img(image_source(url))
         .id(ix)
         .object_fit(ObjectFit::Contain)
         .max_w(relative(1.))

@@ -30,7 +30,10 @@ use crate::{
     v_flex,
 };
 
-use super::{SelectionFormat, TextViewStyle, utils::list_item_prefix};
+use super::{
+    SelectionFormat, TextViewStyle,
+    utils::{image_source, list_item_prefix},
+};
 
 thread_local! {
     static CODE_BLOCK_HIGHLIGHTERS: RefCell<HashMap<SharedString, SyntaxHighlighter>> =
@@ -1155,8 +1158,11 @@ impl CodeBlock {
                 new_end_position: code_rope.offset_to_point(code.len()),
             };
 
+            #[cfg(feature = "tree-sitter")]
+            highlighter.update_input(Some(edit), &code_rope, None);
+            #[cfg(not(feature = "tree-sitter"))]
             highlighter.update(Some(edit), &code_rope, None);
-            highlighter.styles(&(0..code.len()), highlight_theme)
+            highlighter.styles(&(0..code.len()), highlight_theme.as_ref())
         });
         *styles = Some(CachedCodeBlockStyles {
             highlight_theme: highlight_theme.clone(),
@@ -1335,7 +1341,7 @@ impl Paragraph {
                 }
                 let link_click_handler = node_cx.link_click_handler.clone();
                 child_nodes.push(
-                    img(image.url.clone())
+                    img(image_source(&image.url))
                         .id(ix)
                         .object_fit(ObjectFit::Contain)
                         .max_w(relative(1.))

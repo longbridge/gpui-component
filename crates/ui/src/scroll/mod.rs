@@ -1,10 +1,33 @@
-mod auto_scroll;
 mod scrollable;
 mod scrollable_mask;
-mod scrollbar;
 
-pub use auto_scroll::AutoScroll;
+pub use gpui_base::AutoScroll;
+pub use gpui_base::{
+    Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
+    ScrollbarTrackStyle,
+};
 pub use scrollable::*;
 pub(crate) use scrollable_mask::horizontal_scroll_area;
 pub use scrollable_mask::*;
-pub use scrollbar::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ui_scrollbar_is_the_base_type() {
+        fn accepts_base(_: gpui_base::Scrollbar) {}
+        fn accepts_handle(_: impl gpui_base::ScrollbarHandle) {}
+
+        let handle = gpui::ScrollHandle::default();
+        let scrollbar: crate::scroll::Scrollbar = Scrollbar::vertical(&handle).styles(|styles| {
+            styles
+                .track(|style| style.bg(gpui::transparent_black()))
+                .thumb(|style| style.bg(gpui::transparent_black()))
+                .thumb_hover(|style| style.bg(gpui::transparent_black()))
+                .thumb_active(|style| style.bg(gpui::transparent_black()))
+        });
+        accepts_base(scrollbar);
+        accepts_handle(handle);
+    }
+}

@@ -1,7 +1,11 @@
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce, Role,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div,
-    prelude::FluentBuilder as _, px, relative,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
+    StyleRefinement, Styled, TextAlign, Window, div, prelude::FluentBuilder as _, px, relative,
+};
+use gpui_base::{
+    Table as BaseTable, TableBody as BaseTableBody, TableCaption as BaseTableCaption,
+    TableCell as BaseTableCell, TableHead as BaseTableHead, TableHeader as BaseTableHeader,
+    TableRow as BaseTableRow,
 };
 
 use crate::{ActiveTheme as _, AnyChildElement, ChildElement, Sizable, Size, StyledExt as _};
@@ -87,9 +91,7 @@ impl ChildElement for Table {
 
 impl RenderOnce for Table {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        div()
-            .id(("table", self.ix))
-            .role(Role::Table)
+        BaseTable::new(("table", self.ix))
             .w_full()
             .text_sm()
             .overflow_hidden()
@@ -160,9 +162,7 @@ impl Sizable for TableHeader {
 
 impl RenderOnce for TableHeader {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        div()
-            .id(("table-header", self.ix))
-            .role(Role::RowGroup)
+        BaseTableHeader::new(("table-header", self.ix))
             .w_full()
             .bg(cx.theme().tokens.table_head)
             .text_color(cx.theme().table_head_foreground)
@@ -234,9 +234,7 @@ impl ChildElement for TableBody {
 
 impl RenderOnce for TableBody {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        div()
-            .id(("table-body", self.ix))
-            .role(Role::RowGroup)
+        BaseTableBody::new(("table-body", self.ix))
             .w_full()
             .refine_style(&self.style)
             .children(
@@ -377,10 +375,7 @@ impl ChildElement for TableRow {
 
 impl RenderOnce for TableRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        div()
-            .id(("table-row", self.ix))
-            .role(Role::Row)
-            .aria_row_index(self.ix + 1)
+        BaseTableRow::new(("table-row", self.ix), self.ix + 1)
             .w_full()
             .flex()
             .flex_row()
@@ -468,10 +463,7 @@ impl RenderOnce for TableHead {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let paddings = self.size.table_cell_padding();
 
-        div()
-            .id(("table-head", self.ix))
-            .role(Role::ColumnHeader)
-            .aria_column_index(self.ix + 1)
+        BaseTableHead::new(("table-head", self.ix), self.ix + 1)
             .flex()
             .items_center()
             .when(self.style.size.width.is_none(), |this| {
@@ -562,10 +554,7 @@ impl RenderOnce for TableCell {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let paddings = self.size.table_cell_padding();
 
-        div()
-            .id(("table-cell", self.ix))
-            .role(Role::Cell)
-            .aria_column_index(self.ix + 1)
+        BaseTableCell::new(("table-cell", self.ix), self.ix + 1)
             .flex()
             .items_center()
             .when(self.style.size.width.is_none(), |this| {
@@ -634,8 +623,7 @@ impl RenderOnce for TableCaption {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let paddings = self.size.table_cell_padding();
 
-        div()
-            .id(("table-caption", self.ix))
+        BaseTableCaption::new(("table-caption", self.ix))
             .w_full()
             .px(paddings.left)
             .py(paddings.top)

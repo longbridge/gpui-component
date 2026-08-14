@@ -12,13 +12,10 @@ use gpui::{
     prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Selectable, Sizable as _, Size, StyleSized as _, StyledExt,
+    ActiveTheme as _, Sizable as _, Size, StyleSized as _, StyledExt,
     button::Button,
-    checkbox::Checkbox,
     h_flex,
-    input::{Input, InputEvent, InputState},
-    label::Label,
-    menu::{DropdownMenu, PopupMenu},
+    menu::PopupMenu,
     spinner::Spinner,
     table::{
         Column, ColumnFixed, ColumnGroup, ColumnSort, DataTable, TableDelegate, TableEvent,
@@ -28,13 +25,55 @@ use gpui_component::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::story_toolbar_group;
+
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = data_table_story, no_json)]
 struct ChangeSize(Size);
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = data_table_story, no_json)]
+struct ChangeRows(usize);
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = data_table_story, no_json)]
+struct ChangeExtraColumns(usize);
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = data_table_story, no_json)]
 struct OpenDetail(usize);
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = data_table_story, no_json)]
+enum ToggleTableOption {
+    LoopSelection,
+    ColumnResize,
+    ColumnOrder,
+    Sortable,
+    ColumnSelection,
+    RowSelection,
+    CellSelection,
+    RowHeader,
+    FixedColumn,
+    Striped,
+    Loading,
+    LazyLoad,
+    RefreshData,
+    GroupHeaders,
+}
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = data_table_story, no_json)]
+struct ClearTableSelection;
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = data_table_story, no_json)]
+enum GoToTablePosition {
+    Top,
+    Bottom,
+    Cell53,
+    Cell107,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct Counter {
@@ -127,6 +166,16 @@ impl Stock {
     }
 }
 
+/// Restarts ids from zero and builds a fresh set of rows.
+fn regenerate_stocks(size: usize) -> Vec<Stock> {
+    {
+        let mut id_lock = INCREMENT_ID.lock().unwrap();
+        *id_lock = 0;
+    }
+
+    random_stocks(size)
+}
+
 fn random_stocks(size: usize) -> Vec<Stock> {
     // Incremental ID with size.
     let start = {
@@ -136,6 +185,28 @@ fn random_stocks(size: usize) -> Vec<Stock> {
         start
     };
 
+    // Drawing all 40-odd fields per row costs ~24s for a million rows in a debug
+    // build, which is most of the time spent switching to the largest example.
+    // Draw a pool of fully random rows instead and clone from it, still giving
+    // every row its own id and counter so no two rows read alike on screen.
+    const POOL_SIZE: usize = 512;
+    if size > POOL_SIZE * 2 {
+        let pool = random_stocks_exact(0, POOL_SIZE);
+        return (start..start + size)
+            .map(|id| {
+                let mut stock = pool[(id - start) % POOL_SIZE].clone();
+                stock.id = id;
+                stock.counter = Counter::random();
+                stock
+            })
+            .collect();
+    }
+
+    random_stocks_exact(start, size)
+}
+
+/// Builds `size` rows with every field independently randomized.
+fn random_stocks_exact(start: usize, size: usize) -> Vec<Stock> {
     (start..start + size)
         .map(|id| Stock {
             id,
@@ -216,8 +287,7 @@ impl StockTableDelegate {
                     .fixed(ColumnFixed::Left)
                     .resizable(true)
                     .min_width(40.)
-                    .max_width(100.)
-                    .text_center(),
+                    .max_width(100.),
                 Column::new("market", "Market")
                     .width(60.)
                     .fixed(ColumnFixed::Left)
@@ -293,15 +363,9 @@ impl StockTableDelegate {
         }
     }
 
-    fn update_stocks(&mut self, size: usize) {
-        // Reset incremental ID
-        {
-            let mut id_lock = INCREMENT_ID.lock().unwrap();
-            *id_lock = 0;
-        }
-
-        self.stocks = random_stocks(size);
-        self.eof = size <= 50;
+    fn set_stocks(&mut self, stocks: Vec<Stock>) {
+        self.eof = stocks.len() <= 50;
+        self.stocks = stocks;
         self.loading = false;
         self.full_loading = false;
     }
@@ -738,14 +802,13 @@ impl TableDelegate for StockTableDelegate {
 
 pub struct DataTableStory {
     table: Entity<TableState<StockTableDelegate>>,
-    num_stocks_input: Entity<InputState>,
-    num_extra_cols_input: Entity<InputState>,
     stripe: bool,
     refresh_data: bool,
     size: Size,
 
     _subscriptions: Vec<Subscription>,
     _load_task: Task<()>,
+    _load_rows_task: Task<()>,
 }
 
 impl super::Story for DataTableStory {
@@ -778,34 +841,10 @@ impl DataTableStory {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let num_stocks_input = cx.new(|cx| {
-            let mut input = InputState::new(window, cx)
-                .placeholder("Enter number of Stocks to display")
-                .validate(|s, _| s.parse::<usize>().is_ok());
-            input.set_value("5000", window, cx);
-            input
-        });
-
-        let num_extra_cols_input = cx.new(|cx| {
-            let mut input = InputState::new(window, cx)
-                .placeholder("Extra columns")
-                .validate(|s, _| s.parse::<usize>().is_ok());
-            input.set_value("0", window, cx);
-            input
-        });
-
         let delegate = StockTableDelegate::new(5000);
         let table = cx.new(|cx| TableState::new(delegate, window, cx));
 
-        let _subscriptions = vec![
-            cx.subscribe_in(&table, window, Self::on_table_event),
-            cx.subscribe_in(&num_stocks_input, window, Self::on_num_stocks_input_change),
-            cx.subscribe_in(
-                &num_extra_cols_input,
-                window,
-                Self::on_num_extra_cols_input_change,
-            ),
-        ];
+        let _subscriptions = vec![cx.subscribe_in(&table, window, Self::on_table_event)];
 
         let _load_task = cx.spawn(async move |this, cx| {
             loop {
@@ -819,15 +858,23 @@ impl DataTableStory {
                     }
 
                     this.table.update(cx, |table, _| {
-                        table.delegate_mut().stocks.iter_mut().enumerate().for_each(
-                            |(i, stock)| {
+                        // Only walk the head of the table. It paints a few dozen
+                        // rows at a time, so ticking every row of the million-row
+                        // example would stall the frame for nothing on screen.
+                        const MAX_REFRESH_ROWS: usize = 2_000;
+                        table
+                            .delegate_mut()
+                            .stocks
+                            .iter_mut()
+                            .take(MAX_REFRESH_ROWS)
+                            .enumerate()
+                            .for_each(|(i, stock)| {
                                 let n = (3..10).fake::<usize>();
                                 // update 30% of the stocks
                                 if i % n == 0 {
                                     stock.random_update();
                                 }
-                            },
-                        );
+                            });
                     });
                     cx.notify();
                 })
@@ -837,62 +884,12 @@ impl DataTableStory {
 
         Self {
             table,
-            num_stocks_input,
-            num_extra_cols_input,
             stripe: false,
             refresh_data: false,
             size: Size::default(),
             _subscriptions,
             _load_task,
-        }
-    }
-
-    // Event handler for changes in the number input field
-    fn on_num_stocks_input_change(
-        &mut self,
-        _: &Entity<InputState>,
-        event: &InputEvent,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            // Update when the user presses Enter or the input loses focus
-            InputEvent::PressEnter { .. } | InputEvent::Blur => {
-                let text = self.num_stocks_input.read(cx).value().to_string();
-                if let Ok(total_count) = text.parse::<usize>() {
-                    if total_count == self.table.read(cx).delegate().stocks.len() {
-                        return;
-                    }
-
-                    self.table.update(cx, |table, _| {
-                        table.delegate_mut().update_stocks(total_count);
-                    });
-                    cx.notify();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn on_num_extra_cols_input_change(
-        &mut self,
-        _: &Entity<InputState>,
-        event: &InputEvent,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match event {
-            InputEvent::PressEnter { .. } | InputEvent::Blur => {
-                let text = self.num_extra_cols_input.read(cx).value().to_string();
-                if let Ok(count) = text.parse::<usize>() {
-                    self.table.update(cx, |table, cx| {
-                        table.delegate_mut().extra_columns_count = count;
-                        table.refresh(cx);
-                    });
-                    cx.notify();
-                }
-            }
-            _ => {}
+            _load_rows_task: Task::ready(()),
         }
     }
 
@@ -1072,260 +1069,362 @@ impl Render for DataTableStory {
         let table = &self.table.read(cx);
         let delegate = table.delegate();
         let rows_count = delegate.rows_count(cx);
+        let columns_count = delegate.columns_count(cx);
         let size = self.size;
+        let loop_selection = table.loop_selection;
+        let col_resizable = table.col_resizable;
+        let col_movable = table.col_movable;
+        let sortable = table.sortable;
+        let col_selectable = table.col_selectable;
+        let row_selectable = table.row_selectable;
+        let cell_selectable = table.cell_selectable;
+        let row_header = table.row_header;
+        let col_fixed = table.col_fixed;
+        let striped = self.stripe;
+        let full_loading = delegate.full_loading;
+        let lazy_load = delegate.lazy_load;
+        let refresh_data = self.refresh_data;
+        let show_group_headers = delegate.show_group_headers;
 
         v_flex()
             .on_action(cx.listener(Self::on_change_size))
+            .on_action(cx.listener(|this, action: &ChangeRows, _, cx| {
+                if action.0 == this.table.read(cx).delegate().stocks.len() {
+                    return;
+                }
+
+                // Building the largest example allocates a few hundred MB, which
+                // drops frames if it runs between two paints. Show the loading
+                // state, build off-thread, and swap the rows in when they land.
+                let size = action.0;
+                this.table.update(cx, |table, cx| {
+                    table.delegate_mut().full_loading = true;
+                    cx.notify();
+                });
+                this._load_rows_task = cx.spawn(async move |this, cx| {
+                    let stocks = cx
+                        .background_spawn(async move { regenerate_stocks(size) })
+                        .await;
+
+                    this.update(cx, |this, cx| {
+                        this.table.update(cx, |table, cx| {
+                            table.delegate_mut().set_stocks(stocks);
+                            table.refresh(cx);
+                        });
+                        cx.notify();
+                    })
+                    .ok();
+                });
+            }))
+            .on_action(cx.listener(|this, action: &ChangeExtraColumns, _, cx| {
+                this.table.update(cx, |table, cx| {
+                    table.delegate_mut().extra_columns_count = action.0;
+                    table.refresh(cx);
+                });
+                cx.notify();
+            }))
+            .on_action(cx.listener(|this, _: &ClearTableSelection, _, cx| {
+                this.table.update(cx, |table, cx| table.clear_selection(cx));
+            }))
+            .on_action(cx.listener(|this, action: &GoToTablePosition, _, cx| {
+                this.table.update(cx, |table, cx| match action {
+                    GoToTablePosition::Top => table.scroll_to_row(0, cx),
+                    GoToTablePosition::Bottom => {
+                        table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx)
+                    }
+                    GoToTablePosition::Cell53 => table.set_selected_cell(5, 3, cx),
+                    GoToTablePosition::Cell107 => table.set_selected_cell(10, 7, cx),
+                });
+            }))
+            .on_action(cx.listener(
+                |this, action: &ToggleTableOption, window, cx| match action {
+                    ToggleTableOption::LoopSelection => {
+                        let checked = !this.table.read(cx).loop_selection;
+                        this.toggle_loop_selection(&checked, window, cx);
+                    }
+                    ToggleTableOption::ColumnResize => {
+                        let checked = !this.table.read(cx).col_resizable;
+                        this.toggle_col_resize(&checked, window, cx);
+                    }
+                    ToggleTableOption::ColumnOrder => {
+                        let checked = !this.table.read(cx).col_movable;
+                        this.toggle_col_order(&checked, window, cx);
+                    }
+                    ToggleTableOption::Sortable => {
+                        let checked = !this.table.read(cx).sortable;
+                        this.toggle_col_sort(&checked, window, cx);
+                    }
+                    ToggleTableOption::ColumnSelection => {
+                        let checked = !this.table.read(cx).col_selectable;
+                        this.toggle_col_selection(&checked, window, cx);
+                    }
+                    ToggleTableOption::RowSelection => {
+                        let checked = !this.table.read(cx).row_selectable;
+                        this.toggle_row_selection(&checked, window, cx);
+                    }
+                    ToggleTableOption::CellSelection => {
+                        let checked = !this.table.read(cx).cell_selectable;
+                        this.toggle_cell_selection(&checked, window, cx);
+                    }
+                    ToggleTableOption::RowHeader => {
+                        let checked = !this.table.read(cx).row_header;
+                        this.toggle_row_header(&checked, window, cx);
+                    }
+                    ToggleTableOption::FixedColumn => {
+                        let checked = !this.table.read(cx).col_fixed;
+                        this.toggle_col_fixed(&checked, window, cx);
+                    }
+                    ToggleTableOption::Striped => {
+                        this.toggle_stripe(&!this.stripe, window, cx);
+                    }
+                    ToggleTableOption::Loading => {
+                        this.table.update(cx, |table, cx| {
+                            table.delegate_mut().full_loading = !table.delegate().full_loading;
+                            cx.notify();
+                        });
+                    }
+                    ToggleTableOption::LazyLoad => {
+                        this.table.update(cx, |table, cx| {
+                            table.delegate_mut().lazy_load = !table.delegate().lazy_load;
+                            cx.notify();
+                        });
+                    }
+                    ToggleTableOption::RefreshData => {
+                        this.toggle_refresh_data(&!this.refresh_data, window, cx);
+                    }
+                    ToggleTableOption::GroupHeaders => {
+                        let checked = !this.table.read(cx).delegate().show_group_headers;
+                        this.toggle_group_headers(&checked, window, cx);
+                    }
+                },
+            ))
             .size_full()
             .text_sm()
             .gap_4()
             .child(
-                h_flex()
-                    .items_center()
-                    .gap_3()
-                    .flex_wrap()
-                    .child(
-                        Checkbox::new("loop-selection")
-                            .label("Loop Selection")
-                            .selected(table.loop_selection)
-                            .on_click(cx.listener(Self::toggle_loop_selection)),
+                story_toolbar_group()
+                    .dropdown_child(
+                        Button::new("size").label(format!("Size: {:?}", self.size)),
+                        move |menu, _, _| {
+                            menu.menu_with_check(
+                                "48px",
+                                size == Size::Size(px(48.)),
+                                Box::new(ChangeSize(Size::Size(px(48.)))),
+                            )
+                            .menu_with_check(
+                                "Large",
+                                size == Size::Large,
+                                Box::new(ChangeSize(Size::Large)),
+                            )
+                            .menu_with_check(
+                                "Medium",
+                                size == Size::Medium,
+                                Box::new(ChangeSize(Size::Medium)),
+                            )
+                            .menu_with_check(
+                                "Small",
+                                size == Size::Small,
+                                Box::new(ChangeSize(Size::Small)),
+                            )
+                            .menu_with_check(
+                                "XSmall",
+                                size == Size::XSmall,
+                                Box::new(ChangeSize(Size::XSmall)),
+                            )
+                        },
                     )
-                    .child(
-                        Checkbox::new("col-resize")
-                            .label("Column Resize")
-                            .selected(table.col_resizable)
-                            .on_click(cx.listener(Self::toggle_col_resize)),
+                    .dropdown_child(
+                        Button::new("rows").label(format!("Rows: {rows_count}")),
+                        move |menu, _, _| {
+                            menu.menu_with_check(
+                                "100",
+                                rows_count == 100,
+                                Box::new(ChangeRows(100)),
+                            )
+                            .menu_with_check("500", rows_count == 500, Box::new(ChangeRows(500)))
+                            .menu_with_check(
+                                "5,000",
+                                rows_count == 5_000,
+                                Box::new(ChangeRows(5_000)),
+                            )
+                            .menu_with_check(
+                                "10,000",
+                                rows_count == 10_000,
+                                Box::new(ChangeRows(10_000)),
+                            )
+                            .menu_with_check(
+                                "1,000,000",
+                                rows_count == 1_000_000,
+                                Box::new(ChangeRows(1_000_000)),
+                            )
+                        },
                     )
-                    .child(
-                        Checkbox::new("col-order")
-                            .label("Column Order")
-                            .selected(table.col_movable)
-                            .on_click(cx.listener(Self::toggle_col_order)),
-                    )
-                    .child(
-                        Checkbox::new("col-sort")
-                            .label("Sortable")
-                            .selected(table.sortable)
-                            .on_click(cx.listener(Self::toggle_col_sort)),
-                    )
-                    .child(
-                        Checkbox::new("col-selection")
-                            .label("Column Selectable")
-                            .selected(table.col_selectable)
-                            .on_click(cx.listener(Self::toggle_col_selection)),
-                    )
-                    .child(
-                        Checkbox::new("row-selection")
-                            .label("Row Selectable")
-                            .selected(table.row_selectable)
-                            .on_click(cx.listener(Self::toggle_row_selection)),
-                    )
-                    .child(
-                        Checkbox::new("cell-selection")
-                            .label("Cell Selectable")
-                            .selected(table.cell_selectable)
-                            .on_click(cx.listener(Self::toggle_cell_selection)),
-                    )
-                    .child(
-                        Checkbox::new("row-header")
-                            .label("Row Header")
-                            .selected(table.row_header)
-                            .on_click(cx.listener(Self::toggle_row_header)),
-                    )
-                    .child(
-                        Checkbox::new("fixed")
-                            .label("Column Fixed")
-                            .selected(table.col_fixed)
-                            .on_click(cx.listener(Self::toggle_col_fixed)),
-                    )
-                    .child(
-                        Checkbox::new("stripe")
-                            .label("Stripe")
-                            .selected(self.stripe)
-                            .on_click(cx.listener(Self::toggle_stripe)),
-                    )
-                    .child(
-                        Checkbox::new("loading")
-                            .label("Loading")
-                            .checked(self.table.read(cx).delegate().full_loading)
-                            .on_click(cx.listener(|this, check: &bool, _, cx| {
-                                this.table.update(cx, |this, cx| {
-                                    this.delegate_mut().full_loading = *check;
-                                    cx.notify();
-                                })
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("refresh-data")
-                            .label("Refresh Data")
-                            .selected(self.refresh_data)
-                            .on_click(cx.listener(Self::toggle_refresh_data)),
-                    )
-                    .child(
-                        Checkbox::new("group-headers")
-                            .label("Group Headers")
-                            .checked(self.table.read(cx).delegate().show_group_headers)
-                            .on_click(cx.listener(Self::toggle_group_headers)),
-                    ),
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        Button::new("size")
-                            .outline()
-                            .small()
-                            .label(format!("size: {:?}", self.size))
-                            .dropdown_menu(move |menu, _, _| {
+                    .dropdown_child(
+                        Button::new("extra-columns")
+                            .label(format!("Extra Columns: {}", delegate.extra_columns_count)),
+                        {
+                            let extra_columns_count = delegate.extra_columns_count;
+                            move |menu, _, _| {
                                 menu.menu_with_check(
-                                    "48px",
-                                    size == Size::Size(px(48.)),
-                                    Box::new(ChangeSize(Size::Size(px(48.)))),
+                                    "None",
+                                    extra_columns_count == 0,
+                                    Box::new(ChangeExtraColumns(0)),
                                 )
                                 .menu_with_check(
-                                    "Large",
-                                    size == Size::Large,
-                                    Box::new(ChangeSize(Size::Large)),
+                                    "4",
+                                    extra_columns_count == 4,
+                                    Box::new(ChangeExtraColumns(4)),
                                 )
                                 .menu_with_check(
-                                    "Medium",
-                                    size == Size::Medium,
-                                    Box::new(ChangeSize(Size::Medium)),
+                                    "8",
+                                    extra_columns_count == 8,
+                                    Box::new(ChangeExtraColumns(8)),
                                 )
                                 .menu_with_check(
-                                    "Small",
-                                    size == Size::Small,
-                                    Box::new(ChangeSize(Size::Small)),
+                                    "16",
+                                    extra_columns_count == 16,
+                                    Box::new(ChangeExtraColumns(16)),
                                 )
                                 .menu_with_check(
-                                    "XSmall",
-                                    size == Size::XSmall,
-                                    Box::new(ChangeSize(Size::XSmall)),
+                                    "32",
+                                    extra_columns_count == 32,
+                                    Box::new(ChangeExtraColumns(32)),
                                 )
-                            }),
+                            }
+                        },
                     )
-                    .child(
-                        Button::new("scroll-top")
-                            .outline()
-                            .small()
-                            .child("Scroll to Top")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.table.update(cx, |table, cx| {
-                                    table.scroll_to_row(0, cx);
-                                })
-                            })),
-                    )
-                    .child(
-                        Button::new("scroll-bottom")
-                            .outline()
-                            .small()
-                            .child("Scroll to Bottom")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.table.update(cx, |table, cx| {
-                                    table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx);
-                                })
-                            })),
-                    )
+                    .dropdown_child(Button::new("table-options").label("Options"), {
+                        move |menu, _, _| {
+                            menu.menu_with_check(
+                                "Loop Selection",
+                                loop_selection,
+                                Box::new(ToggleTableOption::LoopSelection),
+                            )
+                            .menu_with_check(
+                                "Column Resize",
+                                col_resizable,
+                                Box::new(ToggleTableOption::ColumnResize),
+                            )
+                            .menu_with_check(
+                                "Column Order",
+                                col_movable,
+                                Box::new(ToggleTableOption::ColumnOrder),
+                            )
+                            .menu_with_check(
+                                "Sortable",
+                                sortable,
+                                Box::new(ToggleTableOption::Sortable),
+                            )
+                            .menu_with_check(
+                                "Column Selectable",
+                                col_selectable,
+                                Box::new(ToggleTableOption::ColumnSelection),
+                            )
+                            .menu_with_check(
+                                "Row Selectable",
+                                row_selectable,
+                                Box::new(ToggleTableOption::RowSelection),
+                            )
+                            .menu_with_check(
+                                "Cell Selectable",
+                                cell_selectable,
+                                Box::new(ToggleTableOption::CellSelection),
+                            )
+                            .menu_with_check(
+                                "Row Header",
+                                row_header,
+                                Box::new(ToggleTableOption::RowHeader),
+                            )
+                            .menu_with_check(
+                                "Fixed Column",
+                                col_fixed,
+                                Box::new(ToggleTableOption::FixedColumn),
+                            )
+                            .separator()
+                            .menu_with_check(
+                                "Striped Rows",
+                                striped,
+                                Box::new(ToggleTableOption::Striped),
+                            )
+                            .menu_with_check(
+                                "Loading",
+                                full_loading,
+                                Box::new(ToggleTableOption::Loading),
+                            )
+                            .menu_with_check(
+                                "Lazy Load",
+                                lazy_load,
+                                Box::new(ToggleTableOption::LazyLoad),
+                            )
+                            .menu_with_check(
+                                "Refresh Data",
+                                refresh_data,
+                                Box::new(ToggleTableOption::RefreshData),
+                            )
+                            .menu_with_check(
+                                "Group Headers",
+                                show_group_headers,
+                                Box::new(ToggleTableOption::GroupHeaders),
+                            )
+                            .separator()
+                            .menu("Clear Selection", Box::new(ClearTableSelection))
+                        }
+                    })
+                    .dropdown_child(Button::new("go-to").label("Go To"), |menu, _, _| {
+                        menu.menu("Top", Box::new(GoToTablePosition::Top))
+                            .menu("Bottom", Box::new(GoToTablePosition::Bottom))
+                            .separator()
+                            .menu("Cell 5:3", Box::new(GoToTablePosition::Cell53))
+                            .menu("Cell 10:7", Box::new(GoToTablePosition::Cell107))
+                    })
                     .child(
                         Button::new("dump-csv")
-                            .outline()
-                            .small()
-                            .label("Dump CSV")
+                            .label("Export CSV")
                             .on_click(cx.listener(Self::dump_csv)),
-                    )
-                    .child(
-                        Button::new("select-cell-5-3")
-                            .outline()
-                            .small()
-                            .child("Select Cell (5, 3)")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.table.update(cx, |table, cx| {
-                                    table.set_selected_cell(5, 3, cx);
-                                })
-                            })),
-                    )
-                    .child(
-                        Button::new("select-cell-10-7")
-                            .outline()
-                            .small()
-                            .child("Select Cell (10, 7)")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.table.update(cx, |table, cx| {
-                                    table.set_selected_cell(10, 7, cx);
-                                })
-                            })),
-                    )
-                    .child(
-                        Button::new("clear-selection")
-                            .outline()
-                            .small()
-                            .child("Clear Selection")
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.table.update(cx, |table, cx| {
-                                    table.clear_selection(cx);
-                                })
-                            })),
                     ),
             )
             .child(
-                h_flex().items_center().gap_2().child(
-                    h_flex()
-                        .w_full()
-                        .items_center()
-                        .justify_between()
-                        .gap_2()
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .flex_1()
-                                .child(Label::new("Stocks:"))
-                                .child(
-                                    h_flex()
-                                        .min_w_24()
-                                        .child(Input::new(&self.num_stocks_input).small())
-                                        .into_any_element(),
-                                )
-                                .child(Label::new("Extra Columns:"))
-                                .child(
-                                    h_flex()
-                                        .min_w_24()
-                                        .child(Input::new(&self.num_extra_cols_input).small())
-                                        .into_any_element(),
-                                )
-                                .when(delegate.loading, |this| {
-                                    this.child(
-                                        h_flex().gap_1().child(Spinner::new()).child("Loading..."),
-                                    )
-                                })
-                                .child(
-                                    Checkbox::new("lazy-load")
-                                        .label("Lazy Load")
-                                        .checked(delegate.lazy_load)
-                                        .on_click(cx.listener(|this, check: &bool, _, cx| {
-                                            this.table.update(cx, |table, cx| {
-                                                table.delegate_mut().lazy_load = *check;
-                                                cx.notify();
-                                            })
-                                        })),
-                                ),
-                        )
-                        .child(
-                            h_flex()
-                                .gap_2()
-                                .child(format!("Total Rows: {}", rows_count))
-                                .child(format!("Visible Rows: {:?}", delegate.visible_rows))
-                                .child(format!("Visible Cols: {:?}", delegate.visible_cols))
-                                .when_some(table.selected_cell(), |this, (row, col)| {
-                                    this.child(format!("Selected Cell: ({}, {})", row, col))
-                                })
-                                .when(delegate.eof, |this| this.child("All data loaded.")),
-                        ),
-                ),
-            )
-            .child(
-                DataTable::new(&self.table)
-                    .with_size(self.size)
-                    .stripe(self.stripe),
+                v_flex()
+                    .min_h_0()
+                    .flex_1()
+                    .child(
+                        DataTable::new(&self.table)
+                            .with_size(self.size)
+                            .stripe(self.stripe),
+                    )
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .min_h_9()
+                            .items_center()
+                            .justify_between()
+                            .gap_3()
+                            .px_3()
+                            .bg(cx.theme().muted.opacity(0.35))
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(format!(
+                                "Total · {} rows · {} columns",
+                                rows_count, columns_count
+                            ))
+                            .child(
+                                h_flex()
+                                    .items_center()
+                                    .justify_end()
+                                    .gap_2()
+                                    .when(delegate.loading, |this| {
+                                        this.child(Spinner::new().xsmall())
+                                    })
+                                    .child(format!(
+                                        "Current · rows {:?} · columns {:?}",
+                                        delegate.visible_rows, delegate.visible_cols
+                                    ))
+                                    .when_some(table.selected_cell(), |this, (row, col)| {
+                                        this.child(format!("· cell {}:{}", row, col))
+                                    })
+                                    .when(delegate.eof, |this| this.child("· complete")),
+                            ),
+                    ),
             )
     }
 }

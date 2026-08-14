@@ -15,6 +15,7 @@ gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
+gpui-fps.workspace = true
 
 autocorrect = "2.14.2"
 chrono = "0.4"
@@ -41,12 +42,19 @@ color-lsp = "0.2.0"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 gpui_web.workspace = true
+# WASM has no tree-sitter grammars, so the Editor story highlights with
+# `syntect` there. Native uses the built-in tree-sitter highlighter.
+syntect.workspace = true
 # `rand 0.8` (via `fake`) does not enable the `js` feature of getrandom,
 # which is required to build for wasm32-unknown-unknown.
 getrandom = { version = "0.2", features = ["js"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18" }
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+gpui-base.workspace = true
 
 [lints]
 workspace = true

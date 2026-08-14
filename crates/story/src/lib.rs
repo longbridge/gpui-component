@@ -1,23 +1,27 @@
 use gpui::{
-    Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter,
-    FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement, Styled, Window,
-    WindowBounds, WindowKind, WindowOptions, actions, div, prelude::FluentBuilder as _, px, rems,
-    size,
+    Action, Anchor, AnyElement, AnyView, App, AppContext, Bounds, Context, DismissEvent, Div,
+    Entity, EventEmitter, FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement,
+    KeyBinding, ParentElement, Pixels, Render, RenderOnce, SharedString, Size, StyleRefinement,
+    Styled, Window, WindowBounds, WindowKind, WindowOptions, actions, div,
+    prelude::FluentBuilder as _, px, rems, size,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Root, TitleBar, WindowExt,
+    ActiveTheme, IconName, Root, Sizable as _, Size as ComponentSize, StyledExt as _, TitleBar,
+    WindowExt,
     button::Button,
     dock::{Panel, PanelControl, PanelEvent, PanelInfo, PanelState, TitleStyle, register_panel},
     group_box::{GroupBox, GroupBoxVariants as _},
     h_flex,
     menu::PopupMenu,
     notification::Notification,
-    scroll::{ScrollableElement as _, ScrollbarShow},
+    popover::Popover,
+    scroll::{ScrollableElement as _, ScrollbarMode},
     text::markdown,
     v_flex,
 };
+use gpui_fps::fps_monitor;
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 
 mod app_menus;
 mod embedded_themes;
@@ -33,7 +37,7 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
-pub struct SelectScrollbarShow(ScrollbarShow);
+pub struct SelectScrollbarMode(ScrollbarMode);
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = story, no_json)]
@@ -47,6 +51,10 @@ pub struct SelectFont(usize);
 #[action(namespace = story, no_json)]
 pub struct SelectRadius(usize);
 
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = story, no_json)]
+pub(crate) struct ChangeStorySize(pub ComponentSize);
+
 actions!(
     story,
     [
@@ -58,7 +66,8 @@ actions!(
         Tab,
         TabPrev,
         ShowPanelInfo,
-        ToggleListActiveHighlight
+        ToggleListActiveHighlight,
+        ToggleFpsMonitor
     ]
 );
 
@@ -66,11 +75,15 @@ const PANEL_NAME: &str = "StoryContainer";
 
 pub struct AppState {
     pub invisible_panels: Entity<Vec<SharedString>>,
+    /// Whether the window root renders the performance HUD. Toggled from the
+    /// title bar's settings menu, read by [`StoryRoot`].
+    pub show_fps_monitor: bool,
 }
 impl AppState {
     fn init(cx: &mut App) {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
+            show_fps_monitor: false,
         };
         cx.set_global::<AppState>(state);
     }
@@ -194,17 +207,6 @@ pub fn init(cx: &mut App) {
         cx.set_http_client(std::sync::Arc::new(http_client));
     }
 
-    #[cfg(target_family = "wasm")]
-    {
-        // Safety: the web examples run single-threaded; the client is
-        // created and used exclusively on the main thread.
-        let http_client = unsafe {
-            gpui_web::FetchHttpClient::with_user_agent("gpui-component/story")
-                .expect("failed to create FetchHttpClient")
-        };
-        cx.set_http_client(std::sync::Arc::new(http_client));
-    }
-
     cx.bind_keys([
         KeyBinding::new("/", ToggleSearch, None),
         #[cfg(target_os = "macos")]
@@ -281,11 +283,17 @@ pub fn init(cx: &mut App) {
 struct StorySection {
     base: Div,
     title: SharedString,
+    description: Option<SharedString>,
     sub_title: Vec<AnyElement>,
     children: Vec<AnyElement>,
 }
 
 impl StorySection {
+    pub fn description(mut self, description: impl Into<SharedString>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
     pub fn sub_title(mut self, sub_title: impl IntoElement) -> Self {
         self.sub_title.push(sub_title.into_any_element());
         self
@@ -333,12 +341,26 @@ impl RenderOnce for StorySection {
         GroupBox::new()
             .id(self.title.clone())
             .outline()
+            .mb_6()
             .title(
                 h_flex()
                     .justify_between()
+                    .items_start()
                     .w_full()
                     .gap_4()
-                    .child(self.title)
+                    .child(
+                        v_flex()
+                            .gap_1()
+                            .child(div().font_medium().child(self.title))
+                            .when_some(self.description, |this, description| {
+                                this.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(description),
+                                )
+                            }),
+                    )
                     .children(self.sub_title),
             )
             .content_style(
@@ -355,6 +377,7 @@ impl RenderOnce for StorySection {
 pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
     StorySection {
         title: title.into(),
+        description: None,
         sub_title: vec![],
         base: h_flex()
             .w_full()
@@ -364,6 +387,175 @@ pub(crate) fn section(title: impl Into<SharedString>) -> StorySection {
             .gap_4(),
         children: vec![],
     }
+}
+
+#[derive(IntoElement)]
+pub(crate) struct StoryToolbar {
+    base: Div,
+    items: Vec<StoryToolbarItem>,
+}
+
+enum StoryToolbarItem {
+    Button(Button),
+    Dropdown {
+        button: Button,
+        builder: StoryMenuBuilder,
+    },
+}
+
+impl StoryToolbar {
+    pub(crate) fn child(mut self, button: Button) -> Self {
+        self.items.push(StoryToolbarItem::Button(button));
+        self
+    }
+
+    pub(crate) fn dropdown_child(
+        mut self,
+        button: Button,
+        builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> Self {
+        self.items.push(StoryToolbarItem::Dropdown {
+            button,
+            builder: Rc::new(builder),
+        });
+        self
+    }
+}
+
+type StoryMenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+
+#[derive(Default)]
+struct StoryToolbarMenuState {
+    menu: Option<Entity<PopupMenu>>,
+}
+
+#[derive(IntoElement)]
+struct StoryToolbarMenu {
+    id: SharedString,
+    button: Button,
+    builder: StoryMenuBuilder,
+}
+
+impl RenderOnce for StoryToolbarMenu {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state =
+            window.use_keyed_state(self.id.clone(), cx, |_, _| StoryToolbarMenuState::default());
+        let builder = self.builder;
+
+        let popover_id = SharedString::from(format!("story-toolbar-popover-{}", self.id));
+
+        Popover::new(popover_id)
+            .appearance(false)
+            .overlay_closable(false)
+            .anchor(Anchor::TopRight)
+            .trigger(self.button)
+            .content(move |_, window, cx| {
+                if let Some(menu) = state.read(cx).menu.clone() {
+                    return menu;
+                }
+
+                let builder = builder.clone();
+                let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+                    builder(menu, window, cx)
+                });
+                state.update(cx, |state, _| state.menu = Some(menu.clone()));
+                menu.focus_handle(cx).focus(window, cx);
+
+                let popover = cx.entity();
+                window
+                    .subscribe(&menu, cx, {
+                        let state = state.clone();
+                        move |_, _: &DismissEvent, window, cx| {
+                            popover.update(cx, |popover, cx| popover.dismiss(window, cx));
+                            state.update(cx, |state, _| state.menu = None);
+                        }
+                    })
+                    .detach();
+
+                menu
+            })
+    }
+}
+
+impl Styled for StoryToolbar {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl RenderOnce for StoryToolbar {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let last = self.items.len().saturating_sub(1);
+
+        self.base
+            .children(self.items.into_iter().enumerate().map(|(ix, item)| {
+                // Join the buttons into one segmented control: square off the
+                // inner corners, and let each button after the first sit on its
+                // neighbour's border instead of drawing a second one.
+                let joined = |button: Button| {
+                    button
+                        .outline()
+                        .small()
+                        .when(ix > 0, |this| {
+                            this.rounded_tl(px(0.)).rounded_bl(px(0.)).border_l_0()
+                        })
+                        .when(ix < last, |this| this.rounded_tr(px(0.)).rounded_br(px(0.)))
+                };
+
+                match item {
+                    StoryToolbarItem::Button(button) => joined(button).into_any_element(),
+                    StoryToolbarItem::Dropdown { button, builder } => StoryToolbarMenu {
+                        id: SharedString::from(format!("story-toolbar-menu-{ix}")),
+                        button: joined(button),
+                        builder,
+                    }
+                    .into_any_element(),
+                }
+            }))
+    }
+}
+
+pub(crate) fn story_toolbar_group() -> StoryToolbar {
+    StoryToolbar {
+        base: h_flex().w_full().justify_end(),
+        items: vec![],
+    }
+}
+
+pub(crate) fn story_toolbar(size: ComponentSize) -> StoryToolbar {
+    let label = match size {
+        ComponentSize::XSmall => "XSmall",
+        ComponentSize::Small => "Small",
+        ComponentSize::Medium => "Medium",
+        ComponentSize::Large => "Large",
+        ComponentSize::Size(_) => "Custom",
+    };
+
+    story_toolbar_group().dropdown_child(
+        Button::new("story-size").label(format!("Size: {label}")),
+        move |menu, _, _| {
+            menu.menu_with_check(
+                "XSmall",
+                size == ComponentSize::XSmall,
+                Box::new(ChangeStorySize(ComponentSize::XSmall)),
+            )
+            .menu_with_check(
+                "Small",
+                size == ComponentSize::Small,
+                Box::new(ChangeStorySize(ComponentSize::Small)),
+            )
+            .menu_with_check(
+                "Medium",
+                size == ComponentSize::Medium,
+                Box::new(ChangeStorySize(ComponentSize::Medium)),
+            )
+            .menu_with_check(
+                "Large",
+                size == ComponentSize::Large,
+                Box::new(ChangeStorySize(ComponentSize::Large)),
+            )
+        },
+    )
 }
 
 pub struct StoryContainer {
@@ -517,6 +709,7 @@ impl StoryState {
             "AccordionStory" => story!(AccordionStory),
             "SidebarStory" => story!(SidebarStory),
             "FormStory" => story!(FormStory),
+            "FpsMonitorStory" => story!(FpsMonitorStory),
             "NotificationStory" => story!(NotificationStory),
             "ThemeColorsStory" => story!(ThemeColorsStory),
             _ => {
@@ -635,6 +828,7 @@ pub struct StoryRoot {
     pub(crate) focus_handle: FocusHandle,
     pub(crate) title_bar: Entity<AppTitleBar>,
     pub(crate) view: AnyView,
+    pub(crate) embedded: bool,
 }
 
 impl StoryRoot {
@@ -649,6 +843,17 @@ impl StoryRoot {
             focus_handle: cx.focus_handle(),
             title_bar,
             view: view.into(),
+            embedded: false,
+        }
+    }
+
+    pub fn embedded(view: impl Into<AnyView>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let title_bar = cx.new(|cx| AppTitleBar::new("", window, cx));
+        Self {
+            focus_handle: cx.focus_handle(),
+            title_bar,
+            view: view.into(),
+            embedded: true,
         }
     }
 
@@ -695,6 +900,7 @@ impl Render for StoryRoot {
         let sheet_layer = Root::render_sheet_layer(window, cx);
         let dialog_layer = Root::render_dialog_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
+        let show_fps = AppState::global(cx).show_fps_monitor;
 
         div()
             .id("story-root")
@@ -704,13 +910,18 @@ impl Render for StoryRoot {
             .child(
                 v_flex()
                     .size_full()
-                    .child(self.title_bar.clone())
+                    .when(!self.embedded, |this| this.child(self.title_bar.clone()))
                     .child(
                         div()
                             .track_focus(&self.focus_handle)
+                            .relative()
                             .flex_1()
                             .overflow_hidden()
-                            .child(self.view.clone()),
+                            .child(self.view.clone())
+                            // Rendered inside the content area rather than the
+                            // window root so the HUD's top right corner clears
+                            // the title bar's own controls.
+                            .when(show_fps, |this| this.child(fps_monitor(window, cx))),
                     )
                     .children(sheet_layer)
                     .children(dialog_layer)

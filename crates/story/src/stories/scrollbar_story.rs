@@ -1,16 +1,18 @@
 use std::rc::Rc;
 
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Pixels,
-    Render, Size, Styled, UniformListScrollHandle, Window, div, px, size, uniform_list,
+    Action, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    ParentElement, Pixels, Render, Size, Styled, UniformListScrollHandle, Window, div, px, size,
+    uniform_list,
 };
-use gpui_component::{
-    ActiveTheme as _, Selectable,
-    button::{Button, ButtonGroup},
-    h_flex,
-    scroll::ScrollableElement,
-    v_flex,
-};
+use gpui_component::{ActiveTheme as _, button::Button, scroll::ScrollableElement, v_flex};
+use serde::Deserialize;
+
+use crate::story_toolbar_group;
+
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = scrollbar_story, no_json)]
+struct ChangeDataset(pub usize);
 
 pub struct ScrollbarStory {
     focus_handle: FocusHandle,
@@ -70,47 +72,6 @@ impl ScrollbarStory {
             .into();
         cx.notify();
     }
-
-    fn render_buttons(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        h_flex().gap_2().justify_between().child(
-            h_flex().gap_2().child(
-                ButtonGroup::new("test-cases")
-                    .outline()
-                    .compact()
-                    .child(
-                        Button::new("test-0")
-                            .label("Size 0")
-                            .selected(self.size_mode == 0),
-                    )
-                    .child(
-                        Button::new("test-1")
-                            .label("Size 1")
-                            .selected(self.size_mode == 1),
-                    )
-                    .child(
-                        Button::new("test-2")
-                            .label("Size 2")
-                            .selected(self.size_mode == 2),
-                    )
-                    .child(
-                        Button::new("test-3")
-                            .label("Size 3")
-                            .selected(self.size_mode == 3),
-                    )
-                    .on_click(cx.listener(|view, clicks: &Vec<usize>, _, cx| {
-                        if clicks.contains(&0) {
-                            view.change_test_cases(0, cx)
-                        } else if clicks.contains(&1) {
-                            view.change_test_cases(1, cx)
-                        } else if clicks.contains(&2) {
-                            view.change_test_cases(2, cx)
-                        } else if clicks.contains(&3) {
-                            view.change_test_cases(3, cx)
-                        }
-                    })),
-            ),
-        )
-    }
 }
 
 impl super::Story for ScrollbarStory {
@@ -142,7 +103,30 @@ impl Render for ScrollbarStory {
         v_flex()
             .size_full()
             .gap_4()
-            .child(self.render_buttons(cx))
+            .on_action(cx.listener(|this, action: &ChangeDataset, _, cx| {
+                this.change_test_cases(action.0, cx);
+            }))
+            .child(story_toolbar_group().dropdown_child(
+                Button::new("scrollbar-dataset").label(format!(
+                    "Dataset: {}",
+                    ["Standard", "Wide", "Stress", "Short"][self.size_mode]
+                )),
+                {
+                    let selected = self.size_mode;
+                    move |menu, _, _| {
+                        ["Standard", "Wide", "Stress", "Short"]
+                            .into_iter()
+                            .enumerate()
+                            .fold(menu, |menu, (index, label)| {
+                                menu.menu_with_check(
+                                    label,
+                                    selected == index,
+                                    Box::new(ChangeDataset(index)),
+                                )
+                            })
+                    }
+                },
+            ))
             .child({
                 div()
                     .relative()

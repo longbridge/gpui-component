@@ -1,14 +1,15 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window, px,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
+    ParentElement, Render, Styled, Window, px,
 };
 
-use gpui_component::{ColorName, Sizable, h_flex, indigo_50, indigo_500, tag::Tag, v_flex};
+use gpui_component::{ColorName, Sizable, Size, h_flex, indigo_50, indigo_500, tag::Tag, v_flex};
 
-use crate::section;
+use crate::{ChangeStorySize, section, story_toolbar};
 
 pub struct TagStory {
     focus_handle: FocusHandle,
+    size: Size,
 }
 
 impl super::Story for TagStory {
@@ -29,6 +30,7 @@ impl TagStory {
     pub(crate) fn new(_: &mut Window, cx: &mut App) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
+            size: Size::Medium,
         }
     }
 
@@ -42,98 +44,161 @@ impl Focusable for TagStory {
     }
 }
 impl Render for TagStory {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .w_full()
             .gap_3()
+            .on_action(cx.listener(|this, action: &ChangeStorySize, _, cx| {
+                this.size = action.0;
+                cx.notify();
+            }))
+            .child(story_toolbar(self.size))
             .child(
-                section("Tag (default)").child(
+                section("Default").child(
                     h_flex()
                         .gap_2()
-                        .child(Tag::primary().child("Tag"))
-                        .child(Tag::secondary().child("Secondary"))
-                        .child(Tag::danger().child("Danger"))
-                        .child(Tag::success().child("Success"))
-                        .child(Tag::warning().child("Warning"))
-                        .child(Tag::info().child("Info"))
+                        .child(Tag::primary().with_size(self.size).child("Tag"))
+                        .child(Tag::secondary().with_size(self.size).child("Secondary"))
+                        .child(Tag::danger().with_size(self.size).child("Danger"))
+                        .child(Tag::success().with_size(self.size).child("Success"))
+                        .child(Tag::warning().with_size(self.size).child("Warning"))
+                        .child(Tag::info().with_size(self.size).child("Info"))
                         .child(
-                            Tag::custom(indigo_500(), indigo_50(), indigo_500()).child("Custom"),
+                            Tag::custom(indigo_500(), indigo_50(), indigo_500())
+                                .with_size(self.size)
+                                .child("Custom"),
                         ),
                 ),
             )
             .child(
-                section("Tag (outline)").child(
+                section("Outline").child(
                     h_flex()
                         .gap_2()
-                        .child(Tag::primary().outline().child("Tag"))
-                        .child(Tag::secondary().outline().child("Secondary"))
-                        .child(Tag::danger().outline().child("Danger"))
-                        .child(Tag::success().outline().child("Success"))
-                        .child(Tag::warning().outline().child("Warning"))
-                        .child(Tag::info().outline().child("Info"))
+                        .child(Tag::primary().with_size(self.size).outline().child("Tag"))
+                        .child(
+                            Tag::secondary()
+                                .with_size(self.size)
+                                .outline()
+                                .child("Secondary"),
+                        )
+                        .child(Tag::danger().with_size(self.size).outline().child("Danger"))
+                        .child(
+                            Tag::success()
+                                .with_size(self.size)
+                                .outline()
+                                .child("Success"),
+                        )
+                        .child(
+                            Tag::warning()
+                                .with_size(self.size)
+                                .outline()
+                                .child("Warning"),
+                        )
+                        .child(Tag::info().with_size(self.size).outline().child("Info"))
                         .child(
                             Tag::custom(indigo_500(), indigo_500(), indigo_500())
+                                .with_size(self.size)
                                 .outline()
                                 .child("Custom"),
                         ),
                 ),
             )
             .child(
-                section("Tag (small)").child(
+                section("Rounded").child(
                     h_flex()
                         .gap_2()
-                        .child(Tag::primary().small().child("Tag"))
-                        .child(Tag::secondary().small().child("Secondary"))
-                        .child(Tag::danger().small().child("Danger"))
-                        .child(Tag::success().small().child("Success"))
-                        .child(Tag::warning().small().child("Warning"))
-                        .child(Tag::info().small().child("Info")),
+                        .child(
+                            Tag::primary()
+                                .with_size(self.size)
+                                .rounded_full()
+                                .child("Tag"),
+                        )
+                        .child(
+                            Tag::secondary()
+                                .with_size(self.size)
+                                .rounded_full()
+                                .child("Secondary"),
+                        )
+                        .child(
+                            Tag::danger()
+                                .with_size(self.size)
+                                .rounded_full()
+                                .child("Danger"),
+                        )
+                        .child(
+                            Tag::success()
+                                .with_size(self.size)
+                                .rounded_full()
+                                .child("Success"),
+                        )
+                        .child(
+                            Tag::warning()
+                                .with_size(self.size)
+                                .rounded_full()
+                                .child("Warning"),
+                        )
+                        .child(
+                            Tag::info()
+                                .with_size(self.size)
+                                .rounded_full()
+                                .child("Info"),
+                        ),
                 ),
             )
             .child(
-                section("Tag (rounded full)").child(
+                section("Square").child(
                     h_flex()
                         .gap_2()
-                        .child(Tag::primary().rounded_full().child("Tag"))
-                        .child(Tag::secondary().rounded_full().child("Secondary"))
-                        .child(Tag::danger().rounded_full().child("Danger"))
-                        .child(Tag::success().rounded_full().child("Success"))
-                        .child(Tag::warning().rounded_full().child("Warning"))
-                        .child(Tag::info().rounded_full().child("Info")),
+                        .child(
+                            Tag::primary()
+                                .with_size(self.size)
+                                .rounded(px(0.))
+                                .child("Tag"),
+                        )
+                        .child(
+                            Tag::secondary()
+                                .with_size(self.size)
+                                .rounded(px(0.))
+                                .child("Secondary"),
+                        )
+                        .child(
+                            Tag::danger()
+                                .with_size(self.size)
+                                .rounded(px(0.))
+                                .child("Danger"),
+                        )
+                        .child(
+                            Tag::success()
+                                .with_size(self.size)
+                                .rounded(px(0.))
+                                .child("Success"),
+                        )
+                        .child(
+                            Tag::warning()
+                                .with_size(self.size)
+                                .rounded(px(0.))
+                                .child("Warning"),
+                        )
+                        .child(
+                            Tag::info()
+                                .with_size(self.size)
+                                .rounded(px(0.))
+                                .child("Info"),
+                        ),
                 ),
             )
             .child(
-                section("Tag (small with rounded full)").child(
-                    h_flex()
-                        .gap_2()
-                        .child(Tag::primary().small().rounded_full().child("Tag"))
-                        .child(Tag::secondary().small().rounded_full().child("Secondary"))
-                        .child(Tag::danger().small().rounded_full().child("Danger"))
-                        .child(Tag::success().small().rounded_full().child("Success"))
-                        .child(Tag::warning().small().rounded_full().child("Warning"))
-                        .child(Tag::info().small().rounded_full().child("Info")),
-                ),
-            )
-            .child(
-                section("Tag (rounded 0px)").child(
-                    h_flex()
-                        .gap_2()
-                        .child(Tag::primary().small().rounded(px(0.)).child("Tag"))
-                        .child(Tag::secondary().small().rounded(px(0.)).child("Secondary"))
-                        .child(Tag::danger().small().rounded(px(0.)).child("Danger"))
-                        .child(Tag::success().small().rounded(px(0.)).child("Success"))
-                        .child(Tag::warning().small().rounded(px(0.)).child("Warning"))
-                        .child(Tag::info().small().rounded(px(0.)).child("Info")),
-                ),
-            )
-            .child(
-                section("Color Tags").child(
-                    v_flex().gap_4().child(
-                        h_flex().gap_2().flex_wrap().children(
+                section("Colors").w(px(640.)).child(
+                    v_flex().w_full().gap_4().child(
+                        h_flex().w_full().gap_2().flex_wrap().children(
                             ColorName::all()
                                 .into_iter()
                                 .filter(|color| *color != ColorName::Gray)
-                                .map(|color| Tag::color(color).child(color.to_string())),
+                                .map(|color| {
+                                    Tag::color(color)
+                                        .with_size(self.size)
+                                        .child(color.to_string())
+                                }),
                         ),
                     ),
                 ),
