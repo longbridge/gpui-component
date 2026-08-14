@@ -381,16 +381,15 @@ where
     }
 
     /// Returns the search query.
-    pub fn search_value(&self, cx: &App) -> SharedString {
+    pub fn query(&self, cx: &App) -> SharedString {
         self.state.list.read(cx).query_input.read(cx).value()
     }
 
-    /// Replaces the search query.
-    pub fn set_search_value(&self, value: impl Into<SharedString>, window: &mut Window, cx: &mut App) {
+    /// Sets the search query and updates the filtered items.
+    pub fn set_query(&self, query: impl Into<SharedString>, window: &mut Window, cx: &mut App) {
+        let query = query.into();
         self.state.list.update(cx, |list, cx| {
-            list.query_input.update(cx, |input, cx| {
-                input.set_value(value, window, cx);
-            })
+            list.set_query(query.as_ref(), window, cx);
         });
     }
 
@@ -1147,6 +1146,31 @@ mod tests {
                 .delegate
                 .items_count(0);
             assert_eq!(count_after, 1);
+        });
+    }
+
+    #[gpui::test]
+    fn test_combo_box_set_query_updates_text_and_filters_items(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let cx = cx.add_empty_window();
+        cx.update(|window, cx| {
+            let items = SearchableVec::new(vec!["Rust", "Go", "C++"]);
+            let state = cx.new(|cx| ComboboxState::new(items, vec![], window, cx).searchable(true));
+
+            state.update(cx, |state, cx| state.set_query("Rust", window, cx));
+
+            assert_eq!(state.read(cx).query(cx).as_ref(), "Rust");
+            assert_eq!(
+                state
+                    .read(cx)
+                    .state
+                    .list
+                    .read(cx)
+                    .delegate()
+                    .delegate
+                    .items_count(0),
+                1,
+            );
         });
     }
 

@@ -636,7 +636,7 @@ impl Render for ComboboxStory {
                     .w(px(280.))
                     .description("Add an action below the option list.")
                     .child({
-                        let search_query = self.with_footer.read(cx).search_value(cx).clone();
+                        let search_query = self.with_footer.read(cx).query(cx);
                         let view = cx.entity();
                         Combobox::new(&self.with_footer)
                             .placeholder("Select university")
@@ -659,7 +659,7 @@ impl Render for ComboboxStory {
                                                 "MIT".to_string(),
                                                 "Stanford".to_string(),
                                                 "Cambridge".to_string(),
-                                                search_query.clone().into()
+                                                search_query.clone().into(),
                                             ]);
 
                                             drop(items.perform_search(&search_query, window, cx));
@@ -672,8 +672,7 @@ impl Render for ComboboxStory {
                                     .into_any_element()
                             })
                             .w(px(280.))
-                    }
-                ),
+                    }),
             )
             .child(
                 section("Custom trigger")
