@@ -432,7 +432,6 @@ impl RenderOnce for DatePicker {
                             .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
-                            .when(is_focused, |this| this.focused_border(cx))
                     })
                     .draw_focus_ring(
                         is_focused && self.appearance && !self.disabled && self.focus_ring_enabled,

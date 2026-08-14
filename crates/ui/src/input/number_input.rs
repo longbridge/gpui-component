@@ -193,10 +193,7 @@ impl RenderOnce for NumberInput {
             .input_h(self.size)
             .rounded(cx.theme().radius)
             .when(self.appearance, |this| {
-                this.bg(bg)
-                    .border_1()
-                    .border_color(border_color)
-                    .when(focused, |this| this.focused_border(cx))
+                this.bg(bg).border_1().border_color(border_color)
             })
             .refine_style(&self.style)
             .draw_focus_ring(

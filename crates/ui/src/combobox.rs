@@ -981,9 +981,6 @@ fn render_trigger_container(
         .input_size(size)
         .input_text_size(size)
         .refine_style(style)
-        .when(outline_visible && appearance, |this| {
-            this.focused_border(cx)
-        })
         .draw_focus_ring(
             outline_visible && appearance && focus_ring_enabled,
             px(0.),
