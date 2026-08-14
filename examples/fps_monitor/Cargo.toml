@@ -1,0 +1,14 @@
+[package]
+name = "fps_monitor"
+description = "A performance HUD overlaid on an adjustable animation load, using gpui-perf."
+version = "0.1.0"
+publish = false
+edition.workspace = true
+
+[dependencies]
+gpui.workspace = true
+gpui_platform.workspace = true
+gpui-perf.workspace = true
+
+[lints]
+workspace = true

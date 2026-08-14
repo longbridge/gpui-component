@@ -51,6 +51,13 @@ pub mod menu;
 pub mod native_menu;
 pub mod notification;
 pub mod pagination;
+/// Realtime FPS, frame time, CPU and memory HUD.
+///
+/// Re-exported from the standalone `gpui-perf` crate, which depends only on
+/// `gpui` so the HUD can also be used outside GPUI Component.
+pub mod perf {
+    pub use gpui_perf::*;
+}
 pub mod plot;
 pub mod popover;
 pub mod progress;
