@@ -207,7 +207,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                                         ),
                                 ),
                             )
-                            .with_priority(1)
+                            .with_priority(gpui_base::POPUP_PRIORITY)
                             .into_any(),
                         );
                     }

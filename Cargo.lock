@@ -3166,6 +3166,7 @@ dependencies = [
  "fake",
  "getrandom 0.2.17",
  "gpui",
+ "gpui-base",
  "gpui-component",
  "gpui-component-assets",
  "gpui_platform",
