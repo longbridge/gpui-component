@@ -219,7 +219,7 @@ where
         });
 
         // `set_value` does not emit `InputEvent::Change`, so start the search here.
-        self.start_search(query, window, cx);
+        self.start_search(query.trim().to_string(), window, cx);
     }
 
     /// Set a specific list item for measurement.

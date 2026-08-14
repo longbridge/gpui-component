@@ -288,7 +288,7 @@ pub struct ComboboxStory {
     // 05 custom check icon (single)
     custom_check: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 06 footer button (single)
-    with_footer: Entity<ComboboxState<SearchableVec<&'static str>>>,
+    with_footer: Entity<ComboboxState<SearchableVec<String>>>,
     // 07 custom trigger (single)
     custom_trigger: Entity<ComboboxState<SearchableVec<&'static str>>>,
     // 08 multi badges
@@ -399,8 +399,12 @@ impl ComboboxStory {
         });
 
         let with_footer = cx.new(|cx| {
-            let items =
-                SearchableVec::new(vec!["Harvard University", "MIT", "Stanford", "Cambridge"]);
+            let items = SearchableVec::new(vec![
+                "Harvard University".to_string(),
+                "MIT".to_string(),
+                "Stanford".to_string(),
+                "Cambridge".to_string(),
+            ]);
             ComboboxState::new(items, vec![IndexPath::default()], window, cx).searchable(true)
         });
 
@@ -631,11 +635,13 @@ impl Render for ComboboxStory {
                 section("Footer")
                     .w(px(280.))
                     .description("Add an action below the option list.")
-                    .child(
+                    .child({
+                        let state = self.with_footer.clone();
                         Combobox::new(&self.with_footer)
                             .placeholder("Select university")
                             .search_placeholder("Search…")
-                            .footer(|_, cx| {
+                            .footer(move |_, cx| {
+                                let state = state.clone();
                                 Button::new("add-new")
                                     .ghost()
                                     .label("New university")
@@ -643,10 +649,26 @@ impl Render for ComboboxStory {
                                     .text_color(cx.theme().foreground)
                                     .w_full()
                                     .justify_start()
+                                    .on_click(move |_, window, cx| {
+                                        let search_query = state.read(cx).query(cx);
+                                        let mut items = SearchableVec::new(vec![
+                                            "Harvard University".to_string(),
+                                            "MIT".to_string(),
+                                            "Stanford".to_string(),
+                                            "Cambridge".to_string(),
+                                            search_query.to_string(),
+                                        ]);
+
+                                        drop(items.perform_search(&search_query, window, cx));
+
+                                        state.update(cx, |state, cx| {
+                                            state.set_items(items, window, cx);
+                                        });
+                                    })
                                     .into_any_element()
                             })
-                            .w(px(280.)),
-                    ),
+                            .w(px(280.))
+                    }),
             )
             .child(
                 section("Custom trigger")
