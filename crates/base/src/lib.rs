@@ -82,6 +82,7 @@ pub use checkbox::{
 pub use collapsible::Collapsible;
 pub use color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState, ColorSwatch, HslaSliders};
 pub use combobox::Combobox;
+pub use component_traits::FocusableExt;
 pub use component_traits::{Disableable, Selectable};
 pub use date_picker::DatePicker;
 pub use dialog::{
@@ -136,7 +137,7 @@ pub use slider::{Slider, SliderIndicator, SliderThumb, SliderTrack};
 pub use state_style::StateStyle;
 #[cfg(any(feature = "inspector", debug_assertions))]
 pub use styled::styled_ext_reflection_methods;
-pub use styled::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
+pub use styled::{RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
 pub use switch::{
     Switch, SwitchStyles, SwitchThumb, SwitchThumbStyles, SwitchTrack, SwitchTrackStyles,
 };

@@ -6,6 +6,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
+use crate::styled::FocusRingStyleExt as _;
 use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Sizable, Size,
     StyleSized, StyledExt,
@@ -86,6 +87,7 @@ struct SelectOptions {
     menu_max_h: Length,
     disabled: bool,
     appearance: bool,
+    focus_ring_enabled: bool,
 }
 
 impl Default for SelectOptions {
@@ -101,6 +103,7 @@ impl Default for SelectOptions {
             menu_max_h: rems(20.).into(),
             disabled: false,
             appearance: true,
+            focus_ring_enabled: true,
             search_placeholder: None,
         }
     }
@@ -119,6 +122,7 @@ where
     searchable: bool,
     icon: Option<Icon>,
     title_prefix: Option<SharedString>,
+    focus_ring_enabled: bool,
 }
 
 /// A Select element.
@@ -256,6 +260,7 @@ where
             searchable: false,
             icon: None,
             title_prefix: None,
+            focus_ring_enabled: true,
         }
     }
 
@@ -484,11 +489,16 @@ where
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
                     })
-                    .overflow_hidden()
                     .input_size(self.state.size)
                     .input_text_size(self.state.size)
                     .refine_style(&self.state.style)
                     .when(outline_visible, |this| this.focused_border(cx))
+                    .draw_focus_ring(
+                        outline_visible && self.state.appearance && self.focus_ring_enabled,
+                        px(0.),
+                        window,
+                        cx,
+                    )
                     .when(allow_open, |this| {
                         this.on_click(cx.listener(Self::toggle_menu))
                     })
@@ -496,6 +506,7 @@ where
                         h_flex()
                             .id("inner")
                             .w_full()
+                            .overflow_hidden()
                             .items_center()
                             .justify_between()
                             .gap_1()
@@ -672,6 +683,21 @@ where
     }
 }
 
+impl<D> crate::FocusableExt for Select<D>
+where
+    D: SearchableListDelegate + 'static,
+    <D::Item as SearchableListItem>::Value: PartialEq + Clone,
+{
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.options.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.options.focus_ring_enabled
+    }
+}
+
 impl<D> EventEmitter<SelectEvent<D>> for SelectState<D>
 where
     D: SearchableListDelegate + 'static,
@@ -731,6 +757,7 @@ where
             this.state.menu_max_h = opts.menu_max_h;
             this.state.disabled = opts.disabled;
             this.state.appearance = opts.appearance;
+            this.focus_ring_enabled = opts.focus_ring_enabled;
             this.icon = opts.icon;
             this.title_prefix = opts.title_prefix;
 

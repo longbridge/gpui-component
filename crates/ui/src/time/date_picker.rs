@@ -9,6 +9,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
+use crate::styled::FocusRingStyleExt as _;
 use crate::{
     ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
     actions::{Cancel, Confirm},
@@ -280,6 +281,7 @@ pub struct DatePicker {
     number_of_months: usize,
     presets: Option<Vec<DateRangePreset>>,
     appearance: bool,
+    focus_ring_enabled: bool,
     disabled: bool,
 }
 
@@ -308,6 +310,17 @@ impl Disableable for DatePicker {
     }
 }
 
+impl crate::FocusableExt for DatePicker {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
+    }
+}
+
 impl Render for DatePickerState {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
         Empty
@@ -327,6 +340,7 @@ impl DatePicker {
             number_of_months: 1,
             presets: None,
             appearance: true,
+            focus_ring_enabled: true,
             disabled: false,
         }
     }
@@ -420,7 +434,12 @@ impl RenderOnce for DatePicker {
                             .rounded(cx.theme().radius)
                             .when(is_focused, |this| this.focused_border(cx))
                     })
-                    .overflow_hidden()
+                    .draw_focus_ring(
+                        is_focused && self.appearance && !self.disabled && self.focus_ring_enabled,
+                        px(0.),
+                        window,
+                        cx,
+                    )
                     .input_text_size(self.size)
                     .input_size(self.size)
                     .when(!state.open && !self.disabled, |this| {
@@ -431,6 +450,7 @@ impl RenderOnce for DatePicker {
                     .child(
                         h_flex()
                             .w_full()
+                            .overflow_hidden()
                             .items_center()
                             .justify_between()
                             .gap_1()

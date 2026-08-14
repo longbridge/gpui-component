@@ -4,6 +4,7 @@ use gpui::{
 };
 
 use super::input::{input_style, sync_focused_input_registry};
+use crate::styled::FocusRingStyleExt as _;
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use gpui_base::OtpInput as BaseOtpInput;
 pub use gpui_base::OtpState;
@@ -21,6 +22,7 @@ pub struct OtpInput {
     state: Entity<OtpState>,
     number_of_groups: usize,
     size: Size,
+    focus_ring_enabled: bool,
     disabled: bool,
 }
 
@@ -31,6 +33,7 @@ impl OtpInput {
             state: state.clone(),
             number_of_groups: 2,
             size: Size::Medium,
+            focus_ring_enabled: true,
             disabled: false,
         }
     }
@@ -49,6 +52,16 @@ impl Disableable for OtpInput {
     fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+}
+impl crate::FocusableExt for OtpInput {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
     }
 }
 impl Sizable for OtpInput {
@@ -100,6 +113,7 @@ impl RenderOnce for OtpInput {
             }
 
             let is_input_focused = ix == cursor_ix && is_focused;
+            let focus_visible = is_input_focused && !self.disabled && self.focus_ring_enabled;
 
             groups[group_ix].push(
                 h_flex()
@@ -109,7 +123,7 @@ impl RenderOnce for OtpInput {
                     .bg(bg)
                     .text_color(fg)
                     .when(self.disabled, |this| this.opacity(0.5))
-                    .when(is_input_focused, |this| this.border_color(cx.theme().ring))
+                    .when(focus_visible, |this| this.border_color(cx.theme().ring))
                     .items_center()
                     .justify_center()
                     .rounded(cx.theme().radius)
@@ -121,6 +135,7 @@ impl RenderOnce for OtpInput {
                         Size::Large => this.w_11().h_11(),
                         Size::Size(px) => this.w(px).h(px),
                     })
+                    .draw_focus_ring(focus_visible, px(0.), window, cx)
                     .on_mouse_down(MouseButton::Left, {
                         let state = self.state.clone();
                         move |_, window, cx| state.read(cx).focus_handle(cx).focus(window, cx)

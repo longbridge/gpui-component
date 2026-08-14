@@ -10,6 +10,7 @@ use rust_i18n::t;
 
 pub use crate::select::Caret;
 
+use crate::styled::FocusRingStyleExt as _;
 use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Sizable, Size,
     StyleSized, StyledExt, h_flex,
@@ -78,6 +79,7 @@ struct ComboboxOptions {
     menu_max_h: Length,
     disabled: bool,
     appearance: bool,
+    focus_ring_enabled: bool,
     trigger_icon: Option<Icon>,
     check_icon: Option<Icon>,
 }
@@ -94,6 +96,7 @@ impl Default for ComboboxOptions {
             menu_max_h: rems(20.).into(),
             disabled: false,
             appearance: true,
+            focus_ring_enabled: true,
             trigger_icon: None,
             check_icon: None,
         }
@@ -118,6 +121,7 @@ where
         Box<dyn Fn(&ComboboxTriggerContext<D>, &mut Window, &mut App) -> AnyElement + 'static>,
     >,
     footer: Option<Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>>,
+    focus_ring_enabled: bool,
 }
 
 /// Events emitted by [`ComboboxState`].
@@ -266,6 +270,7 @@ where
             check_icon: None,
             render_trigger: None,
             footer: None,
+            focus_ring_enabled: true,
         }
     }
 
@@ -659,6 +664,7 @@ where
             .child(render_trigger_container(
                 disabled,
                 self.state.appearance,
+                self.focus_ring_enabled,
                 self.state.size,
                 &self.state.style,
                 bg,
@@ -669,6 +675,7 @@ where
                 trailing,
                 toggle_handler,
                 prepaint_handler,
+                window,
                 cx,
             ))
             .when(self.state.open, |this| {
@@ -851,6 +858,21 @@ where
     }
 }
 
+impl<D> crate::FocusableExt for Combobox<D>
+where
+    D: SearchableListDelegate + 'static,
+    <D::Item as SearchableListItem>::Value: PartialEq + Clone,
+{
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.options.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.options.focus_ring_enabled
+    }
+}
+
 impl<D> Styled for Combobox<D>
 where
     D: SearchableListDelegate + 'static,
@@ -884,6 +906,7 @@ where
             this.state.menu_max_h = opts.menu_max_h;
             this.state.disabled = opts.disabled;
             this.state.appearance = opts.appearance;
+            this.focus_ring_enabled = opts.focus_ring_enabled;
             this.trigger_icon = opts.trigger_icon;
             this.check_icon = opts.check_icon;
             this.render_trigger = render_trigger;
@@ -926,6 +949,7 @@ where
 fn render_trigger_container(
     disabled: bool,
     appearance: bool,
+    focus_ring_enabled: bool,
     size: Size,
     style: &StyleRefinement,
     bg: Hsla,
@@ -936,6 +960,7 @@ fn render_trigger_container(
     trailing: AnyElement,
     toggle_handler: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
     prepaint_handler: Box<dyn Fn(Bounds<Pixels>, &mut Window, &mut App) + 'static>,
+    window: &Window,
     cx: &mut App,
 ) -> impl IntoElement {
     div()
@@ -953,11 +978,16 @@ fn render_trigger_container(
                 .border_color(cx.theme().input)
                 .rounded(cx.theme().radius)
         })
-        .overflow_hidden()
         .input_size(size)
         .input_text_size(size)
         .refine_style(style)
         .when(outline_visible, |this| this.focused_border(cx))
+        .draw_focus_ring(
+            outline_visible && appearance && focus_ring_enabled,
+            px(0.),
+            window,
+            cx,
+        )
         .when(allow_open, |this| {
             this.when_some(toggle_handler, |this, handler| this.on_click(handler))
         })
@@ -965,6 +995,7 @@ fn render_trigger_container(
             h_flex()
                 .id("inner")
                 .w_full()
+                .overflow_hidden()
                 .items_center()
                 .justify_between()
                 .gap_1()

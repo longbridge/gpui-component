@@ -20,6 +20,7 @@ use gpui_base::InputBase as BaseInput;
 use rust_i18n::t;
 
 use super::{InputContentType, InputState, sync_native_content_type};
+use crate::styled::FocusRingStyleExt as _;
 use gpui_base::input::InputBaseState;
 
 enum InputStateSource {
@@ -99,6 +100,17 @@ impl Selectable for Input {
 
     fn is_selected(&self) -> bool {
         self.selected
+    }
+}
+
+impl crate::FocusableExt for Input {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_bordered = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_bordered
     }
 }
 
@@ -552,7 +564,6 @@ impl RenderOnce for Input {
             None if placeholder_is_mask => None,
             None => placeholder.clone(),
         };
-
         BaseInput::new(("input", state.entity_id()))
             .focused(focused)
             .disabled(disabled)
@@ -560,7 +571,7 @@ impl RenderOnce for Input {
                 styles.focused(|style| {
                     style.when(
                         self.appearance && self.bordered && self.focus_bordered,
-                        |style| style.focused_border(cx),
+                        |style| style.border_1().border_color(cx.theme().ring),
                     )
                 })
             })
@@ -599,6 +610,12 @@ impl RenderOnce for Input {
             .items_center()
             .gap(gap_x)
             .refine_style(&self.style)
+            .draw_focus_ring(
+                focused && self.appearance && self.bordered && self.focus_bordered,
+                px(0.),
+                window,
+                cx,
+            )
             .children(prefix.map(|p| {
                 div()
                     .when(presentation.is_disabled(), |this| this.opacity(0.5))
