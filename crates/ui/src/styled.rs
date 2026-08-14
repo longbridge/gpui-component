@@ -43,7 +43,7 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
                 .map(|v| v.to_pixels(rem_size))
                 .unwrap_or_default(),
         };
-        let outer_radius = radius.map(|value| *value + FOCUS_RING_OFFSET);
+        let outer_radius = radius.map(|value| *value + FOCUS_RING_OFFSET + margin);
         let mut border_style = StyleRefinement::default();
         border_style.corner_radii.top_left = Some(radius.top_left.into());
         border_style.corner_radii.top_right = Some(radius.top_right.into());
@@ -55,7 +55,13 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
         ring_style.corner_radii.bottom_left = Some(outer_radius.bottom_left.into());
         ring_style.corner_radii.bottom_right = Some(outer_radius.bottom_right.into());
         let inset = FOCUS_RING_OFFSET + margin;
-
+        // Pre-composite the translucent ring against the surface. GPUI borders are
+        // center-aligned, so retaining alpha here would blend their antialiased seam
+        // with the inner focus border and make the shared edge look blurry.
+        let ring_color = cx
+            .theme()
+            .background
+            .blend(cx.theme().ring.alpha(FOCUS_RING_OPACITY));
         self.child(
             div()
                 .flex_none()
@@ -74,7 +80,7 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
                 .right(-inset)
                 .bottom(-inset)
                 .border(FOCUS_RING_WIDTH)
-                .border_color(cx.theme().ring.alpha(FOCUS_RING_OPACITY))
+                .border_color(ring_color)
                 .refine_style(&ring_style),
         )
     }
