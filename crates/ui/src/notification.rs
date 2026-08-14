@@ -21,7 +21,7 @@ use crate::{
 const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(400);
 const NOTIFICATION_EXIT_DURATION: Duration = Duration::from_millis(200);
 const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
-const DEFAULT_NOTIFICATION_WIDTH: Pixels = px(356.);
+const DEFAULT_NOTIFICATION_WIDTH: Pixels = px(382.);
 struct DismissRequest;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -74,6 +74,7 @@ pub struct Notification {
     title: Option<SharedString>,
     message: Option<SharedString>,
     icon: Option<Icon>,
+    placement: Option<Anchor>,
     autohide: bool,
     action_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> Button>>,
     content_builder: Option<Rc<dyn Fn(&mut Self, &mut Window, &mut Context<Self>) -> AnyElement>>,
@@ -132,6 +133,7 @@ impl Notification {
             message: None,
             type_: None,
             icon: None,
+            placement: None,
             autohide: true,
             action_builder: None,
             content_builder: None,
@@ -211,6 +213,15 @@ impl Notification {
     /// Set the type of the notification, default is NotificationType::Info.
     pub fn with_type(mut self, type_: NotificationType) -> Self {
         self.type_ = Some(type_);
+        self
+    }
+
+    /// Set the placement of the notification, overriding the global
+    /// [`NotificationSettings::placement`].
+    ///
+    /// Notifications are stacked separately for each placement.
+    pub fn placement(mut self, placement: Anchor) -> Self {
+        self.placement = Some(placement);
         self
     }
 
@@ -314,7 +325,7 @@ impl Render for Notification {
             Some(type_) => Some(type_.icon(cx)),
         };
         let has_icon = icon.is_some();
-        let placement = cx.theme().notification.placement;
+        let placement = self.placement.unwrap_or(cx.theme().notification.placement);
 
         BaseToast::new("notification")
             .transition_status(transition_status)
@@ -425,12 +436,16 @@ impl Render for Notification {
 /// The settings for notifications.
 #[derive(Debug, Clone)]
 pub struct NotificationSettings {
-    /// The placement of the notification, default: [`Anchor::TopRight`]
+    /// The placement of the notifications, default: [`Anchor::TopRight`]
+    ///
+    /// A single notification can override this with [`Notification::placement`].
     pub placement: Anchor,
     /// The margins of the notification with respect to the window edges.
     pub margins: Edges<Pixels>,
     /// The maximum number of notifications to show at once, default: 10
     pub max_items: usize,
+    /// The width of the notifications, default: 382px
+    pub width: Pixels,
 }
 
 impl Default for NotificationSettings {
@@ -445,15 +460,22 @@ impl Default for NotificationSettings {
                 left: offset,
             },
             max_items: 10,
+            width: DEFAULT_NOTIFICATION_WIDTH,
         }
     }
+}
+
+/// Per-placement stack state, created lazily for placements in use.
+struct AnchorStack {
+    state: ToastStackState,
+    focus_handle: FocusHandle,
 }
 
 /// A list of notifications.
 pub struct NotificationList {
     /// Notifications that will be auto hidden.
     pub(crate) notifications: ToastManager<NotificationId, Entity<Notification>>,
-    stack_state: ToastStackState,
+    stacks: Vec<(Anchor, AnchorStack)>,
     focus_handle: FocusHandle,
     _subscriptions: HashMap<NotificationId, Subscription>,
 }
@@ -477,10 +499,63 @@ impl NotificationList {
         .detach();
         Self {
             notifications: ToastManager::new(ToastMotion::sonner()),
-            stack_state: ToastStackState::default(),
+            stacks: Vec::new(),
             focus_handle: cx.focus_handle().tab_stop(true),
             _subscriptions: HashMap::new(),
         }
+    }
+
+    fn is_expanded(&self) -> bool {
+        self.stacks
+            .iter()
+            .any(|(_, stack)| stack.state.is_expanded())
+    }
+
+    /// Group the visible notifications by their effective placement, pairing
+    /// each group with the element id its stack renders under and preserving
+    /// the display order within each group.
+    fn grouped(
+        &self,
+        cx: &App,
+    ) -> Vec<(
+        Anchor,
+        ElementId,
+        Vec<(NotificationId, Entity<Notification>)>,
+    )> {
+        let settings = &cx.theme().notification;
+        let (max_items, placement) = (settings.max_items, settings.placement);
+
+        let mut groups: Vec<(Anchor, Vec<(NotificationId, Entity<Notification>)>)> = Vec::new();
+        for (id, item, _) in self.notifications.visible(max_items) {
+            let anchor = item.read(cx).placement.unwrap_or(placement);
+            match groups.iter_mut().find(|(a, _)| *a == anchor) {
+                Some((_, items)) => items.push((id.clone(), item.clone())),
+                None => groups.push((anchor, vec![(id.clone(), item.clone())])),
+            }
+        }
+        groups
+            .into_iter()
+            .map(|(anchor, items)| (anchor, Self::stack_id(anchor), items))
+            .collect()
+    }
+
+    /// The element id a placement's stack renders under.
+    ///
+    /// Keyed by the placement itself rather than by position among the mounted
+    /// stacks: a stack whose id changes loses the element state of its whole
+    /// subtree, which replays the enter animation of every notification in it.
+    fn stack_id(anchor: Anchor) -> ElementId {
+        let ix = match anchor {
+            Anchor::TopLeft => 0,
+            Anchor::TopCenter => 1,
+            Anchor::TopRight => 2,
+            Anchor::BottomLeft => 3,
+            Anchor::BottomCenter => 4,
+            Anchor::BottomRight => 5,
+            Anchor::LeftCenter => 6,
+            Anchor::RightCenter => 7,
+        };
+        ("notification-list", ix as usize).into()
     }
 
     pub fn push(
@@ -524,7 +599,7 @@ impl NotificationList {
     fn advance(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let changes = self.notifications.advance(
             cx.background_executor().now(),
-            self.stack_state.is_expanded() || !window.is_window_active(),
+            self.is_expanded() || !window.is_window_active(),
         );
         for id in changes.presented {
             if let Some(note) = self.notifications.get(&id) {
@@ -619,25 +694,63 @@ impl Render for NotificationList {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let size = window.viewport_size();
-        let max_items = cx.theme().notification.max_items;
-        let items = self
-            .notifications
-            .visible(max_items)
-            .map(|(id, value, _)| (id.clone(), value.clone()))
-            .collect::<Vec<_>>();
+        let settings = &cx.theme().notification;
+        let (placement, margins, width) =
+            (settings.placement, settings.margins.clone(), settings.width);
 
-        let placement = cx.theme().notification.placement;
-        let stack = items.into_iter().fold(
-            ToastStack::new("notification-list", self.stack_state.clone()),
-            |stack, (id, item)| stack.item(format!("{id:?}"), item),
-        );
+        let groups = self.grouped(cx);
+        self.stacks
+            .retain(|(anchor, _)| groups.iter().any(|(a, _, _)| a == anchor));
 
-        stack
-            .placement(placement)
-            .focus_handle(self.focus_handle.clone())
-            .v_flex()
-            .w(DEFAULT_NOTIFICATION_WIDTH)
-            .max_h(size.height)
+        let default_focus_handle = self.focus_handle.clone();
+        let stacks = groups.into_iter().map(|(anchor, stack_id, items)| {
+            let stack_ix = self
+                .stacks
+                .iter()
+                .position(|(a, _)| *a == anchor)
+                .unwrap_or_else(|| {
+                    self.stacks.push((
+                        anchor,
+                        AnchorStack {
+                            state: ToastStackState::default(),
+                            focus_handle: if anchor == placement {
+                                default_focus_handle.clone()
+                            } else {
+                                cx.focus_handle().tab_stop(true)
+                            },
+                        },
+                    ));
+                    self.stacks.len() - 1
+                });
+            let stack = &self.stacks[stack_ix].1;
+
+            items
+                .into_iter()
+                .fold(
+                    ToastStack::new(stack_id, stack.state.clone()),
+                    |stack, (id, item)| stack.item(format!("{id:?}"), item),
+                )
+                .placement(anchor)
+                .focus_handle(stack.focus_handle.clone())
+                .v_flex()
+                .w(width)
+                .max_h(size.height)
+                .absolute()
+                .map(|this| match anchor {
+                    Anchor::TopLeft => this.top(margins.top).left(margins.left),
+                    Anchor::TopRight => this.top(margins.top).right(margins.right),
+                    Anchor::TopCenter => this.top(margins.top).left_0().right_0().mx_auto(),
+                    Anchor::BottomLeft => this.bottom(margins.bottom).left(margins.left),
+                    Anchor::BottomRight => this.bottom(margins.bottom).right(margins.right),
+                    Anchor::BottomCenter => {
+                        this.bottom(margins.bottom).left_0().right_0().mx_auto()
+                    }
+                    Anchor::LeftCenter => this.left(margins.left).top_0().bottom_0().my_auto(),
+                    Anchor::RightCenter => this.right(margins.right).top_0().bottom_0().my_auto(),
+                })
+        });
+
+        div().size_full().children(stacks)
     }
 }
 
@@ -678,6 +791,118 @@ mod tests {
         cx.background_executor
             .advance_clock(NOTIFICATION_EXIT_DURATION + Duration::from_millis(50));
         cx.run_until_parked();
+    }
+
+    #[test]
+    fn test_notification_builder() {
+        let note = Notification::new()
+            .title("title")
+            .message("message")
+            .with_type(NotificationType::Success)
+            .placement(Anchor::BottomLeft)
+            .autohide(false);
+        assert_eq!(note.title, Some("title".into()));
+        assert_eq!(note.message, Some("message".into()));
+        assert!(matches!(note.type_, Some(NotificationType::Success)));
+        assert_eq!(note.placement, Some(Anchor::BottomLeft));
+        assert!(!note.autohide);
+    }
+
+    /// A stack's element id must not depend on how many other placements are
+    /// mounted: a changing id drops the element state of the whole subtree,
+    /// which replays each notification's enter animation.
+    #[gpui::test]
+    fn stack_element_id_survives_other_placements_disappearing(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        // The left stack is pushed first, so it owns the lower group index.
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("left")
+                    .id::<FooKind>()
+                    .placement(Anchor::BottomLeft)
+                    .autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("right").id::<BarKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        let right_id = |cx: &mut VisualTestContext| {
+            list.read_with(cx, |list, cx| {
+                list.grouped(cx)
+                    .into_iter()
+                    .find(|(anchor, _, _)| *anchor == Anchor::TopRight)
+                    .map(|(_, id, _)| id)
+                    .expect("the right stack is mounted")
+            })
+        };
+        let before = right_id(cx);
+
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        assert_eq!(right_id(cx), before);
+    }
+
+    #[gpui::test]
+    fn per_notification_placement_stacks_by_anchor(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("default")
+                    .id::<FooKind>()
+                    .autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("bottom")
+                    .id::<BarKind>()
+                    .placement(Anchor::BottomLeft)
+                    .autohide(false),
+                window,
+                cx,
+            );
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let anchors =
+            |list: &NotificationList| list.stacks.iter().map(|(a, _)| *a).collect::<Vec<_>>();
+        assert_eq!(
+            list.read_with(cx, |list, _| anchors(list)),
+            [Anchor::TopRight, Anchor::BottomLeft]
+        );
+
+        // Dismissing the overridden notification prunes its stack.
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<BarKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        assert_eq!(
+            list.read_with(cx, |list, _| anchors(list)),
+            [Anchor::TopRight]
+        );
     }
 
     #[gpui::test]
@@ -765,7 +990,7 @@ mod tests {
             other_focus.focus(window, cx);
             window.draw(cx).clear(cx);
         });
-        assert!(!list.read_with(cx, |list, _| list.stack_state.is_expanded()));
+        assert!(!list.read_with(cx, |list, _| list.is_expanded()));
         cx.background_executor
             .advance_clock(Duration::from_secs(5) + Duration::from_millis(50));
         cx.run_until_parked();
