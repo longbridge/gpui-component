@@ -1,3 +1,4 @@
+use crate::input::EditorMode;
 use anyhow::Result;
 use gpui::{App, Context, EntityInputHandler, Pixels, Task, Window, px};
 use lsp_types::{
@@ -101,7 +102,8 @@ pub trait CompletionProvider {
     fn is_completion_trigger(&self, offset: usize, new_text: &str, cx: &mut App) -> bool;
 }
 
-pub(crate) struct InlineCompletion {
+#[doc(hidden)]
+pub struct InlineCompletion {
     /// Completion item to display as an inline completion suggestion
     pub(crate) item: Option<InlineCompletionItem>,
     /// Task for debouncing inline completion requests
@@ -117,7 +119,7 @@ impl Default for InlineCompletion {
     }
 }
 
-impl InputBaseState {
+impl InputBaseState<EditorMode> {
     pub(crate) fn handle_completion_trigger(
         &mut self,
         range: &Range<usize>,
@@ -129,7 +131,7 @@ impl InputBaseState {
             return;
         }
 
-        let Some(provider) = self.lsp.completion_provider.clone() else {
+        let Some(provider) = self.extras.lsp.completion_provider.clone() else {
             return;
         };
 
@@ -145,6 +147,7 @@ impl InputBaseState {
         }
 
         let start_offset = self
+            .extras
             .context_menu_content
             .completion
             .trigger_start_offset
@@ -162,8 +165,12 @@ impl InputBaseState {
             )
             .map(|s| s.trim().to_string())
             .unwrap_or_default();
-        self.context_menu_content.completion.trigger_start_offset = Some(start_offset);
-        self.context_menu_content
+        self.extras
+            .context_menu_content
+            .completion
+            .trigger_start_offset = Some(start_offset);
+        self.extras
+            .context_menu_content
             .completion
             .query
             .clone_from(&query);
@@ -175,7 +182,7 @@ impl InputBaseState {
 
         let provider_responses =
             provider.completions(&self.text, new_offset, completion_context, window, cx);
-        self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
+        self.extras.context_menu_task = cx.spawn_in(window, async move |editor, cx| {
             let mut completions: Vec<CompletionItem> = vec![];
             if let Some(provider_responses) = provider_responses.await.ok() {
                 match provider_responses {
@@ -186,8 +193,8 @@ impl InputBaseState {
 
             if completions.is_empty() {
                 editor.update(cx, |editor, cx| {
-                    editor.context_menu_content.completion.open = false;
-                    editor.context_menu_content.completion.items.clear();
+                    editor.extras.context_menu_content.completion.open = false;
+                    editor.extras.context_menu_content.completion.items.clear();
                     cx.notify();
                 })?;
                 return Ok(());
@@ -199,9 +206,13 @@ impl InputBaseState {
                         return;
                     }
 
-                    editor.context_menu_content.completion.items = completions;
-                    editor.context_menu_content.completion.open =
-                        !editor.context_menu_content.completion.items.is_empty();
+                    editor.extras.context_menu_content.completion.items = completions;
+                    editor.extras.context_menu_content.completion.open = !editor
+                        .extras
+                        .context_menu_content
+                        .completion
+                        .items
+                        .is_empty();
 
                     cx.notify();
                 })
@@ -212,14 +223,15 @@ impl InputBaseState {
     }
 
     pub(crate) fn hide_context_menu(&mut self, cx: &mut Context<Self>) {
-        self.context_menu_content.completion.open = false;
-        self.context_menu_content.code_action.open = false;
-        self._context_menu_task = Task::ready(Ok(()));
+        self.extras.context_menu_content.completion.open = false;
+        self.extras.context_menu_content.code_action.open = false;
+        self.extras.context_menu_task = Task::ready(Ok(()));
         cx.notify();
     }
 
     pub(crate) fn is_context_menu_open(&self, _cx: &gpui::App) -> bool {
-        self.context_menu_content.completion.open || self.context_menu_content.code_action.open
+        self.extras.context_menu_content.completion.open
+            || self.extras.context_menu_content.code_action.open
     }
 
     pub(crate) fn handle_action_for_context_menu(
@@ -230,9 +242,9 @@ impl InputBaseState {
     ) -> bool {
         let closes_overlay =
             crate::input::Enter::is_primary(&*action) || action.partial_eq(&crate::input::Escape);
-        let kind = if self.context_menu_content.completion.open {
+        let kind = if self.extras.context_menu_content.completion.open {
             Some(super::InputOverlayKind::Completion)
-        } else if self.context_menu_content.code_action.open {
+        } else if self.extras.context_menu_content.code_action.open {
             Some(super::InputOverlayKind::CodeAction)
         } else {
             None
@@ -244,10 +256,10 @@ impl InputBaseState {
         if handled && closes_overlay {
             match kind {
                 super::InputOverlayKind::Completion => {
-                    self.context_menu_content.completion.open = false
+                    self.extras.context_menu_content.completion.open = false
                 }
                 super::InputOverlayKind::CodeAction => {
-                    self.context_menu_content.code_action.open = false
+                    self.extras.context_menu_content.code_action.open = false
                 }
             }
             cx.notify();
@@ -264,7 +276,7 @@ impl InputBaseState {
         // Clear any existing inline completion on text change
         self.clear_inline_completion(cx);
 
-        let Some(provider) = self.lsp.completion_provider.clone() else {
+        let Some(provider) = self.extras.lsp.completion_provider.clone() else {
             return;
         };
 
@@ -273,7 +285,7 @@ impl InputBaseState {
         let debounce = provider.inline_completion_debounce();
         let background_executor = cx.background_executor().clone();
 
-        self.inline_completion.task = cx.spawn_in(window, async move |editor, cx| {
+        self.extras.inline_completion.task = cx.spawn_in(window, async move |editor, cx| {
             // Debounce: wait before fetching to avoid unnecessary requests while typing
             background_executor.timer(debounce).await;
 
@@ -318,7 +330,7 @@ impl InputBaseState {
                     InlineCompletionResponse::Array(items) => items.into_iter().next(),
                     InlineCompletionResponse::List(comp_list) => comp_list.items.into_iter().next(),
                 } {
-                    editor.inline_completion.item = Some(item);
+                    editor.extras.inline_completion.item = Some(item);
                     cx.notify();
                 }
             })?;
@@ -330,12 +342,12 @@ impl InputBaseState {
     /// Check if an inline completion suggestion is currently displayed.
     #[inline]
     pub(crate) fn has_inline_completion(&self) -> bool {
-        self.inline_completion.item.is_some()
+        self.extras.inline_completion.item.is_some()
     }
 
     /// Clear the inline completion suggestion.
     pub(crate) fn clear_inline_completion(&mut self, cx: &mut Context<Self>) {
-        self.inline_completion = InlineCompletion::default();
+        self.extras.inline_completion = InlineCompletion::default();
         cx.notify();
     }
 
@@ -346,7 +358,7 @@ impl InputBaseState {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let Some(completion_item) = self.inline_completion.item.take() else {
+        let Some(completion_item) = self.extras.inline_completion.item.take() else {
             return false;
         };
 

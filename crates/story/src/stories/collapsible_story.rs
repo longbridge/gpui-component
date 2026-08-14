@@ -53,7 +53,7 @@ const NOTIFICATIONS: [(&str, &str); 3] = [
 
 /// The keys listed by the row actions example, as (name, key) pairs.
 const API_KEY_ROWS: [(&str, &str); 3] = [
-    ("Production", "AUDO230454*242SDIFPPL"),
+    ("Production", "PRDK230454*242SDIFPPL"),
     ("Development", "DUILO30454*242SDIFUIP"),
     ("Staging", "IPPODAS230454*242SDI"),
 ];

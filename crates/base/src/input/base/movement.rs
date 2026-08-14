@@ -1,3 +1,4 @@
+use crate::input::InputModeKind;
 use gpui::{Context, Point, Window};
 
 use crate::input::{
@@ -11,7 +12,7 @@ pub(crate) enum MoveDirection {
     Down,
 }
 
-impl InputBaseState {
+impl<M: InputModeKind> InputBaseState<M> {
     /// Called after moving the cursor. Updates preferred_column if we know where the cursor now is.
     pub(super) fn update_preferred_column(&mut self) {
         let Some(last_layout) = &self.last_layout else {
@@ -50,8 +51,8 @@ impl InputBaseState {
         self.scroll_to(offset, direction, cx);
         self.pause_blink_cursor(cx);
         self.update_preferred_column();
-        self.hide_context_menu(cx);
-        self.clear_inline_completion(cx);
+        M::hide_context_menu(self, cx);
+        M::clear_inline_completion(self, cx);
         cx.notify()
     }
 
@@ -155,7 +156,7 @@ impl InputBaseState {
     }
 
     pub(super) fn up(&mut self, action: &MoveUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
+        if M::handle_context_menu_action(self, Box::new(action.clone()), window, cx) {
             return;
         }
 
@@ -175,7 +176,7 @@ impl InputBaseState {
     }
 
     pub(super) fn down(&mut self, action: &MoveDown, window: &mut Window, cx: &mut Context<Self>) {
-        if self.handle_action_for_context_menu(Box::new(action.clone()), window, cx) {
+        if M::handle_context_menu_action(self, Box::new(action.clone()), window, cx) {
             return;
         }
 

@@ -5,7 +5,7 @@ use lsp_types::ColorInformation;
 use ropey::Rope;
 use std::ops::Range;
 
-use crate::input::{InputBaseState, Lsp, RopeExt};
+use crate::input::{EditorMode, InputBaseState, Lsp, RopeExt};
 
 pub trait DocumentColorProvider {
     /// Fetches document colors for the specified range.
@@ -51,7 +51,7 @@ impl Lsp {
         &mut self,
         text: &Rope,
         window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut Context<InputBaseState<EditorMode>>,
     ) {
         let Some(provider) = self.document_color_provider.as_ref() else {
             return;
@@ -90,8 +90,8 @@ impl Lsp {
                             .collect();
                         document_colors.sort_by_key(|(range, _)| range.start);
 
-                        if document_colors != input_state.lsp.document_colors {
-                            input_state.lsp.document_colors = document_colors;
+                        if document_colors != input_state.extras.lsp.document_colors {
+                            input_state.extras.lsp.document_colors = document_colors;
                             cx.notify();
                         }
                     });

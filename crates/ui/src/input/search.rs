@@ -34,8 +34,32 @@ enum MoveDirection {
     Down,
 }
 
-pub(super) struct SearchPanel {
-    editor: WeakEntity<InputBaseState>,
+#[cfg(test)]
+fn next_scroll_direction(
+    previous_match_ix: usize,
+    current_match_ix: usize,
+) -> Option<MoveDirection> {
+    if current_match_ix <= previous_match_ix {
+        None
+    } else {
+        Some(MoveDirection::Down)
+    }
+}
+
+#[cfg(test)]
+fn prev_scroll_direction(
+    previous_match_ix: usize,
+    current_match_ix: usize,
+) -> Option<MoveDirection> {
+    if current_match_ix >= previous_match_ix {
+        None
+    } else {
+        Some(MoveDirection::Up)
+    }
+}
+
+pub(super) struct SearchPanel<M: crate::input::overlay::OverlayMode> {
+    editor: WeakEntity<InputBaseState<M>>,
     search_input: Entity<InputState>,
     replace_input: Entity<InputState>,
     session: gpui_base::input::SearchSession,
@@ -44,36 +68,16 @@ pub(super) struct SearchPanel {
     _subscriptions: Vec<Subscription>,
 }
 
-impl SearchPanel {
+impl<M: crate::input::overlay::OverlayMode> SearchPanel<M> {
     pub(super) fn sync_session(&mut self, session: &gpui_base::input::SearchSession) {
         self.session = session.clone();
     }
 
-    #[cfg(test)]
-    fn next_scroll_direction(
-        previous_match_ix: usize,
-        current_match_ix: usize,
-    ) -> Option<MoveDirection> {
-        if current_match_ix <= previous_match_ix {
-            None
-        } else {
-            Some(MoveDirection::Down)
-        }
-    }
-
-    #[cfg(test)]
-    fn prev_scroll_direction(
-        previous_match_ix: usize,
-        current_match_ix: usize,
-    ) -> Option<MoveDirection> {
-        if current_match_ix >= previous_match_ix {
-            None
-        } else {
-            Some(MoveDirection::Up)
-        }
-    }
-
-    pub fn new(editor: Entity<InputBaseState>, window: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub(crate) fn new(
+        editor: Entity<InputBaseState<M>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Self> {
         let search_input = cx.new(|cx| InputState::new(window, cx));
         let replace_input = cx.new(|cx| InputState::new(window, cx));
 
@@ -289,13 +293,13 @@ impl SearchPanel {
     }
 }
 
-impl Focusable for SearchPanel {
+impl<M: crate::input::overlay::OverlayMode> Focusable for SearchPanel<M> {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
         self.search_input.read(cx).focus_handle(cx)
     }
 }
 
-impl Render for SearchPanel {
+impl<M: crate::input::overlay::OverlayMode> Render for SearchPanel<M> {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.session.open {
             return Empty.into_any_element();
@@ -530,36 +534,36 @@ mod tests {
     #[test]
     fn test_next_scroll_direction_returns_down_without_wrap() {
         assert!(matches!(
-            SearchPanel::next_scroll_direction(0, 1),
+            next_scroll_direction(0, 1),
             Some(MoveDirection::Down)
         ));
     }
 
     #[test]
     fn test_next_scroll_direction_returns_none_on_wrap() {
-        assert!(SearchPanel::next_scroll_direction(2, 0).is_none());
+        assert!(next_scroll_direction(2, 0).is_none());
     }
 
     #[test]
     fn test_next_scroll_direction_returns_none_for_single_match() {
-        assert!(SearchPanel::next_scroll_direction(0, 0).is_none());
+        assert!(next_scroll_direction(0, 0).is_none());
     }
 
     #[test]
     fn test_prev_scroll_direction_returns_up_without_wrap() {
         assert!(matches!(
-            SearchPanel::prev_scroll_direction(2, 1),
+            prev_scroll_direction(2, 1),
             Some(MoveDirection::Up)
         ));
     }
 
     #[test]
     fn test_prev_scroll_direction_returns_none_on_wrap() {
-        assert!(SearchPanel::prev_scroll_direction(0, 2).is_none());
+        assert!(prev_scroll_direction(0, 2).is_none());
     }
 
     #[test]
     fn test_prev_scroll_direction_returns_none_for_single_match() {
-        assert!(SearchPanel::prev_scroll_direction(0, 0).is_none());
+        assert!(prev_scroll_direction(0, 0).is_none());
     }
 }

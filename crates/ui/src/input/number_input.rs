@@ -129,7 +129,7 @@ impl RenderOnce for NumberInput {
         } else {
             cx.theme().radius
         };
-        let base_state = self.state.read(cx).base_state().clone();
+        let base_state = self.state.clone();
         let content = BaseNumberInput::new(&base_state)
             .disabled(self.disabled)
             .size_full()

@@ -3,7 +3,7 @@ use gpui::{App, Context, MouseMoveEvent, Task, Window};
 use instant::Duration;
 use ropey::Rope;
 
-use crate::input::{HoverPopoverState, InputBaseState, RopeExt};
+use crate::input::{EditorMode, HoverPopoverState, InputBaseState, RopeExt};
 
 /// Hover provider
 ///
@@ -21,23 +21,23 @@ pub trait HoverProvider {
     ) -> Task<Result<Option<lsp_types::Hover>>>;
 }
 
-impl InputBaseState {
+impl InputBaseState<EditorMode> {
     /// Handle hover trigger LSP request.
     pub(super) fn handle_hover_popover(
         &mut self,
         offset: usize,
         window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut Context<InputBaseState<EditorMode>>,
     ) {
         if self.selecting {
             return;
         }
 
-        let Some(provider) = self.lsp.hover_provider.clone() else {
+        let Some(provider) = self.extras.lsp.hover_provider.clone() else {
             return;
         };
 
-        if let Some(hover_popover) = self.hover_popover.as_ref() {
+        if let Some(hover_popover) = self.extras.hover_popover.as_ref() {
             if hover_popover.symbol_range.contains(&offset) {
                 return;
             }
@@ -47,8 +47,8 @@ impl InputBaseState {
         let task = provider.hover(&self.text, offset, window, cx);
         let mut symbol_range = self.text.word_range(offset).unwrap_or(offset..offset);
         let editor = cx.entity();
-        let should_delay = self.hover_popover.is_none();
-        self.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
+        let should_delay = self.extras.hover_popover.is_none();
+        self.extras.lsp._hover_task = cx.spawn_in(window, async move |_, cx| {
             if should_delay {
                 cx.background_executor()
                     .timer(Duration::from_millis(150))
@@ -65,13 +65,13 @@ impl InputBaseState {
                             let end = editor.text.position_to_offset(&range.end);
                             symbol_range = start..end;
                         }
-                        editor.hover_popover = Some(HoverPopoverState {
+                        editor.extras.hover_popover = Some(HoverPopoverState {
                             symbol_range,
                             hover,
                         });
                     }
                     None => {
-                        editor.hover_popover = None;
+                        editor.extras.hover_popover = None;
                     }
                 }
                 cx.notify();
@@ -91,17 +91,18 @@ impl InputBaseState {
         if event.modifiers.secondary() {
             self.handle_hover_definition(offset, window, cx);
         } else {
-            self.hover_definition.clear();
+            self.extras.hover_definition.clear();
             self.handle_hover_popover(offset, window, cx);
         }
         cx.notify();
     }
 
     pub fn clear_hover_state(&mut self, cx: &mut Context<Self>) {
-        let changed = !self.hover_definition.is_empty() || self.hover_popover.is_some();
-        self.hover_definition.clear();
-        self.hover_popover = None;
-        self.lsp._hover_task = Task::ready(Ok(()));
+        let changed =
+            !self.extras.hover_definition.is_empty() || self.extras.hover_popover.is_some();
+        self.extras.hover_definition.clear();
+        self.extras.hover_popover = None;
+        self.extras.lsp._hover_task = Task::ready(Ok(()));
         if changed {
             cx.notify();
         }

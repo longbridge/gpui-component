@@ -1,3 +1,4 @@
+use crate::input::InputModeKind;
 use std::ops::Range;
 
 use gpui::{Context, Window};
@@ -6,7 +7,7 @@ use sum_tree::Bias;
 
 use super::{InputBaseState, RopeExt as _};
 
-impl InputBaseState {
+impl<M: InputModeKind> InputBaseState<M> {
     /// Select the word at the given offset on double-click.
     ///
     /// The offset is the UTF-8 offset.

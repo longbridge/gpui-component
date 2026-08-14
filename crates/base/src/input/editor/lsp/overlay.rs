@@ -1,4 +1,5 @@
 use super::*;
+use crate::input::EditorMode;
 use std::ops::Range;
 
 use lsp_types::{CompletionItem, Hover};
@@ -35,7 +36,7 @@ pub enum InputOverlayKind {
     CodeAction,
 }
 
-impl InputBaseState {
+impl InputBaseState<EditorMode> {
     pub fn present_completion_items(
         &mut self,
         trigger_start_offset: usize,
@@ -43,18 +44,25 @@ impl InputBaseState {
         items: Vec<CompletionItem>,
         cx: &mut Context<Self>,
     ) {
-        self.context_menu_content.completion.trigger_start_offset = Some(trigger_start_offset);
-        self.context_menu_content.completion.query = query.into();
-        self.context_menu_content.completion.items = items;
-        self.context_menu_content.completion.open =
-            !self.context_menu_content.completion.items.is_empty();
+        self.extras
+            .context_menu_content
+            .completion
+            .trigger_start_offset = Some(trigger_start_offset);
+        self.extras.context_menu_content.completion.query = query.into();
+        self.extras.context_menu_content.completion.items = items;
+        self.extras.context_menu_content.completion.open =
+            !self.extras.context_menu_content.completion.items.is_empty();
         cx.notify();
     }
 
     pub fn present_code_actions(&mut self, items: Vec<CodeActionItem>, cx: &mut Context<Self>) {
-        self.context_menu_content.code_action.items = items;
-        self.context_menu_content.code_action.open =
-            !self.context_menu_content.code_action.items.is_empty();
+        self.extras.context_menu_content.code_action.items = items;
+        self.extras.context_menu_content.code_action.open = !self
+            .extras
+            .context_menu_content
+            .code_action
+            .items
+            .is_empty();
         cx.notify();
     }
 
@@ -64,7 +72,7 @@ impl InputBaseState {
         hover: Hover,
         cx: &mut Context<Self>,
     ) {
-        self.hover_popover = Some(HoverPopoverState {
+        self.extras.hover_popover = Some(HoverPopoverState {
             symbol_range,
             hover,
         });
@@ -101,7 +109,7 @@ impl InputBaseState {
             InputOverlayKind,
             Box<dyn gpui::Action>,
             &mut Window,
-            &mut Context<InputBaseState>,
+            &mut Context<InputBaseState<EditorMode>>,
         ) -> bool
         + 'static,
     ) {
@@ -113,15 +121,15 @@ impl InputBaseState {
     }
 
     pub fn dismiss_completion_overlay(&mut self, cx: &mut Context<Self>) {
-        if self.context_menu_content.completion.open {
-            self.context_menu_content.completion.open = false;
+        if self.extras.context_menu_content.completion.open {
+            self.extras.context_menu_content.completion.open = false;
             cx.notify();
         }
     }
 
     pub fn dismiss_code_action_overlay(&mut self, cx: &mut Context<Self>) {
-        if self.context_menu_content.code_action.open {
-            self.context_menu_content.code_action.open = false;
+        if self.extras.context_menu_content.code_action.open {
+            self.extras.context_menu_content.code_action.open = false;
             cx.notify();
         }
     }
@@ -161,16 +169,16 @@ impl InputBaseState {
 
     #[doc(hidden)]
     pub fn completion_menu_state(&self) -> &CompletionMenuState {
-        &self.context_menu_content.completion
+        &self.extras.context_menu_content.completion
     }
 
     #[doc(hidden)]
     pub fn code_action_menu_state(&self) -> &CodeActionMenuState {
-        &self.context_menu_content.code_action
+        &self.extras.context_menu_content.code_action
     }
 
     pub fn hover_popover(&self) -> Option<&HoverPopoverState> {
-        self.hover_popover.as_ref()
+        self.extras.hover_popover.as_ref()
     }
 
     pub fn dismiss_lsp_overlays(&mut self, cx: &mut Context<Self>) {

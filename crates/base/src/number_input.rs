@@ -1,3 +1,4 @@
+use crate::input::InputState;
 use std::rc::Rc;
 
 use gpui::Focusable;
@@ -7,7 +8,6 @@ use gpui::{
     Window, actions, div, prelude::FluentBuilder as _,
 };
 
-use crate::input::InputBaseState;
 use crate::{Button, InputBase, StyledExt as _};
 
 actions!(number_input, [Increment, Decrement]);
@@ -31,22 +31,15 @@ pub enum StepAction {
 #[derive(Clone)]
 pub enum NumberStep {
     Fixed(f64),
-    ByValue(Rc<dyn Fn(f64, StepAction, &mut gpui::Context<InputBaseState>) -> f64>),
+    ByValue(Rc<dyn Fn(f64, StepAction, &mut gpui::App) -> f64>),
 }
 
 impl NumberStep {
-    pub fn by_value(
-        f: impl Fn(f64, StepAction, &mut gpui::Context<InputBaseState>) -> f64 + 'static,
-    ) -> Self {
+    pub fn by_value(f: impl Fn(f64, StepAction, &mut gpui::App) -> f64 + 'static) -> Self {
         Self::ByValue(Rc::new(f))
     }
 
-    pub(crate) fn value(
-        &self,
-        current: f64,
-        action: StepAction,
-        cx: &mut gpui::Context<InputBaseState>,
-    ) -> f64 {
+    pub(crate) fn value(&self, current: f64, action: StepAction, cx: &mut gpui::App) -> f64 {
         match self {
             Self::Fixed(step) => *step,
             Self::ByValue(f) => f(current, action, cx),
@@ -64,9 +57,9 @@ impl From<f64> for NumberStep {
 pub enum NumberInputEvent {
     Step(StepAction),
 }
-impl EventEmitter<NumberInputEvent> for InputBaseState {}
+impl EventEmitter<NumberInputEvent> for InputState {}
 
-impl InputBaseState {
+impl InputState {
     /// Apply a number-input step or emit a step event when stepping is caller-controlled.
     fn apply_number_step(
         &mut self,
@@ -106,7 +99,7 @@ pub struct NumberInput {
     style: StyleRefinement,
     children: Vec<AnyElement>,
     disabled: bool,
-    state: Entity<InputBaseState>,
+    state: Entity<InputState>,
     on_step: Option<StepHandler>,
     decrement_button: Option<ButtonDecorator>,
     increment_button: Option<ButtonDecorator>,
@@ -162,7 +155,7 @@ impl RenderOnce for NumberInputText {
 }
 
 impl NumberInput {
-    pub fn new(state: &Entity<InputBaseState>) -> Self {
+    pub fn new(state: &Entity<InputState>) -> Self {
         Self {
             style: StyleRefinement::default(),
             children: Vec::new(),
@@ -389,7 +382,7 @@ mod tests {
     };
 
     struct StepperHarness {
-        state: Entity<InputBaseState>,
+        state: Entity<InputState>,
     }
 
     impl Render for StepperHarness {
@@ -410,11 +403,11 @@ mod tests {
     fn pressing_a_step_button_never_takes_focus_off_the_editor(cx: &mut TestAppContext) {
         cx.update(crate::init);
 
-        let mut created: Option<Entity<InputBaseState>> = None;
+        let mut created: Option<Entity<InputState>> = None;
         let window = cx.update(|cx| {
             cx.open_window(Default::default(), |window, cx| {
                 cx.set_global(Theme::default());
-                let state = cx.new(|cx| InputBaseState::new(window, cx).step(1.));
+                let state = cx.new(|cx| InputState::new(window, cx).step(1.));
                 created = Some(state.clone());
                 cx.new(|_| StepperHarness { state })
             })

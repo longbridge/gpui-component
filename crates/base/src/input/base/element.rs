@@ -1,3 +1,4 @@
+use crate::input::InputModeKind;
 use gpui::Corners;
 use gpui::Half;
 use gpui::{
@@ -22,7 +23,7 @@ use crate::{
 use super::{
     InputBaseState, TextDecoration,
     layout::{LastLayout, WhitespaceIndicators},
-    mode::InputMode,
+    mode::LayoutMode,
 };
 
 fn diagnostic_highlight_style(
@@ -116,12 +117,12 @@ pub(super) struct EditorScrollbarSnapshot {
 }
 
 impl EditorScrollbarSnapshot {
-    fn new(
+    fn new<M: InputModeKind>(
         input_bounds: Bounds<Pixels>,
         last_layout: &LastLayout,
         scroll_size: Size<Pixels>,
         cursor_scroll_offset: Point<Pixels>,
-        state: &InputBaseState,
+        state: &InputBaseState<M>,
     ) -> Self {
         Self {
             layout: EditorScrollbarLayout::new(
@@ -168,17 +169,17 @@ impl EditorScrollbarLayout {
     }
 }
 
-pub(super) struct EditorScrollbar {
-    state: Entity<InputBaseState>,
+pub(super) struct EditorScrollbar<M: InputModeKind> {
+    state: Entity<InputBaseState<M>>,
 }
 
-impl EditorScrollbar {
-    pub(super) fn new(state: Entity<InputBaseState>) -> Self {
+impl<M: InputModeKind> EditorScrollbar<M> {
+    pub(super) fn new(state: Entity<InputBaseState<M>>) -> Self {
         Self { state }
     }
 }
 
-impl IntoElement for EditorScrollbar {
+impl<M: InputModeKind> IntoElement for EditorScrollbar<M> {
     type Element = Self;
 
     fn into_element(self) -> Self::Element {
@@ -186,7 +187,7 @@ impl IntoElement for EditorScrollbar {
     }
 }
 
-impl Element for EditorScrollbar {
+impl<M: InputModeKind> Element for EditorScrollbar<M> {
     type RequestLayoutState = ();
     type PrepaintState = Option<AnyElement>;
 
@@ -267,7 +268,7 @@ impl Element for EditorScrollbar {
 }
 
 fn clamp_auto_grow_vertical_scroll_offset(
-    mode: &InputMode,
+    mode: &LayoutMode,
     scroll_top: Pixels,
     scroll_height: Pixels,
     input_height: Pixels,
@@ -386,13 +387,13 @@ struct FoldIconLayout {
     icons: Vec<(usize, bool, gpui::AnyElement)>,
 }
 
-pub(super) struct TextElement {
-    pub(crate) state: Entity<InputBaseState>,
+pub(super) struct TextElement<M: InputModeKind> {
+    pub(crate) state: Entity<InputBaseState<M>>,
     placeholder: SharedString,
 }
 
-impl TextElement {
-    pub(super) fn new(state: Entity<InputBaseState>) -> Self {
+impl<M: InputModeKind> TextElement<M> {
+    pub(super) fn new(state: Entity<InputBaseState<M>>) -> Self {
         Self {
             state,
             placeholder: SharedString::default(),
@@ -793,11 +794,7 @@ impl TextElement {
         cx: &mut App,
     ) -> Option<Path<Pixels>> {
         let state = self.state.read(cx);
-        let Some(symbol_range) = state
-            .hover_popover
-            .as_ref()
-            .map(|session| session.symbol_range.clone())
-        else {
+        let Some(symbol_range) = M::hover_symbol_range(&state.extras) else {
             return None;
         };
 
@@ -869,7 +866,7 @@ impl TextElement {
     /// - visible_top: The top position of the first visible line in the scroll viewport.
     fn calculate_visible_range(
         &self,
-        state: &InputBaseState,
+        state: &InputBaseState<M>,
         line_height: Pixels,
         input_height: Pixels,
     ) -> (Range<usize>, Vec<usize>, Pixels) {
@@ -935,7 +932,7 @@ impl TextElement {
 
     /// Return (line_number_width, line_number_len)
     fn layout_line_numbers(
-        state: &InputBaseState,
+        state: &InputBaseState<M>,
         text: &Rope,
         font_size: Pixels,
         style: &TextStyle,
@@ -980,7 +977,7 @@ impl TextElement {
     ///
     /// Returns `WhitespaceIndicators` with shaped lines for space and tab characters.
     fn layout_whitespace_indicators(
-        state: &InputBaseState,
+        state: &InputBaseState<M>,
         text_size: Pixels,
         style: &TextStyle,
         window: &mut Window,
@@ -1037,7 +1034,7 @@ impl TextElement {
     /// - first_line: Shaped text for the first line (goes after cursor on same line)
     /// - ghost_lines: Shaped lines for subsequent lines (shift content down)
     fn layout_inline_completion(
-        state: &InputBaseState,
+        state: &InputBaseState<M>,
         visible_range: &Range<usize>,
         font_size: Pixels,
         window: &mut Window,
@@ -1048,7 +1045,7 @@ impl TextElement {
             return (None, vec![]);
         }
 
-        let Some(completion_item) = state.inline_completion.item.as_ref() else {
+        let Some(completion_item) = M::inline_completion_item(&state.extras) else {
             return (None, vec![]);
         };
 
@@ -1292,7 +1289,7 @@ impl TextElement {
 
     #[allow(clippy::too_many_arguments)]
     fn layout_lines(
-        state: &InputBaseState,
+        state: &InputBaseState<M>,
         display_text: &Rope,
         last_layout: &LastLayout,
         font_size: Pixels,
@@ -1414,7 +1411,7 @@ impl TextElement {
         let is_multi_line = state.mode.is_multi_line();
 
         let (mut highlighter, diagnostics) = match &state.mode {
-            InputMode::CodeEditor {
+            LayoutMode::CodeEditor {
                 highlighter,
                 diagnostics,
                 ..
@@ -1424,7 +1421,7 @@ impl TextElement {
                     .then(|| {
                         compose_decoration_collections(
                             Vec::new(),
-                            state.decorations.iter(),
+                            M::decoration_layers(&state.extras).into_iter(),
                             visible_byte_range,
                         )
                     })
@@ -1436,7 +1433,7 @@ impl TextElement {
                 .then(|| {
                     compose_decoration_collections(
                         Vec::new(),
-                        state.decorations.iter(),
+                        M::decoration_layers(&state.extras).into_iter(),
                         visible_byte_range,
                     )
                 })
@@ -1514,14 +1511,15 @@ impl TextElement {
         // result through the active highlight theme so it shares the same
         // colour vocabulary as the tree-sitter path. Empty Vec when no
         // provider is set, so `combine_highlights` short-circuits.
-        let custom_styles = state.lsp.semantic_tokens_for_range(
+        let custom_styles = M::semantic_token_styles(
+            &state.extras,
             text,
             &visible_byte_range,
             state.editor_style.highlight_styles.as_ref(),
         );
 
         // hover definition style
-        if let Some(hover_style) = self.layout_hover_definition(cx) {
+        if let Some(hover_style) = M::hover_definition_style(self.state.read(cx), cx) {
             styles.push(hover_style);
         }
 
@@ -1530,7 +1528,7 @@ impl TextElement {
         if !state.masked {
             styles = compose_decoration_collections(
                 styles,
-                state.decorations.iter(),
+                M::decoration_layers(&state.extras).into_iter(),
                 visible_byte_range.clone(),
             )
             .unwrap_or_default();
@@ -1581,7 +1579,7 @@ impl PrepaintState {
     }
 }
 
-impl IntoElement for TextElement {
+impl<M: InputModeKind> IntoElement for TextElement<M> {
     type Element = Self;
 
     fn into_element(self) -> Self::Element {
@@ -1620,7 +1618,7 @@ fn print_points_as_svg_path(
         }
     }
 }
-impl Element for TextElement {
+impl<M: InputModeKind> Element for TextElement<M> {
     type RequestLayoutState = ();
     type PrepaintState = PrepaintState;
 
@@ -1846,9 +1844,8 @@ impl Element for TextElement {
             .into_vec()
         };
 
-        let document_colors = state
-            .lsp
-            .document_colors_for_range(&text, &last_layout.visible_range);
+        let document_colors =
+            M::document_color_swatches(&state.extras, &text, &last_layout.visible_range);
 
         // Create shaped lines for whitespace indicators before layout
         let whitespace_indicators =
@@ -2026,7 +2023,7 @@ impl Element for TextElement {
             None
         };
 
-        let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
+        let hover_definition_hitbox = M::hover_definition_hitbox(state, window, cx);
         let indent_guides_path =
             self.layout_indent_guides(state, &bounds, &last_layout, &text_style, window);
         state
@@ -2639,7 +2636,7 @@ mod tests {
 
     #[test]
     fn test_auto_grow_scroll_offset_is_clamped_to_current_viewport() {
-        let mode = InputMode::auto_grow(3, 8);
+        let mode = LayoutMode::auto_grow(3, 8);
 
         assert_eq!(
             clamp_auto_grow_vertical_scroll_offset(&mode, px(-260.), px(340.), px(160.)),
@@ -2654,7 +2651,7 @@ mod tests {
             px(0.)
         );
 
-        let plain_text = InputMode::plain_text().multi_line(true);
+        let plain_text = LayoutMode::plain_text().multi_line(true);
         assert_eq!(
             clamp_auto_grow_vertical_scroll_offset(&plain_text, px(-260.), px(340.), px(160.)),
             px(-260.)

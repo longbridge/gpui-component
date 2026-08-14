@@ -24,6 +24,8 @@ mod highlighting;
 #[path = "editor/indent.rs"]
 mod indent;
 mod input;
+#[path = "base/kind.rs"]
+mod kind;
 #[path = "base/layout.rs"]
 mod layout;
 #[path = "editor/lsp/mod.rs"]
@@ -66,13 +68,13 @@ pub use highlighting::{
 };
 pub use indent::TabSize;
 pub use input::{Input, InputState};
+pub use kind::{EditorExtras, EditorMode, InputMode, InputModeKind, TextareaMode};
 pub use lsp::{
     CodeActionItem, CodeActionMenuState, CodeActionProvider, CompletionMenuOptions,
     CompletionMenuState, CompletionProvider, DefinitionProvider, DocumentColorProvider,
     DocumentRangeSemanticTokensProvider, HoverPopoverState, HoverProvider, InputOverlayKind, Lsp,
     ShowDocumentHandler,
 };
-pub(super) use lsp::{HoverDefinition, InlineCompletion};
 pub use lsp_types::Position;
 pub use mask_pattern::MaskPattern;
 #[cfg(target_os = "macos")]

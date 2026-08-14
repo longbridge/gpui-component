@@ -1,169 +1,236 @@
-use gpui::{
-    App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
-    Render, RenderOnce, SharedString, Subscription, Window,
-};
+use gpui::{App, Div, Entity, InteractiveElement as _, IntoElement, RenderOnce, Stateful, Window};
 
-use super::{InputBaseState, InputEvent, TabSize, TextDecoration, TextDecorationCollection};
+use super::{EditorMode, InputBaseState, InputModeKind};
 
 /// State for source-code editing.
 ///
-/// Editor-specific configuration lives here so ordinary inputs and textareas
-/// do not need to expose languages, line numbers, folding, diagnostics, or LSP.
-#[derive(Default)]
-struct EditorOptions {
-    placeholder: Option<SharedString>,
-    default_value: Option<SharedString>,
-    tab_size: Option<TabSize>,
-    line_number: Option<bool>,
-    folding: Option<bool>,
-    show_whitespaces: bool,
-    configured: bool,
-}
+/// This is the shared editing engine in its code-editor kind. Languages, line
+/// numbers, folding, indent guides, diagnostics, decorations, and the LSP
+/// providers exist on this kind only, so an ordinary input or textarea never
+/// exposes them.
+pub type EditorState = InputBaseState<EditorMode>;
 
-pub struct EditorState {
-    base: Entity<InputBaseState>,
-    value: SharedString,
-    options: EditorOptions,
-    _subscription: Subscription,
+impl InputModeKind for EditorMode {
+    type Extras = super::EditorExtras;
+
+    fn lsp(extras: &Self::Extras) -> Option<&super::Lsp> {
+        Some(&extras.lsp)
+    }
+
+    fn lsp_mut(extras: &mut Self::Extras) -> Option<&mut super::Lsp> {
+        Some(&mut extras.lsp)
+    }
+
+    fn decoration_layers(extras: &Self::Extras) -> Vec<&[super::TextDecoration]> {
+        extras.decorations.iter().collect()
+    }
+
+    fn semantic_token_styles(
+        extras: &Self::Extras,
+        text: &ropey::Rope,
+        range: &std::ops::Range<usize>,
+        resolver: &dyn super::HighlightStyleResolver,
+    ) -> Vec<(std::ops::Range<usize>, gpui::HighlightStyle)> {
+        extras.lsp.semantic_tokens_for_range(text, range, resolver)
+    }
+
+    fn document_color_swatches(
+        extras: &Self::Extras,
+        text: &ropey::Rope,
+        range: &std::ops::Range<usize>,
+    ) -> Vec<(std::ops::Range<usize>, gpui::Hsla)> {
+        extras.lsp.document_colors_for_range(text, range)
+    }
+
+    fn hover_definition_style(
+        state: &InputBaseState<Self>,
+        _cx: &App,
+    ) -> Option<(std::ops::Range<usize>, gpui::HighlightStyle)> {
+        crate::input::element::TextElement::<Self>::hover_definition_style(state)
+    }
+
+    fn hover_definition_hitbox(
+        state: &InputBaseState<Self>,
+        window: &mut Window,
+        _cx: &App,
+    ) -> Option<gpui::Hitbox> {
+        crate::input::element::TextElement::<Self>::hover_definition_hitbox(state, window)
+    }
+
+    fn hover_symbol_range(extras: &Self::Extras) -> Option<std::ops::Range<usize>> {
+        extras
+            .hover_popover
+            .as_ref()
+            .map(|session| session.symbol_range.clone())
+    }
+
+    fn inline_completion_item(extras: &Self::Extras) -> Option<&lsp_types::InlineCompletionItem> {
+        extras.inline_completion.item.as_ref()
+    }
+
+    fn hover_popover(extras: &Self::Extras) -> Option<&super::HoverPopoverState> {
+        extras.hover_popover.as_ref()
+    }
+
+    fn reset_language_features(state: &mut InputBaseState<Self>) {
+        state.extras.lsp.reset();
+    }
+
+    fn reset_annotations(state: &mut InputBaseState<Self>) {
+        state.extras.hover_popover = None;
+        state.extras.decorations.clear();
+    }
+
+    fn adjust_annotations(
+        state: &mut InputBaseState<Self>,
+        range: &std::ops::Range<usize>,
+        new_len: usize,
+    ) {
+        state.extras.decorations.adjust_for_edit(range, new_len);
+    }
+
+    fn refresh_language_features(
+        state: &mut InputBaseState<Self>,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        let text = state.text().clone();
+        state.extras.lsp.update(&text, window, cx);
+    }
+
+    fn accept_inline_completion(
+        state: &mut InputBaseState<Self>,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) -> bool {
+        state.accept_inline_completion(window, cx)
+    }
+
+    fn has_inline_completion(state: &InputBaseState<Self>) -> bool {
+        state.has_inline_completion()
+    }
+
+    fn on_click(
+        state: &mut InputBaseState<Self>,
+        event: &gpui::MouseDownEvent,
+        offset: usize,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) -> bool {
+        state.handle_click_hover_definition(event, offset, window, cx)
+    }
+
+    fn clear_hover_state(
+        state: &mut InputBaseState<Self>,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        state.clear_hover_state(cx);
+    }
+
+    fn on_text_typed(
+        state: &mut InputBaseState<Self>,
+        range: &std::ops::Range<usize>,
+        text: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        state.handle_completion_trigger(range, text, window, cx);
+    }
+
+    fn clear_inline_completion(
+        state: &mut InputBaseState<Self>,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        state.clear_inline_completion(cx);
+    }
+
+    fn hide_context_menu(
+        state: &mut InputBaseState<Self>,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        state.hide_context_menu(cx);
+    }
+
+    fn context_menu_capabilities(extras: &Self::Extras) -> (bool, bool) {
+        (
+            extras.lsp.definition_provider.is_some(),
+            !extras.lsp.code_action_providers.is_empty(),
+        )
+    }
+
+    fn is_context_menu_open(state: &InputBaseState<Self>, cx: &App) -> bool {
+        state.is_context_menu_open(cx)
+    }
+
+    fn handle_context_menu_action(
+        state: &mut InputBaseState<Self>,
+        action: Box<dyn gpui::Action>,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) -> bool {
+        state.handle_action_for_context_menu(action, window, cx)
+    }
+
+    fn on_hover_definition(
+        state: &mut InputBaseState<Self>,
+        offset: usize,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        state.handle_hover_definition(offset, window, cx);
+    }
+
+    fn on_mouse_move(
+        state: &mut InputBaseState<Self>,
+        offset: usize,
+        event: &gpui::MouseMoveEvent,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        state.handle_mouse_move(offset, event, window, cx);
+    }
+
+    fn drive_highlighter(
+        highlighter: &std::rc::Rc<std::cell::RefCell<Option<Box<dyn super::InputHighlighter>>>>,
+        edit: super::InputEdit,
+        text: &ropey::Rope,
+        folding: bool,
+        window: &mut Window,
+        cx: &mut gpui::Context<InputBaseState<Self>>,
+    ) {
+        let mut highlighter = highlighter.borrow_mut();
+        let Some(highlighter) = highlighter.as_mut() else {
+            return;
+        };
+        highlighter.update(Some(edit), text, folding, window, cx);
+    }
+
+    fn register_actions(
+        element: Stateful<Div>,
+        entity: &Entity<InputBaseState<Self>>,
+        window: &mut Window,
+    ) -> Stateful<Div> {
+        element
+            .on_action(window.listener_for(entity, InputBaseState::on_action_toggle_code_actions))
+            .on_action(window.listener_for(entity, InputBaseState::on_action_go_to_definition))
+    }
 }
 
 impl EditorState {
-    pub fn new(
-        language: impl Into<SharedString>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let language = language.into();
-        let base = cx.new(|cx| InputBaseState::new(window, cx).code_editor(language));
-        let subscription = cx.subscribe(&base, |this, base, event: &InputEvent, cx| {
-            if matches!(event, InputEvent::Change) {
-                this.value = base.read(cx).value();
-            }
-            cx.emit(event.clone());
-        });
-
-        Self {
-            base,
-            value: SharedString::default(),
-            options: EditorOptions::default(),
-            _subscription: subscription,
-        }
+    /// The LSP providers and their cached results.
+    ///
+    /// This exists on the editor alone: an ordinary input or textarea has no
+    /// language server, and no field to reach one through.
+    pub fn lsp(&self) -> &super::Lsp {
+        &self.extras.lsp
     }
 
-    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
-        self.options.placeholder = Some(placeholder.into());
-        self
-    }
-
-    pub fn default_value(mut self, value: impl Into<SharedString>) -> Self {
-        let value = value.into();
-        self.value = value.clone();
-        self.options.default_value = Some(value);
-        self
-    }
-
-    pub fn tab_size(mut self, tab_size: TabSize) -> Self {
-        self.options.tab_size = Some(tab_size);
-        self
-    }
-
-    pub fn line_number(mut self, line_number: bool) -> Self {
-        self.options.line_number = Some(line_number);
-        self
-    }
-
-    pub fn folding(mut self, folding: bool) -> Self {
-        self.options.folding = Some(folding);
-        self
-    }
-
-    pub fn show_whitespaces(mut self, show: bool) -> Self {
-        self.options.show_whitespaces = show;
-        self
-    }
-
-    pub fn value(&self) -> SharedString {
-        self.value.clone()
-    }
-
-    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        self.focus_handle(cx).focus(window, cx);
-    }
-
-    pub fn set_value(
-        &mut self,
-        value: impl Into<SharedString>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let value = value.into();
-        self.value = value.clone();
-        self.base
-            .update(cx, |state, cx| state.set_value(value, window, cx));
-    }
-
-    pub fn create_decorations_collection(
-        &mut self,
-        decorations: Vec<TextDecoration>,
-        cx: &mut Context<Self>,
-    ) -> TextDecorationCollection {
-        self.base.update(cx, |state, cx| {
-            state.create_decorations_collection(decorations, cx)
-        })
-    }
-
-    #[doc(hidden)]
-    pub fn base_state(&self) -> &Entity<InputBaseState> {
-        &self.base
-    }
-
-    #[doc(hidden)]
-    pub fn prepare(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.options.configured {
-            return;
-        }
-        self.options.configured = true;
-        let placeholder = self.options.placeholder.take();
-        let default_value = self.options.default_value.take();
-        let tab_size = self.options.tab_size;
-        let line_number = self.options.line_number;
-        let folding = self.options.folding;
-        let show_whitespaces = self.options.show_whitespaces;
-        self.base.update(cx, |state, cx| {
-            if let Some(placeholder) = placeholder {
-                state.set_placeholder(placeholder, window, cx);
-            }
-            if let Some(value) = default_value {
-                state.set_value(value, window, cx);
-            }
-            if let Some(tab_size) = tab_size {
-                state.set_tab_size(tab_size, cx);
-            }
-            if let Some(line_number) = line_number {
-                state.set_line_number(line_number, window, cx);
-            }
-            if let Some(folding) = folding {
-                state.set_folding(folding, window, cx);
-            }
-            state.set_show_whitespaces(show_whitespaces, window, cx);
-        });
+    /// The LSP providers, mutably. Configure the providers through this.
+    pub fn lsp_mut(&mut self) -> &mut super::Lsp {
+        &mut self.extras.lsp
     }
 }
 
-impl EventEmitter<InputEvent> for EditorState {}
-
-impl Focusable for EditorState {
-    fn focus_handle(&self, cx: &App) -> FocusHandle {
-        self.base.read(cx).focus_handle(cx)
-    }
-}
-
-impl Render for EditorState {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.prepare(window, cx);
-        self.base.clone()
-    }
-}
 /// An unstyled source-code editor.
 #[derive(IntoElement)]
 pub struct Editor {

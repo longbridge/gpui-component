@@ -3,7 +3,6 @@ use gpui::{
     Window, prelude::FluentBuilder as _,
 };
 
-use super::state::sync_focused_input_registry;
 use super::{EditorState, Input};
 use crate::{RoleOverride, StyledExt as _};
 
@@ -91,11 +90,9 @@ impl Styled for Editor {
 }
 
 impl RenderOnce for Editor {
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        self.state.update(cx, |state, cx| state.prepare(window, cx));
-        sync_focused_input_registry(self.state.clone(), window, cx);
-        let base = self.state.read(cx).base_state().clone();
-        Input::from_base(&base)
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        Input::from_state(&self.state)
+            .focused_as(self.state.clone().into())
             .appearance(self.appearance)
             .bordered(self.bordered)
             .focus_bordered(false)

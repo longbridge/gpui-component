@@ -176,7 +176,7 @@ impl Focusable for TextareaStory {
 
 impl Render for TextareaStory {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let loc = self.textarea.read(cx).cursor_position(cx);
+        let loc = self.textarea.read(cx).cursor_position();
 
         v_flex()
             .w_full()

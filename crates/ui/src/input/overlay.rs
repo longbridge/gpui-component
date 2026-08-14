@@ -4,29 +4,228 @@ use gpui::{AnyElement, App, Entity, EntityId, Global, IntoElement, WeakEntity, W
 use ropey::Rope;
 
 use super::{
-    InputBaseState,
+    InputBaseState, InputModeKind,
     popovers::{CodeActionMenu, CompletionMenu, DiagnosticPopover, HoverPopover},
     search::SearchPanel,
 };
 
-#[derive(Default)]
-struct InputOverlayRegistry {
-    hosts: HashMap<EntityId, (WeakEntity<InputBaseState>, InputOverlayHost)>,
+struct InputOverlayRegistry<M: OverlayMode> {
+    hosts: HashMap<EntityId, (WeakEntity<InputBaseState<M>>, InputOverlayHost<M>)>,
 }
 
-impl Global for InputOverlayRegistry {}
+impl<M: OverlayMode> Default for InputOverlayRegistry<M> {
+    fn default() -> Self {
+        Self {
+            hosts: HashMap::default(),
+        }
+    }
+}
 
-struct InputOverlayHost {
-    search: Entity<SearchPanel>,
+impl<M: OverlayMode> Global for InputOverlayRegistry<M> {}
+
+struct InputOverlayHost<M: OverlayMode> {
+    search: Entity<SearchPanel<M>>,
+    search_signature: (bool, bool, String, Option<usize>),
+    /// The language-feature popovers. Only a code editor has them.
+    lsp: Option<LspOverlays>,
+}
+
+/// The popovers driven by language features: completion, code actions, hover
+/// and diagnostics. They belong to a code editor, so they are built and synced
+/// by [`OverlayMode`], where the state's kind is concrete.
+#[doc(hidden)]
+pub struct LspOverlays {
     completion: Entity<CompletionMenu>,
     code_actions: Entity<CodeActionMenu>,
     hover: Option<Entity<HoverPopover>>,
     diagnostic: Option<Entity<DiagnosticPopover>>,
-    search_signature: (bool, bool, String, Option<usize>),
     completion_signature: String,
     code_action_signature: String,
     hover_signature: String,
     diagnostic_signature: String,
+}
+
+/// What the state read out of the engine for one sync pass.
+#[doc(hidden)]
+pub struct LspSnapshot {
+    completion_open: bool,
+    completion_start: Option<usize>,
+    completion_query: String,
+    completion_items: Vec<lsp_types::CompletionItem>,
+    code_action_open: bool,
+    code_action_items: Vec<gpui_base::input::CodeActionItem>,
+    hover: Option<gpui_base::input::HoverPopoverState>,
+    diagnostic: Option<std::rc::Rc<gpui_base::input::DiagnosticEntry>>,
+    cursor: usize,
+}
+
+/// Which overlays a mode of input shows.
+///
+/// The overlay layer is generic over the mode, so it cannot name the editor's
+/// state type. This trait is the seam: the code-editor implementation is the
+/// only one that builds language-feature popovers, and inside it the state is
+/// an `Entity<EditorState>`, which those popovers take.
+///
+/// A framework-internal seam, named only because it bounds [`super::Input`].
+#[doc(hidden)]
+pub trait OverlayMode: InputModeKind + Sized {
+    /// Reads the language-feature state this mode shows, if any.
+    fn lsp_snapshot(_state: &InputBaseState<Self>, _cx: &App) -> Option<LspSnapshot> {
+        None
+    }
+
+    /// Installs the routing that lets an open menu consume actions first.
+    fn install_action_handler(_state: &Entity<InputBaseState<Self>>, _cx: &mut App) {}
+
+    fn build_lsp(
+        _state: &Entity<InputBaseState<Self>>,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Option<LspOverlays> {
+        None
+    }
+
+    fn sync_lsp(
+        _lsp: &mut LspOverlays,
+        _state: &Entity<InputBaseState<Self>>,
+        _snapshot: &LspSnapshot,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) {
+    }
+}
+
+impl OverlayMode for crate::input::InputMode {}
+impl OverlayMode for crate::input::TextareaMode {}
+
+impl OverlayMode for crate::input::EditorMode {
+    fn install_action_handler(state: &Entity<InputBaseState<Self>>, cx: &mut App) {
+        let id = state.entity_id();
+        state.update(cx, move |state, _| {
+            state.set_overlay_action_handler(move |kind, action, window, cx| {
+                let menus = cx
+                    .try_global::<InputOverlayRegistry<Self>>()
+                    .and_then(|registry| registry.hosts.get(&id))
+                    .and_then(|(_, host)| host.lsp.as_ref())
+                    .map(|lsp| (lsp.completion.clone(), lsp.code_actions.clone()));
+                let Some((completion, code_actions)) = menus else {
+                    return false;
+                };
+                match kind {
+                    gpui_base::input::InputOverlayKind::Completion => {
+                        completion.update(cx, |menu, cx| menu.handle_action(action, window, cx))
+                    }
+                    gpui_base::input::InputOverlayKind::CodeAction => {
+                        code_actions.update(cx, |menu, cx| menu.handle_action(action, window, cx))
+                    }
+                }
+            });
+        });
+    }
+
+    fn lsp_snapshot(state: &InputBaseState<Self>, _cx: &App) -> Option<LspSnapshot> {
+        let completion = state.completion_menu_state();
+        let code_actions = state.code_action_menu_state();
+        Some(LspSnapshot {
+            completion_open: completion.open,
+            completion_start: completion.trigger_start_offset,
+            completion_query: completion.query.clone(),
+            completion_items: completion.items.clone(),
+            code_action_open: code_actions.open,
+            code_action_items: code_actions.items.clone(),
+            hover: state.hover_popover().cloned(),
+            diagnostic: state.diagnostic_popover(),
+            cursor: state.cursor(),
+        })
+    }
+
+    fn build_lsp(
+        state: &Entity<InputBaseState<Self>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Option<LspOverlays> {
+        Some(LspOverlays {
+            completion: CompletionMenu::new(state.clone(), window, cx),
+            code_actions: CodeActionMenu::new(state.clone(), window, cx),
+            hover: None,
+            diagnostic: None,
+            completion_signature: String::new(),
+            code_action_signature: String::new(),
+            hover_signature: String::new(),
+            diagnostic_signature: String::new(),
+        })
+    }
+
+    fn sync_lsp(
+        lsp: &mut LspOverlays,
+        state: &Entity<InputBaseState<Self>>,
+        snapshot: &LspSnapshot,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let cursor = snapshot.cursor;
+        let completion_signature = format!(
+            "{}:{:?}:{}:{:?}",
+            snapshot.completion_open,
+            snapshot.completion_start,
+            snapshot.completion_query,
+            snapshot.completion_items
+        );
+        if completion_signature != lsp.completion_signature {
+            lsp.completion_signature = completion_signature;
+            let open = snapshot.completion_open;
+            let start = snapshot.completion_start;
+            let query = snapshot.completion_query.clone();
+            let items = snapshot.completion_items.clone();
+            lsp.completion.update(cx, |menu, cx| {
+                if open {
+                    menu.update_query(start.unwrap_or(cursor), query);
+                    menu.show(cursor, items, window, cx);
+                } else {
+                    menu.hide(cx);
+                }
+            });
+        }
+
+        let code_action_signature = format!(
+            "{}:{:?}",
+            snapshot.code_action_open, snapshot.code_action_items
+        );
+        if code_action_signature != lsp.code_action_signature {
+            lsp.code_action_signature = code_action_signature;
+            let open = snapshot.code_action_open;
+            let items = snapshot.code_action_items.clone();
+            lsp.code_actions.update(cx, |menu, cx| {
+                if open {
+                    menu.show(cursor, items, window, cx);
+                } else {
+                    menu.hide(cx);
+                }
+            });
+        }
+
+        let hover_signature = format!("{:?}", snapshot.hover);
+        if hover_signature != lsp.hover_signature {
+            lsp.hover_signature = hover_signature;
+            lsp.hover = snapshot.hover.as_ref().map(|popover| {
+                HoverPopover::new(
+                    state.clone(),
+                    popover.symbol_range.clone(),
+                    &popover.hover,
+                    cx,
+                )
+            });
+        }
+
+        let diagnostic_signature = format!("{:?}", snapshot.diagnostic);
+        if diagnostic_signature != lsp.diagnostic_signature {
+            lsp.diagnostic_signature = diagnostic_signature;
+            lsp.diagnostic = snapshot
+                .diagnostic
+                .as_deref()
+                .map(|entry| DiagnosticPopover::new(entry, state.clone(), cx));
+        }
+    }
 }
 
 #[derive(Default)]
@@ -47,63 +246,26 @@ impl InputOverlays {
     }
 }
 
-impl InputOverlayHost {
-    fn new(state: Entity<InputBaseState>, window: &mut Window, cx: &mut App) -> Self {
-        let search = SearchPanel::new(state.clone(), window, cx);
-        let completion = CompletionMenu::new(state.clone(), window, cx);
-        let code_actions = CodeActionMenu::new(state.clone(), window, cx);
+impl<M: OverlayMode> InputOverlayHost<M> {
+    fn new(state: Entity<InputBaseState<M>>, window: &mut Window, cx: &mut App) -> Self {
         Self {
-            search,
-            completion,
-            code_actions,
-            hover: None,
-            diagnostic: None,
+            search: SearchPanel::new(state.clone(), window, cx),
             search_signature: (false, false, String::new(), None),
-            completion_signature: String::new(),
-            code_action_signature: String::new(),
-            hover_signature: String::new(),
-            diagnostic_signature: String::new(),
+            lsp: M::build_lsp(&state, window, cx),
         }
     }
 
     fn sync(
         &mut self,
-        state: &Entity<InputBaseState>,
+        state: &Entity<InputBaseState<M>>,
         window: &mut Window,
         cx: &mut App,
     ) -> InputOverlays {
-        let (
-            search_open,
-            replace_mode,
-            completion_open,
-            completion_start,
-            completion_query,
-            completion_items,
-            code_action_open,
-            code_action_items,
-            hover,
-            diagnostic,
-            cursor,
-            search_session,
-        ) = {
+        let snapshot = M::lsp_snapshot(state.read(cx), cx);
+        let (search_open, replace_mode, search_session) = {
             let state = state.read(cx);
             let search = state.search_session();
-            let completion = state.completion_menu_state();
-            let code_actions = state.code_action_menu_state();
-            (
-                search.open,
-                search.replace_mode,
-                completion.open,
-                completion.trigger_start_offset,
-                completion.query.clone(),
-                completion.items.clone(),
-                code_actions.open,
-                code_actions.items.clone(),
-                state.hover_popover().cloned(),
-                state.diagnostic_popover(),
-                state.cursor(),
-                search.clone(),
-            )
+            (search.open, search.replace_mode, search.clone())
         };
 
         self.search
@@ -135,84 +297,50 @@ impl InputOverlayHost {
             });
         }
 
-        let completion_signature = format!(
-            "{completion_open}:{completion_start:?}:{completion_query}:{completion_items:?}"
-        );
-        if completion_signature != self.completion_signature {
-            self.completion_signature = completion_signature;
-            self.completion.update(cx, |menu, cx| {
-                if completion_open {
-                    menu.update_query(completion_start.unwrap_or(cursor), completion_query);
-                    menu.show(cursor, completion_items, window, cx);
-                } else {
-                    menu.hide(cx);
-                }
-            });
-        }
-
-        let code_action_signature = format!("{code_action_open}:{code_action_items:?}");
-        if code_action_signature != self.code_action_signature {
-            self.code_action_signature = code_action_signature;
-            self.code_actions.update(cx, |menu, cx| {
-                if code_action_open {
-                    menu.show(cursor, code_action_items, window, cx);
-                } else {
-                    menu.hide(cx);
-                }
-            });
-        }
-
-        let hover_signature = format!("{hover:?}");
-        if hover_signature != self.hover_signature {
-            self.hover_signature = hover_signature;
-            self.hover = hover.map(|popover| {
-                HoverPopover::new(state.clone(), popover.symbol_range, &popover.hover, cx)
-            });
-        }
-
-        let diagnostic_signature = format!("{diagnostic:?}");
-        if diagnostic_signature != self.diagnostic_signature {
-            self.diagnostic_signature = diagnostic_signature;
-            self.diagnostic = diagnostic
-                .as_deref()
-                .map(|entry| DiagnosticPopover::new(entry, state.clone(), cx));
+        if let (Some(lsp), Some(snapshot)) = (self.lsp.as_mut(), snapshot.as_ref()) {
+            M::sync_lsp(lsp, state, snapshot, window, cx);
         }
 
         let search = search_open.then(|| self.search.clone().into_any_element());
         let mut floating = Vec::with_capacity(4);
-        if completion_open {
-            floating.push(self.completion.clone().into_any_element());
-        }
-        if code_action_open {
-            floating.push(self.code_actions.clone().into_any_element());
-        }
-        if let Some(hover) = self.hover.as_ref() {
-            floating.push(hover.clone().into_any_element());
-        }
-        if let Some(diagnostic) = self.diagnostic.as_ref() {
-            floating.push(diagnostic.clone().into_any_element());
+        if let (Some(lsp), Some(snapshot)) = (self.lsp.as_ref(), snapshot.as_ref()) {
+            if snapshot.completion_open {
+                floating.push(lsp.completion.clone().into_any_element());
+            }
+            if snapshot.code_action_open {
+                floating.push(lsp.code_actions.clone().into_any_element());
+            }
+            if let Some(hover) = lsp.hover.as_ref() {
+                floating.push(hover.clone().into_any_element());
+            }
+            if let Some(diagnostic) = lsp.diagnostic.as_ref() {
+                floating.push(diagnostic.clone().into_any_element());
+            }
         }
         InputOverlays { search, floating }
     }
 }
 
-pub(super) fn render_overlays(
-    state: &Entity<InputBaseState>,
+pub(super) fn render_overlays<M: OverlayMode>(
+    state: &Entity<InputBaseState<M>>,
     window: &mut Window,
     cx: &mut App,
 ) -> InputOverlays {
-    install_action_handler(state, cx);
+    M::install_action_handler(state, cx);
     let has_overlay = {
+        let snapshot = M::lsp_snapshot(state.read(cx), cx);
         let state = state.read(cx);
         state.search_session().open
-            || state.completion_menu_state().open
-            || state.code_action_menu_state().open
-            || state.hover_popover().is_some()
-            || state.diagnostic_popover().is_some()
+            || snapshot.is_some_and(|lsp| {
+                lsp.completion_open
+                    || lsp.code_action_open
+                    || lsp.hover.is_some()
+                    || lsp.diagnostic.is_some()
+            })
     };
     if !has_overlay {
-        if cx.has_global::<InputOverlayRegistry>() {
-            let registry = cx.global_mut::<InputOverlayRegistry>();
+        if cx.has_global::<InputOverlayRegistry<M>>() {
+            let registry = cx.global_mut::<InputOverlayRegistry<M>>();
             registry.hosts.remove(&state.entity_id());
             registry
                 .hosts
@@ -221,45 +349,22 @@ pub(super) fn render_overlays(
         return InputOverlays::default();
     }
 
-    if !cx.has_global::<InputOverlayRegistry>() {
-        cx.set_global(InputOverlayRegistry::default());
+    if !cx.has_global::<InputOverlayRegistry<M>>() {
+        cx.set_global(InputOverlayRegistry::<M>::default());
     }
 
     let id = state.entity_id();
     let mut host = cx
-        .global_mut::<InputOverlayRegistry>()
+        .global_mut::<InputOverlayRegistry<M>>()
         .hosts
         .remove(&id)
         .map(|(_, host)| host)
         .unwrap_or_else(|| InputOverlayHost::new(state.clone(), window, cx));
     let overlays = host.sync(state, window, cx);
-    cx.global_mut::<InputOverlayRegistry>()
+    cx.global_mut::<InputOverlayRegistry<M>>()
         .hosts
         .insert(id, (state.downgrade(), host));
     overlays
-}
-
-fn install_action_handler(state: &Entity<InputBaseState>, cx: &mut App) {
-    let id = state.entity_id();
-    state.update(cx, move |state, _| {
-        state.set_overlay_action_handler(move |kind, action, window, cx| {
-            let menus = cx
-                .try_global::<InputOverlayRegistry>()
-                .and_then(|registry| registry.hosts.get(&id))
-                .map(|(_, host)| (host.completion.clone(), host.code_actions.clone()));
-            let Some((completion, code_actions)) = menus else {
-                return false;
-            };
-            match kind {
-                gpui_base::input::InputOverlayKind::Completion => {
-                    completion.update(cx, |menu, cx| menu.handle_action(action, window, cx))
-                }
-                gpui_base::input::InputOverlayKind::CodeAction => {
-                    code_actions.update(cx, |menu, cx| menu.handle_action(action, window, cx))
-                }
-            }
-        });
-    });
 }
 
 #[cfg(test)]
@@ -271,7 +376,7 @@ mod tests {
     use lsp_types::{CodeAction, CompletionItem, Hover, HoverContents, MarkedString};
 
     struct OverlayProbe {
-        state: Entity<InputBaseState>,
+        state: Entity<crate::input::EditorState>,
     }
 
     impl Render for OverlayProbe {
@@ -289,8 +394,7 @@ mod tests {
         cx.update(crate::init);
         let (probe, cx) = cx.add_window_view(|window, cx| OverlayProbe {
             state: cx.new(|cx| {
-                InputBaseState::new(window, cx)
-                    .multi_line(true)
+                crate::input::EditorState::new("sql", window, cx)
                     .searchable(true)
                     .replaceable(true)
             }),
@@ -342,7 +446,7 @@ mod tests {
             assert_eq!(overlays.len(), 5);
             assert_eq!(render_overlays(&state, window, cx).len(), 5);
             assert!(
-                cx.global::<InputOverlayRegistry>()
+                cx.global::<InputOverlayRegistry<crate::input::EditorMode>>()
                     .hosts
                     .contains_key(&state.entity_id())
             );
@@ -358,24 +462,21 @@ mod tests {
             assert!(host.sync(&state, window, cx).is_empty());
             assert!(render_overlays(&state, window, cx).is_empty());
             assert!(
-                !cx.global::<InputOverlayRegistry>()
+                !cx.global::<InputOverlayRegistry<crate::input::EditorMode>>()
                     .hosts
                     .contains_key(&state.entity_id())
             );
         });
 
         let dropped_owner = cx.update(|window, cx| {
-            let ephemeral = cx.new(|cx| {
-                InputBaseState::new(window, cx)
-                    .multi_line(true)
-                    .searchable(true)
-            });
+            let ephemeral =
+                cx.new(|cx| crate::input::EditorState::new("sql", window, cx).searchable(true));
             ephemeral.update(cx, |state, cx| state.open_search(false, cx));
             assert_eq!(render_overlays(&ephemeral, window, cx).len(), 1);
             ephemeral.update(cx, |state, cx| state.close_search(cx));
             assert!(render_overlays(&ephemeral, window, cx).is_empty());
             assert!(
-                !cx.global::<InputOverlayRegistry>()
+                !cx.global::<InputOverlayRegistry<crate::input::EditorMode>>()
                     .hosts
                     .contains_key(&ephemeral.entity_id())
             );

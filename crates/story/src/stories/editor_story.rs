@@ -53,8 +53,7 @@ impl EditorStory {
         // which parses incrementally on a background thread.
         #[cfg(target_family = "wasm")]
         {
-            let base_state = editor_state.read(cx).base_state().clone();
-            base_state.update(cx, |state, cx| {
+            editor_state.update(cx, |state, cx| {
                 state.set_highlighter_factory(
                     std::rc::Rc::new(|language| {
                         syntect_highlighter::SyntectHighlighter::new(language)
@@ -68,7 +67,6 @@ impl EditorStory {
         let decoration_text = "Decoration styles\nColor highlights important text.\nItalic adds emphasis.\nUnderline marks a review range.";
         let decorations_state =
             cx.new(|cx| EditorState::new("text", window, cx).default_value(decoration_text));
-        decorations_state.update(cx, |state, cx| state.prepare(window, cx));
 
         let marker = "Decoration styles";
         let color_range = "Color";
