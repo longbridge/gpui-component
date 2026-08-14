@@ -30,7 +30,10 @@ use crate::{
     v_flex,
 };
 
-use super::{SelectionFormat, TextViewStyle, utils::list_item_prefix};
+use super::{
+    SelectionFormat, TextViewStyle,
+    utils::{image_source, list_item_prefix},
+};
 
 thread_local! {
     static CODE_BLOCK_HIGHLIGHTERS: RefCell<HashMap<SharedString, SyntaxHighlighter>> =
@@ -1338,7 +1341,7 @@ impl Paragraph {
                 }
                 let link_click_handler = node_cx.link_click_handler.clone();
                 child_nodes.push(
-                    img(image.url.clone())
+                    img(image_source(&image.url))
                         .id(ix)
                         .object_fit(ObjectFit::Contain)
                         .max_w(relative(1.))
