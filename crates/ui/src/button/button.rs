@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::styled::{FocusRingStyleExt as _, focus_ring_color};
+use crate::styled::{FocusRingStyleExt as _, focus_border_color};
 use crate::{
     ActiveTheme, Colorize as _, Disableable, Icon, RoleOverride, Selectable, Sizable, Size,
     StyleSized, StyledExt,
@@ -719,7 +719,7 @@ impl RenderOnce for Button {
         })
         .when(
             is_focused && self.focus_ring_enabled && (self.variant.is_default() || self.outline),
-            |this| this.border_color(focus_ring_color(cx)),
+            |this| this.border_color(focus_border_color(cx)),
         )
         .when(
             is_focused && self.focus_ring_enabled && !(self.variant.is_default() || self.outline),
@@ -732,7 +732,7 @@ impl RenderOnce for Button {
                         .when(self.border_edges.right, |this| this.border_r_1())
                         .when(self.border_edges.top, |this| this.border_t_1())
                         .when(self.border_edges.bottom, |this| this.border_b_1())
-                        .border_color(focus_ring_color(cx))
+                        .border_color(focus_border_color(cx))
                         .when(self.border_corners.top_left, |this| {
                             this.rounded_tl(rounding)
                         })

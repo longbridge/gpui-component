@@ -9,7 +9,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
-use crate::styled::{FocusRingStyleExt as _, focus_ring_color};
+use crate::styled::{FocusRingStyleExt as _, focus_border_color};
 use crate::{
     ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
     actions::{Cancel, Confirm},
@@ -431,7 +431,7 @@ impl RenderOnce for DatePicker {
                             .when(self.disabled, |this| this.opacity(0.5))
                             .border_1()
                             .border_color(if is_focused && self.focus_ring_enabled {
-                                focus_ring_color(cx)
+                                focus_border_color(cx)
                             } else {
                                 cx.theme().input
                             })

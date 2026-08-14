@@ -7,12 +7,15 @@ use crate::ActiveTheme as _;
 
 const FOCUS_RING_WIDTH: Pixels = px(4.);
 const FOCUS_RING_OPACITY: f32 = 0.5;
+const FOCUS_BORDER_OPACITY: f32 = 0.75;
 const FOCUS_RING_OFFSET: Pixels = px(2.);
 
-pub(crate) fn focus_ring_color(cx: &App) -> gpui::Hsla {
-    cx.theme()
-        .background
-        .blend(cx.theme().ring.alpha(FOCUS_RING_OPACITY))
+fn preblend_focus_color(opacity: f32, cx: &App) -> gpui::Hsla {
+    cx.theme().background.blend(cx.theme().ring.alpha(opacity))
+}
+
+pub(crate) fn focus_border_color(cx: &App) -> gpui::Hsla {
+    preblend_focus_color(FOCUS_BORDER_OPACITY, cx)
 }
 
 pub(crate) trait FocusRingStyleExt<T: ParentElement + Styled + Sized> {
@@ -58,7 +61,7 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
         let inset = FOCUS_RING_OFFSET + margin;
         // Pre-composite the focus color against the surface so the outer ring's
         // antialiased edge cannot blend again with the control's focused border.
-        let ring_color = focus_ring_color(cx);
+        let ring_color = preblend_focus_color(FOCUS_RING_OPACITY, cx);
         self.child(
             div()
                 .flex_none()

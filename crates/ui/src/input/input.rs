@@ -20,7 +20,7 @@ use gpui_base::InputBase as BaseInput;
 use rust_i18n::t;
 
 use super::{InputContentType, InputState, sync_native_content_type};
-use crate::styled::{FocusRingStyleExt as _, focus_ring_color};
+use crate::styled::{FocusRingStyleExt as _, focus_border_color};
 use gpui_base::input::InputBaseState;
 
 enum InputStateSource {
@@ -608,7 +608,7 @@ impl RenderOnce for Input {
                     .when(self.bordered, |this| {
                         this.border_1()
                             .border_color(if focused && self.focus_bordered {
-                                focus_ring_color(cx)
+                                focus_border_color(cx)
                             } else {
                                 cx.theme().input
                             })

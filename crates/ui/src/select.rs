@@ -6,7 +6,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
-use crate::styled::{FocusRingStyleExt as _, focus_ring_color};
+use crate::styled::{FocusRingStyleExt as _, focus_border_color};
 use crate::{
     ActiveTheme, Disableable, ElementExt as _, Icon, IconName, IndexPath, Sizable, Size,
     StyleSized, StyledExt,
@@ -487,7 +487,7 @@ where
                             .text_color(fg)
                             .when(self.state.disabled, |this| this.opacity(0.5))
                             .border_color(if outline_visible && self.focus_ring_enabled {
-                                focus_ring_color(cx)
+                                focus_border_color(cx)
                             } else {
                                 cx.theme().input
                             })
