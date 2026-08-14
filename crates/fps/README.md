@@ -5,10 +5,10 @@ second, frame time, dropped frame rate, and this process' CPU and memory usage.
 
 ```
 ┌──────────────────────────┐
-│ ﹋﹏  118 FPS  ﹋︿﹏﹋   │  ← the trace runs behind the headline
+│  ﹋﹏  118 FPS  ﹋︿﹏﹋   │  ← the trace runs behind the headline
 │ FRAME             8.4 ms │
 │ DROP                0.0% │
-│ CPU 12.4%     MEM 184 MB │
+│ CPU 12.4%      MEM 84 MB │
 └──────────────────────────┘
 ```
 
@@ -138,7 +138,7 @@ window redraws for its own reasons, and reads zero while the window is idle.
   Recomputed per frame they flicker through digits too fast to read. `FRAME` is
   the mean over that interval rather than the latest frame, which at this cadence
   would be an arbitrary sample.
-- The frame rate is graded against the target *rate* with a 5% tolerance, not by
+- The frame rate is graded against the target _rate_ with a 5% tolerance, not by
   comparing `1/fps` against the budget. Under vsync a healthy 60Hz display reads
   58 to 60 and never exactly 60.00, so an exact comparison would paint a
   perfectly healthy application as over budget.
