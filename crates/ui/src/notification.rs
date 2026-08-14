@@ -21,7 +21,7 @@ use crate::{
 const NOTIFICATION_TRANSITION_DURATION: Duration = Duration::from_millis(400);
 const NOTIFICATION_EXIT_DURATION: Duration = Duration::from_millis(200);
 const NOTIFICATION_TRANSITION_OFFSET: Pixels = px(96.);
-const DEFAULT_NOTIFICATION_WIDTH: Pixels = px(356.);
+const DEFAULT_NOTIFICATION_WIDTH: Pixels = px(382.);
 struct DismissRequest;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -431,6 +431,8 @@ pub struct NotificationSettings {
     pub margins: Edges<Pixels>,
     /// The maximum number of notifications to show at once, default: 10
     pub max_items: usize,
+    /// The width of the notifications, default: 382px
+    pub width: Pixels,
 }
 
 impl Default for NotificationSettings {
@@ -445,6 +447,7 @@ impl Default for NotificationSettings {
                 left: offset,
             },
             max_items: 10,
+            width: DEFAULT_NOTIFICATION_WIDTH,
         }
     }
 }
@@ -619,14 +622,15 @@ impl Render for NotificationList {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let size = window.viewport_size();
-        let max_items = cx.theme().notification.max_items;
+        let settings = &cx.theme().notification;
+        let (max_items, placement, width) =
+            (settings.max_items, settings.placement, settings.width);
         let items = self
             .notifications
             .visible(max_items)
             .map(|(id, value, _)| (id.clone(), value.clone()))
             .collect::<Vec<_>>();
 
-        let placement = cx.theme().notification.placement;
         let stack = items.into_iter().fold(
             ToastStack::new("notification-list", self.stack_state.clone()),
             |stack, (id, item)| stack.item(format!("{id:?}"), item),
@@ -636,7 +640,7 @@ impl Render for NotificationList {
             .placement(placement)
             .focus_handle(self.focus_handle.clone())
             .v_flex()
-            .w(DEFAULT_NOTIFICATION_WIDTH)
+            .w(width)
             .max_h(size.height)
     }
 }
