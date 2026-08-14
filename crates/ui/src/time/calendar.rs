@@ -106,52 +106,54 @@ impl RenderOnce for Calendar {
                 .justify_center()
                 .when(
                     matches!(
-                        state.kind,
+                        state.kind(),
                         CalendarItemKind::Month | CalendarItemKind::MonthToggle
                     ),
                     |this| {
-                        this.when(state.kind == CalendarItemKind::Month, |this| {
+                        this.when(state.kind() == CalendarItemKind::Month, |this| {
                             this.w(relative(0.3))
                         })
-                        .when(state.kind == CalendarItemKind::MonthToggle, |this| {
+                        .when(state.kind() == CalendarItemKind::MonthToggle, |this| {
                             this.w_auto().px_2()
                         })
                     },
                 )
                 .when(
                     matches!(
-                        state.kind,
+                        state.kind(),
                         CalendarItemKind::Year | CalendarItemKind::YearToggle
                     ),
                     |this| {
-                        this.when(state.kind == CalendarItemKind::Year, |this| {
+                        this.when(state.kind() == CalendarItemKind::Year, |this| {
                             this.w(relative(0.2))
                         })
-                        .when(state.kind == CalendarItemKind::YearToggle, |this| {
+                        .when(state.kind() == CalendarItemKind::YearToggle, |this| {
                             this.w_auto().px_2()
                         })
                     },
                 )
                 .when(
                     matches!(
-                        state.kind,
+                        state.kind(),
                         CalendarItemKind::Previous | CalendarItemKind::Next
                     ),
                     |this| this.text_lg(),
                 )
-                .when(state.muted, |this| {
-                    this.text_color(if state.disabled {
+                .when(state.is_muted(), |this| {
+                    this.text_color(if state.is_disabled() {
                         cx.theme().muted_foreground.opacity(0.3)
                     } else {
                         cx.theme().muted_foreground
                     })
                 })
-                .when(state.in_range, |this| {
+                .when(state.is_in_range(), |this| {
                     this.bg(cx.theme().accent)
                         .text_color(cx.theme().accent_foreground)
                 })
                 .when(
-                    !state.active && !state.disabled && state.kind != CalendarItemKind::Weekday,
+                    !state.is_active()
+                        && !state.is_disabled()
+                        && state.kind() != CalendarItemKind::Weekday,
                     |this| {
                         this.hover(|this| {
                             this.bg(cx.theme().tokens.accent)
@@ -159,11 +161,11 @@ impl RenderOnce for Calendar {
                         })
                     },
                 )
-                .when(state.active, |this| {
+                .when(state.is_active(), |this| {
                     this.bg(cx.theme().tokens.primary)
                         .text_color(cx.theme().primary_foreground)
                 })
-                .when(state.today && !state.active, |this| {
+                .when(state.is_today() && !state.is_active(), |this| {
                     this.border_1().border_color(cx.theme().border)
                 })
                 .into_any_element()

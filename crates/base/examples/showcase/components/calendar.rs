@@ -9,7 +9,7 @@ impl BaseShowcase {
             .border_1()
             .border_color(rgb(0xd4d4d4))
             .item(|item, state, _, _| {
-                match state.kind {
+                match state.kind() {
                     CalendarItemKind::Previous | CalendarItemKind::Next => item
                         .size_7()
                         .flex()
@@ -37,14 +37,14 @@ impl BaseShowcase {
                         .items_center()
                         .justify_center()
                         .text_xs()
-                        .when(state.muted, |s| s.text_color(rgb(0xa3a3a3)))
-                        .when(state.today && !state.active, |s| {
+                        .when(state.is_muted(), |s| s.text_color(rgb(0xa3a3a3)))
+                        .when(state.is_today() && !state.is_active(), |s| {
                             s.border_1().border_color(rgb(0xd4d4d4))
                         })
-                        .when(state.active, |s| {
+                        .when(state.is_active(), |s| {
                             s.bg(rgb(0x171717)).text_color(rgb(0xffffff))
                         })
-                        .when(!state.disabled && !state.active, |s| {
+                        .when(!state.is_disabled() && !state.is_active(), |s| {
                             s.hover(|s| s.bg(rgb(0xf5f5f5)))
                         }),
                     CalendarItemKind::Month | CalendarItemKind::Year => item
@@ -54,10 +54,10 @@ impl BaseShowcase {
                         .items_center()
                         .justify_center()
                         .text_xs()
-                        .when(state.active, |s| {
+                        .when(state.is_active(), |s| {
                             s.bg(rgb(0x171717)).text_color(rgb(0xffffff))
                         })
-                        .when(!state.active, |s| s.hover(|s| s.bg(rgb(0xf5f5f5)))),
+                        .when(!state.is_active(), |s| s.hover(|s| s.bg(rgb(0xf5f5f5)))),
                 }
                 .into_any_element()
             })

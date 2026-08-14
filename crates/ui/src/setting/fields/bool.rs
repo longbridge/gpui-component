@@ -38,8 +38,8 @@ impl SettingFieldRender for BoolField {
             .child(if self.use_switch {
                 Switch::new("check")
                     .checked(checked)
-                    .disabled(options.disabled)
-                    .with_size(options.size)
+                    .disabled(options.is_disabled())
+                    .with_size(options.size())
                     .on_click(move |checked: &bool, _, cx: &mut App| {
                         set_value(*checked, cx);
                     })
@@ -47,8 +47,8 @@ impl SettingFieldRender for BoolField {
             } else {
                 Checkbox::new("check")
                     .checked(checked)
-                    .disabled(options.disabled)
-                    .with_size(options.size)
+                    .disabled(options.is_disabled())
+                    .with_size(options.size())
                     .on_click(move |checked: &bool, _, cx: &mut App| {
                         set_value(*checked, cx);
                     })
