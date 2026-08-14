@@ -4,7 +4,7 @@ use gpui::{
 };
 
 use super::input::{input_style, sync_focused_input_registry};
-use crate::styled::FocusRingStyleExt as _;
+use crate::styled::{FocusRingStyleExt as _, focus_ring_color};
 use crate::{ActiveTheme, Disableable, Icon, IconName, Sizable, Size, h_flex, v_flex};
 use gpui_base::OtpInput as BaseOtpInput;
 pub use gpui_base::OtpState;
@@ -119,7 +119,11 @@ impl RenderOnce for OtpInput {
                 h_flex()
                     .id(ix)
                     .border_1()
-                    .border_color(cx.theme().input)
+                    .border_color(if focus_visible {
+                        focus_ring_color(cx)
+                    } else {
+                        cx.theme().input
+                    })
                     .bg(bg)
                     .text_color(fg)
                     .when(self.disabled, |this| this.opacity(0.5))
