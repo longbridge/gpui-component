@@ -1,6 +1,6 @@
 pub use crate::component_traits::{Collapsible, Disableable, Selectable};
 pub use crate::sizing::{Sizable, Size, StyleSized};
-use gpui::{App, Corners, Edges, ParentElement, Pixels, StyleRefinement, Styled, Window, div, px};
+use gpui::{App, Corners, ParentElement, Pixels, StyleRefinement, Styled, Window, div, px};
 pub use gpui_base::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v_flex};
 
 use crate::ActiveTheme as _;
@@ -20,28 +20,6 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
 
         let rem_size = window.rem_size();
         let style = self.style();
-        let border_widths = Edges::<Pixels> {
-            top: style
-                .border_widths
-                .top
-                .map(|v| v.to_pixels(rem_size))
-                .unwrap_or_default(),
-            bottom: style
-                .border_widths
-                .bottom
-                .map(|v| v.to_pixels(rem_size))
-                .unwrap_or_default(),
-            left: style
-                .border_widths
-                .left
-                .map(|v| v.to_pixels(rem_size))
-                .unwrap_or_default(),
-            right: style
-                .border_widths
-                .right
-                .map(|v| v.to_pixels(rem_size))
-                .unwrap_or_default(),
-        };
         let radius = Corners::<Pixels> {
             top_left: style
                 .corner_radii
@@ -81,10 +59,7 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
             div()
                 .flex_none()
                 .absolute()
-                .top(-border_widths.top)
-                .left(-border_widths.left)
-                .right(-border_widths.right)
-                .bottom(-border_widths.bottom)
+                .inset_0()
                 .border_1()
                 .border_color(cx.theme().ring)
                 .refine_style(&border_style),
@@ -93,10 +68,10 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
             div()
                 .flex_none()
                 .absolute()
-                .top(-(inset + border_widths.top))
-                .left(-(inset + border_widths.left))
-                .right(-(inset + border_widths.right))
-                .bottom(-(inset + border_widths.bottom))
+                .top(-inset)
+                .left(-inset)
+                .right(-inset)
+                .bottom(-inset)
                 .border(FOCUS_RING_WIDTH)
                 .border_color(cx.theme().ring.alpha(FOCUS_RING_OPACITY))
                 .refine_style(&ring_style),
