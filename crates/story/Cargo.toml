@@ -15,6 +15,7 @@ gpui.workspace = true
 gpui_platform.workspace = true
 gpui-component = { workspace = true }
 gpui-component-assets.workspace = true
+gpui-fps.workspace = true
 
 autocorrect = "2.14.2"
 chrono = "0.4"

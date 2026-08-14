@@ -19,6 +19,7 @@ use gpui_component::{
     text::markdown,
     v_flex,
 };
+use gpui_fps::fps_monitor;
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
@@ -65,7 +66,8 @@ actions!(
         Tab,
         TabPrev,
         ShowPanelInfo,
-        ToggleListActiveHighlight
+        ToggleListActiveHighlight,
+        ToggleFpsMonitor
     ]
 );
 
@@ -73,11 +75,15 @@ const PANEL_NAME: &str = "StoryContainer";
 
 pub struct AppState {
     pub invisible_panels: Entity<Vec<SharedString>>,
+    /// Whether the window root renders the performance HUD. Toggled from the
+    /// title bar's settings menu, read by [`StoryRoot`].
+    pub show_fps_monitor: bool,
 }
 impl AppState {
     fn init(cx: &mut App) {
         let state = Self {
             invisible_panels: cx.new(|_| Vec::new()),
+            show_fps_monitor: false,
         };
         cx.set_global::<AppState>(state);
     }
@@ -703,6 +709,7 @@ impl StoryState {
             "AccordionStory" => story!(AccordionStory),
             "SidebarStory" => story!(SidebarStory),
             "FormStory" => story!(FormStory),
+            "FpsMonitorStory" => story!(FpsMonitorStory),
             "NotificationStory" => story!(NotificationStory),
             "ThemeColorsStory" => story!(ThemeColorsStory),
             _ => {
@@ -893,6 +900,7 @@ impl Render for StoryRoot {
         let sheet_layer = Root::render_sheet_layer(window, cx);
         let dialog_layer = Root::render_dialog_layer(window, cx);
         let notification_layer = Root::render_notification_layer(window, cx);
+        let show_fps = AppState::global(cx).show_fps_monitor;
 
         div()
             .id("story-root")
@@ -906,9 +914,14 @@ impl Render for StoryRoot {
                     .child(
                         div()
                             .track_focus(&self.focus_handle)
+                            .relative()
                             .flex_1()
                             .overflow_hidden()
-                            .child(self.view.clone()),
+                            .child(self.view.clone())
+                            // Rendered inside the content area rather than the
+                            // window root so the HUD's top right corner clears
+                            // the title bar's own controls.
+                            .when(show_fps, |this| this.child(fps_monitor(window, cx))),
                     )
                     .children(sheet_layer)
                     .children(dialog_layer)
