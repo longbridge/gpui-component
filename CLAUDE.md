@@ -78,6 +78,10 @@ The implemented foundation architecture is documented in
 `docs/STYLING-AND-MOTION.md`. Preserve these constraints when designing or
 implementing this architecture:
 
+- Do not modify `gpui-base` unless the user explicitly requests a Base-layer
+  change. By default, implement component behavior and visual styling in
+  `crates/ui` or the application layer.
+
 - Keep `gpui-component` as the ecosystem and product brand.
 - Name the foundation crate `gpui-base`.
 - Follow the ownership boundary: the framework owns behavior and infrastructure;

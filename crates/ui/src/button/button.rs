@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
+use crate::styled::FocusRingStyleExt as _;
 use crate::{
-    ActiveTheme, Colorize as _, Disableable, FocusableExt as _, Icon, RoleOverride, Selectable,
-    Sizable, Size, StyleSized, StyledExt,
+    ActiveTheme, Colorize as _, Disableable, Icon, RoleOverride, Selectable, Sizable, Size,
+    StyleSized, StyledExt,
     button::ButtonIcon,
     h_flex,
     select::Caret,
@@ -209,6 +210,7 @@ pub struct Button {
     on_hover: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
     loading: bool,
     loading_icon: Option<Icon>,
+    focus_ring_enabled: bool,
 
     tab_index: isize,
     tab_stop: bool,
@@ -247,6 +249,7 @@ impl Button {
             tooltip: None,
             tooltip_builder: None,
             on_click: None,
+            focus_ring_enabled: true,
             on_hover: None,
             loading: false,
             compact: false,
@@ -415,6 +418,17 @@ impl Disableable for Button {
     fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+}
+
+impl crate::FocusableExt for Button {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
     }
 }
 
@@ -703,7 +717,7 @@ impl RenderOnce for Button {
                 this
             }
         })
-        .focus_ring(is_focused, px(0.), window, cx)
+        .draw_focus_ring(is_focused && self.focus_ring_enabled, px(0.), window, cx)
     }
 }
 

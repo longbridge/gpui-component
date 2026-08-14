@@ -319,13 +319,7 @@ impl RenderOnce for Field {
                                 }),
                         )
                     })
-                    .child(
-                        div()
-                            .w_full()
-                            .flex_1()
-                            .overflow_x_hidden()
-                            .children(self.children),
-                    ),
+                    .child(div().w_full().flex_1().children(self.children)),
             )
             .child(
                 // Other

@@ -1,8 +1,9 @@
 use std::{rc::Rc, time::Duration};
 
+use crate::styled::FocusRingStyleExt as _;
 use crate::{
-    ActiveTheme, Disableable, FocusableExt, IconName, RoleOverride, Selectable, Sizable, Size,
-    StyledExt as _, icon::IconNamed, text::Text, tooltip::ComponentTooltip, v_flex,
+    ActiveTheme, Disableable, IconName, RoleOverride, Selectable, Sizable, Size, StyledExt as _,
+    icon::IconNamed, text::Text, tooltip::ComponentTooltip, v_flex,
 };
 use gpui::{
     Animation, AnimationExt, AnyElement, App, ElementId, InteractiveElement, IntoElement,
@@ -29,6 +30,7 @@ pub struct Checkbox {
     on_click: Option<Rc<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
     tooltip: ComponentTooltip,
     role: RoleOverride,
+    focus_ring_enabled: bool,
 }
 
 impl Checkbox {
@@ -49,6 +51,7 @@ impl Checkbox {
             tab_index: 0,
             tooltip: ComponentTooltip::default(),
             role: RoleOverride::default(),
+            focus_ring_enabled: true,
         }
     }
 
@@ -113,6 +116,17 @@ impl Disableable for Checkbox {
     fn disabled(mut self, disabled: bool) -> Self {
         self.disabled = disabled;
         self
+    }
+}
+
+impl crate::FocusableExt for Checkbox {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
     }
 }
 
@@ -255,7 +269,7 @@ impl RenderOnce for Checkbox {
                 _ => this,
             })
             .rounded(cx.theme().radius * 0.5)
-            .focus_ring(is_focused, px(2.), window, cx)
+            .draw_focus_ring(is_focused && self.focus_ring_enabled, px(2.), window, cx)
             .refine_style(&self.style)
             .child(
                 CheckboxIndicator::new()

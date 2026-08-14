@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
+use crate::styled::FocusRingStyleExt as _;
 use crate::{
-    ActiveTheme, AxisExt, FocusableExt as _, Sizable, Size, StyledExt,
-    checkbox::checkbox_check_icon, h_flex, text::Text, tooltip::ComponentTooltip, v_flex,
+    ActiveTheme, AxisExt, Sizable, Size, StyledExt, checkbox::checkbox_check_icon, h_flex,
+    text::Text, tooltip::ComponentTooltip, v_flex,
 };
 use gpui::{
     AnyElement, App, Axis, ElementId, InteractiveElement, IntoElement, ParentElement, RenderOnce,
@@ -30,6 +31,7 @@ pub struct Radio {
     tooltip: ComponentTooltip,
     position_in_set: Option<usize>,
     size_of_set: Option<usize>,
+    focus_ring_enabled: bool,
 }
 
 impl Radio {
@@ -51,6 +53,7 @@ impl Radio {
             tooltip: ComponentTooltip::default(),
             position_in_set: None,
             size_of_set: None,
+            focus_ring_enabled: true,
         }
     }
 
@@ -103,6 +106,17 @@ impl Sizable for Radio {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
+    }
+}
+
+impl crate::FocusableExt for Radio {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
     }
 }
 
@@ -168,7 +182,7 @@ impl RenderOnce for Radio {
             .items_start()
             .line_height(relative(1.))
             .rounded(cx.theme().radius * 0.5)
-            .focus_ring(is_focused, px(2.), window, cx)
+            .draw_focus_ring(is_focused && self.focus_ring_enabled, px(2.), window, cx)
             .map(|this| match self.size {
                 Size::XSmall => this.text_xs(),
                 Size::Small => this.text_sm(),
