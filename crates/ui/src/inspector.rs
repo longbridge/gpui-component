@@ -570,7 +570,7 @@ impl CompletionProvider for LspProvider {
         offset: usize,
         _: lsp_types::CompletionContext,
         _: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut App,
     ) -> Task<Result<CompletionResponse>> {
         let mut left_offset = 0;
         while left_offset < 100 {
@@ -627,7 +627,7 @@ impl CompletionProvider for LspProvider {
         })
     }
 
-    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut Context<InputBaseState>) -> bool {
+    fn is_completion_trigger(&self, _: usize, _: &str, _: &mut App) -> bool {
         true
     }
 }

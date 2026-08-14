@@ -3,6 +3,7 @@ use gpui::{
     Window, prelude::FluentBuilder as _,
 };
 
+use super::state::sync_focused_input_registry;
 use super::{Input, TextareaState};
 use crate::{RoleOverride, StyledExt as _};
 
@@ -92,6 +93,7 @@ impl Styled for Textarea {
 impl RenderOnce for Textarea {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         self.state.update(cx, |state, cx| state.prepare(window, cx));
+        sync_focused_input_registry(self.state.clone(), window, cx);
         let base = self.state.read(cx).base_state().clone();
         Input::from_base(&base)
             .appearance(self.appearance)

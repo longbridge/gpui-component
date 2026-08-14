@@ -1,5 +1,5 @@
 use anyhow::Result;
-use gpui::{Context, EntityInputHandler, Pixels, Task, Window, px};
+use gpui::{App, Context, EntityInputHandler, Pixels, Task, Window, px};
 use lsp_types::{
     CompletionContext, CompletionItem, CompletionResponse, InlineCompletionContext,
     InlineCompletionItem, InlineCompletionResponse, InlineCompletionTriggerKind,
@@ -50,7 +50,7 @@ pub trait CompletionProvider {
         offset: usize,
         trigger: CompletionContext,
         window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut App,
     ) -> Task<Result<CompletionResponse>>;
 
     /// Fetches an inline completion suggestion for the given position.
@@ -73,7 +73,7 @@ pub trait CompletionProvider {
         _offset: usize,
         _trigger: InlineCompletionContext,
         _window: &mut Window,
-        _cx: &mut Context<InputBaseState>,
+        _cx: &mut App,
     ) -> Task<Result<InlineCompletionResponse>> {
         Task::ready(Ok(InlineCompletionResponse::Array(vec![])))
     }
@@ -90,7 +90,7 @@ pub trait CompletionProvider {
         &self,
         _completion_indices: Vec<usize>,
         _completions: Rc<RefCell<Box<[Completion]>>>,
-        _: &mut Context<InputBaseState>,
+        _: &mut App,
     ) -> Task<Result<bool>> {
         Task::ready(Ok(false))
     }
@@ -98,12 +98,7 @@ pub trait CompletionProvider {
     /// Determines if the completion should be triggered based on the given byte offset.
     ///
     /// This is called on the main thread.
-    fn is_completion_trigger(
-        &self,
-        offset: usize,
-        new_text: &str,
-        cx: &mut Context<InputBaseState>,
-    ) -> bool;
+    fn is_completion_trigger(&self, offset: usize, new_text: &str, cx: &mut App) -> bool;
 }
 
 pub(crate) struct InlineCompletion {

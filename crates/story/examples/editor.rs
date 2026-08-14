@@ -163,7 +163,7 @@ impl CompletionProvider for ExampleLspStore {
         offset: usize,
         trigger: CompletionContext,
         _: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut App,
     ) -> Task<Result<CompletionResponse>> {
         let trigger_character = trigger.trigger_character.unwrap_or_default();
         if trigger_character.is_empty() {
@@ -221,7 +221,7 @@ impl CompletionProvider for ExampleLspStore {
         offset: usize,
         _trigger: InlineCompletionContext,
         _window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut App,
     ) -> Task<Result<InlineCompletionResponse>> {
         let rope = rope.clone();
         cx.background_spawn(async move {
@@ -254,12 +254,7 @@ impl CompletionProvider for ExampleLspStore {
         })
     }
 
-    fn is_completion_trigger(
-        &self,
-        _offset: usize,
-        _new_text: &str,
-        _cx: &mut Context<InputBaseState>,
-    ) -> bool {
+    fn is_completion_trigger(&self, _offset: usize, _new_text: &str, _cx: &mut App) -> bool {
         true
     }
 }

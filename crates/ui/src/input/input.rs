@@ -2,12 +2,11 @@ use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AccessibleAction, AnyElement, App, DefiniteLength, Edges, Entity, Focusable, Hsla,
+    AccessibleAction, AnyElement, App, DefiniteLength, Edges, Entity, Hsla,
     InteractiveElement as _, IntoElement, ParentElement as _, Rems, RenderOnce, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled, TextAlign, Window, div, px, relative,
 };
 
-use crate::Root;
 use crate::button::{Button, ButtonVariants as _};
 use crate::input::clear_button;
 use crate::native_menu::NativeMenu;
@@ -19,29 +18,14 @@ use crate::{Sizable, StyleSized};
 use gpui_base::InputBase as BaseInput;
 use rust_i18n::t;
 
-use super::{InputContentType, InputState, sync_native_content_type};
+use super::state::sync_focused_input_registry;
+use super::{AnyInputState, InputContentType, InputState, sync_native_content_type};
 use crate::styled::FocusRingStyleExt as _;
 use gpui_base::input::InputBaseState;
 
 enum InputStateSource {
     Input(Entity<InputState>),
     Base(Entity<InputBaseState>),
-}
-
-pub(super) fn sync_focused_input_registry(
-    focused: bool,
-    state: Entity<InputState>,
-    window: &mut Window,
-    cx: &mut App,
-) {
-    Root::try_update(window, cx, |root, _, cx| {
-        if focused {
-            root.focused_input = Some(state.clone());
-        } else if root.focused_input.as_ref() == Some(&state) {
-            root.focused_input = None;
-        }
-        cx.notify();
-    });
 }
 
 /// Returns `(background, foreground)` colors for input-like components.
@@ -406,12 +390,7 @@ impl RenderOnce for Input {
             InputStateSource::Base(state) => (state.clone(), None),
         };
         if let Some(input) = input_state {
-            sync_focused_input_registry(
-                state.read(cx).focus_handle(cx).is_focused(window),
-                input,
-                window,
-                cx,
-            );
+            sync_focused_input_registry(AnyInputState::Input(input), window, cx);
         }
 
         state.update(cx, |state, cx| {
@@ -948,11 +927,13 @@ mod tests {
 
     #[gpui::test]
     fn focused_input_registry_tracks_focus_and_blur(cx: &mut gpui::TestAppContext) {
-        use crate::WindowExt as _;
+        use crate::{Root, WindowExt as _};
         use gpui::{AppContext as _, Render};
 
         struct Probe {
             input: Entity<InputState>,
+            textarea: Entity<crate::input::TextareaState>,
+            editor: Entity<crate::input::EditorState>,
             otp: Entity<gpui_base::OtpState>,
             other: gpui::FocusHandle,
         }
@@ -961,24 +942,34 @@ mod tests {
                 div()
                     .child(div().track_focus(&self.other))
                     .child(Input::new(&self.input))
+                    .child(crate::input::Textarea::new(&self.textarea))
+                    .child(crate::input::Editor::new(&self.editor))
                     .child(crate::input::OtpInput::new(&self.otp))
             }
         }
 
         cx.update(crate::init);
         let mut input = None;
+        let mut textarea = None;
+        let mut editor = None;
         let mut other_focus = None;
         let mut otp = None;
         let window = cx.update(|cx| {
             cx.open_window(Default::default(), |window, cx| {
                 let state = cx.new(|cx| InputState::new(window, cx));
+                let textarea_state = cx.new(|cx| crate::input::TextareaState::new(window, cx));
+                let editor_state = cx.new(|cx| crate::input::EditorState::new("rust", window, cx));
                 let otp_state = cx.new(|cx| gpui_base::OtpState::new(6, window, cx));
                 input = Some(state.clone());
+                textarea = Some(textarea_state.clone());
+                editor = Some(editor_state.clone());
                 otp = Some(otp_state.clone());
                 let other = cx.focus_handle();
                 other_focus = Some(other.clone());
                 let probe = cx.new(|_| Probe {
                     input: state,
+                    textarea: textarea_state,
+                    editor: editor_state,
                     otp: otp_state,
                     other,
                 });
@@ -987,43 +978,39 @@ mod tests {
             .unwrap()
         });
         let input = input.unwrap();
-        let mut cx = gpui::VisualTestContext::from_window(window.into(), cx);
-        cx.update(|window, cx| {
-            let _ = window.draw(cx);
-        });
-        cx.update(|window, cx| input.update(cx, |state, cx| state.focus(window, cx)));
-        cx.run_until_parked();
-        cx.update(|window, cx| {
-            let _ = window.draw(cx);
-        });
-        assert_eq!(
-            cx.update(|window, cx| window.focused_input(cx)),
-            Some(input.clone())
-        );
-        cx.update(|window, cx| other_focus.clone().unwrap().focus(window, cx));
-        cx.update(|window, cx| {
-            let _ = window.draw(cx);
-        });
-        cx.run_until_parked();
-        cx.update(|window, cx| {
-            let _ = window.draw(cx);
-        });
-        assert_eq!(cx.update(|window, cx| window.focused_input(cx)), None);
-
+        let textarea = textarea.unwrap();
+        let editor = editor.unwrap();
         let otp = otp.unwrap();
-        let compat = otp.read_with(&cx, |state, _| state.compat_input_state());
-        cx.update(|window, cx| otp.update(cx, |state, cx| state.focus(window, cx)));
-        cx.update(|window, cx| {
-            let _ = window.draw(cx);
-        });
-        assert_eq!(
-            cx.update(|window, cx| window.focused_input(cx)),
-            Some(compat)
-        );
-        cx.update(|window, cx| other_focus.unwrap().focus(window, cx));
-        cx.update(|window, cx| {
-            let _ = window.draw(cx);
-        });
-        assert_eq!(cx.update(|window, cx| window.focused_input(cx)), None);
+        let other_focus = other_focus.unwrap();
+        let mut cx = gpui::VisualTestContext::from_window(window.into(), cx);
+
+        // Focusing each kind of input registers it, and blurring clears it.
+        let cases: Vec<AnyInputState> = vec![
+            input.clone().into(),
+            textarea.clone().into(),
+            editor.clone().into(),
+            otp.clone().into(),
+        ];
+        for expected in cases {
+            cx.update(|window, cx| {
+                let _ = window.draw(cx);
+            });
+            cx.update(|window, cx| expected.focus_handle(cx).focus(window, cx));
+            cx.run_until_parked();
+            cx.update(|window, cx| {
+                let _ = window.draw(cx);
+            });
+            assert_eq!(
+                cx.update(|window, cx| window.focused_input(cx)),
+                Some(expected)
+            );
+
+            cx.update(|window, cx| other_focus.clone().focus(window, cx));
+            cx.run_until_parked();
+            cx.update(|window, cx| {
+                let _ = window.draw(cx);
+            });
+            assert_eq!(cx.update(|window, cx| window.focused_input(cx)), None);
+        }
     }
 }

@@ -248,7 +248,7 @@ mod syntect_highlighter {
             text: &Rope,
             folding: bool,
             _window: &mut Window,
-            _cx: &mut Context<InputBaseState>,
+            _cx: &mut App,
         ) {
             // `syntect` has no incremental mode, so the whole document is
             // reparsed. Read the rope once and reuse it for folding too.
