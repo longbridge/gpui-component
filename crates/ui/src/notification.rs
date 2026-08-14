@@ -511,6 +511,53 @@ impl NotificationList {
             .any(|(_, stack)| stack.state.is_expanded())
     }
 
+    /// Group the visible notifications by their effective placement, pairing
+    /// each group with the element id its stack renders under and preserving
+    /// the display order within each group.
+    fn grouped(
+        &self,
+        cx: &App,
+    ) -> Vec<(
+        Anchor,
+        ElementId,
+        Vec<(NotificationId, Entity<Notification>)>,
+    )> {
+        let settings = &cx.theme().notification;
+        let (max_items, placement) = (settings.max_items, settings.placement);
+
+        let mut groups: Vec<(Anchor, Vec<(NotificationId, Entity<Notification>)>)> = Vec::new();
+        for (id, item, _) in self.notifications.visible(max_items) {
+            let anchor = item.read(cx).placement.unwrap_or(placement);
+            match groups.iter_mut().find(|(a, _)| *a == anchor) {
+                Some((_, items)) => items.push((id.clone(), item.clone())),
+                None => groups.push((anchor, vec![(id.clone(), item.clone())])),
+            }
+        }
+        groups
+            .into_iter()
+            .map(|(anchor, items)| (anchor, Self::stack_id(anchor), items))
+            .collect()
+    }
+
+    /// The element id a placement's stack renders under.
+    ///
+    /// Keyed by the placement itself rather than by position among the mounted
+    /// stacks: a stack whose id changes loses the element state of its whole
+    /// subtree, which replays the enter animation of every notification in it.
+    fn stack_id(anchor: Anchor) -> ElementId {
+        let ix = match anchor {
+            Anchor::TopLeft => 0,
+            Anchor::TopCenter => 1,
+            Anchor::TopRight => 2,
+            Anchor::BottomLeft => 3,
+            Anchor::BottomCenter => 4,
+            Anchor::BottomRight => 5,
+            Anchor::LeftCenter => 6,
+            Anchor::RightCenter => 7,
+        };
+        ("notification-list", ix as usize).into()
+    }
+
     pub fn push(
         &mut self,
         notification: impl Into<Notification>,
@@ -648,28 +695,15 @@ impl Render for NotificationList {
     ) -> impl IntoElement {
         let size = window.viewport_size();
         let settings = &cx.theme().notification;
-        let (max_items, placement, margins, width) = (
-            settings.max_items,
-            settings.placement,
-            settings.margins.clone(),
-            settings.width,
-        );
+        let (placement, margins, width) =
+            (settings.placement, settings.margins.clone(), settings.width);
 
-        // Group the visible notifications by their effective placement,
-        // preserving the display order within each group.
-        let mut groups: Vec<(Anchor, Vec<(NotificationId, Entity<Notification>)>)> = Vec::new();
-        for (id, item, _) in self.notifications.visible(max_items) {
-            let anchor = item.read(cx).placement.unwrap_or(placement);
-            match groups.iter_mut().find(|(a, _)| *a == anchor) {
-                Some((_, items)) => items.push((id.clone(), item.clone())),
-                None => groups.push((anchor, vec![(id.clone(), item.clone())])),
-            }
-        }
+        let groups = self.grouped(cx);
         self.stacks
-            .retain(|(anchor, _)| groups.iter().any(|(a, _)| a == anchor));
+            .retain(|(anchor, _)| groups.iter().any(|(a, _, _)| a == anchor));
 
         let default_focus_handle = self.focus_handle.clone();
-        let stacks = groups.into_iter().enumerate().map(|(ix, (anchor, items))| {
+        let stacks = groups.into_iter().map(|(anchor, stack_id, items)| {
             let stack_ix = self
                 .stacks
                 .iter()
@@ -693,7 +727,7 @@ impl Render for NotificationList {
             items
                 .into_iter()
                 .fold(
-                    ToastStack::new(("notification-list", ix), stack.state.clone()),
+                    ToastStack::new(stack_id, stack.state.clone()),
                     |stack, (id, item)| stack.item(format!("{id:?}"), item),
                 )
                 .placement(anchor)
@@ -708,7 +742,11 @@ impl Render for NotificationList {
                     Anchor::TopCenter => this.top(margins.top).left_0().right_0().mx_auto(),
                     Anchor::BottomLeft => this.bottom(margins.bottom).left(margins.left),
                     Anchor::BottomRight => this.bottom(margins.bottom).right(margins.right),
-                    _ => this.bottom(margins.bottom).left_0().right_0().mx_auto(),
+                    Anchor::BottomCenter => {
+                        this.bottom(margins.bottom).left_0().right_0().mx_auto()
+                    }
+                    Anchor::LeftCenter => this.left(margins.left).top_0().bottom_0().my_auto(),
+                    Anchor::RightCenter => this.right(margins.right).top_0().bottom_0().my_auto(),
                 })
         });
 
@@ -768,6 +806,55 @@ mod tests {
         assert!(matches!(note.type_, Some(NotificationType::Success)));
         assert_eq!(note.placement, Some(Anchor::BottomLeft));
         assert!(!note.autohide);
+    }
+
+    /// A stack's element id must not depend on how many other placements are
+    /// mounted: a changing id drops the element state of the whole subtree,
+    /// which replays each notification's enter animation.
+    #[gpui::test]
+    fn stack_element_id_survives_other_placements_disappearing(cx: &mut TestAppContext) {
+        cx.update(|cx| cx.set_global(Theme::default()));
+        let (root, cx) = cx.add_window_view(|window, cx| TestRoot {
+            list: cx.new(|cx| NotificationList::new(window, cx)),
+            other_focus: cx.focus_handle(),
+        });
+        cx.update(|window, _| window.activate_window());
+        let list = root.read_with(cx, |root, _| root.list.clone());
+
+        // The left stack is pushed first, so it owns the lower group index.
+        list.update_in(cx, |list, window, cx| {
+            list.push(
+                Notification::info("left")
+                    .id::<FooKind>()
+                    .placement(Anchor::BottomLeft)
+                    .autohide(false),
+                window,
+                cx,
+            );
+            list.push(
+                Notification::info("right").id::<BarKind>().autohide(false),
+                window,
+                cx,
+            );
+        });
+
+        let right_id = |cx: &mut VisualTestContext| {
+            list.read_with(cx, |list, cx| {
+                list.grouped(cx)
+                    .into_iter()
+                    .find(|(anchor, _, _)| *anchor == Anchor::TopRight)
+                    .map(|(_, id, _)| id)
+                    .expect("the right stack is mounted")
+            })
+        };
+        let before = right_id(cx);
+
+        list.update_in(cx, |list, window, cx| {
+            list.close(TypeId::of::<FooKind>(), window, cx);
+        });
+        flush_dismiss(cx);
+
+        assert_eq!(right_id(cx), before);
     }
 
     #[gpui::test]
