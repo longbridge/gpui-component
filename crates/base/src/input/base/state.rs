@@ -397,27 +397,75 @@ pub struct InputBaseState {
 }
 
 /// Read-only styling data exposed to presentation facades.
+///
+/// The fields are private and read through the methods below, so that a new
+/// one can be added without breaking the facades.
 #[derive(Clone)]
 pub struct InputPresentation {
-    pub focus_handle: FocusHandle,
-    pub disabled: bool,
-    pub readonly: bool,
-    pub loading: bool,
-    pub masked: bool,
-    pub multi_line: bool,
-    pub code_editor: bool,
-    pub text_align: TextAlign,
-    pub placeholder: SharedString,
-    pub value: String,
-    pub mask_placeholder: Option<String>,
+    focus_handle: FocusHandle,
+    disabled: bool,
+    readonly: bool,
+    loading: bool,
+    masked: bool,
+    multi_line: bool,
+    code_editor: bool,
+    text_align: TextAlign,
+    placeholder: SharedString,
+    value: String,
+    mask_placeholder: Option<String>,
 }
 
 impl InputPresentation {
+    pub fn focus_handle(&self) -> &FocusHandle {
+        &self.focus_handle
+    }
+
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+
+    pub fn is_readonly(&self) -> bool {
+        self.readonly
+    }
+
     /// Returns true if the user is allowed to change the text.
     ///
     /// See also: [`InputBaseState::is_editable`].
     pub fn is_editable(&self) -> bool {
         !self.disabled && !self.readonly
+    }
+
+    pub fn is_loading(&self) -> bool {
+        self.loading
+    }
+
+    pub fn is_masked(&self) -> bool {
+        self.masked
+    }
+
+    pub fn is_multi_line(&self) -> bool {
+        self.multi_line
+    }
+
+    pub fn is_code_editor(&self) -> bool {
+        self.code_editor
+    }
+
+    pub fn text_align(&self) -> TextAlign {
+        self.text_align
+    }
+
+    pub fn placeholder(&self) -> &SharedString {
+        &self.placeholder
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    /// The placeholder derived from the mask pattern, e.g.: `(___) ___-____`.
+    pub fn mask_placeholder(&self) -> Option<&str> {
+        self.mask_placeholder.as_deref()
     }
 }
 
@@ -459,14 +507,13 @@ impl InputBaseState {
     }
 
     pub fn context_menu_capabilities(&self) -> InputContextMenuCapabilities {
-        InputContextMenuCapabilities {
-            disabled: self.disabled,
-            readonly: self.readonly,
-            code_editor: self.mode.is_code_editor(),
-            selection: !self.selected_range.is_empty(),
-            go_to_definition: self.lsp.definition_provider.is_some(),
-            code_actions: !self.lsp.code_action_providers.is_empty(),
-        }
+        InputContextMenuCapabilities::new()
+            .disabled(self.disabled)
+            .readonly(self.readonly)
+            .code_editor(self.mode.is_code_editor())
+            .selection(!self.selected_range.is_empty())
+            .go_to_definition(self.lsp.definition_provider.is_some())
+            .code_actions(!self.lsp.code_action_providers.is_empty())
     }
 
     pub fn set_text_align(&mut self, text_align: TextAlign, cx: &mut Context<Self>) {

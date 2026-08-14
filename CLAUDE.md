@@ -188,6 +188,13 @@ Text input system based on Rope data structure:
    conditions with `when`, `when_some`, `when_none`, and `map`; do not split a chain into a
    mutable temporary element followed by imperative reassignment when the builder API can
    express the same operation.
+7. **No `pub` fields on public data types**: A public struct handed across the
+   `gpui-base`/application seam — a state snapshot, capability set, or option set — keeps
+   its fields private, is constructed with a builder (`new()` plus one chained setter per
+   field), and is read through methods (`is_`/`has_`/`can_` for booleans). Adding a `pub`
+   field is a breaking change; adding one behind a builder is not. Value types whose fields
+   are the definition and cannot grow (`Point`, `Selection`, `Edges`) are exempt. See the
+   "Public Data Types Across the Seam" section of `docs/ARCHITECTURE.md`.
 
 ## Code Style
 

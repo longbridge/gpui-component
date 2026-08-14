@@ -257,7 +257,7 @@ impl Input {
     }
 
     fn render_toggle_mask_button(state: &Entity<InputBaseState>, cx: &App) -> impl IntoElement {
-        let masked = state.read(cx).presentation().masked;
+        let masked = state.read(cx).presentation().is_masked();
         Button::new("toggle-mask")
             .icon(if masked {
                 IconName::Eye
@@ -436,7 +436,7 @@ impl RenderOnce for Input {
                         .into_any_element()
                 })),
             });
-            state.set_editor_paddings(if state.presentation().multi_line {
+            state.set_editor_paddings(if state.presentation().is_multi_line() {
                 Edges {
                     top: self.size.input_py(),
                     right: self.size.input_px(),
@@ -454,33 +454,33 @@ impl RenderOnce for Input {
                 let menu = if let Some(custom) = custom.as_ref() {
                     custom(NativeMenu::new(), window, cx)
                 } else {
-                    let enabled = !capabilities.disabled;
+                    let enabled = !capabilities.is_disabled();
                     // A read-only input can still navigate the code, it only
                     // rejects the items that would change the text.
-                    let editable = enabled && !capabilities.readonly;
+                    let editable = enabled && !capabilities.is_readonly();
                     let mut menu = NativeMenu::new();
-                    if capabilities.code_editor {
+                    if capabilities.is_code_editor() {
                         menu = menu
                             .menu_with_disabled(
                                 t!("Input.Go to Definition"),
-                                !(enabled && capabilities.go_to_definition),
+                                !(enabled && capabilities.can_go_to_definition()),
                                 Box::new(gpui_base::input::GoToDefinition),
                             )
                             .menu_with_disabled(
                                 t!("Input.Show Code Actions"),
-                                !(editable && capabilities.code_actions),
+                                !(editable && capabilities.has_code_actions()),
                                 Box::new(gpui_base::input::ToggleCodeActions),
                             )
                             .separator();
                     }
                     menu.menu_with_disabled(
                         t!("Input.Cut"),
-                        !(editable && capabilities.selection),
+                        !(editable && capabilities.has_selection()),
                         Box::new(gpui_base::input::Cut),
                     )
                     .menu_with_disabled(
                         t!("Input.Copy"),
-                        !capabilities.selection,
+                        !capabilities.has_selection(),
                         Box::new(gpui_base::input::Copy),
                     )
                     .menu_with_disabled(
@@ -502,15 +502,15 @@ impl RenderOnce for Input {
         let presentation = state.read(cx).presentation();
         let content_type = self.content_type;
         let disabled = self.disabled;
-        let is_multi_line = presentation.multi_line;
+        let is_multi_line = presentation.is_multi_line();
         let accessibility_role = Self::accessibility_role(is_multi_line, content_type, self.role);
         let accessibility_state = state.clone();
         // Materializing the whole rope is only observable through the
         // accessibility tree, so skip it when no client is listening.
         let accessibility_value = (window.is_a11y_active()
-            && Self::exposes_accessibility_value(presentation.masked, content_type))
-        .then(|| presentation.value.clone());
-        let focused = presentation.focus_handle.is_focused(window) && !presentation.disabled;
+            && Self::exposes_accessibility_value(presentation.is_masked(), content_type))
+        .then(|| presentation.value().to_owned());
+        let focused = presentation.focus_handle().is_focused(window) && !presentation.is_disabled();
         if focused {
             sync_native_content_type(window, content_type, presentation.is_editable());
         }
@@ -521,13 +521,13 @@ impl RenderOnce for Input {
             _ => px(6.),
         };
 
-        let (bg, _) = input_style(presentation.disabled, cx);
-        let bg = if presentation.code_editor {
+        let (bg, _) = input_style(presentation.is_disabled(), cx);
+        let bg = if presentation.is_code_editor() {
             cx.theme().editor_background()
         } else {
             bg
         };
-        let bg = if presentation.disabled {
+        let bg = if presentation.is_disabled() {
             bg.opacity(0.5)
         } else {
             bg
@@ -536,17 +536,16 @@ impl RenderOnce for Input {
         let suffix = self.suffix;
         let show_clear_button = self.cleanable
             && presentation.is_editable()
-            && !presentation.loading
-            && !presentation.value.is_empty()
-            && !presentation.multi_line;
+            && !presentation.is_loading()
+            && !presentation.value().is_empty()
+            && !presentation.is_multi_line();
         let has_suffix =
-            suffix.is_some() || presentation.loading || self.mask_toggle || show_clear_button;
+            suffix.is_some() || presentation.is_loading() || self.mask_toggle || show_clear_button;
 
-        let placeholder = Some(presentation.placeholder.clone()).filter(|p| !p.is_empty());
+        let placeholder = Some(presentation.placeholder().clone()).filter(|p| !p.is_empty());
 
         // Don't use a mask-derived placeholder ("(___)___-___") as an aria_label fallback.
-        let placeholder_is_mask =
-            presentation.mask_placeholder.as_deref() == placeholder.as_deref();
+        let placeholder_is_mask = presentation.mask_placeholder() == placeholder.as_deref();
 
         let aria_label = match self.aria_label {
             Some(label) => Some(label),
@@ -586,7 +585,7 @@ impl RenderOnce for Input {
             .input_h(self.size)
             .input_text_size(self.size)
             .items_center()
-            .when(presentation.multi_line, |this| {
+            .when(presentation.is_multi_line(), |this| {
                 this.h_auto()
                     .when_some(self.height, |this, height| this.h(height))
             })
@@ -602,13 +601,15 @@ impl RenderOnce for Input {
             .refine_style(&self.style)
             .children(prefix.map(|p| {
                 div()
-                    .when(presentation.disabled, |this| this.opacity(0.5))
+                    .when(presentation.is_disabled(), |this| this.opacity(0.5))
                     .child(p)
             }))
-            .when(presentation.multi_line, |this| {
+            .when(presentation.is_multi_line(), |this| {
                 this.child(Self::render_editor(&state, overlays.search, window))
             })
-            .when(!presentation.multi_line, |this| this.child(state.clone()))
+            .when(!presentation.is_multi_line(), |this| {
+                this.child(state.clone())
+            })
             .when(has_suffix, |this| {
                 this.pr(self.size.input_px()).child(
                     h_flex()
@@ -616,8 +617,8 @@ impl RenderOnce for Input {
                         .gap(gap_x)
                         .items_center()
                         .cursor_default()
-                        .when(presentation.disabled, |this| this.opacity(0.5))
-                        .when(presentation.loading, |this| {
+                        .when(presentation.is_disabled(), |this| this.opacity(0.5))
+                        .when(presentation.is_loading(), |this| {
                             this.child(Spinner::new().color(cx.theme().muted_foreground))
                         })
                         .when(self.mask_toggle, |this| {
