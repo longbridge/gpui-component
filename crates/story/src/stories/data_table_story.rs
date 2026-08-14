@@ -93,8 +93,16 @@ impl Counter {
         ALL_COUNTERS[ix].clone()
     }
 
+    /// The symbol carrying its market, e.g. `AAPL.US`.
+    ///
+    /// Hong Kong symbols already ship the suffix (`0700.HK`), so appending the
+    /// market again would read `0700.HK.HK`.
     fn symbol_code(&self) -> SharedString {
-        format!("{}.{}", self.symbol, self.market).into()
+        if self.symbol.contains('.') {
+            self.symbol.clone()
+        } else {
+            format!("{}.{}", self.symbol, self.market).into()
+        }
     }
 }
 
@@ -152,8 +160,8 @@ impl Stock {
         self.price = (5.0..999.0).fake::<f64>();
         self.change = self.price * self.change_percent;
         self.prev_close = self.price - self.change;
-        self.volume = (1e4..5e8).fake::<f64>();
-        self.turnover = (1e5..9e9).fake::<f64>();
+        self.volume = (1e4..5e7).fake::<f64>();
+        self.turnover = self.volume * self.price;
         self.market_cap = self.price * self.shares as f64;
         self.ttm = (5.0..80.0).fake::<f64>();
         self.five_mins_ranking = self.five_mins_ranking * (1.0 + (-0.2..0.2).fake::<f64>());
@@ -185,7 +193,7 @@ fn change_colors(val: f64, cx: &App) -> Option<(Hsla, Hsla)> {
 /// Formats a large number with a compact unit, e.g. `1.24B`, so wide columns
 /// stay readable.
 fn compact(val: f64) -> String {
-    const UNITS: [(f64, &str); 3] = [(1e9, "B"), (1e6, "M"), (1e3, "K")];
+    const UNITS: [(f64, &str); 4] = [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")];
 
     UNITS
         .into_iter()
@@ -245,7 +253,8 @@ fn random_stocks_exact(start: usize, size: usize) -> Vec<Stock> {
             let price = (5.0..999.0).fake::<f64>();
             let change_percent = (-0.1..0.1).fake::<f64>();
             let change = price * change_percent;
-            let shares = (1_000_000..9_999_999_999i64).fake::<i64>();
+            let shares = (1_000_000..3_000_000_000i64).fake::<i64>();
+            let volume = (1e4..5e7).fake::<f64>();
 
             Stock {
                 id,
@@ -253,8 +262,8 @@ fn random_stocks_exact(start: usize, size: usize) -> Vec<Stock> {
                 price,
                 change,
                 change_percent,
-                volume: (1e4..5e8).fake(),
-                turnover: (1e5..9e9).fake(),
+                volume,
+                turnover: volume * price,
                 market_cap: price * shares as f64,
                 ttm: (5.0..80.0).fake(),
                 five_mins_ranking: (0.0..1000.0).fake(),
@@ -347,15 +356,15 @@ impl StockTableDelegate {
                     .sortable()
                     .text_right()
                     .p_0(),
-                Column::new("volume", "Volume").p_0(),
-                Column::new("turnover", "Turnover").p_0(),
-                Column::new("market_cap", "Market Cap").p_0(),
-                Column::new("ttm", "TTM").p_0(),
+                Column::new("volume", "Volume").text_right().p_0(),
+                Column::new("turnover", "Turnover").text_right().p_0(),
+                Column::new("market_cap", "Market Cap").text_right().p_0(),
+                Column::new("ttm", "TTM").text_right().p_0(),
                 Column::new("five_mins_ranking", "5m Ranking")
                     .text_right()
                     .p_0(),
-                Column::new("th60_days_ranking", "60d Ranking"),
-                Column::new("year_change_percent", "Year Chg%"),
+                Column::new("th60_days_ranking", "60d Ranking").text_right(),
+                Column::new("year_change_percent", "Year Chg%").text_right(),
                 Column::new("bid", "Bid").text_right().p_0(),
                 Column::new("bid_volume", "Bid Vol").text_right().p_0(),
                 Column::new("ask", "Ask").text_right().p_0(),
@@ -364,33 +373,33 @@ impl StockTableDelegate {
                 Column::new("prev_close", "Prev Close").text_right().p_0(),
                 Column::new("high", "High").text_right().p_0(),
                 Column::new("low", "Low").text_right().p_0(),
-                Column::new("turnover_rate", "Turnover Rate"),
-                Column::new("rise_rate", "Rise Rate"),
-                Column::new("amplitude", "Amplitude"),
-                Column::new("pe_status", "P/E"),
-                Column::new("pb_status", "P/B"),
+                Column::new("turnover_rate", "Turnover Rate").text_right(),
+                Column::new("rise_rate", "Rise Rate").text_right(),
+                Column::new("amplitude", "Amplitude").text_right(),
+                Column::new("pe_status", "P/E").text_right(),
+                Column::new("pb_status", "P/B").text_right(),
                 Column::new("volume_ratio", "Volume Ratio")
                     .text_right()
                     .p_0(),
                 Column::new("bid_ask_ratio", "Bid Ask Ratio")
                     .text_right()
                     .p_0(),
-                Column::new("latest_pre_close", "Latest Pre Close"),
-                Column::new("latest_post_close", "Latest Post Close"),
-                Column::new("pre_market_cap", "Pre Mkt Cap"),
-                Column::new("pre_market_percent", "Pre Mkt%"),
-                Column::new("pre_market_change", "Pre Mkt Chg"),
-                Column::new("post_market_cap", "Post Mkt Cap"),
-                Column::new("post_market_percent", "Post Mkt%"),
-                Column::new("post_market_change", "Post Mkt Chg"),
-                Column::new("float_cap", "Float Cap"),
-                Column::new("shares", "Shares"),
-                Column::new("shares_float", "Float Shares"),
-                Column::new("day_5_ranking", "5d Ranking"),
-                Column::new("day_10_ranking", "10d Ranking"),
-                Column::new("day_30_ranking", "30d Ranking"),
-                Column::new("day_120_ranking", "120d Ranking"),
-                Column::new("day_250_ranking", "250d Ranking"),
+                Column::new("latest_pre_close", "Latest Pre Close").text_right(),
+                Column::new("latest_post_close", "Latest Post Close").text_right(),
+                Column::new("pre_market_cap", "Pre Mkt Cap").text_right(),
+                Column::new("pre_market_percent", "Pre Mkt%").text_right(),
+                Column::new("pre_market_change", "Pre Mkt Chg").text_right(),
+                Column::new("post_market_cap", "Post Mkt Cap").text_right(),
+                Column::new("post_market_percent", "Post Mkt%").text_right(),
+                Column::new("post_market_change", "Post Mkt Chg").text_right(),
+                Column::new("float_cap", "Float Cap").text_right(),
+                Column::new("shares", "Shares").text_right(),
+                Column::new("shares_float", "Float Shares").text_right(),
+                Column::new("day_5_ranking", "5d Ranking").text_right(),
+                Column::new("day_10_ranking", "10d Ranking").text_right(),
+                Column::new("day_30_ranking", "30d Ranking").text_right(),
+                Column::new("day_120_ranking", "120d Ranking").text_right(),
+                Column::new("day_250_ranking", "250d Ranking").text_right(),
             ],
             extra_columns_count: 0,
             loading: false,
@@ -474,15 +483,35 @@ impl TableDelegate for StockTableDelegate {
         if !self.show_group_headers {
             return None;
         }
+        // Both rows must span every column, and the lower row subdivides the
+        // upper one, so each group lines up with the columns it names.
+        let trailing = self.columns_count(cx) - self.columns.len();
+
         Some(vec![
             vec![
                 ColumnGroup {
-                    label: "Stock Info".into(),
+                    label: "Stock".into(),
                     span: 4,
                 },
                 ColumnGroup {
-                    label: "Price & Change".into(),
-                    span: 3,
+                    label: "Market Data".into(),
+                    span: 10,
+                },
+                ColumnGroup {
+                    label: "Quotes".into(),
+                    span: 8,
+                },
+                ColumnGroup {
+                    label: "Stats".into(),
+                    span: 7,
+                },
+                ColumnGroup {
+                    label: "Extended Hours".into(),
+                    span: 8,
+                },
+                ColumnGroup {
+                    label: "Shares & Rankings".into(),
+                    span: 8 + trailing,
                 },
             ],
             vec![
@@ -491,16 +520,48 @@ impl TableDelegate for StockTableDelegate {
                     span: 4,
                 },
                 ColumnGroup {
-                    label: "Stock Info".into(),
-                    span: 7,
+                    label: "Price & Change".into(),
+                    span: 3,
                 },
                 ColumnGroup {
-                    label: "Ranking & Stats".into(),
-                    span: 14,
+                    label: "Turnover".into(),
+                    span: 4,
                 },
                 ColumnGroup {
-                    label: "Market Data".into(),
-                    span: self.columns_count(cx) - 25,
+                    label: "Momentum".into(),
+                    span: 3,
+                },
+                ColumnGroup {
+                    label: "Order Book".into(),
+                    span: 4,
+                },
+                ColumnGroup {
+                    label: "Session".into(),
+                    span: 4,
+                },
+                ColumnGroup {
+                    label: "Activity".into(),
+                    span: 3,
+                },
+                ColumnGroup {
+                    label: "Valuation".into(),
+                    span: 2,
+                },
+                ColumnGroup {
+                    label: "Ratios".into(),
+                    span: 2,
+                },
+                ColumnGroup {
+                    label: "Pre & Post Market".into(),
+                    span: 8,
+                },
+                ColumnGroup {
+                    label: "Shares".into(),
+                    span: 3,
+                },
+                ColumnGroup {
+                    label: "Rankings".into(),
+                    span: 5 + trailing,
                 },
             ],
         ])
@@ -514,8 +575,9 @@ impl TableDelegate for StockTableDelegate {
         let col = self.column(col_ix, cx);
 
         div()
-            .child(col.name.clone())
-            .when(col_ix >= 3 && col_ix <= 10, |this| {
+            // Same rule as the cells: supply the padding only for the columns
+            // that dropped their own, so a header lines up with its column.
+            .when(col.paddings.is_some(), |this| {
                 this.table_cell_size(self.size)
             })
             .when(col.align == TextAlign::Center, |this| {
@@ -524,6 +586,7 @@ impl TableDelegate for StockTableDelegate {
             .when(col.align == TextAlign::Right, |this| {
                 this.h_flex().w_full().justify_end()
             })
+            .child(col.name.clone())
     }
 
     fn context_menu(
@@ -609,7 +672,7 @@ impl TableDelegate for StockTableDelegate {
                 .into_any_element(),
             "name" => self
                 .value_cell(&col)
-                .child(stock.counter.name.clone())
+                .child(div().truncate().child(stock.counter.name.clone()))
                 .into_any_element(),
             "price" => self
                 .value_cell(&col)
