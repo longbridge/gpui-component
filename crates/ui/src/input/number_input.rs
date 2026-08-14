@@ -11,7 +11,7 @@ use gpui::{
 use crate::{Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _};
 
 use super::{Input, InputState, input::input_style};
-use crate::styled::{FocusRingStyleExt as _, focus_border_color};
+use crate::styled::FocusRingStyleExt as _;
 use gpui_base::NumberInput as BaseNumberInput;
 pub use gpui_base::{NumberInputEvent, NumberStep, StepAction};
 use rust_i18n::t;
@@ -195,11 +195,8 @@ impl RenderOnce for NumberInput {
             .when(self.appearance, |this| {
                 this.bg(bg)
                     .border_1()
-                    .border_color(if focused && self.focus_ring_enabled {
-                        focus_border_color(cx)
-                    } else {
-                        border_color
-                    })
+                    .border_color(border_color)
+                    .when(focused, |this| this.focused_border(cx))
             })
             .refine_style(&self.style)
             .draw_focus_ring(

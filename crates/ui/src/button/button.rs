@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::styled::{FocusRingStyleExt as _, focus_border_color};
+use crate::styled::FocusRingStyleExt as _;
 use crate::{
     ActiveTheme, Colorize as _, Disableable, Icon, RoleOverride, Selectable, Sizable, Size,
     StyleSized, StyledExt,
@@ -717,10 +717,6 @@ impl RenderOnce for Button {
                 this
             }
         })
-        .when(
-            is_focused && self.focus_ring_enabled && (self.variant.is_default() || self.outline),
-            |this| this.border_color(focus_border_color(cx)),
-        )
         .draw_focus_ring(is_focused && self.focus_ring_enabled, px(0.), window, cx)
     }
 }

@@ -20,7 +20,7 @@ use gpui_base::InputBase as BaseInput;
 use rust_i18n::t;
 
 use super::{InputContentType, InputState, sync_native_content_type};
-use crate::styled::{FocusRingStyleExt as _, focus_border_color};
+use crate::styled::FocusRingStyleExt as _;
 use gpui_base::input::InputBaseState;
 
 enum InputStateSource {
@@ -577,6 +577,14 @@ impl RenderOnce for Input {
             .focused(focused)
             .disabled(disabled)
             .track_focus(&frame_focus_handle)
+            .styles(|styles| {
+                styles.focused(|style| {
+                    style.when(
+                        self.appearance && self.bordered && self.focus_bordered,
+                        |style| style.border_1().border_color(cx.theme().ring),
+                    )
+                })
+            })
             .role(accessibility_role)
             .when_some(self.accessibility_id, |this, id| this.accessibility_id(id))
             .when_some(aria_label, |this, label| this.aria_label(label))
@@ -606,12 +614,7 @@ impl RenderOnce for Input {
                 this.bg(bg)
                     .rounded(cx.theme().radius)
                     .when(self.bordered, |this| {
-                        this.border_1()
-                            .border_color(if focused && self.focus_bordered {
-                                focus_border_color(cx)
-                            } else {
-                                cx.theme().input
-                            })
+                        this.border_1().border_color(cx.theme().input)
                     })
             })
             .items_center()
