@@ -55,9 +55,9 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
         ring_style.corner_radii.bottom_left = Some(outer_radius.bottom_left.into());
         ring_style.corner_radii.bottom_right = Some(outer_radius.bottom_right.into());
         let inset = FOCUS_RING_OFFSET + margin;
-        // Pre-composite the translucent ring against the surface. GPUI borders are
-        // center-aligned, so retaining alpha here would blend their antialiased seam
-        // with the inner focus border and make the shared edge look blurry.
+        // Pre-composite the focus color against the surface. GPUI borders are
+        // center-aligned, so retaining alpha on either layer would blend their
+        // antialiased seam and make the shared edge look blurry.
         let ring_color = cx
             .theme()
             .background
@@ -68,7 +68,7 @@ impl<T: ParentElement + Styled + Sized> FocusRingStyleExt<T> for T {
                 .absolute()
                 .inset_0()
                 .border_1()
-                .border_color(cx.theme().ring)
+                .border_color(ring_color)
                 .refine_style(&border_style),
         )
         .child(
