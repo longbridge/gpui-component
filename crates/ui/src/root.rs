@@ -10,10 +10,10 @@ use crate::{
     window_border,
 };
 use gpui::{
-    Anchor, AnyView, App, AppContext, Bounds, ClipboardItem, Context, DefiniteLength, ElementId,
-    Entity, EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement as _, Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle,
-    Window, actions, div, prelude::FluentBuilder as _,
+    AnyView, App, AppContext, Bounds, ClipboardItem, Context, DefiniteLength, ElementId, Entity,
+    EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding, ParentElement as _,
+    Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle, Window, actions, div,
+    prelude::FluentBuilder as _,
 };
 use std::{any::TypeId, collections::HashMap, rc::Rc};
 
@@ -179,56 +179,15 @@ impl Root {
             _ => (None, None, None, None),
         };
 
-        let placement = cx.theme().notification.placement;
-        let margins = &cx.theme().notification.margins;
-
         Some(
             div()
                 .absolute()
-                .when(matches!(placement, Anchor::TopRight), |this| {
-                    this.top_0().right_0()
-                })
-                .when(matches!(placement, Anchor::TopLeft), |this| {
-                    this.top_0().left_0()
-                })
-                .when(matches!(placement, Anchor::TopCenter), |this| {
-                    this.top_0().mx_auto()
-                })
-                .when(matches!(placement, Anchor::BottomRight), |this| {
-                    this.bottom_0().right_0()
-                })
-                .when(matches!(placement, Anchor::BottomLeft), |this| {
-                    this.bottom_0().left_0()
-                })
-                .when(matches!(placement, Anchor::BottomCenter), |this| {
-                    this.bottom_0().mx_auto()
-                })
+                .inset_0()
                 .when_some(mt, |this, offset| this.mt(offset))
                 .when_some(mr, |this, offset| this.mr(offset))
                 .when_some(mb, |this, offset| this.mb(offset))
                 .when_some(ml, |this, offset| this.ml(offset))
-                .child(
-                    div()
-                        .when(matches!(placement, Anchor::TopRight), |this| {
-                            this.mt(margins.top).mr(margins.right)
-                        })
-                        .when(matches!(placement, Anchor::TopLeft), |this| {
-                            this.mt(margins.top).ml(margins.left)
-                        })
-                        .when(matches!(placement, Anchor::TopCenter), |this| {
-                            this.mt(margins.top)
-                        })
-                        .when(matches!(placement, Anchor::BottomRight), |this| {
-                            this.mb(margins.bottom).mr(margins.right)
-                        })
-                        .when(matches!(placement, Anchor::BottomLeft), |this| {
-                            this.mb(margins.bottom).ml(margins.left)
-                        })
-                        .when(matches!(placement, Anchor::BottomCenter), |this| {
-                            this.mb(margins.bottom)
-                        })
-                        .child(root.read(cx).notification.clone()),
-                ),
+                .child(root.read(cx).notification.clone()),
         )
     }
 

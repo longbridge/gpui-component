@@ -379,6 +379,34 @@ impl Render for NotificationStory {
                     ),
             )
             .child(
+                section("Placement per notification")
+                    .description("Override the global placement for a single notification.")
+                    .child(
+                        Button::new("show-notify-bottom-right")
+                            .outline()
+                            .label("Bottom Right")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::info("This notification is at bottom right.")
+                                        .placement(Anchor::BottomRight),
+                                    cx,
+                                )
+                            })),
+                    )
+                    .child(
+                        Button::new("show-notify-top-center")
+                            .outline()
+                            .label("Top Center")
+                            .on_click(cx.listener(|_, _, window, cx| {
+                                window.push_notification(
+                                    Notification::info("This notification is at top center.")
+                                        .placement(Anchor::TopCenter),
+                                    cx,
+                                )
+                            })),
+                    ),
+            )
+            .child(
                 section("Custom content")
                     .description("Render application-owned notification content.")
                     .child(
