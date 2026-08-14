@@ -384,11 +384,6 @@ where
         });
     }
 
-    /// Clears the search query.
-    pub fn clear_search_value(&self, window: &mut Window, cx: &mut App) {
-        self.set_search_value("", window, cx);
-    }
-
     fn selection_changes(
         multiple: bool,
         selection: &[(IndexPath, D::Item)],
