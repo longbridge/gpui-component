@@ -9,8 +9,8 @@ use super::{
 };
 use crate::StepAction;
 
-type InputValidator = Rc<dyn Fn(&str, &mut Context<InputState>) -> bool>;
-type InputStep = Rc<dyn Fn(f64, StepAction, &mut Context<InputState>) -> f64>;
+type InputValidator = Rc<dyn Fn(&str, &mut App) -> bool>;
+type InputStep = Rc<dyn Fn(f64, StepAction, &mut App) -> f64>;
 
 #[derive(Default)]
 struct InputOptions {
@@ -102,10 +102,7 @@ impl InputState {
         self
     }
 
-    pub fn validate(
-        mut self,
-        validate: impl Fn(&str, &mut Context<Self>) -> bool + 'static,
-    ) -> Self {
+    pub fn validate(mut self, validate: impl Fn(&str, &mut App) -> bool + 'static) -> Self {
         self.options.validator = Some(Rc::new(validate));
         self
     }
@@ -125,10 +122,7 @@ impl InputState {
         self
     }
 
-    pub fn step_by(
-        mut self,
-        step: impl Fn(f64, StepAction, &mut Context<Self>) -> f64 + 'static,
-    ) -> Self {
+    pub fn step_by(mut self, step: impl Fn(f64, StepAction, &mut App) -> f64 + 'static) -> Self {
         self.options.step_by = Some(Rc::new(step));
         self
     }
@@ -250,7 +244,6 @@ impl InputState {
         let max = self.options.max;
         let context_menu = self.options.context_menu;
         let editor_style = self.options.editor_style.take();
-        let entity = cx.entity().downgrade();
         self.base.update(cx, |state, cx| {
             if let Some(placeholder) = placeholder {
                 state.set_placeholder(placeholder, window, cx);
@@ -272,26 +265,15 @@ impl InputState {
                 state.set_pattern(pattern, window, cx);
             }
             if let Some(validator) = validator {
-                let entity = entity.clone();
-                state.set_validator(
-                    move |value, cx| {
-                        entity
-                            .update(cx, |_, cx| validator(value, cx))
-                            .unwrap_or(false)
-                    },
-                    cx,
-                );
+                state.set_validator(move |value, cx| validator(value, cx), cx);
             }
             if let Some(step) = step {
                 state.set_step(Some(step), window, cx);
             }
             if let Some(step_by) = step_by {
-                let entity = entity.clone();
                 state.set_step(
                     Some(NumberStep::by_value(move |value, action, cx| {
-                        entity
-                            .update(cx, |_, cx| step_by(value, action, cx))
-                            .unwrap_or_default()
+                        step_by(value, action, cx)
                     })),
                     window,
                     cx,
@@ -347,5 +329,71 @@ impl Input {
 impl RenderOnce for Input {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         self.state
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::Cell, rc::Rc};
+
+    use gpui::{ParentElement as _, TestAppContext, VisualTestContext, div};
+
+    use super::*;
+
+    struct TestRoot(Entity<InputState>);
+
+    impl Render for TestRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().child(self.0.clone())
+        }
+    }
+
+    #[gpui::test]
+    fn facade_callbacks_do_not_reenter_input_state(cx: &mut TestAppContext) {
+        let validation_calls = Rc::new(Cell::new(0));
+        let step_calls = Rc::new(Cell::new(0));
+        let mut input = None;
+
+        let window = cx.update(|cx| {
+            cx.open_window(Default::default(), |window, cx| {
+                let validation_calls = validation_calls.clone();
+                let step_calls = step_calls.clone();
+                let state = cx.new(|cx| {
+                    InputState::new(window, cx)
+                        .validate(move |_, _| {
+                            validation_calls.set(validation_calls.get() + 1);
+                            true
+                        })
+                        .step_by(move |_, _, _| {
+                            step_calls.set(step_calls.get() + 1);
+                            1.
+                        })
+                });
+                input = Some(state.clone());
+                cx.new(|_| TestRoot(state))
+            })
+            .unwrap()
+        });
+        let input = input.unwrap();
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            input.update(cx, |state, cx| {
+                state.set_value("1", window, cx);
+                state.replace_all("2", window, cx);
+            });
+        });
+
+        let base = input.read_with(&cx, |state, _| state.base.clone());
+        cx.update(|_, cx| {
+            base.update(cx, |state, cx| {
+                let step = state.number_step.clone().unwrap();
+                assert_eq!(step.value(2., StepAction::Increment, cx), 1.);
+            });
+        });
+
+        assert!(validation_calls.get() >= 2);
+        assert_eq!(step_calls.get(), 1);
     }
 }
