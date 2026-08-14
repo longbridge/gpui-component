@@ -2244,10 +2244,17 @@ impl InputBaseState {
     }
 
     /// Set the selected range using UTF-8 byte offsets.
+    ///
+    /// Non-empty ranges expand to character boundaries. Empty ranges remain empty and are
+    /// clipped to the preceding character boundary.
     pub fn set_selected_range(&mut self, range: Range<usize>, cx: &mut Context<Self>) {
-        let len = self.text.len();
-        let start = range.start.min(len);
-        let end = range.end.min(len);
+        let end_bias = if range.start == range.end {
+            Bias::Left
+        } else {
+            Bias::Right
+        };
+        let start = self.text.clip_offset(range.start, Bias::Left);
+        let end = self.text.clip_offset(range.end, end_bias);
 
         self.move_to(start, None, cx);
         self.selection_reversed = false;
@@ -3851,6 +3858,24 @@ mod tests {
                 // clamped + collapsed
                 s.set_selected_range(100..100, cx);
                 assert_eq!(s.selected_range(), 11..11);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_set_selected_range_clips_to_utf8_boundaries(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state.default_value("éx"));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_selected_range(0..1, cx);
+                assert_eq!(state.selected_range(), 0..2);
+                state.copy(&Copy, window, cx);
+
+                state.set_selected_range(1..1, cx);
+                assert_eq!(state.selected_range(), 0..0);
             });
         });
     }
