@@ -261,8 +261,9 @@ fn base_input_accepts_application_owned_highlighters() {
             _: Option<gpui_base::input::InputEdit>,
             _: &gpui_base::input::Rope,
             _: bool,
+            _: gpui_base::input::HighlighterHost,
             _: &mut gpui::Window,
-            _: &mut gpui::Context<gpui_base::input::InputBaseState>,
+            _: &mut gpui::App,
         ) {
         }
 

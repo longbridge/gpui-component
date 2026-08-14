@@ -3,7 +3,7 @@ use gpui::{App, Context, Entity, SharedString, Task, Window};
 use lsp_types::CodeAction;
 use std::ops::Range;
 
-use crate::input::{InputBaseState, ToggleCodeActions};
+use crate::input::{EditorState, InputBaseState, ToggleCodeActions};
 
 pub trait CodeActionProvider {
     /// The id for this CodeAction.
@@ -16,7 +16,7 @@ pub trait CodeActionProvider {
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_codeAction
     fn code_actions(
         &self,
-        state: Entity<InputBaseState>,
+        state: Entity<EditorState>,
         range: Range<usize>,
         window: &mut Window,
         cx: &mut App,
@@ -25,7 +25,7 @@ pub trait CodeActionProvider {
     /// Performs the specified code action.
     fn perform_code_action(
         &self,
-        state: Entity<InputBaseState>,
+        state: Entity<EditorState>,
         action: CodeAction,
         push_to_history: bool,
         window: &mut Window,
@@ -58,7 +58,9 @@ impl InputBaseState {
         let providers = self.lsp.code_action_providers.clone();
         let range = self.selected_range.start..self.selected_range.end;
 
-        let state = cx.entity();
+        let Some(state) = self.editor_owner() else {
+            return;
+        };
         self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
             let mut provider_responses = vec![];
             _ = cx.update(|window, cx| {
@@ -118,7 +120,9 @@ impl InputBaseState {
             return;
         };
 
-        let state = cx.entity();
+        let Some(state) = self.editor_owner() else {
+            return;
+        };
         let task = provider.perform_code_action(state, item.action.clone(), true, window, cx);
 
         cx.spawn_in(window, async move |_, _| {

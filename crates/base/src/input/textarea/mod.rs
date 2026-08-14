@@ -2,8 +2,9 @@ use gpui::{
     App, AppContext as _, Context, Entity, EventEmitter, FocusHandle, Focusable, IntoElement,
     Render, RenderOnce, SharedString, Subscription, Window,
 };
+use ropey::Rope;
 
-use super::{InputBaseState, InputEvent, Position};
+use super::{InputBaseState, InputEvent, Position, TabSize};
 
 struct TextareaOptions {
     placeholder: Option<SharedString>,
@@ -13,6 +14,7 @@ struct TextareaOptions {
     submit_on_enter: bool,
     soft_wrap: bool,
     searchable: bool,
+    tab_size: Option<TabSize>,
     configured: bool,
 }
 
@@ -26,6 +28,7 @@ impl Default for TextareaOptions {
             submit_on_enter: false,
             soft_wrap: true,
             searchable: false,
+            tab_size: None,
             configured: false,
         }
     }
@@ -51,7 +54,6 @@ impl TextareaState {
             }
             cx.emit(event.clone());
         });
-
         Self {
             base,
             options: TextareaOptions::default(),
@@ -100,6 +102,12 @@ impl TextareaState {
         self
     }
 
+    /// Width of a tab, and whether Tab inserts a hard tab.
+    pub fn tab_size(mut self, tab_size: TabSize) -> Self {
+        self.options.tab_size = Some(tab_size);
+        self
+    }
+
     pub fn value(&self) -> SharedString {
         self.value.clone()
     }
@@ -142,8 +150,49 @@ impl TextareaState {
         self.value = self.base.read(cx).value();
     }
 
+    /// Return the text [`Rope`] of the textarea.
+    pub fn text<'a>(&self, cx: &'a App) -> &'a Rope {
+        self.base.read(cx).text()
+    }
+
+    /// Return the byte offset of the cursor.
+    pub fn cursor(&self, cx: &App) -> usize {
+        self.base.read(cx).cursor()
+    }
+
+    /// Return the (0-based) [`Position`] of the cursor.
     pub fn cursor_position(&self, cx: &App) -> Position {
         self.base.read(cx).cursor_position()
+    }
+
+    /// Move the cursor to a (0-based) [`Position`] and focus the textarea.
+    pub fn set_cursor_position(
+        &mut self,
+        position: impl Into<Position>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let position = position.into();
+        self.base.update(cx, |state, cx| {
+            state.set_cursor_position(position, window, cx)
+        });
+    }
+
+    pub fn set_placeholder(
+        &mut self,
+        placeholder: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let placeholder = placeholder.into();
+        self.base.update(cx, |state, cx| {
+            state.set_placeholder(placeholder, window, cx)
+        });
+    }
+
+    pub fn set_soft_wrap(&mut self, wrap: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.base
+            .update(cx, |state, cx| state.set_soft_wrap(wrap, window, cx));
     }
 
     #[doc(hidden)]
@@ -164,7 +213,11 @@ impl TextareaState {
         let submit_on_enter = self.options.submit_on_enter;
         let soft_wrap = self.options.soft_wrap;
         let searchable = self.options.searchable;
+        let tab_size = self.options.tab_size;
         self.base.update(cx, |state, cx| {
+            if let Some(tab_size) = tab_size {
+                state.set_tab_size(tab_size, cx);
+            }
             if let Some(placeholder) = placeholder {
                 state.set_placeholder(placeholder, window, cx);
             }

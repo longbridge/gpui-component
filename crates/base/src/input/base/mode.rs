@@ -253,7 +253,8 @@ impl InputMode {
                     update.selected_range,
                     update.change_text,
                 );
-                h.update(Some(edit), update.new_text, *folding, window, cx);
+                let host = crate::input::HighlighterHost::new(cx.weak_entity());
+                h.update(Some(edit), update.new_text, *folding, host, window, cx);
             }
             _ => {}
         }

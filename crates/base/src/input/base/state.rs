@@ -9,7 +9,7 @@ use gpui::{
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, SharedString, Styled as _, Subscription,
-    Task, UTF16Selection, Window, actions, div, point, prelude::FluentBuilder as _, px,
+    Task, UTF16Selection, WeakEntity, Window, actions, div, point, prelude::FluentBuilder as _, px,
 };
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
@@ -394,6 +394,12 @@ pub struct InputBaseState {
     pub(super) inline_completion: InlineCompletion,
 
     pub(super) auto_scroll: AutoScroll,
+    /// The `EditorState` that owns this engine, when the control is an editor.
+    ///
+    /// Set by `EditorState::new`. The LSP providers are handed this entity, so
+    /// an application implements them against `EditorState` and never needs to
+    /// name the engine itself.
+    editor_owner: Option<WeakEntity<crate::input::EditorState>>,
 }
 
 /// Read-only styling data exposed to presentation facades.
@@ -632,6 +638,7 @@ impl InputBaseState {
             inline_completion: InlineCompletion::default(),
             cursor_line_end_affinity: false,
             auto_scroll: AutoScroll::default(),
+            editor_owner: None,
         }
     }
 
@@ -1460,6 +1467,16 @@ impl InputBaseState {
     /// Return the value without mask.
     pub fn unmask_value(&self) -> SharedString {
         self.mask_pattern.unmask(&self.text.to_string()).into()
+    }
+
+    /// Record the `EditorState` that owns this engine.
+    pub(crate) fn set_editor_owner(&mut self, owner: WeakEntity<crate::input::EditorState>) {
+        self.editor_owner = Some(owner);
+    }
+
+    /// The owning `EditorState`, when this engine backs an editor.
+    pub(crate) fn editor_owner(&self) -> Option<Entity<crate::input::EditorState>> {
+        self.editor_owner.as_ref().and_then(|owner| owner.upgrade())
     }
 
     /// Return the text [`Rope`] of the input field.

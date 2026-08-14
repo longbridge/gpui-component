@@ -16,7 +16,7 @@ use gpui_component::{
     h_flex,
     highlighter::Language,
     input::{
-        DocumentRangeSemanticTokensProvider, Input, InputBaseState, InputEvent, Rope, RopeExt,
+        DocumentRangeSemanticTokensProvider, Editor, EditorState, InputEvent, Rope, RopeExt,
         TabSize,
     },
     resizable::{h_resizable, resizable_panel},
@@ -1111,7 +1111,7 @@ impl DocumentRangeSemanticTokensProvider for MarkerHighlighter {
 }
 
 pub struct Example {
-    input_state: Entity<InputBaseState>,
+    input_state: Entity<EditorState>,
     /// When `true`, tables wrap cell content to fit the width; when `false`
     /// (the default), tables keep cells on one line and scroll horizontally.
     table_wrap: bool,
@@ -1126,8 +1126,7 @@ const EXAMPLE: &str = include_str!("./fixtures/test.md");
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
-            let mut input_state = InputBaseState::new(window, cx)
-                .code_editor(Language::Markdown)
+            EditorState::new(Language::Markdown, window, cx)
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 2,
@@ -1135,13 +1134,15 @@ impl Example {
                 })
                 .searchable(true)
                 .placeholder("Enter your Markdown here...")
-                .default_value(EXAMPLE);
+                .default_value(EXAMPLE)
+        });
 
-            // Install the example range semantic tokens provider, alongside
-            // the other LSP providers. It highlights TODO/FIXME/… markers.
-            input_state.lsp.semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
-
-            input_state
+        // Install the example range semantic tokens provider, alongside the
+        // other LSP providers. It highlights TODO/FIXME/… markers.
+        input_state.update(cx, |state, cx| {
+            state.update_lsp(cx, |lsp| {
+                lsp.semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
+            });
         });
 
         // Focus the input on startup so that actions (e.g. Open) can bubble
@@ -1225,17 +1226,16 @@ impl Render for Example {
                                             .font_family(cx.theme().mono_font_family.clone())
                                             .text_size(cx.theme().mono_font_size)
                                             .child(
-                                                Input::from_base(&self.input_state)
-                                                    .h_full()
+                                                Editor::new(&self.input_state)
+                                                    .h(relative(1.))
                                                     .p_0()
-                                                    .border_0()
-                                                    .focus_bordered(false),
+                                                    .border_0(),
                                             ),
                                     ),
                                 )
                                 .child(
                                     resizable_panel().child(
-                                        markdown(self.input_state.read(cx).value().clone())
+                                        markdown(self.input_state.read(cx).value())
                                             .code_block_actions(|code_block, _window, _cx| {
                                                 let code = code_block.code();
                                                 let lang = code_block.lang();

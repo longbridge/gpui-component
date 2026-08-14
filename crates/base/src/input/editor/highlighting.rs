@@ -1,6 +1,6 @@
 use std::{ops::Range, rc::Rc, sync::Arc};
 
-use gpui::{AnyElement, Context, HighlightStyle, Hsla, SharedString, Window};
+use gpui::{AnyElement, App, HighlightStyle, Hsla, SharedString, WeakEntity, Window};
 use ropey::Rope;
 
 use super::{FoldRange, InputBaseState, InputEdit};
@@ -22,6 +22,29 @@ impl HighlightStyleResolver for NoHighlightStyles {
     }
 }
 
+/// Lets a highlighter push results back into the editor it belongs to.
+///
+/// A highlighter that parses on a background thread needs a way to apply what
+/// it found once the parse lands. It gets this handle instead of the editing
+/// engine itself, so an implementation never names an internal type.
+#[derive(Clone)]
+pub struct HighlighterHost {
+    state: WeakEntity<InputBaseState>,
+}
+
+impl HighlighterHost {
+    pub(crate) fn new(state: WeakEntity<InputBaseState>) -> Self {
+        Self { state }
+    }
+
+    /// Apply fold candidates found by a background parse, and repaint.
+    pub fn apply_fold_candidates(&self, candidates: Vec<FoldRange>, cx: &mut App) {
+        let _ = self.state.update(cx, |state, cx| {
+            state.apply_highlighter_fold_candidates(candidates, cx);
+        });
+    }
+}
+
 /// Parser-independent syntax highlighting seam consumed by the Base editor.
 ///
 /// Implementations own parsing, incremental state, and language-specific
@@ -34,8 +57,9 @@ pub trait InputHighlighter {
         edit: Option<InputEdit>,
         text: &Rope,
         folding: bool,
+        host: HighlighterHost,
         window: &mut Window,
-        cx: &mut Context<InputBaseState>,
+        cx: &mut App,
     );
 
     /// Return ordered, non-overlapping style runs that fully cover `range`.

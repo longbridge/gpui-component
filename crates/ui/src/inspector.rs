@@ -20,7 +20,7 @@ use crate::{
     clipboard::Clipboard,
     description_list::DescriptionList,
     h_flex,
-    input::{CompletionProvider, Input, InputBaseState, InputEvent, RopeExt, TabSize},
+    input::{CompletionProvider, Editor, EditorState, InputEvent, RopeExt, TabSize},
     link::Link,
     v_flex,
 };
@@ -60,9 +60,9 @@ pub(crate) fn init(cx: &mut App) {
     cx.set_inspector_renderer(Box::new(render_inspector));
 }
 
-struct EditorState {
+struct InspectorEditor {
     /// The input state for the editor.
-    state: Entity<InputBaseState>,
+    state: Entity<EditorState>,
     /// Error to display from parsing the input, or if serialization errors somehow occur.
     error: Option<SharedString>,
     /// Whether the editor is currently being edited.
@@ -72,8 +72,8 @@ struct EditorState {
 pub struct DivInspector {
     inspector_id: Option<InspectorElementId>,
     inspector_state: Option<DivInspectorState>,
-    rust_state: EditorState,
-    json_state: EditorState,
+    rust_state: InspectorEditor,
+    json_state: InspectorEditor,
     /// Initial style before any edits
     initial_style: StyleRefinement,
     /// Part of the initial style that could not be converted to Rust code
@@ -85,23 +85,20 @@ impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let lsp_provider = Rc::new(LspProvider {});
 
-        let json_input_state = cx.new(|cx| {
-            InputBaseState::new(window, cx)
-                .code_editor("json")
-                .line_number(false)
-        });
+        let json_input_state = cx.new(|cx| EditorState::new("json", window, cx).line_number(false));
 
         let rust_input_state = cx.new(|cx| {
-            let mut editor = InputBaseState::new(window, cx)
-                .code_editor("rust")
+            EditorState::new("rust", window, cx)
                 .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,
-                });
-
-            editor.lsp.completion_provider = Some(lsp_provider.clone());
-            editor
+                })
+        });
+        rust_input_state.update(cx, |state, cx| {
+            state.update_lsp(cx, |lsp| {
+                lsp.completion_provider = Some(lsp_provider.clone())
+            });
         });
 
         let _subscriptions = vec![
@@ -129,13 +126,13 @@ impl DivInspector {
             ),
         ];
 
-        let rust_state = EditorState {
+        let rust_state = InspectorEditor {
             state: rust_input_state,
             error: None,
             editing: false,
         };
 
-        let json_state = EditorState {
+        let json_state = InspectorEditor {
             state: json_input_state,
             error: None,
             editing: false,
@@ -206,11 +203,10 @@ impl DivInspector {
 
         let (new_style, diagnostics) = rust_to_style(self.unconvertible_style.clone(), code);
         self.rust_state.state.update(cx, |state, cx| {
-            if let Some(set) = state.diagnostics_mut() {
+            state.update_diagnostics(cx, |set| {
                 set.clear();
                 set.extend(diagnostics);
-            }
-            cx.notify();
+            });
         });
         self.json_state.error = None;
         self.json_state.editing = false;
@@ -437,7 +433,7 @@ impl Render for DivInspector {
                                 .gap_y_1()
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
-                                .child(Input::from_base(&self.rust_state.state).h_full())
+                                .child(Editor::new(&self.rust_state.state).h(gpui::relative(1.)))
                                 .when_some(self.rust_state.error.clone(), |this, err| {
                                     this.child(Alert::error("rust-error", err).text_xs())
                                 }),
@@ -465,7 +461,7 @@ impl Render for DivInspector {
                                 .gap_y_1()
                                 .font_family(cx.theme().mono_font_family.clone())
                                 .text_size(cx.theme().mono_font_size)
-                                .child(Input::from_base(&self.json_state.state).h_full())
+                                .child(Editor::new(&self.json_state.state).h(gpui::relative(1.)))
                                 .when_some(self.json_state.error.clone(), |this, err| {
                                     this.child(Alert::error("json-error", err).text_xs())
                                 }),

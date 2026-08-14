@@ -16,7 +16,8 @@ use gpui_component::{
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
     input::{
         self, CodeActionProvider, CompletionProvider, DefinitionProvider, DocumentColorProvider,
-        HoverProvider, Input, InputBaseState, InputEvent, Position, Rope, RopeExt, TabSize,
+        Editor, EditorState, HoverProvider, Input, InputEvent, InputState, Position, Rope, RopeExt,
+        TabSize,
     },
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
@@ -68,9 +69,9 @@ fn init() {
 }
 
 pub struct Example {
-    editor: Entity<InputBaseState>,
+    editor: Entity<EditorState>,
     tree_state: Entity<TreeState>,
-    go_to_line_state: Entity<InputBaseState>,
+    go_to_line_state: Entity<InputState>,
     language: Lang,
     line_number: bool,
     indent_guides: bool,
@@ -266,7 +267,7 @@ impl CodeActionProvider for ExampleLspStore {
 
     fn code_actions(
         &self,
-        _state: Entity<InputBaseState>,
+        _state: Entity<EditorState>,
         range: Range<usize>,
         _window: &mut Window,
         _cx: &mut App,
@@ -285,7 +286,7 @@ impl CodeActionProvider for ExampleLspStore {
 
     fn perform_code_action(
         &self,
-        state: Entity<InputBaseState>,
+        state: Entity<EditorState>,
         action: CodeAction,
         _push_to_history: bool,
         window: &mut Window,
@@ -435,7 +436,7 @@ impl CodeActionProvider for TextConvertor {
 
     fn code_actions(
         &self,
-        state: Entity<InputBaseState>,
+        state: Entity<EditorState>,
         range: Range<usize>,
         _window: &mut Window,
         cx: &mut App,
@@ -448,9 +449,10 @@ impl CodeActionProvider for TextConvertor {
         let state = state.read(cx);
         let document_uri = lsp_types::Uri::from_str("file://example").unwrap();
 
-        let old_text = state.text().slice(range.clone()).to_string();
-        let start = state.text().offset_to_position(range.start);
-        let end = state.text().offset_to_position(range.end);
+        let text = state.text(cx);
+        let old_text = text.slice(range.clone()).to_string();
+        let start = text.offset_to_position(range.start);
+        let end = text.offset_to_position(range.end);
         let range = lsp_types::Range { start, end };
 
         actions.push(CodeAction {
@@ -589,7 +591,7 @@ impl CodeActionProvider for TextConvertor {
 
     fn perform_code_action(
         &self,
-        state: Entity<InputBaseState>,
+        state: Entity<EditorState>,
         action: CodeAction,
         _push_to_history: bool,
         window: &mut Window,
@@ -691,8 +693,7 @@ impl Example {
         let lsp_store = ExampleLspStore::new();
 
         let editor = cx.new(|cx| {
-            let mut editor = InputBaseState::new(window, cx)
-                .code_editor(default_language.name().to_string())
+            EditorState::new(default_language.name().to_string(), window, cx)
                 .line_number(true)
                 .indent_guides(true)
                 .tab_size(TabSize {
@@ -701,16 +702,18 @@ impl Example {
                 })
                 .soft_wrap(false)
                 .default_value(include_str!("./fixtures/test.rs"))
-                .placeholder("Enter your code here...");
+                .placeholder("Enter your code here...")
+        });
 
+        editor.update(cx, |state, cx| {
             let lsp_store = Rc::new(lsp_store.clone());
-            editor.lsp.completion_provider = Some(lsp_store.clone());
-            editor.lsp.code_action_providers = vec![lsp_store.clone(), Rc::new(TextConvertor)];
-            editor.lsp.hover_provider = Some(lsp_store.clone());
-            editor.lsp.definition_provider = Some(lsp_store.clone());
-            editor.lsp.document_color_provider = Some(lsp_store.clone());
-
-            editor
+            state.update_lsp(cx, |lsp| {
+                lsp.completion_provider = Some(lsp_store.clone());
+                lsp.code_action_providers = vec![lsp_store.clone(), Rc::new(TextConvertor)];
+                lsp.hover_provider = Some(lsp_store.clone());
+                lsp.definition_provider = Some(lsp_store.clone());
+                lsp.document_color_provider = Some(lsp_store);
+            });
         });
 
         // Focus the editor on startup so that actions (e.g. Open) can bubble
@@ -720,7 +723,7 @@ impl Example {
             focus_handle.focus(window, cx);
         });
 
-        let go_to_line_state = cx.new(|cx| InputBaseState::new(window, cx));
+        let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
 
         let tree_state = cx.new(|cx| TreeState::new(cx));
         Self::load_files(tree_state.clone(), PathBuf::from("./"), cx);
@@ -765,7 +768,7 @@ impl Example {
 
         window.open_alert_dialog(cx, move |dialog, window, cx| {
             input_state.update(cx, |state, cx| {
-                let cursor_pos = editor.read(cx).cursor_position();
+                let cursor_pos = editor.read(cx).cursor_position(cx);
                 state.set_placeholder(
                     format!("{}:{}", cursor_pos.line, cursor_pos.character),
                     window,
@@ -776,7 +779,7 @@ impl Example {
 
             dialog
                 .title("Go to line")
-                .child(Input::from_base(&input_state))
+                .child(Input::new(&input_state))
                 .on_ok({
                     let editor = editor.clone();
                     let input_state = input_state.clone();
@@ -809,7 +812,7 @@ impl Example {
     fn lint_document(&mut self, cx: &mut Context<Self>) {
         let language = self.language.name().to_string();
         let lsp_store = self.lsp_store.clone();
-        let text = self.editor.read(cx).text().clone();
+        let text = self.editor.read(cx).text(cx).clone();
 
         self._lint_task = cx.background_spawn(async move {
             let value = text.to_string();
@@ -1113,8 +1116,8 @@ impl Example {
     }
 
     fn render_go_to_line_button(&self, _: &mut Window, cx: &mut Context<Self>) -> Button {
-        let position = self.editor.read(cx).cursor_position();
-        let cursor = self.editor.read(cx).cursor();
+        let position = self.editor.read(cx).cursor_position(cx);
+        let cursor = self.editor.read(cx).cursor(cx);
 
         Button::new("line-column")
             .ghost()
@@ -1136,7 +1139,7 @@ impl Render for Example {
         if self.lsp_store.is_dirty() {
             let diagnostics = self.lsp_store.diagnostics();
             self.editor.update(cx, |state, cx| {
-                _ = state.diagnostics_mut().map(|set| {
+                state.update_diagnostics(cx, |set| {
                     set.clear();
                     set.extend(diagnostics);
                 });
@@ -1161,14 +1164,13 @@ impl Render for Example {
                                     .child(self.render_file_tree(window, cx)),
                             )
                             .child(
-                                Input::from_base(&self.editor)
+                                Editor::new(&self.editor)
                                     .readonly(self.readonly)
                                     .bordered(false)
                                     .p_0()
-                                    .h_full()
+                                    .h(relative(1.))
                                     .font_family(cx.theme().mono_font_family.clone())
                                     .text_size(cx.theme().mono_font_size)
-                                    .focus_bordered(false)
                                     .into_any_element(),
                             ),
                     )

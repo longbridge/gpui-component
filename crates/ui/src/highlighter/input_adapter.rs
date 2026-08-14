@@ -11,7 +11,7 @@ use std::{
 
 use gpui::{HighlightStyle, SharedString, Task};
 use gpui_base::input::{
-    FoldRange, HighlightStyleResolver, InputBaseState, InputEdit as BaseInputEdit,
+    FoldRange, HighlightStyleResolver, HighlighterHost, InputEdit as BaseInputEdit,
     InputHighlighter, InputHighlighterFactory,
 };
 use ropey::Rope;
@@ -63,8 +63,9 @@ impl InputHighlighter for TreeSitterInputHighlighter {
         edit: Option<BaseInputEdit>,
         text: &Rope,
         folding: bool,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<InputBaseState>,
+        host: HighlighterHost,
+        _window: &mut gpui::Window,
+        cx: &mut gpui::App,
     ) {
         const SYNC_PARSE_TIMEOUT: Duration = Duration::from_millis(2);
         const SYNC_PARSE_MAX_BYTES: usize = 256 * 1024;
@@ -94,7 +95,7 @@ impl InputHighlighter for TreeSitterInputHighlighter {
         let text_for_apply = text.clone();
         let cancel = Arc::new(AtomicBool::new(false));
 
-        let task = cx.spawn_in(window, async move |entity, cx| {
+        let task = cx.spawn(async move |cx| {
             struct CancelOnDrop(Arc<AtomicBool>);
             impl Drop for CancelOnDrop {
                 fn drop(&mut self) {
@@ -151,9 +152,7 @@ impl InputHighlighter for TreeSitterInputHighlighter {
                 highlighter
                     .borrow_mut()
                     .apply_background_tree(tree, &text_for_apply, injections);
-                let _ = entity.update(cx, |state, cx| {
-                    state.apply_highlighter_fold_candidates(folds, cx);
-                });
+                let _ = cx.update(|cx| host.apply_fold_candidates(folds, cx));
             }
         });
         parse_task.borrow_mut().replace(task);
