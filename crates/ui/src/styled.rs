@@ -5,17 +5,16 @@ pub use gpui_base::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v
 
 use crate::ActiveTheme as _;
 
-const FOCUS_RING_WIDTH: Pixels = px(4.);
-const FOCUS_RING_OPACITY: f32 = 0.75;
-const FOCUS_BORDER_OPACITY: f32 = 0.5;
-const FOCUS_RING_OFFSET: Pixels = px(2.);
+const FOCUS_RING_WIDTH: Pixels = px(3.);
+const FOCUS_RING_OPACITY: f32 = 0.5;
+const FOCUS_RING_OFFSET: Pixels = px(1.5);
 
 fn preblend_focus_color(opacity: f32, cx: &App) -> gpui::Hsla {
     cx.theme().background.blend(cx.theme().ring.alpha(opacity))
 }
 
 pub(crate) fn focus_border_color(cx: &App) -> gpui::Hsla {
-    preblend_focus_color(FOCUS_BORDER_OPACITY, cx)
+    cx.theme().ring
 }
 
 pub(crate) trait FocusRingStyleExt<T: ParentElement + Styled + Sized> {
