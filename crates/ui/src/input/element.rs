@@ -2209,18 +2209,24 @@ impl Element for TextElement {
         if let Some(line_numbers) = prepaint.line_numbers.as_ref() {
             offset_y += invisible_top_padding;
 
-            if let Some(gutter_bg) = cx.theme().highlight_theme.style.editor_gutter_background {
-                window.paint_quad(fill(
-                    Bounds {
-                        origin: input_bounds.origin,
-                        size: size(
-                            prepaint.last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN,
-                            input_bounds.size.height + prepaint.ghost_lines_height,
-                        ),
-                    },
-                    gutter_bg,
-                ));
-            }
+            // The gutter is a fixed overlay above horizontally scrolling text.
+            // Always give it an opaque editor background when the theme does not
+            // provide a dedicated gutter color, and cover the complete gutter so
+            // text cannot show through its right-side spacing/fold-icon area.
+            let gutter_bg = cx
+                .theme()
+                .highlight_theme
+                .style
+                .editor_gutter_background
+                .unwrap_or(editor_background);
+            let gutter_bounds = Bounds {
+                origin: input_bounds.origin,
+                size: size(
+                    prepaint.last_layout.line_number_width,
+                    input_bounds.size.height + prepaint.ghost_lines_height,
+                ),
+            };
+            window.paint_quad(fill(gutter_bounds, gutter_bg));
 
             // Each item is the normal lines.
             for (lines, &buffer_line) in line_numbers
@@ -2236,12 +2242,8 @@ impl Element for TextElement {
                     if let Some(bg_color) = active_line_color {
                         window.paint_quad(fill(
                             Bounds::new(
-                                p,
-                                size(
-                                    prepaint.last_layout.line_number_width
-                                        - LINE_NUMBER_RIGHT_MARGIN,
-                                    height,
-                                ),
+                                point(gutter_bounds.origin.x, p.y),
+                                size(gutter_bounds.size.width, height),
                             ),
                             bg_color,
                         ));
