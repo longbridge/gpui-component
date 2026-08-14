@@ -1,3 +1,7 @@
+use std::path::PathBuf;
+
+use gpui::{ImageSource, SharedUri};
+
 const NUMBERED_PREFIXES_1: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const NUMBERED_PREFIXES_2: &str = "abcdefghijklmnopqrstuvwxyz";
 
@@ -34,9 +38,76 @@ pub(super) fn list_item_prefix(ix: usize, ordered: bool, depth: usize) -> String
     }
 }
 
+/// Converts an image URL from a document into an [`ImageSource`].
+///
+/// URLs with a scheme (e.g. `https:`, `data:`) load as remote resources, while
+/// `file://` URLs and plain paths load from the filesystem. Relative paths
+/// resolve against the process working directory. A single-letter scheme is
+/// treated as a Windows drive letter.
+pub(super) fn image_source(url: &SharedUri) -> ImageSource {
+    let url_str = url.as_ref();
+    if let Some(path) = url_str.strip_prefix("file://") {
+        return PathBuf::from(path).into();
+    }
+
+    let has_scheme = url_str.split_once(':').is_some_and(|(scheme, _)| {
+        scheme.len() > 1
+            && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    });
+
+    if has_scheme {
+        url.clone().into()
+    } else {
+        PathBuf::from(url_str).into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::text::utils::list_item_prefix;
+    use std::{path::Path, sync::Arc};
+
+    use gpui::{ImageSource, Resource};
+
+    use crate::text::utils::{image_source, list_item_prefix};
+
+    #[test]
+    fn test_image_source() {
+        fn source(url: &str) -> Resource {
+            match image_source(&url.to_string().into()) {
+                ImageSource::Resource(resource) => resource,
+                _ => panic!("expected a resource for {url:?}"),
+            }
+        }
+        fn assert_uri(url: &str) {
+            match source(url) {
+                Resource::Uri(uri) => assert_eq!(uri.as_ref(), url),
+                other => panic!("expected Uri for {url:?}, got {other:?}"),
+            }
+        }
+        fn assert_path(url: &str, expected: &str) {
+            match source(url) {
+                Resource::Path(path) => assert_eq!(path, Arc::from(Path::new(expected))),
+                other => panic!("expected Path for {url:?}, got {other:?}"),
+            }
+        }
+
+        assert_uri("https://example.com/logo.png");
+        assert_uri("http://example.com/logo.png");
+        assert_uri("data:image/png;base64,iVBORw0KGgo=");
+
+        assert_path("website/public/logo.svg", "website/public/logo.svg");
+        assert_path("./images/a.png", "./images/a.png");
+        assert_path("../images/a.png", "../images/a.png");
+        assert_path("/absolute/path/logo.svg", "/absolute/path/logo.svg");
+        assert_path("file:///absolute/path/logo.svg", "/absolute/path/logo.svg");
+        // A single-letter scheme is a Windows drive letter, not a URL scheme.
+        assert_path(r"C:\images\logo.png", r"C:\images\logo.png");
+        // A colon inside a path segment does not make it a URL.
+        assert_path("docs/a:b.png", "docs/a:b.png");
+    }
 
     #[test]
     fn test_list_item_prefix() {
