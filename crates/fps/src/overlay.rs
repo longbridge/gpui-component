@@ -20,7 +20,7 @@ const MARGIN: Pixels = px(12.);
 ///
 /// ```no_run
 /// # use gpui::*;
-/// # use gpui_perf::{FpsMonitor, FpsOverlay};
+/// # use gpui_fps::{FpsMonitor, FpsOverlay};
 /// # fn example(monitor: &Entity<FpsMonitor>, content: impl IntoElement) -> impl IntoElement {
 /// div()
 ///     .relative()

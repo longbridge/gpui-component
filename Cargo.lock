@@ -2389,7 +2389,7 @@ name = "fps_monitor"
 version = "0.1.0"
 dependencies = [
  "gpui",
- "gpui-perf",
+ "gpui-fps",
  "gpui_platform",
 ]
 
@@ -3178,7 +3178,7 @@ dependencies = [
  "gpui-base",
  "gpui-component",
  "gpui-component-assets",
- "gpui-perf",
+ "gpui-fps",
  "gpui_platform",
  "gpui_web",
  "gtk",
@@ -3215,7 +3215,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui-perf"
+name = "gpui-fps"
 version = "0.1.0"
 dependencies = [
  "gpui",

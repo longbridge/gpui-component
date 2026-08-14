@@ -14,8 +14,8 @@ use gpui_component::{
 };
 
 use crate::{
-    SelectFont, SelectRadius, SelectScrollbarMode, ToggleFpsMonitor, ToggleListActiveHighlight,
-    app_menus,
+    AppState, SelectFont, SelectRadius, SelectScrollbarMode, ToggleFpsMonitor,
+    ToggleListActiveHighlight, app_menus,
 };
 
 pub struct AppTitleBar {
@@ -156,17 +156,19 @@ impl FontSizeSelector {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        gpui_perf::toggle_fps(window, cx);
+        let state = AppState::global_mut(cx);
+        state.show_fps_monitor = !state.show_fps_monitor;
+        window.refresh();
     }
 }
 
 impl Render for FontSizeSelector {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let font_size = cx.theme().font_size.as_f32() as i32;
         let radius = cx.theme().radius.as_f32() as i32;
         let scroll_show = cx.theme().scrollbar_mode;
-        let show_fps_monitor = gpui_perf::fps_visible(window, cx);
+        let show_fps_monitor = AppState::global(cx).show_fps_monitor;
 
         div()
             .id("font-size-selector")

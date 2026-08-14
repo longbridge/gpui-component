@@ -1,17 +1,17 @@
-//! Overlays the `gpui-perf` HUD on a port of three.js' `webgl_lines_colors`
+//! Overlays the `gpui-fps` HUD on a port of three.js' `webgl_lines_colors`
 //! demo: 3D Hilbert curves smoothed with a Catmull-Rom spline, colored by the
 //! same three HSL schemes as the original, rotating over a black background.
 //!
 //! The number of curves is adjustable, which makes it a load knob for watching
 //! the frame time trace react.
 //!
-//! The example deliberately depends only on `gpui` and `gpui-perf`, not on
+//! The example deliberately depends only on `gpui` and `gpui-fps`, not on
 //! `gpui-component`, to show that the HUD stands on its own.
 
 use std::time::Instant;
 
 use gpui::*;
-use gpui_perf::fps_monitor;
+use gpui_fps::fps_monitor;
 
 /// Matches the original demo: a one-iteration Hilbert curve of 64 control
 /// points, resampled at six points each.
@@ -418,9 +418,6 @@ fn main() {
             cx.open_window(WindowOptions::default(), |window, cx| {
                 window.activate_window();
                 window.set_window_title("FPS Monitor");
-                // The HUD starts hidden, and looking at it is the whole point
-                // of this example.
-                gpui_perf::toggle_fps(window, cx);
                 cx.new(|cx| Example::new(window, cx))
             })
             .expect("failed to open window");

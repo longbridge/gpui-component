@@ -2,6 +2,8 @@ use gpui::{Action, App, SharedString};
 use gpui_component::{Theme, ThemeConfig, ThemeMode, ThemeRegistry, scroll::ScrollbarMode};
 use serde::{Deserialize, Serialize};
 
+use crate::AppState;
+
 #[cfg(not(target_family = "wasm"))]
 use gpui_component::ActiveTheme;
 
@@ -15,6 +17,8 @@ struct State {
     theme: SharedString,
     #[serde(alias = "scrollbar_show")]
     scrollbar_mode: Option<ScrollbarMode>,
+    #[serde(default)]
+    show_fps_monitor: Option<bool>,
 }
 
 fn apply_theme_config(theme_config: std::rc::Rc<ThemeConfig>, cx: &mut App) {
@@ -28,7 +32,22 @@ impl Default for State {
         Self {
             theme: "Default Light".into(),
             scrollbar_mode: None,
+            show_fps_monitor: None,
         }
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn save_state(cx: &mut App) {
+    let state = State {
+        theme: cx.theme().theme_name().clone(),
+        scrollbar_mode: Some(cx.theme().scrollbar_mode),
+        show_fps_monitor: Some(AppState::global(cx).show_fps_monitor),
+    };
+
+    if let Ok(json) = serde_json::to_string_pretty(&state) {
+        // Ignore write errors - if STATE_FILE doesn't exist or can't be written, do nothing
+        let _ = std::fs::write(STATE_FILE, json);
     }
 }
 
@@ -73,21 +92,17 @@ pub fn init(cx: &mut App) {
     if let Some(scrollbar_mode) = state.scrollbar_mode {
         Theme::set_scrollbar_mode(scrollbar_mode, cx);
     }
+    if let Some(show_fps_monitor) = state.show_fps_monitor {
+        AppState::global_mut(cx).show_fps_monitor = show_fps_monitor;
+    }
     cx.refresh_windows();
 
+    // Both globals carry persisted settings, so either changing writes the file.
     #[cfg(not(target_family = "wasm"))]
-    cx.observe_global::<Theme>(|cx| {
-        let state = State {
-            theme: cx.theme().theme_name().clone(),
-            scrollbar_mode: Some(cx.theme().scrollbar_mode),
-        };
-
-        if let Ok(json) = serde_json::to_string_pretty(&state) {
-            // Ignore write errors - if STATE_FILE doesn't exist or can't be written, do nothing
-            let _ = std::fs::write(STATE_FILE, json);
-        }
-    })
-    .detach();
+    {
+        cx.observe_global::<Theme>(save_state).detach();
+        cx.observe_global::<AppState>(save_state).detach();
+    }
 
     cx.on_action(|switch: &SwitchTheme, cx| {
         let theme_name = switch.0.clone();

@@ -5,7 +5,7 @@ use gpui::{
     Styled, Window, div, px,
 };
 use gpui_component::{ActiveTheme as _, v_flex};
-use gpui_perf::{FpsMonitor, FpsOverlay};
+use gpui_fps::{FpsMonitor, FpsOverlay};
 
 use crate::section;
 

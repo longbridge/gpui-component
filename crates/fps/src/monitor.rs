@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use instant::Instant;
+
 use gpui::{
     Bounds, Context, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement, PathBuilder,
     Pixels, Point, Render, StatefulInteractiveElement as _, Styled, Task, Window, canvas, div,
@@ -22,10 +24,14 @@ const DEFAULT_RESOURCE_INTERVAL: Duration = Duration::from_millis(500);
 /// the bars don't visibly rescale every frame.
 const AXIS_DECAY: f32 = 0.04;
 
-/// Fixed widths keep every row flush with the chart and stop the HUD from
-/// resizing as the readings gain or lose digits.
+/// A fixed width keeps every row flush with the chart and stops the HUD from
+/// resizing as the readings gain or lose digits. Collapsed, the HUD hugs its
+/// text instead and only the figure gets a fixed box.
 const HUD_WIDTH: Pixels = px(172.);
-const COMPACT_WIDTH: Pixels = px(112.);
+const COMPACT_FIGURE_WIDTH: Pixels = px(25.);
+
+/// Size of every label and reading. Collapsed, the figure uses it too.
+const TEXT_SIZE: Pixels = px(10.);
 
 /// The trace sits behind the headline, so it is dimmed enough to stay out of
 /// the figure's way while still showing its shape and color.
@@ -44,6 +50,14 @@ const FIGURE_WIDTH: Pixels = px(70.);
 /// Width of the `FPS` unit, and of the empty box mirroring it on the other side
 /// of the figure so the figure lands on the HUD's true center.
 const UNIT_WIDTH: Pixels = px(22.);
+
+/// How often the numbers are recomputed.
+///
+/// The trace keeps up with every frame, but the readings do not: recomputed
+/// per frame they flicker through digits too fast to read, and the eye tracks
+/// the churn rather than the value. Twice a second is slow enough to read and
+/// fast enough to feel live.
+const READOUT_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Fraction of the target frame rate that still counts as meeting it. Vsync and
 /// the sampling window each cost a frame or so a second, so a 60Hz display that
@@ -72,13 +86,23 @@ const DEFAULT_FONT: &str = "monospace";
 ///
 /// ```no_run
 /// # use gpui::*;
-/// # use gpui_perf::FpsMonitor;
+/// # use gpui_fps::FpsMonitor;
 /// # fn example(window: &mut Window, cx: &mut App) {
 /// let monitor = cx.new(|cx| FpsMonitor::new(window, cx).capacity(240));
 /// # }
 /// ```
+/// The numbers as last published to the screen.
+#[derive(Clone, Copy, Default)]
+struct Readout {
+    fps: f32,
+    frame_millis: f32,
+    dropped_percent: f32,
+}
+
 pub struct FpsMonitor {
     sampler: FrameSampler,
+    readout: Readout,
+    readout_at: Option<Instant>,
     style: FpsStyle,
     frame_budget: Duration,
     continuous: bool,
@@ -97,6 +121,8 @@ impl FpsMonitor {
         let frame_budget = DEFAULT_FRAME_BUDGET;
         Self {
             sampler: FrameSampler::new(window.window_handle().window_id(), DEFAULT_CAPACITY),
+            readout: Readout::default(),
+            readout_at: None,
             style: FpsStyle::default(),
             frame_budget,
             continuous: true,
@@ -202,6 +228,26 @@ impl FpsMonitor {
         let _ = minimum_resource_interval();
     }
 
+    /// Republishes the readings if [`READOUT_INTERVAL`] has passed.
+    fn update_readout(&mut self) {
+        let now = Instant::now();
+        let due = self
+            .readout_at
+            .is_none_or(|at| now.duration_since(at) >= READOUT_INTERVAL);
+        if !due {
+            return;
+        }
+
+        self.readout = Readout {
+            fps: self.sampler.fps(),
+            // The mean over the interval rather than the latest frame, which
+            // at this cadence would be an arbitrary sample.
+            frame_millis: self.sampler.mean_draw().as_secs_f32() * 1000.,
+            dropped_percent: self.sampler.over_budget_ratio(self.frame_budget) * 100.,
+        };
+        self.readout_at = Some(now);
+    }
+
     /// Grows immediately to fit the slowest retained frame and decays back
     /// slowly, so a single spike doesn't make the whole chart jump.
     fn update_axis(&mut self) {
@@ -296,7 +342,7 @@ impl FpsMonitor {
     ///
     /// The figure is centered in a fixed box so neither the unit nor the group
     /// shifts as the count gains or loses a digit; the two share a bottom edge.
-    fn render_headline(&self, fps: f32, color: Hsla, with_trace: bool) -> Div {
+    fn render_headline(&self, fps: f32, color: Hsla) -> Div {
         let style = self.style;
 
         div()
@@ -304,7 +350,7 @@ impl FpsMonitor {
             .overflow_hidden()
             .w_full()
             .h(HEADLINE_HEIGHT)
-            .when(with_trace, |this| this.child(self.render_chart()))
+            .child(self.render_chart())
             .child(
                 div()
                     .flex()
@@ -333,6 +379,7 @@ impl FpsMonitor {
 impl Render for FpsMonitor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sampler.tick();
+        self.update_readout();
         self.update_axis();
         self.start_resource_sampling(cx);
         if self.continuous {
@@ -341,63 +388,88 @@ impl Render for FpsMonitor {
 
         let style = self.style;
         let budget = self.frame_budget;
-        let fps = self.sampler.fps();
-        let frame_millis = self
-            .sampler
-            .last()
-            .map(|sample| sample.draw.as_secs_f32() * 1000.)
-            .unwrap_or_default();
-        let dropped = self.sampler.over_budget_ratio(budget) * 100.;
+        let Readout {
+            fps,
+            frame_millis,
+            dropped_percent: dropped,
+        } = self.readout;
         let fps_color = fps_color(fps, budget, style);
         let resources = self.resources.filter(|_| self.show_resources);
         let compact = self.compact;
 
-        let width = if compact { COMPACT_WIDTH } else { HUD_WIDTH };
-
         div()
-            .id("gpui-perf-hud")
+            .id("gpui-fps-hud")
             .flex()
-            .flex_col()
-            .w(width)
-            .px_2()
-            .py_1p5()
-            .rounded(px(4.))
             .bg(style.background)
             .font_family(DEFAULT_FONT)
-            .text_size(px(10.))
+            .text_size(TEXT_SIZE)
             .text_color(style.muted)
             .on_click(cx.listener(|this, _, _, cx| {
                 this.compact = !this.compact;
                 cx.notify();
             }))
-            .child(self.render_headline(fps, fps_color, !compact))
-            .when(!compact, |this| {
-                this.child(reading(
-                    "FRAME",
-                    format!("{frame_millis:.1} ms"),
-                    style.foreground,
-                    style,
-                ))
-                .child(reading(
-                    "DROP",
-                    format!("{dropped:.1}%"),
-                    style.level_color(if dropped > 0. { 1. } else { 0. }, 0.5),
-                    style,
-                ))
-                .when_some(resources, |this, resources| {
-                    this.child(
-                        // CPU and memory share a row: both are coarse
-                        // background samples, unlike the per-frame numbers.
-                        div()
-                            .flex()
-                            .w_full()
-                            .justify_between()
-                            .gap_2()
-                            .py(px(1.))
-                            .child(pair("CPU", format!("{:.1}%", resources.cpu_percent), style))
-                            .child(pair("MEM", format_bytes(resources.memory_bytes), style)),
-                    )
-                })
+            .map(|this| {
+                if compact {
+                    // Collapsed, the HUD is one small tag: the figure drops to
+                    // the same size as its unit, the box shrinks to the text,
+                    // and everything else is dropped, so it sits over the
+                    // interface without competing with it.
+                    this.items_center()
+                        .gap_1()
+                        .px_1p5()
+                        .py_0p5()
+                        .rounded(px(3.))
+                        .child(
+                            div()
+                                .w(COMPACT_FIGURE_WIDTH)
+                                .text_right()
+                                .text_color(fps_color)
+                                .child(format!("{fps:.0}")),
+                        )
+                        .child("FPS")
+                } else {
+                    this.flex_col()
+                        .w(HUD_WIDTH)
+                        .px_2()
+                        .py_1p5()
+                        .rounded(px(4.))
+                        .child(self.render_headline(fps, fps_color))
+                        .child(reading(
+                            "FRAME",
+                            format!("{frame_millis:.1} ms"),
+                            style.foreground,
+                            style,
+                        ))
+                        .child(reading(
+                            "DROP",
+                            format!("{dropped:.1}%"),
+                            style.level_color(if dropped > 0. { 1. } else { 0. }, 0.5),
+                            style,
+                        ))
+                        .when_some(resources, |this, resources| {
+                            this.child(
+                                // CPU and memory share a row: both are coarse
+                                // background samples, unlike the per-frame
+                                // numbers.
+                                div()
+                                    .flex()
+                                    .w_full()
+                                    .justify_between()
+                                    .gap_2()
+                                    .py(px(1.))
+                                    .child(pair(
+                                        "CPU",
+                                        format!("{:.1}%", resources.cpu_percent),
+                                        style,
+                                    ))
+                                    .child(pair(
+                                        "MEM",
+                                        format_bytes(resources.memory_bytes),
+                                        style,
+                                    )),
+                            )
+                        })
+                }
             })
     }
 }

@@ -85,10 +85,6 @@ impl FrameSampler {
         self.capacity
     }
 
-    pub(crate) fn last(&self) -> Option<FrameSample> {
-        self.samples.back().copied()
-    }
-
     /// Share of the retained frames that overran `budget`, in `0..1`.
     pub(crate) fn over_budget_ratio(&self, budget: Duration) -> f32 {
         if self.samples.is_empty() {
@@ -100,6 +96,15 @@ impl FrameSampler {
             .filter(|sample| sample.draw > budget)
             .count();
         over as f32 / self.samples.len() as f32
+    }
+
+    /// Mean draw time across the retained frames.
+    pub(crate) fn mean_draw(&self) -> Duration {
+        if self.samples.is_empty() {
+            return Duration::ZERO;
+        }
+        let total: Duration = self.samples.iter().map(|sample| sample.draw).sum();
+        total / self.samples.len() as u32
     }
 
     /// The slowest retained frame, used to scale the chart's y axis.
