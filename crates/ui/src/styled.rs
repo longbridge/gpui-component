@@ -5,9 +5,9 @@ pub use gpui_base::{FocusableExt, RoleOverride, StyledExt, box_shadow, h_flex, v
 
 use crate::ActiveTheme as _;
 
-const FOCUS_RING_WIDTH: Pixels = px(3.);
+const FOCUS_RING_WIDTH: Pixels = px(4.);
 const FOCUS_RING_OPACITY: f32 = 0.5;
-const FOCUS_RING_OFFSET: Pixels = px(1.5);
+const FOCUS_RING_OFFSET: Pixels = px(2.);
 
 pub(crate) trait FocusRingStyleExt<T: ParentElement + Styled + Sized> {
     fn draw_focus_ring(self, visible: bool, margin: Pixels, window: &Window, cx: &App) -> Self;

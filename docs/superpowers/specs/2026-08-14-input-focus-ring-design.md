@@ -15,7 +15,7 @@ Do not change focus styling for unrelated controls such as buttons, checkboxes, 
 When an eligible, enabled input is focused and its appearance, border, and focus border are enabled:
 
 - The existing one-pixel border uses the theme's solid `ring` color.
-- A separate three-pixel outer ring uses the same `ring` color at 50% opacity.
+- A separate four-pixel outer ring uses the same `ring` color at 50% opacity. GPUI centers borders on their path, so the ring is offset by two pixels to keep its inner edge flush with the focused border.
 - The outer ring follows the input's resolved corner radius and sits outside its border without affecting layout.
 
 Unfocused and disabled inputs retain their existing appearance. `appearance(false)`, `bordered(false)`, and `focus_bordered(false)` suppress both focused layers.
