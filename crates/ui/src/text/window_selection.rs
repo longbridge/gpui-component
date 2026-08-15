@@ -1,44 +1,31 @@
-use std::ops::RangeInclusive;
-
 use gpui::{
-    App, Bounds, Context, Element, ElementId, Entity, EntityId, GlobalElementId, Hitbox,
-    InspectorElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Point, ScrollWheelEvent, Style, WeakEntity, Window,
+    App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement, LayoutId,
+    Pixels, Window,
 };
+use gpui_base::SelectionScopeId;
 
-use crate::{
-    Root,
-    global_state::{GlobalState, UiGlobalState},
-    scroll::AutoScroll,
-    text::TextViewState,
-};
+use crate::{Root, global_state::UiGlobalState};
 
-/// The modal layer a selectable [`TextView`](crate::text::TextView) belongs to.
-///
-/// Window text selection is global, but when a modal (Dialog/Sheet) is open the
-/// selection must be confined to that modal so a drag that leaves the modal
-/// (e.g. over the overlay) cannot select TextViews behind it. Each selectable
-/// view is tagged with the scope it painted under (see [`SelectionScopeMarker`]),
-/// and selection only considers views whose scope matches the active layer (see
-/// [`Root::active_selection_scope`]).
+/// The modal layer a selectable TextView belongs to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum SelectionScope {
-    /// The base window content, outside any Dialog/Sheet.
     Base,
-    /// A Dialog at the given layer index (matches `Dialog::layer_ix`, i.e. the
-    /// position in `Root::active_dialogs`).
     Dialog(usize),
-    /// The active Sheet.
     Sheet,
 }
 
-/// Extension trait that confines window text selection started inside an
-/// element's subtree to a modal [`SelectionScope`]. Chains like `Styled` /
-/// `focus_trap`, so a Dialog/Sheet wraps its content with a single call:
-///
-/// ```ignore
-/// v_flex().child(content).selection_scope(SelectionScope::Dialog(layer_ix))
-/// ```
+impl SelectionScope {
+    pub(crate) fn base_id(self) -> SelectionScopeId {
+        match self {
+            Self::Base => SelectionScopeId::default(),
+            Self::Dialog(layer_ix) => SelectionScopeId::new(layer_ix as u64 + 1),
+            Self::Sheet => SelectionScopeId::new(u64::MAX),
+        }
+    }
+}
+
+/// Marks an element subtree with the base selection scope used by TextViews
+/// painted inside it.
 pub(crate) trait SelectionScopeElement: IntoElement + Sized {
     fn selection_scope(self, scope: SelectionScope) -> SelectionScopeMarker<Self::Element> {
         SelectionScopeMarker {
@@ -50,13 +37,6 @@ pub(crate) trait SelectionScopeElement: IntoElement + Sized {
 
 impl<E: IntoElement> SelectionScopeElement for E {}
 
-/// A layout-transparent wrapper element (created by
-/// [`SelectionScopeElement::selection_scope`]) that marks its subtree with a
-/// [`SelectionScope`] during paint, so selectable
-/// [`TextView`](crate::text::TextView)s painted inside it register under that
-/// scope. It delegates every [`Element`] method to the wrapped element and only
-/// brackets `paint` with a scope push/pop — mirroring the `text_view_state_stack`
-/// idiom in `TextView::paint`.
 pub(crate) struct SelectionScopeMarker<E> {
     scope: SelectionScope,
     element: E,
@@ -115,11 +95,6 @@ impl<E: Element> Element for SelectionScopeMarker<E> {
         window: &mut Window,
         cx: &mut App,
     ) {
-        // Mark the subtree so selectable TextViews register under this scope.
-        // Registration happens during the child's paint (see `TextView::paint`),
-        // so bracketing the child paint is sufficient. Paint is depth-first and
-        // single-threaded, so the bracket is exact even if the dialog layer is
-        // later wrapped in a deferred draw.
         UiGlobalState::global_mut(cx).push_selection_scope(self.scope);
         self.element.paint(
             id,
@@ -134,446 +109,8 @@ impl<E: Element> Element for SelectionScopeMarker<E> {
     }
 }
 
-/// Window-level text selection state, owned by [`Root`].
-///
-/// All text selection (including within a single TextView) is driven by this
-/// state. Selection endpoints are content-anchored when they fall inside a
-/// TextView, so the selection follows the content when it scrolls.
-#[derive(Default)]
-pub struct WindowTextSelection {
-    pub(crate) anchor: Option<SelectionEndpoint>,
-    pub(crate) cursor: Option<SelectionEndpoint>,
-    /// Anchor staged during capture for a Shift+click. Capture still clears the
-    /// visible selection so a component that stops bubble propagation cannot
-    /// leave stale highlights; an unsuppressed bubble handler consumes this to
-    /// extend the selection.
-    pending_extension_anchor: Option<SelectionEndpoint>,
-    pub(crate) is_selecting: bool,
-    pub(crate) did_hit_text: bool,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum SelectionStart {
-    Begin,
-    Extend,
-}
-
-/// A selection endpoint, content-anchored to a TextView.
-///
-/// `point` is always stored in the view's content coordinates (relative to its
-/// `bounds().origin` and `scroll_offset()`), even when the press landed in
-/// blank space: in that case the endpoint is proxy-anchored to the nearest view
-/// in document flow (see [`Root::text_selection_endpoint`]) and `inside` is
-/// false. This keeps the selection following the content when an outer
-/// container scrolls — a window-coordinate anchor would drift relative to the
-/// content. `view` is only `None` when no view is registered at all.
-#[derive(Clone)]
-pub(crate) struct SelectionEndpoint {
-    /// Some: the endpoint is anchored to this TextView; `point` is in that
-    /// view's content coordinates (may fall outside the view when proxy-
-    /// anchored from blank space). None: no view is registered; `point` is
-    /// window coordinates.
-    pub(crate) view: Option<WeakEntity<TextViewState>>,
-    pub(crate) point: Point<Pixels>,
-    /// True when the press actually hit the view's hitbox; false when the
-    /// endpoint is proxy-anchored to the nearest view from blank space (so
-    /// the selection follows content when an outer container scrolls).
-    pub(crate) inside: bool,
-    /// True when the endpoint hit an Inline text run, not just blank space in
-    /// the parent TextView bounds.
-    pub(crate) inside_text: bool,
-    /// The top-level block `point` falls in, for a scrollable (virtualized)
-    /// view. Resolved once, while the block is on screen, because the block
-    /// stops reporting its selection as soon as it scrolls out of view (see
-    /// [`ParsedDocument::selected_text`](crate::text::document::ParsedDocument)).
-    pub(crate) block_ix: Option<usize>,
-}
-
-impl SelectionEndpoint {
-    /// Resolve this endpoint to window coordinates.
-    ///
-    /// Whether the endpoint was a true hit or proxy-anchored from blank space,
-    /// `point` is in the view's content coordinates, so resolving uses the
-    /// view's current `bounds().origin + scroll_offset()` (refreshed every
-    /// frame in prepaint) and the endpoint follows the content as it moves.
-    fn resolve(&self, cx: &App) -> Option<Point<Pixels>> {
-        match &self.view {
-            Some(view) => {
-                let state = view.upgrade()?;
-                let state = state.read(cx);
-                Some(self.point + state.scroll_offset() + state.bounds().origin)
-            }
-            None => Some(self.point),
-        }
-    }
-
-    fn view_id(&self) -> Option<EntityId> {
-        self.view.as_ref().map(|view| view.entity_id())
-    }
-}
-
-impl WindowTextSelection {
-    /// The (anchor, cursor) points in window coordinates, `None` if the
-    /// selection is empty.
-    pub(crate) fn resolved_points(&self, cx: &App) -> Option<(Point<Pixels>, Point<Pixels>)> {
-        if !self.did_hit_text {
-            return None;
-        }
-        let start = self.anchor.as_ref()?.resolve(cx)?;
-        let end = self.cursor.as_ref()?.resolve(cx)?;
-        if start == end {
-            return None;
-        }
-        Some((start, end))
-    }
-
-    /// If both endpoints are anchored to the same TextView, return its id.
-    ///
-    /// This is the single-view fast path: when a drag starts and ends anchored
-    /// to one TextView, only that view participates, keeping the single-view
-    /// behavior identical to before. Proxy-anchored endpoints (from blank
-    /// space) count here too: a drag that begins in the blank space just above
-    /// view A proxy-anchors its anchor to A, so a drag from there into A stays
-    /// single-view — geometrically the selection starts at A's top, which is
-    /// correct. When the two endpoints anchor to different views, all
-    /// registered views participate and the per-character geometric test (in
-    /// `Inline`) decides what is actually selected.
-    /// The top-level blocks the selection spans inside `view`, when both of its
-    /// endpoints are anchored there. Only a scrollable view records these (see
-    /// [`SelectionEndpoint::block_ix`]).
-    pub(crate) fn block_range(&self, view: EntityId) -> Option<RangeInclusive<usize>> {
-        let anchor = self.anchor.as_ref()?;
-        let cursor = self.cursor.as_ref()?;
-        if anchor.view_id() != Some(view) || cursor.view_id() != Some(view) {
-            return None;
-        }
-
-        let (anchor, cursor) = (anchor.block_ix?, cursor.block_ix?);
-        Some(anchor.min(cursor)..=anchor.max(cursor))
-    }
-
-    pub(crate) fn single_view(&self) -> Option<EntityId> {
-        let anchor = self.anchor.as_ref()?.view_id()?;
-        let cursor = self.cursor.as_ref()?.view_id()?;
-        (anchor == cursor).then_some(anchor)
-    }
-
-    fn involves(&self, view_id: EntityId) -> bool {
-        self.anchor.as_ref().and_then(|e| e.view_id()) == Some(view_id)
-            || self.cursor.as_ref().and_then(|e| e.view_id()) == Some(view_id)
-    }
-}
-
 impl Root {
-    /// Register a selectable TextView for window-level selection.
-    /// Called from TextView's paint on every frame.
-    pub(crate) fn register_selectable_text_view(
-        state: &Entity<TextViewState>,
-        hitbox: &Hitbox,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        let Some(root) = window.root::<Root>().flatten() else {
-            return;
-        };
-        let id = state.entity_id();
-        let weak = state.downgrade();
-        let hitbox = hitbox.clone();
-        // Capture the modal scope this view is painting under (set by the
-        // `SelectionScopeMarker` wrapping a Dialog/Sheet content subtree).
-        let scope = UiGlobalState::global(cx).current_selection_scope();
-        root.update(cx, |root, _| {
-            // Prune dead views on each registration. This is O(N) per call (O(N²)
-            // per frame across N selectable views), acceptable for typical view
-            // counts; revisit if a window ever hosts hundreds of selectable views.
-            root.selectable_text_views
-                .retain(|_, (view, _, _)| view.upgrade().is_some());
-            root.selectable_text_views.insert(id, (weak, hitbox, scope));
-            root.selectable_text_inlines.remove(&id);
-        });
-    }
-
-    /// Register Inline text bounds for a selectable TextView.
-    /// Called from Inline's paint on every frame.
-    pub(crate) fn register_selectable_text_inline(
-        state: &Entity<TextViewState>,
-        text_bounds: Vec<Bounds<Pixels>>,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        if text_bounds.is_empty() {
-            return;
-        }
-        let Some(root) = window.root::<Root>().flatten() else {
-            return;
-        };
-        let id = state.entity_id();
-        root.update(cx, |root, _| {
-            root.selectable_text_inlines
-                .entry(id)
-                .or_default()
-                .extend(text_bounds);
-        });
-    }
-
-    /// Whether there is an active text selection (window-level or view-local).
-    pub(crate) fn has_text_selection(&self, cx: &App) -> bool {
-        if self.text_selection.resolved_points(cx).is_some() {
-            return true;
-        }
-        self.selectable_text_views.values().any(|(view, _, _)| {
-            view.upgrade()
-                .is_some_and(|view| view.read(cx).has_view_selection())
-        })
-    }
-
-    /// Internal: collect selected text using `&self` directly, so it is safe
-    /// to call while the Root entity is leased (e.g. inside Root's own action
-    /// handler).
-    ///
-    /// Note: per-view selected text is collected from `InlineState`, which is
-    /// populated during paint. The result reflects the last painted frame; a
-    /// copy action racing ahead of a pending repaint may observe the previous
-    /// selection state.
-    pub(crate) fn window_selected_text(&self, cx: &App) -> String {
-        let resolved = self.text_selection.resolved_points(cx);
-        let single_view = self.text_selection.single_view();
-        // A window selection lives in exactly one scope (its endpoints are
-        // confined to the active modal by `text_selection_endpoint`, and the
-        // selection is cleared when a modal opens/closes). Only views in that
-        // scope contribute, so copying never mixes text across layers.
-        let anchor_scope = self.active_selection_scope();
-
-        let mut items: Vec<(Point<Pixels>, String)> = Vec::new();
-        for (id, (view, _, scope)) in self.selectable_text_views.iter() {
-            let Some(view) = view.upgrade() else { continue };
-            let state = view.read(cx);
-            let in_window_selection = resolved.is_some()
-                && state.is_selectable()
-                && *scope == anchor_scope
-                && single_view.map_or(true, |v| v == *id);
-            if !state.has_view_selection() && !in_window_selection {
-                continue;
-            }
-            let text = state.selected_text_in(self.text_selection.block_range(*id));
-            if text.trim().is_empty() {
-                continue;
-            }
-            items.push((state.bounds().origin, text));
-        }
-
-        items.sort_by(|a, b| {
-            a.0.y
-                .partial_cmp(&b.0.y)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then(
-                    a.0.x
-                        .partial_cmp(&b.0.x)
-                        .unwrap_or(std::cmp::Ordering::Equal),
-                )
-        });
-
-        items
-            .into_iter()
-            .map(|(_, text)| text)
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    /// Clear the window selection and all view-local selections.
-    pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
-        let had_window_selection = self.text_selection.anchor.is_some();
-        self.text_selection.anchor = None;
-        self.text_selection.cursor = None;
-        self.text_selection.pending_extension_anchor = None;
-        self.text_selection.is_selecting = false;
-        self.text_selection.did_hit_text = false;
-        self.selectable_text_views.retain(|_, (view, _, _)| {
-            let Some(view) = view.upgrade() else {
-                return false;
-            };
-            // Skip views with nothing to clear: without a window selection nor
-            // a view-local selection, their inline selection state is already
-            // empty, and notifying would re-render every selectable view on
-            // every click.
-            //
-            // When `had_window_selection` is true this still clears every view,
-            // even though the selection may have covered only some of them: the
-            // set of views that painted a highlight is not cheaply tracked, so
-            // clearing all of them is the conservative, correctness-first
-            // choice.
-            if had_window_selection || view.read(cx).has_view_selection() {
-                view.update(cx, |state, cx| {
-                    state.is_selecting = false;
-                    state.clear_selection(cx);
-                });
-            }
-            true
-        });
-        self.selectable_text_inlines
-            .retain(|id, _| self.selectable_text_views.contains_key(id));
-    }
-
-    /// Clear the window selection when a view it is anchored to has been
-    /// resized (its content coordinates are no longer valid). An active drag
-    /// is not interrupted, so streaming (append-only) updates keep working.
-    ///
-    /// `involves` also matches a proxy-anchored endpoint (blank space anchored
-    /// to this view): once the view resizes, the content the blank endpoint was
-    /// pinned relative to has moved, so clearing the selection is the
-    /// conservative, correctness-first choice there too.
-    pub(crate) fn clear_text_selection_for_resized_view(
-        &mut self,
-        view_id: EntityId,
-        cx: &mut Context<Self>,
-    ) {
-        if self.text_selection.is_selecting {
-            return;
-        }
-        if self.text_selection.involves(view_id) {
-            self.clear_text_selection(cx);
-        }
-    }
-
-    fn start_text_selection(
-        &mut self,
-        position: Point<Pixels>,
-        start: SelectionStart,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let endpoint = self.text_selection_endpoint(position, window, cx);
-        // Components that own their own mouse-down interaction (Input, Button,
-        // etc.) set `GlobalState::suppress_text_selection` in their bubble-phase
-        // handler; the controller checks that flag before calling this, so a
-        // press starts a selection from any point that is not consumed by such a
-        // component — including blank space inside a focusable container, which
-        // GPUI's focus-on-mouse-down would otherwise mark default-prevented.
-        // Only focus the view when the press actually hit it. A proxy-anchored
-        // endpoint (blank space) must not steal focus from wherever it was.
-        if endpoint.inside {
-            if let Some(view) = endpoint.view.as_ref().and_then(|v| v.upgrade()) {
-                view.update(cx, |state, cx| {
-                    state.focus_handle.focus(window, cx);
-                });
-            }
-        }
-        let extension_anchor = (start == SelectionStart::Extend)
-            .then(|| self.text_selection.pending_extension_anchor.take())
-            .flatten()
-            .filter(|anchor| anchor.resolve(cx).is_some());
-        self.text_selection.pending_extension_anchor = None;
-
-        self.text_selection.anchor = Some(extension_anchor.unwrap_or_else(|| endpoint.clone()));
-        self.text_selection.cursor = Some(endpoint);
-        if let Some(view) = self
-            .text_selection
-            .anchor
-            .as_ref()
-            .filter(|endpoint| endpoint.inside)
-            .and_then(|endpoint| endpoint.view.as_ref())
-            .and_then(|view| view.upgrade())
-        {
-            view.update(cx, |state, _| state.is_selecting = true);
-        }
-        self.text_selection.did_hit_text = self
-            .text_selection
-            .anchor
-            .as_ref()
-            .is_some_and(|endpoint| endpoint.inside_text)
-            || self
-                .text_selection
-                .cursor
-                .as_ref()
-                .is_some_and(|endpoint| endpoint.inside_text);
-        self.text_selection.is_selecting = true;
-    }
-
-    pub(crate) fn update_text_selection(
-        &mut self,
-        position: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if !self.text_selection.is_selecting {
-            return;
-        }
-        // Do not update the selection while a GPUI drag-and-drop is active
-        // (e.g. dragging a dock tab or a resize handle across TextViews).
-        if cx.has_active_drag() {
-            return;
-        }
-
-        // Compute the selection band before and after moving the cursor so the
-        // notify can be limited to the views that actually changed. Order
-        // matters: read the old points first, then update the cursor, then read
-        // the new points.
-        let old_points = self.text_selection.resolved_points(cx);
-        let endpoint = self.text_selection_endpoint(position, window, cx);
-        self.text_selection.did_hit_text |= endpoint.inside_text;
-        self.text_selection.cursor = Some(endpoint);
-        let new_points = self.text_selection.resolved_points(cx);
-
-        // Auto-scroll the anchor view when dragging near its viewport edges,
-        // same semantics as the previous per-view implementation. Only a true
-        // hit anchor (inside == true) auto-scrolls; a proxy-anchored view was
-        // never pressed and must not scroll.
-        if let Some(view) = self
-            .text_selection
-            .anchor
-            .as_ref()
-            .filter(|e| e.inside)
-            .and_then(|e| e.view.as_ref())
-            .and_then(|v| v.upgrade())
-        {
-            view.update(cx, |state, cx| {
-                if state.scrollable {
-                    let delta = AutoScroll::compute_delta(position.y, state.bounds());
-                    state.set_auto_scroll(delta, cx);
-                }
-            });
-        }
-
-        self.notify_selection_band(old_points, new_points, cx);
-    }
-
-    pub(crate) fn end_text_selection(&mut self, cx: &mut Context<Self>) {
-        self.text_selection.pending_extension_anchor = None;
-        if !self.text_selection.is_selecting {
-            return;
-        }
-        self.text_selection.is_selecting = false;
-        if !self.text_selection.did_hit_text {
-            self.text_selection.anchor = None;
-            self.text_selection.cursor = None;
-            return;
-        }
-        // Only a true hit anchor (inside == true) had `is_selecting` and
-        // auto-scroll set in `start_text_selection`; a proxy-anchored view
-        // has nothing to tear down.
-        if let Some(view) = self
-            .text_selection
-            .anchor
-            .as_ref()
-            .filter(|e| e.inside)
-            .and_then(|e| e.view.as_ref())
-            .and_then(|v| v.upgrade())
-        {
-            view.update(cx, |state, cx| {
-                state.is_selecting = false;
-                state.stop_auto_scroll();
-                cx.notify();
-            });
-        }
-        self.notify_selectable_text_views(cx);
-    }
-
-    /// The scope window text selection is confined to right now. When any
-    /// Dialog is open, selection is limited to the topmost dialog (highest
-    /// `layer_ix`); otherwise to the active Sheet if one is open; otherwise the
-    /// base window. Views registered under a different scope are excluded from
-    /// selection (see [`Root::text_selection_endpoint`]).
-    fn active_selection_scope(&self) -> SelectionScope {
+    pub(crate) fn active_selection_scope(&self) -> SelectionScope {
         if !self.active_dialogs.is_empty() {
             SelectionScope::Dialog(self.active_dialogs.len() - 1)
         } else if self.active_sheet.is_some() {
@@ -581,347 +118,6 @@ impl Root {
         } else {
             SelectionScope::Base
         }
-    }
-
-    /// Resolve a window position to a selection endpoint. Uses hitbox hover
-    /// testing so clipped or occluded TextViews are correctly excluded.
-    ///
-    /// When the position falls inside a view's hitbox, the endpoint is a true
-    /// hit (`inside == true`), anchored to that view's content coordinates.
-    /// When it lands in blank space, the endpoint is proxy-anchored to the
-    /// nearest view in document flow (`inside == false`), so the selection
-    /// still follows the content when an outer container scrolls. Only when no
-    /// view is registered does it fall back to a window-coordinate endpoint.
-    fn text_selection_endpoint(
-        &self,
-        position: Point<Pixels>,
-        window: &Window,
-        cx: &App,
-    ) -> SelectionEndpoint {
-        // Confine selection to the active modal layer: when a Dialog/Sheet is
-        // open, views behind it must not participate. The overlay's `.occlude()`
-        // already keeps the true-hit path below from hovering behind-views, but
-        // the proxy-anchor fallback ignores occlusion, so both loops filter by
-        // scope (the true-hit filter is cheap defense-in-depth).
-        let scope = self.active_selection_scope();
-
-        let mut best: Option<(WeakEntity<TextViewState>, f32)> = None;
-        // `is_hovered` reflects the hitbox state as of the last prepaint frame —
-        // a one-frame lag that is negligible for mouse-driven selection.
-        // Smallest-area wins as a proxy for the innermost (topmost) view when
-        // TextViews overlap.
-        for (view, hitbox, view_scope) in self.selectable_text_views.values() {
-            if *view_scope != scope {
-                continue;
-            }
-            if view.upgrade().is_none() {
-                continue;
-            }
-            if !hitbox.is_hovered(window) {
-                continue;
-            }
-            let area = f32::from(hitbox.bounds.size.width) * f32::from(hitbox.bounds.size.height);
-            if best.as_ref().map_or(true, |(_, a)| area < *a) {
-                best = Some((view.clone(), area));
-            }
-        }
-
-        if let Some((view, entity)) =
-            best.and_then(|(view, _)| view.upgrade().map(|entity| (view, entity)))
-        {
-            let state = entity.read(cx);
-            let inside_text = self
-                .selectable_text_inlines
-                .get(&state.entity_id)
-                .is_some_and(|bounds| bounds.iter().any(|bounds| bounds.contains(&position)));
-            let point = position - state.bounds().origin - state.scroll_offset();
-            return SelectionEndpoint {
-                point,
-                view: Some(view),
-                inside: true,
-                inside_text,
-                block_ix: state.block_ix_at(point.y),
-            };
-        }
-
-        // Blank space: proxy-anchor to the nearest view in document flow so the
-        // endpoint moves with the content (a window-coordinate anchor would
-        // drift when an outer container scrolls). Prefer the view whose top is
-        // the largest value still at or above `position.y` (the nearest
-        // predecessor in the flow); if the position is above every view, fall
-        // back to the first view (smallest top). `point` is computed with the
-        // same formula as a true hit and may fall outside the view's bounds —
-        // it is a pure relative offset.
-        let mut predecessor: Option<(WeakEntity<TextViewState>, Pixels)> = None;
-        let mut first: Option<(WeakEntity<TextViewState>, Pixels)> = None;
-        for (view, _, view_scope) in self.selectable_text_views.values() {
-            if *view_scope != scope {
-                continue;
-            }
-            let Some(entity) = view.upgrade() else {
-                continue;
-            };
-            let top = entity.read(cx).bounds().top();
-            if top <= position.y {
-                if predecessor.as_ref().map_or(true, |(_, t)| top > *t) {
-                    predecessor = Some((view.clone(), top));
-                }
-            }
-            if first.as_ref().map_or(true, |(_, t)| top < *t) {
-                first = Some((view.clone(), top));
-            }
-        }
-
-        match predecessor.or(first) {
-            Some((view, _)) => {
-                let entity = view.upgrade();
-                // `view.upgrade()` succeeded above when the candidate was
-                // chosen; if it raced to None, fall back to a window endpoint.
-                match entity {
-                    Some(entity) => {
-                        let state = entity.read(cx);
-                        let point = position - state.bounds().origin - state.scroll_offset();
-                        SelectionEndpoint {
-                            point,
-                            view: Some(view),
-                            inside: false,
-                            inside_text: false,
-                            block_ix: state.block_ix_at(point.y),
-                        }
-                    }
-                    None => SelectionEndpoint {
-                        view: None,
-                        point: position,
-                        inside: false,
-                        inside_text: false,
-                        block_ix: None,
-                    },
-                }
-            }
-            None => SelectionEndpoint {
-                view: None,
-                point: position,
-                inside: false,
-                inside_text: false,
-                block_ix: None,
-            },
-        }
-    }
-
-    fn notify_selectable_text_views(&mut self, cx: &mut Context<Self>) {
-        self.selectable_text_views.retain(|_, (view, _, _)| {
-            let Some(view) = view.upgrade() else {
-                return false;
-            };
-            view.update(cx, |_, cx| cx.notify());
-            true
-        });
-    }
-
-    /// Notify the views affected by the current selection update. For a
-    /// single-view selection only the anchor view re-renders; for a
-    /// cross-view selection only views whose bounds intersect the vertical
-    /// band covered by the old and new selection participate, plus everything
-    /// that may need to clear a previously painted highlight.
-    fn notify_selection_band(
-        &mut self,
-        old_points: Option<(Point<Pixels>, Point<Pixels>)>,
-        new_points: Option<(Point<Pixels>, Point<Pixels>)>,
-        cx: &mut Context<Self>,
-    ) {
-        // Single-view fast path: when the selection lives entirely in the
-        // anchor view, only it can paint a highlight, so only it needs to
-        // re-render.
-        //
-        // This is only safe when there is no *previous* band that may have
-        // painted a highlight on some other view: a drag that crossed into a
-        // second view and then came back inside the anchor view leaves the new
-        // band single-view, but the old band still covers the view that must
-        // clear its now-stale highlight. In that case fall through to the
-        // general band path (band = old ∪ new), which always covers the anchor
-        // view too.
-        if old_points.is_none() {
-            if let Some(id) = self.text_selection.single_view() {
-                if let Some((view, _, _)) = self.selectable_text_views.get(&id) {
-                    if let Some(view) = view.upgrade() {
-                        view.update(cx, |_, cx| cx.notify());
-                    }
-                }
-                return;
-            }
-        }
-
-        // Merge the old and new selection bands. The old band covers views that
-        // may need to clear a previously painted highlight; the new band covers
-        // views that may need to paint one. If both are empty there is nothing
-        // to update.
-        let band = |points: Option<(Point<Pixels>, Point<Pixels>)>| {
-            points.map(|(a, b)| {
-                let (lo, hi) = if a.y <= b.y { (a.y, b.y) } else { (b.y, a.y) };
-                (lo, hi)
-            })
-        };
-        let (band_min, band_max) = match (band(old_points), band(new_points)) {
-            (Some((lo_a, hi_a)), Some((lo_b, hi_b))) => (lo_a.min(lo_b), hi_a.max(hi_b)),
-            (Some(b), None) | (None, Some(b)) => b,
-            (None, None) => return,
-        };
-
-        self.selectable_text_views.retain(|_, (view, _, _)| {
-            let Some(view) = view.upgrade() else {
-                return false;
-            };
-            let bounds = view.read(cx).bounds();
-            if bounds.top() <= band_max && bounds.bottom() >= band_min {
-                view.update(cx, |_, cx| cx.notify());
-            }
-            true
-        });
-    }
-}
-
-/// A zero-size element that drives window-level text selection.
-///
-/// Must be the FIRST child of Root's container div: bubble-phase mouse
-/// listeners fire in reverse registration order, so registering earliest makes
-/// the controller run AFTER interactive components (which may stop
-/// propagation or prevent default).
-///
-/// Note: `window.on_mouse_event` handlers are window-global (not scoped to
-/// any hitbox); the phase check and the `GlobalState::suppress_text_selection`
-/// flag are the only guards. The flag is reset in the capture phase of every
-/// left mouse down and set in the bubble phase by components that own their own
-/// press/drag interaction (Button, Input, etc.). Because bubble-phase listeners
-/// fire in reverse registration order and this controller registers earliest,
-/// it observes the flag after those components have set it, so presses consumed
-/// by them are excluded while presses on blank space (even inside a focusable
-/// container) still start a selection.
-pub(crate) struct TextSelectionController;
-
-impl IntoElement for TextSelectionController {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for TextSelectionController {
-    type RequestLayoutState = ();
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        (window.request_layout(Style::default(), [], cx), ())
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        _: &mut Window,
-        _: &mut App,
-    ) -> Self::PrepaintState {
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        _: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
-        window: &mut Window,
-        _: &mut App,
-    ) {
-        window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
-            if event.button != MouseButton::Left {
-                return;
-            }
-            if phase.capture() {
-                // Reset the suppression flag at the start of every press, then
-                // stage the anchor needed by Shift+click before clearing the
-                // previous selection. Clearing in capture preserves the existing
-                // behavior even when a component stops bubble propagation.
-                GlobalState::reset_text_selection_suppression(cx);
-                Root::update(window, cx, |root, _, cx| {
-                    let extension_anchor = (event.click_count == 1 && event.modifiers.shift)
-                        .then(|| root.text_selection.anchor.clone())
-                        .flatten();
-                    root.clear_text_selection(cx);
-                    root.text_selection.pending_extension_anchor = extension_anchor;
-                });
-            } else if event.click_count == 1 {
-                // Reaching bubble phase means no component stopped propagation.
-                // Components that own their own press (Button, Input, etc.) set
-                // `suppress_text_selection` in their bubble handler; if set, the
-                // press is theirs and must not start a window selection.
-                if GlobalState::is_text_selection_suppressed(cx) {
-                    Root::update(window, cx, |root, _, _| {
-                        root.text_selection.pending_extension_anchor = None;
-                    });
-                    return;
-                }
-                Root::update(window, cx, |root, window, cx| {
-                    let start = if event.modifiers.shift {
-                        SelectionStart::Extend
-                    } else {
-                        SelectionStart::Begin
-                    };
-                    root.start_text_selection(event.position, start, window, cx);
-                });
-            }
-        });
-
-        window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
-            if !phase.bubble() {
-                return;
-            }
-            Root::update(window, cx, |root, window, cx| {
-                root.update_text_selection(event.position, window, cx);
-            });
-        });
-
-        window.on_mouse_event(move |_: &MouseUpEvent, phase, window, cx| {
-            if !phase.bubble() {
-                return;
-            }
-            Root::update(window, cx, |root, _, cx| root.end_text_selection(cx));
-        });
-
-        window.on_mouse_event(move |_: &ScrollWheelEvent, phase, window, cx| {
-            if !phase.bubble() {
-                return;
-            }
-            // While drag-selecting, a wheel scroll moves content under the
-            // stationary cursor; re-resolve the cursor endpoint at the current
-            // mouse position so the selection keeps extending to the pointer
-            // (browser behavior). `update_text_selection` is a no-op unless a
-            // selection drag is active, so the idle cost is negligible.
-            //
-            // Bounds are refreshed in the next frame's prepaint, so a single
-            // wheel event may resolve one frame stale; continuous scrolling
-            // converges, so this is left unhandled.
-            let position = window.mouse_position();
-            Root::update(window, cx, |root, window, cx| {
-                root.update_text_selection(position, window, cx);
-            });
-        });
     }
 }
 
@@ -934,13 +130,178 @@ mod tests {
         text::{TextView, TextViewState},
     };
     use gpui::{
-        AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
-        Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render,
-        Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
+        App, AppContext as _, Bounds, Context, Element, ElementId, Entity, FocusHandle,
+        GlobalElementId, Hitbox, InspectorElementId, InteractiveElement as _, IntoElement,
+        LayoutId, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Pixels,
+        Render, SharedString, Styled as _, StyledText, TestAppContext, VisualTestContext, Window,
+        div, point, px,
+    };
+    use gpui_base::{
+        SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelectionHost,
+        TextSelectionRegion,
     };
     use std::cell::Cell;
     use std::rc::Rc;
     use std::time::Duration;
+
+    struct PlainSelectableText {
+        region: TextSelectionRegion,
+        text: SharedString,
+        styled_text: StyledText,
+    }
+
+    impl PlainSelectableText {
+        fn new(region: TextSelectionRegion, text: impl Into<SharedString>) -> Self {
+            let text = text.into();
+            Self {
+                region,
+                styled_text: StyledText::new(text.clone()),
+                text,
+            }
+        }
+    }
+
+    impl IntoElement for PlainSelectableText {
+        type Element = Self;
+
+        fn into_element(self) -> Self::Element {
+            self
+        }
+    }
+
+    impl Element for PlainSelectableText {
+        type RequestLayoutState = ();
+        type PrepaintState = Hitbox;
+
+        fn id(&self) -> Option<ElementId> {
+            None
+        }
+
+        fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+            None
+        }
+
+        fn request_layout(
+            &mut self,
+            id: Option<&GlobalElementId>,
+            inspector_id: Option<&InspectorElementId>,
+            window: &mut Window,
+            cx: &mut App,
+        ) -> (LayoutId, Self::RequestLayoutState) {
+            self.styled_text
+                .request_layout(id, inspector_id, window, cx)
+        }
+
+        fn prepaint(
+            &mut self,
+            id: Option<&GlobalElementId>,
+            inspector_id: Option<&InspectorElementId>,
+            bounds: Bounds<Pixels>,
+            _: &mut Self::RequestLayoutState,
+            window: &mut Window,
+            cx: &mut App,
+        ) -> Self::PrepaintState {
+            self.styled_text
+                .prepaint(id, inspector_id, bounds, &mut (), window, cx);
+            let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
+            TextSelectionHost::install(window, cx).update(cx, |host, cx| {
+                host.register_region(
+                    self.region.clone(),
+                    SelectionRegionFrame {
+                        hitbox: hitbox.clone(),
+                        bounds,
+                        scroll_offset: Default::default(),
+                        scope: SelectionScopeId::default(),
+                        document_order: 0,
+                        text_bounds: vec![bounds],
+                    },
+                    cx,
+                );
+            });
+            hitbox
+        }
+
+        fn paint(
+            &mut self,
+            id: Option<&GlobalElementId>,
+            inspector_id: Option<&InspectorElementId>,
+            bounds: Bounds<Pixels>,
+            _: &mut Self::RequestLayoutState,
+            _: &mut Self::PrepaintState,
+            window: &mut Window,
+            cx: &mut App,
+        ) {
+            let layout = self.styled_text.layout().clone();
+            self.region.state().update(cx, |state, _| {
+                state.project_selection_runs(&[SelectionRunFrame {
+                    order: 0,
+                    text: self.text.clone(),
+                    layout,
+                    bounds,
+                }]);
+            });
+            self.styled_text
+                .paint(id, inspector_id, bounds, &mut (), &mut (), window, cx);
+        }
+    }
+
+    struct MixedAdapterView {
+        plain_region: TextSelectionRegion,
+        text_view: Entity<TextViewState>,
+    }
+
+    impl MixedAdapterView {
+        fn new(cx: &mut Context<Self>) -> Self {
+            Self {
+                plain_region: TextSelectionRegion::new("", cx),
+                text_view: cx.new(|cx| TextViewState::markdown("TextView adapter", cx)),
+            }
+        }
+    }
+
+    impl Render for MixedAdapterView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .pt(px(10.))
+                .child(gpui_base::TextSelectionController)
+                .child(div().h(px(40.)).child(PlainSelectableText::new(
+                    self.plain_region.clone(),
+                    "Plain adapter",
+                )))
+                .child(
+                    div()
+                        .h(px(40.))
+                        .child(TextView::new(&self.text_view).selectable(true)),
+                )
+        }
+    }
+
+    struct BaseOwnedTextViewSelection {
+        text_view: Entity<TextViewState>,
+    }
+
+    impl BaseOwnedTextViewSelection {
+        fn new(cx: &mut Context<Self>) -> Self {
+            Self {
+                text_view: cx.new(|cx| TextViewState::markdown("Single authority", cx)),
+            }
+        }
+    }
+
+    impl Render for BaseOwnedTextViewSelection {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .pt(px(10.))
+                .child(gpui_base::TextSelectionController)
+                .child(
+                    div()
+                        .h(px(40.))
+                        .child(TextView::new(&self.text_view).selectable(true)),
+                )
+        }
+    }
 
     struct ChatTestView {
         focus_handle: FocusHandle,
@@ -1025,6 +386,99 @@ mod tests {
             let _ = window.draw(cx);
         });
         (chat, cx)
+    }
+
+    #[gpui::test]
+    fn base_plain_region_and_text_view_share_one_cross_region_selection(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (_, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(MixedAdapterView::new);
+            Root::new(content, window, cx)
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        cx.simulate_mouse_down(
+            point(px(1.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(300.), px(70.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(300.), px(70.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let selected =
+            cx.update(|window, cx| gpui_base::WindowTextSelectionExt::selected_text(window, cx));
+        assert_eq!(selected.trim(), "Plain adapter\nTextView adapter");
+    }
+
+    #[gpui::test]
+    fn clearing_base_host_leaves_no_root_owned_text_view_selection(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(BaseOwnedTextViewSelection::new);
+            Root::new(content, window, cx)
+        });
+        let content = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<BaseOwnedTextViewSelection>()
+                .unwrap()
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        cx.simulate_mouse_down(
+            point(px(1.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(300.), px(15.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(300.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        assert_eq!(
+            content
+                .read_with(cx, |view, cx| view.text_view.read(cx).selected_text())
+                .trim(),
+            "Single authority"
+        );
+
+        cx.update(|window, cx| {
+            gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
+            let _ = window.draw(cx);
+        });
+
+        let selected = content.read_with(cx, |view, cx| view.text_view.read(cx).selected_text());
+        assert!(
+            selected.is_empty(),
+            "TextView retained selection outside the base host: {selected:?}"
+        );
     }
 
     /// A `scrollable(true)` TextView virtualizes its blocks, so a block only

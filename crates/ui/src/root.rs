@@ -5,17 +5,17 @@ use crate::{
     native_menu::FallbackMenuOverlay,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    text::{SelectionScope, TextSelectionController, TextViewState, WindowTextSelection},
+    text::TextSelectionController,
     tooltip::render_tooltip,
     window_border,
 };
 use gpui::{
-    AnyView, App, AppContext, Bounds, ClipboardItem, Context, DefiniteLength, ElementId, Entity,
-    EntityId, FocusHandle, Hitbox, InteractiveElement, IntoElement, KeyBinding, ParentElement as _,
-    Pixels, Render, StyleRefinement, Styled, WeakEntity, WeakFocusHandle, Window, actions, div,
-    prelude::FluentBuilder as _,
+    AnyView, App, AppContext, ClipboardItem, Context, DefiniteLength, ElementId, Entity,
+    FocusHandle, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
+    StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
-use std::{any::TypeId, collections::HashMap, rc::Rc};
+use gpui_base::TextSelectionHost;
+use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
 
@@ -50,13 +50,8 @@ pub struct Root {
     /// The focus handle that will be restored after a dialog is closed with animation.
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
-    /// Window-level text selection state. See `text::window_selection`.
-    pub(crate) text_selection: WindowTextSelection,
-    /// Selectable TextViews registered this frame, keyed by entity id.
-    pub(crate) selectable_text_views:
-        HashMap<EntityId, (WeakEntity<TextViewState>, Hitbox, SelectionScope)>,
-    /// Inline text bounds for selectable TextViews, keyed by parent TextView id.
-    pub(crate) selectable_text_inlines: HashMap<EntityId, Vec<Bounds<Pixels>>>,
+    /// Handle to the one base-owned window selection host.
+    text_selection_host: Option<Entity<TextSelectionHost>>,
 }
 
 #[derive(Clone)]
@@ -110,9 +105,7 @@ impl Root {
             window_shadow_size: window_border::SHADOW_SIZE,
             bordered: true,
             pending_focus_restore: None,
-            text_selection: WindowTextSelection::default(),
-            selectable_text_views: HashMap::new(),
-            selectable_text_inlines: HashMap::new(),
+            text_selection_host: None,
         }
     }
 
@@ -526,6 +519,32 @@ impl Root {
         window.focus_prev(cx);
     }
 
+    pub(crate) fn window_selected_text(&self, cx: &App) -> String {
+        self.text_selection_host
+            .as_ref()
+            .map(|host| host.read(cx).selected_text(cx))
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn has_text_selection(&self, cx: &App) -> bool {
+        self.text_selection_host
+            .as_ref()
+            .is_some_and(|host| host.read(cx).has_text_selection(cx))
+    }
+
+    /// Clear the one base-owned selection and every TextView-local selection.
+    pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
+        if let Some(host) = &self.text_selection_host {
+            host.update(cx, |host, cx| host.clear(cx));
+        }
+    }
+
+    pub(crate) fn end_text_selection(&mut self, cx: &mut Context<Self>) {
+        if let Some(host) = &self.text_selection_host {
+            host.update(cx, |host, cx| host.end(cx));
+        }
+    }
+
     fn on_action_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
         let text = self.window_selected_text(cx).trim().to_string();
         if text.is_empty() {
@@ -545,6 +564,14 @@ impl Styled for Root {
 impl Render for Root {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         window.set_rem_size(cx.theme().font_size);
+        if !cx.has_global::<crate::global_state::UiGlobalState>() {
+            crate::global_state::init(cx);
+        }
+        crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
+        let active_scope = self.active_selection_scope().base_id();
+        let text_selection_host = TextSelectionHost::install(window, cx);
+        text_selection_host.update(cx, |host, cx| host.set_active_scope(active_scope, cx));
+        self.text_selection_host = Some(text_selection_host);
 
         let inner = div()
             .id("root")

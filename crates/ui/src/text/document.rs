@@ -72,6 +72,7 @@ impl ParsedDocument {
         format: SelectionFormat,
         blocks: Option<RangeInclusive<usize>>,
     ) -> String {
+        let requested_blocks = blocks.clone();
         let painted = self
             .blocks
             .iter()
@@ -97,7 +98,12 @@ impl ParsedDocument {
             let mut text = String::new();
             for (ix, block) in self.blocks.iter().enumerate().take(last + 1).skip(first) {
                 let selected = block.selected_text(format);
-                if !selected.is_empty() {
+                let is_virtual_endpoint = requested_blocks
+                    .as_ref()
+                    .is_some_and(|blocks| ix == *blocks.start() || ix == *blocks.end());
+                if requested_blocks.is_some() && !is_virtual_endpoint {
+                    text.push_str(&block.text());
+                } else if !selected.is_empty() {
                     text.push_str(&selected);
                 } else if !painted[ix] {
                     // Never painted, so it cannot report a selection of its own

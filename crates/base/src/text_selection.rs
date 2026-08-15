@@ -29,6 +29,14 @@ impl SelectionScopeId {
 pub struct SelectionEndpointSnapshot {
     pub region_id: Option<EntityId>,
     pub point: Point<Pixels>,
+    virtual_key: Option<u64>,
+}
+
+impl SelectionEndpointSnapshot {
+    /// Returns renderer-defined endpoint metadata captured when it hit a region.
+    pub fn virtual_key(&self) -> Option<u64> {
+        self.virtual_key
+    }
 }
 
 /// Region-relative selection endpoints with an optional rendering projection.
@@ -185,7 +193,9 @@ fn point_in_selection_band(
 type RegionSelectionCallback = Rc<dyn Fn(Option<SelectionSnapshot>, &mut App)>;
 type RegionAutoScrollCallback = Rc<dyn Fn(Option<Pixels>, &mut App)>;
 type RegionVoidCallback = Rc<dyn Fn(&mut App)>;
+type RegionFocusCallback = Rc<dyn Fn(&mut Window, &mut App)>;
 type RegionCopyCallback = Rc<dyn Fn(&App) -> String>;
+type RegionVirtualKeyCallback = Rc<dyn Fn(Point<Pixels>, &App) -> Option<u64>>;
 
 /// Renderer-owned state associated with a selectable region.
 ///
@@ -198,9 +208,10 @@ pub struct TextSelectionRegionState {
     snapshot: Option<SelectionSnapshot>,
     on_selection: Option<RegionSelectionCallback>,
     on_auto_scroll: Option<RegionAutoScrollCallback>,
-    on_focus: Option<RegionVoidCallback>,
+    on_focus: Option<RegionFocusCallback>,
     on_clear: Option<RegionVoidCallback>,
     copy: Option<RegionCopyCallback>,
+    virtual_key: Option<RegionVirtualKeyCallback>,
 }
 
 impl TextSelectionRegionState {
@@ -215,6 +226,7 @@ impl TextSelectionRegionState {
             on_focus: None,
             on_clear: None,
             copy: None,
+            virtual_key: None,
         }
     }
 
@@ -274,7 +286,7 @@ impl TextSelectionRegionState {
     }
 
     /// Installs the callback which focuses the region when a drag begins in it.
-    pub fn on_focus(&mut self, callback: impl Fn(&mut App) + 'static) {
+    pub fn on_focus(&mut self, callback: impl Fn(&mut Window, &mut App) + 'static) {
         self.on_focus = Some(Rc::new(callback));
     }
 
@@ -286,6 +298,14 @@ impl TextSelectionRegionState {
     /// Installs a renderer-specific copy projection.
     pub fn copy_with(&mut self, callback: impl Fn(&App) -> String + 'static) {
         self.copy = Some(Rc::new(callback));
+    }
+
+    /// Installs a renderer-specific lookup for stable virtualized content keys.
+    pub fn on_virtual_key(
+        &mut self,
+        callback: impl Fn(Point<Pixels>, &App) -> Option<u64> + 'static,
+    ) {
+        self.virtual_key = Some(Rc::new(callback));
     }
 
     fn set_snapshot(&mut self, snapshot: Option<SelectionSnapshot>, cx: &mut App) {
@@ -317,9 +337,9 @@ impl TextSelectionRegionState {
         }
     }
 
-    fn focus(&self, cx: &mut App) {
+    fn focus(&self, window: &mut Window, cx: &mut App) {
         if let Some(callback) = &self.on_focus {
-            callback(cx);
+            callback(window, cx);
         }
     }
 
@@ -372,6 +392,7 @@ struct SelectionEndpoint {
     point: Point<Pixels>,
     inside: bool,
     inside_text: bool,
+    virtual_key: Option<u64>,
 }
 
 impl SelectionEndpoint {
@@ -379,6 +400,7 @@ impl SelectionEndpoint {
         SelectionEndpointSnapshot {
             region_id: self.region_id(),
             point: self.point,
+            virtual_key: self.virtual_key,
         }
     }
 
@@ -618,15 +640,16 @@ impl TextSelectionHost {
     }
 
     fn prepare_for_mouse_down(&mut self, extend: bool, cx: &mut App) {
-        self.pending_extension_anchor = extend.then(|| self.anchor.clone()).flatten();
+        let pending_extension_anchor = extend.then(|| self.anchor.clone()).flatten();
         self.clear(cx);
+        self.pending_extension_anchor = pending_extension_anchor;
     }
 
     fn begin_in_window(
         &mut self,
         position: Point<Pixels>,
         extend: bool,
-        window: &Window,
+        window: &mut Window,
         cx: &mut App,
     ) {
         self.begin_impl(position, extend, Some(window), cx);
@@ -640,7 +663,7 @@ impl TextSelectionHost {
         &mut self,
         position: Point<Pixels>,
         extend: bool,
-        window: Option<&Window>,
+        mut window: Option<&mut Window>,
         cx: &mut App,
     ) {
         GlobalState::init(cx);
@@ -658,7 +681,7 @@ impl TextSelectionHost {
         if !extend {
             self.clear(cx);
         }
-        let endpoint = self.endpoint(position, window);
+        let endpoint = self.endpoint(position, window.as_deref(), cx);
         let anchor = previous_anchor.unwrap_or_else(|| endpoint.clone());
         self.anchor = Some(anchor.clone());
         self.cursor = Some(endpoint.clone());
@@ -666,7 +689,9 @@ impl TextSelectionHost {
         self.is_selecting = true;
         if anchor.inside {
             if let Some(region) = anchor.region.and_then(|region| region.upgrade()) {
-                region.update(cx, |state, cx| state.focus(cx));
+                if let Some(window) = window.as_deref_mut() {
+                    region.update(cx, |state, cx| state.focus(window, cx));
+                }
             }
         }
         self.publish_snapshots(cx);
@@ -676,14 +701,19 @@ impl TextSelectionHost {
         if !self.is_selecting {
             return;
         }
-        let endpoint = self.endpoint(position, window);
+        let endpoint = self.endpoint(position, window, cx);
         self.did_hit_text |= endpoint.inside_text;
         self.cursor = Some(endpoint);
         self.update_anchor_auto_scroll(position, cx);
         self.publish_snapshots(cx);
     }
 
-    fn endpoint(&mut self, position: Point<Pixels>, window: Option<&Window>) -> SelectionEndpoint {
+    fn endpoint(
+        &mut self,
+        position: Point<Pixels>,
+        window: Option<&Window>,
+        cx: &App,
+    ) -> SelectionEndpoint {
         self.prune_dead_regions();
         let mut hit: Option<(
             WeakEntity<TextSelectionRegionState>,
@@ -745,21 +775,30 @@ impl TextSelectionHost {
                     .map(|(region, frame)| (region, frame, false))
             });
         match selection {
-            Some((region, frame, inside)) => SelectionEndpoint {
-                point: position - frame.bounds.origin - frame.scroll_offset,
-                region: Some(region),
-                inside,
-                inside_text: inside
-                    && frame
-                        .text_bounds
-                        .iter()
-                        .any(|bounds| bounds.contains(&position)),
-            },
+            Some((region, frame, inside)) => {
+                let point = position - frame.bounds.origin - frame.scroll_offset;
+                let virtual_key = region.upgrade().and_then(|region| {
+                    let callback = region.read(cx).virtual_key.clone()?;
+                    callback(point, cx)
+                });
+                SelectionEndpoint {
+                    point,
+                    region: Some(region),
+                    inside,
+                    inside_text: inside
+                        && frame
+                            .text_bounds
+                            .iter()
+                            .any(|bounds| bounds.contains(&position)),
+                    virtual_key,
+                }
+            }
             None => SelectionEndpoint {
                 region: None,
                 point: position,
                 inside: false,
                 inside_text: false,
+                virtual_key: None,
             },
         }
     }
@@ -1127,10 +1166,12 @@ mod tests {
             anchor: SelectionEndpointSnapshot {
                 region_id: None,
                 point: anchor,
+                virtual_key: None,
             },
             cursor: SelectionEndpointSnapshot {
                 region_id: None,
                 point: cursor,
+                virtual_key: None,
             },
             is_selecting: false,
             resolved_points: Some((anchor, cursor)),

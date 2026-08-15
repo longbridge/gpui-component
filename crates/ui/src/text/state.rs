@@ -17,6 +17,7 @@ use crate::{
         document::ParsedDocument,
         format,
         node::{self, NodeContext},
+        selection_adapter::TextViewSelectionAdapter,
     },
     v_flex,
 };
@@ -66,7 +67,6 @@ pub enum SelectionFormat {
 /// The state of a TextView.
 pub struct TextViewState {
     pub(super) focus_handle: FocusHandle,
-    pub(super) entity_id: gpui::EntityId,
     pub(super) list_state: ListState,
 
     /// The bounds of the text view
@@ -85,6 +85,7 @@ pub struct TextViewState {
     selected_text_override: Option<String>,
     select_all: bool,
     pub(super) auto_scroll: AutoScroll,
+    pub(super) selection_adapter: TextViewSelectionAdapter,
 
     pub(super) parsed_content: ParsedContent,
     /// Content format (markdown / html), used to parse synchronously on the
@@ -112,7 +113,7 @@ impl TextViewState {
     /// Create a new TextViewState.
     fn new(format: TextViewFormat, text: &str, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
-        let entity_id = cx.entity_id();
+        let selection_adapter = TextViewSelectionAdapter::new(cx.entity().downgrade(), cx);
 
         let (tx, rx) = unbounded::<UpdateOptions>();
         let (tx_result, rx_result) = unbounded::<ParsedUpdate>();
@@ -137,7 +138,7 @@ impl TextViewState {
                         // positions remain valid for append-only updates and will
                         // self-correct on the next mouse-move event.
                         if !state.is_selecting {
-                            state.reset_selection();
+                            state.reset_selection_and_adapter(cx);
                         }
                         cx.notify();
                     });
@@ -149,7 +150,6 @@ impl TextViewState {
 
         let mut this = Self {
             focus_handle,
-            entity_id,
             bounds: Bounds::default(),
             multi_click_selection: None,
             selected_text_override: None,
@@ -168,6 +168,7 @@ impl TextViewState {
             markdown_extensions: Arc::default(),
             is_selecting: false,
             auto_scroll: AutoScroll::default(),
+            selection_adapter,
             parsed_content: Default::default(),
             format,
             parsed_error: None,
@@ -223,7 +224,7 @@ impl TextViewState {
     /// Set whether the text is selectable, default false.
     pub fn set_scrollable(&mut self, scrollable: bool, cx: &mut Context<Self>) {
         if !scrollable {
-            self.reset_selection();
+            self.reset_selection_and_adapter(cx);
         }
         self.scrollable = scrollable;
         cx.notify();
@@ -341,7 +342,7 @@ impl TextViewState {
                     self.parsed_content = content;
                     self.parsed_error = None;
                     if !self.is_selecting {
-                        self.reset_selection();
+                        self.reset_selection_and_adapter(cx);
                     }
                 }
                 Err(err) => {
@@ -356,22 +357,20 @@ impl TextViewState {
     }
 
     /// Save bounds and unselect if bounds changed.
-    pub(super) fn update_bounds(&mut self, bounds: Bounds<Pixels>) {
+    pub(super) fn update_bounds(&mut self, bounds: Bounds<Pixels>, cx: &mut App) {
         if self.bounds.size != bounds.size {
-            self.reset_selection();
+            self.reset_selection_and_adapter(cx);
         }
         self.bounds = bounds;
     }
 
     /// The index of the top-level block at `content_y`, in this view's content
-    /// coordinates (the same space [`SelectionEndpoint`] stores its point in).
+    /// coordinates (the same space the base selection endpoint stores its point in).
     ///
     /// Only laid-out blocks can be located, which is enough for a selection
     /// endpoint: the user can only put one where they can see it. Returns
     /// `None` for a view that is not virtualized, where every block paints and
     /// the range is not needed.
-    ///
-    /// [`SelectionEndpoint`]: crate::text::window_selection::SelectionEndpoint
     pub(super) fn block_ix_at(&self, content_y: Pixels) -> Option<usize> {
         if !self.scrollable {
             return None;
@@ -407,7 +406,7 @@ impl TextViewState {
         self.auto_scroll.stop();
     }
 
-    fn reset_selection(&mut self) {
+    pub(super) fn reset_selection(&mut self) {
         self.multi_click_selection = None;
         self.selected_text_override = None;
         self.select_all = false;
@@ -419,9 +418,14 @@ impl TextViewState {
         self.parsed_content.document.clear_selection();
     }
 
+    fn reset_selection_and_adapter(&mut self, cx: &mut App) {
+        self.reset_selection();
+        self.selection_adapter.set_local_selection(false, cx);
+    }
+
     /// Clear the current text selection.
     pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
-        self.reset_selection();
+        self.reset_selection_and_adapter(cx);
         cx.notify();
     }
 
@@ -440,6 +444,7 @@ impl TextViewState {
         self.select_all = true;
         self.is_selecting = false;
         self.auto_scroll.stop();
+        self.selection_adapter.set_local_selection(true, cx);
         cx.notify();
     }
 
@@ -448,6 +453,7 @@ impl TextViewState {
         pos: Point<Pixels>,
         kind: TextViewMultiClickKind,
         selected_text: String,
+        cx: &mut App,
     ) {
         let scroll_offset = self.scroll_offset();
         let pos = pos - self.bounds.origin - scroll_offset;
@@ -456,6 +462,7 @@ impl TextViewState {
         self.select_all = false;
         self.is_selecting = false;
         self.auto_scroll.stop();
+        self.selection_adapter.set_local_selection(true, cx);
     }
 
     pub(super) fn set_auto_scroll(&mut self, delta: Option<Pixels>, cx: &mut Context<Self>) {
@@ -471,26 +478,15 @@ impl TextViewState {
     /// Single-view fast path: when both endpoints are anchored inside one
     /// TextView, only that view participates (identical to the previous
     /// per-view behavior).
-    pub(crate) fn selection_points(
-        &self,
-        window: &Window,
-        cx: &App,
-    ) -> Option<(Point<Pixels>, Point<Pixels>)> {
+    pub(crate) fn selection_points(&self, cx: &App) -> Option<(Point<Pixels>, Point<Pixels>)> {
         if !self.selectable {
             return None;
         }
-        let root = window.root::<crate::Root>().flatten()?;
-        let selection = &root.read(cx).text_selection;
-        if let Some(view_id) = selection.single_view() {
-            if view_id != self.entity_id {
-                return None;
-            }
-        }
-        selection.resolved_points(cx)
+        self.selection_adapter.selection_points(cx)
     }
 
-    pub(crate) fn has_selection(&self, window: &Window, cx: &App) -> bool {
-        self.has_view_selection() || self.selection_points(window, cx).is_some()
+    pub(crate) fn has_selection(&self, cx: &App) -> bool {
+        self.has_view_selection() || self.selection_points(cx).is_some()
     }
 
     pub(super) fn on_action_select_all(
@@ -569,16 +565,16 @@ impl Render for TextViewState {
             })
             .on_prepaint(move |bounds, window, cx| {
                 let size_changed = state.read(cx).bounds().size != bounds.size;
-                let id = state.entity_id();
-                state.update(cx, |state, _| {
-                    state.update_bounds(bounds);
+                let selection_involves_view = state
+                    .read(cx)
+                    .selection_adapter
+                    .selection_involves_region(cx);
+                let is_selecting = state.read(cx).is_selecting;
+                state.update(cx, |state, cx| {
+                    state.update_bounds(bounds, cx);
                 });
-                if size_changed {
-                    if let Some(root) = window.root::<crate::Root>().flatten() {
-                        root.update(cx, |root, cx| {
-                            root.clear_text_selection_for_resized_view(id, cx);
-                        });
-                    }
+                if size_changed && selection_involves_view && !is_selecting {
+                    gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
                 }
             })
     }

@@ -15,6 +15,7 @@ pub(crate) fn init(cx: &mut App) {
 pub(crate) struct UiGlobalState {
     pub(crate) text_view_state_stack: Vec<Entity<TextViewState>>,
     selection_scope_stack: Vec<SelectionScope>,
+    selection_document_order: u64,
 }
 
 impl Global for UiGlobalState {}
@@ -24,6 +25,7 @@ impl UiGlobalState {
         Self {
             text_view_state_stack: Vec::new(),
             selection_scope_stack: Vec::new(),
+            selection_document_order: 1,
         }
     }
 
@@ -52,5 +54,15 @@ impl UiGlobalState {
             .last()
             .copied()
             .unwrap_or(SelectionScope::Base)
+    }
+
+    pub(crate) fn begin_selection_frame(&mut self) {
+        self.selection_document_order = 1;
+    }
+
+    pub(crate) fn next_selection_document_order(&mut self) -> u64 {
+        let order = self.selection_document_order;
+        self.selection_document_order = self.selection_document_order.wrapping_add(1);
+        order
     }
 }
