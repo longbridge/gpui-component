@@ -111,14 +111,27 @@ mod tests {
     use lsp_types::{Position, Range as LspRange};
 
     #[test]
-    fn test_document_colors_for_range_ignores_inverted_ranges() {
+    fn test_document_colors_for_range_ignores_empty_and_inverted_ranges() {
         let text = Rope::from_str("01234567890123456789");
         let mut lsp = Lsp::default();
-        lsp.document_colors.push((
-            LspRange::new(Position::new(0, 10), Position::new(0, 5)),
-            gpui::red(),
-        ));
+        lsp.document_colors.extend([
+            (
+                LspRange::new(Position::new(0, 10), Position::new(0, 5)),
+                gpui::red(),
+            ),
+            (
+                LspRange::new(Position::new(0, 10), Position::new(0, 10)),
+                gpui::green(),
+            ),
+            (
+                LspRange::new(Position::new(0, 5), Position::new(0, 10)),
+                gpui::blue(),
+            ),
+        ]);
 
-        assert!(lsp.document_colors_for_range(&text, &(0..0)).is_empty());
+        assert_eq!(
+            lsp.document_colors_for_range(&text, &(0..0)),
+            vec![(5..10, gpui::blue())]
+        );
     }
 }
