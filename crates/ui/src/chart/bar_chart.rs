@@ -10,7 +10,7 @@ use num_traits::{Num, ToPrimitive};
 use crate::{
     ActiveTheme,
     plot::{
-        AXIS_GAP, AxisLabelSide, Grid, Plot, PlotAxis,
+        AXIS_GAP, AxisLabelSide, Grid, Plot, PlotAxis, PlotLabel,
         label::{TEXT_GAP, TEXT_SIZE, Text, measure_text_width},
         scale::{Scale, ScaleBand, ScaleLinear, Sealed},
         shape::{Bar, BarAlignment},
@@ -37,6 +37,8 @@ where
     tick_margin: usize,
     label: Option<Rc<dyn Fn(&T) -> SharedString>>,
     label_axis: bool,
+    value_axis: bool,
+    value_ticks: usize,
     grid: bool,
     alignment: BarAlignment,
     corner_radii: Corners<Pixels>,
@@ -62,6 +64,8 @@ where
             tick_margin: 1,
             label: None,
             label_axis: true,
+            value_axis: false,
+            value_ticks: 4,
             grid: true,
             alignment: BarAlignment::default(),
             corner_radii: Corners::all(px(0.)),
@@ -193,6 +197,22 @@ where
     /// Default is true.
     pub fn label_axis(mut self, label_axis: bool) -> Self {
         self.label_axis = label_axis;
+        self
+    }
+
+    /// Show or hide the value-axis line and labels.
+    ///
+    /// Default is false.
+    pub fn value_axis(mut self, value_axis: bool) -> Self {
+        self.value_axis = value_axis;
+        self
+    }
+
+    /// Set the number of ticks along the value axis.
+    ///
+    /// Default is 4.
+    pub fn value_ticks(mut self, value_ticks: usize) -> Self {
+        self.value_ticks = value_ticks.max(1);
         self
     }
 
@@ -335,31 +355,81 @@ where
             range,
         );
 
+        // The pixel position of the zero value along the value axis, used as the baseline for
+        let zero_pixel = value_scale.tick(&V::zero()).unwrap_or(baseline);
+
+        // Compute the data range for the value axis, used for grid lines and value labels.
+        let (domain_lo, domain_hi) = self.data.iter().fold((0.0_f32, 0.0_f32), |(lo, hi), v| {
+            let f = value_fn(v).to_f32().unwrap_or(0.);
+            (lo.min(f), hi.max(f))
+        });
+
         // Draw band axis (with categorical labels).
         let mut axis = PlotAxis::new().stroke(cx.theme().border);
         if self.label_axis {
-            let labels = build_band_labels(
-                &self.data,
-                band_fn.as_ref(),
-                &band_scale,
-                band_width,
-                self.tick_margin,
-                cx.theme().muted_foreground,
-            );
-            axis = match alignment {
-                BarAlignment::Bottom => axis.x(baseline).x_label(labels),
-                BarAlignment::Top => axis
-                    .x(baseline)
-                    .x_label_side(AxisLabelSide::Start)
-                    .x_label(labels),
-                BarAlignment::Left => axis
-                    .y(baseline)
-                    .y_label_side(AxisLabelSide::Start)
-                    .y_label(labels.into_iter().map(|t| t.align(TextAlign::Right))),
-                BarAlignment::Right => axis
-                    .y(baseline)
-                    .y_label(labels.into_iter().map(|t| t.align(TextAlign::Left))),
-            };
+            match alignment {
+                BarAlignment::Bottom | BarAlignment::Top => {
+                    axis = axis.x(zero_pixel);
+
+                    // Each label is positioned individually: above the
+                    // line if its bar is negative (so as not to overlap the
+                    // bar that goes below zero), below otherwise.
+                    let mut label_items = Vec::with_capacity(self.data.len());
+                    for (i, d) in self.data.iter().enumerate() {
+                        if (i + 1) % self.tick_margin != 0 {
+                            continue;
+                        }
+                        let Some(band_x) = band_scale.tick(&band_fn(d)) else {
+                            continue;
+                        };
+                        let label_x = band_x + band_width / 2.0;
+                        let value = value_fn(d).to_f32().unwrap_or(0.0);
+
+                        let label_y = if value < 0.0 {
+                            zero_pixel - TEXT_GAP - TEXT_SIZE
+                        } else {
+                            zero_pixel + TEXT_GAP
+                        };
+
+                        label_items.push(
+                            Text::new(
+                                band_fn(d).into(),
+                                point(px(label_x), px(label_y)),
+                                cx.theme().muted_foreground,
+                            )
+                            .align(TextAlign::Center),
+                        );
+                    }
+                    PlotLabel::new(label_items).paint(&bounds, window, cx);
+                }
+                BarAlignment::Left => {
+                    let labels = build_band_labels(
+                        &self.data,
+                        band_fn.as_ref(),
+                        &band_scale,
+                        band_width,
+                        self.tick_margin,
+                        cx.theme().muted_foreground,
+                    );
+                    axis = axis
+                        .y(zero_pixel)
+                        .y_label_side(AxisLabelSide::Start)
+                        .y_label(labels.into_iter().map(|t| t.align(TextAlign::Right)));
+                }
+                BarAlignment::Right => {
+                    let labels = build_band_labels(
+                        &self.data,
+                        band_fn.as_ref(),
+                        &band_scale,
+                        band_width,
+                        self.tick_margin,
+                        cx.theme().muted_foreground,
+                    );
+                    axis = axis
+                        .y(zero_pixel)
+                        .y_label(labels.into_iter().map(|t| t.align(TextAlign::Left)));
+                }
+            }
         }
         axis.paint(&bounds, window, cx);
 
@@ -373,19 +443,42 @@ where
 
         // Draw grid: lines perpendicular to the value axis, evenly spaced
         // across the value range and excluding the line at the baseline.
+        let steps = self.value_ticks;
+        let grid_steps: Vec<f32> = (0..=steps)
+            .map(|i| far + (baseline - far) * i as f32 / steps as f32)
+            .collect();
+
         if self.grid {
-            let grid_steps: Vec<f32> = (0..4)
-                .map(|i| far + (baseline - far) * i as f32 / 4.0)
-                .collect();
             let grid = Grid::new()
                 .stroke(cx.theme().border)
                 .dash_array(&[px(4.), px(2.)]);
             let grid = if is_horizontal {
-                grid.x(grid_steps)
+                grid.x(grid_steps.clone())
             } else {
-                grid.y(grid_steps)
+                grid.y(grid_steps.clone())
             };
             grid.paint(&bounds, window);
+        }
+
+        if self.value_axis {
+            use crate::plot::AxisText;
+
+            let value_labels: Vec<AxisText> = grid_steps
+                .iter()
+                .enumerate()
+                .map(|(i, &y_pixel)| {
+                    let value =
+                        domain_hi - (domain_hi - domain_lo) * i as f32 / self.value_ticks as f32;
+                    AxisText::new(format_tick(value), px(y_pixel), cx.theme().muted_foreground)
+                        .align(TextAlign::Right)
+                })
+                .collect();
+
+            let value_axis = PlotAxis::new()
+                .y_axis(false)
+                .y(px(4.))
+                .y_label(value_labels);
+            value_axis.paint(&bounds, window, cx);
         }
 
         // Draw bars.
@@ -423,7 +516,7 @@ where
             .alignment(alignment)
             .band_width(band_width)
             .cross(move |d| band_scale.tick(&band_fn_cloned(d)))
-            .base(move |_| baseline)
+            .base(move |_| zero_pixel)
             .value(move |d| value_scale.tick(&value_fn_cloned(d)))
             .corner_radii(self.corner_radii);
 
@@ -611,4 +704,13 @@ fn clip_stops_to_bar(stops: [LinearColorStop; 2]) -> [LinearColorStop; 2] {
         }
     };
     [new_a, new_b]
+}
+
+/// Format a tick value for display on the value axis.
+fn format_tick(v: f32) -> String {
+    if (v - v.round()).abs() < 0.001 {
+        format!("{:.0}", v)
+    } else {
+        format!("{:.1}", v)
+    }
 }
