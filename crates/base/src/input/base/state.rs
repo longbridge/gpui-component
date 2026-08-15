@@ -517,8 +517,14 @@ impl<M: InputModeKind> InputBaseState<M> {
         cx.notify();
     }
 
-    pub fn toggle_masked(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_masked(!self.masked, window, cx);
+    /// Flip the password mask.
+    ///
+    /// Setting the mask is a single-line method, but flipping it stays here:
+    /// the reveal button is rendered from the generic path, and it can only be
+    /// switched on through [`crate::input::InputState`] anyway.
+    pub fn toggle_masked(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        self.masked = !self.masked;
+        cx.notify();
     }
 
     pub fn on_context_menu(
@@ -632,20 +638,6 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.enable_context_menu = enabled;
     }
 
-    /// Set this input is searchable, default is false (Default true for Code Editor).
-    #[doc(hidden)]
-    pub fn searchable(mut self, searchable: bool) -> Self {
-        debug_assert!(self.mode.is_multi_line());
-        self.searchable = searchable;
-        self
-    }
-
-    pub fn set_searchable(&mut self, searchable: bool, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_multi_line());
-        self.searchable = searchable;
-        cx.notify();
-    }
-
     /// Set whether search UI allows replacement, default is true.
     #[doc(hidden)]
     pub fn replaceable(mut self, allow: bool) -> Self {
@@ -657,51 +649,6 @@ impl<M: InputModeKind> InputBaseState<M> {
     pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
         self
-    }
-
-    /// Set enable/disable code folding, only for [`LayoutMode::CodeEditor`] mode.
-    ///
-    /// Default: true
-    #[doc(hidden)]
-    pub fn folding(mut self, folding: bool) -> Self {
-        debug_assert!(self.mode.is_code_editor());
-        if let LayoutMode::CodeEditor { folding: f, .. } = &mut self.mode {
-            *f = folding;
-        }
-        self
-    }
-
-    /// Set code folding at runtime, only for [`LayoutMode::CodeEditor`] mode.
-    ///
-    /// When disabling, all existing folds are cleared.
-    pub fn set_folding(&mut self, folding: bool, _: &mut Window, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_code_editor());
-        if let LayoutMode::CodeEditor { folding: f, .. } = &mut self.mode {
-            *f = folding;
-        }
-        if !folding {
-            self.display_map.clear_folds();
-        }
-        cx.notify();
-    }
-
-    /// Set enable/disable line number, only for [`LayoutMode::CodeEditor`] mode.
-    #[doc(hidden)]
-    pub fn line_number(mut self, line_number: bool) -> Self {
-        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
-        if let LayoutMode::CodeEditor { line_number: l, .. } = &mut self.mode {
-            *l = line_number;
-        }
-        self
-    }
-
-    /// Set line number, only for [`LayoutMode::CodeEditor`] mode.
-    pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
-        if let LayoutMode::CodeEditor { line_number: l, .. } = &mut self.mode {
-            *l = line_number;
-        }
-        cx.notify();
     }
 
     /// Set highlighter language for for [`LayoutMode::CodeEditor`] mode.
@@ -1010,24 +957,6 @@ impl<M: InputModeKind> InputBaseState<M> {
         !self.disabled && !self.readonly
     }
 
-    /// Set with password masked state.
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode.
-    pub fn masked(mut self, masked: bool) -> Self {
-        debug_assert!(self.mode.is_single_line());
-        self.masked = masked;
-        self
-    }
-
-    /// Set the password masked state of the input field.
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode.
-    pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_single_line());
-        self.masked = masked;
-        cx.notify();
-    }
-
     /// Set true to clear the input by pressing Escape key.
     pub fn clean_on_escape(mut self) -> Self {
         self.clean_on_escape = true;
@@ -1053,14 +982,6 @@ impl<M: InputModeKind> InputBaseState<M> {
         cx.notify();
     }
 
-    /// Set the soft wrap mode for multi-line input, default is true.
-    #[doc(hidden)]
-    pub fn soft_wrap(mut self, wrap: bool) -> Self {
-        debug_assert!(self.mode.is_multi_line());
-        self.soft_wrap = wrap;
-        self
-    }
-
     /// Set whether to show whitespace characters.
     #[doc(hidden)]
     pub fn show_whitespaces(mut self, show: bool) -> Self {
@@ -1068,52 +989,9 @@ impl<M: InputModeKind> InputBaseState<M> {
         self
     }
 
-    /// Set how soft-wrapped continuation lines are indented, default is [`WrappingIndent::Same`]
-    #[doc(hidden)]
-    pub fn wrapping_indent(mut self, wrapping_indent: WrappingIndent) -> Self {
-        debug_assert!(self.mode.is_multi_line());
-        self.wrapping_indent = wrapping_indent;
-        self
-    }
-
-    /// Update the soft wrap mode for multi-line input, default is true.
-    pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_multi_line());
-        self.soft_wrap = wrap;
-        if wrap {
-            let wrap_width = self
-                .last_layout
-                .as_ref()
-                .and_then(|b| b.wrap_width)
-                .unwrap_or(self.input_bounds.size.width);
-
-            self.display_map.on_layout_changed(Some(wrap_width), cx);
-
-            // Reset scroll to left 0
-            let mut offset = self.scroll_handle.offset();
-            offset.x = px(0.);
-            self.scroll_handle.set_offset(offset);
-        } else {
-            self.display_map.on_layout_changed(None, cx);
-        }
-        cx.notify();
-    }
-
     /// Update whether to show whitespace characters.
     pub fn set_show_whitespaces(&mut self, show: bool, _: &mut Window, cx: &mut Context<Self>) {
         self.show_whitespaces = show;
-        cx.notify();
-    }
-
-    /// Update how soft-wrapped continuation lines are indented.
-    pub fn set_wrapping_indent(
-        &mut self,
-        wrapping_indent: WrappingIndent,
-        _: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.wrapping_indent = wrapping_indent;
-        self.display_map.set_wrapping_indent(wrapping_indent, cx);
         cx.notify();
     }
 
@@ -1171,123 +1049,6 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
         self.cursor_surrounding_lines = lines;
-        cx.notify();
-    }
-
-    /// Set the regular expression pattern of the input field.
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode.
-    pub fn pattern(mut self, pattern: regex::Regex) -> Self {
-        debug_assert!(self.mode.is_single_line());
-        self.pattern = Some(pattern);
-        self
-    }
-
-    /// Set the regular expression pattern of the input field with reference.
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode.
-    pub fn set_pattern(
-        &mut self,
-        pattern: regex::Regex,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) {
-        debug_assert!(self.mode.is_single_line());
-        self.pattern = Some(pattern);
-    }
-
-    /// Set the validation function of the input field.
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode.
-    pub fn validate(mut self, f: impl Fn(&str, &mut App) -> bool + 'static) -> Self {
-        debug_assert!(self.mode.is_single_line());
-        self.validate = Some(Box::new(f));
-        self
-    }
-
-    pub fn set_validator(
-        &mut self,
-        validate: impl Fn(&str, &mut App) -> bool + 'static,
-        _cx: &mut Context<Self>,
-    ) {
-        self.validate = Some(Box::new(validate));
-    }
-
-    /// Set the step value of the [`super::NumberInput`] for increment/decrement.
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode with [`super::NumberInput`].
-    ///
-    /// If any of `step`, `min`, `max` is set, the [`super::NumberInput`] will
-    /// update the value internally (step by `step`, default 1, clamp to the
-    /// `min`/`max` range and emit [`InputEvent::Change`]) instead of emitting
-    /// [`super::NumberInputEvent::Step`].
-    ///
-    /// See also [`Self::step_by`] to calculate the step value
-    /// based on the current value.
-    pub fn step(mut self, step: impl Into<NumberStep>) -> Self {
-        debug_assert!(self.mode.is_single_line());
-        self.number_step = Some(step.into());
-        self
-    }
-
-    /// Set the minimum value of the [`super::NumberInput`].
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode with [`super::NumberInput`].
-    ///
-    /// The value will be clamped to the minimum value on stepping and on
-    /// blur (only if the clamped value passes the `pattern`/`validate` check).
-    /// See also [`Self::step`].
-    pub fn min(mut self, min: f64) -> Self {
-        debug_assert!(self.mode.is_single_line());
-        self.number_min = Some(min);
-        self
-    }
-
-    /// Set the maximum value of the [`super::NumberInput`].
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode with [`super::NumberInput`].
-    ///
-    /// The value will be clamped to the maximum value on stepping and on
-    /// blur (only if the clamped value passes the `pattern`/`validate` check).
-    /// See also [`Self::step`].
-    pub fn max(mut self, max: f64) -> Self {
-        debug_assert!(self.mode.is_single_line());
-        self.number_max = Some(max);
-        self
-    }
-
-    /// Update the step value after construction, `None` to fall back to
-    /// emitting [`super::NumberInputEvent::Step`] (if `min`, `max` are unset).
-    ///
-    /// See [`Self::step`] and [`Self::step_by`].
-    pub fn set_step(
-        &mut self,
-        step: impl Into<Option<NumberStep>>,
-        _: &mut Window,
-        _: &mut Context<Self>,
-    ) {
-        debug_assert!(self.mode.is_single_line());
-        self.number_step = step.into();
-    }
-
-    /// Update the minimum value after construction. See [`Self::min`].
-    pub fn set_min(&mut self, min: Option<f64>, _: &mut Window, _: &mut Context<Self>) {
-        debug_assert!(self.mode.is_single_line());
-        self.number_min = min;
-    }
-
-    /// Update the maximum value after construction. See [`Self::max`].
-    pub fn set_max(&mut self, max: Option<f64>, _: &mut Window, _: &mut Context<Self>) {
-        debug_assert!(self.mode.is_single_line());
-        self.number_max = max;
-    }
-
-    /// Set true to show spinner at the input right.
-    ///
-    /// Only for [`LayoutMode::SingleLine`] mode.
-    pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_single_line());
-        self.loading = loading;
         cx.notify();
     }
 
@@ -3960,6 +3721,7 @@ mod tests {
         });
     }
 
+
     /// Soft wrap is on by default, for every mode that can wrap.
     ///
     /// The default lives in the shared constructor, where a mode-specific
@@ -4004,6 +3766,175 @@ impl InputBaseState<crate::input::InputMode> {
     pub fn step_by(mut self, f: impl Fn(f64, StepAction, &mut App) -> f64 + 'static) -> Self {
         self.number_step = Some(NumberStep::by_value(f));
         self
+    }
+
+    /// Set with password masked state.
+    pub fn masked(mut self, masked: bool) -> Self {
+        self.masked = masked;
+        self
+    }
+
+    /// Set the password masked state of the input field.
+    pub fn set_masked(&mut self, masked: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.masked = masked;
+        cx.notify();
+    }
+
+    /// Set the regular expression pattern of the input field.
+    pub fn pattern(mut self, pattern: regex::Regex) -> Self {
+        self.pattern = Some(pattern);
+        self
+    }
+
+    /// Set the regular expression pattern of the input field with reference.
+    pub fn set_pattern(
+        &mut self,
+        pattern: regex::Regex,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        self.pattern = Some(pattern);
+    }
+
+    /// Set the validation function of the input field.
+    pub fn validate(mut self, f: impl Fn(&str, &mut App) -> bool + 'static) -> Self {
+        self.validate = Some(Box::new(f));
+        self
+    }
+
+    pub fn set_validator(
+        &mut self,
+        validate: impl Fn(&str, &mut App) -> bool + 'static,
+        _cx: &mut Context<Self>,
+    ) {
+        self.validate = Some(Box::new(validate));
+    }
+
+    /// Set the step value of the [`super::NumberInput`] for increment/decrement.
+    ///
+    /// If any of `step`, `min`, `max` is set, the [`super::NumberInput`] will
+    /// update the value internally (step by `step`, default 1, clamp to the
+    /// `min`/`max` range and emit [`InputEvent::Change`]) instead of emitting
+    /// [`super::NumberInputEvent::Step`].
+    ///
+    /// See also [`Self::step_by`] to calculate the step value
+    /// based on the current value.
+    pub fn step(mut self, step: impl Into<NumberStep>) -> Self {
+        self.number_step = Some(step.into());
+        self
+    }
+
+    /// Set the minimum value of the [`super::NumberInput`].
+    ///
+    /// The value will be clamped to the minimum value on stepping and on
+    /// blur (only if the clamped value passes the `pattern`/`validate` check).
+    /// See also [`Self::step`].
+    pub fn min(mut self, min: f64) -> Self {
+        self.number_min = Some(min);
+        self
+    }
+
+    /// Set the maximum value of the [`super::NumberInput`].
+    ///
+    /// The value will be clamped to the maximum value on stepping and on
+    /// blur (only if the clamped value passes the `pattern`/`validate` check).
+    /// See also [`Self::step`].
+    pub fn max(mut self, max: f64) -> Self {
+        self.number_max = Some(max);
+        self
+    }
+
+    /// Update the step value after construction, `None` to fall back to
+    /// emitting [`super::NumberInputEvent::Step`] (if `min`, `max` are unset).
+    ///
+    /// See [`Self::step`] and [`Self::step_by`].
+    pub fn set_step(
+        &mut self,
+        step: impl Into<Option<NumberStep>>,
+        _: &mut Window,
+        _: &mut Context<Self>,
+    ) {
+        self.number_step = step.into();
+    }
+
+    /// Update the minimum value after construction. See [`Self::min`].
+    pub fn set_min(&mut self, min: Option<f64>, _: &mut Window, _: &mut Context<Self>) {
+        self.number_min = min;
+    }
+
+    /// Update the maximum value after construction. See [`Self::max`].
+    pub fn set_max(&mut self, max: Option<f64>, _: &mut Window, _: &mut Context<Self>) {
+        self.number_max = max;
+    }
+
+    /// Set true to show spinner at the input right.
+    pub fn set_loading(&mut self, loading: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.loading = loading;
+        cx.notify();
+    }
+}
+
+/// Methods shared by the two multi-line modes, and reachable on neither a
+/// single-line input nor anything else.
+impl<M: crate::input::MultiLineMode> InputBaseState<M> {
+    /// Set this input is searchable, default is false (Default true for Code Editor).
+    #[doc(hidden)]
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.searchable = searchable;
+        self
+    }
+
+    pub fn set_searchable(&mut self, searchable: bool, cx: &mut Context<Self>) {
+        self.searchable = searchable;
+        cx.notify();
+    }
+
+    /// Set the soft wrap mode, default is true.
+    #[doc(hidden)]
+    pub fn soft_wrap(mut self, wrap: bool) -> Self {
+        self.soft_wrap = wrap;
+        self
+    }
+
+    /// Update the soft wrap mode, default is true.
+    pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.soft_wrap = wrap;
+        if wrap {
+            let wrap_width = self
+                .last_layout
+                .as_ref()
+                .and_then(|b| b.wrap_width)
+                .unwrap_or(self.input_bounds.size.width);
+
+            self.display_map.on_layout_changed(Some(wrap_width), cx);
+
+            // Reset scroll to left 0
+            let mut offset = self.scroll_handle.offset();
+            offset.x = px(0.);
+            self.scroll_handle.set_offset(offset);
+        } else {
+            self.display_map.on_layout_changed(None, cx);
+        }
+        cx.notify();
+    }
+
+    /// Set how soft-wrapped continuation lines are indented, default is [`WrappingIndent::Same`]
+    #[doc(hidden)]
+    pub fn wrapping_indent(mut self, wrapping_indent: WrappingIndent) -> Self {
+        self.wrapping_indent = wrapping_indent;
+        self
+    }
+
+    /// Update how soft-wrapped continuation lines are indented.
+    pub fn set_wrapping_indent(
+        &mut self,
+        wrapping_indent: WrappingIndent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.wrapping_indent = wrapping_indent;
+        self.display_map.set_wrapping_indent(wrapping_indent, cx);
+        cx.notify();
     }
 }
 
@@ -4087,5 +4018,46 @@ impl InputBaseState<crate::input::EditorMode> {
         state.mode = LayoutMode::code_editor(language);
         state.searchable = true;
         state
+    }
+
+    /// Set enable/disable code folding.
+    ///
+    /// Default: true
+    #[doc(hidden)]
+    pub fn folding(mut self, folding: bool) -> Self {
+        if let LayoutMode::CodeEditor { folding: f, .. } = &mut self.mode {
+            *f = folding;
+        }
+        self
+    }
+
+    /// Set code folding at runtime.
+    ///
+    /// When disabling, all existing folds are cleared.
+    pub fn set_folding(&mut self, folding: bool, _: &mut Window, cx: &mut Context<Self>) {
+        if let LayoutMode::CodeEditor { folding: f, .. } = &mut self.mode {
+            *f = folding;
+        }
+        if !folding {
+            self.display_map.clear_folds();
+        }
+        cx.notify();
+    }
+
+    /// Set enable/disable line number.
+    #[doc(hidden)]
+    pub fn line_number(mut self, line_number: bool) -> Self {
+        if let LayoutMode::CodeEditor { line_number: l, .. } = &mut self.mode {
+            *l = line_number;
+        }
+        self
+    }
+
+    /// Set line number.
+    pub fn set_line_number(&mut self, line_number: bool, _: &mut Window, cx: &mut Context<Self>) {
+        if let LayoutMode::CodeEditor { line_number: l, .. } = &mut self.mode {
+            *l = line_number;
+        }
+        cx.notify();
     }
 }

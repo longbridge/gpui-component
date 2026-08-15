@@ -9,15 +9,12 @@
 //! pub type EditorState   = InputBaseState<EditorMode>;
 //! ```
 //!
-//! A method that only makes sense for one mode can then live in that mode's
-//! `impl` block, so it does not exist on the others: `InputState` has no
-//! `auto_grow`, and only `EditorState` performs code actions.
-//!
-//! Not every mode-specific method is placed that way yet. Some still assert
-//! their mode at runtime, and `lsp` is a field, which no marker can gate.
-//! Moving them means also dispatching `gpui-component`'s generic render paths
-//! by mode, the way [`InputModeKind`] already dispatches actions and the
-//! highlighter.
+//! A method that only makes sense for one mode lives in that mode's `impl`
+//! block, so it does not exist on the others: `InputState` has no `auto_grow`
+//! or `soft_wrap`, `TextareaState` has no `masked` or `line_number`, and only
+//! `EditorState` performs code actions. Methods shared by the two multi-line
+//! modes go on [`MultiLineMode`]. Reaching for the wrong one is a compile
+//! error rather than a debug assertion.
 //!
 //! [`super::LayoutMode`] carries the same distinction at runtime, since the
 //! engine branches on it while editing. The marker only decides which API is
@@ -53,6 +50,18 @@ mod sealed {
 impl sealed::Sealed for InputMode {}
 impl sealed::Sealed for TextareaMode {}
 impl sealed::Sealed for EditorMode {}
+
+/// The modes whose layout spans more than one line: [`TextareaMode`] and
+/// [`EditorMode`].
+///
+/// Soft wrap, wrapping indent and the search session are meaningless in a
+/// single-line field, but shared by the two multi-line modes. Bounding an
+/// `impl` block on this trait puts those methods on both without writing them
+/// twice, and keeps them off [`InputMode`].
+pub trait MultiLineMode: InputModeKind {}
+
+impl MultiLineMode for TextareaMode {}
+impl MultiLineMode for EditorMode {}
 
 /// Hooks the shared engine calls back into for mode-specific work.
 ///
