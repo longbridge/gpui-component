@@ -4,8 +4,8 @@
 
 Complete after independent-review fix round 1. `TextView` and plain selectable
 regions share one implementation-private window state. The public integration
-surface is a zero-sized `TextSelection` element plus `WindowTextSelectionExt`;
-there is no public host type or install call.
+surface is a zero-sized `TextSelection` element plus `WindowTextSelection`;
+there is no public state type or lifecycle setup call.
 
 ## Public interface
 
@@ -14,7 +14,7 @@ there is no public host type or install call.
 - Renderers register frames with
   `window.register_text_selection_region(region, frame, cx)`.
 - Scope, query, clear, and end operations use the same Window extension.
-- Advanced TextView adapter code never sees the private `WindowTextSelection`.
+- Advanced TextView adapter code never sees the private `TextSelectionState`.
 - Before the element paints, Window queries are safe empty/no-op operations.
 
 ## Review fixes and RED evidence
@@ -32,8 +32,8 @@ Each review finding was reproduced before implementation:
 - A virtual-key callback re-entering window selection ran under the mutable
   state lease.
 - The DnD guard had no discriminating test.
-- The public `TextSelectionHost::install` seam forced Root, examples, and
-  adapters to manage an entity contrary to repository element conventions.
+- The former public state seam forced Root, examples, and adapters to manage an
+  entity contrary to repository element conventions.
 
 ## Implementation
 
@@ -50,8 +50,8 @@ Each review finding was reproduced before implementation:
 - Resolved virtual keys in a second phase outside the window-state lease, with
   a reentrant regression test.
 - Added an injectable active-DnD path and a test proving the cursor cannot move.
-- Replaced the public host/controller seam with public `TextSelection` and a
-  small Window extension; the state and installation lookup are private.
+- Replaced the public state/controller seam with public `TextSelection` and a
+  small `WindowTextSelection` interface; state lookup is private.
 
 ## Verification
 
@@ -63,10 +63,10 @@ cargo test -p gpui-component text::window_selection::tests -- --nocapture
 46 passed
 
 cargo test -p gpui-component
-402 unit + 40 compatibility tests passed
+404 unit + 40 compatibility tests passed
 
 cargo test -p gpui-base
-327 unit + 1 integration test passed
+328 unit + 1 integration test passed
 
 cargo check --workspace --all-targets
 passed
@@ -93,8 +93,25 @@ Only the workspace's existing future-incompatibility warning for `block` and
 No blocking concerns. The state remains window-local through a private global
 map because GPUI does not expose arbitrary Window-owned state; the element
 fully encapsulates that implementation detail. Duplicate `TextSelection`
-elements are harmless because installation and frame sweeping are keyed to the
+elements are harmless because event deduplication and frame sweeping use the
 single private window state.
+
+## Review fix round 2
+
+- Renamed the public Window interface to `WindowTextSelection` and the private
+  implementation to `TextSelectionState`.
+- Expanded style equality to cover heading callbacks, code/table/table-cell
+  refinements, inline code, and dark mode; every layout writes the complete
+  style value.
+- Scope and registration mutations lazily create private state before the
+  element paints, while queries without an element remain no-op.
+- Restored deprecated `Root::clear_text_selection` as a forwarding request
+  without retaining an entity.
+- Added ordered callback epochs so a deferred snapshot cannot overtake clear.
+- Marked synchronous parse acknowledgements so they cannot clear a newer
+  selection; coalesced appends still publish their parsed result.
+- Deduplicated duplicate-element mouse-down preparation/begin handling so Shift
+  anchors are not cleared twice.
 
 The user-owned `.github/workflows/release.yml` change was neither modified nor
 staged.

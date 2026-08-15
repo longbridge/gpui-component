@@ -47,7 +47,17 @@ impl PartialEq for TextViewStyle {
     fn eq(&self, other: &Self) -> bool {
         self.paragraph_gap == other.paragraph_gap
             && self.heading_base_font_size == other.heading_base_font_size
+            && match (&self.heading_font_size, &other.heading_font_size) {
+                (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+                (None, None) => true,
+                _ => false,
+            }
             && self.highlight_theme == other.highlight_theme
+            && self.code_block == other.code_block
+            && self.table == other.table
+            && self.table_cell == other.table_cell
+            && self.inline_code == other.inline_code
+            && self.is_dark == other.is_dark
     }
 }
 
@@ -122,5 +132,30 @@ impl TextViewStyle {
             style.background_color = Some(cx.theme().accent);
         }
         style
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selection_layout_fingerprint_covers_callback_table_and_theme_fields() {
+        let base = TextViewStyle::default();
+        assert!(base != base.clone().heading_font_size(|_, size| size));
+
+        let mut table = StyleRefinement::default();
+        table.text.white_space = Some(gpui::WhiteSpace::Nowrap);
+        assert!(base != base.clone().table_cell(table));
+
+        let mut dark = base.clone();
+        dark.is_dark = true;
+        assert!(base != dark);
+    }
+
+    #[test]
+    fn cloning_preserves_the_same_heading_callback_fingerprint() {
+        let style = TextViewStyle::default().heading_font_size(|_, size| size);
+        assert!(style == style.clone());
     }
 }

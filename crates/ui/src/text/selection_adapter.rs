@@ -3,7 +3,7 @@ use std::{cell::RefCell, ops::RangeInclusive, rc::Rc};
 use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
 use gpui_base::{
     SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionScopeId,
-    SelectionSnapshot, TextSelectionRegion, WindowTextSelectionExt as _,
+    SelectionSnapshot, TextSelectionRegion, WindowTextSelection as _,
 };
 
 use super::TextViewState;

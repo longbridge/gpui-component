@@ -210,7 +210,7 @@ mod tests {
             self.styled_text
                 .prepaint(id, inspector_id, bounds, &mut (), window, cx);
             let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
-            gpui_base::WindowTextSelectionExt::register_text_selection_region(
+            gpui_base::WindowTextSelection::register_text_selection_region(
                 window,
                 self.region.clone(),
                 SelectionRegionFrame {
@@ -602,7 +602,7 @@ mod tests {
         });
 
         let selected =
-            cx.update(|window, cx| gpui_base::WindowTextSelectionExt::selected_text(window, cx));
+            cx.update(|window, cx| gpui_base::WindowTextSelection::selected_text(window, cx));
         assert_eq!(selected.trim(), "Plain adapter\nTextView adapter");
     }
 
@@ -651,7 +651,7 @@ mod tests {
         );
 
         cx.update(|window, cx| {
-            gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
+            gpui_base::WindowTextSelection::clear_text_selection(window, cx);
             let _ = window.draw(cx);
         });
 
@@ -681,7 +681,7 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
+            gpui_base::WindowTextSelection::clear_text_selection(window, cx);
             assert_eq!(text_view.read(cx).selected_text(), "");
         });
     }
@@ -705,15 +705,15 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
-            gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
+            gpui_base::WindowTextSelection::clear_text_selection(window, cx);
             text_view.update(cx, |state, cx| state.select_all(cx));
         });
         cx.run_until_parked();
 
         let (has_selection, selected) = cx.update(|window, cx| {
             (
-                gpui_base::WindowTextSelectionExt::has_text_selection(window, cx),
-                gpui_base::WindowTextSelectionExt::selected_text(window, cx),
+                gpui_base::WindowTextSelection::has_text_selection(window, cx),
+                gpui_base::WindowTextSelection::selected_text(window, cx),
             )
         });
         assert!(has_selection);

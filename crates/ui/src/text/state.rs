@@ -126,6 +126,9 @@ impl TextViewState {
                         if parsed_update.revision != state.revision {
                             return;
                         }
+                        if parsed_update.synchronous {
+                            return;
+                        }
 
                         match parsed_update.result {
                             Ok(content) => {
@@ -331,6 +334,7 @@ impl TextViewState {
         let update_options = UpdateOptions {
             revision: self.revision,
             append,
+            synchronous: !append,
             pending_text: text.to_string(),
             markdown_extensions: self.markdown_extensions.clone(),
         };
@@ -601,7 +605,7 @@ impl Render for TextViewState {
                     && ((size_changed && selection_involves_view && !compatible_layout_update)
                         || (revision_changed && has_selection_snapshot))
                 {
-                    gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
+                    gpui_base::WindowTextSelection::clear_text_selection(window, cx);
                 }
             })
     }
@@ -652,6 +656,7 @@ impl Future for UpdateFuture {
                     _ = self.tx_result.try_send(ParsedUpdate {
                         revision: options.revision,
                         append: options.append,
+                        synchronous: options.synchronous,
                         result: res,
                     });
                     if hit_coalesce_budget {
@@ -672,6 +677,7 @@ struct UpdateOptions {
     revision: usize,
     pending_text: String,
     append: bool,
+    synchronous: bool,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -680,6 +686,7 @@ impl UpdateOptions {
         if next.append {
             self.pending_text.push_str(&next.pending_text);
             self.revision = next.revision;
+            self.synchronous = false;
         } else {
             *self = next;
         }
@@ -689,6 +696,7 @@ impl UpdateOptions {
 struct ParsedUpdate {
     revision: usize,
     append: bool,
+    synchronous: bool,
     result: Result<ParsedContent, SharedString>,
 }
 
@@ -788,6 +796,7 @@ mod tests {
             revision: 1,
             pending_text: "old".to_string(),
             append: true,
+            synchronous: false,
             markdown_extensions: Arc::default(),
         };
 
@@ -795,12 +804,14 @@ mod tests {
             revision: 2,
             pending_text: "new".to_string(),
             append: false,
+            synchronous: true,
             markdown_extensions: Arc::default(),
         });
         options.merge(UpdateOptions {
             revision: 3,
             pending_text: " text".to_string(),
             append: true,
+            synchronous: false,
             markdown_extensions: Arc::default(),
         });
 
@@ -820,6 +831,7 @@ mod tests {
                 revision,
                 pending_text: format!("{revision}\n"),
                 append: revision != 1,
+                synchronous: revision == 1,
                 markdown_extensions: Arc::default(),
             })
             .unwrap();

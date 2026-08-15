@@ -224,21 +224,21 @@ impl WindowExt for Window {
 
     #[inline]
     fn selected_text(&mut self, cx: &mut App) -> String {
-        gpui_base::WindowTextSelectionExt::selected_text(self, cx)
+        gpui_base::WindowTextSelection::selected_text(self, cx)
     }
 
     #[inline]
     fn has_text_selection(&mut self, cx: &mut App) -> bool {
-        gpui_base::WindowTextSelectionExt::has_text_selection(self, cx)
+        gpui_base::WindowTextSelection::has_text_selection(self, cx)
     }
 
     #[inline]
     fn clear_text_selection(&mut self, cx: &mut App) {
-        gpui_base::WindowTextSelectionExt::clear_text_selection(self, cx);
+        gpui_base::WindowTextSelection::clear_text_selection(self, cx);
     }
 
     #[inline]
     fn end_text_selection(&mut self, cx: &mut App) {
-        gpui_base::WindowTextSelectionExt::end_text_selection(self, cx);
+        gpui_base::WindowTextSelection::end_text_selection(self, cx);
     }
 }

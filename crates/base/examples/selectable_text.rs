@@ -11,7 +11,7 @@ use gpui::{
 };
 use gpui_base::{
     SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelection, TextSelectionRegion,
-    WindowTextSelectionExt as _,
+    WindowTextSelection as _,
 };
 
 struct PlainSelectableText {

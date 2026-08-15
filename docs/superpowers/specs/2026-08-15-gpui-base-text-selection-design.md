@@ -24,20 +24,19 @@ HTML, parsed nodes, Dialog, or Sheet. Those concepts connect through adapters.
 The base layer exposes:
 
 ```rust
-pub struct TextSelectionHost;
-pub struct TextSelectionController;
+pub struct TextSelection;
 pub struct TextSelectionRegion;
 pub struct SelectionScopeId;
 pub struct SelectionRegionFrame;
 pub struct SelectionRunFrame;
 pub struct SelectionRunState;
-pub trait WindowTextSelectionExt;
+pub trait WindowTextSelection;
 ```
 
-`TextSelectionHost` owns one selection session. `TextSelectionController`
-installs its window event handlers. `TextSelectionRegion` is a base-owned,
+`TextSelection` is a zero-sized element that enables one window selection
+session and its event lifecycle. `TextSelectionRegion` is a base-owned,
 renderer-neutral entity handle; advanced adapters attach renderer callbacks to
-that handle rather than placing heterogeneous renderer entities in the host.
+that handle without accessing the implementation-private state.
 
 `SelectionRegionFrame` registers current bounds, scroll offset, hitbox, scope,
 document order, visible text-hit bounds, and an optional stable virtual block
@@ -45,14 +44,15 @@ key. `SelectionRunFrame` registers laid-out plain text and returns the selected
 UTF-8 byte range through `SelectionRunState`.
 
 The window extension exposes `selected_text`, `has_text_selection`,
-`clear_text_selection`, and `end_text_selection` against the window's host.
+`clear_text_selection`, and `end_text_selection` against the window state.
 
-## Installation and lifecycle
+## Element lifecycle
 
-The host is window-local and installed once by a host element/controller. It is
-not stored in an application global and does not require downcasting a concrete
-root. `gpui_component::Root` installs it automatically as its first child;
-custom roots can install the same host explicitly.
+The state is window-local and implementation-private. `gpui_component::Root`
+renders one `TextSelection` child; a custom root does the same. Roots and
+renderers never create, retrieve, or retain the state entity. Frame registration
+and scope mutation may create state lazily before the element paints, while
+queries without an element remain safe empty/no-op operations.
 
 Registration is frame-based. A region identifier remains stable for the
 semantic lifetime of its content. Dead and unpainted regions are pruned safely.
@@ -89,18 +89,18 @@ HashMap iteration or screen coordinates alone. Plain adapters use selected run
 substrings. Advanced adapters receive an immutable selection snapshot and may
 return source text or include virtualized content.
 
-Callbacks are invoked only after the host releases its entity borrow.
+Callbacks are invoked only after the private state releases its entity borrow.
 
 ## Backward compatibility and deprecation
 
 Existing TextView builders, `SelectionFormat`, copy/select-all actions, and all
 selection behavior remain compatible. Applications using
-`gpui_component::Root` do not install anything new.
+`gpui_component::Root` do not add anything new.
 
 The selection methods on `gpui_component::WindowExt` and public
 `Root::clear_text_selection` may be deprecated in favor of
-`gpui_base::WindowTextSelectionExt`. During the deprecation window they forward
-to the same base host. The migration never ships two authoritative selection
+`gpui_base::WindowTextSelection`. During the deprecation window they forward
+to the same window state. The migration never ships two authoritative selection
 states. Removal happens only in a later semver-breaking release.
 
 ## Behavioral requirements

@@ -147,7 +147,7 @@ pub use tabs::{Tab, TabStyles, Tabs};
 pub use text_selection::{
     SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionRunFrame,
     SelectionRunState, SelectionScopeId, SelectionSnapshot, TextSelection, TextSelectionRegion,
-    TextSelectionRegionState, WindowTextSelectionExt, project_selection_runs,
+    TextSelectionRegionState, WindowTextSelection, project_selection_runs,
 };
 pub use theme::{ResizableTheme, ScrollbarTheme, Theme};
 pub use theme_tokens::{

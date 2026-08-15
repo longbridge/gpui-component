@@ -4,7 +4,7 @@
 
 **Goal:** Implement renderer-neutral window text selection in `gpui-base`, prove it with a plain adapter, and migrate TextView without changing its behavior.
 
-**Architecture:** A window-local `TextSelectionHost` owns generic region endpoints and event coordination. Base-owned `TextSelectionRegion` entities erase renderer types; plain runs use base geometry while TextView attaches advanced copy, focus, scrolling, and virtual-block adapters.
+**Architecture:** An implementation-private window `TextSelectionState` owns generic region endpoints and event coordination. A public `TextSelection` element owns lifecycle wiring, and `WindowTextSelection` exposes operations without revealing state. Base-owned `TextSelectionRegion` entities erase renderer types; plain runs use base geometry while TextView attaches advanced copy, focus, scrolling, and virtual-block adapters.
 
 **Tech Stack:** Rust, GPUI entities/elements/hitboxes/TextLayout, `gpui::test` visual tests.
 
@@ -13,13 +13,13 @@
 - `gpui-base` must not depend on `gpui-component`, TextView, Markdown, HTML, Dialog, or Sheet types.
 - Every runnable checkpoint has one authoritative selection state.
 - Existing TextView behavior and builders remain compatible.
-- Old component-layer window methods may be deprecated only after forwarding to the base host.
+- Old component-layer window methods may be deprecated only after forwarding to window selection.
 - Endpoints use region-relative content coordinates; scope and document order are explicit.
 - Production changes follow red-green-refactor and preserve unrelated `.github/workflows/release.yml` work.
 
 ---
 
-### Task 1: Base host, regions, and gesture contract
+### Task 1: Base window state, regions, and gesture contract
 
 **Files:**
 - Create: `crates/base/src/text_selection.rs`
@@ -27,7 +27,7 @@
 - Test: `crates/base/src/text_selection.rs`
 
 **Interfaces:**
-- Produces: `TextSelectionHost`, `TextSelectionController`, `TextSelectionRegion`, `SelectionScopeId`, `SelectionRegionFrame`, `SelectionSnapshot`, and `WindowTextSelectionExt`.
+- Produces: `TextSelection`, `TextSelectionRegion`, `SelectionScopeId`, `SelectionRegionFrame`, `SelectionSnapshot`, and `WindowTextSelection`.
 - Consumes: GPUI window events, `GlobalState` suppression, and `AutoScroll` commands through region callbacks.
 
 - [ ] **Step 1: Write failing base contract tests**
@@ -35,7 +35,7 @@
 Create fake regions backed by `Entity<TextSelectionRegionState>`. Test begin,
 update, end, stable Shift anchor, reversed extension, cross-region ordering,
 scope exclusion, suppression, dead-region fallback, and clear/has/copy through
-`WindowTextSelectionExt`.
+`WindowTextSelection`.
 
 - [ ] **Step 2: Verify RED**
 
@@ -48,7 +48,7 @@ cargo test -p gpui-base text_selection --lib
 Expected: compilation fails because the new public types and methods do not yet
 exist.
 
-- [ ] **Step 3: Implement the minimum host interface**
+- [ ] **Step 3: Implement the minimum window interface**
 
 Start with these renderer-neutral types:
 
@@ -68,7 +68,7 @@ pub struct SelectionRegionFrame {
     pub text_bounds: Vec<Bounds<Pixels>>,
 }
 
-pub trait WindowTextSelectionExt {
+pub trait WindowTextSelection {
     fn selected_text(&mut self, cx: &mut App) -> String;
     fn has_text_selection(&mut self, cx: &mut App) -> bool;
     fn clear_text_selection(&mut self, cx: &mut App);
@@ -77,7 +77,7 @@ pub trait WindowTextSelectionExt {
 ```
 
 Port anchor/cursor, capture/bubble choreography, proxy endpoints, scope checks,
-weak-region pruning, and logical copy ordering behind the host interface.
+weak-region pruning, and logical copy ordering behind the window interface.
 
 - [ ] **Step 4: Verify GREEN and refactor**
 
@@ -168,13 +168,13 @@ Expected: plain adapter contracts and example compile successfully.
 - Test: `crates/ui/src/text/window_selection.rs`
 
 **Interfaces:**
-- Consumes: base host, region, snapshot, run registration, focus/scroll/copy adapter hooks.
-- Produces: TextView integration backed only by the base host, including Markdown source and virtual block export.
+- Consumes: base window selection, region, snapshot, run registration, focus/scroll/copy adapter hooks.
+- Produces: TextView integration backed only by window selection, including Markdown source and virtual block export.
 
 - [ ] **Step 1: Add compatibility assertions before migration**
 
 Keep the existing selection tests unchanged and add assertions that Root contains
-no second selection after adapter installation. Add an integration fixture where
+no second selection after adapter integration. Add an integration fixture where
 a base plain region and a TextView participate in one cross-region selection.
 
 - [ ] **Step 2: Verify the compatibility baseline**
@@ -186,7 +186,7 @@ cargo test -p gpui-component text::window_selection::tests --lib
 ```
 
 Expected: existing tests pass; the mixed-adapter test fails because TextView is
-not registered with the base host.
+not registered with window selection.
 
 - [ ] **Step 3: Implement `TextViewSelectionAdapter`**
 
@@ -200,7 +200,7 @@ clear, and virtual block lookup.
 Delete Root's `WindowTextSelection`, selectable-view map, and inline-bounds map.
 Move the old controller implementation to base, retain only TextView adapter
 logic in `selection_adapter.rs`, and make every TextView selection query read the
-base host.
+window selection.
 
 - [ ] **Step 5: Verify GREEN**
 
@@ -226,8 +226,8 @@ Expected: the unchanged compatibility suite and mixed-adapter test pass.
 - Test: `crates/ui/src/text/window_selection.rs`
 
 **Interfaces:**
-- Consumes: `SelectionScopeId` and `WindowTextSelectionExt` from base.
-- Produces: opaque modal scope mapping and deprecated component-layer forwarding to the single base host.
+- Consumes: `SelectionScopeId` and `WindowTextSelection` from base.
+- Produces: opaque modal scope mapping and deprecated component-layer forwarding to the single window state.
 
 - [ ] **Step 1: Write failing forwarding and scope tests**
 
@@ -248,7 +248,7 @@ the base extension.
 
 - [ ] **Step 3: Implement scope and forwarding**
 
-Map Root modal state to opaque scope IDs, move the scope marker to base, install
+Map Root modal state to opaque scope IDs, move the scope marker to base, render
 the base controller automatically, and mark old selection methods deprecated
 with migration notes. Use fully-qualified calls internally to avoid extension
 trait ambiguity.

@@ -337,8 +337,8 @@ impl Element for TextView {
             state.scrollable = self.scrollable;
             if state.text_view_style != self.text_view_style {
                 state.selection_revision = state.selection_revision.wrapping_add(1);
-                state.text_view_style = self.text_view_style.clone();
             }
+            state.text_view_style = self.text_view_style.clone();
 
             if let Some(text) = self.text.clone() {
                 state.set_text(text.as_str(), cx);
