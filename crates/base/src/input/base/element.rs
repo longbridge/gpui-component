@@ -401,7 +401,7 @@ impl<M: InputModeKind> TextElement<M> {
     }
 
     /// Set the placeholder text of the input field.
-    pub fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+    pub(super) fn placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
         self.placeholder = placeholder.into();
         self
     }

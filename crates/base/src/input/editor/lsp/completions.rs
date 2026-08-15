@@ -102,8 +102,7 @@ pub trait CompletionProvider {
     fn is_completion_trigger(&self, offset: usize, new_text: &str, cx: &mut App) -> bool;
 }
 
-#[doc(hidden)]
-pub struct InlineCompletion {
+pub(crate) struct InlineCompletion {
     /// Completion item to display as an inline completion suggestion
     pub(crate) item: Option<InlineCompletionItem>,
     /// Task for debouncing inline completion requests

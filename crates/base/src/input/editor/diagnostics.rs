@@ -10,7 +10,7 @@ use sum_tree::{Bias, SeekTarget, SumTree};
 use crate::input::{Position, RopeExt as _};
 
 pub type DiagnosticRelatedInformation = lsp_types::DiagnosticRelatedInformation;
-pub type CodeDescription = lsp_types::CodeDescription;
+pub(super) type CodeDescription = lsp_types::CodeDescription;
 pub type RelatedInformation = lsp_types::DiagnosticRelatedInformation;
 pub type DiagnosticTag = lsp_types::DiagnosticTag;
 

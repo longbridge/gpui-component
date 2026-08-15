@@ -93,8 +93,7 @@ impl TextDecorationCollection {
 }
 
 #[derive(Default)]
-#[doc(hidden)]
-pub struct DecorationCollections {
+pub(crate) struct DecorationCollections {
     entries: Vec<(TextDecorationCollectionId, Vec<TextDecoration>)>,
 }
 

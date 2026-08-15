@@ -1,3 +1,10 @@
+//! Text input: the shared editing engine and the three states built on it.
+//!
+//! Nothing here should be `pub` unless it is reachable from outside the crate.
+//! A `pub` on an item behind a private module says something the module path
+//! contradicts, and it hides the real API surface from anyone reading it.
+#![warn(unreachable_pub)]
+
 use gpui::App;
 
 /// Character used by masked editor modes.

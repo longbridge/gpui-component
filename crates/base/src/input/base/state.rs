@@ -3036,11 +3036,11 @@ mod tests {
 
     impl InputView<EditorMode> {
         /// An editor state, for the tests that exercise code-editor behavior.
-        pub fn new(cx: &mut TestAppContext) -> Self {
+        fn new(cx: &mut TestAppContext) -> Self {
             Self::build_editor(cx, |state| state)
         }
 
-        pub fn build_editor(
+        fn build_editor(
             cx: &mut TestAppContext,
             f: impl FnOnce(InputBaseState<EditorMode>) -> InputBaseState<EditorMode> + 'static,
         ) -> Self {
@@ -3051,7 +3051,7 @@ mod tests {
     }
 
     impl InputView<TextareaMode> {
-        pub fn build_textarea(
+        fn build_textarea(
             cx: &mut TestAppContext,
             f: impl FnOnce(InputBaseState<TextareaMode>) -> InputBaseState<TextareaMode> + 'static,
         ) -> Self {
@@ -3063,7 +3063,7 @@ mod tests {
 
     impl InputView<InputMode> {
         /// A single-line state, the default these tests were written against.
-        pub fn build(
+        fn build(
             cx: &mut TestAppContext,
             f: impl FnOnce(InputBaseState<InputMode>) -> InputBaseState<InputMode> + 'static,
         ) -> Self {
