@@ -574,7 +574,7 @@ impl TextSelectionState {
     /// Registrations are stamped with the current generation while any sibling
     /// is painting. Sweeping only after paint makes registration independent of
     /// whether a region or the lifecycle element paints first.
-    pub fn finish_frame(&mut self, cx: &mut App) {
+    pub fn finish_frame(&mut self, cx: &mut App) -> Vec<RegionClearCallbacks> {
         self.finish_frame_scheduled = false;
         let stale = self
             .regions
@@ -584,14 +584,16 @@ impl TextSelectionState {
                     .then(|| (*id, registration.region.clone()))
             })
             .collect::<Vec<_>>();
+        let mut callbacks = Vec::new();
         for (id, region) in stale {
             self.regions.remove(&id);
             if let Some(region) = region.upgrade() {
-                region.update(cx, |state, cx| state.set_snapshot(None, cx));
+                callbacks.push(region.update(cx, |state, _| state.clear_state()));
             }
         }
         self.publish_snapshots(cx);
         self.frame_generation = self.frame_generation.wrapping_add(1);
+        callbacks
     }
 
     fn schedule_finish_frame(&mut self) -> bool {
@@ -1091,17 +1093,31 @@ impl Element for TextSelection {
             state.enabled_heartbeat
         });
         let enabled_state = state.clone();
-        window.on_next_frame(move |_, cx| {
-            enabled_state.update(cx, |state, _| {
-                if state.enabled_heartbeat == heartbeat {
+        window.on_next_frame(move |window, cx| {
+            if enabled_state.read(cx).enabled_heartbeat != heartbeat {
+                return;
+            }
+            window.on_next_frame(move |_, cx| {
+                let callbacks = enabled_state.update(cx, |state, cx| {
+                    if !state.enabled || state.enabled_heartbeat != heartbeat {
+                        return Vec::new();
+                    }
                     state.enabled = false;
+                    state.clear_state(cx)
+                });
+                for callbacks in callbacks {
+                    TextSelectionRegionState::dispatch_clear(callbacks, cx);
                 }
             });
+            window.refresh();
         });
         if state.update(cx, |state, _| state.schedule_finish_frame()) {
             let state = state.clone();
             window.on_next_frame(move |_, cx| {
-                state.update(cx, |state, cx| state.finish_frame(cx));
+                let callbacks = state.update(cx, |state, cx| state.finish_frame(cx));
+                for callbacks in callbacks {
+                    TextSelectionRegionState::dispatch_clear(callbacks, cx);
+                }
             });
         }
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
@@ -1261,6 +1277,7 @@ pub fn clear_window_text_selection(window_id: gpui::WindowId, cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ElementExt as _;
     use gpui::{
         Bounds, ContentMask, Context, Hitbox, HitboxBehavior, HitboxId, InteractiveElement as _,
         IntoElement, ParentElement as _, Render, SharedString, Styled as _, StyledText,
@@ -1282,6 +1299,7 @@ mod tests {
     struct SelectionElementOnlyView;
     struct ToggleSelectionElementView {
         enabled: bool,
+        region: TextSelectionRegion,
     }
 
     struct DoubleSelectionElementView {
@@ -1315,14 +1333,53 @@ mod tests {
     }
 
     impl Render for ToggleSelectionElementView {
-        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            if self.enabled {
+                let bounds = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(20.)));
+                window.register_text_selection_region(
+                    self.region.clone(),
+                    SelectionRegionFrame {
+                        hitbox: Hitbox {
+                            id: HitboxId::placeholder(),
+                            bounds,
+                            content_mask: ContentMask { bounds },
+                            behavior: HitboxBehavior::Normal,
+                        },
+                        bounds,
+                        scroll_offset: Point::default(),
+                        scope: SelectionScopeId::default(),
+                        document_order: 0,
+                        text_bounds: vec![bounds],
+                    },
+                    cx,
+                );
+            }
             div().when(self.enabled, |this| this.child(TextSelection))
         }
     }
 
     impl Render for DoubleSelectionElementView {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            div().size_full().child(TextSelection).child(TextSelection)
+            let region = self.region.clone();
+            div()
+                .size_full()
+                .child(TextSelection)
+                .child(TextSelection)
+                .on_prepaint(move |bounds, window, cx| {
+                    let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                    window.register_text_selection_region(
+                        region,
+                        SelectionRegionFrame {
+                            hitbox,
+                            bounds,
+                            scroll_offset: Point::default(),
+                            scope: SelectionScopeId::default(),
+                            document_order: 0,
+                            text_bounds: vec![bounds],
+                        },
+                        cx,
+                    );
+                })
         }
     }
 
@@ -1980,18 +2037,24 @@ mod tests {
     }
 
     #[gpui::test]
-    fn removing_the_element_expires_window_selection_enablement(cx: &mut TestAppContext) {
-        let (view, cx) = cx.add_window_view(|_, _| ToggleSelectionElementView { enabled: true });
+    fn selection_element_lease_renews_expires_and_does_not_resurrect_selection(
+        cx: &mut TestAppContext,
+    ) {
+        let (view, cx) = cx.add_window_view(|_, cx| ToggleSelectionElementView {
+            enabled: true,
+            region: TextSelectionRegion::new("local", cx),
+        });
+        let region = cx.update(|_, cx| view.read(cx).region.clone());
         cx.update(|window, cx| {
             let _ = window.draw(cx);
-            let state = TextSelectionState::ensure(window, cx);
-            let region = TextSelectionRegion::new("local", cx);
             region
                 .state()
                 .update(cx, |region, _| region.set_local_selection(true));
-            state.update(cx, |state, cx| {
-                FakeRegion { region }.register(state, 0., SelectionScopeId::default(), 0, cx)
-            });
+            assert!(window.has_text_selection(cx));
+
+            window.simulate_next_frame(cx);
+            assert!(window.has_text_selection(cx));
+            let _ = window.draw(cx);
             assert!(window.has_text_selection(cx));
         });
         view.update(cx, |view, cx| {
@@ -2001,11 +2064,28 @@ mod tests {
         cx.update(|window, cx| {
             let _ = window.draw(cx);
         });
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+        });
+        cx.update(|window, cx| {
+            window.simulate_next_frame(cx);
+        });
         cx.run_until_parked();
         cx.update(|window, cx| {
             assert!(!window.has_text_selection(cx));
             assert_eq!(window.selected_text(cx), "");
+            assert!(!region.state().read(cx).local_selection);
             window.clear_text_selection(cx);
+        });
+
+        view.update(cx, |view, cx| {
+            view.enabled = true;
+            cx.notify();
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            assert!(!window.has_text_selection(cx));
+            assert_eq!(window.selected_text(cx), "");
         });
     }
 
@@ -2072,5 +2152,70 @@ mod tests {
 
             assert_eq!(host.read(cx).selected_text(cx), "once");
         });
+    }
+
+    #[gpui::test]
+    fn duplicate_selection_elements_gate_real_pointer_gestures_and_reentrant_clear(
+        cx: &mut TestAppContext,
+    ) {
+        let (view, cx) = cx.add_window_view(|_, cx| DoubleSelectionElementView {
+            region: TextSelectionRegion::new("once", cx),
+        });
+        let clear_count = Rc::new(Cell::new(0));
+        cx.update(|window, cx| {
+            let state = TextSelectionState::ensure(window, cx);
+            let state_for_clear = state.clone();
+            let count = clear_count.clone();
+            view.read(cx).region.state().update(cx, |region, _| {
+                region.on_clear(move |cx| {
+                    count.set(count.get() + 1);
+                    let _ = state_for_clear.read(cx).snapshot();
+                });
+            });
+            let _ = window.draw(cx);
+        });
+
+        cx.simulate_mouse_down(
+            point(px(10.), px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(10.), px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_down(
+            point(px(70.), px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers {
+                shift: true,
+                ..Default::default()
+            },
+        );
+        cx.simulate_mouse_up(
+            point(px(70.), px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.update(|window, cx| assert!(window.has_text_selection(cx)));
+
+        cx.simulate_mouse_down(
+            point(px(15.), px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(85.), px(10.)),
+            Some(MouseButton::Left),
+            gpui::Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(px(85.), px(10.)),
+            MouseButton::Left,
+            gpui::Modifiers::default(),
+        );
+        cx.update(|window, cx| assert!(window.has_text_selection(cx)));
+        assert_eq!(clear_count.get(), 3);
     }
 }

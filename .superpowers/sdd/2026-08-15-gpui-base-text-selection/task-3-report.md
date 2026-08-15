@@ -142,5 +142,22 @@ single private window state.
 - Updated remaining selection comments and plan language to element/window-state
   terminology.
 
+## Review fix round 5
+
+- Replaced one-frame unconditional disablement with a renewable two-frame paint
+  lease. A mounted `TextSelection` refreshes its heartbeat before expiry; a
+  removed element expires, clears all retained renderer-local selection, and
+  dispatches clear callbacks after releasing window state.
+- Made stale-region frame sweeping use the same complete renderer cleanup, with
+  callbacks dispatched outside the window-state lease.
+- Strengthened lifecycle coverage with a strongly held, every-frame registered
+  region: mounted selection survives frame advancement, removal clears it, and
+  re-adding the element cannot resurrect it.
+- Added a real window-event regression with two `TextSelection` elements across
+  ordinary click, Shift-click, and drag. It verifies one clear per gesture and
+  an `on_clear` callback that safely reenters selection state.
+- Final targeted totals: `gpui-component` 406 unit tests plus 40 compatibility
+  tests; `gpui-base` 331 unit tests plus 1 integration test.
+
 The user-owned `.github/workflows/release.yml` change was neither modified nor
 staged.
