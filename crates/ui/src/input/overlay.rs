@@ -82,16 +82,22 @@ impl LspSnapshot {
     }
 }
 
-/// Which overlays a mode of input shows.
+/// What the UI layer needs from each kind of input.
 ///
-/// The overlay layer is generic over the mode, so it cannot name the editor's
-/// state type. This trait is the seam: the code-editor implementation is the
-/// only one that builds language-feature popovers, and inside it the state is
-/// an `Entity<EditorState>`, which those popovers take.
+/// The UI layer is generic over the mode, so it cannot name the editor's state
+/// type. This trait is the seam: the code-editor implementation is the only one
+/// that builds language-feature popovers, and inside it the state is an
+/// `Entity<EditorState>`, which those popovers take.
 ///
 /// A framework-internal seam, named only because it bounds [`super::Input`].
 #[doc(hidden)]
 pub trait OverlayMode: InputModeKind + Sized {
+    /// This state seen as "whichever input is here".
+    ///
+    /// Which variant follows from the mode, so the renderer derives it rather
+    /// than being told, and a `Textarea` cannot register itself as an `Editor`.
+    fn any_state(state: &Entity<InputBaseState<Self>>) -> crate::input::AnyInputState;
+
     /// Reads the language-feature state this mode shows, if any.
     fn lsp_snapshot(_state: &InputBaseState<Self>, _cx: &App) -> Option<LspSnapshot> {
         None
@@ -118,10 +124,23 @@ pub trait OverlayMode: InputModeKind + Sized {
     }
 }
 
-impl OverlayMode for crate::input::InputMode {}
-impl OverlayMode for crate::input::TextareaMode {}
+impl OverlayMode for crate::input::InputMode {
+    fn any_state(state: &Entity<InputBaseState<Self>>) -> crate::input::AnyInputState {
+        state.clone().into()
+    }
+}
+
+impl OverlayMode for crate::input::TextareaMode {
+    fn any_state(state: &Entity<InputBaseState<Self>>) -> crate::input::AnyInputState {
+        state.clone().into()
+    }
+}
 
 impl OverlayMode for crate::input::EditorMode {
+    fn any_state(state: &Entity<InputBaseState<Self>>) -> crate::input::AnyInputState {
+        state.clone().into()
+    }
+
     fn install_action_handler(state: &Entity<InputBaseState<Self>>, cx: &mut App) {
         let id = state.entity_id();
         state.update(cx, move |state, _| {

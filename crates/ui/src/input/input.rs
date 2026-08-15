@@ -19,7 +19,7 @@ use gpui_base::InputBase as BaseInput;
 use rust_i18n::t;
 
 use super::state::sync_focused_input_registry;
-use super::{AnyInputState, InputContentType, InputState, sync_native_content_type};
+use super::{InputContentType, InputState, sync_native_content_type};
 use crate::styled::FocusRingStyleExt as _;
 use gpui_base::input::{InputBaseState, InputMode};
 
@@ -111,8 +111,6 @@ pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
 #[derive(IntoElement)]
 pub struct Input<M: OverlayMode = InputMode> {
     state: Entity<InputBaseState<M>>,
-    /// What to register as the window's focused input while this holds focus.
-    focused_as: Option<AnyInputState>,
     style: StyleRefinement,
     size: Size,
     prefix: Option<AnyElement>,
@@ -170,7 +168,7 @@ impl<M: OverlayMode> crate::FocusableExt for Input<M> {
 impl Input<InputMode> {
     /// Create a new [`Input`] element bind to the [`InputState`].
     pub fn new(state: &Entity<InputState>) -> Self {
-        Self::with_state(state.clone()).focused_as(AnyInputState::Input(state.clone()))
+        Self::with_state(state.clone())
     }
 }
 
@@ -183,16 +181,9 @@ impl<M: OverlayMode> Input<M> {
         Self::with_state(state.clone())
     }
 
-    /// Sets what this element registers as the window's focused input.
-    pub(crate) fn focused_as(mut self, state: AnyInputState) -> Self {
-        self.focused_as = Some(state);
-        self
-    }
-
     fn with_state(state: Entity<InputBaseState<M>>) -> Self {
         Self {
             state,
-            focused_as: None,
             size: Size::default(),
             style: StyleRefinement::default(),
             prefix: None,
@@ -387,9 +378,9 @@ impl<M: OverlayMode> RenderOnce for Input<M> {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
         let state = self.state.clone();
-        if let Some(focused_as) = self.focused_as.clone() {
-            sync_focused_input_registry(focused_as, window, cx);
-        }
+        // Which kind of input this registers as follows from `M`; the `From`
+        // impls on `AnyInputState` are that mapping.
+        sync_focused_input_registry(M::any_state(&state), window, cx);
 
         state.update(cx, |state, cx| {
             state.ensure_highlighter_factory(crate::highlighter::input_highlighter_factory());
@@ -651,6 +642,7 @@ impl<M: OverlayMode> RenderOnce for Input<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::AnyInputState;
 
     #[test]
     fn content_types_map_to_accessibility_roles() {

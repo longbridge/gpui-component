@@ -92,7 +92,6 @@ impl Styled for Textarea {
 impl RenderOnce for Textarea {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         Input::from_state(&self.state)
-            .focused_as(self.state.clone().into())
             .appearance(self.appearance)
             .bordered(self.bordered)
             .disabled(self.disabled)
