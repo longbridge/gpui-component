@@ -1064,36 +1064,56 @@ struct WindowTextSelections(HashMap<gpui::WindowId, Entity<TextSelectionState>>)
 impl Global for WindowTextSelections {}
 
 #[derive(Default)]
-struct TextSelectionScopeStack(Vec<SelectionScopeId>);
+struct TextSelectionScopeStacks(HashMap<gpui::WindowId, Vec<SelectionScopeId>>);
 
-impl Global for TextSelectionScopeStack {}
+impl Global for TextSelectionScopeStacks {}
 
-fn push_text_selection_scope(scope: SelectionScopeId, cx: &mut App) {
-    if !cx.has_global::<TextSelectionScopeStack>() {
-        cx.set_global(TextSelectionScopeStack::default());
+fn push_text_selection_scope(window_id: gpui::WindowId, scope: SelectionScopeId, cx: &mut App) {
+    if !cx.has_global::<TextSelectionScopeStacks>() {
+        cx.set_global(TextSelectionScopeStacks::default());
     }
-    cx.global_mut::<TextSelectionScopeStack>().0.push(scope);
+    cx.global_mut::<TextSelectionScopeStacks>()
+        .0
+        .entry(window_id)
+        .or_default()
+        .push(scope);
 }
 
-fn pop_text_selection_scope(cx: &mut App) {
-    cx.global_mut::<TextSelectionScopeStack>().0.pop();
+fn pop_text_selection_scope(window_id: gpui::WindowId, cx: &mut App) {
+    let stacks = &mut cx.global_mut::<TextSelectionScopeStacks>().0;
+    let remove_stack = stacks.get_mut(&window_id).is_some_and(|stack| {
+        stack.pop();
+        stack.is_empty()
+    });
+    if remove_stack {
+        stacks.remove(&window_id);
+    }
 }
 
-fn current_text_selection_scope(cx: &App) -> Option<SelectionScopeId> {
-    cx.has_global::<TextSelectionScopeStack>()
-        .then(|| cx.global::<TextSelectionScopeStack>().0.last().copied())
+fn current_text_selection_scope(window_id: gpui::WindowId, cx: &App) -> Option<SelectionScopeId> {
+    cx.has_global::<TextSelectionScopeStacks>()
+        .then(|| {
+            cx.global::<TextSelectionScopeStacks>()
+                .0
+                .get(&window_id)
+                .and_then(|stack| stack.last().copied())
+        })
         .flatten()
 }
 
 fn with_text_selection_scope<T>(
+    window_id: gpui::WindowId,
     scope: SelectionScopeId,
     cx: &mut App,
     callback: impl FnOnce(&mut App) -> T,
 ) -> T {
-    push_text_selection_scope(scope, cx);
-    let result = callback(cx);
-    pop_text_selection_scope(cx);
-    result
+    push_text_selection_scope(window_id, scope, cx);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback(cx)));
+    pop_text_selection_scope(window_id, cx);
+    match result {
+        Ok(result) => result,
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
 }
 
 /// A zero-sized element which enables text selection for a window root.
@@ -1142,7 +1162,8 @@ impl<E: Element> Element for TextSelectionScopeMarker<E> {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        with_text_selection_scope(self.scope, cx, |cx| {
+        let window_id = window.window_handle().window_id();
+        with_text_selection_scope(window_id, self.scope, cx, |cx| {
             self.element.request_layout(id, inspector_id, window, cx)
         })
     }
@@ -1156,7 +1177,8 @@ impl<E: Element> Element for TextSelectionScopeMarker<E> {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        with_text_selection_scope(self.scope, cx, |cx| {
+        let window_id = window.window_handle().window_id();
+        with_text_selection_scope(window_id, self.scope, cx, |cx| {
             self.element
                 .prepaint(id, inspector_id, bounds, request_layout, window, cx)
         })
@@ -1172,7 +1194,8 @@ impl<E: Element> Element for TextSelectionScopeMarker<E> {
         window: &mut Window,
         cx: &mut App,
     ) {
-        with_text_selection_scope(self.scope, cx, |cx| {
+        let window_id = window.window_handle().window_id();
+        with_text_selection_scope(window_id, self.scope, cx, |cx| {
             self.element.paint(
                 id,
                 inspector_id,
@@ -1377,7 +1400,7 @@ impl WindowTextSelection for Window {
         mut frame: SelectionRegionFrame,
         cx: &mut App,
     ) {
-        if let Some(scope) = current_text_selection_scope(cx) {
+        if let Some(scope) = current_text_selection_scope(self.window_handle().window_id(), cx) {
             frame.scope = scope;
         }
         let state = TextSelectionState::ensure(self, cx);
@@ -1616,6 +1639,47 @@ mod tests {
             coverage: SelectionRegionCoverage::Bounded,
             resolved_points: Some((anchor, cursor)),
         }
+    }
+
+    #[gpui::test]
+    fn scope_stack_is_cleaned_after_panicking_subtree(cx: &mut TestAppContext) {
+        let window_id = {
+            let (_, window_cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
+            window_cx.update(|window, _| window.window_handle().window_id())
+        };
+        let scope = SelectionScopeId::new(41);
+
+        cx.update(|cx| {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                with_text_selection_scope(window_id, scope, cx, |_| panic!("subtree failed"));
+            }));
+
+            assert!(result.is_err());
+            assert_eq!(current_text_selection_scope(window_id, cx), None);
+        });
+    }
+
+    #[gpui::test]
+    fn reentrant_scope_from_one_window_does_not_pollute_another(cx: &mut TestAppContext) {
+        let first_window_id = {
+            let (_, window_cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
+            window_cx.update(|window, _| window.window_handle().window_id())
+        };
+        let second_window_id = {
+            let (_, window_cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
+            window_cx.update(|window, _| window.window_handle().window_id())
+        };
+        let scope = SelectionScopeId::new(42);
+
+        cx.update(|cx| {
+            with_text_selection_scope(first_window_id, scope, cx, |cx| {
+                assert_eq!(current_text_selection_scope(second_window_id, cx), None);
+                assert_eq!(
+                    current_text_selection_scope(first_window_id, cx),
+                    Some(scope)
+                );
+            });
+        });
     }
 
     #[gpui::test]

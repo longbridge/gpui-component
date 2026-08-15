@@ -2,7 +2,8 @@
 
 ## Status
 
-Complete. `gpui-component::Root` now assigns opaque base scope IDs to active
+Implementation complete; manual and performance verification remain for the
+root agent. `gpui-component::Root` now assigns opaque base scope IDs to active
 Dialog and Sheet state, modal surfaces use the base-owned scope marker, and the
 component compatibility methods synchronously forward to the one base-owned
 window selection state.
@@ -30,12 +31,23 @@ compiled only under `cfg(test)`.
   pointer move expand `"Hello "` into both TextViews, so the forwarding test
   failed.
 - GREEN 3: restoring both forwarding paths produced a 50-test focused pass.
+- RED 5: a scoped subtree panic left `SelectionScopeId(41)` at the top of the
+  scope stack.
+- GREEN 4: scoped rendering now pops before resuming the panic; the cleanup
+  regression test passes.
+- RED 6: the double-window reentry test could not compile against the
+  App-global stack API because scope lookup had no window key.
+- GREEN 5: window-keyed stacks isolate reentrant rendering; both the active
+  window and unrelated-window assertions pass.
 
 ## Implementation
 
-- Added a private base `TextSelectionScopeStack` and
+- Added private base `TextSelectionScopeStacks` and
   `TextSelection::scope(scope, element)`. Region registration automatically
   adopts the innermost marked scope during request-layout, prepaint, or paint.
+- Scope stacks are keyed by window, so a reentrant render in another window
+  cannot inherit the active window's scope. Scoped rendering also cleans up
+  before resuming a subtree panic.
 - Root allocates stable non-default IDs for each opened modal, stores them on
   `ActiveDialog`/`ActiveSheet`, selects the top Dialog before the Sheet, and
   injects the IDs into the rendered modal surfaces.
@@ -69,13 +81,13 @@ compiled only under `cfg(test)`.
 
 ```text
 cargo test -p gpui-base text_selection --lib
-30 passed
+32 passed
 
 cargo test -p gpui-component text::window_selection::tests --lib
 50 passed
 
 cargo test -p gpui-base --lib
-332 passed
+334 passed
 
 cargo test -p gpui-component --lib
 409 passed
@@ -93,12 +105,20 @@ passed
 Only the workspace's existing future-incompatibility warning for `block` and
 `proc-macro-error2` was emitted.
 
+## Manual and performance verification
+
+Pending root-agent verification; this subtask does not claim either result:
+
+- Manual interaction verification for selection across ordinary content,
+  Dialog, and Sheet surfaces.
+- Performance comparison for selection rendering and region registration.
+
 ## Self-review and concerns
 
 The standards review found two low-severity readability smells in the new base
 marker: a collection name that did not state its stack semantics and repeated
 push/delegate/pop code. These were addressed with
-`TextSelectionScopeStack` and one scoped helper, then the focused base and UI
+`TextSelectionScopeStacks` and one scoped helper, then the focused base and UI
 tests were rerun.
 
 The spec review found that the synthetic Sheet fixture did not exercise
@@ -106,6 +126,8 @@ The spec review found that the synthetic Sheet fixture did not exercise
 forwarding test. Both were added and independently shown to fail when their
 production forwarding was temporarily removed.
 
-No blocking concerns. The task commit is the commit containing this report.
+No code or automated-test blockers. Manual and performance verification are
+explicitly pending the root agent. The task commit is the commit containing
+this report.
 The user's pre-existing `.github/workflows/release.yml` change was neither
 modified nor staged.

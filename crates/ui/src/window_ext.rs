@@ -85,20 +85,17 @@ pub trait WindowExt: Sized {
     /// Returns true if there is a focused Input entity.
     fn has_focused_input(&mut self, cx: &mut App) -> bool;
 
-    /// Returns the merged selected text across all selectable TextViews in
-    /// this window, ordered top to bottom and joined with `\n`.
-    ///
-    /// Returns an empty string if the window root is not a [`Root`].
+    /// Returns the merged selected text across registered selectable regions
+    /// in this window, in logical document order and joined with `\n`.
     #[deprecated(note = "use gpui_base::WindowTextSelection::selected_text instead")]
     fn selected_text(&mut self, cx: &mut App) -> String;
 
-    /// Returns true if there is an active text selection in this window
-    /// (either a window-level drag selection or a view-local selection such
-    /// as select-all or a double-click word selection).
+    /// Returns true if any registered region has an active text selection in
+    /// this window, including renderer-local selections such as select-all.
     #[deprecated(note = "use gpui_base::WindowTextSelection::has_text_selection instead")]
     fn has_text_selection(&mut self, cx: &mut App) -> bool;
 
-    /// Clears the window-level text selection and all view-local selections.
+    /// Clears the window text selection and all registered renderer-local selections.
     #[deprecated(note = "use gpui_base::WindowTextSelection::clear_text_selection instead")]
     fn clear_text_selection(&mut self, cx: &mut App);
 
