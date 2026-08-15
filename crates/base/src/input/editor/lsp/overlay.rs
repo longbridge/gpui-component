@@ -10,12 +10,39 @@ pub struct CompletionMenuState {
     pub trigger_start_offset: Option<usize>,
     pub query: String,
     pub items: Vec<CompletionItem>,
+    revision: u64,
+}
+
+impl CompletionMenuState {
+    /// Bumped whenever the content changes.
+    ///
+    /// A renderer that mirrors this menu compares revisions to decide whether
+    /// to rebuild, so it never has to compare the item list itself.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub(super) fn bump(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
+    }
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct CodeActionMenuState {
     pub open: bool,
     pub items: Vec<CodeActionItem>,
+    revision: u64,
+}
+
+impl CodeActionMenuState {
+    /// Bumped whenever the content changes. See [`CompletionMenuState::revision`].
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub(super) fn bump(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -52,6 +79,7 @@ impl InputBaseState<EditorMode> {
         self.extras.context_menu_content.completion.items = items;
         self.extras.context_menu_content.completion.open =
             !self.extras.context_menu_content.completion.items.is_empty();
+        self.extras.context_menu_content.completion.bump();
         cx.notify();
     }
 
@@ -63,6 +91,7 @@ impl InputBaseState<EditorMode> {
             .code_action
             .items
             .is_empty();
+        self.extras.context_menu_content.code_action.bump();
         cx.notify();
     }
 

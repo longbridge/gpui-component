@@ -30,6 +30,19 @@ struct InputOverlayHost<M: OverlayMode> {
     lsp: Option<LspOverlays>,
 }
 
+/// Identifies one version of an overlay's content.
+///
+/// Sync runs on every frame, so the check for "did this change" must not touch
+/// the content itself: the completion list can hold hundreds of items, each
+/// with its own documentation. The engine bumps a revision when it swaps the
+/// content, and the popovers are keyed by cheap identity instead — a revision,
+/// an `Rc` pointer, or a range.
+#[derive(PartialEq, Eq, Default)]
+struct OverlaySignature {
+    open: bool,
+    revision: u64,
+}
+
 /// The popovers driven by language features: completion, code actions, hover
 /// and diagnostics. They belong to a code editor, so they are built and synced
 /// by [`OverlayMode`], where the state's kind is concrete.
@@ -39,24 +52,34 @@ pub struct LspOverlays {
     code_actions: Entity<CodeActionMenu>,
     hover: Option<Entity<HoverPopover>>,
     diagnostic: Option<Entity<DiagnosticPopover>>,
-    completion_signature: String,
-    code_action_signature: String,
-    hover_signature: String,
-    diagnostic_signature: String,
+    completion_signature: OverlaySignature,
+    code_action_signature: OverlaySignature,
+    hover_signature: Option<std::ops::Range<usize>>,
+    diagnostic_signature: Option<std::rc::Rc<gpui_base::input::DiagnosticEntry>>,
 }
 
 /// What the state read out of the engine for one sync pass.
+///
+/// Deliberately free of content: only what is needed to decide whether a
+/// popover is shown and whether it changed. The content is read from the state
+/// again, on the frames where it actually did.
 #[doc(hidden)]
 pub struct LspSnapshot {
-    completion_open: bool,
+    completion: OverlaySignature,
     completion_start: Option<usize>,
-    completion_query: String,
-    completion_items: Vec<lsp_types::CompletionItem>,
-    code_action_open: bool,
-    code_action_items: Vec<gpui_base::input::CodeActionItem>,
-    hover: Option<gpui_base::input::HoverPopoverState>,
+    code_action: OverlaySignature,
+    hover: Option<std::ops::Range<usize>>,
     diagnostic: Option<std::rc::Rc<gpui_base::input::DiagnosticEntry>>,
     cursor: usize,
+}
+
+impl LspSnapshot {
+    fn has_overlay(&self) -> bool {
+        self.completion.open
+            || self.code_action.open
+            || self.hover.is_some()
+            || self.diagnostic.is_some()
+    }
 }
 
 /// Which overlays a mode of input shows.
@@ -127,13 +150,18 @@ impl OverlayMode for crate::input::EditorMode {
         let completion = state.completion_menu_state();
         let code_actions = state.code_action_menu_state();
         Some(LspSnapshot {
-            completion_open: completion.open,
+            completion: OverlaySignature {
+                open: completion.open,
+                revision: completion.revision(),
+            },
             completion_start: completion.trigger_start_offset,
-            completion_query: completion.query.clone(),
-            completion_items: completion.items.clone(),
-            code_action_open: code_actions.open,
-            code_action_items: code_actions.items.clone(),
-            hover: state.hover_popover().cloned(),
+            code_action: OverlaySignature {
+                open: code_actions.open,
+                revision: code_actions.revision(),
+            },
+            hover: state
+                .hover_popover()
+                .map(|popover| popover.symbol_range.clone()),
             diagnostic: state.diagnostic_popover(),
             cursor: state.cursor(),
         })
@@ -149,10 +177,10 @@ impl OverlayMode for crate::input::EditorMode {
             code_actions: CodeActionMenu::new(state.clone(), window, cx),
             hover: None,
             diagnostic: None,
-            completion_signature: String::new(),
-            code_action_signature: String::new(),
-            hover_signature: String::new(),
-            diagnostic_signature: String::new(),
+            completion_signature: OverlaySignature::default(),
+            code_action_signature: OverlaySignature::default(),
+            hover_signature: None,
+            diagnostic_signature: None,
         })
     }
 
@@ -164,19 +192,19 @@ impl OverlayMode for crate::input::EditorMode {
         cx: &mut App,
     ) {
         let cursor = snapshot.cursor;
-        let completion_signature = format!(
-            "{}:{:?}:{}:{:?}",
-            snapshot.completion_open,
-            snapshot.completion_start,
-            snapshot.completion_query,
-            snapshot.completion_items
-        );
-        if completion_signature != lsp.completion_signature {
-            lsp.completion_signature = completion_signature;
-            let open = snapshot.completion_open;
+
+        if snapshot.completion != lsp.completion_signature {
+            lsp.completion_signature = OverlaySignature {
+                open: snapshot.completion.open,
+                revision: snapshot.completion.revision,
+            };
+            let open = snapshot.completion.open;
             let start = snapshot.completion_start;
-            let query = snapshot.completion_query.clone();
-            let items = snapshot.completion_items.clone();
+            // Read the items only now, on a frame where they changed.
+            let (query, items) = {
+                let menu = state.read(cx).completion_menu_state();
+                (menu.query.clone(), menu.items.clone())
+            };
             lsp.completion.update(cx, |menu, cx| {
                 if open {
                     menu.update_query(start.unwrap_or(cursor), query);
@@ -187,14 +215,13 @@ impl OverlayMode for crate::input::EditorMode {
             });
         }
 
-        let code_action_signature = format!(
-            "{}:{:?}",
-            snapshot.code_action_open, snapshot.code_action_items
-        );
-        if code_action_signature != lsp.code_action_signature {
-            lsp.code_action_signature = code_action_signature;
-            let open = snapshot.code_action_open;
-            let items = snapshot.code_action_items.clone();
+        if snapshot.code_action != lsp.code_action_signature {
+            lsp.code_action_signature = OverlaySignature {
+                open: snapshot.code_action.open,
+                revision: snapshot.code_action.revision,
+            };
+            let open = snapshot.code_action.open;
+            let items = state.read(cx).code_action_menu_state().items.clone();
             lsp.code_actions.update(cx, |menu, cx| {
                 if open {
                     menu.show(cursor, items, window, cx);
@@ -204,22 +231,28 @@ impl OverlayMode for crate::input::EditorMode {
             });
         }
 
-        let hover_signature = format!("{:?}", snapshot.hover);
-        if hover_signature != lsp.hover_signature {
-            lsp.hover_signature = hover_signature;
-            lsp.hover = snapshot.hover.as_ref().map(|popover| {
-                HoverPopover::new(
-                    state.clone(),
-                    popover.symbol_range.clone(),
-                    &popover.hover,
-                    cx,
-                )
+        // A hover popover is anchored to one symbol, so a new range means new
+        // content and the same range means the same content.
+        if snapshot.hover != lsp.hover_signature {
+            lsp.hover_signature = snapshot.hover.clone();
+            let popover = state
+                .read(cx)
+                .hover_popover()
+                .map(|popover| (popover.symbol_range.clone(), popover.hover.clone()));
+            lsp.hover = popover.map(|(symbol_range, hover)| {
+                HoverPopover::new(state.clone(), symbol_range, &hover, cx)
             });
         }
 
-        let diagnostic_signature = format!("{:?}", snapshot.diagnostic);
-        if diagnostic_signature != lsp.diagnostic_signature {
-            lsp.diagnostic_signature = diagnostic_signature;
+        // The engine hands out the diagnostic behind an `Rc`, so pointer
+        // identity already answers "is this the same entry".
+        let diagnostic_changed = match (&snapshot.diagnostic, &lsp.diagnostic_signature) {
+            (Some(new), Some(old)) => !std::rc::Rc::ptr_eq(new, old),
+            (None, None) => false,
+            _ => true,
+        };
+        if diagnostic_changed {
+            lsp.diagnostic_signature = snapshot.diagnostic.clone();
             lsp.diagnostic = snapshot
                 .diagnostic
                 .as_deref()
@@ -304,10 +337,10 @@ impl<M: OverlayMode> InputOverlayHost<M> {
         let search = search_open.then(|| self.search.clone().into_any_element());
         let mut floating = Vec::with_capacity(4);
         if let (Some(lsp), Some(snapshot)) = (self.lsp.as_ref(), snapshot.as_ref()) {
-            if snapshot.completion_open {
+            if snapshot.completion.open {
                 floating.push(lsp.completion.clone().into_any_element());
             }
-            if snapshot.code_action_open {
+            if snapshot.code_action.open {
                 floating.push(lsp.code_actions.clone().into_any_element());
             }
             if let Some(hover) = lsp.hover.as_ref() {
@@ -328,15 +361,9 @@ pub(super) fn render_overlays<M: OverlayMode>(
 ) -> InputOverlays {
     M::install_action_handler(state, cx);
     let has_overlay = {
-        let snapshot = M::lsp_snapshot(state.read(cx), cx);
         let state = state.read(cx);
         state.search_session().open
-            || snapshot.is_some_and(|lsp| {
-                lsp.completion_open
-                    || lsp.code_action_open
-                    || lsp.hover.is_some()
-                    || lsp.diagnostic.is_some()
-            })
+            || M::lsp_snapshot(state, cx).is_some_and(|lsp| lsp.has_overlay())
     };
     if !has_overlay {
         if cx.has_global::<InputOverlayRegistry<M>>() {
@@ -387,6 +414,66 @@ mod tests {
         ) -> impl IntoElement {
             div()
         }
+    }
+
+    /// A frame that changed nothing must not rebuild the popovers.
+    ///
+    /// Sync runs every frame, so the change check has to be cheap and stable.
+    /// It is keyed on a revision the engine bumps when it swaps the content;
+    /// forgetting to bump, or comparing the content itself again, both show up
+    /// here.
+    #[gpui::test]
+    fn unchanged_content_keeps_the_overlay_signature(cx: &mut gpui::TestAppContext) {
+        cx.update(crate::init);
+        let (probe, cx) = cx.add_window_view(|window, cx| OverlayProbe {
+            state: cx.new(|cx| crate::input::EditorState::new("sql", window, cx)),
+        });
+        let state = probe.read_with(cx, |probe, _| probe.state.clone());
+
+        cx.update(|window, cx| {
+            state.update(cx, |state, cx| {
+                state.present_completion_items(
+                    0,
+                    "f",
+                    vec![CompletionItem {
+                        label: "foo".into(),
+                        ..Default::default()
+                    }],
+                    cx,
+                );
+            });
+
+            let mut host = InputOverlayHost::new(state.clone(), window, cx);
+            host.sync(&state, window, cx);
+            let after_first = host.lsp.as_ref().unwrap().completion_signature.revision;
+
+            // A second pass over untouched content.
+            host.sync(&state, window, cx);
+            assert_eq!(
+                host.lsp.as_ref().unwrap().completion_signature.revision,
+                after_first,
+                "an unchanged frame must not bump the signature"
+            );
+
+            // Swapping the items must be noticed.
+            state.update(cx, |state, cx| {
+                state.present_completion_items(
+                    0,
+                    "f",
+                    vec![CompletionItem {
+                        label: "bar".into(),
+                        ..Default::default()
+                    }],
+                    cx,
+                );
+            });
+            host.sync(&state, window, cx);
+            assert_ne!(
+                host.lsp.as_ref().unwrap().completion_signature.revision,
+                after_first,
+                "new items must be noticed"
+            );
+        });
     }
 
     #[gpui::test]

@@ -195,6 +195,7 @@ impl InputBaseState<EditorMode> {
                 editor.update(cx, |editor, cx| {
                     editor.extras.context_menu_content.completion.open = false;
                     editor.extras.context_menu_content.completion.items.clear();
+                    editor.extras.context_menu_content.completion.bump();
                     cx.notify();
                 })?;
                 return Ok(());
@@ -213,6 +214,7 @@ impl InputBaseState<EditorMode> {
                         .completion
                         .items
                         .is_empty();
+                    editor.extras.context_menu_content.completion.bump();
 
                     cx.notify();
                 })
