@@ -45,6 +45,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         direction: Option<MoveDirection>,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         let offset = offset.clamp(0, self.text.len());
         self.cursor_line_end_affinity = false;
         self.selected_range = (offset..offset).into();

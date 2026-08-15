@@ -16,6 +16,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         };
 
+        self.undo_manager.break_transaction_coalescing();
         self.selected_range = (range.start..range.end).into();
         self.selected_word_range = Some(self.selected_range);
         cx.notify()
@@ -26,6 +27,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     /// The offset is the UTF-8 offset.
     pub(super) fn select_line(&mut self, offset: usize, _: &mut Window, cx: &mut Context<Self>) {
         let range = TextSelector::line_range(&self.text, offset);
+        self.undo_manager.break_transaction_coalescing();
         self.selected_range = (range.start..range.end).into();
         self.selected_word_range = None;
         cx.notify()

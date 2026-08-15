@@ -54,6 +54,8 @@ mod selection;
 #[path = "base/state.rs"]
 mod state;
 mod textarea;
+#[path = "base/undo_manager.rs"]
+mod undo_manager;
 
 pub(crate) fn init(cx: &mut App) {
     state::init(cx);

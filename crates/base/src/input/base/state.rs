@@ -28,6 +28,7 @@ use super::{
     kind::InputModeKind,
     mask_pattern::normalize_number_input,
     mode::LayoutMode,
+    undo_manager::{EditIntent, UndoManager},
 };
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
 use crate::input::blink_cursor::CURSOR_WIDTH;
@@ -35,7 +36,7 @@ use crate::input::movement::MoveDirection;
 use crate::input::{
     InputExtras as _, Position, RopeExt as _, Selection, element::RIGHT_MARGIN, layout::LastLayout,
 };
-use crate::{AutoScroll, History, StepAction};
+use crate::{AutoScroll, StepAction};
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = input, no_json)]
@@ -285,7 +286,7 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) mode: LayoutMode,
     pub(super) text: Rope,
     pub(super) display_map: DisplayMap,
-    pub(super) history: History<Change>,
+    pub(super) undo_manager: UndoManager,
     pub(super) search_session: super::SearchSession,
     pub(super) searchable: bool,
     pub(super) replaceable: bool,
@@ -566,7 +567,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     fn new_in_mode(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle().tab_stop(true);
         let blink_cursor = cx.new(|_| BlinkCursor::new());
-        let history = History::new().group_interval(std::time::Duration::from_secs(1));
+        let undo_manager = UndoManager::new();
 
         let _subscriptions = vec![
             // Observe the blink cursor to repaint the view when it changes.
@@ -601,7 +602,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             scroll_beyond_last_line: None,
             cursor_surrounding_lines: None,
             blink_cursor,
-            history,
+            undo_manager,
             selected_range: Selection::default(),
             selected_word_range: None,
             selection_reversed: false,
@@ -808,17 +809,17 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.history.set_ignoring(true);
+        self.undo_manager.set_ignoring(true);
         self.emit_events = false;
         self.replace_text(value, window, cx);
-        self.history.set_ignoring(false);
+        self.undo_manager.set_ignoring(false);
         self.emit_events = true;
 
         self.reset_selection();
         self.reset_lsp_state();
         self.reset_scroll_to_start();
 
-        self.history.clear();
+        self.undo_manager.clear();
         cx.notify();
     }
 
@@ -867,6 +868,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     ) {
         let text: SharedString = text.into();
         self.with_edits_allowed(|this| {
+            this.undo_manager.pending_intent = Some(EditIntent::Atomic);
             let range_utf16 = this.range_to_utf16(&(this.cursor()..this.cursor()));
             this.replace_text_in_range_silent(Some(range_utf16), &text, window, cx);
             this.selected_range = (this.selected_range.end..this.selected_range.end).into();
@@ -884,6 +886,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     ) {
         let text: SharedString = text.into();
         self.with_edits_allowed(|this| {
+            this.undo_manager.pending_intent = Some(EditIntent::Atomic);
             this.replace_text_in_range_silent(None, &text, window, cx);
             this.selected_range = (this.selected_range.end..this.selected_range.end).into();
         });
@@ -897,6 +900,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     ) {
         let text: SharedString = text.into();
         self.with_edits_allowed(|this| {
+            this.undo_manager.pending_intent = Some(EditIntent::Atomic);
             let range = 0..this.text.chars().map(|c| c.len_utf16()).sum();
             this.replace_text_in_range_silent(Some(range), &text, window, cx);
             this.reset_highlighter(cx);
@@ -1170,10 +1174,12 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn select_left(&mut self, _: &SelectLeft, _: &mut Window, cx: &mut Context<Self>) {
+        self.undo_manager.break_transaction_coalescing();
         self.select_to(self.previous_boundary(self.cursor()), cx);
     }
 
     pub(super) fn select_right(&mut self, _: &SelectRight, _: &mut Window, cx: &mut Context<Self>) {
+        self.undo_manager.break_transaction_coalescing();
         self.select_to(self.next_boundary(self.cursor()), cx);
     }
 
@@ -1181,6 +1187,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         if self.is_single_line() {
             return;
         }
+        self.undo_manager.break_transaction_coalescing();
         let offset = self.start_of_line().saturating_sub(1);
         self.select_to(self.previous_boundary(offset), cx);
     }
@@ -1189,6 +1196,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         if self.is_single_line() {
             return;
         }
+        self.undo_manager.break_transaction_coalescing();
         let offset = (self.end_of_line() + 1).min(self.text.len());
         self.select_to(self.next_boundary(offset), cx);
     }
@@ -1208,6 +1216,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         self.select_to(0, cx);
     }
 
@@ -1217,6 +1226,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         let end = self.text.len();
         self.select_to(end, cx);
     }
@@ -1227,6 +1237,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         let offset = self.start_of_line();
         self.select_to(offset, cx);
     }
@@ -1237,6 +1248,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         let offset = self.end_of_line();
         self.select_to(offset, cx);
     }
@@ -1247,6 +1259,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         let offset = self.previous_start_of_word();
         self.select_to(offset, cx);
     }
@@ -1257,6 +1270,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         let offset = self.next_end_of_word();
         self.select_to(offset, cx);
     }
@@ -1408,17 +1422,25 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
-        if self.selected_range.is_empty() {
-            self.select_to(self.previous_boundary(self.cursor()), cx)
-        }
+        let intent = if self.selected_range.is_empty() {
+            self.select_to(self.previous_boundary(self.cursor()), cx);
+            EditIntent::Backspace
+        } else {
+            EditIntent::Atomic
+        };
+        self.undo_manager.pending_intent = Some(intent);
         self.replace_text_in_range(None, "", window, cx);
         self.pause_blink_cursor(cx);
     }
 
     pub(super) fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
-        if self.selected_range.is_empty() {
-            self.select_to(self.next_boundary(self.cursor()), cx)
-        }
+        let intent = if self.selected_range.is_empty() {
+            self.select_to(self.next_boundary(self.cursor()), cx);
+            EditIntent::DeleteForward
+        } else {
+            EditIntent::Atomic
+        };
+        self.undo_manager.pending_intent = Some(intent);
         self.replace_text_in_range(None, "", window, cx);
         self.pause_blink_cursor(cx);
     }
@@ -1548,6 +1570,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         } else {
             // Single line input or submit-on-enter: just emit the event
             // (e.g.: in a dialog to confirm, or a chat textarea to send).
+            self.undo_manager.break_transaction_coalescing();
             cx.propagate();
         }
 
@@ -1622,6 +1645,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.undo_manager.break_transaction_coalescing();
         // Input has its own text selection; suppress the window-level text
         // selection (Root) so it does not start a drag from here.
         crate::global_state::GlobalState::suppress_text_selection(cx);
@@ -1899,19 +1923,29 @@ impl<M: InputModeKind> InputBaseState<M> {
         let selected_text = self.text.slice(self.selected_range).to_string();
         cx.write_to_clipboard(ClipboardItem::new_string(selected_text));
 
+        self.undo_manager.pending_intent = Some(EditIntent::Atomic);
         self.replace_text_in_range_silent(None, "", window, cx);
     }
 
     pub(super) fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(clipboard) = cx.read_from_clipboard() {
             let new_text = clipboard.text().unwrap_or_default();
+            self.undo_manager.pending_intent = Some(EditIntent::Atomic);
             self.replace_text_in_range_silent(None, &new_text, window, cx);
             self.scroll_to(self.cursor(), None, cx);
         }
     }
 
-    fn push_history(&mut self, text: &Rope, range: &Range<usize>, new_text: &str) {
-        if self.history.is_ignoring() {
+    fn push_history(
+        &mut self,
+        text: &Rope,
+        range: &Range<usize>,
+        new_text: &str,
+        requested_intent: Option<EditIntent>,
+        selection_before: Selection,
+        selection_after: Option<Selection>,
+    ) {
+        if self.undo_manager.is_ignoring() {
             return;
         }
 
@@ -1920,30 +1954,63 @@ impl<M: InputModeKind> InputBaseState<M> {
         let old_text = text.slice(range.clone()).to_string();
         let new_range = range.start..range.start + new_text.len();
 
-        self.history
-            .push(Change::new(range, &old_text, new_range, new_text));
+        let intent = requested_intent.unwrap_or_else(|| {
+            if range.is_empty()
+                && old_text.is_empty()
+                && !new_text.is_empty()
+                && !new_text.contains(['\n', '\r'])
+            {
+                EditIntent::Typing
+            } else {
+                EditIntent::Atomic
+            }
+        });
+
+        let selection_before = match intent {
+            EditIntent::Backspace => Selection::new(range.end, range.end),
+            EditIntent::DeleteForward => Selection::new(range.start, range.start),
+            EditIntent::Typing | EditIntent::Atomic => selection_before,
+        };
+        let selection_after =
+            selection_after.unwrap_or_else(|| Selection::new(new_range.end, new_range.end));
+
+        self.undo_manager.record_transaction(
+            Change::new(
+                range,
+                &old_text,
+                new_range,
+                new_text,
+                selection_before,
+                selection_after,
+            ),
+            intent,
+        );
     }
 
     pub(super) fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {
-        self.history.set_ignoring(true);
-        if let Some(changes) = self.history.undo() {
-            for change in changes {
+        self.undo_manager.set_ignoring(true);
+        if let Some(changes) = self.undo_manager.undo() {
+            let selection = changes.last().unwrap().selection_before;
+            for change in &changes {
                 let range_utf16 = self.range_to_utf16(&change.new_range.into());
                 self.replace_text_in_range_silent(Some(range_utf16), &change.old_text, window, cx);
             }
+            self.selected_range = selection;
         }
-        self.history.set_ignoring(false);
+        self.undo_manager.set_ignoring(false);
     }
 
     pub(super) fn redo(&mut self, _: &Redo, window: &mut Window, cx: &mut Context<Self>) {
-        self.history.set_ignoring(true);
-        if let Some(changes) = self.history.redo() {
-            for change in changes {
+        self.undo_manager.set_ignoring(true);
+        if let Some(changes) = self.undo_manager.redo() {
+            let selection = changes.last().unwrap().selection_after;
+            for change in &changes {
                 let range_utf16 = self.range_to_utf16(&change.old_range.into());
                 self.replace_text_in_range_silent(Some(range_utf16), &change.new_text, window, cx);
             }
+            self.selected_range = selection;
         }
-        self.history.set_ignoring(false);
+        self.undo_manager.set_ignoring(false);
     }
 
     /// Get byte offset of the cursor.
@@ -1994,6 +2061,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub fn select_all(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        self.undo_manager.break_transaction_coalescing();
         self.selected_range = (0..self.text.len()).into();
         cx.notify();
     }
@@ -2133,6 +2201,7 @@ impl<M: InputModeKind> InputBaseState<M> {
 
     /// Unselects the currently selected text.
     pub fn unselect(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        self.undo_manager.break_transaction_coalescing();
         let offset = self.cursor();
         self.selected_range = (offset..offset).into();
         cx.notify()
@@ -2227,6 +2296,8 @@ impl<M: InputModeKind> InputBaseState<M> {
         if M::is_context_menu_open(self, cx) {
             return;
         }
+
+        self.undo_manager.break_transaction_coalescing();
 
         // NOTE: Do not cancel select, when blur.
         // Because maybe user want to copy the selected text by AppMenuBar (will take focus handle).
@@ -2567,6 +2638,7 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
 
     fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
         self.ime_marked_range = None;
+        self.undo_manager.commit_transaction();
     }
 
     /// Replace text in range.
@@ -2580,9 +2652,11 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let requested_intent = self.undo_manager.pending_intent.take();
         if !self.is_editable() {
             return;
         }
+        let selection_before = self.selected_range;
 
         if self.blink_cursor.read(cx).visible() {
             self.pause_blink_cursor(cx);
@@ -2647,11 +2721,24 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
             // A segment-based history entry no longer matches the masked
             // document, record a whole-document change instead, so that
             // undo/redo can restore the text exactly.
-            self.push_history(&old_text, &(0..old_text.len()), &self.text.to_string());
+            self.push_history(
+                &old_text,
+                &(0..old_text.len()),
+                &self.text.to_string(),
+                Some(EditIntent::Atomic),
+                selection_before,
+                Some(Selection::new(new_offset, new_offset)),
+            );
         } else {
-            self.push_history(&old_text, &range, &new_text);
+            self.push_history(
+                &old_text,
+                &range,
+                &new_text,
+                requested_intent,
+                selection_before,
+                None,
+            );
         }
-        self.history.end_grouping();
         if let Some(diagnostics) = self.mode.diagnostics_mut() {
             diagnostics.reset(&self.text)
         }
@@ -2700,8 +2787,15 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let requested_intent = self.undo_manager.pending_intent.take();
         if !self.is_editable() {
             return;
+        }
+        let selection_before = self.selected_range;
+
+        let starts_composition = self.ime_marked_range.is_none();
+        if starts_composition {
+            self.undo_manager.begin_transaction();
         }
 
         M::reset_language_features(self);
@@ -2729,6 +2823,9 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
                 && self.is_valid_input(&old_text.to_string(), cx)
             {
                 self.text = old_text;
+                if starts_composition {
+                    self.undo_manager.commit_transaction();
+                }
                 return;
             }
         }
@@ -2776,8 +2873,17 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         if self.is_multi_line() {
             self.mode.update_auto_grow(&self.display_map);
         }
-        self.history.start_grouping();
-        self.push_history(&old_text, &range, new_text);
+        self.push_history(
+            &old_text,
+            &range,
+            new_text,
+            requested_intent,
+            selection_before,
+            Some(self.selected_range),
+        );
+        if new_text.is_empty() {
+            self.undo_manager.commit_transaction();
+        }
         cx.notify();
     }
 
@@ -3393,13 +3499,515 @@ mod tests {
                 state.replace_text_in_range(None, "5", window, cx);
                 assert_eq!(state.value(), "12,345");
 
-                // The two edits are grouped into one undo step (by the
-                // history group interval). Before the whole-document history
-                // fix, this undo produced a corrupted value like "1,2344".
+                // Each whole-document mask rewrite is an atomic undo step.
+                // Before the whole-document history fix, undo produced a
+                // corrupted value like "1,2344".
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "1,234");
                 state.undo(&Undo, window, cx);
                 assert_eq!(state.value(), "");
                 state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "1,234");
+                state.redo(&Redo, window, cx);
                 assert_eq!(state.value(), "12,345");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_coalesces_adjacent_typing_transactions(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.replace_text_in_range(None, "b", window, cx);
+                assert_eq!(state.value(), "ab");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_cursor_movement_splits_typing(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.replace_text_in_range(None, "b", window, cx);
+                state.left(&MoveLeft, window, cx);
+                state.replace_text_in_range(None, "x", window, cx);
+                assert_eq!(state.value(), "axb");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "ab");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_splits_backward_and_forward_delete(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("abcd", window, cx);
+                state.set_selected_range(2..2, cx);
+                state.backspace(&Backspace, window, cx);
+                state.delete(&Delete, window, cx);
+                assert_eq!(state.value(), "ad");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "acd");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "abcd");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_coalesces_directional_character_deletes(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("abcd", window, cx);
+                state.backspace(&Backspace, window, cx);
+                state.backspace(&Backspace, window, cx);
+                assert_eq!(state.value(), "ab");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "abcd");
+                assert_eq!(state.selected_range(), 4..4);
+
+                state.set_value("abcd", window, cx);
+                state.set_selected_range(1..1, cx);
+                state.delete(&Delete, window, cx);
+                state.delete(&Delete, window, cx);
+                assert_eq!(state.value(), "ad");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "abcd");
+                assert_eq!(state.selected_range(), 1..1);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_atomic_paste_isolated_from_typing(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            cx.write_to_clipboard(ClipboardItem::new_string("P".to_string()));
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.paste(&Paste, window, cx);
+                state.replace_text_in_range(None, "b", window, cx);
+                assert_eq!(state.value(), "aPb");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "aP");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "a");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_programmatic_insert_is_atomic(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.insert("P", window, cx);
+                state.replace_text_in_range(None, "b", window, cx);
+                assert_eq!(state.value(), "aPb");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "aP");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "a");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_selection_round_trip_splits_typing(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.replace_text_in_range(None, "b", window, cx);
+                state.select_all(window, cx);
+                state.unselect(window, cx);
+                state.replace_text_in_range(None, "c", window, cx);
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "ab");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_enter_is_atomic(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.enter(
+                    &Enter {
+                        secondary: false,
+                        shift: false,
+                    },
+                    window,
+                    cx,
+                );
+                state.replace_text_in_range(None, "b", window, cx);
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "a\n");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "a");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_single_line_return_commits_the_typing_session(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                for part in ["a", "b", "c"] {
+                    state.replace_text_in_range(None, part, window, cx);
+                }
+                state.enter(
+                    &Enter {
+                        secondary: false,
+                        shift: false,
+                    },
+                    window,
+                    cx,
+                );
+                for part in ["d", "e", "f"] {
+                    state.replace_text_in_range(None, part, window, cx);
+                }
+                assert_eq!(state.value(), "abcdef");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "abc");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_submit_on_enter_commits_the_textarea_session(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state.submit_on_enter(true));
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "before submit", window, cx);
+                state.enter(
+                    &Enter {
+                        secondary: false,
+                        shift: false,
+                    },
+                    window,
+                    cx,
+                );
+                state.replace_text_in_range(None, " after submit", window, cx);
+                assert_eq!(state.value(), "before submit after submit");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "before submit");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_blur_commits_the_typing_session(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "before blur", window, cx);
+                state.on_blur(window, cx);
+                state.on_focus(window, cx);
+                state.replace_text_in_range(None, " after focus", window, cx);
+                assert_eq!(state.value(), "before blur after focus");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "before blur");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_keeps_rapid_lines_in_distinct_transactions(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                let enter = Enter {
+                    secondary: false,
+                    shift: false,
+                };
+                state.replace_text_in_range(None, "a", window, cx);
+                state.enter(&enter, window, cx);
+                state.replace_text_in_range(None, "b", window, cx);
+                state.enter(&enter, window, cx);
+                state.replace_text_in_range(None, "c", window, cx);
+                assert_eq!(state.value(), "a\nb\nc");
+
+                for expected in ["a\nb\n", "a\nb", "a\n", "a", ""] {
+                    state.undo(&Undo, window, cx);
+                    assert_eq!(state.value(), expected);
+                }
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_coalesces_long_unicode_typing_without_a_timer(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+        let parts = [
+            "The ",
+            "quick ",
+            "brown fox, ",
+            "你好，世界 ",
+            "🦀 jumps over 13 lazy dogs.",
+        ];
+        let expected = parts.concat();
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                for part in parts {
+                    state.replace_text_in_range(None, part, window, cx);
+                }
+                assert_eq!(state.value(), expected);
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), expected);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_long_multiline_sequence_has_structural_boundaries(
+        cx: &mut TestAppContext,
+    ) {
+        let input_view = InputView::build_textarea(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+        let enter = Enter {
+            secondary: false,
+            shift: false,
+        };
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                for (index, line) in [
+                    "first line with punctuation!",
+                    "第二行包含 Unicode 🦀",
+                    "third line has several words",
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    for chunk in line.split_inclusive(' ') {
+                        state.replace_text_in_range(None, chunk, window, cx);
+                    }
+                    if index < 2 {
+                        state.enter(&enter, window, cx);
+                    }
+                }
+
+                assert_eq!(
+                    state.value(),
+                    "first line with punctuation!\n第二行包含 Unicode 🦀\nthird line has several words"
+                );
+                state.undo(&Undo, window, cx);
+                assert_eq!(
+                    state.value(),
+                    "first line with punctuation!\n第二行包含 Unicode 🦀\n"
+                );
+                state.undo(&Undo, window, cx);
+                assert_eq!(
+                    state.value(),
+                    "first line with punctuation!\n第二行包含 Unicode 🦀"
+                );
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "first line with punctuation!\n");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_cut_and_repeated_pastes_are_distinct_transactions(
+        cx: &mut TestAppContext,
+    ) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "alpha beta gamma", window, cx);
+                state.set_selected_range(6..10, cx);
+                state.cut(&Cut, window, cx);
+                assert_eq!(state.value(), "alpha  gamma");
+
+                state.paste(&Paste, window, cx);
+                state.paste(&Paste, window, cx);
+                assert_eq!(state.value(), "alpha betabeta gamma");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "alpha beta gamma");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "alpha  gamma");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "alpha beta gamma");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_word_and_line_deletes_do_not_coalesce(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("one two three\nfour five", window, cx);
+                state.set_selected_range(13..13, cx);
+                state.delete_previous_word(&DeleteToPreviousWordStart, window, cx);
+                assert_eq!(state.value(), "one two \nfour five");
+                state.delete_to_end_of_line(&DeleteToEndOfLine, window, cx);
+                assert_eq!(state.value(), "one two four five");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "one two \nfour five");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "one two three\nfour five");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_multiline_replacement_is_one_atomic_transaction(cx: &mut TestAppContext) {
+        let input_view = InputView::build_textarea(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "before", window, cx);
+                state.set_selected_range(0..6, cx);
+                state.replace_text_in_range(None, "line one\nline two\n第三行", window, cx);
+                assert_eq!(state.value(), "line one\nline two\n第三行");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "before");
+                assert_eq!(state.selected_range(), 0..6);
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "line one\nline two\n第三行");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_composition_isolated_from_long_typing(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "prefix ", window, cx);
+                state.replace_and_mark_text_in_range(None, "n", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "ni", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "你", None, window, cx);
+                state.unmark_text(window, cx);
+                state.replace_text_in_range(None, " suffix", window, cx);
+                assert_eq!(state.value(), "prefix 你 suffix");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "prefix 你");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "prefix ");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_selected_replacement_is_atomic(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "abc", window, cx);
+                state.set_selected_range(1..2, cx);
+                state.replace_text_in_range(None, "X", window, cx);
+                state.replace_text_in_range(None, "z", window, cx);
+                assert_eq!(state.value(), "aXzc");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "aXc");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "abc");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
             });
         });
     }
@@ -3650,7 +4258,7 @@ mod tests {
                 // Seed with a value and clear history so the baseline is clean.
                 state.set_value("first", window, cx);
                 assert!(
-                    state.history.undos().is_empty(),
+                    !state.undo_manager.has_undos(),
                     "history should be empty after set_value"
                 );
 
@@ -3658,7 +4266,7 @@ mod tests {
                 state.replace_all("second", window, cx);
                 assert_eq!(state.value(), "second");
                 assert!(
-                    !state.history.undos().is_empty(),
+                    state.undo_manager.has_undos(),
                     "replace_all should record an undo step"
                 );
 
@@ -3752,6 +4360,176 @@ mod tests {
                 assert_eq!(state.value(), "你好 sh");
                 assert_eq!(state.selected_range(), 9..9);
                 assert_eq!(state.ime_marked_range, Some((7..9).into()));
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_composition_is_one_undo_group(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("a", window, cx);
+                state.replace_and_mark_text_in_range(None, "s", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "sh", None, window, cx);
+                state.replace_text_in_range(None, "是", window, cx);
+                assert_eq!(state.value(), "a是");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "a");
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "a是");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_composition_cancel_leaves_no_entry(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("a", window, cx);
+                state.replace_and_mark_text_in_range(None, "s", None, window, cx);
+                state.replace_and_mark_text_in_range(None, "", None, window, cx);
+
+                assert_eq!(state.value(), "a");
+                assert!(!state.undo_manager.has_undos());
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_selection_restored_by_undo_and_redo(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("abc", window, cx);
+                state.set_selected_range(1..2, cx);
+                state.replace_text_in_range(None, "X", window, cx);
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "abc");
+                assert_eq!(state.selected_range(), 1..2);
+
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "aXc");
+                assert_eq!(state.selected_range(), 2..2);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_forward_delete_restores_cursor(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("abc", window, cx);
+                state.set_selected_range(1..1, cx);
+                state.delete(&Delete, window, cx);
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "abc");
+                assert_eq!(state.selected_range(), 1..1);
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_selection_movement_preserves_redo(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "ab", window, cx);
+                state.undo(&Undo, window, cx);
+                state.set_selected_range(0..0, cx);
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "ab");
+
+                state.undo(&Undo, window, cx);
+                state.replace_text_in_range(None, "x", window, cx);
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "x");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_noop_edit_preserves_redo(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "a", window, cx);
+                state.undo(&Undo, window, cx);
+                state.backspace(&Backspace, window, cx);
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.value(), "a");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_noop_edit_breaks_coalescing_without_clearing_history(
+        cx: &mut TestAppContext,
+    ) {
+        let input_view = InputView::build(cx, |state| state);
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.replace_text_in_range(None, "alpha", window, cx);
+                state.replace_text_in_range(None, "", window, cx);
+                state.replace_text_in_range(None, "beta", window, cx);
+                assert_eq!(state.value(), "alphabeta");
+
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "alpha");
+                state.undo(&Undo, window, cx);
+                assert_eq!(state.value(), "");
+            });
+        });
+    }
+
+    #[gpui::test]
+    fn test_undo_manager_masked_redo_restores_actual_cursor(cx: &mut TestAppContext) {
+        let input_view = InputView::build(cx, |state| {
+            state.mask_pattern(MaskPattern::Number {
+                separator: Some(','),
+                fraction: None,
+            })
+        });
+        let mut cx = VisualTestContext::from_window(input_view.window_handle.into(), cx);
+        let input = input_view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("12345", window, cx);
+                state.set_selected_range(2..2, cx);
+                state.replace_text_in_range(None, "9", window, cx);
+                let selection_after_edit = state.selected_range();
+                assert_ne!(selection_after_edit.end, state.value().len());
+
+                state.undo(&Undo, window, cx);
+                state.redo(&Redo, window, cx);
+                assert_eq!(state.selected_range(), selection_after_edit);
             });
         });
     }
