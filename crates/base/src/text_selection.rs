@@ -1,12 +1,14 @@
 use std::{
     collections::{HashMap, HashSet},
+    ops::Range,
     rc::Rc,
 };
 
 use gpui::{
     App, AppContext as _, Bounds, Element, ElementId, Entity, EntityId, Global, GlobalElementId,
-    Hitbox, InspectorElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Point, ScrollWheelEvent, Style, WeakEntity, Window,
+    Half, Hitbox, InspectorElementId, IntoElement, LayoutId, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollWheelEvent, SharedString, Style, TextLayout,
+    WeakEntity, Window,
 };
 
 use crate::{AutoScroll, GlobalState};
@@ -53,6 +55,129 @@ pub struct SelectionRegionFrame {
     pub scope: SelectionScopeId,
     pub document_order: u64,
     pub text_bounds: Vec<Bounds<Pixels>>,
+}
+
+/// Per-frame text layout reported by a plain selectable region.
+#[derive(Clone)]
+pub struct SelectionRunFrame {
+    /// Logical order within the containing region.
+    pub order: u64,
+    /// The exact text used to produce `layout`.
+    pub text: SharedString,
+    /// Laid-out glyph geometry in window coordinates.
+    pub layout: TextLayout,
+    /// The run's window-coordinate paint bounds.
+    pub bounds: Bounds<Pixels>,
+}
+
+/// Selection projection for one [`SelectionRunFrame`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SelectionRunState {
+    /// The selected UTF-8 byte range in the run's text.
+    pub byte_range: Option<Range<usize>>,
+    /// Whether the containing region participates in the current selection.
+    pub active: bool,
+}
+
+/// Projects a region selection snapshot onto laid-out plain-text runs.
+///
+/// The returned states retain the input order so callers can pair every state
+/// with its frame. The ranges are always character boundaries; `order` is used
+/// only when a region caches selected text for copying.
+pub fn project_selection_runs(
+    snapshot: Option<SelectionSnapshot>,
+    runs: &[SelectionRunFrame],
+) -> Vec<SelectionRunState> {
+    let Some(snapshot) = snapshot else {
+        return vec![SelectionRunState::default(); runs.len()];
+    };
+    let Some((anchor, cursor)) = snapshot.resolved_points() else {
+        return runs
+            .iter()
+            .map(|_| SelectionRunState {
+                byte_range: None,
+                active: true,
+            })
+            .collect();
+    };
+
+    runs.iter()
+        .map(|run| SelectionRunState {
+            byte_range: selection_range_for_run(run, anchor, cursor),
+            active: true,
+        })
+        .collect()
+}
+
+fn selection_range_for_run(
+    run: &SelectionRunFrame,
+    selection_start: Point<Pixels>,
+    selection_end: Point<Pixels>,
+) -> Option<Range<usize>> {
+    debug_assert_eq!(run.text.len(), run.layout.len());
+
+    let line_height = run.layout.line_height();
+    let mut range = None;
+    for (offset, character) in run.text.char_indices() {
+        let next_offset = offset + character.len_utf8();
+        let Some(position) = run.layout.position_for_index(offset) else {
+            continue;
+        };
+
+        let char_width = run
+            .layout
+            .position_for_index(next_offset)
+            .filter(|next| next.y == position.y)
+            .map_or_else(|| line_height.half(), |next| next.x - position.x);
+
+        if point_in_selection_band(
+            position,
+            char_width,
+            selection_start,
+            selection_end,
+            line_height,
+        ) {
+            range.get_or_insert(offset..offset).end = next_offset;
+        }
+    }
+    range
+}
+
+fn point_in_selection_band(
+    position: Point<Pixels>,
+    char_width: Pixels,
+    selection_start: Point<Pixels>,
+    selection_end: Point<Pixels>,
+    line_height: Pixels,
+) -> bool {
+    let point_in_line =
+        |point: Point<Pixels>| point.y >= position.y && point.y < position.y + line_height;
+    let top = selection_start.y.min(selection_end.y);
+    let bottom = selection_start.y.max(selection_end.y);
+    let x = position.x + char_width.half();
+
+    if position.y + line_height <= top || position.y > bottom {
+        return false;
+    }
+
+    if point_in_line(selection_start) && point_in_line(selection_end) {
+        let left = selection_start.x.min(selection_end.x);
+        let right = selection_start.x.max(selection_end.x);
+        return x >= left && x <= right;
+    }
+
+    let (top_point, bottom_point) = if selection_start.y < selection_end.y {
+        (selection_start, selection_end)
+    } else {
+        (selection_end, selection_start)
+    };
+    if point_in_line(top_point) {
+        x >= top_point.x
+    } else if point_in_line(bottom_point) {
+        x <= bottom_point.x
+    } else {
+        true
+    }
 }
 
 type RegionSelectionCallback = Rc<dyn Fn(Option<SelectionSnapshot>, &mut App)>;
@@ -104,6 +229,27 @@ impl TextSelectionRegionState {
         self.local_selection = active;
     }
 
+    /// Projects this region's current snapshot onto plain-text runs and caches
+    /// their selected substrings for [`TextSelectionHost::selected_text`].
+    pub fn project_selection_runs(&mut self, runs: &[SelectionRunFrame]) -> Vec<SelectionRunState> {
+        let states = project_selection_runs(self.snapshot, runs);
+        let mut selected_runs = runs
+            .iter()
+            .zip(&states)
+            .enumerate()
+            .filter_map(|(index, (run, state))| {
+                state.byte_range.as_ref().map(|range| {
+                    debug_assert!(run.text.is_char_boundary(range.start));
+                    debug_assert!(run.text.is_char_boundary(range.end));
+                    (run.order, index, run.text[range.clone()].to_string())
+                })
+            })
+            .collect::<Vec<_>>();
+        selected_runs.sort_by_key(|(order, index, _)| (*order, *index));
+        self.selected_text = selected_runs.into_iter().map(|(_, _, text)| text).collect();
+        states
+    }
+
     /// Installs the callback which updates renderer highlights from host state.
     pub fn on_selection(
         &mut self,
@@ -133,6 +279,9 @@ impl TextSelectionRegionState {
     }
 
     fn set_snapshot(&mut self, snapshot: Option<SelectionSnapshot>, cx: &mut App) {
+        if self.snapshot == snapshot {
+            return;
+        }
         self.snapshot = snapshot;
         if let Some(callback) = &self.on_selection {
             callback(snapshot, cx);
@@ -831,8 +980,8 @@ mod tests {
     use super::*;
     use gpui::{
         Bounds, ContentMask, Context, Hitbox, HitboxBehavior, HitboxId, InteractiveElement as _,
-        IntoElement, ParentElement as _, Render, Styled as _, TestAppContext, Window, div, point,
-        px, size,
+        IntoElement, ParentElement as _, Render, SharedString, Styled as _, StyledText,
+        TestAppContext, TextLayout, Window, div, point, px, size,
     };
     use std::{cell::RefCell, rc::Rc};
 
@@ -848,6 +997,11 @@ mod tests {
 
     struct DoubleControllerView {
         region: TextSelectionRegion,
+    }
+
+    struct PlainRunLayoutView {
+        texts: Vec<SharedString>,
+        layouts: Vec<TextLayout>,
     }
 
     impl Render for WindowRegionView {
@@ -877,6 +1031,23 @@ mod tests {
                 .size_full()
                 .child(TextSelectionController)
                 .child(TextSelectionController)
+        }
+    }
+
+    impl Render for PlainRunLayoutView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            self.layouts.clear();
+            let children = self
+                .texts
+                .iter()
+                .enumerate()
+                .map(|(index, text)| {
+                    let text = StyledText::new(text.clone());
+                    self.layouts.push(text.layout().clone());
+                    div().absolute().top(px(index as f32 * 40.)).child(text)
+                })
+                .collect::<Vec<_>>();
+            div().size_full().children(children)
         }
     }
 
@@ -913,6 +1084,132 @@ mod tests {
                 cx,
             );
         }
+    }
+
+    fn laid_out_runs(texts: &[&str], cx: &mut TestAppContext) -> Vec<(SharedString, TextLayout)> {
+        let texts = texts
+            .iter()
+            .map(|text| SharedString::from(*text))
+            .collect::<Vec<_>>();
+        let view = cx.add_window({
+            let texts = texts.clone();
+            move |_, _| PlainRunLayoutView {
+                texts,
+                layouts: Vec::new(),
+            }
+        });
+        cx.update_window(*view, |_, window, cx| {
+            let _ = window.draw(cx);
+        })
+        .unwrap();
+        let layouts = cx.update(|cx| view.read(cx).unwrap().layouts.clone());
+        texts.into_iter().zip(layouts).collect()
+    }
+
+    fn plain_snapshot(anchor: Point<Pixels>, cursor: Point<Pixels>) -> SelectionSnapshot {
+        SelectionSnapshot {
+            anchor: SelectionEndpointSnapshot {
+                region_id: None,
+                point: anchor,
+            },
+            cursor: SelectionEndpointSnapshot {
+                region_id: None,
+                point: cursor,
+            },
+            is_selecting: false,
+            resolved_points: Some((anchor, cursor)),
+        }
+    }
+
+    fn run_frame(order: u64, text: SharedString, layout: TextLayout) -> SelectionRunFrame {
+        SelectionRunFrame {
+            order,
+            text,
+            bounds: layout.bounds(),
+            layout,
+        }
+    }
+
+    #[gpui::test]
+    fn plain_projection_preserves_forward_reversed_and_unicode_ranges(cx: &mut TestAppContext) {
+        let (text, layout) = laid_out_runs(&["aé🙂z"], cx).pop().unwrap();
+        let run = run_frame(0, text, layout.clone());
+        let start = layout.position_for_index(1).unwrap();
+        let end = layout.position_for_index(7).unwrap();
+
+        let forward = project_selection_runs(Some(plain_snapshot(start, end)), &[run.clone()]);
+        let reversed = project_selection_runs(Some(plain_snapshot(end, start)), &[run]);
+
+        assert_eq!(forward[0].byte_range, Some(1..7));
+        assert_eq!(reversed[0].byte_range, Some(1..7));
+        assert!(forward[0].active);
+        assert!(reversed[0].active);
+    }
+
+    #[gpui::test]
+    fn plain_projection_spans_multiple_runs_and_leaves_empty_gutters_unselected(
+        cx: &mut TestAppContext,
+    ) {
+        let mut runs = laid_out_runs(&["first", "", "second"], cx);
+        let (first_text, first_layout) = runs.remove(0);
+        let (gutter_text, gutter_layout) = runs.remove(0);
+        let (second_text, second_layout) = runs.remove(0);
+        let start = first_layout.position_for_index(2).unwrap();
+        let end = second_layout.position_for_index(3).unwrap();
+        let states = project_selection_runs(
+            Some(plain_snapshot(start, end)),
+            &[
+                run_frame(2, second_text, second_layout),
+                run_frame(1, gutter_text, gutter_layout),
+                run_frame(0, first_text, first_layout),
+            ],
+        );
+
+        assert_eq!(states[0].byte_range, Some(0..3));
+        assert_eq!(states[1].byte_range, None);
+        assert_eq!(states[2].byte_range, Some(2..5));
+        assert!(states.iter().all(|state| state.active));
+    }
+
+    #[gpui::test]
+    fn plain_projection_caches_multiple_region_copies_in_document_order(cx: &mut TestAppContext) {
+        let mut runs = laid_out_runs(&["one", "two"], cx);
+        let (first_text, first_layout) = runs.remove(0);
+        let (second_text, second_layout) = runs.remove(0);
+        let snapshot = plain_snapshot(
+            first_layout.position_for_index(1).unwrap(),
+            second_layout.position_for_index(2).unwrap(),
+        );
+        cx.update(|cx| {
+            let mut host = TextSelectionHost::default();
+            let first = FakeRegion::new("", cx);
+            let second = FakeRegion::new("", cx);
+            first.register(&mut host, 0., SelectionScopeId::default(), 1, cx);
+            second.register(&mut host, 20., SelectionScopeId::default(), 0, cx);
+
+            first.region.state().update(cx, |state, cx| {
+                state.set_snapshot(Some(snapshot), cx);
+                assert_eq!(
+                    state.project_selection_runs(&[run_frame(0, first_text, first_layout)]),
+                    vec![SelectionRunState {
+                        byte_range: Some(1..3),
+                        active: true,
+                    }]
+                );
+            });
+            second.region.state().update(cx, |state, cx| {
+                state.set_snapshot(Some(snapshot), cx);
+                assert_eq!(
+                    state.project_selection_runs(&[run_frame(0, second_text, second_layout)]),
+                    vec![SelectionRunState {
+                        byte_range: Some(0..2),
+                        active: true,
+                    }]
+                );
+            });
+
+            assert_eq!(host.selected_text(cx), "tw\nne");
+        });
     }
 
     #[gpui::test]

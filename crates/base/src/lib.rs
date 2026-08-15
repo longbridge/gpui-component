@@ -145,9 +145,9 @@ pub use switch::{
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
 pub use text_selection::{
-    SelectionEndpointSnapshot, SelectionRegionFrame, SelectionScopeId, SelectionSnapshot,
-    TextSelectionController, TextSelectionHost, TextSelectionRegion, TextSelectionRegionState,
-    WindowTextSelectionExt,
+    SelectionEndpointSnapshot, SelectionRegionFrame, SelectionRunFrame, SelectionRunState,
+    SelectionScopeId, SelectionSnapshot, TextSelectionController, TextSelectionHost,
+    TextSelectionRegion, TextSelectionRegionState, WindowTextSelectionExt, project_selection_runs,
 };
 pub use theme::{ResizableTheme, ScrollbarTheme, Theme};
 pub use theme_tokens::{
