@@ -10,8 +10,8 @@ use gpui::{
     WindowOptions, div, transparent_black,
 };
 use gpui_base::{
-    SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelectionController,
-    TextSelectionHost, TextSelectionRegion,
+    SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelection, TextSelectionRegion,
+    WindowTextSelectionExt as _,
 };
 
 struct PlainSelectableText {
@@ -134,20 +134,18 @@ impl Element for PlainSelectableText {
         self.styled_text
             .prepaint(id, inspector_id, bounds, &mut (), window, cx);
         let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
-        TextSelectionHost::install(window, cx).update(cx, |host, cx| {
-            host.register_region(
-                self.region.clone(),
-                SelectionRegionFrame {
-                    hitbox: hitbox.clone(),
-                    bounds,
-                    scroll_offset: Point::default(),
-                    scope: SelectionScopeId::default(),
-                    document_order: 0,
-                    text_bounds: vec![bounds],
-                },
-                cx,
-            );
-        });
+        window.register_text_selection_region(
+            self.region.clone(),
+            SelectionRegionFrame {
+                hitbox: hitbox.clone(),
+                bounds,
+                scroll_offset: Point::default(),
+                scope: SelectionScopeId::default(),
+                document_order: 0,
+                text_bounds: vec![bounds],
+            },
+            cx,
+        );
         hitbox
     }
 
@@ -197,7 +195,8 @@ impl Render for Example {
         div()
             .size_full()
             .p_8()
-            .child(TextSelectionController)
+            .bg(gpui::white())
+            .child(TextSelection)
             .child(PlainSelectableText::new(
                 self.region.clone(),
                 "Plain GPUI text — drag to select this UTF-8 text: café 🙂",

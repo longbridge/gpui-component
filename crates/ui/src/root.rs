@@ -5,7 +5,7 @@ use crate::{
     native_menu::FallbackMenuOverlay,
     notification::{Notification, NotificationList},
     sheet::Sheet,
-    text::TextSelectionController,
+    text::TextSelection,
     tooltip::render_tooltip,
     window_border,
 };
@@ -14,7 +14,7 @@ use gpui::{
     FocusHandle, InteractiveElement, IntoElement, KeyBinding, ParentElement as _, Pixels, Render,
     StyleRefinement, Styled, WeakFocusHandle, Window, actions, div, prelude::FluentBuilder as _,
 };
-use gpui_base::TextSelectionHost;
+use gpui_base::WindowTextSelectionExt as _;
 use std::{any::TypeId, rc::Rc};
 
 actions!(root, [Tab, TabPrev]);
@@ -50,8 +50,6 @@ pub struct Root {
     /// The focus handle that will be restored after a dialog is closed with animation.
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
-    /// Handle to the one base-owned window selection host.
-    text_selection_host: Option<Entity<TextSelectionHost>>,
 }
 
 #[derive(Clone)]
@@ -105,7 +103,6 @@ impl Root {
             window_shadow_size: window_border::SHADOW_SIZE,
             bordered: true,
             pending_focus_restore: None,
-            text_selection_host: None,
         }
     }
 
@@ -280,7 +277,7 @@ impl Root {
         ));
         // Opening a modal confines selection to it; drop any background
         // selection so it cannot linger (or be copied) under the modal.
-        self.clear_text_selection(cx);
+        window.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -296,7 +293,7 @@ impl Root {
         if let Some(handle) = self.close_dialog_internal() {
             window.focus(&handle, cx);
         }
-        self.clear_text_selection(cx);
+        window.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -320,7 +317,7 @@ impl Root {
             })
             .detach();
         }
-        self.clear_text_selection(cx);
+        window.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -334,7 +331,7 @@ impl Root {
         if let Some(handle) = previous_focused_handle.and_then(|h| h.upgrade()) {
             window.focus(&handle, cx);
         }
-        self.clear_text_selection(cx);
+        window.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -363,7 +360,7 @@ impl Root {
         });
         // Opening a modal confines selection to it; drop any background
         // selection so it cannot linger (or be copied) under the modal.
-        self.clear_text_selection(cx);
+        window.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -378,7 +375,7 @@ impl Root {
             window.focus(&previous_handle, cx);
         }
         self.active_sheet = None;
-        self.clear_text_selection(cx);
+        window.clear_text_selection(cx);
         cx.notify();
     }
 
@@ -519,34 +516,8 @@ impl Root {
         window.focus_prev(cx);
     }
 
-    pub(crate) fn window_selected_text(&self, cx: &App) -> String {
-        self.text_selection_host
-            .as_ref()
-            .map(|host| host.read(cx).selected_text(cx))
-            .unwrap_or_default()
-    }
-
-    pub(crate) fn has_text_selection(&self, cx: &App) -> bool {
-        self.text_selection_host
-            .as_ref()
-            .is_some_and(|host| host.read(cx).has_text_selection(cx))
-    }
-
-    /// Clear the one base-owned selection and every TextView-local selection.
-    pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
-        if let Some(host) = &self.text_selection_host {
-            host.update(cx, |host, cx| host.clear(cx));
-        }
-    }
-
-    pub(crate) fn end_text_selection(&mut self, cx: &mut Context<Self>) {
-        if let Some(host) = &self.text_selection_host {
-            host.update(cx, |host, cx| host.end(cx));
-        }
-    }
-
-    fn on_action_copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        let text = self.window_selected_text(cx).trim().to_string();
+    fn on_action_copy(&mut self, _: &Copy, window: &mut Window, cx: &mut Context<Self>) {
+        let text = window.selected_text(cx).trim().to_string();
         if text.is_empty() {
             cx.propagate();
             return;
@@ -569,9 +540,7 @@ impl Render for Root {
         }
         crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
         let active_scope = self.active_selection_scope().base_id();
-        let text_selection_host = TextSelectionHost::install(window, cx);
-        text_selection_host.update(cx, |host, cx| host.set_active_scope(active_scope, cx));
-        self.text_selection_host = Some(text_selection_host);
+        window.set_text_selection_scope(active_scope, cx);
 
         let inner = div()
             .id("root")
@@ -585,7 +554,7 @@ impl Render for Root {
             .bg(cx.theme().tokens.background)
             .text_color(cx.theme().foreground)
             .refine_style(&self.style)
-            .child(TextSelectionController)
+            .child(TextSelection)
             .child(self.view.clone())
             .child(self.tooltip_overlay.clone())
             .child(self.native_menu_overlay.clone());

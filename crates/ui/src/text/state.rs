@@ -93,6 +93,8 @@ pub struct TextViewState {
     format: TextViewFormat,
     text: String,
     revision: usize,
+    pub(super) selection_revision: usize,
+    compatible_layout_update: bool,
     parsed_error: Option<SharedString>,
     tx: Sender<UpdateOptions>,
     _parse_task: Task<()>,
@@ -129,6 +131,7 @@ impl TextViewState {
                             Ok(content) => {
                                 state.parsed_content = content;
                                 state.parsed_error = None;
+                                state.compatible_layout_update = parsed_update.append;
                             }
                             Err(err) => {
                                 state.parsed_error = Some(err);
@@ -137,7 +140,7 @@ impl TextViewState {
                         // Don't interrupt an active drag-selection; the stored
                         // positions remain valid for append-only updates and will
                         // self-correct on the next mouse-move event.
-                        if !state.is_selecting {
+                        if !parsed_update.append && !state.is_selecting {
                             state.reset_selection_and_adapter(cx);
                         }
                         cx.notify();
@@ -174,6 +177,8 @@ impl TextViewState {
             parsed_error: None,
             text: text.to_string(),
             revision: 0,
+            selection_revision: 0,
+            compatible_layout_update: false,
             tx,
             _parse_task,
             _receive_task,
@@ -320,6 +325,9 @@ impl TextViewState {
 
     fn increment_update(&mut self, text: &str, append: bool, cx: &mut Context<Self>) {
         self.revision += 1;
+        if !append {
+            self.selection_revision = self.selection_revision.wrapping_add(1);
+        }
         let update_options = UpdateOptions {
             revision: self.revision,
             append,
@@ -349,6 +357,10 @@ impl TextViewState {
                     self.parsed_error = Some(err);
                 }
             }
+            // Keep the background parser's accumulated document in sync so a
+            // later append extends this baseline instead of parsing the delta
+            // as a standalone document.
+            _ = self.tx.try_send(update_options);
             cx.notify();
             return;
         }
@@ -357,10 +369,7 @@ impl TextViewState {
     }
 
     /// Save bounds and unselect if bounds changed.
-    pub(super) fn update_bounds(&mut self, bounds: Bounds<Pixels>, cx: &mut App) {
-        if self.bounds.size != bounds.size {
-            self.reset_selection_and_adapter(cx);
-        }
+    pub(super) fn update_bounds(&mut self, bounds: Bounds<Pixels>, _cx: &mut App) {
         self.bounds = bounds;
     }
 
@@ -564,24 +573,32 @@ impl Render for TextViewState {
                 ),
             })
             .on_prepaint(move |bounds, window, cx| {
-                let (size_changed, selection_involves_view, has_selection_snapshot, is_selecting) = {
+                let (
+                    size_changed,
+                    selection_involves_view,
+                    has_selection_snapshot,
+                    is_selecting,
+                    compatible_layout_update,
+                ) = {
                     let state = state.read(cx);
                     (
                         state.bounds().size != bounds.size,
                         state.selection_adapter.selection_involves_region(cx),
                         state.selection_adapter.has_selection_snapshot(cx),
                         state.is_selecting,
+                        state.compatible_layout_update,
                     )
                 };
                 let mut revision_changed = false;
                 state.update(cx, |state, cx| {
                     revision_changed = state
                         .selection_adapter
-                        .update_layout_revision(state.revision);
+                        .update_layout_revision(state.selection_revision, state.is_selecting);
                     state.update_bounds(bounds, cx);
+                    state.compatible_layout_update = false;
                 });
                 if !is_selecting
-                    && ((size_changed && selection_involves_view)
+                    && ((size_changed && selection_involves_view && !compatible_layout_update)
                         || (revision_changed && has_selection_snapshot))
                 {
                     gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
@@ -634,6 +651,7 @@ impl Future for UpdateFuture {
                     }
                     _ = self.tx_result.try_send(ParsedUpdate {
                         revision: options.revision,
+                        append: options.append,
                         result: res,
                     });
                     if hit_coalesce_budget {
@@ -670,6 +688,7 @@ impl UpdateOptions {
 
 struct ParsedUpdate {
     revision: usize,
+    append: bool,
     result: Result<ParsedContent, SharedString>,
 }
 

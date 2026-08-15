@@ -224,33 +224,21 @@ impl WindowExt for Window {
 
     #[inline]
     fn selected_text(&mut self, cx: &mut App) -> String {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return String::new();
-        };
-        root.read(cx).window_selected_text(cx)
+        gpui_base::WindowTextSelectionExt::selected_text(self, cx)
     }
 
     #[inline]
     fn has_text_selection(&mut self, cx: &mut App) -> bool {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return false;
-        };
-        root.read(cx).has_text_selection(cx)
+        gpui_base::WindowTextSelectionExt::has_text_selection(self, cx)
     }
 
     #[inline]
     fn clear_text_selection(&mut self, cx: &mut App) {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return;
-        };
-        root.update(cx, |root, cx| root.clear_text_selection(cx));
+        gpui_base::WindowTextSelectionExt::clear_text_selection(self, cx);
     }
 
     #[inline]
     fn end_text_selection(&mut self, cx: &mut App) {
-        let Some(root) = self.root::<Root>().flatten() else {
-            return;
-        };
-        root.update(cx, |root, cx| root.end_text_selection(cx));
+        gpui_base::WindowTextSelectionExt::end_text_selection(self, cx);
     }
 }

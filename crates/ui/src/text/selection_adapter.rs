@@ -2,8 +2,8 @@ use std::{cell::RefCell, ops::RangeInclusive, rc::Rc};
 
 use gpui::{App, Bounds, EntityId, Hitbox, Pixels, Point, WeakEntity, Window};
 use gpui_base::{
-    SelectionEndpointSnapshot, SelectionRegionFrame, SelectionScopeId, SelectionSnapshot,
-    TextSelectionHost, TextSelectionRegion,
+    SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionScopeId,
+    SelectionSnapshot, TextSelectionRegion, WindowTextSelectionExt as _,
 };
 
 use super::TextViewState;
@@ -18,6 +18,7 @@ struct CachedBlockEndpoint {
 struct VirtualBlockSelection {
     anchor: Option<CachedBlockEndpoint>,
     cursor: Option<CachedBlockEndpoint>,
+    coverage: SelectionRegionCoverage,
 }
 
 impl VirtualBlockSelection {
@@ -26,6 +27,8 @@ impl VirtualBlockSelection {
             *self = Self::default();
             return;
         };
+
+        self.coverage = snapshot.region_coverage();
 
         Self::update_endpoint(&mut self.anchor, snapshot.anchor, region_id);
         Self::update_endpoint(&mut self.cursor, snapshot.cursor, region_id);
@@ -45,21 +48,27 @@ impl VirtualBlockSelection {
         *cached = Some(CachedBlockEndpoint { endpoint, block_ix });
     }
 
-    fn block_range(&self, region_id: EntityId) -> Option<RangeInclusive<usize>> {
+    fn block_range(&self, region_id: EntityId, last: usize) -> Option<RangeInclusive<usize>> {
         let anchor = self.anchor?;
         let cursor = self.cursor?;
-        if anchor.endpoint.region_id != Some(region_id)
-            || cursor.endpoint.region_id != Some(region_id)
-        {
-            return None;
+        match self.coverage {
+            SelectionRegionCoverage::Full => Some(0..=last),
+            SelectionRegionCoverage::FromStart => Some(0..=anchor.block_ix.or(cursor.block_ix)?),
+            SelectionRegionCoverage::ToEnd => Some(anchor.block_ix.or(cursor.block_ix)?..=last),
+            SelectionRegionCoverage::Bounded => {
+                if anchor.endpoint.region_id != Some(region_id)
+                    || cursor.endpoint.region_id != Some(region_id)
+                {
+                    return None;
+                }
+                let (anchor, cursor) = (anchor.block_ix?, cursor.block_ix?);
+                Some(anchor.min(cursor)..=anchor.max(cursor))
+            }
         }
-
-        let (anchor, cursor) = (anchor.block_ix?, cursor.block_ix?);
-        Some(anchor.min(cursor)..=anchor.max(cursor))
     }
 }
 
-/// TextView's renderer-specific bridge to the base-owned selection host.
+/// TextView's renderer-specific bridge to base-owned window selection.
 #[derive(Clone)]
 pub(super) struct TextViewSelectionAdapter {
     region: TextSelectionRegion,
@@ -114,7 +123,8 @@ impl TextViewSelectionAdapter {
                     return String::new();
                 };
                 let state = view.read(cx);
-                let blocks = blocks_for_copy.borrow().block_range(region_id);
+                let last = state.parsed_content.document.blocks.len().saturating_sub(1);
+                let blocks = blocks_for_copy.borrow().block_range(region_id, last);
                 state.selected_text_in(blocks)
             });
 
@@ -141,12 +151,14 @@ impl TextViewSelectionAdapter {
         }
     }
 
-    pub(super) fn update_layout_revision(&mut self, revision: usize) -> bool {
+    pub(super) fn update_layout_revision(&mut self, revision: usize, is_selecting: bool) -> bool {
         let changed = self
             .layout_revision
             .is_some_and(|previous| previous != revision);
-        self.layout_revision = Some(revision);
-        changed
+        if !changed || !is_selecting {
+            self.layout_revision = Some(revision);
+        }
+        changed && !is_selecting
     }
 
     pub(super) fn begin_frame(&mut self) {
@@ -167,20 +179,18 @@ impl TextViewSelectionAdapter {
         window: &mut Window,
         cx: &mut App,
     ) {
-        TextSelectionHost::install(window, cx).update(cx, |host, cx| {
-            host.register_region(
-                self.region.clone(),
-                SelectionRegionFrame {
-                    hitbox,
-                    bounds,
-                    scroll_offset,
-                    scope,
-                    document_order,
-                    text_bounds: self.text_bounds.clone(),
-                },
-                cx,
-            );
-        });
+        window.register_text_selection_region(
+            self.region.clone(),
+            SelectionRegionFrame {
+                hitbox,
+                bounds,
+                scroll_offset,
+                scope,
+                document_order,
+                text_bounds: self.text_bounds.clone(),
+            },
+            cx,
+        );
     }
 
     pub(super) fn selection_points(&self, cx: &App) -> Option<(Point<Pixels>, Point<Pixels>)> {

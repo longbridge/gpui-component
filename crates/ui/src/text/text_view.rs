@@ -335,7 +335,10 @@ impl Element for TextView {
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
             state.scrollable = self.scrollable;
-            state.text_view_style = self.text_view_style.clone();
+            if state.text_view_style != self.text_view_style {
+                state.selection_revision = state.selection_revision.wrapping_add(1);
+                state.text_view_style = self.text_view_style.clone();
+            }
 
             if let Some(text) = self.text.clone() {
                 state.set_text(text.as_str(), cx);
@@ -386,7 +389,7 @@ impl Element for TextView {
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        bounds: Bounds<Pixels>,
+        _bounds: Bounds<Pixels>,
         request_layout: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
         window: &mut Window,
@@ -404,16 +407,20 @@ impl Element for TextView {
         UiGlobalState::global_mut(cx).text_view_state_stack.pop();
 
         if self.selectable {
-            let (adapter, scroll_offset) = {
+            let (adapter, scroll_offset, content_bounds) = {
                 let state = state.read(cx);
-                (state.selection_adapter.clone(), state.scroll_offset())
+                (
+                    state.selection_adapter.clone(),
+                    state.scroll_offset(),
+                    state.bounds(),
+                )
             };
             let global = UiGlobalState::global_mut(cx);
             let scope = global.current_selection_scope().base_id();
             let document_order = global.next_selection_document_order();
             adapter.register_frame(
                 hitbox.clone(),
-                bounds,
+                content_bounds,
                 scroll_offset,
                 scope,
                 document_order,

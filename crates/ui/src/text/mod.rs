@@ -13,7 +13,7 @@ mod utils;
 mod window_selection;
 
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
-pub(crate) use gpui_base::TextSelectionController;
+pub(crate) use gpui_base::TextSelection;
 pub use markdown_ext::*;
 pub use state::*;
 pub use style::*;

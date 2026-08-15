@@ -137,8 +137,7 @@ mod tests {
         div, point, px,
     };
     use gpui_base::{
-        SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelectionHost,
-        TextSelectionRegion,
+        SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelectionRegion,
     };
     use std::cell::Cell;
     use std::rc::Rc;
@@ -148,6 +147,7 @@ mod tests {
         region: TextSelectionRegion,
         text: SharedString,
         styled_text: StyledText,
+        document_order: u64,
     }
 
     impl PlainSelectableText {
@@ -157,7 +157,13 @@ mod tests {
                 region,
                 styled_text: StyledText::new(text.clone()),
                 text,
+                document_order: 0,
             }
+        }
+
+        fn document_order(mut self, document_order: u64) -> Self {
+            self.document_order = document_order;
+            self
         }
     }
 
@@ -204,20 +210,19 @@ mod tests {
             self.styled_text
                 .prepaint(id, inspector_id, bounds, &mut (), window, cx);
             let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
-            TextSelectionHost::install(window, cx).update(cx, |host, cx| {
-                host.register_region(
-                    self.region.clone(),
-                    SelectionRegionFrame {
-                        hitbox: hitbox.clone(),
-                        bounds,
-                        scroll_offset: Default::default(),
-                        scope: SelectionScopeId::default(),
-                        document_order: 0,
-                        text_bounds: vec![bounds],
-                    },
-                    cx,
-                );
-            });
+            gpui_base::WindowTextSelectionExt::register_text_selection_region(
+                window,
+                self.region.clone(),
+                SelectionRegionFrame {
+                    hitbox: hitbox.clone(),
+                    bounds,
+                    scroll_offset: Default::default(),
+                    scope: SelectionScopeId::default(),
+                    document_order: self.document_order,
+                    text_bounds: vec![bounds],
+                },
+                cx,
+            );
             hitbox
         }
 
@@ -280,6 +285,183 @@ mod tests {
         text_view: Entity<TextViewState>,
     }
 
+    struct CrossRegionVirtualView {
+        top_region: TextSelectionRegion,
+        bottom_region: TextSelectionRegion,
+        text_view: Entity<TextViewState>,
+        format: crate::text::SelectionFormat,
+    }
+
+    impl CrossRegionVirtualView {
+        fn new(format: crate::text::SelectionFormat, cx: &mut Context<Self>) -> Self {
+            let source = (0..20)
+                .map(|ix| format!("**Paragraph{ix}**"))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            Self {
+                top_region: TextSelectionRegion::new("", cx),
+                bottom_region: TextSelectionRegion::new("", cx),
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+                format,
+            }
+        }
+    }
+
+    impl Render for CrossRegionVirtualView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .pt(px(10.))
+                .child(
+                    div().h(px(40.)).child(
+                        PlainSelectableText::new(self.top_region.clone(), "Top plain")
+                            .document_order(0),
+                    ),
+                )
+                .child(
+                    div().h(px(80.)).child(
+                        TextView::new(&self.text_view)
+                            .selectable(true)
+                            .scrollable(true)
+                            .selection_format(self.format),
+                    ),
+                )
+                .child(
+                    div().h(px(40.)).child(
+                        PlainSelectableText::new(self.bottom_region.clone(), "Bottom plain")
+                            .document_order(2),
+                    ),
+                )
+        }
+    }
+
+    enum CrossRegionVirtualScenario {
+        PlainToVirtualTail,
+        VirtualHeadToPlain,
+        VirtualInMiddle,
+    }
+
+    fn assert_cross_region_virtual_export(
+        format: crate::text::SelectionFormat,
+        scenario: CrossRegionVirtualScenario,
+        cx: &mut TestAppContext,
+    ) {
+        use gpui::ListOffset;
+
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(move |window, cx| {
+            let content = cx.new(|cx| CrossRegionVirtualView::new(format, cx));
+            Root::new(content, window, cx)
+        });
+        let content = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<CrossRegionVirtualView>()
+                .unwrap()
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        let (bounds, list_state) = content.read_with(cx, |content, cx| {
+            let state = content.text_view.read(cx);
+            (state.bounds(), state.list_state.clone())
+        });
+        let top_plain = point(px(1.), bounds.origin.y - px(20.));
+        let bottom_plain = point(px(1.), bounds.bottom() + px(20.));
+
+        match scenario {
+            CrossRegionVirtualScenario::PlainToVirtualTail => {
+                list_state.scroll_to(ListOffset {
+                    item_ix: 19,
+                    offset_in_item: px(0.),
+                });
+                cx.update(|window, cx| {
+                    let _ = window.draw(cx);
+                });
+                drag(
+                    cx,
+                    top_plain,
+                    point(bounds.right() - px(1.), bounds.bottom() - px(1.)),
+                );
+            }
+            CrossRegionVirtualScenario::VirtualHeadToPlain => {
+                drag(cx, bounds.origin + point(px(1.), px(1.)), bottom_plain);
+            }
+            CrossRegionVirtualScenario::VirtualInMiddle => {
+                drag(cx, top_plain, bottom_plain);
+            }
+        }
+
+        let text = window_selected_text(cx);
+        for ix in 0..20 {
+            let expected = if format == crate::text::SelectionFormat::Source {
+                format!("**Paragraph{ix}**")
+            } else {
+                format!("Paragraph{ix}")
+            };
+            assert!(
+                text.contains(&expected),
+                "missing {expected:?} for cross-region virtual selection: {text:?}"
+            );
+        }
+    }
+
+    #[gpui::test]
+    fn plain_to_virtual_tail_exports_unpainted_plain_blocks(cx: &mut TestAppContext) {
+        assert_cross_region_virtual_export(
+            crate::text::SelectionFormat::Plain,
+            CrossRegionVirtualScenario::PlainToVirtualTail,
+            cx,
+        );
+    }
+
+    #[gpui::test]
+    fn plain_to_virtual_tail_exports_unpainted_source_blocks(cx: &mut TestAppContext) {
+        assert_cross_region_virtual_export(
+            crate::text::SelectionFormat::Source,
+            CrossRegionVirtualScenario::PlainToVirtualTail,
+            cx,
+        );
+    }
+
+    #[gpui::test]
+    fn virtual_head_to_plain_exports_unpainted_plain_blocks(cx: &mut TestAppContext) {
+        assert_cross_region_virtual_export(
+            crate::text::SelectionFormat::Plain,
+            CrossRegionVirtualScenario::VirtualHeadToPlain,
+            cx,
+        );
+    }
+
+    #[gpui::test]
+    fn virtual_head_to_plain_exports_unpainted_source_blocks(cx: &mut TestAppContext) {
+        assert_cross_region_virtual_export(
+            crate::text::SelectionFormat::Source,
+            CrossRegionVirtualScenario::VirtualHeadToPlain,
+            cx,
+        );
+    }
+
+    #[gpui::test]
+    fn middle_virtual_region_exports_all_plain_blocks(cx: &mut TestAppContext) {
+        assert_cross_region_virtual_export(
+            crate::text::SelectionFormat::Plain,
+            CrossRegionVirtualScenario::VirtualInMiddle,
+            cx,
+        );
+    }
+
+    #[gpui::test]
+    fn middle_virtual_region_exports_all_source_blocks(cx: &mut TestAppContext) {
+        assert_cross_region_virtual_export(
+            crate::text::SelectionFormat::Source,
+            CrossRegionVirtualScenario::VirtualInMiddle,
+            cx,
+        );
+    }
+
     impl BaseOwnedTextViewSelection {
         fn new(cx: &mut Context<Self>) -> Self {
             Self {
@@ -310,6 +492,7 @@ mod tests {
         /// Blank gap between the two views, used to anchor a selection in blank
         /// space (the proxy-anchored endpoint path).
         mid_gap: gpui::Pixels,
+        first_style: crate::text::TextViewStyle,
     }
 
     impl ChatTestView {
@@ -321,6 +504,7 @@ mod tests {
                 second_selectable,
                 top_offset: px(10.),
                 mid_gap: px(0.),
+                first_style: crate::text::TextViewStyle::default(),
             }
         }
     }
@@ -338,9 +522,11 @@ mod tests {
                 .size_full()
                 .pt(self.top_offset)
                 .child(
-                    div()
-                        .h(px(40.))
-                        .child(TextView::new(&self.first).selectable(true)),
+                    div().h(px(40.)).child(
+                        TextView::new(&self.first)
+                            .selectable(true)
+                            .style(self.first_style.clone()),
+                    ),
                 )
                 // A blank gap between the two views. It is not over any
                 // TextView hitbox, so a press here exercises the blank-space
@@ -476,11 +662,73 @@ mod tests {
         );
     }
 
+    #[gpui::test]
+    fn base_clear_resets_text_view_before_returning(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(BaseOwnedTextViewSelection::new);
+            Root::new(content, window, cx)
+        });
+        let content = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<BaseOwnedTextViewSelection>()
+                .unwrap()
+        });
+        let text_view = content.read_with(cx, |content, _| content.text_view.clone());
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            text_view.update(cx, |state, cx| state.select_all(cx));
+            gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
+            assert_eq!(text_view.read(cx).selected_text(), "");
+        });
+    }
+
+    #[gpui::test]
+    fn base_clear_then_select_all_in_one_effect_keeps_the_new_selection(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(BaseOwnedTextViewSelection::new);
+            Root::new(content, window, cx)
+        });
+        let content = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<BaseOwnedTextViewSelection>()
+                .unwrap()
+        });
+        let text_view = content.read_with(cx, |content, _| content.text_view.clone());
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            text_view.update(cx, |state, cx| state.select_all(cx));
+            gpui_base::WindowTextSelectionExt::clear_text_selection(window, cx);
+            text_view.update(cx, |state, cx| state.select_all(cx));
+        });
+        cx.run_until_parked();
+
+        let (has_selection, selected) = cx.update(|window, cx| {
+            (
+                gpui_base::WindowTextSelectionExt::has_text_selection(window, cx),
+                gpui_base::WindowTextSelectionExt::selected_text(window, cx),
+            )
+        });
+        assert!(has_selection);
+        assert_eq!(selected.trim(), "Single authority");
+    }
+
     /// A `scrollable(true)` TextView virtualizes its blocks, so a block only
     /// learns its selection once it has been painted. Pressing at the top,
     /// scrolling with the wheel and releasing at the bottom leaves every block
     /// in between unpainted — copying used to drop all of them.
     struct ScrollableTextViewTest {
+        text_view: Entity<TextViewState>,
+    }
+
+    struct PaddedScrollableTextViewTest {
         text_view: Entity<TextViewState>,
     }
 
@@ -512,6 +760,88 @@ mod tests {
                 ),
             )
         }
+    }
+
+    impl Render for PaddedScrollableTextViewTest {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                TextView::new(&self.text_view)
+                    .selectable(true)
+                    .scrollable(true)
+                    .h(px(300.))
+                    .p(px(100.)),
+            )
+        }
+    }
+
+    #[gpui::test]
+    fn padded_scrollable_text_view_uses_content_origin_for_virtual_blocks(cx: &mut TestAppContext) {
+        use gpui::ListOffset;
+
+        const BLOCKS: usize = 20;
+        let source = (0..BLOCKS)
+            .map(|ix| format!("Paragraph{ix}"))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let view = cx.new(|cx| PaddedScrollableTextViewTest {
+                text_view: cx.new(|cx| TextViewState::markdown(&source, cx)),
+            });
+            Root::new(view, window, cx)
+        });
+        let view = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<PaddedScrollableTextViewTest>()
+                .unwrap()
+        });
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        let (text_view, bounds) = view.read_with(cx, |view, cx| {
+            let state = view.text_view.read(cx);
+            (view.text_view.clone(), state.bounds())
+        });
+
+        cx.simulate_mouse_down(
+            bounds.origin + point(px(1.), px(1.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        let list_state = text_view.read_with(cx, |state, _| state.list_state.clone());
+        list_state.scroll_to(ListOffset {
+            item_ix: BLOCKS - 1,
+            offset_in_item: px(0.),
+        });
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_move(
+            point(bounds.right() - px(1.), bounds.bottom() - px(1.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_up(
+            point(bounds.right() - px(1.), bounds.bottom() - px(1.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let text = window_selected_text(cx);
+        assert!(
+            text.contains("Paragraph0"),
+            "first block was skipped: {text:?}"
+        );
+        assert!(
+            text.contains("Paragraph18"),
+            "drag did not reach the tail: {text:?}"
+        );
     }
 
     /// [`Paragraph::render`] stores one `InlineState` per run of children
@@ -1049,6 +1379,89 @@ mod tests {
             first.update(cx, |state, cx| state.set_text("Other words", cx));
         });
         cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(window_selected_text(cx), "");
+    }
+
+    #[gpui::test]
+    fn active_drag_replacement_invalidates_after_mouse_up(cx: &mut TestAppContext) {
+        let (chat, cx) = setup(true, cx);
+        let first = chat.read_with(cx, |chat, _| chat.first.clone());
+
+        cx.simulate_mouse_down(
+            point(px(0.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(300.), px(15.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|_, cx| {
+            first.update(cx, |state, cx| state.set_text("Other words", cx));
+        });
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.simulate_mouse_up(
+            point(px(300.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert_eq!(window_selected_text(cx), "");
+    }
+
+    #[gpui::test]
+    fn active_drag_append_keeps_compatible_selection(cx: &mut TestAppContext) {
+        let (chat, cx) = setup(true, cx);
+        let first = chat.read_with(cx, |chat, _| chat.first.clone());
+
+        cx.simulate_mouse_down(
+            point(px(0.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.simulate_mouse_move(
+            point(px(300.), px(15.)),
+            Some(MouseButton::Left),
+            Modifiers::default(),
+        );
+        cx.update(|_, cx| {
+            first.update(cx, |state, cx| state.push_str(" again", cx));
+        });
+        cx.run_until_parked();
+        cx.simulate_mouse_up(
+            point(px(300.), px(15.)),
+            MouseButton::Left,
+            Modifiers::default(),
+        );
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        let selected = window_selected_text(cx);
+        assert!(selected.contains("Hello world"), "selected={selected:?}");
+    }
+
+    #[gpui::test]
+    fn same_size_style_reflow_invalidates_finished_selection(cx: &mut TestAppContext) {
+        let (chat, cx) = setup(true, cx);
+        drag(cx, point(px(0.), px(15.)), point(px(300.), px(15.)));
+        assert_eq!(window_selected_text(cx).trim(), "Hello world");
+
+        chat.update(cx, |chat, cx| {
+            chat.first_style.heading_base_font_size = px(28.);
+            cx.notify();
+        });
         cx.update(|window, cx| {
             let _ = window.draw(cx);
         });
