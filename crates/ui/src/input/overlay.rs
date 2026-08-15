@@ -46,8 +46,7 @@ struct OverlaySignature {
 /// The popovers driven by language features: completion, code actions, hover
 /// and diagnostics. They belong to a code editor, so they are built and synced
 /// by [`OverlayMode`], where the state's kind is concrete.
-#[doc(hidden)]
-pub struct LspOverlays {
+pub(crate) struct LspOverlays {
     completion: Entity<CompletionMenu>,
     code_actions: Entity<CodeActionMenu>,
     hover: Option<Entity<HoverPopover>>,
@@ -63,8 +62,7 @@ pub struct LspOverlays {
 /// Deliberately free of content: only what is needed to decide whether a
 /// popover is shown and whether it changed. The content is read from the state
 /// again, on the frames where it actually did.
-#[doc(hidden)]
-pub struct LspSnapshot {
+pub(crate) struct LspSnapshot {
     completion: OverlaySignature,
     completion_start: Option<usize>,
     code_action: OverlaySignature,
@@ -89,15 +87,8 @@ impl LspSnapshot {
 /// that builds language-feature popovers, and inside it the state is an
 /// `Entity<EditorState>`, which those popovers take.
 ///
-/// A framework-internal seam, named only because it bounds [`super::Input`].
-#[doc(hidden)]
-pub trait OverlayMode: InputModeKind + Sized {
-    /// This state seen as "whichever input is here".
-    ///
-    /// Which variant follows from the mode, so the renderer derives it rather
-    /// than being told, and a `Textarea` cannot register itself as an `Editor`.
-    fn any_state(state: &Entity<InputBaseState<Self>>) -> crate::input::AnyInputState;
-
+/// Entirely internal: nothing public is generic over the mode any more.
+pub(crate) trait OverlayMode: InputModeKind + Sized {
     /// Reads the language-feature state this mode shows, if any.
     fn lsp_snapshot(_state: &InputBaseState<Self>, _cx: &App) -> Option<LspSnapshot> {
         None
@@ -124,23 +115,10 @@ pub trait OverlayMode: InputModeKind + Sized {
     }
 }
 
-impl OverlayMode for crate::input::InputMode {
-    fn any_state(state: &Entity<InputBaseState<Self>>) -> crate::input::AnyInputState {
-        state.clone().into()
-    }
-}
-
-impl OverlayMode for crate::input::TextareaMode {
-    fn any_state(state: &Entity<InputBaseState<Self>>) -> crate::input::AnyInputState {
-        state.clone().into()
-    }
-}
+impl OverlayMode for crate::input::InputMode {}
+impl OverlayMode for crate::input::TextareaMode {}
 
 impl OverlayMode for crate::input::EditorMode {
-    fn any_state(state: &Entity<InputBaseState<Self>>) -> crate::input::AnyInputState {
-        state.clone().into()
-    }
-
     fn install_action_handler(state: &Entity<InputBaseState<Self>>, cx: &mut App) {
         let id = state.entity_id();
         state.update(cx, move |state, _| {

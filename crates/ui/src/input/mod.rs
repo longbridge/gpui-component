@@ -31,7 +31,6 @@ pub use gpui_base::input::{
 };
 pub use gpui_base::input::{EditorMode, InputMode, InputModeKind, TextareaMode};
 #[doc(hidden)]
-pub use overlay::OverlayMode;
 mod editor;
 mod state;
 mod textarea;

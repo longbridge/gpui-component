@@ -18,12 +18,9 @@ use crate::{Sizable, StyleSized};
 use gpui_base::InputBase as BaseInput;
 use rust_i18n::t;
 
-use super::state::sync_focused_input_registry;
+use super::state::{TextInputState, sync_focused_input_registry};
 use super::{InputContentType, InputState, sync_native_content_type};
 use crate::styled::FocusRingStyleExt as _;
-use gpui_base::input::{InputBaseState, InputMode};
-
-use super::overlay::OverlayMode;
 
 fn accessibility_role(
     is_multi_line: bool,
@@ -109,8 +106,8 @@ pub(crate) fn input_style(disabled: bool, cx: &App) -> (Hsla, Hsla) {
 
 /// A text input element bind to an [`InputState`].
 #[derive(IntoElement)]
-pub struct Input<M: OverlayMode = InputMode> {
-    state: Entity<InputBaseState<M>>,
+pub struct Input {
+    state: TextInputState,
     style: StyleRefinement,
     size: Size,
     prefix: Option<AnyElement>,
@@ -136,14 +133,14 @@ pub struct Input<M: OverlayMode = InputMode> {
     context_menu_builder: Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
 }
 
-impl<M: OverlayMode> Sizable for Input<M> {
+impl Sizable for Input {
     fn with_size(mut self, size: impl Into<Size>) -> Self {
         self.size = size.into();
         self
     }
 }
 
-impl<M: OverlayMode> Selectable for Input<M> {
+impl Selectable for Input {
     fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -154,7 +151,7 @@ impl<M: OverlayMode> Selectable for Input<M> {
     }
 }
 
-impl<M: OverlayMode> crate::FocusableExt for Input<M> {
+impl crate::FocusableExt for Input {
     fn focus_ring(mut self, enabled: bool) -> Self {
         self.focus_bordered = enabled;
         self
@@ -165,23 +162,21 @@ impl<M: OverlayMode> crate::FocusableExt for Input<M> {
     }
 }
 
-impl Input<InputMode> {
+impl Input {
     /// Create a new [`Input`] element bind to the [`InputState`].
     pub fn new(state: &Entity<InputState>) -> Self {
-        Self::with_state(state.clone())
+        Self::with_state(state.clone().into())
     }
-}
 
-impl<M: OverlayMode> Input<M> {
     /// Builds an input renderer around a state of any kind.
     ///
     /// `Textarea` and `Editor` render through this. Application code uses
     /// [`Input::new`], [`super::Textarea`], or [`super::Editor`].
-    pub(crate) fn from_state(state: &Entity<InputBaseState<M>>) -> Self {
-        Self::with_state(state.clone())
+    pub(crate) fn from_state(state: impl Into<TextInputState>) -> Self {
+        Self::with_state(state.into())
     }
 
-    fn with_state(state: Entity<InputBaseState<M>>) -> Self {
+    fn with_state(state: TextInputState) -> Self {
         Self {
             state,
             size: Size::default(),
@@ -319,8 +314,8 @@ impl<M: OverlayMode> Input<M> {
         self
     }
 
-    fn render_toggle_mask_button(state: &Entity<InputBaseState<M>>, cx: &App) -> impl IntoElement {
-        let masked = state.read(cx).presentation().is_masked();
+    fn render_toggle_mask_button(state: &TextInputState, cx: &App) -> impl IntoElement {
+        let masked = state.presentation(cx).is_masked();
         Button::new("toggle-mask")
             .icon(if masked {
                 IconName::Eye
@@ -332,16 +327,12 @@ impl<M: OverlayMode> Input<M> {
             .tab_stop(false)
             .on_click({
                 let state = state.clone();
-                move |_, window, cx| {
-                    state.update(cx, |state, cx| {
-                        state.toggle_masked(window, cx);
-                    })
-                }
+                move |_, window, cx| state.toggle_masked(window, cx)
             })
     }
 
     fn handle_accessibility_set_value(
-        state: &Entity<InputBaseState<M>>,
+        state: &TextInputState,
         data: Option<&gpui::accesskit::ActionData>,
         window: &mut Window,
         cx: &mut App,
@@ -349,42 +340,41 @@ impl<M: OverlayMode> Input<M> {
         let Some(gpui::accesskit::ActionData::Value(value)) = data else {
             return;
         };
-        state.update(cx, |state, cx| {
-            state.replace_all(value.to_string(), window, cx);
-        });
+        state.replace_all(value.to_string(), window, cx);
     }
 
     /// This method must after the refine_style.
     fn render_editor(
-        input_state: &Entity<InputBaseState<M>>,
+        input_state: TextInputState,
         search_panel: Option<AnyElement>,
         _: &Window,
     ) -> impl IntoElement {
-        v_flex()
-            .size_full()
-            .children(search_panel)
-            .child(div().relative().flex_1().child(input_state.clone()))
+        v_flex().size_full().children(search_panel).child(
+            div()
+                .relative()
+                .flex_1()
+                .child(input_state.into_any_element()),
+        )
     }
 }
 
-impl<M: OverlayMode> Styled for Input<M> {
+impl Styled for Input {
     fn style(&mut self) -> &mut StyleRefinement {
         &mut self.style
     }
 }
 
-impl<M: OverlayMode> RenderOnce for Input<M> {
+impl RenderOnce for Input {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         const LINE_HEIGHT: Rems = Rems(1.25);
         let text_align = self.style.text.text_align.unwrap_or(TextAlign::Left);
         let state = self.state.clone();
-        // Which kind of input this registers as follows from `M`; the `From`
-        // impls on `AnyInputState` are that mapping.
-        sync_focused_input_registry(M::any_state(&state), window, cx);
+        // Which kind of input this registers as follows from the state itself.
+        sync_focused_input_registry(&state, window, cx);
 
-        state.update(cx, |state, cx| {
-            state.ensure_highlighter_factory(crate::highlighter::input_highlighter_factory());
-            state.set_editor_style(gpui_base::input::InputEditorStyle {
+        state.ensure_highlighter_factory(crate::highlighter::input_highlighter_factory(), cx);
+        state.set_editor_style(
+            gpui_base::input::InputEditorStyle {
                 foreground: cx.theme().foreground,
                 muted_foreground: cx.theme().muted_foreground,
                 background: cx.theme().editor_background(),
@@ -415,8 +405,11 @@ impl<M: OverlayMode> RenderOnce for Input<M> {
                         .selected(is_folded)
                         .into_any_element()
                 })),
-            });
-            state.set_editor_paddings(if state.presentation().is_multi_line() {
+            },
+            cx,
+        );
+        state.set_editor_paddings(
+            if state.presentation(cx).is_multi_line() {
                 Edges {
                     top: self.size.input_py(),
                     right: self.size.input_px(),
@@ -425,12 +418,15 @@ impl<M: OverlayMode> RenderOnce for Input<M> {
                 }
             } else {
                 Edges::default()
-            });
-            state.set_disabled(self.disabled, cx);
-            state.set_readonly(self.readonly, cx);
-            state.set_text_align(text_align, cx);
-            let custom = self.context_menu_builder.clone();
-            state.on_context_menu(Rc::new(move |_, capabilities, position, window, cx| {
+            },
+            cx,
+        );
+        state.set_disabled(self.disabled, cx);
+        state.set_readonly(self.readonly, cx);
+        state.set_text_align(text_align, cx);
+        let custom = self.context_menu_builder.clone();
+        state.on_context_menu(
+            Rc::new(move |_, capabilities, position, window, cx| {
                 let menu = if let Some(custom) = custom.as_ref() {
                     custom(NativeMenu::new(), window, cx)
                 } else {
@@ -475,11 +471,12 @@ impl<M: OverlayMode> RenderOnce for Input<M> {
                     )
                 };
                 menu.show(position, window, cx);
-            }));
-        });
-        let overlays = super::overlay::render_overlays(&state, window, cx);
+            }),
+            cx,
+        );
+        let overlays = state.render_overlays(window, cx);
 
-        let presentation = state.read(cx).presentation();
+        let presentation = state.presentation(cx);
         let content_type = self.content_type;
         let disabled = self.disabled;
         let is_multi_line = presentation.is_multi_line();
@@ -600,10 +597,10 @@ impl<M: OverlayMode> RenderOnce for Input<M> {
                     .child(p)
             }))
             .when(presentation.is_multi_line(), |this| {
-                this.child(Self::render_editor(&state, overlays.search, window))
+                this.child(Self::render_editor(state.clone(), overlays.search, window))
             })
             .when(!presentation.is_multi_line(), |this| {
-                this.child(state.clone())
+                this.child(state.clone().into_any_element())
             })
             .when(has_suffix, |this| {
                 this.pr(self.size.input_px()).child(
@@ -623,10 +620,8 @@ impl<M: OverlayMode> RenderOnce for Input<M> {
                             this.child(clear_button(cx).on_click({
                                 let state = state.clone();
                                 move |_, window, cx| {
-                                    state.update(cx, |state, cx| {
-                                        state.clean(window, cx);
-                                        state.focus(window, cx);
-                                    })
+                                    state.clean(window, cx);
+                                    state.focus(window, cx);
                                 }
                             }))
                         })
@@ -832,7 +827,7 @@ mod tests {
         assert_eq!(*captured.lock().unwrap(), Some((None, true)));
 
         let state = probe.read_with(cx, |probe, _| probe.state.clone());
-        let base = state.clone();
+        let base: TextInputState = state.clone().into();
         cx.update(|window, cx| {
             Input::handle_accessibility_set_value(&base, None, window, cx);
         });
