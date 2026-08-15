@@ -20,14 +20,15 @@ pub struct HighlighterUpdate<'a> {
     pub(super) force: bool,
 }
 
+/// How the input lays its text out: rows, growth, and the code-editor extras.
+///
+/// This does not say what *kind* of input this is — that is fixed at the type
+/// level by [`crate::input::InputModeKind`], and asking it here is what used to
+/// let the two disagree.
 #[derive(Clone)]
 pub(crate) enum LayoutMode {
     /// A plain text input mode.
-    PlainText {
-        multi_line: bool,
-        tab: TabSize,
-        rows: usize,
-    },
+    PlainText { tab: TabSize, rows: usize },
     /// An auto grow input mode.
     AutoGrow {
         rows: usize,
@@ -36,7 +37,6 @@ pub(crate) enum LayoutMode {
     },
     /// A code editor input mode.
     CodeEditor {
-        multi_line: bool,
         tab: TabSize,
         rows: usize,
         /// Show line number
@@ -61,7 +61,6 @@ impl LayoutMode {
     /// Create a plain input mode with default settings.
     pub(super) fn plain_text() -> Self {
         LayoutMode::PlainText {
-            multi_line: false,
             tab: TabSize::default(),
             rows: 1,
         }
@@ -71,7 +70,6 @@ impl LayoutMode {
     pub(super) fn code_editor(language: impl Into<SharedString>) -> Self {
         LayoutMode::CodeEditor {
             rows: 2,
-            multi_line: true,
             tab: TabSize::default(),
             language: language.into(),
             highlighter: Rc::new(RefCell::new(None)),
@@ -92,54 +90,19 @@ impl LayoutMode {
         }
     }
 
-    pub(super) fn multi_line(mut self, multi_line: bool) -> Self {
-        match &mut self {
-            LayoutMode::PlainText { multi_line: ml, .. } => *ml = multi_line,
-            LayoutMode::CodeEditor { multi_line: ml, .. } => *ml = multi_line,
-            LayoutMode::AutoGrow { .. } => {}
-        }
-        self
-    }
-
-    #[inline]
-    pub(super) fn is_single_line(&self) -> bool {
-        !self.is_multi_line()
-    }
-
-    #[inline]
-    pub(super) fn is_code_editor(&self) -> bool {
-        matches!(self, LayoutMode::CodeEditor { .. })
-    }
-
-    /// Return true if the mode is code editor and `folding: true`, `multi_line: true`.
+    /// Return true if this layout is a code editor with folding enabled.
     #[inline]
     pub(crate) fn is_folding(&self) -> bool {
         if cfg!(target_family = "wasm") {
             return false;
         }
 
-        matches!(
-            self,
-            LayoutMode::CodeEditor {
-                folding: true,
-                multi_line: true,
-                ..
-            }
-        )
+        matches!(self, LayoutMode::CodeEditor { folding: true, .. })
     }
 
     #[inline]
     pub(super) fn is_auto_grow(&self) -> bool {
         matches!(self, LayoutMode::AutoGrow { .. })
-    }
-
-    #[inline]
-    pub(super) fn is_multi_line(&self) -> bool {
-        match self {
-            LayoutMode::PlainText { multi_line, .. } => *multi_line,
-            LayoutMode::CodeEditor { multi_line, .. } => *multi_line,
-            LayoutMode::AutoGrow { max_rows, .. } => *max_rows > 1,
-        }
     }
 
     pub(super) fn set_rows(&mut self, new_rows: usize) {
@@ -160,21 +123,17 @@ impl LayoutMode {
         }
     }
 
+    /// Grow the row count to fit the content.
+    ///
+    /// Callers gate this on the input being multi-line; a single-line field
+    /// keeps its one row.
     pub(super) fn update_auto_grow(&mut self, display_map: &DisplayMap) {
-        if self.is_single_line() {
-            return;
-        }
-
         let wrapped_lines = display_map.wrap_row_count();
         self.set_rows(wrapped_lines);
     }
 
     /// At least 1 row be return.
     pub(super) fn rows(&self) -> usize {
-        if !self.is_multi_line() {
-            return 1;
-        }
-
         match self {
             LayoutMode::PlainText { rows, .. } => *rows,
             LayoutMode::CodeEditor { rows, .. } => *rows,
@@ -195,10 +154,6 @@ impl LayoutMode {
 
     #[allow(unused)]
     pub(super) fn max_rows(&self) -> usize {
-        if !self.is_multi_line() {
-            return 1;
-        }
-
         match self {
             LayoutMode::AutoGrow { max_rows, .. } => *max_rows,
             _ => usize::MAX,
@@ -209,11 +164,7 @@ impl LayoutMode {
     #[inline]
     pub(super) fn line_number(&self) -> bool {
         match self {
-            LayoutMode::CodeEditor {
-                line_number,
-                multi_line,
-                ..
-            } => *line_number && *multi_line,
+            LayoutMode::CodeEditor { line_number, .. } => *line_number,
             _ => false,
         }
     }
@@ -359,9 +310,6 @@ mod tests {
     #[test]
     fn test_code_editor() {
         let mode = LayoutMode::code_editor("rust");
-        assert_eq!(mode.is_code_editor(), true);
-        assert_eq!(mode.is_multi_line(), true);
-        assert_eq!(mode.is_single_line(), false);
         assert_eq!(mode.line_number(), true);
         assert_eq!(mode.has_indent_guides(), true);
         assert_eq!(mode.max_rows(), usize::MAX);
@@ -369,10 +317,9 @@ mod tests {
         assert_eq!(mode.is_folding(), true);
 
         let mode = LayoutMode::CodeEditor {
-            multi_line: false,
-            line_number: true,
-            indent_guides: true,
-            folding: true,
+            line_number: false,
+            indent_guides: false,
+            folding: false,
             rows: 0,
             tab: Default::default(),
             language: "rust".into(),
@@ -380,12 +327,8 @@ mod tests {
             highlighter_factory: None,
             diagnostics: DiagnosticSet::new(&Rope::new()),
         };
-        assert_eq!(mode.is_code_editor(), true);
-        assert_eq!(mode.is_multi_line(), false);
-        assert_eq!(mode.is_single_line(), true);
         assert_eq!(mode.line_number(), false);
         assert_eq!(mode.has_indent_guides(), false);
-        assert_eq!(mode.max_rows(), 1);
         assert_eq!(mode.min_rows(), 1);
         assert_eq!(mode.is_folding(), false);
     }
@@ -393,33 +336,23 @@ mod tests {
     #[test]
     fn test_plain() {
         let mode = LayoutMode::PlainText {
-            multi_line: true,
             tab: TabSize::default(),
             rows: 5,
         };
-        assert_eq!(mode.is_code_editor(), false);
-        assert_eq!(mode.is_multi_line(), true);
-        assert_eq!(mode.is_single_line(), false);
         assert_eq!(mode.line_number(), false);
         assert_eq!(mode.rows(), 5);
         assert_eq!(mode.max_rows(), usize::MAX);
         assert_eq!(mode.min_rows(), 1);
 
         let mode = LayoutMode::plain_text();
-        assert_eq!(mode.is_code_editor(), false);
-        assert_eq!(mode.is_multi_line(), false);
-        assert_eq!(mode.is_single_line(), true);
         assert_eq!(mode.line_number(), false);
-        assert_eq!(mode.max_rows(), 1);
+        assert_eq!(mode.rows(), 1);
         assert_eq!(mode.min_rows(), 1);
     }
 
     #[test]
     fn test_auto_grow() {
         let mut mode = LayoutMode::auto_grow(2, 5);
-        assert_eq!(mode.is_code_editor(), false);
-        assert_eq!(mode.is_multi_line(), true);
-        assert_eq!(mode.is_single_line(), false);
         assert_eq!(mode.line_number(), false);
         assert_eq!(mode.rows(), 2);
         assert_eq!(mode.max_rows(), 5);

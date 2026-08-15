@@ -11,6 +11,9 @@ use super::{EditorMode, InputBaseState, InputModeKind};
 pub type EditorState = InputBaseState<EditorMode>;
 
 impl InputModeKind for EditorMode {
+    const MULTI_LINE: bool = true;
+    const CODE_EDITOR: bool = true;
+
     type Extras = super::EditorExtras;
 
     fn lsp(extras: &Self::Extras) -> Option<&super::Lsp> {

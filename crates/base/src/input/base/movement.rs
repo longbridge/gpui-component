@@ -65,7 +65,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
         let Some(last_layout) = &self.last_layout else {
@@ -160,7 +160,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
 
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
 
@@ -180,7 +180,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             return;
         }
 
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
 
@@ -197,7 +197,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn page_up(&mut self, _: &MovePageUp, window: &mut Window, cx: &mut Context<Self>) {
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
 
@@ -215,7 +215,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.mode.is_single_line() {
+        if self.is_single_line() {
             return;
         }
 

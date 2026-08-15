@@ -72,6 +72,18 @@ impl MultiLineMode for EditorMode {}
 /// Sealed: the engine branches on a closed set of runtime modes, so the
 /// markers are a closed set too. The three above are all of them.
 pub trait InputModeKind: sealed::Sealed + Sized + 'static {
+    /// Whether this kind of input spans more than one line.
+    ///
+    /// The kind decides this, not the layout: [`super::LayoutMode`] carries
+    /// how many rows to show and how to grow, which is a different question
+    /// from whether the input is a text field or a document. Deriving it from
+    /// the layout let the two disagree — an auto-growing textarea capped at
+    /// one row used to report itself as single-line.
+    const MULTI_LINE: bool;
+
+    /// Whether this kind of input is a source-code editor.
+    const CODE_EDITOR: bool = false;
+
     /// State only this mode needs.
     ///
     /// The engine is shared, but its parts are not: a single-line field has no
@@ -292,6 +304,8 @@ pub trait InputModeKind: sealed::Sealed + Sized + 'static {
 }
 
 impl InputModeKind for InputMode {
+    const MULTI_LINE: bool = false;
+
     /// A single-line field needs nothing beyond the shared engine. Masking,
     /// validation and number stepping live there: together they are ~120 bytes
     /// and their access sites sit inside the shared edit path, so separating
@@ -299,6 +313,8 @@ impl InputModeKind for InputMode {
     type Extras = ();
 }
 impl InputModeKind for TextareaMode {
+    const MULTI_LINE: bool = true;
+
     /// Ordinary multi-line text needs nothing beyond the shared engine.
     type Extras = ();
 }

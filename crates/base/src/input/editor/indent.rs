@@ -50,23 +50,22 @@ impl TabSize {
 }
 
 impl LayoutMode {
+    /// Whether this layout indents blocks.
+    ///
+    /// Callers gate this on the input being multi-line: indenting a one-line
+    /// text field has nothing to indent.
     #[inline]
     pub(super) fn is_indentable(&self) -> bool {
-        match self {
-            LayoutMode::PlainText { multi_line, .. }
-            | LayoutMode::CodeEditor { multi_line, .. } => *multi_line,
-            _ => false,
-        }
+        matches!(
+            self,
+            LayoutMode::PlainText { .. } | LayoutMode::CodeEditor { .. }
+        )
     }
 
     #[inline]
     pub(super) fn has_indent_guides(&self) -> bool {
         match self {
-            LayoutMode::CodeEditor {
-                indent_guides,
-                multi_line,
-                ..
-            } => *indent_guides && *multi_line,
+            LayoutMode::CodeEditor { indent_guides, .. } => *indent_guides,
             _ => false,
         }
     }
@@ -110,7 +109,7 @@ impl<M: InputModeKind> TextElement<M> {
         text_style: &TextStyle,
         window: &mut Window,
     ) -> Option<Path<Pixels>> {
-        if !state.mode.has_indent_guides() {
+        if !state.is_multi_line() || !state.mode.has_indent_guides() {
             return None;
         }
 
@@ -164,13 +163,11 @@ impl<M: InputModeKind> TextElement<M> {
     }
 }
 
-impl<M: InputModeKind> InputBaseState<M> {
-    /// Set whether to show indent guides in code editor mode, default is true.
-    ///
-    /// Only for [`LayoutMode::CodeEditor`] mode.
+/// Indent guides are a code-editor affordance.
+impl InputBaseState<crate::input::EditorMode> {
+    /// Set whether to show indent guides, default is true.
     #[doc(hidden)]
     pub fn indent_guides(mut self, indent_guides: bool) -> Self {
-        debug_assert!(self.mode.is_code_editor() && self.mode.is_multi_line());
         if let LayoutMode::CodeEditor {
             indent_guides: l, ..
         } = &mut self.mode
@@ -180,16 +177,13 @@ impl<M: InputModeKind> InputBaseState<M> {
         self
     }
 
-    /// Set indent guides in code editor mode.
-    ///
-    /// Only for [`LayoutMode::CodeEditor`] mode.
+    /// Set indent guides at runtime.
     pub fn set_indent_guides(
         &mut self,
         indent_guides: bool,
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        debug_assert!(self.mode.is_code_editor());
         if let LayoutMode::CodeEditor {
             indent_guides: l, ..
         } = &mut self.mode
@@ -198,31 +192,9 @@ impl<M: InputModeKind> InputBaseState<M> {
         }
         cx.notify();
     }
+}
 
-    /// Set the tab size for the input.
-    ///
-    /// Only for [`LayoutMode::PlainText`] and [`LayoutMode::CodeEditor`] mode with multi_line.
-    #[doc(hidden)]
-    pub fn tab_size(mut self, tab: TabSize) -> Self {
-        debug_assert!(self.mode.is_multi_line() || self.mode.is_code_editor());
-        match &mut self.mode {
-            LayoutMode::PlainText { tab: t, .. } => *t = tab,
-            LayoutMode::CodeEditor { tab: t, .. } => *t = tab,
-            _ => {}
-        }
-        self
-    }
-
-    pub fn set_tab_size(&mut self, tab: TabSize, cx: &mut Context<Self>) {
-        debug_assert!(self.mode.is_multi_line() || self.mode.is_code_editor());
-        match &mut self.mode {
-            LayoutMode::PlainText { tab: value, .. }
-            | LayoutMode::CodeEditor { tab: value, .. } => *value = tab,
-            _ => {}
-        }
-        cx.notify();
-    }
-
+impl<M: InputModeKind> InputBaseState<M> {
     pub(super) fn indent_inline(
         &mut self,
         _: &IndentInline,
@@ -259,7 +231,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn indent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.mode.is_indentable() {
+        if !self.is_multi_line() || !self.mode.is_indentable() {
             cx.propagate();
             return;
         };
@@ -317,7 +289,7 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     pub(super) fn outdent(&mut self, block: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.mode.is_indentable() {
+        if !self.is_multi_line() || !self.mode.is_indentable() {
             cx.propagate();
             return;
         };
@@ -435,5 +407,28 @@ mod tests {
         assert_eq!(tab.indent_count(&RopeSlice::from("  \tabc")), 6);
         assert_eq!(tab.indent_count(&RopeSlice::from(" \t abc  ")), 6);
         assert_eq!(tab.indent_count(&RopeSlice::from("abc")), 0);
+    }
+}
+
+/// Tab size only means something where there is more than one line to indent.
+impl<M: crate::input::MultiLineMode> InputBaseState<M> {
+    /// Set the tab size for the input.
+    #[doc(hidden)]
+    pub fn tab_size(mut self, tab: TabSize) -> Self {
+        match &mut self.mode {
+            LayoutMode::PlainText { tab: t, .. } => *t = tab,
+            LayoutMode::CodeEditor { tab: t, .. } => *t = tab,
+            _ => {}
+        }
+        self
+    }
+
+    pub fn set_tab_size(&mut self, tab: TabSize, cx: &mut Context<Self>) {
+        match &mut self.mode {
+            LayoutMode::PlainText { tab: value, .. }
+            | LayoutMode::CodeEditor { tab: value, .. } => *value = tab,
+            _ => {}
+        }
+        cx.notify();
     }
 }

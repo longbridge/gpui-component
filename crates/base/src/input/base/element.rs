@@ -872,7 +872,7 @@ impl<M: InputModeKind> TextElement<M> {
     ) -> (Range<usize>, Vec<usize>, Pixels) {
         // Add extra rows to avoid showing empty space when scroll to bottom.
         let extra_rows = 1;
-        if state.mode.is_single_line() {
+        if state.is_single_line() {
             return (0..1, vec![0], px(0.));
         }
 
@@ -959,7 +959,7 @@ impl<M: InputModeKind> TextElement<M> {
             );
 
             empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
-        } else if state.mode.is_code_editor() && state.mode.is_multi_line() {
+        } else if state.is_code_editor() {
             LINE_NUMBER_RIGHT_MARGIN
         } else {
             px(0.)
@@ -1298,7 +1298,7 @@ impl<M: InputModeKind> TextElement<M> {
         whitespace_indicators: Option<WhitespaceIndicators>,
         window: &mut Window,
     ) -> Vec<LineLayout> {
-        let is_single_line = state.mode.is_single_line();
+        let is_single_line = state.is_single_line();
 
         if is_single_line {
             let shaped_line = window.text_system().shape_line(
@@ -1408,7 +1408,7 @@ impl<M: InputModeKind> TextElement<M> {
     ) -> Option<Vec<(Range<usize>, HighlightStyle)>> {
         let state = self.state.read(cx);
         let text = &state.text;
-        let is_multi_line = state.mode.is_multi_line();
+        let is_multi_line = state.is_multi_line();
 
         let (mut highlighter, diagnostics) = match &state.mode {
             LayoutMode::CodeEditor {
@@ -1642,7 +1642,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
 
         let mut style = Style::default();
         style.size.width = relative(1.).into();
-        if state.mode.is_multi_line() {
+        if state.is_multi_line() {
             style.flex_grow = 1.0;
             style.size.height = relative(1.).into();
             if state.mode.is_auto_grow() {
@@ -1679,7 +1679,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         });
 
         let state = self.state.read(cx);
-        let multi_line = state.mode.is_multi_line();
+        let multi_line = state.is_multi_line();
         let text = state.text.clone();
         let is_empty = text.len() == 0;
         let placeholder = self.placeholder.clone();
@@ -1865,7 +1865,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         let mut longest_line_width = wrap_width.unwrap_or(px(0.));
         // 1. Single line
         // 2. Multi-line with soft wrap disabled.
-        if state.mode.is_single_line() || !state.soft_wrap {
+        if state.is_single_line() || !state.soft_wrap {
             let longest_row = state.display_map.longest_row();
             let longest_line: SharedString = state.text.slice_line(longest_row).to_string().into();
             longest_line_width = window
@@ -1899,7 +1899,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
 
         let total_wrapped_lines = state.display_map.wrap_row_count();
         let empty_bottom_height = empty_bottom_height(
-            state.mode.is_code_editor(),
+            state.is_code_editor(),
             state.scroll_beyond_last_line,
             bounds.size.height,
             line_height,
@@ -2651,7 +2651,7 @@ mod tests {
             px(0.)
         );
 
-        let plain_text = LayoutMode::plain_text().multi_line(true);
+        let plain_text = LayoutMode::plain_text();
         assert_eq!(
             clamp_auto_grow_vertical_scroll_offset(&plain_text, px(-260.), px(340.), px(160.)),
             px(-260.)
