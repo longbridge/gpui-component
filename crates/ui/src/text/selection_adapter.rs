@@ -30,8 +30,8 @@ impl VirtualBlockSelection {
 
         self.coverage = snapshot.region_coverage();
 
-        Self::update_endpoint(&mut self.anchor, snapshot.anchor, region_id);
-        Self::update_endpoint(&mut self.cursor, snapshot.cursor, region_id);
+        Self::update_endpoint(&mut self.anchor, snapshot.anchor(), region_id);
+        Self::update_endpoint(&mut self.cursor, snapshot.cursor(), region_id);
     }
 
     fn update_endpoint(
@@ -42,7 +42,7 @@ impl VirtualBlockSelection {
         if cached.is_some_and(|cached| cached.endpoint == endpoint) {
             return;
         }
-        let block_ix = (endpoint.region_id == Some(region_id))
+        let block_ix = (endpoint.region_id() == Some(region_id))
             .then(|| endpoint.virtual_key().map(|key| key as usize))
             .flatten();
         *cached = Some(CachedBlockEndpoint { endpoint, block_ix });
@@ -56,8 +56,8 @@ impl VirtualBlockSelection {
             SelectionRegionCoverage::FromStart => Some(0..=anchor.block_ix.or(cursor.block_ix)?),
             SelectionRegionCoverage::ToEnd => Some(anchor.block_ix.or(cursor.block_ix)?..=last),
             SelectionRegionCoverage::Bounded => {
-                if anchor.endpoint.region_id != Some(region_id)
-                    || cursor.endpoint.region_id != Some(region_id)
+                if anchor.endpoint.region_id() != Some(region_id)
+                    || cursor.endpoint.region_id() != Some(region_id)
                 {
                     return None;
                 }
@@ -79,24 +79,27 @@ pub(super) struct TextViewSelectionAdapter {
 impl TextViewSelectionAdapter {
     pub(super) fn new(view: WeakEntity<TextViewState>, cx: &mut App) -> Self {
         let region = TextSelectionRegion::new("", cx);
-        let region_id = region.state().entity_id();
+        let region_id = region.entity_id();
         let virtual_blocks = Rc::new(RefCell::new(VirtualBlockSelection::default()));
 
-        region.state().update(cx, |region_state, _| {
-            let view_for_selection = view.clone();
-            let blocks_for_selection = virtual_blocks.clone();
-            region_state.on_selection(move |snapshot, cx| {
+        let view_for_selection = view.clone();
+        let blocks_for_selection = virtual_blocks.clone();
+        region.on_selection(
+            move |snapshot, cx| {
                 let _ = view_for_selection.update(cx, |state, cx| {
                     blocks_for_selection
                         .borrow_mut()
                         .update(snapshot, region_id);
-                    state.is_selecting = snapshot.is_some_and(|snapshot| snapshot.is_selecting);
+                    state.is_selecting = snapshot.is_some_and(|snapshot| snapshot.is_selecting());
                     cx.notify();
                 });
-            });
+            },
+            cx,
+        );
 
-            let view_for_scroll = view.clone();
-            region_state.on_auto_scroll(move |delta, cx| {
+        let view_for_scroll = view.clone();
+        region.on_auto_scroll(
+            move |delta, cx| {
                 let _ = view_for_scroll.update(cx, |state, cx| {
                     if state.scrollable {
                         state.set_auto_scroll(delta, cx);
@@ -104,21 +107,27 @@ impl TextViewSelectionAdapter {
                         state.stop_auto_scroll();
                     }
                 });
-            });
+            },
+            cx,
+        );
 
-            let view_for_clear = view.clone();
-            let blocks_for_clear = virtual_blocks.clone();
-            region_state.on_clear(move |cx| {
+        let view_for_clear = view.clone();
+        let blocks_for_clear = virtual_blocks.clone();
+        region.on_clear(
+            move |cx| {
                 blocks_for_clear.replace(VirtualBlockSelection::default());
                 let _ = view_for_clear.update(cx, |state, cx| {
                     state.reset_selection();
                     cx.notify();
                 });
-            });
+            },
+            cx,
+        );
 
-            let view_for_copy = view.clone();
-            let blocks_for_copy = virtual_blocks.clone();
-            region_state.copy_with(move |cx| {
+        let view_for_copy = view.clone();
+        let blocks_for_copy = virtual_blocks.clone();
+        region.copy_with(
+            move |cx| {
                 let Some(view) = view_for_copy.upgrade() else {
                     return String::new();
                 };
@@ -126,23 +135,30 @@ impl TextViewSelectionAdapter {
                 let last = state.parsed_content.document.blocks.len().saturating_sub(1);
                 let blocks = blocks_for_copy.borrow().block_range(region_id, last);
                 state.selected_text_in(blocks)
-            });
+            },
+            cx,
+        );
 
-            let view_for_virtual_key = view.clone();
-            region_state.on_virtual_key(move |point, cx| {
+        let view_for_virtual_key = view.clone();
+        region.on_virtual_key(
+            move |point, cx| {
                 let view = view_for_virtual_key.upgrade()?;
                 view.read(cx).block_ix_at(point.y).map(|block| block as u64)
-            });
+            },
+            cx,
+        );
 
-            region_state.on_focus(move |window, cx| {
+        region.on_focus(
+            move |window, cx| {
                 let Some(view) = view.upgrade() else {
                     return;
                 };
                 let focus_handle = view.read(cx).focus_handle.clone();
                 view.update(cx, |state, _| state.is_selecting = true);
                 focus_handle.focus(window, cx);
-            });
-        });
+            },
+            cx,
+        );
 
         Self {
             region,
@@ -180,41 +196,31 @@ impl TextViewSelectionAdapter {
     ) {
         window.register_text_selection_region(
             self.region.clone(),
-            SelectionRegionFrame {
-                hitbox,
-                bounds,
-                scroll_offset,
-                scope: Default::default(),
-                document_order,
-                text_bounds: self.text_bounds.clone(),
-            },
+            SelectionRegionFrame::new(hitbox, bounds)
+                .with_scroll_offset(scroll_offset)
+                .with_document_order(document_order)
+                .with_text_bounds(self.text_bounds.clone()),
             cx,
         );
     }
 
     pub(super) fn selection_points(&self, cx: &App) -> Option<(Point<Pixels>, Point<Pixels>)> {
-        self.region.state().read(cx).snapshot()?.resolved_points()
+        self.region.snapshot(cx)?.resolved_points()
     }
 
     pub(super) fn set_local_selection(&self, active: bool, cx: &mut App) {
-        self.region
-            .state()
-            .update(cx, |state, _| state.set_local_selection(active));
+        self.region.set_local_selection(active, cx);
     }
 
     pub(super) fn selection_involves_region(&self, cx: &App) -> bool {
-        let id = self.region.state().entity_id();
-        self.region
-            .state()
-            .read(cx)
-            .snapshot()
-            .is_some_and(|snapshot| {
-                snapshot.anchor.region_id == Some(id) || snapshot.cursor.region_id == Some(id)
-            })
+        let id = self.region.entity_id();
+        self.region.snapshot(cx).is_some_and(|snapshot| {
+            snapshot.anchor().region_id() == Some(id) || snapshot.cursor().region_id() == Some(id)
+        })
     }
 
     pub(super) fn has_selection_snapshot(&self, cx: &App) -> bool {
-        self.region.state().read(cx).snapshot().is_some()
+        self.region.snapshot(cx).is_some()
     }
 
     #[cfg(test)]

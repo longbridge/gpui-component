@@ -10,7 +10,7 @@ use gpui::{
     WindowOptions, div, transparent_black,
 };
 use gpui_base::{
-    SelectionRegionFrame, SelectionRunFrame, SelectionScopeId, TextSelection, TextSelectionRegion,
+    SelectionRegionFrame, SelectionRunFrame, TextSelection, TextSelectionRegion,
     WindowTextSelection as _,
 };
 
@@ -136,14 +136,7 @@ impl Element for PlainSelectableText {
         let hitbox = window.insert_hitbox(bounds, gpui::HitboxBehavior::Normal);
         window.register_text_selection_region(
             self.region.clone(),
-            SelectionRegionFrame {
-                hitbox: hitbox.clone(),
-                bounds,
-                scroll_offset: Point::default(),
-                scope: SelectionScopeId::default(),
-                document_order: 0,
-                text_bounds: vec![bounds],
-            },
+            SelectionRegionFrame::new(hitbox.clone(), bounds).with_text_bounds(vec![bounds]),
             cx,
         );
         hitbox
@@ -160,15 +153,20 @@ impl Element for PlainSelectableText {
         cx: &mut App,
     ) {
         let layout = self.styled_text.layout().clone();
-        let states = self.region.state().update(cx, |state, _| {
-            state.project_selection_runs(&[SelectionRunFrame {
-                order: 0,
-                text: self.text.clone(),
-                layout: layout.clone(),
+        let states = self.region.project_selection_runs(
+            &[SelectionRunFrame::new(
+                0,
+                self.text.clone(),
+                layout.clone(),
                 bounds,
-            }])
-        });
-        if let Some(range) = states.into_iter().next().and_then(|state| state.byte_range) {
+            )],
+            cx,
+        );
+        if let Some(range) = states
+            .into_iter()
+            .next()
+            .and_then(|state| state.byte_range().cloned())
+        {
             Self::paint_selection(&layout, range, window);
         }
         self.styled_text
@@ -183,9 +181,7 @@ struct Example {
 impl Example {
     fn new(cx: &mut Context<Self>) -> Self {
         let region = TextSelectionRegion::new("", cx);
-        region.state().update(cx, |state, _| {
-            state.on_selection(|_, cx| cx.refresh_windows());
-        });
+        region.on_selection(|_, cx| cx.refresh_windows(), cx);
         Self { region }
     }
 }

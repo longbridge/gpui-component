@@ -1,9 +1,4 @@
-use std::{
-    cell::Cell,
-    collections::{HashMap, HashSet},
-    ops::Range,
-    rc::{Rc, Weak as RcWeak},
-};
+use std::{cell::Cell, collections::HashMap, ops::Range, rc::Rc};
 
 use gpui::{
     App, AppContext as _, Bounds, Element, ElementId, Entity, EntityId, Global, GlobalElementId,
@@ -28,14 +23,39 @@ impl SelectionScopeId {
 /// A selection endpoint anchored to a region's content coordinates.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SelectionEndpointSnapshot {
-    pub region_id: Option<EntityId>,
-    pub point: Point<Pixels>,
+    region_id: Option<EntityId>,
+    point: Point<Pixels>,
     virtual_key: Option<u64>,
 }
 
 impl SelectionEndpointSnapshot {
+    /// Creates an endpoint at a region-relative content point.
+    pub const fn new(region_id: Option<EntityId>, point: Point<Pixels>) -> Self {
+        Self {
+            region_id,
+            point,
+            virtual_key: None,
+        }
+    }
+
+    /// Sets renderer-defined endpoint metadata.
+    pub const fn with_virtual_key(mut self, virtual_key: u64) -> Self {
+        self.virtual_key = Some(virtual_key);
+        self
+    }
+
+    /// Returns the region which owns this endpoint, when it hit one.
+    pub const fn region_id(&self) -> Option<EntityId> {
+        self.region_id
+    }
+
+    /// Returns the region-relative content point.
+    pub const fn point(&self) -> Point<Pixels> {
+        self.point
+    }
+
     /// Returns renderer-defined endpoint metadata captured when it hit a region.
-    pub fn virtual_key(&self) -> Option<u64> {
+    pub const fn virtual_key(&self) -> Option<u64> {
         self.virtual_key
     }
 }
@@ -43,9 +63,9 @@ impl SelectionEndpointSnapshot {
 /// Region-relative selection endpoints with an optional rendering projection.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SelectionSnapshot {
-    pub anchor: SelectionEndpointSnapshot,
-    pub cursor: SelectionEndpointSnapshot,
-    pub is_selecting: bool,
+    anchor: SelectionEndpointSnapshot,
+    cursor: SelectionEndpointSnapshot,
+    is_selecting: bool,
     resolved_points: Option<(Point<Pixels>, Point<Pixels>)>,
     coverage: SelectionRegionCoverage,
 }
@@ -61,46 +81,231 @@ pub enum SelectionRegionCoverage {
 }
 
 impl SelectionSnapshot {
+    /// Creates a snapshot from stable region-relative endpoints.
+    pub const fn new(anchor: SelectionEndpointSnapshot, cursor: SelectionEndpointSnapshot) -> Self {
+        Self {
+            anchor,
+            cursor,
+            is_selecting: false,
+            resolved_points: None,
+            coverage: SelectionRegionCoverage::Bounded,
+        }
+    }
+
+    /// Sets whether the pointer gesture is still active.
+    pub const fn with_selecting(mut self, is_selecting: bool) -> Self {
+        self.is_selecting = is_selecting;
+        self
+    }
+
+    /// Sets the current window-coordinate rendering projection.
+    pub const fn with_resolved_points(
+        mut self,
+        resolved_points: Option<(Point<Pixels>, Point<Pixels>)>,
+    ) -> Self {
+        self.resolved_points = resolved_points;
+        self
+    }
+
+    /// Sets the portion of the receiving region covered by this selection.
+    pub const fn with_region_coverage(mut self, coverage: SelectionRegionCoverage) -> Self {
+        self.coverage = coverage;
+        self
+    }
+
+    /// Returns the stable anchor endpoint.
+    pub const fn anchor(&self) -> SelectionEndpointSnapshot {
+        self.anchor
+    }
+
+    /// Returns the moving cursor endpoint.
+    pub const fn cursor(&self) -> SelectionEndpointSnapshot {
+        self.cursor
+    }
+
+    /// Returns whether the pointer gesture is still active.
+    pub const fn is_selecting(&self) -> bool {
+        self.is_selecting
+    }
+
     /// Returns the window-coordinate endpoints for renderers that need them.
-    pub fn resolved_points(&self) -> Option<(Point<Pixels>, Point<Pixels>)> {
+    pub const fn resolved_points(&self) -> Option<(Point<Pixels>, Point<Pixels>)> {
         self.resolved_points
     }
 
-    pub fn region_coverage(&self) -> SelectionRegionCoverage {
+    /// Returns the portion of the receiving region covered by this selection.
+    pub const fn region_coverage(&self) -> SelectionRegionCoverage {
         self.coverage
     }
 }
 
 /// Per-frame geometry reported by a selectable region.
 pub struct SelectionRegionFrame {
-    pub hitbox: Hitbox,
-    pub bounds: Bounds<Pixels>,
-    pub scroll_offset: Point<Pixels>,
-    pub scope: SelectionScopeId,
-    pub document_order: u64,
-    pub text_bounds: Vec<Bounds<Pixels>>,
+    hitbox: Hitbox,
+    bounds: Bounds<Pixels>,
+    scroll_offset: Point<Pixels>,
+    scope: SelectionScopeId,
+    document_order: u64,
+    text_bounds: Vec<Bounds<Pixels>>,
+}
+
+impl SelectionRegionFrame {
+    /// Creates a region frame with default scope, order, and scroll offset.
+    pub fn new(hitbox: Hitbox, bounds: Bounds<Pixels>) -> Self {
+        Self {
+            hitbox,
+            bounds,
+            scroll_offset: Point::default(),
+            scope: SelectionScopeId::default(),
+            document_order: 0,
+            text_bounds: Vec::new(),
+        }
+    }
+
+    /// Sets the region's content scroll offset.
+    pub fn with_scroll_offset(mut self, scroll_offset: Point<Pixels>) -> Self {
+        self.scroll_offset = scroll_offset;
+        self
+    }
+
+    /// Sets the opaque selection scope.
+    pub fn with_scope(mut self, scope: SelectionScopeId) -> Self {
+        self.scope = scope;
+        self
+    }
+
+    /// Sets the stable logical document order.
+    pub fn with_document_order(mut self, document_order: u64) -> Self {
+        self.document_order = document_order;
+        self
+    }
+
+    /// Sets the glyph-bearing bounds used to reject blank-only gestures.
+    pub fn with_text_bounds(mut self, text_bounds: Vec<Bounds<Pixels>>) -> Self {
+        self.text_bounds = text_bounds;
+        self
+    }
+
+    /// Returns the region hitbox.
+    pub fn hitbox(&self) -> &Hitbox {
+        &self.hitbox
+    }
+
+    /// Returns the region's window-coordinate bounds.
+    pub const fn bounds(&self) -> Bounds<Pixels> {
+        self.bounds
+    }
+
+    /// Returns the region's content scroll offset.
+    pub const fn scroll_offset(&self) -> Point<Pixels> {
+        self.scroll_offset
+    }
+
+    /// Returns the opaque selection scope.
+    pub const fn scope(&self) -> SelectionScopeId {
+        self.scope
+    }
+
+    /// Returns the stable logical document order.
+    pub const fn document_order(&self) -> u64 {
+        self.document_order
+    }
+
+    /// Returns the glyph-bearing bounds used to reject blank-only gestures.
+    pub fn text_bounds(&self) -> &[Bounds<Pixels>] {
+        &self.text_bounds
+    }
 }
 
 /// Per-frame text layout reported by a plain selectable region.
 #[derive(Clone)]
 pub struct SelectionRunFrame {
     /// Logical order within the containing region.
-    pub order: u64,
+    order: u64,
     /// The exact text used to produce `layout`.
-    pub text: SharedString,
+    text: SharedString,
     /// Laid-out glyph geometry in window coordinates.
-    pub layout: TextLayout,
+    layout: TextLayout,
     /// The run's window-coordinate paint bounds.
-    pub bounds: Bounds<Pixels>,
+    bounds: Bounds<Pixels>,
+}
+
+impl SelectionRunFrame {
+    /// Creates a laid-out text run frame.
+    pub fn new(
+        order: u64,
+        text: impl Into<SharedString>,
+        layout: TextLayout,
+        bounds: Bounds<Pixels>,
+    ) -> Self {
+        Self {
+            order,
+            text: text.into(),
+            layout,
+            bounds,
+        }
+    }
+
+    /// Returns the run's logical order within its region.
+    pub const fn order(&self) -> u64 {
+        self.order
+    }
+
+    /// Returns the exact text used to produce the layout.
+    pub fn text(&self) -> &SharedString {
+        &self.text
+    }
+
+    /// Returns the laid-out glyph geometry.
+    pub fn layout(&self) -> &TextLayout {
+        &self.layout
+    }
+
+    /// Returns the run's window-coordinate paint bounds.
+    pub const fn bounds(&self) -> Bounds<Pixels> {
+        self.bounds
+    }
 }
 
 /// Selection projection for one [`SelectionRunFrame`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SelectionRunState {
     /// The selected UTF-8 byte range in the run's text.
-    pub byte_range: Option<Range<usize>>,
+    byte_range: Option<Range<usize>>,
     /// Whether the containing region participates in the current selection.
-    pub active: bool,
+    active: bool,
+}
+
+impl SelectionRunState {
+    /// Creates an inactive run projection with no selected range.
+    pub const fn new() -> Self {
+        Self {
+            byte_range: None,
+            active: false,
+        }
+    }
+
+    /// Sets the selected UTF-8 byte range.
+    pub fn with_byte_range(mut self, byte_range: Option<Range<usize>>) -> Self {
+        self.byte_range = byte_range;
+        self
+    }
+
+    /// Sets whether the containing region participates in the selection.
+    pub const fn with_active(mut self, active: bool) -> Self {
+        self.active = active;
+        self
+    }
+
+    /// Returns the selected UTF-8 byte range.
+    pub fn byte_range(&self) -> Option<&Range<usize>> {
+        self.byte_range.as_ref()
+    }
+
+    /// Returns whether the containing region participates in the selection.
+    pub const fn is_active(&self) -> bool {
+        self.active
+    }
 }
 
 /// Projects a region selection snapshot onto laid-out plain-text runs.
@@ -118,17 +323,15 @@ pub fn project_selection_runs(
     let Some((anchor, cursor)) = snapshot.resolved_points() else {
         return runs
             .iter()
-            .map(|_| SelectionRunState {
-                byte_range: None,
-                active: true,
-            })
+            .map(|_| SelectionRunState::new().with_active(true))
             .collect();
     };
 
     runs.iter()
-        .map(|run| SelectionRunState {
-            byte_range: selection_range_for_run(run, anchor, cursor),
-            active: true,
+        .map(|run| {
+            SelectionRunState::new()
+                .with_byte_range(selection_range_for_run(run, anchor, cursor))
+                .with_active(true)
         })
         .collect()
 }
@@ -210,9 +413,29 @@ type RegionSelectionCallback = Rc<dyn Fn(Option<SelectionSnapshot>, &mut App)>;
 type RegionAutoScrollCallback = Rc<dyn Fn(Option<Pixels>, &mut App)>;
 type RegionVoidCallback = Rc<dyn Fn(&mut App)>;
 type RegionFocusCallback = Rc<dyn Fn(&mut Window, &mut App)>;
-type RegionCopyCallback = Rc<dyn Fn(&App) -> String>;
+type RegionCopyCallback = Rc<dyn Fn(&mut App) -> String>;
 type RegionVirtualKeyCallback = Rc<dyn Fn(Point<Pixels>, &App) -> Option<u64>>;
 type RegionClearCallbacks = (Option<RegionVoidCallback>, Option<RegionSelectionCallback>);
+
+struct RegionCopyItem {
+    document_order: u64,
+    callback: Option<RegionCopyCallback>,
+    fallback: String,
+}
+
+fn resolve_copy_items(mut items: Vec<RegionCopyItem>, cx: &mut App) -> String {
+    items.sort_by_key(|item| item.document_order);
+    items
+        .into_iter()
+        .map(|item| {
+            item.callback
+                .map(|callback| callback(cx))
+                .unwrap_or(item.fallback)
+        })
+        .filter(|text| !text.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 fn dispatch_clear_callbacks(callbacks: Vec<RegionClearCallbacks>, cx: &mut App) {
     for callbacks in callbacks {
@@ -220,11 +443,7 @@ fn dispatch_clear_callbacks(callbacks: Vec<RegionClearCallbacks>, cx: &mut App) 
     }
 }
 
-/// Renderer-owned state associated with a selectable region.
-///
-/// The window layer owns only generic geometry and gesture state. Renderers store
-/// their projection, highlights, and optional focus/scroll hooks here.
-pub struct TextSelectionRegionState {
+struct TextSelectionRegionState {
     selected_text: String,
     projected_selected_text: Option<String>,
     local_selection: bool,
@@ -321,7 +540,7 @@ impl TextSelectionRegionState {
     }
 
     /// Installs a renderer-specific copy projection.
-    pub fn copy_with(&mut self, callback: impl Fn(&App) -> String + 'static) {
+    pub fn copy_with(&mut self, callback: impl Fn(&mut App) -> String + 'static) {
         self.copy = Some(Rc::new(callback));
     }
 
@@ -381,15 +600,15 @@ impl TextSelectionRegionState {
         }
     }
 
-    fn copied_text(&self, cx: &App) -> String {
-        self.copy
-            .as_ref()
-            .map(|callback| callback(cx))
-            .unwrap_or_else(|| {
-                self.projected_selected_text
-                    .clone()
-                    .unwrap_or_else(|| self.selected_text.clone())
-            })
+    fn copy_item(&self, document_order: u64) -> Option<RegionCopyItem> {
+        (self.snapshot.is_some() || self.local_selection).then(|| RegionCopyItem {
+            document_order,
+            callback: self.copy.clone(),
+            fallback: self
+                .projected_selected_text
+                .clone()
+                .unwrap_or_else(|| self.selected_text.clone()),
+        })
     }
 }
 
@@ -403,13 +622,82 @@ impl TextSelectionRegion {
         Self(cx.new(|_| TextSelectionRegionState::new(selected_text)))
     }
 
-    /// Returns the region state entity for adapter configuration.
-    pub fn state(&self) -> Entity<TextSelectionRegionState> {
-        self.0.clone()
+    /// Returns this region's stable identity.
+    pub fn entity_id(&self) -> EntityId {
+        self.0.entity_id()
     }
 
-    fn entity_id(&self) -> EntityId {
-        self.0.entity_id()
+    /// Returns the current geometry selection snapshot for this region.
+    pub fn snapshot(&self, cx: &App) -> Option<SelectionSnapshot> {
+        self.0.read(cx).snapshot()
+    }
+
+    /// Sets the fallback text copied while this region participates.
+    pub fn set_selected_text(&self, text: impl Into<String>, cx: &mut App) {
+        self.0.update(cx, |state, _| state.set_selected_text(text));
+    }
+
+    /// Marks renderer-local selection, such as select-all, as active.
+    pub fn set_local_selection(&self, active: bool, cx: &mut App) {
+        self.0
+            .update(cx, |state, _| state.set_local_selection(active));
+    }
+
+    /// Returns whether renderer-local selection is active.
+    pub fn has_local_selection(&self, cx: &App) -> bool {
+        self.0.read(cx).local_selection
+    }
+
+    /// Projects the current snapshot onto plain-text runs and caches their copy text.
+    pub fn project_selection_runs(
+        &self,
+        runs: &[SelectionRunFrame],
+        cx: &mut App,
+    ) -> Vec<SelectionRunState> {
+        self.0
+            .update(cx, |state, _| state.project_selection_runs(runs))
+    }
+
+    /// Sets the callback which updates renderer highlights from window state.
+    pub fn on_selection(
+        &self,
+        callback: impl Fn(Option<SelectionSnapshot>, &mut App) + 'static,
+        cx: &mut App,
+    ) {
+        self.0.update(cx, |state, _| state.on_selection(callback));
+    }
+
+    /// Sets the callback which receives drag auto-scroll commands.
+    pub fn on_auto_scroll(
+        &self,
+        callback: impl Fn(Option<Pixels>, &mut App) + 'static,
+        cx: &mut App,
+    ) {
+        self.0.update(cx, |state, _| state.on_auto_scroll(callback));
+    }
+
+    /// Sets the callback which focuses the region when a drag begins in it.
+    pub fn on_focus(&self, callback: impl Fn(&mut Window, &mut App) + 'static, cx: &mut App) {
+        self.0.update(cx, |state, _| state.on_focus(callback));
+    }
+
+    /// Sets renderer-local cleanup invoked when window selection is cleared.
+    pub fn on_clear(&self, callback: impl Fn(&mut App) + 'static, cx: &mut App) {
+        self.0.update(cx, |state, _| state.on_clear(callback));
+    }
+
+    /// Sets a renderer-specific copy projection.
+    pub fn copy_with(&self, callback: impl Fn(&mut App) -> String + 'static, cx: &mut App) {
+        self.0.update(cx, |state, _| state.copy_with(callback));
+    }
+
+    /// Sets a renderer-specific lookup for stable virtualized content keys.
+    pub fn on_virtual_key(
+        &self,
+        callback: impl Fn(Point<Pixels>, &App) -> Option<u64> + 'static,
+        cx: &mut App,
+    ) {
+        self.0.update(cx, |state, _| state.on_virtual_key(callback));
     }
 
     fn downgrade(&self) -> WeakEntity<TextSelectionRegionState> {
@@ -436,10 +724,11 @@ struct SelectionEndpoint {
 
 impl SelectionEndpoint {
     fn snapshot(&self) -> SelectionEndpointSnapshot {
-        SelectionEndpointSnapshot {
-            region_id: self.region_id(),
-            point: self.point,
-            virtual_key: self.virtual_key,
+        let snapshot = SelectionEndpointSnapshot::new(self.region_id(), self.point);
+        if let Some(virtual_key) = self.virtual_key {
+            snapshot.with_virtual_key(virtual_key)
+        } else {
+            snapshot
         }
     }
 
@@ -456,8 +745,8 @@ impl SelectionEndpoint {
 }
 
 /// Window-local generic text-selection state.
+#[derive(Default)]
 struct TextSelectionState {
-    lifecycle_tokens: Vec<RcWeak<()>>,
     regions: HashMap<EntityId, RegionRegistration>,
     active_scope: SelectionScopeId,
     anchor: Option<SelectionEndpoint>,
@@ -470,56 +759,7 @@ struct TextSelectionState {
     mouse_down_prepared: bool,
 }
 
-impl Default for TextSelectionState {
-    fn default() -> Self {
-        Self {
-            lifecycle_tokens: Vec::new(),
-            regions: HashMap::new(),
-            active_scope: SelectionScopeId::default(),
-            anchor: None,
-            cursor: None,
-            pending_extension_anchor: None,
-            is_selecting: false,
-            did_hit_text: false,
-            frame_generation: 0,
-            finish_frame_scheduled: false,
-            mouse_down_prepared: false,
-        }
-    }
-}
-
 impl TextSelectionState {
-    fn renew_lifecycle(&mut self, token: &Rc<()>, cx: &mut App) -> Vec<RegionClearCallbacks> {
-        let callbacks = self.prune_lifecycle(cx);
-        if !self
-            .lifecycle_tokens
-            .iter()
-            .any(|candidate| candidate.ptr_eq(&Rc::downgrade(token)))
-        {
-            self.lifecycle_tokens.push(Rc::downgrade(token));
-        }
-        callbacks
-    }
-
-    fn prune_lifecycle(&mut self, cx: &mut App) -> Vec<RegionClearCallbacks> {
-        if self.lifecycle_tokens.is_empty() {
-            return Vec::new();
-        }
-        self.lifecycle_tokens
-            .retain(|token| token.strong_count() > 0);
-        if self.lifecycle_tokens.is_empty() {
-            self.clear_state(cx)
-        } else {
-            Vec::new()
-        }
-    }
-
-    fn lifecycle_is_live(&self) -> bool {
-        self.lifecycle_tokens
-            .iter()
-            .any(|token| token.strong_count() > 0)
-    }
-
     fn resolve_virtual_keys(state: &Entity<Self>, cx: &mut App) {
         let pending = state.update(cx, |state, _| {
             [
@@ -547,28 +787,48 @@ impl TextSelectionState {
             state.publish_snapshots(cx);
         });
     }
-    /// Creates the private state used by the [`TextSelection`] element.
-    fn ensure(window: &Window, cx: &mut App) -> Entity<Self> {
+    fn acquire(window_id: gpui::WindowId, cx: &mut App) -> Entity<Self> {
         if !cx.has_global::<WindowTextSelections>() {
             cx.set_global(WindowTextSelections::default());
         }
-        let live_windows = cx
-            .windows()
-            .into_iter()
-            .map(|handle| handle.window_id())
-            .collect::<HashSet<_>>();
-        cx.global_mut::<WindowTextSelections>()
+        if let Some(state) = cx
+            .global::<WindowTextSelections>()
             .0
-            .retain(|window_id, _| live_windows.contains(window_id));
-        let window_id = window.window_handle().window_id();
-        if let Some(state) = cx.global::<WindowTextSelections>().0.get(&window_id) {
-            return state.clone();
+            .get(&window_id)
+            .and_then(WeakEntity::upgrade)
+        {
+            return state;
         }
-        let state = cx.new(|_| Self::default());
+
+        let state = cx.new(|cx| {
+            let entity_id = cx.entity_id();
+            cx.on_release(move |state: &mut TextSelectionState, cx| {
+                let callbacks = state.clear_state(cx);
+                if cx.has_global::<WindowTextSelections>() {
+                    let registry = &mut cx.global_mut::<WindowTextSelections>().0;
+                    if registry
+                        .get(&window_id)
+                        .is_some_and(|state| state.entity_id() == entity_id)
+                    {
+                        registry.remove(&window_id);
+                    }
+                }
+                if !callbacks.is_empty() {
+                    cx.defer(move |cx| dispatch_clear_callbacks(callbacks, cx));
+                }
+            })
+            .detach();
+            Self::default()
+        });
         cx.global_mut::<WindowTextSelections>()
             .0
-            .insert(window_id, state.clone());
+            .insert(window_id, state.downgrade());
         state
+    }
+
+    #[cfg(test)]
+    fn ensure(window: &Window, cx: &mut App) -> Entity<Self> {
+        Self::acquire(window.window_handle().window_id(), cx)
     }
 
     fn existing(window: &Window, cx: &App) -> Option<Entity<Self>> {
@@ -578,7 +838,7 @@ impl TextSelectionState {
         cx.global::<WindowTextSelections>()
             .0
             .get(&window.window_handle().window_id())
-            .cloned()
+            .and_then(WeakEntity::upgrade)
     }
 
     /// Updates the active scope. Regions from other scopes cannot participate.
@@ -704,25 +964,19 @@ impl TextSelectionState {
             .collect()
     }
 
-    /// Returns the currently selected text in logical document order.
-    pub fn selected_text(&self, cx: &App) -> String {
-        let mut items = self
-            .regions
+    fn copy_items(&self, cx: &App) -> Vec<RegionCopyItem> {
+        self.regions
             .values()
             .filter_map(|registration| {
                 let region = registration.region.upgrade()?;
-                let state = region.read(cx);
-                (state.snapshot.is_some() || state.local_selection)
-                    .then(|| (registration.frame.document_order, state.copied_text(cx)))
+                region.read(cx).copy_item(registration.frame.document_order)
             })
-            .filter(|(_, text)| !text.trim().is_empty())
-            .collect::<Vec<_>>();
-        items.sort_by_key(|(order, _)| *order);
-        items
-            .into_iter()
-            .map(|(_, text)| text)
-            .collect::<Vec<_>>()
-            .join("\n")
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn selected_text(&self, cx: &mut App) -> String {
+        resolve_copy_items(self.copy_items(cx), cx)
     }
 
     /// Returns whether a drag or a renderer-local selection is active.
@@ -741,14 +995,14 @@ impl TextSelectionState {
         if !self.did_hit_text {
             return None;
         }
-        let anchor = self.anchor.as_ref()?.resolve(&self.regions)?;
-        let cursor = self.cursor.as_ref()?.resolve(&self.regions)?;
-        (anchor != cursor).then_some(SelectionSnapshot {
-            anchor: self.anchor.as_ref()?.snapshot(),
-            cursor: self.cursor.as_ref()?.snapshot(),
-            is_selecting: self.is_selecting,
-            coverage: SelectionRegionCoverage::Bounded,
-            resolved_points: Some((anchor, cursor)),
+        let anchor_endpoint = self.anchor.as_ref()?;
+        let cursor_endpoint = self.cursor.as_ref()?;
+        let anchor = anchor_endpoint.resolve(&self.regions)?;
+        let cursor = cursor_endpoint.resolve(&self.regions)?;
+        (anchor != cursor).then(|| {
+            SelectionSnapshot::new(anchor_endpoint.snapshot(), cursor_endpoint.snapshot())
+                .with_selecting(self.is_selecting)
+                .with_resolved_points(Some((anchor, cursor)))
         })
     }
 
@@ -808,7 +1062,7 @@ impl TextSelectionState {
         position: Point<Pixels>,
         extend: bool,
         already_prepared: bool,
-        mut window: Option<&mut Window>,
+        window: Option<&mut Window>,
         cx: &mut App,
     ) {
         GlobalState::init(cx);
@@ -835,7 +1089,7 @@ impl TextSelectionState {
         self.did_hit_text = anchor.inside_text || endpoint.inside_text;
         self.is_selecting = true;
         if let Some(region) = focus_region.and_then(|region| region.upgrade()) {
-            if let Some(window) = window.as_deref_mut() {
+            if let Some(window) = window {
                 region.update(cx, |state, cx| state.focus(window, cx));
             }
         }
@@ -887,10 +1141,10 @@ impl TextSelectionState {
             );
             if hovered {
                 let area = f32::from(frame.bounds.size.width) * f32::from(frame.bounds.size.height);
-                if hit
-                    .as_ref()
-                    .is_none_or(|(_, _, best_area)| area < *best_area)
-                {
+                if hit.as_ref().is_none_or(|(_, best, best_area)| {
+                    area < *best_area
+                        || (area == *best_area && frame.document_order < best.document_order)
+                }) {
                     hit = Some((registration.region.clone(), frame.clone(), area));
                 }
             }
@@ -1059,7 +1313,9 @@ impl TextSelectionState {
 }
 
 #[derive(Default)]
-struct WindowTextSelections(HashMap<gpui::WindowId, Entity<TextSelectionState>>);
+/// Non-owning window locator; retained [`TextSelection`] element state owns
+/// each live selection entity.
+struct WindowTextSelections(HashMap<gpui::WindowId, WeakEntity<TextSelectionState>>);
 
 impl Global for WindowTextSelections {}
 
@@ -1117,11 +1373,26 @@ fn with_text_selection_scope<T>(
 }
 
 /// A zero-sized element which enables text selection for a window root.
+///
+/// Mount one as the root's first child. Its stable `"window-text-selection"`
+/// element identity retains the window-local selection entity across frames;
+/// additional instances share that identity and are unnecessary.
 pub struct TextSelection;
 
 impl TextSelection {
+    /// Constructs the root element and binds its window state immediately.
+    ///
+    /// Use this form when a custom root calls [`WindowTextSelection`] methods
+    /// during the same render. Insert the returned element as the first child.
+    /// A root which only registers regions during child prepaint or paint may
+    /// use the unit `TextSelection` value instead.
+    pub fn new(window: &Window, cx: &mut App) -> impl IntoElement + use<> {
+        PreboundTextSelection {
+            state: TextSelectionState::acquire(window.window_handle().window_id(), cx),
+        }
+    }
+
     /// Marks an element subtree as belonging to `scope`.
-    #[doc(hidden)]
     pub fn scope(scope: SelectionScopeId, element: impl IntoElement) -> impl IntoElement {
         TextSelectionScopeMarker {
             scope,
@@ -1209,8 +1480,19 @@ impl<E: Element> Element for TextSelectionScopeMarker<E> {
     }
 }
 
-struct TextSelectionElementState {
-    token: Rc<()>,
+struct PreboundTextSelection {
+    state: Entity<TextSelectionState>,
+}
+
+#[doc(hidden)]
+pub struct TextSelectionPrepaintState(Entity<TextSelectionState>);
+
+impl IntoElement for PreboundTextSelection {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
 }
 
 impl IntoElement for TextSelection {
@@ -1223,7 +1505,7 @@ impl IntoElement for TextSelection {
 
 impl Element for TextSelection {
     type RequestLayoutState = ();
-    type PrepaintState = ();
+    type PrepaintState = TextSelectionPrepaintState;
 
     fn id(&self) -> Option<ElementId> {
         Some("window-text-selection".into())
@@ -1245,112 +1527,213 @@ impl Element for TextSelection {
 
     fn prepaint(
         &mut self,
+        global_id: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        TextSelectionPrepaintState(retain_text_selection_state(global_id, None, window, cx))
+    }
+
+    fn paint(
+        &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         _: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        _: &mut Window,
-        _: &mut App,
-    ) -> Self::PrepaintState {
+        state: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        paint_text_selection(&state.0, window, cx);
+    }
+}
+
+impl Element for PreboundTextSelection {
+    type RequestLayoutState = ();
+    type PrepaintState = TextSelectionPrepaintState;
+
+    fn id(&self) -> Option<ElementId> {
+        Some("window-text-selection".into())
     }
 
-    fn paint(
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        (window.request_layout(Style::default(), [], cx), ())
+    }
+
+    fn prepaint(
         &mut self,
         global_id: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
         _: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
-        _: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        TextSelectionPrepaintState(retain_text_selection_state(
+            global_id,
+            Some(&self.state),
+            window,
+            cx,
+        ))
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Self::RequestLayoutState,
+        state: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
-        let token = window.with_element_state::<TextSelectionElementState, _>(
-            global_id.expect("TextSelection has a stable element id"),
-            |element_state, _| {
-                let element_state = element_state
-                    .unwrap_or_else(|| TextSelectionElementState { token: Rc::new(()) });
-                (element_state.token.clone(), element_state)
-            },
-        );
-        let state = TextSelectionState::ensure(window, cx);
-        let callbacks = state.update(cx, |state, cx| state.renew_lifecycle(&token, cx));
-        dispatch_clear_callbacks(callbacks, cx);
-        if state.update(cx, |state, _| state.schedule_finish_frame()) {
-            let state = state.clone();
-            window.on_next_frame(move |_, cx| {
-                let callbacks = state.update(cx, |state, cx| state.finish_frame(cx));
-                dispatch_clear_callbacks(callbacks, cx);
-            });
-        }
-        window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
-            if event.button != MouseButton::Left {
-                return;
-            }
-            let state = TextSelectionState::ensure(window, cx);
-            if phase.capture() {
-                GlobalState::init(cx);
-                GlobalState::reset_text_selection_suppression(cx);
-                let callbacks = state.update(cx, |state, cx| {
-                    if state.mouse_down_prepared {
-                        return Vec::new();
-                    }
-                    state.mouse_down_prepared = true;
-                    state
-                        .prepare_for_mouse_down(event.click_count == 1 && event.modifiers.shift, cx)
-                });
-                dispatch_clear_callbacks(callbacks, cx);
-            } else if event.click_count == 1 {
-                if GlobalState::is_text_selection_suppressed(cx) {
-                    state.update(cx, |state, _| state.pending_extension_anchor = None);
-                    return;
-                }
-                state.update(cx, |state, cx| {
-                    if !state.is_selecting {
-                        state.begin_in_window(event.position, event.modifiers.shift, window, cx)
-                    }
-                });
-                TextSelectionState::resolve_virtual_keys(&state, cx);
-            }
-        });
-        window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
-            if phase.bubble() {
-                let state = TextSelectionState::ensure(window, cx);
-                state.update(cx, |state, cx| {
-                    state.update_in_window(event.position, window, cx)
-                });
-                TextSelectionState::resolve_virtual_keys(&state, cx);
-            }
-        });
-        window.on_mouse_event(move |_: &MouseUpEvent, phase, window, cx| {
-            if phase.bubble() {
-                let state = TextSelectionState::ensure(window, cx);
-                state.update(cx, |state, cx| {
-                    state.mouse_down_prepared = false;
-                    state.end(cx)
-                });
-            }
-        });
-        window.on_mouse_event(move |_: &ScrollWheelEvent, phase, window, cx| {
-            if phase.bubble() {
-                let position = window.mouse_position();
-                let state = TextSelectionState::ensure(window, cx);
-                state.update(cx, |state, cx| state.update_in_window(position, window, cx));
-                TextSelectionState::resolve_virtual_keys(&state, cx);
-            }
-        });
+        paint_text_selection(&state.0, window, cx);
     }
 }
 
-/// Window text-selection operations. Add one [`TextSelection`] element to a
-/// custom window root; before it paints these operations are safe no-ops.
+fn retain_text_selection_state(
+    global_id: Option<&GlobalElementId>,
+    prebound: Option<&Entity<TextSelectionState>>,
+    window: &mut Window,
+    cx: &mut App,
+) -> Entity<TextSelectionState> {
+    let window_id = window.window_handle().window_id();
+    let prebound = prebound.cloned();
+    let state = window.with_element_state::<Entity<TextSelectionState>, _>(
+        global_id.expect("TextSelection has a stable element id"),
+        |retained, _| {
+            let state = retained
+                .or(prebound)
+                .unwrap_or_else(|| TextSelectionState::acquire(window_id, cx));
+            (state.clone(), state)
+        },
+    );
+    if !cx.has_global::<WindowTextSelections>() {
+        cx.set_global(WindowTextSelections::default());
+    }
+    cx.global_mut::<WindowTextSelections>()
+        .0
+        .insert(window_id, state.downgrade());
+    state
+}
+
+fn paint_text_selection(state: &Entity<TextSelectionState>, window: &mut Window, cx: &mut App) {
+    if state.update(cx, |state, _| state.schedule_finish_frame()) {
+        let state = state.downgrade();
+        window.on_next_frame(move |_, cx| {
+            let Some(state) = state.upgrade() else {
+                return;
+            };
+            let callbacks = state.update(cx, |state, cx| state.finish_frame(cx));
+            dispatch_clear_callbacks(callbacks, cx);
+        });
+    }
+
+    let mouse_down_state = state.downgrade();
+    window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
+        if event.button != MouseButton::Left {
+            return;
+        }
+        let Some(state) = mouse_down_state.upgrade() else {
+            return;
+        };
+        if phase.capture() {
+            GlobalState::init(cx);
+            GlobalState::reset_text_selection_suppression(cx);
+            let callbacks = state.update(cx, |state, cx| {
+                if state.mouse_down_prepared {
+                    return Vec::new();
+                }
+                state.mouse_down_prepared = true;
+                state.prepare_for_mouse_down(event.click_count == 1 && event.modifiers.shift, cx)
+            });
+            dispatch_clear_callbacks(callbacks, cx);
+        } else if event.click_count == 1 {
+            if GlobalState::is_text_selection_suppressed(cx) {
+                state.update(cx, |state, _| state.pending_extension_anchor = None);
+                return;
+            }
+            state.update(cx, |state, cx| {
+                if !state.is_selecting {
+                    state.begin_in_window(event.position, event.modifiers.shift, window, cx)
+                }
+            });
+            TextSelectionState::resolve_virtual_keys(&state, cx);
+        }
+    });
+
+    let mouse_move_state = state.downgrade();
+    window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+        if phase.bubble()
+            && let Some(state) = mouse_move_state.upgrade()
+        {
+            state.update(cx, |state, cx| {
+                state.update_in_window(event.position, window, cx)
+            });
+            TextSelectionState::resolve_virtual_keys(&state, cx);
+        }
+    });
+
+    let mouse_up_state = state.downgrade();
+    window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+        if phase.bubble()
+            && let Some(state) = mouse_up_state.upgrade()
+        {
+            state.update(cx, |state, cx| {
+                state.mouse_down_prepared = false;
+                state.end(cx)
+            });
+        }
+    });
+
+    let scroll_state = state.downgrade();
+    window.on_mouse_event(move |_: &ScrollWheelEvent, phase, window, cx| {
+        if phase.bubble()
+            && let Some(state) = scroll_state.upgrade()
+        {
+            let position = window.mouse_position();
+            state.update(cx, |state, cx| state.update_in_window(position, window, cx));
+            TextSelectionState::resolve_virtual_keys(&state, cx);
+        }
+    });
+}
+
+/// Window text-selection operations.
+///
+/// Add one [`TextSelection`] as the first child of a custom window root. Use
+/// [`TextSelection::new`] before same-render scope changes; the unit value is
+/// sufficient when registration happens later during child prepaint or paint.
+/// Calls made before either form binds the state are safe no-ops.
 pub trait WindowTextSelection {
+    /// Returns the currently selected text in logical document order.
     fn selected_text(&mut self, cx: &mut App) -> String;
+
+    /// Returns whether a drag or renderer-local selection is active.
     fn has_text_selection(&mut self, cx: &mut App) -> bool;
+
+    /// Clears window selection and every participating region's local selection.
     fn clear_text_selection(&mut self, cx: &mut App);
+
+    /// Ends the current drag while leaving its selection visible.
     fn end_text_selection(&mut self, cx: &mut App);
-    #[doc(hidden)]
+
+    /// Sets the active opaque selection scope for this window.
     fn set_text_selection_scope(&mut self, scope: SelectionScopeId, cx: &mut App);
-    #[doc(hidden)]
+
+    /// Registers a selectable region's geometry for the current frame.
     fn register_text_selection_region(
         &mut self,
         region: TextSelectionRegion,
@@ -1361,9 +1744,11 @@ pub trait WindowTextSelection {
 
 impl WindowTextSelection for Window {
     fn selected_text(&mut self, cx: &mut App) -> String {
-        live_text_selection_state(self, cx)
-            .map(|state| state.read(cx).selected_text(cx))
-            .unwrap_or_default()
+        let Some(state) = live_text_selection_state(self, cx) else {
+            return String::new();
+        };
+        let items = state.read(cx).copy_items(cx);
+        resolve_copy_items(items, cx)
     }
 
     fn has_text_selection(&mut self, cx: &mut App) -> bool {
@@ -1385,12 +1770,10 @@ impl WindowTextSelection for Window {
     }
 
     fn set_text_selection_scope(&mut self, scope: SelectionScopeId, cx: &mut App) {
-        let state = TextSelectionState::ensure(self, cx);
-        let callbacks = state.update(cx, |state, cx| {
-            let mut callbacks = state.prune_lifecycle(cx);
-            callbacks.extend(state.set_active_scope_state(scope, cx));
-            callbacks
-        });
+        let Some(state) = TextSelectionState::existing(self, cx) else {
+            return;
+        };
+        let callbacks = state.update(cx, |state, cx| state.set_active_scope_state(scope, cx));
         dispatch_clear_callbacks(callbacks, cx);
     }
 
@@ -1403,25 +1786,18 @@ impl WindowTextSelection for Window {
         if let Some(scope) = current_text_selection_scope(self.window_handle().window_id(), cx) {
             frame.scope = scope;
         }
-        let state = TextSelectionState::ensure(self, cx);
-        let callbacks = state.update(cx, |state, cx| {
-            let callbacks = state.prune_lifecycle(cx);
-            state.register_region(region, frame, cx);
-            callbacks
-        });
-        dispatch_clear_callbacks(callbacks, cx);
+        let Some(state) = TextSelectionState::existing(self, cx) else {
+            return;
+        };
+        state.update(cx, |state, cx| state.register_region(region, frame, cx));
     }
 }
 
 fn live_text_selection_state(window: &Window, cx: &mut App) -> Option<Entity<TextSelectionState>> {
-    let state = TextSelectionState::existing(window, cx)?;
-    let callbacks = state.update(cx, |state, cx| state.prune_lifecycle(cx));
-    dispatch_clear_callbacks(callbacks, cx);
-    state.read(cx).lifecycle_is_live().then_some(state)
+    TextSelectionState::existing(window, cx)
 }
 
-#[doc(hidden)]
-pub fn clear_window_text_selection(window_id: gpui::WindowId, cx: &mut App) {
+pub(crate) fn clear_window_text_selection(window_id: gpui::WindowId, cx: &mut App) {
     if !cx.has_global::<WindowTextSelections>() {
         return;
     }
@@ -1429,15 +1805,10 @@ pub fn clear_window_text_selection(window_id: gpui::WindowId, cx: &mut App) {
         .global::<WindowTextSelections>()
         .0
         .get(&window_id)
-        .cloned()
+        .and_then(WeakEntity::upgrade)
     else {
         return;
     };
-    let callbacks = state.update(cx, |state, cx| state.prune_lifecycle(cx));
-    dispatch_clear_callbacks(callbacks, cx);
-    if !state.read(cx).lifecycle_is_live() {
-        return;
-    }
     let callbacks = state.update(cx, |state, cx| state.clear_state(cx));
     dispatch_clear_callbacks(callbacks, cx);
 }
@@ -1474,6 +1845,14 @@ mod tests {
         region: TextSelectionRegion,
     }
 
+    struct WindowOwnedSelectionView {
+        region: TextSelectionRegion,
+    }
+
+    struct FirstFrameScopedSelectionView {
+        region: TextSelectionRegion,
+    }
+
     struct PlainRunLayoutView {
         texts: Vec<SharedString>,
         layouts: Vec<TextLayout>,
@@ -1501,28 +1880,20 @@ mod tests {
     }
 
     impl Render for ToggleSelectionElementView {
-        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-            if self.enabled {
-                let bounds = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(20.)));
-                window.register_text_selection_region(
-                    self.region.clone(),
-                    SelectionRegionFrame {
-                        hitbox: Hitbox {
-                            id: HitboxId::placeholder(),
-                            bounds,
-                            content_mask: ContentMask { bounds },
-                            behavior: HitboxBehavior::Normal,
-                        },
-                        bounds,
-                        scroll_offset: Point::default(),
-                        scope: SelectionScopeId::default(),
-                        document_order: 0,
-                        text_bounds: vec![bounds],
-                    },
-                    cx,
-                );
-            }
-            div().when(self.enabled, |this| this.child(TextSelection))
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let region = self.region.clone();
+            div().when(self.enabled, |this| {
+                this.child(TextSelection)
+                    .child(div().size_full().on_prepaint(move |bounds, window, cx| {
+                        let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                        window.register_text_selection_region(
+                            region,
+                            SelectionRegionFrame::new(hitbox, bounds)
+                                .with_text_bounds(vec![bounds]),
+                            cx,
+                        );
+                    }))
+            })
         }
     }
 
@@ -1537,17 +1908,48 @@ mod tests {
                     let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
                     window.register_text_selection_region(
                         region,
-                        SelectionRegionFrame {
-                            hitbox,
-                            bounds,
-                            scroll_offset: Point::default(),
-                            scope: SelectionScopeId::default(),
-                            document_order: 0,
-                            text_bounds: vec![bounds],
-                        },
+                        SelectionRegionFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
                         cx,
                     );
                 })
+        }
+    }
+
+    impl Render for WindowOwnedSelectionView {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let region = self.region.clone();
+            div()
+                .size_full()
+                .child(TextSelection)
+                .child(div().size_full().on_prepaint(move |bounds, window, cx| {
+                    let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                    window.register_text_selection_region(
+                        region,
+                        SelectionRegionFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
+                        cx,
+                    );
+                }))
+        }
+    }
+
+    impl Render for FirstFrameScopedSelectionView {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let selection = TextSelection::new(window, cx);
+            let scope = SelectionScopeId::new(23);
+            window.set_text_selection_scope(scope, cx);
+            let region = self.region.clone();
+
+            div().child(selection).child(TextSelection::scope(
+                scope,
+                div().size_full().on_prepaint(move |bounds, window, cx| {
+                    let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
+                    window.register_text_selection_region(
+                        region,
+                        SelectionRegionFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
+                        cx,
+                    );
+                }),
+            ))
         }
     }
 
@@ -1585,19 +1987,18 @@ mod tests {
             let bounds = Bounds::new(point(px(0.), px(y)), size(px(100.), px(10.)));
             host.register_region(
                 self.region.clone(),
-                SelectionRegionFrame {
-                    hitbox: Hitbox {
+                SelectionRegionFrame::new(
+                    Hitbox {
                         id: HitboxId::placeholder(),
                         bounds,
                         content_mask: ContentMask { bounds },
                         behavior: HitboxBehavior::Normal,
                     },
                     bounds,
-                    scroll_offset: point(px(0.), px(0.)),
-                    scope,
-                    document_order,
-                    text_bounds: vec![bounds],
-                },
+                )
+                .with_scope(scope)
+                .with_document_order(document_order)
+                .with_text_bounds(vec![bounds]),
                 cx,
             );
         }
@@ -1624,21 +2025,11 @@ mod tests {
     }
 
     fn plain_snapshot(anchor: Point<Pixels>, cursor: Point<Pixels>) -> SelectionSnapshot {
-        SelectionSnapshot {
-            anchor: SelectionEndpointSnapshot {
-                region_id: None,
-                point: anchor,
-                virtual_key: None,
-            },
-            cursor: SelectionEndpointSnapshot {
-                region_id: None,
-                point: cursor,
-                virtual_key: None,
-            },
-            is_selecting: false,
-            coverage: SelectionRegionCoverage::Bounded,
-            resolved_points: Some((anchor, cursor)),
-        }
+        SelectionSnapshot::new(
+            SelectionEndpointSnapshot::new(None, anchor),
+            SelectionEndpointSnapshot::new(None, cursor),
+        )
+        .with_resolved_points(Some((anchor, cursor)))
     }
 
     #[gpui::test]
@@ -1690,13 +2081,14 @@ mod tests {
             let host = cx.new(|_| TextSelectionState::default());
             let host_for_callback = host.clone();
             let region = FakeRegion::new("region", cx);
-            region.region.state().update(cx, |state, _| {
-                state.on_selection(move |snapshot, cx| {
+            region.region.on_selection(
+                move |snapshot, cx| {
                     if snapshot.is_some() {
                         host_for_callback.update(cx, |_, _| called_from_callback.set(true));
                     }
-                });
-            });
+                },
+                cx,
+            );
             host.update(cx, |host, cx| {
                 region.register(host, 0., SelectionScopeId::default(), 0, cx);
                 host.begin(point(px(1.), px(1.)), false, cx);
@@ -1713,10 +2105,13 @@ mod tests {
         let observed_for_callback = observed.clone();
         cx.update(|cx| {
             let region = TextSelectionRegion::new("region", cx);
-            region.state().update(cx, |state, cx| {
-                state.on_selection(move |snapshot, _| {
+            region.on_selection(
+                move |snapshot, _| {
                     observed_for_callback.borrow_mut().push(snapshot.is_some());
-                });
+                },
+                cx,
+            );
+            region.0.update(cx, |state, cx| {
                 state.set_snapshot(
                     Some(plain_snapshot(point(px(1.), px(1.)), point(px(8.), px(1.)))),
                     cx,
@@ -1730,12 +2125,89 @@ mod tests {
     }
 
     fn run_frame(order: u64, text: SharedString, layout: TextLayout) -> SelectionRunFrame {
-        SelectionRunFrame {
-            order,
-            text,
-            bounds: layout.bounds(),
-            layout,
-        }
+        let bounds = layout.bounds();
+        SelectionRunFrame::new(order, text, layout, bounds)
+    }
+
+    #[gpui::test]
+    fn public_selection_data_uses_builders_and_readers(cx: &mut TestAppContext) {
+        let bounds = Bounds::new(point(px(1.), px(2.)), size(px(30.), px(10.)));
+        let hitbox = Hitbox {
+            id: HitboxId::placeholder(),
+            bounds,
+            content_mask: ContentMask { bounds },
+            behavior: HitboxBehavior::Normal,
+        };
+        let scope = SelectionScopeId::new(7);
+        let endpoint = SelectionEndpointSnapshot::new(None, bounds.origin).with_virtual_key(11);
+        let snapshot = SelectionSnapshot::new(endpoint, endpoint)
+            .with_selecting(true)
+            .with_resolved_points(Some((bounds.origin, bounds.bottom_right())))
+            .with_region_coverage(SelectionRegionCoverage::Full);
+        let region_frame = SelectionRegionFrame::new(hitbox, bounds)
+            .with_scroll_offset(point(px(3.), px(4.)))
+            .with_scope(scope)
+            .with_document_order(9)
+            .with_text_bounds(vec![bounds]);
+
+        assert_eq!(endpoint.region_id(), None);
+        assert_eq!(endpoint.point(), bounds.origin);
+        assert_eq!(endpoint.virtual_key(), Some(11));
+        assert_eq!(snapshot.anchor(), endpoint);
+        assert_eq!(snapshot.cursor(), endpoint);
+        assert!(snapshot.is_selecting());
+        assert_eq!(snapshot.region_coverage(), SelectionRegionCoverage::Full);
+        assert_eq!(
+            snapshot.resolved_points(),
+            Some((bounds.origin, bounds.bottom_right()))
+        );
+        assert_eq!(region_frame.bounds(), bounds);
+        assert_eq!(region_frame.scroll_offset(), point(px(3.), px(4.)));
+        assert_eq!(region_frame.scope(), scope);
+        assert_eq!(region_frame.document_order(), 9);
+        assert_eq!(region_frame.text_bounds(), &[bounds]);
+
+        let (text, layout) = laid_out_runs(&["aé"], cx).pop().unwrap();
+        let run_frame = SelectionRunFrame::new(3, text.clone(), layout.clone(), layout.bounds());
+        assert_eq!(run_frame.order(), 3);
+        assert_eq!(run_frame.text(), &text);
+        assert_eq!(run_frame.layout().len(), layout.len());
+        assert_eq!(run_frame.bounds(), layout.bounds());
+
+        let run_state = SelectionRunState::new()
+            .with_byte_range(Some(1..3))
+            .with_active(true);
+        assert_eq!(run_state.byte_range(), Some(&(1..3)));
+        assert!(run_state.is_active());
+    }
+
+    #[gpui::test]
+    fn region_handle_is_the_public_adapter_seam(cx: &mut TestAppContext) {
+        let selected = Rc::new(Cell::new(false));
+        let selected_from_callback = selected.clone();
+        cx.update(|cx| {
+            let region = TextSelectionRegion::new("initial", cx);
+            let region_id = region.entity_id();
+            region.set_selected_text("updated", cx);
+            region.set_local_selection(true, cx);
+            region.on_selection(
+                move |snapshot, _| selected_from_callback.set(snapshot.is_some()),
+                cx,
+            );
+            region.on_auto_scroll(|_, _| {}, cx);
+            region.on_focus(|_, _| {}, cx);
+            region.on_clear(|_| {}, cx);
+            region.copy_with(|_| "copied".to_string(), cx);
+            region.on_virtual_key(|_, _| Some(3), cx);
+
+            assert_eq!(region.entity_id(), region_id);
+            assert_eq!(region.snapshot(cx), None);
+            assert_eq!(
+                region.project_selection_runs(&[], cx),
+                Vec::<SelectionRunState>::new()
+            );
+        });
+        assert!(!selected.get());
     }
 
     #[gpui::test]
@@ -1745,13 +2217,14 @@ mod tests {
         let start = layout.position_for_index(1).unwrap();
         let end = layout.position_for_index(7).unwrap();
 
-        let forward = project_selection_runs(Some(plain_snapshot(start, end)), &[run.clone()]);
+        let forward =
+            project_selection_runs(Some(plain_snapshot(start, end)), std::slice::from_ref(&run));
         let reversed = project_selection_runs(Some(plain_snapshot(end, start)), &[run]);
 
-        assert_eq!(forward[0].byte_range, Some(1..7));
-        assert_eq!(reversed[0].byte_range, Some(1..7));
-        assert!(forward[0].active);
-        assert!(reversed[0].active);
+        assert_eq!(forward[0].byte_range(), Some(&(1..7)));
+        assert_eq!(reversed[0].byte_range(), Some(&(1..7)));
+        assert!(forward[0].is_active());
+        assert!(reversed[0].is_active());
     }
 
     #[gpui::test]
@@ -1773,10 +2246,10 @@ mod tests {
             ],
         );
 
-        assert_eq!(states[0].byte_range, Some(0..3));
-        assert_eq!(states[1].byte_range, None);
-        assert_eq!(states[2].byte_range, Some(2..5));
-        assert!(states.iter().all(|state| state.active));
+        assert_eq!(states[0].byte_range(), Some(&(0..3)));
+        assert_eq!(states[1].byte_range(), None);
+        assert_eq!(states[2].byte_range(), Some(&(2..5)));
+        assert!(states.iter().all(SelectionRunState::is_active));
     }
 
     #[gpui::test]
@@ -1795,26 +2268,34 @@ mod tests {
             first.register(&mut host, 0., SelectionScopeId::default(), 1, cx);
             second.register(&mut host, 20., SelectionScopeId::default(), 0, cx);
 
-            first.region.state().update(cx, |state, cx| {
-                state.set_snapshot(Some(snapshot), cx);
-                assert_eq!(
-                    state.project_selection_runs(&[run_frame(0, first_text, first_layout)]),
-                    vec![SelectionRunState {
-                        byte_range: Some(1..3),
-                        active: true,
-                    }]
-                );
-            });
-            second.region.state().update(cx, |state, cx| {
-                state.set_snapshot(Some(snapshot), cx);
-                assert_eq!(
-                    state.project_selection_runs(&[run_frame(0, second_text, second_layout)]),
-                    vec![SelectionRunState {
-                        byte_range: Some(0..2),
-                        active: true,
-                    }]
-                );
-            });
+            first
+                .region
+                .0
+                .update(cx, |state, cx| state.set_snapshot(Some(snapshot), cx));
+            assert_eq!(
+                first
+                    .region
+                    .project_selection_runs(&[run_frame(0, first_text, first_layout)], cx),
+                vec![
+                    SelectionRunState::new()
+                        .with_byte_range(Some(1..3))
+                        .with_active(true)
+                ]
+            );
+            second
+                .region
+                .0
+                .update(cx, |state, cx| state.set_snapshot(Some(snapshot), cx));
+            assert_eq!(
+                second
+                    .region
+                    .project_selection_runs(&[run_frame(0, second_text, second_layout)], cx),
+                vec![
+                    SelectionRunState::new()
+                        .with_byte_range(Some(0..2))
+                        .with_active(true)
+                ]
+            );
 
             assert_eq!(host.selected_text(cx), "tw\nne");
         });
@@ -1836,26 +2317,21 @@ mod tests {
             let mut host = TextSelectionState::default();
             let region = FakeRegion::new("", cx);
             region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
-            region.region.state().update(cx, |state, cx| {
+            region.region.0.update(cx, |state, cx| {
                 state.set_snapshot(Some(first_snapshot), cx);
-                state.project_selection_runs(&[run.clone()]);
+                state.project_selection_runs(std::slice::from_ref(&run));
             });
             assert_eq!(host.selected_text(cx), "ir");
 
-            region.region.state().update(cx, |state, cx| {
+            region.region.0.update(cx, |state, cx| {
                 state.set_snapshot(Some(changed_snapshot), cx);
             });
             assert_eq!(host.selected_text(cx), "");
 
-            region.region.state().update(cx, |state, _| {
-                state.project_selection_runs(&[run]);
-            });
+            region.region.project_selection_runs(&[run], cx);
             assert_eq!(host.selected_text(cx), "st");
             host.clear(cx);
-            region
-                .region
-                .state()
-                .update(cx, |state, _| state.set_local_selection(true));
+            region.region.set_local_selection(true, cx);
             assert_eq!(host.selected_text(cx), "");
         });
     }
@@ -1873,7 +2349,7 @@ mod tests {
             let mut host = TextSelectionState::default();
             let region = FakeRegion::new("", cx);
             region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
-            region.region.state().update(cx, |state, cx| {
+            region.region.0.update(cx, |state, cx| {
                 state.set_snapshot(Some(snapshot), cx);
                 state.project_selection_runs(&[
                     run_frame(1, first_text, first_layout),
@@ -1895,13 +2371,7 @@ mod tests {
             &[run_frame(0, SharedString::from("longer"), layout)],
         );
 
-        assert_eq!(
-            states,
-            vec![SelectionRunState {
-                byte_range: None,
-                active: true,
-            }]
-        );
+        assert_eq!(states, vec![SelectionRunState::new().with_active(true)]);
     }
 
     #[gpui::test]
@@ -1934,13 +2404,13 @@ mod tests {
             host.end(cx);
             host.begin(point(px(8.), px(2.)), true, cx);
             host.end(cx);
-            let first_anchor = host.snapshot().unwrap().anchor;
+            let first_anchor = host.snapshot().unwrap().anchor();
 
             host.begin(point(px(0.), px(2.)), true, cx);
             host.end(cx);
             let reversed = host.snapshot().unwrap();
-            assert_eq!(reversed.anchor, first_anchor);
-            assert!(reversed.cursor.point.x < reversed.anchor.point.x);
+            assert_eq!(reversed.anchor(), first_anchor);
+            assert!(reversed.cursor().point().x < reversed.anchor().point().x);
         });
     }
 
@@ -1950,12 +2420,13 @@ mod tests {
             let state = cx.new(|_| TextSelectionState::default());
             let region = FakeRegion::new("virtual", cx);
             let state_for_callback = state.clone();
-            region.region.state().update(cx, |region, _| {
-                region.on_virtual_key(move |_, cx| {
+            region.region.on_virtual_key(
+                move |_, cx| {
                     let _ = state_for_callback.read(cx).snapshot();
                     Some(7)
-                });
-            });
+                },
+                cx,
+            );
             state.update(cx, |state, cx| {
                 region.register(state, 0., SelectionScopeId::default(), 0, cx);
                 state.begin(point(px(1.), px(1.)), false, cx);
@@ -1965,7 +2436,7 @@ mod tests {
             TextSelectionState::resolve_virtual_keys(&state, cx);
 
             assert_eq!(
-                state.read(cx).snapshot().unwrap().cursor.virtual_key(),
+                state.read(cx).snapshot().unwrap().cursor().virtual_key(),
                 Some(7)
             );
         });
@@ -2065,9 +2536,7 @@ mod tests {
         cx.update(|window, cx| {
             let region = view.read(cx).region.clone();
             let host = TextSelectionState::ensure(window, cx);
-            let lifecycle = Rc::new(());
             host.update(cx, |host, cx| {
-                host.renew_lifecycle(&lifecycle, cx);
                 FakeRegion { region }.register(host, 0., SelectionScopeId::default(), 0, cx);
                 host.begin(point(px(1.), px(1.)), false, cx);
                 host.update(point(px(8.), px(1.)), cx);
@@ -2080,6 +2549,92 @@ mod tests {
             window.clear_text_selection(cx);
             assert!(!window.has_text_selection(cx));
             assert_eq!(window.selected_text(cx), "");
+        });
+    }
+
+    #[gpui::test]
+    fn two_windows_isolate_selection_copy_clear_and_release_ownership(cx: &mut TestAppContext) {
+        let first = cx.add_window(|_, cx| WindowOwnedSelectionView {
+            region: TextSelectionRegion::new("first", cx),
+        });
+        let second = cx.add_window(|_, cx| WindowOwnedSelectionView {
+            region: TextSelectionRegion::new("second", cx),
+        });
+        let first_region = cx.update(|cx| first.read(cx).unwrap().region.clone());
+        let second_region = cx.update(|cx| second.read(cx).unwrap().region.clone());
+
+        let first_state = cx
+            .update_window(*first, |_, window, cx| {
+                let _ = window.draw(cx);
+                first_region.set_local_selection(true, cx);
+                assert_eq!(window.selected_text(cx), "first");
+                TextSelectionState::existing(window, cx)
+                    .unwrap()
+                    .downgrade()
+            })
+            .unwrap();
+        cx.update_window(*second, |_, window, cx| {
+            let _ = window.draw(cx);
+            second_region.set_local_selection(true, cx);
+            assert_eq!(window.selected_text(cx), "second");
+        })
+        .unwrap();
+
+        cx.update_window(*first, |_, window, cx| {
+            window.clear_text_selection(cx);
+            assert_eq!(window.selected_text(cx), "");
+        })
+        .unwrap();
+        cx.update_window(*second, |_, window, cx| {
+            assert_eq!(window.selected_text(cx), "second");
+        })
+        .unwrap();
+
+        cx.update_window(*first, |_, window, _| window.remove_window())
+            .unwrap();
+        cx.run_until_parked();
+
+        assert!(first_state.upgrade().is_none());
+        cx.update_window(*second, |_, window, cx| {
+            assert_eq!(window.selected_text(cx), "second");
+        })
+        .unwrap();
+        cx.update(|cx| {
+            assert_eq!(cx.global::<WindowTextSelections>().0.len(), 1);
+        });
+    }
+
+    #[gpui::test]
+    fn copy_callback_can_reenter_window_and_region_selection(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_, _| SelectionElementOnlyView);
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            let state = TextSelectionState::existing(window, cx).unwrap();
+            let region = TextSelectionRegion::new("fallback", cx);
+            let state_for_copy = state.clone();
+            let region_for_copy = region.clone();
+            region.copy_with(
+                move |cx: &mut App| {
+                    state_for_copy.update(cx, |state, _| {
+                        assert!(state.snapshot().is_some());
+                    });
+                    assert!(region_for_copy.snapshot(cx).is_some());
+                    region_for_copy.set_selected_text("reentered", cx);
+                    "reentrant copy".to_string()
+                },
+                cx,
+            );
+            state.update(cx, |state, cx| {
+                FakeRegion {
+                    region: region.clone(),
+                }
+                .register(state, 0., SelectionScopeId::default(), 0, cx);
+                state.begin(point(px(1.), px(1.)), false, cx);
+                state.update(point(px(8.), px(1.)), cx);
+                state.end(cx);
+            });
+
+            assert_eq!(window.selected_text(cx), "reentrant copy");
         });
     }
 
@@ -2101,7 +2656,7 @@ mod tests {
             host.end(cx);
 
             assert_eq!(host.selected_text(cx), "first\nsecond");
-            assert!(third.region.state().read(cx).snapshot().is_none());
+            assert!(third.region.snapshot(cx).is_none());
         });
     }
 
@@ -2120,7 +2675,7 @@ mod tests {
             host.set_active_scope(SelectionScopeId::new(1), cx);
 
             assert!(!host.has_text_selection(cx));
-            assert!(base.region.state().read(cx).snapshot().is_none());
+            assert!(base.region.snapshot(cx).is_none());
         });
     }
 
@@ -2137,7 +2692,7 @@ mod tests {
 
             assert!(!host.has_text_selection(cx));
             assert_eq!(host.selected_text(cx), "");
-            assert!(region.region.state().read(cx).snapshot().is_none());
+            assert!(region.region.snapshot(cx).is_none());
         });
     }
 
@@ -2154,7 +2709,7 @@ mod tests {
             host.finish_frame(cx);
             host.finish_frame(cx);
             assert_eq!(host.selected_text(cx), "");
-            assert!(region.region.state().read(cx).snapshot().is_none());
+            assert!(region.region.snapshot(cx).is_none());
         });
     }
 
@@ -2165,9 +2720,9 @@ mod tests {
         cx.update(|cx| {
             let mut host = TextSelectionState::default();
             let region = FakeRegion::new("scroll", cx);
-            region.region.state().update(cx, |state, _| {
-                state.on_auto_scroll(move |delta, _| observed.borrow_mut().push(delta));
-            });
+            region
+                .region
+                .on_auto_scroll(move |delta, _| observed.borrow_mut().push(delta), cx);
             region.register(&mut host, 0., SelectionScopeId::default(), 0, cx);
 
             host.begin(point(px(1.), px(1.)), false, cx);
@@ -2190,9 +2745,32 @@ mod tests {
 
             host.begin(point(px(1.), px(1.)), false, cx);
             host.update(point(px(200.), px(25.)), cx);
-            let endpoint = host.snapshot().unwrap().cursor;
+            let endpoint = host.snapshot().unwrap().cursor();
 
-            assert_eq!(endpoint.region_id, Some(earlier.region.state().entity_id()));
+            assert_eq!(endpoint.region_id(), Some(earlier.region.entity_id()));
+        });
+    }
+
+    #[gpui::test]
+    fn equal_area_hovered_regions_break_ties_by_document_order(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            for _ in 0..64 {
+                let mut host = TextSelectionState::default();
+                let later = FakeRegion::new("later", cx);
+                let earliest = FakeRegion::new("earliest", cx);
+                let middle = FakeRegion::new("middle", cx);
+                later.register(&mut host, 0., SelectionScopeId::default(), 30, cx);
+                earliest.register(&mut host, 0., SelectionScopeId::default(), 10, cx);
+                middle.register(&mut host, 0., SelectionScopeId::default(), 20, cx);
+
+                host.begin(point(px(1.), px(1.)), false, cx);
+                host.update(point(px(8.), px(1.)), cx);
+
+                assert_eq!(
+                    host.snapshot().unwrap().anchor().region_id(),
+                    Some(earliest.region.entity_id())
+                );
+            }
         });
     }
 
@@ -2211,15 +2789,30 @@ mod tests {
     }
 
     #[gpui::test]
+    fn constructed_selection_element_supports_scope_and_registration_on_the_first_frame(
+        cx: &mut TestAppContext,
+    ) {
+        let (view, cx) = cx.add_window_view(|_, cx| FirstFrameScopedSelectionView {
+            region: TextSelectionRegion::new("first frame", cx),
+        });
+        let region = cx.update(|_, cx| view.read(cx).region.clone());
+
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            let state = TextSelectionState::existing(window, cx).unwrap();
+            assert_eq!(state.read(cx).active_scope, SelectionScopeId::new(23));
+            assert!(state.read(cx).regions.contains_key(&region.entity_id()));
+        });
+    }
+
+    #[gpui::test]
     fn lazy_registration_does_not_enable_queries_without_the_element(cx: &mut TestAppContext) {
         let (_, cx) = cx.add_window_view(|_, cx| WindowRegionView {
             region: TextSelectionRegion::new("registered", cx),
         });
         cx.update(|window, cx| {
             let region = TextSelectionRegion::new("registered", cx);
-            region
-                .state()
-                .update(cx, |state, _| state.set_local_selection(true));
+            region.set_local_selection(true, cx);
             let bounds = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(20.)));
             let hitbox = Hitbox {
                 id: HitboxId::placeholder(),
@@ -2229,14 +2822,7 @@ mod tests {
             };
             window.register_text_selection_region(
                 region,
-                SelectionRegionFrame {
-                    hitbox,
-                    bounds,
-                    scroll_offset: Point::default(),
-                    scope: SelectionScopeId::default(),
-                    document_order: 0,
-                    text_bounds: vec![bounds],
-                },
+                SelectionRegionFrame::new(hitbox, bounds).with_text_bounds(vec![bounds]),
                 cx,
             );
             assert_eq!(window.selected_text(cx), "");
@@ -2247,9 +2833,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn selection_element_lease_renews_expires_and_does_not_resurrect_selection(
-        cx: &mut TestAppContext,
-    ) {
+    fn retained_selection_state_releases_and_does_not_resurrect_selection(cx: &mut TestAppContext) {
         let (view, cx) = cx.add_window_view(|_, cx| ToggleSelectionElementView {
             enabled: true,
             region: TextSelectionRegion::new("local", cx),
@@ -2257,9 +2841,7 @@ mod tests {
         let region = cx.update(|_, cx| view.read(cx).region.clone());
         cx.update(|window, cx| {
             let _ = window.draw(cx);
-            region
-                .state()
-                .update(cx, |region, _| region.set_local_selection(true));
+            region.set_local_selection(true, cx);
             assert!(window.has_text_selection(cx));
 
             window.simulate_next_frame(cx);
@@ -2284,7 +2866,7 @@ mod tests {
         cx.update(|window, cx| {
             assert!(!window.has_text_selection(cx));
             assert_eq!(window.selected_text(cx), "");
-            assert!(!region.state().read(cx).local_selection);
+            assert!(!region.has_local_selection(cx));
             window.clear_text_selection(cx);
         });
 
@@ -2350,7 +2932,7 @@ mod tests {
             host.finish_frame(cx);
 
             assert_eq!(host.selected_text(cx), "painted first");
-            assert!(region.region.state().read(cx).snapshot().is_some());
+            assert!(region.region.snapshot(cx).is_some());
         });
     }
 
@@ -2372,7 +2954,8 @@ mod tests {
             let _ = window.draw(cx);
             window.simulate_next_frame(cx);
 
-            assert_eq!(host.read(cx).selected_text(cx), "once");
+            let items = host.read(cx).copy_items(cx);
+            assert_eq!(resolve_copy_items(items, cx), "once");
         });
     }
 
@@ -2388,12 +2971,14 @@ mod tests {
             let state = TextSelectionState::ensure(window, cx);
             let state_for_clear = state.clone();
             let count = clear_count.clone();
-            view.read(cx).region.state().update(cx, |region, _| {
-                region.on_clear(move |cx| {
+            let region = view.read(cx).region.clone();
+            region.on_clear(
+                move |cx| {
                     count.set(count.get() + 1);
                     let _ = state_for_clear.read(cx).snapshot();
-                });
-            });
+                },
+                cx,
+            );
             let _ = window.draw(cx);
         });
 

@@ -90,14 +90,9 @@ mod tests {
             gpui_base::WindowTextSelection::register_text_selection_region(
                 window,
                 self.region.clone(),
-                SelectionRegionFrame {
-                    hitbox: hitbox.clone(),
-                    bounds,
-                    scroll_offset: Default::default(),
-                    scope: SelectionScopeId::default(),
-                    document_order: self.document_order,
-                    text_bounds: vec![bounds],
-                },
+                SelectionRegionFrame::new(hitbox.clone(), bounds)
+                    .with_document_order(self.document_order)
+                    .with_text_bounds(vec![bounds]),
                 cx,
             );
             hitbox
@@ -114,14 +109,10 @@ mod tests {
             cx: &mut App,
         ) {
             let layout = self.styled_text.layout().clone();
-            self.region.state().update(cx, |state, _| {
-                state.project_selection_runs(&[SelectionRunFrame {
-                    order: 0,
-                    text: self.text.clone(),
-                    layout,
-                    bounds,
-                }]);
-            });
+            self.region.project_selection_runs(
+                &[SelectionRunFrame::new(0, self.text.clone(), layout, bounds)],
+                cx,
+            );
             self.styled_text
                 .paint(id, inspector_id, bounds, &mut (), &mut (), window, cx);
         }

@@ -9,6 +9,15 @@ pub mod actions;
 mod alert_dialog;
 pub mod animation;
 #[doc(hidden)]
+pub mod __private {
+    use gpui::{App, WindowId};
+
+    #[doc(hidden)]
+    pub fn clear_window_text_selection(window_id: WindowId, cx: &mut App) {
+        crate::text_selection::clear_window_text_selection(window_id, cx);
+    }
+}
+#[doc(hidden)]
 pub mod async_util;
 mod auto_scroll;
 mod avatar;
@@ -144,12 +153,10 @@ pub use switch::{
 };
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
-#[doc(hidden)]
-pub use text_selection::clear_window_text_selection;
 pub use text_selection::{
     SelectionEndpointSnapshot, SelectionRegionCoverage, SelectionRegionFrame, SelectionRunFrame,
     SelectionRunState, SelectionScopeId, SelectionSnapshot, TextSelection, TextSelectionRegion,
-    TextSelectionRegionState, WindowTextSelection, project_selection_runs,
+    WindowTextSelection, project_selection_runs,
 };
 pub use theme::{ResizableTheme, ScrollbarTheme, Theme};
 pub use theme_tokens::{

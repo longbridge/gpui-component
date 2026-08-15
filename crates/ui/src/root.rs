@@ -92,7 +92,7 @@ impl Root {
     /// Clears window-owned text selection synchronously.
     #[deprecated(note = "use gpui_base::WindowTextSelection::clear_text_selection instead")]
     pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
-        gpui_base::clear_window_text_selection(self.window_id, cx);
+        gpui_base::__private::clear_window_text_selection(self.window_id, cx);
     }
 
     /// Create a new Root view.
@@ -578,6 +578,7 @@ impl Render for Root {
             crate::global_state::init(cx);
         }
         crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
+        let text_selection = TextSelection::new(window, cx);
         let active_scope = self.active_text_selection_scope();
         gpui_base::WindowTextSelection::set_text_selection_scope(window, active_scope, cx);
 
@@ -593,7 +594,7 @@ impl Render for Root {
             .bg(cx.theme().tokens.background)
             .text_color(cx.theme().foreground)
             .refine_style(&self.style)
-            .child(TextSelection)
+            .child(text_selection)
             .child(self.view.clone())
             .child(self.tooltip_overlay.clone())
             .child(self.native_menu_overlay.clone());
