@@ -687,6 +687,31 @@ mod tests {
     }
 
     #[gpui::test]
+    #[allow(deprecated)]
+    fn deprecated_root_clear_forwards_synchronously(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let (root, cx) = cx.add_window_view(|window, cx| {
+            let content = cx.new(BaseOwnedTextViewSelection::new);
+            Root::new(content, window, cx)
+        });
+        let content = root.read_with(cx, |root, _| {
+            root.view()
+                .clone()
+                .downcast::<BaseOwnedTextViewSelection>()
+                .unwrap()
+        });
+        let text_view = content.read_with(cx, |content, _| content.text_view.clone());
+        let cx: &mut VisualTestContext = cx;
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+            text_view.update(cx, |state, cx| state.select_all(cx));
+            root.update(cx, |root, cx| root.clear_text_selection(cx));
+            assert_eq!(text_view.read(cx).selected_text(), "");
+        });
+    }
+
+    #[gpui::test]
     fn base_clear_then_select_all_in_one_effect_keeps_the_new_selection(cx: &mut TestAppContext) {
         cx.update(crate::init);
         let (root, cx) = cx.add_window_view(|window, cx| {

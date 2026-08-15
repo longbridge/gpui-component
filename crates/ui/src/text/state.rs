@@ -126,7 +126,7 @@ impl TextViewState {
                         if parsed_update.revision != state.revision {
                             return;
                         }
-                        if parsed_update.synchronous {
+                        if parsed_update.mode == ParseMode::BaselineAck {
                             return;
                         }
 
@@ -334,7 +334,11 @@ impl TextViewState {
         let update_options = UpdateOptions {
             revision: self.revision,
             append,
-            synchronous: !append,
+            mode: if append {
+                ParseMode::Update
+            } else {
+                ParseMode::BaselineAck
+            },
             pending_text: text.to_string(),
             markdown_extensions: self.markdown_extensions.clone(),
         };
@@ -656,7 +660,7 @@ impl Future for UpdateFuture {
                     _ = self.tx_result.try_send(ParsedUpdate {
                         revision: options.revision,
                         append: options.append,
-                        synchronous: options.synchronous,
+                        mode: options.mode,
                         result: res,
                     });
                     if hit_coalesce_budget {
@@ -677,7 +681,7 @@ struct UpdateOptions {
     revision: usize,
     pending_text: String,
     append: bool,
-    synchronous: bool,
+    mode: ParseMode,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -686,7 +690,7 @@ impl UpdateOptions {
         if next.append {
             self.pending_text.push_str(&next.pending_text);
             self.revision = next.revision;
-            self.synchronous = false;
+            self.mode = ParseMode::Update;
         } else {
             *self = next;
         }
@@ -696,8 +700,14 @@ impl UpdateOptions {
 struct ParsedUpdate {
     revision: usize,
     append: bool,
-    synchronous: bool,
+    mode: ParseMode,
     result: Result<ParsedContent, SharedString>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ParseMode {
+    BaselineAck,
+    Update,
 }
 
 fn merge_pending_options(options: &mut UpdateOptions, rx: &Receiver<UpdateOptions>) -> bool {
@@ -796,7 +806,7 @@ mod tests {
             revision: 1,
             pending_text: "old".to_string(),
             append: true,
-            synchronous: false,
+            mode: ParseMode::Update,
             markdown_extensions: Arc::default(),
         };
 
@@ -804,14 +814,14 @@ mod tests {
             revision: 2,
             pending_text: "new".to_string(),
             append: false,
-            synchronous: true,
+            mode: ParseMode::BaselineAck,
             markdown_extensions: Arc::default(),
         });
         options.merge(UpdateOptions {
             revision: 3,
             pending_text: " text".to_string(),
             append: true,
-            synchronous: false,
+            mode: ParseMode::Update,
             markdown_extensions: Arc::default(),
         });
 
@@ -831,7 +841,11 @@ mod tests {
                 revision,
                 pending_text: format!("{revision}\n"),
                 append: revision != 1,
-                synchronous: revision == 1,
+                mode: if revision == 1 {
+                    ParseMode::BaselineAck
+                } else {
+                    ParseMode::Update
+                },
                 markdown_extensions: Arc::default(),
             })
             .unwrap();

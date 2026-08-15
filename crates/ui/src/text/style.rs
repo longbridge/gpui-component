@@ -48,7 +48,10 @@ impl PartialEq for TextViewStyle {
         self.paragraph_gap == other.paragraph_gap
             && self.heading_base_font_size == other.heading_base_font_size
             && match (&self.heading_font_size, &other.heading_font_size) {
-                (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+                (Some(left), Some(right)) => (1..=6).all(|level| {
+                    left(level, self.heading_base_font_size)
+                        == right(level, other.heading_base_font_size)
+                }),
                 (None, None) => true,
                 _ => false,
             }
@@ -142,7 +145,9 @@ mod tests {
     #[test]
     fn selection_layout_fingerprint_covers_callback_table_and_theme_fields() {
         let base = TextViewStyle::default();
-        assert!(base != base.clone().heading_font_size(|_, size| size));
+        let heading = base.clone().heading_font_size(|_, size| size);
+        assert!(heading == base.clone().heading_font_size(|_, size| size));
+        assert!(heading != base.clone().heading_font_size(|_, size| size * 2.));
 
         let mut table = StyleRefinement::default();
         table.text.white_space = Some(gpui::WhiteSpace::Nowrap);

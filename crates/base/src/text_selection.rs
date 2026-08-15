@@ -451,6 +451,7 @@ impl SelectionEndpoint {
 
 /// Window-local generic text-selection state.
 struct TextSelectionState {
+    enabled: bool,
     regions: HashMap<EntityId, RegionRegistration>,
     active_scope: SelectionScopeId,
     anchor: Option<SelectionEndpoint>,
@@ -466,6 +467,7 @@ struct TextSelectionState {
 impl Default for TextSelectionState {
     fn default() -> Self {
         Self {
+            enabled: false,
             regions: HashMap::new(),
             active_scope: SelectionScopeId::default(),
             anchor: None,
@@ -620,7 +622,7 @@ impl TextSelectionState {
     /// Starts a selection gesture using bounds hit testing (useful to adapters/tests).
     #[cfg(test)]
     fn begin(&mut self, position: Point<Pixels>, extend: bool, cx: &mut App) {
-        self.begin_impl(position, extend, None, cx);
+        self.begin_impl(position, extend, false, None, cx);
     }
 
     /// Updates the current gesture using bounds hit testing.
@@ -747,7 +749,7 @@ impl TextSelectionState {
         window: &mut Window,
         cx: &mut App,
     ) {
-        self.begin_impl(position, extend, Some(window), cx);
+        self.begin_impl(position, extend, true, Some(window), cx);
     }
 
     fn update_in_window(&mut self, position: Point<Pixels>, window: &Window, cx: &mut App) {
@@ -770,6 +772,7 @@ impl TextSelectionState {
         &mut self,
         position: Point<Pixels>,
         extend: bool,
+        already_prepared: bool,
         mut window: Option<&mut Window>,
         cx: &mut App,
     ) {
@@ -786,7 +789,7 @@ impl TextSelectionState {
             })
             .flatten()
             .filter(|anchor| anchor.resolve(&self.regions).is_some());
-        if !extend {
+        if !extend && !already_prepared {
             self.clear(cx);
         }
         let endpoint = self.endpoint(position, window.as_deref(), cx);
@@ -1080,6 +1083,7 @@ impl Element for TextSelection {
         cx: &mut App,
     ) {
         let state = TextSelectionState::ensure(window, cx);
+        state.update(cx, |state, _| state.enabled = true);
         if state.update(cx, |state, _| state.schedule_finish_frame()) {
             let state = state.clone();
             window.on_next_frame(move |_, cx| {
@@ -1155,6 +1159,8 @@ pub trait WindowTextSelection {
     fn clear_text_selection(&mut self, cx: &mut App);
     fn end_text_selection(&mut self, cx: &mut App);
     #[doc(hidden)]
+    fn clear_text_selection_for_window(window_id: gpui::WindowId, cx: &mut App);
+    #[doc(hidden)]
     fn set_text_selection_scope(&mut self, scope: SelectionScopeId, cx: &mut App);
     #[doc(hidden)]
     fn register_text_selection_region(
@@ -1168,17 +1174,21 @@ pub trait WindowTextSelection {
 impl WindowTextSelection for Window {
     fn selected_text(&mut self, cx: &mut App) -> String {
         TextSelectionState::existing(self, cx)
+            .filter(|state| state.read(cx).enabled)
             .map(|state| state.read(cx).selected_text(cx))
             .unwrap_or_default()
     }
 
     fn has_text_selection(&mut self, cx: &mut App) -> bool {
         TextSelectionState::existing(self, cx)
-            .is_some_and(|state| state.read(cx).has_text_selection(cx))
+            .is_some_and(|state| state.read(cx).enabled && state.read(cx).has_text_selection(cx))
     }
 
     fn clear_text_selection(&mut self, cx: &mut App) {
         if let Some(state) = TextSelectionState::existing(self, cx) {
+            if !state.read(cx).enabled {
+                return;
+            }
             let callbacks = state.update(cx, |state, cx| state.clear_state(cx));
             for callbacks in callbacks {
                 TextSelectionRegionState::dispatch_clear(callbacks, cx);
@@ -1188,7 +1198,31 @@ impl WindowTextSelection for Window {
 
     fn end_text_selection(&mut self, cx: &mut App) {
         if let Some(state) = TextSelectionState::existing(self, cx) {
+            if !state.read(cx).enabled {
+                return;
+            }
             state.update(cx, |state, cx| state.end(cx));
+        }
+    }
+
+    fn clear_text_selection_for_window(window_id: gpui::WindowId, cx: &mut App) {
+        if !cx.has_global::<WindowTextSelections>() {
+            return;
+        }
+        let Some(state) = cx
+            .global::<WindowTextSelections>()
+            .0
+            .get(&window_id)
+            .cloned()
+        else {
+            return;
+        };
+        if !state.read(cx).enabled {
+            return;
+        }
+        let callbacks = state.update(cx, |state, cx| state.clear_state(cx));
+        for callbacks in callbacks {
+            TextSelectionRegionState::dispatch_clear(callbacks, cx);
         }
     }
 
@@ -1744,6 +1778,7 @@ mod tests {
             let region = view.read(cx).region.clone();
             let host = TextSelectionState::ensure(window, cx);
             host.update(cx, |host, cx| {
+                host.enabled = true;
                 FakeRegion { region }.register(host, 0., SelectionScopeId::default(), 0, cx);
                 host.begin(point(px(1.), px(1.)), false, cx);
                 host.update(point(px(8.), px(1.)), cx);
@@ -1873,11 +1908,9 @@ mod tests {
     }
 
     #[gpui::test]
-    fn window_extension_is_a_safe_no_op_until_a_host_is_explicitly_installed(
-        cx: &mut TestAppContext,
-    ) {
+    fn window_extension_is_a_safe_no_op_until_the_element_is_rendered(cx: &mut TestAppContext) {
         let (_, cx) = cx.add_window_view(|_, cx| WindowRegionView {
-            region: TextSelectionRegion::new("not installed", cx),
+            region: TextSelectionRegion::new("not enabled", cx),
         });
         cx.update(|window, cx| {
             assert!(!window.has_text_selection(cx));
@@ -1885,6 +1918,42 @@ mod tests {
             window.clear_text_selection(cx);
             window.end_text_selection(cx);
             assert!(!window.has_text_selection(cx));
+        });
+    }
+
+    #[gpui::test]
+    fn lazy_registration_does_not_enable_queries_without_the_element(cx: &mut TestAppContext) {
+        let (_, cx) = cx.add_window_view(|_, cx| WindowRegionView {
+            region: TextSelectionRegion::new("registered", cx),
+        });
+        cx.update(|window, cx| {
+            let region = TextSelectionRegion::new("registered", cx);
+            region
+                .state()
+                .update(cx, |state, _| state.set_local_selection(true));
+            let bounds = Bounds::new(point(px(0.), px(0.)), size(px(100.), px(20.)));
+            let hitbox = Hitbox {
+                id: HitboxId::placeholder(),
+                bounds,
+                content_mask: ContentMask { bounds },
+                behavior: HitboxBehavior::Normal,
+            };
+            window.register_text_selection_region(
+                region,
+                SelectionRegionFrame {
+                    hitbox,
+                    bounds,
+                    scroll_offset: Point::default(),
+                    scope: SelectionScopeId::default(),
+                    document_order: 0,
+                    text_bounds: vec![bounds],
+                },
+                cx,
+            );
+            assert_eq!(window.selected_text(cx), "");
+            assert!(!window.has_text_selection(cx));
+            window.clear_text_selection(cx);
+            assert_eq!(window.selected_text(cx), "");
         });
     }
 

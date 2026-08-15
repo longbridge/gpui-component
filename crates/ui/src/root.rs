@@ -50,7 +50,7 @@ pub struct Root {
     /// The focus handle that will be restored after a dialog is closed with animation.
     /// Used to handle rapid dialog opening/closing to maintain correct focus chain.
     pending_focus_restore: Option<WeakFocusHandle>,
-    clear_text_selection_requested: bool,
+    window_id: gpui::WindowId,
 }
 
 #[derive(Clone)]
@@ -85,11 +85,13 @@ impl ActiveDialog {
 }
 
 impl Root {
-    /// Requests that window-owned text selection be cleared on the next render.
-    #[deprecated(note = "call WindowExt::clear_text_selection instead")]
+    /// Clears window-owned text selection synchronously.
+    #[deprecated(note = "call gpui_base::WindowTextSelection::clear_text_selection instead")]
     pub fn clear_text_selection(&mut self, cx: &mut Context<Self>) {
-        self.clear_text_selection_requested = true;
-        cx.notify();
+        <Window as gpui_base::WindowTextSelection>::clear_text_selection_for_window(
+            self.window_id,
+            cx,
+        );
     }
 
     /// Create a new Root view.
@@ -111,7 +113,7 @@ impl Root {
             window_shadow_size: window_border::SHADOW_SIZE,
             bordered: true,
             pending_focus_restore: None,
-            clear_text_selection_requested: false,
+            window_id: window.window_handle().window_id(),
         }
     }
 
@@ -550,9 +552,6 @@ impl Render for Root {
         crate::global_state::UiGlobalState::global_mut(cx).begin_selection_frame();
         let active_scope = self.active_selection_scope().base_id();
         window.set_text_selection_scope(active_scope, cx);
-        if std::mem::take(&mut self.clear_text_selection_requested) {
-            window.clear_text_selection(cx);
-        }
 
         let inner = div()
             .id("root")

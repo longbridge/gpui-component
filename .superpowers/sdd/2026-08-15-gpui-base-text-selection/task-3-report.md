@@ -63,10 +63,10 @@ cargo test -p gpui-component text::window_selection::tests -- --nocapture
 46 passed
 
 cargo test -p gpui-component
-404 unit + 40 compatibility tests passed
+405 unit + 40 compatibility tests passed
 
 cargo test -p gpui-base
-328 unit + 1 integration test passed
+329 unit + 1 integration test passed
 
 cargo check --workspace --all-targets
 passed
@@ -112,6 +112,22 @@ single private window state.
   selection; coalesced appends still publish their parsed result.
 - Deduplicated duplicate-element mouse-down preparation/begin handling so Shift
   anchors are not cleared twice.
+
+## Review fix round 3
+
+- Removed the second ordinary-click clear from bubble begin; capture produces
+  the single ordered clear batch, dispatched after the state lease.
+- Made deprecated `Root::clear_text_selection` synchronously forward by stored
+  `WindowId`, without storing a selection-state entity.
+- Added explicit element-enabled state: lazy scope/region mutation may prepare
+  state, but query, clear, and end remain no-op until `TextSelection` renders.
+- Replaced the baseline boolean with `ParseMode`; a pure baseline acknowledgement
+  is ignored while a baseline coalesced with append becomes an applied update.
+- Compared heading callbacks by their six layout outputs rather than allocation
+  identity, avoiding per-render invalidation for newly-created equivalent
+  closures while detecting semantic heading-size changes.
+- Added synchronous deprecated-forwarding and lazy-registration/local-selection
+  regressions; duplicate capture/bubble preparation remains event-idempotent.
 
 The user-owned `.github/workflows/release.yml` change was neither modified nor
 staged.
