@@ -16,7 +16,7 @@ jobs:
         run: |
           cargo publish -p gpui-component-assets
           cargo publish -p gpui-component-macros
-          cargo publish -p gpui-component-base
+          cargo publish -p gpui-base
           cargo publish -p gpui-wry
 
           # crates.io may take a short while to expose newly published
