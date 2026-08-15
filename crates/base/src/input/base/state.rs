@@ -564,7 +564,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             search_session: super::SearchSession::default(),
             searchable: false,
             replaceable: true,
-            soft_wrap: false,
+            soft_wrap: true,
             wrapping_indent: WrappingIndent::default(),
             scroll_beyond_last_line: None,
             cursor_surrounding_lines: None,
@@ -3958,6 +3958,25 @@ mod tests {
                 assert_eq!(state.ime_marked_range, Some((7..9).into()));
             });
         });
+    }
+
+    /// Soft wrap is on by default, for every mode that can wrap.
+    ///
+    /// The default lives in the shared constructor, where a mode-specific
+    /// `new` can silently fail to restore it; this pins it down.
+    #[gpui::test]
+    fn test_soft_wrap_is_enabled_by_default(cx: &mut TestAppContext) {
+        let textarea = InputView::build_textarea(cx, |state| state);
+        let mut textarea_cx = VisualTestContext::from_window(textarea.window_handle.into(), cx);
+        textarea
+            .input
+            .read_with(&mut textarea_cx, |state, _| assert!(state.soft_wrap));
+
+        let editor = InputView::<EditorMode>::new(cx);
+        let mut editor_cx = VisualTestContext::from_window(editor.window_handle.into(), cx);
+        editor
+            .input
+            .read_with(&mut editor_cx, |state, _| assert!(state.soft_wrap));
     }
 }
 
