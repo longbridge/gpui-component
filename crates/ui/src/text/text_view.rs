@@ -3,8 +3,9 @@ use std::sync::Arc;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Element, ElementId, Entity, GlobalElementId, Hitbox,
-    HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement, LayoutId, MouseButton,
-    ParentElement, Pixels, SharedString, StyleRefinement, Styled, Window, div,
+    HitboxBehavior, ImageSource, InspectorElementId, InteractiveElement, IntoElement, LayoutId,
+    MouseButton, ParentElement, Pixels, SharedString, SharedUri, StyleRefinement, Styled, Window,
+    div,
 };
 
 use crate::StyledExt;
@@ -21,6 +22,8 @@ pub(crate) type CodeBlockActionsFn =
 
 pub(crate) type LinkClickHandlerFn =
     dyn Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync;
+
+pub(crate) type ImageSourceResolverFn = dyn Fn(&SharedUri) -> ImageSource + Send + Sync;
 
 pub(crate) fn handle_link_click(
     handler: &Option<Arc<LinkClickHandlerFn>>,
@@ -71,6 +74,7 @@ pub struct TextView {
     scrollable: bool,
     code_block_actions: Option<Arc<CodeBlockActionsFn>>,
     link_click_handler: Option<Arc<LinkClickHandlerFn>>,
+    image_source_resolver: Option<Arc<ImageSourceResolverFn>>,
     markdown_extensions: Arc<MarkdownExtensions>,
 }
 
@@ -112,6 +116,7 @@ impl TextView {
             scrollable: false,
             code_block_actions: None,
             link_click_handler: None,
+            image_source_resolver: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -130,6 +135,7 @@ impl TextView {
             scrollable: false,
             code_block_actions: None,
             link_click_handler: None,
+            image_source_resolver: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -148,6 +154,7 @@ impl TextView {
             scrollable: false,
             code_block_actions: None,
             link_click_handler: None,
+            image_source_resolver: None,
             markdown_extensions: Arc::default(),
         }
     }
@@ -214,6 +221,20 @@ impl TextView {
         F: Fn(&SharedString, &ClickEvent, &mut Window, &mut App) + Send + Sync + 'static,
     {
         self.link_click_handler = Some(Arc::new(handler));
+        self
+    }
+
+    /// Resolve document image URLs to custom image sources.
+    ///
+    /// By default, image URLs remain URI resources and are never interpreted as
+    /// filesystem paths. The resolver receives document-controlled values, so
+    /// it should only return path-backed sources for trusted content or after
+    /// enforcing an appropriate path policy.
+    pub fn image_source_resolver<F>(mut self, resolver: F) -> Self
+    where
+        F: Fn(&SharedUri) -> ImageSource + Send + Sync + 'static,
+    {
+        self.image_source_resolver = Some(Arc::new(resolver));
         self
     }
 
@@ -331,6 +352,7 @@ impl Element for TextView {
         state.update(cx, |state, cx| {
             state.code_block_actions = self.code_block_actions.clone();
             state.link_click_handler = self.link_click_handler.clone();
+            state.image_source_resolver = self.image_source_resolver.clone();
             state.set_markdown_extensions(self.markdown_extensions.clone(), cx);
             state.selectable = self.selectable;
             state.selection_format = self.selection_format;
@@ -409,12 +431,19 @@ impl Element for TextView {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
     use super::{TextView, TextViewPlugin};
     use crate::text::TextViewState;
     use gpui::{
-        AppContext as _, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement,
-        Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _, Render,
-        SharedString, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px,
+        AppContext as _, ClickEvent, Context, Entity, ImageSource, InteractiveElement as _,
+        IntoElement, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement as _,
+        Render, SharedString, SharedUri, Styled as _, TestAppContext, VisualTestContext, Window,
+        div, point, px,
     };
 
     struct TextViewTestRoot {
@@ -456,6 +485,10 @@ mod tests {
         text_view: Entity<TextViewState>,
     }
 
+    struct ImageSourceResolverTestRoot {
+        resolver_called: Arc<AtomicBool>,
+    }
+
     impl InlineImageTextViewTestRoot {
         fn new(cx: &mut Context<Self>) -> Self {
             let text_view = cx.new(|cx| {
@@ -473,6 +506,23 @@ mod tests {
             div()
                 .w(px(420.))
                 .child(TextView::new(&self.text_view).selectable(true))
+        }
+    }
+
+    impl Render for ImageSourceResolverTestRoot {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            let called = self.resolver_called.clone();
+            div().w(px(420.)).child(
+                TextView::markdown(
+                    "image-source-resolver",
+                    "Before ![image](trusted/image.svg) after",
+                )
+                .image_source_resolver(move |url| {
+                    assert_eq!(url.as_ref(), "trusted/image.svg");
+                    called.store(true, Ordering::SeqCst);
+                    url.clone().into()
+                }),
+            )
         }
     }
 
@@ -513,6 +563,48 @@ mod tests {
             inline_bounds[1].left() - inline_bounds[0].right() < px(40.),
             "unloaded inline image fallback should stay generic and compact"
         );
+    }
+
+    #[gpui::test]
+    fn image_source_resolver_is_an_explicit_opt_in(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let resolver_called = Arc::new(AtomicBool::new(false));
+        let called = resolver_called.clone();
+        let (_, cx) = cx.add_window_view(move |_, _| ImageSourceResolverTestRoot {
+            resolver_called: called,
+        });
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+
+        assert!(resolver_called.load(Ordering::SeqCst));
+    }
+
+    #[gpui::test]
+    fn document_image_paths_are_not_cached_as_filesystem_resources(cx: &mut TestAppContext) {
+        cx.update(crate::init);
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../website/public/logo.svg");
+        let url = path.to_string_lossy().to_string();
+        let markdown = format!("![poc]({url})");
+        let (_, cx) = cx.add_window_view(|_, cx| TextViewTestRoot::new(&markdown, cx));
+        let cx: &mut VisualTestContext = cx;
+
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            let _ = window.draw(cx);
+        });
+        cx.run_until_parked();
+
+        let uri: SharedUri = url.clone().into();
+        let uri_source: ImageSource = uri.into();
+        let path_source: ImageSource = path.into();
+        cx.update(|_, cx| {
+            assert!(uri_source.is_asset_cached(cx));
+            assert!(!path_source.is_asset_cached(cx));
+        });
     }
 
     #[gpui::test]
