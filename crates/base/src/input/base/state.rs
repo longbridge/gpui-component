@@ -2205,7 +2205,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         // NOTE: Do not cancel select, when blur.
         // Because maybe user want to copy the selected text by AppMenuBar (will take focus handle).
 
-        M::reset_annotations(self);
+        M::clear_hover_state(self, cx);
         self.diagnostic_popover = None;
         M::clear_inline_completion(self, cx);
         self.blink_cursor.update(cx, |cursor, cx| {
@@ -2609,6 +2609,9 @@ impl<M: InputModeKind> EntityInputHandler for InputBaseState<M> {
         }
 
         if mask_changed {
+            // Masking rewrites the whole document, so ranges recorded against
+            // the old text no longer point at anything.
+            M::reset_annotations(self);
         } else {
             M::adjust_annotations(self, &range, new_text.len());
         }
@@ -3721,6 +3724,55 @@ mod tests {
         });
     }
 
+    /// Losing focus hides the hover popover but keeps the decorations.
+    ///
+    /// Both used to be dropped by one call, so clicking away threw away
+    /// decorations the application had installed and never asked to remove.
+    #[gpui::test]
+    fn test_blur_keeps_decorations(cx: &mut TestAppContext) {
+        let view = InputView::<EditorMode>::new(cx);
+        let mut cx = VisualTestContext::from_window(view.window_handle.into(), cx);
+        let input = view.input;
+
+        cx.update(|window, cx| {
+            input.update(cx, |state, cx| {
+                state.set_value("select 1", window, cx);
+                let _collection = state.create_decorations_collection(
+                    vec![crate::input::TextDecoration::new(
+                        0..6,
+                        gpui::HighlightStyle {
+                            font_weight: Some(gpui::FontWeight::BOLD),
+                            ..Default::default()
+                        },
+                    )],
+                    cx,
+                );
+                state.present_hover(
+                    0..6,
+                    lsp_types::Hover {
+                        contents: lsp_types::HoverContents::Scalar(
+                            lsp_types::MarkedString::String("docs".into()),
+                        ),
+                        range: None,
+                    },
+                    cx,
+                );
+                assert!(state.hover_popover().is_some());
+
+                state.on_blur(window, cx);
+
+                assert!(
+                    state.hover_popover().is_none(),
+                    "blur should hide the hover popover"
+                );
+                let decorations = EditorMode::decoration_layers(&state.extras);
+                assert!(
+                    decorations.iter().any(|layer| !layer.is_empty()),
+                    "blur must not discard decorations"
+                );
+            });
+        });
+    }
 
     /// Soft wrap is on by default, for every mode that can wrap.
     ///
