@@ -1,9 +1,12 @@
+use std::rc::Rc;
+
 use gpui::{
     App, DefiniteLength, Entity, IntoElement, RenderOnce, SharedString, StyleRefinement, Styled,
     Window, prelude::FluentBuilder as _,
 };
 
 use super::{EditorState, Input};
+use crate::native_menu::NativeMenu;
 use crate::{RoleOverride, StyledExt as _};
 
 /// A styled source-code editor.
@@ -19,6 +22,11 @@ pub struct Editor {
     tab_index: isize,
     role: RoleOverride,
     aria_label: Option<SharedString>,
+
+    /// An optional context menu builder to allow a custom context menu.
+    ///
+    /// If set, this overrides the built-in context menu.
+    context_menu_builder: Option<Rc<dyn Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu>>,
 }
 
 impl Editor {
@@ -34,6 +42,7 @@ impl Editor {
             tab_index: 0,
             role: RoleOverride::default(),
             aria_label: None,
+            context_menu_builder: None,
         }
     }
 
@@ -81,6 +90,18 @@ impl Editor {
         self.aria_label = Some(label.into());
         self
     }
+
+    /// Replace the built-in context menu shown on right-click.
+    ///
+    /// The closure receives an empty menu and returns the one to show, so it
+    /// decides entirely what appears — the default items are not added.
+    pub fn context_menu(
+        mut self,
+        f: impl Fn(NativeMenu, &mut Window, &mut App) -> NativeMenu + 'static,
+    ) -> Self {
+        self.context_menu_builder = Some(Rc::new(f));
+        self
+    }
 }
 
 impl Styled for Editor {
@@ -101,6 +122,9 @@ impl RenderOnce for Editor {
             .role(self.role)
             .when_some(self.height, |this, height| this.h(height))
             .when_some(self.aria_label, |this, label| this.aria_label(label))
+            .when_some(self.context_menu_builder, |this, build| {
+                this.context_menu(move |menu, window, cx| build(menu, window, cx))
+            })
             .refine_style(&self.style)
     }
 }
