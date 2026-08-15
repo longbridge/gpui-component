@@ -35,7 +35,6 @@ pub fn embedded_themes() -> HashMap<&'static str, &'static str> {
         "macos-classic",
         include_str!("../../../themes/macos-classic.json"),
     );
-    themes.insert("matrix", include_str!("../../../themes/matrix.json"));
     themes.insert(
         "mellifluous",
         include_str!("../../../themes/mellifluous.json"),
