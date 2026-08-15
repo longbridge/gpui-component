@@ -181,7 +181,8 @@ impl BaseShowcase {
             });
         });
         let editor = cx.new(|cx| {
-            EditorState::new("rust", window, cx)
+            EditorState::new(window, cx)
+                .language("rust")
                 .line_number(true)
                 .folding(true)
                 .show_whitespaces(true)

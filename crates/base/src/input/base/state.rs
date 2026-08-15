@@ -3042,7 +3042,7 @@ mod tests {
             f: impl FnOnce(InputBaseState<EditorMode>) -> InputBaseState<EditorMode> + 'static,
         ) -> Self {
             Self::build_with(cx, move |window, cx| {
-                f(crate::input::EditorState::new("sql", window, cx))
+                f(crate::input::EditorState::new(window, cx).language("sql"))
             })
         }
     }
@@ -4097,24 +4097,37 @@ impl InputBaseState<crate::input::TextareaMode> {
 
 /// Methods that only a source-code editor offers.
 impl InputBaseState<crate::input::EditorMode> {
-    /// Create a source-code editor state for `language`.
+    /// Create a source-code editor state.
     ///
     /// Default options: line numbers on, tab size 2 with soft tabs, indent
-    /// guides on, multi-line, and search enabled.
+    /// guides on, multi-line, and search enabled. Set the language for syntax
+    /// highlighting with [`Self::language`]; without one the text is shown
+    /// unhighlighted.
     ///
     /// The editor aims at simple code editing or display, not at being a
     /// full-featured code editor. It offers syntax highlighting, auto indent,
     /// line numbers, and handles large text up to about 50K lines.
-    pub fn new(
-        language: impl Into<SharedString>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
-        let language: SharedString = language.into();
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut state = Self::new_in_mode(window, cx);
-        state.mode = LayoutMode::code_editor(language);
+        state.mode = LayoutMode::code_editor();
         state.searchable = true;
         state
+    }
+
+    /// Set the language to highlight, e.g. `"rust"`.
+    ///
+    /// See [`Self::set_highlighter`] to change it after construction.
+    pub fn language(mut self, language: impl Into<SharedString>) -> Self {
+        if let LayoutMode::CodeEditor {
+            language: l,
+            highlighter,
+            ..
+        } = &mut self.mode
+        {
+            *l = language.into();
+            *highlighter.borrow_mut() = None;
+        }
+        self
     }
 
     /// Set enable/disable code folding.

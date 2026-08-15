@@ -1126,7 +1126,8 @@ const EXAMPLE: &str = include_str!("./fixtures/test.md");
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
-            EditorState::new(Language::Markdown, window, cx)
+            EditorState::new(window, cx)
+                .language(Language::Markdown)
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 2,

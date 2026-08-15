@@ -23,7 +23,8 @@ const EXAMPLE: &str = include_str!("./fixtures/test.html");
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
-            EditorState::new(Language::Html, window, cx)
+            EditorState::new(window, cx)
+                .language(Language::Html)
                 .tab_size(TabSize {
                     tab_size: 4,
                     hard_tabs: false,

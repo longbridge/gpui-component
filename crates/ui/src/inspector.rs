@@ -85,10 +85,15 @@ impl DivInspector {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let lsp_provider = Rc::new(LspProvider {});
 
-        let json_input_state = cx.new(|cx| EditorState::new("json", window, cx).line_number(false));
+        let json_input_state = cx.new(|cx| {
+            EditorState::new(window, cx)
+                .language("json")
+                .line_number(false)
+        });
 
         let rust_input_state = cx.new(|cx| {
-            EditorState::new("rust", window, cx)
+            EditorState::new(window, cx)
+                .language("rust")
                 .line_number(false)
                 .tab_size(TabSize {
                     tab_size: 4,

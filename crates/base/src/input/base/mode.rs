@@ -67,11 +67,13 @@ impl LayoutMode {
     }
 
     /// Create a code editor input mode with default settings.
-    pub(super) fn code_editor(language: impl Into<SharedString>) -> Self {
+    ///
+    /// Starts with no language; the state sets one through its own builder.
+    pub(super) fn code_editor() -> Self {
         LayoutMode::CodeEditor {
             rows: 2,
             tab: TabSize::default(),
-            language: language.into(),
+            language: SharedString::default(),
             highlighter: Rc::new(RefCell::new(None)),
             highlighter_factory: None,
             line_number: true,
@@ -309,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_code_editor() {
-        let mode = LayoutMode::code_editor("rust");
+        let mode = LayoutMode::code_editor();
         assert_eq!(mode.line_number(), true);
         assert_eq!(mode.has_indent_guides(), true);
         assert_eq!(mode.max_rows(), usize::MAX);

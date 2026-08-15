@@ -426,7 +426,7 @@ mod tests {
     fn unchanged_content_keeps_the_overlay_signature(cx: &mut gpui::TestAppContext) {
         cx.update(crate::init);
         let (probe, cx) = cx.add_window_view(|window, cx| OverlayProbe {
-            state: cx.new(|cx| crate::input::EditorState::new("sql", window, cx)),
+            state: cx.new(|cx| crate::input::EditorState::new(window, cx).language("sql")),
         });
         let state = probe.read_with(cx, |probe, _| probe.state.clone());
 
@@ -481,7 +481,8 @@ mod tests {
         cx.update(crate::init);
         let (probe, cx) = cx.add_window_view(|window, cx| OverlayProbe {
             state: cx.new(|cx| {
-                crate::input::EditorState::new("sql", window, cx)
+                crate::input::EditorState::new(window, cx)
+                    .language("sql")
                     .searchable(true)
                     .replaceable(true)
             }),
@@ -556,8 +557,11 @@ mod tests {
         });
 
         let dropped_owner = cx.update(|window, cx| {
-            let ephemeral =
-                cx.new(|cx| crate::input::EditorState::new("sql", window, cx).searchable(true));
+            let ephemeral = cx.new(|cx| {
+                crate::input::EditorState::new(window, cx)
+                    .language("sql")
+                    .searchable(true)
+            });
             ephemeral.update(cx, |state, cx| state.open_search(false, cx));
             assert_eq!(render_overlays(&ephemeral, window, cx).len(), 1);
             ephemeral.update(cx, |state, cx| state.close_search(cx));

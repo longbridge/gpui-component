@@ -956,7 +956,8 @@ mod tests {
             cx.open_window(Default::default(), |window, cx| {
                 let state = cx.new(|cx| InputState::new(window, cx));
                 let textarea_state = cx.new(|cx| crate::input::TextareaState::new(window, cx));
-                let editor_state = cx.new(|cx| crate::input::EditorState::new("rust", window, cx));
+                let editor_state =
+                    cx.new(|cx| crate::input::EditorState::new(window, cx).language("rust"));
                 let otp_state = cx.new(|cx| gpui_base::OtpState::new(6, window, cx));
                 input = Some(state.clone());
                 textarea = Some(textarea_state.clone());

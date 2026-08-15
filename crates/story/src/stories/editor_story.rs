@@ -39,7 +39,8 @@ impl EditorStory {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let editor_state = cx.new(|cx| {
-            EditorState::new("rust", window, cx)
+            EditorState::new(window, cx)
+                .language("rust")
                 .folding(true)
                 .tab_size(TabSize {
                     tab_size: 4,
@@ -65,8 +66,11 @@ impl EditorStory {
         }
 
         let decoration_text = "Decoration styles\nColor highlights important text.\nItalic adds emphasis.\nUnderline marks a review range.";
-        let decorations_state =
-            cx.new(|cx| EditorState::new("text", window, cx).default_value(decoration_text));
+        let decorations_state = cx.new(|cx| {
+            EditorState::new(window, cx)
+                .language("text")
+                .default_value(decoration_text)
+        });
 
         let marker = "Decoration styles";
         let color_range = "Color";

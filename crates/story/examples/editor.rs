@@ -693,7 +693,8 @@ impl Example {
         let lsp_store = ExampleLspStore::new();
 
         let editor = cx.new(|cx| {
-            EditorState::new(default_language.name().to_string(), window, cx)
+            EditorState::new(window, cx)
+                .language(default_language.name().to_string())
                 .line_number(true)
                 .indent_guides(true)
                 .tab_size(TabSize {
